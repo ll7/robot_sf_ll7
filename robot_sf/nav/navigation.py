@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""Route sampling and waypoint navigation helpers.
+
+This module provides utilities to sample valid robot routes from a map definition and
+to track progress along those routes during navigation.
+"""
 
 from dataclasses import dataclass, field
 from math import atan2, dist
@@ -10,40 +14,20 @@ from shapely.prepared import PreparedGeometry, prep
 from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
+from robot_sf.planner import PlanningError
+from robot_sf.planner.visibility_planner import PlanningFailedError
 
 
 @dataclass
 class RouteNavigator:
-    """
-    A class to represent a route navigator.
+    """Tracks progress along an ordered list of waypoints.
 
-    Attributes
-    ----------
-    waypoints : List[Vec2D]
-        The list of waypoints.
-    waypoint_id : int
-        The current waypoint index.
-    proximity_threshold : float
-        The proximity threshold to consider a waypoint as reached.
-    pos : Vec2D
-        The current position.
-    reached_waypoint : bool
-        Whether the current waypoint has been reached.
-
-    Methods
-    -------
-    reached_destination():
-        Checks if the destination has been reached.
-    current_waypoint():
-        Returns the current waypoint.
-    next_waypoint():
-        Returns the next waypoint.
-    initial_orientation():
-        Returns the initial orientation.
-    update_position(pos: Vec2D):
-        Updates the current position and checks if the current waypoint has been reached.
-    new_route(route: List[Vec2D]):
-        Sets a new route.
+    Attributes:
+        waypoints: Ordered list of waypoints the robot must follow.
+        waypoint_id: Index of the currently targeted waypoint.
+        proximity_threshold: Distance tolerance for considering a waypoint reached.
+        pos: Latest known robot position.
+        reached_waypoint: Whether the current waypoint was reached on the last update.
     """
 
     waypoints: list[Vec2D] = field(default_factory=list)
@@ -54,13 +38,11 @@ class RouteNavigator:
 
     @property
     def reached_destination(self) -> bool:
-        """
-        Checks if the destination has been reached.
+        """Whether the final waypoint has been reached within the threshold.
 
-        Returns
-        -------
-        bool
-            True if the destination has been reached, False otherwise.
+        Returns:
+            bool: ``True`` when the last waypoint is within ``proximity_threshold`` of
+            ``pos`` or when the route is empty.
         """
 
         return (
@@ -70,26 +52,21 @@ class RouteNavigator:
 
     @property
     def current_waypoint(self) -> Vec2D:
-        """
-        Returns the current waypoint.
+        """Current target waypoint.
 
-        Returns
-        -------
-        Vec2D
-            The current waypoint.
+        Returns:
+            Vec2D: Current waypoint coordinates.
         """
-
+        if not self.waypoints:
+            raise ValueError("RouteNavigator has no waypoints; cannot fetch current waypoint.")
         return self.waypoints[self.waypoint_id]
 
     @property
     def next_waypoint(self) -> Vec2D | None:
-        """
-        Returns the next waypoint.
+        """Next waypoint, if it exists.
 
-        Returns
-        -------
-        Optional[Vec2D]
-            The next waypoint, or None if there is no next waypoint.
+        Returns:
+            Vec2D | None: Next waypoint coordinates, or ``None`` if at the end.
         """
 
         return (
@@ -100,13 +77,10 @@ class RouteNavigator:
 
     @property
     def initial_orientation(self) -> float:
-        """
-        Returns the initial orientation.
+        """Initial heading from the first to the second waypoint.
 
-        Returns
-        -------
-        float
-            The initial orientation.
+        Returns:
+            float: Orientation in radians.
         """
 
         return atan2(
@@ -115,51 +89,78 @@ class RouteNavigator:
         )
 
     def update_position(self, pos: Vec2D):
-        """
-        Updates the current position and checks if the current waypoint has been reached.
+        """Update the robot position and advance the waypoint if reached.
 
-        Parameters
-        ----------
-        pos : Vec2D
-            The new position.
+        Args:
+            pos: New robot position.
         """
+        if not self.waypoints:
+            self.pos = pos
+            self.reached_waypoint = False
+            return
 
         reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
         if reached_waypoint:
-            self.waypoint_id = min(len(self.waypoints) - 1, self.waypoint_id + 1)
+            next_idx = self.waypoint_id + 1
+            if self.waypoints:
+                self.waypoint_id = min(len(self.waypoints) - 1, next_idx)
+            else:
+                self.waypoint_id = 0
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
     def new_route(self, route: list[Vec2D]):
-        """
-        Sets a new route.
+        """Replace the active route and reset progress.
 
-        Parameters
-        ----------
-        route : List[Vec2D]
-            The new route.
+        Args:
+            route: Ordered list of waypoints to follow.
         """
-
         self.waypoints = route
         self.waypoint_id = 0
+        self.reached_waypoint = False
 
 
 def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Vec2D]:
-    """
-    Samples a route from the given map definition.
+    """Sample a concrete waypoint route for a robot spawn.
 
-    Parameters
-    ----------
-    map_def : MapDefinition
-        The map definition.
-    spawn_id : Optional[int], optional
-        The spawn ID, by default None. If None, a random spawn ID is chosen.
+    Args:
+        map_def: Map definition containing predefined routes and zones.
+        spawn_id: Optional spawn identifier; chooses a random spawn when ``None``.
 
-    Returns
-    -------
-    List[Vec2D]
-        The sampled route.
+    Returns:
+        list[Vec2D]: Waypoints including sampled spawn and goal positions.
     """
+
+    planner = getattr(map_def, "_global_planner", None)
+    use_planner = getattr(map_def, "_use_planner", False)
+
+    if use_planner and planner is not None:
+        if not map_def.robot_routes_by_spawn_id:
+            msg = "Planner mode enabled but no robot routes are defined on the map."
+            raise ValueError(msg)
+
+        if spawn_id is None:
+            spawn_id = sample(list(map_def.robot_routes_by_spawn_id.keys()), k=1)[0]
+
+        routes_for_spawn = map_def.robot_routes_by_spawn_id.get(spawn_id)
+        if not routes_for_spawn:
+            msg = f"Planner mode: no routes found for spawn_id={spawn_id}"
+            raise ValueError(msg)
+
+        route_choice = sample(routes_for_spawn, k=1)[0]
+        prepared_obstacles = get_prepared_obstacles(map_def)
+        start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+        goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+        try:
+            planned = planner.plan(start, goal)
+        except (PlanningFailedError, PlanningError):
+            pass
+        else:
+            if isinstance(planned, tuple):
+                route, _ = planned
+            else:
+                route = planned
+            return route
 
     # If no spawn_id is provided, choose a random one
     spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)
@@ -186,7 +187,14 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
 
 
 def get_prepared_obstacles(map_def: MapDefinition) -> list[PreparedGeometry]:
-    """Return cached prepared obstacle polygons for a map definition."""
+    """Return cached prepared obstacle polygons for a map definition.
+
+    Args:
+        map_def: Map definition with polygonal obstacles.
+
+    Returns:
+        list[PreparedGeometry]: Prepared shapely polygons, cached on the map.
+    """
     prepared: list[PreparedGeometry] | None = getattr(map_def, "_prepared_obstacles", None)
     if prepared is not None:
         return prepared

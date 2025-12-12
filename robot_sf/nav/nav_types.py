@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""SVG-derived geometry types used for navigation maps.
+
+These dataclasses normalize SVG elements (rectangles, circles, paths) into simple
+Python structures consumed by map parsing and obstacle construction logic.
+"""
 
 from dataclasses import dataclass
 
@@ -7,8 +11,15 @@ from robot_sf.common.types import Vec2D, Zone
 
 @dataclass
 class SvgRectangle:
-    """
-    A class to represent a rectangle in an SVG file.
+    """Axis-aligned rectangle extracted from an SVG map.
+
+    Attributes:
+        x: X coordinate of the top-left corner.
+        y: Y coordinate of the top-left corner.
+        width: Rectangle width in world units.
+        height: Rectangle height in world units.
+        label: Human-readable label from the SVG metadata.
+        id_: Raw SVG element identifier.
     """
 
     x: float
@@ -19,9 +30,10 @@ class SvgRectangle:
     id_: str
 
     def __post_init__(self):
-        """
-        Validates the width and height.
-        Raises a ValueError if width or height is less than 0.
+        """Validate rectangle dimensions are non-negative.
+
+        Raises:
+            ValueError: If ``width`` or ``height`` is negative.
         """
         if self.width < 0:
             raise ValueError("Width needs to be a float >= 0!")
@@ -29,11 +41,10 @@ class SvgRectangle:
             raise ValueError("Height needs to be a float >= 0!")
 
     def get_zone(self) -> Zone:
-        """
-        Returns the zone of the rectangle.
+        """Convert the rectangle into a zone tuple.
 
         Returns:
-            Zone: A tuple of 3 corner points defining the rectangular zone boundaries.
+            Zone: Three corner points defining the rectangular zone boundaries.
         """
         # TODO: Is this a correct zone definition?
         return (
@@ -45,34 +56,51 @@ class SvgRectangle:
 
 @dataclass
 class SvgCircle:
-    """Represents a circle in an SVG file (for single pedestrian markers)."""
+    """Circle extracted from an SVG map (e.g., pedestrian markers).
+
+    Attributes:
+        cx: X coordinate of the circle center.
+        cy: Y coordinate of the circle center.
+        r: Radius of the circle.
+        label: Human-readable label from the SVG metadata.
+        id_: Raw SVG element identifier.
+        cls: Raw SVG class attribute, used for POI detection.
+    """
 
     cx: float
     cy: float
     r: float
     label: str
     id_: str
+    cls: str = ""
 
     def __post_init__(self):
-        """
-        Validates the radius.
-        Raises a ValueError if radius is less than or equal to 0.
+        """Validate radius is positive.
+
+        Raises:
+            ValueError: If ``r`` is less than or equal to zero.
         """
         if self.r <= 0:
             raise ValueError("Radius needs to be a float > 0!")
 
     def get_center(self) -> Vec2D:
-        """Returns the center point of the circle.
+        """Return the circle center coordinates.
 
         Returns:
-            Vec2D: A tuple (cx, cy) representing the center coordinates.
+            Vec2D: Tuple ``(cx, cy)`` representing the center point.
         """
         return (self.cx, self.cy)
 
 
 @dataclass
 class SvgPath:
-    """Represents a path in an SVG file (sequence of 2D waypoints)."""
+    """Polyline path extracted from an SVG file.
+
+    Attributes:
+        coordinates: Ordered 2D waypoints composing the path.
+        label: Human-readable label from the SVG metadata.
+        id: Raw SVG element identifier.
+    """
 
     coordinates: tuple[Vec2D, ...]
     label: str

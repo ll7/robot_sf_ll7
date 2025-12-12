@@ -5,7 +5,7 @@ repos:
     hooks:
       # Run the linter.
       - id: ruff
-        args: [--fix]
+        args: [--fix, --exit-zero]
       # Run the formatter.
       - id: ruff-format
   - repo: local

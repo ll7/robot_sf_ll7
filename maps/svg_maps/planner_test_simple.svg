@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Simple test map for global planner with POI routing -->
+
+<!-- Features: narrow bottleneck, multiple waypoints, clear obstacle geometry -->
+
+<svg
+   width="60"
+   height="20"
+   viewBox="0 0 60 20"
+   version="1.1"
+   id="svg_planner_test"
+   sodipodi:docname="planner_test_simple.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="26.767522"
+     inkscape:cx="41.206654"
+     inkscape:cy="8.5177851"
+     inkscape:window-width="3440"
+     inkscape:window-height="1381"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg_planner_test" />
+  <defs
+     id="defs1" />
+  <g
+     id="layer1"
+     inkscape:label="Layer 1">
+    <!-- Boundary obstacles (walls) -->
+    <!-- Left wall -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="wall_left"
+       width="1"
+       height="20"
+       x="0"
+       y="0"
+       inkscape:label="obstacle" />
+    <!-- Right wall -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="wall_right"
+       width="1"
+       height="20"
+       x="59"
+       y="0"
+       inkscape:label="obstacle" />
+    <!-- Top wall -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="wall_top"
+       width="60"
+       height="1"
+       x="0"
+       y="0"
+       inkscape:label="obstacle" />
+    <!-- Bottom wall -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="wall_bottom"
+       width="60"
+       height="1"
+       x="0"
+       y="19"
+       inkscape:label="obstacle" />
+    <!-- Obstacle 1: Top-left block (open space on left) -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="obs1"
+       width="8"
+       height="6"
+       x="5"
+       y="1"
+       inkscape:label="obstacle" />
+    <!-- Obstacle 2: Bottom-left block (narrow bottleneck) -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="obs2"
+       width="8"
+       height="6"
+       x="5"
+       y="13"
+       inkscape:label="obstacle" />
+    <!-- Obstacle 3: Center obstruction (forces path through bottleneck) -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="obs3"
+       width="6"
+       height="12"
+       x="20"
+       y="4"
+       inkscape:label="obstacle" />
+    <!-- Obstacle 4: Right-side block -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="obs4"
+       width="8"
+       height="8"
+       x="44.824509"
+       y="6"
+       inkscape:label="obstacle" />
+    <!-- Spawn zone (yellow) -->
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="spawn_zone"
+       width="4"
+       height="4"
+       x="1.5"
+       y="8"
+       inkscape:label="robot_spawn_zone" />
+    <!-- Goal zone (orange) -->
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="goal_zone"
+       width="4"
+       height="4"
+       x="54.5"
+       y="8"
+       inkscape:label="robot_goal_zone" />
+    <!-- Robot route (optional visual reference) -->
+    <path
+       style="fill:none;stroke:#0310b4;stroke-width:0.2;stroke-dasharray:none;stroke-opacity:0.5"
+       d="M 3.5,10 13,10 20,10 27,10 54.5,10"
+       id="robot_route"
+       inkscape:label="robot_route_0_0" />
+  </g>
+  <!-- POI group for waypoint testing -->
+  <g
+     id="pois"
+     inkscape:label="POIs"
+     transform="translate(-2.9886965,-0.03735871)">
+    <!-- POI 1: Just before bottleneck (tests entry) -->
+    <circle
+       class="poi"
+       id="poi_before_bottleneck"
+       cx="15"
+       cy="10"
+       r="0.5"
+       inkscape:label="before_bottleneck" />
+    <!-- POI 2: In bottleneck (tests tight passage) -->
+    <circle
+       class="poi"
+       id="poi_bottleneck_center"
+       cx="20.88489"
+       cy="10"
+       r="0.5"
+       inkscape:label="bottleneck_center" />
+    <!-- POI 3: After bottleneck (tests exit) -->
+    <circle
+       class="poi"
+       id="poi_after_bottleneck"
+       cx="32"
+       cy="10"
+       r="0.5"
+       inkscape:label="after_bottleneck" />
+    <!-- POI 4: Near goal (optional intermediate waypoint) -->
+    <circle
+       class="poi"
+       id="poi_near_goal"
+       cx="45"
+       cy="10"
+       r="0.5"
+       inkscape:label="near_goal" />
+  </g>
+</svg>

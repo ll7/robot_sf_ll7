@@ -177,6 +177,14 @@ class MapDefinition:
     ped_routes: list[GlobalRoute]
     single_pedestrians: list[SinglePedestrianDefinition] = field(default_factory=list)
     """List of individually controlled pedestrians with explicit start/goal/trajectory definitions."""
+
+    poi_positions: list[Vec2D] = field(default_factory=list)
+    """Point-of-interest waypoints parsed from SVG maps."""
+
+    poi_labels: dict[str, str] = field(default_factory=dict)
+    """Mapping from POI identifiers to human-readable labels."""
+    _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
+    """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
     """Transformed obstacles in pysf format. Are generated in __post_init__."""
     robot_routes_by_spawn_id: dict[int, list[GlobalRoute]] = field(init=False)
@@ -218,6 +226,8 @@ class MapDefinition:
 
         # Validate single pedestrians
         self._validate_single_pedestrians()
+        self._validate_pois()
+        self._build_poi_lookup()
 
     def _validate_single_pedestrians(self):
         """
@@ -301,6 +311,33 @@ class MapDefinition:
                         f"(distance: {dist:.2f}m < 0.5m threshold)."
                     )
 
+    def _validate_pois(self) -> None:
+        """Validate POI identifiers, counts, and bounds."""
+        if not self.poi_positions and not self.poi_labels:
+            return
+
+        if len(self.poi_positions) != len(self.poi_labels):
+            raise ValueError(
+                "poi_positions and poi_labels must have the same length: "
+                f"{len(self.poi_positions)} positions vs {len(self.poi_labels)} labels."
+            )
+
+        if len(set(self.poi_labels.keys())) != len(self.poi_labels):
+            raise ValueError("POI identifiers must be unique.")
+
+        for poi in self.poi_positions:
+            if not (0 <= poi[0] <= self.width and 0 <= poi[1] <= self.height):
+                raise ValueError(
+                    f"POI position {poi} is outside map bounds (0, 0) to ({self.width}, {self.height})."
+                )
+
+    def _build_poi_lookup(self) -> None:
+        """Construct a label-to-position mapping for efficient POI lookup."""
+        self._poi_positions_by_label.clear()
+        for idx, poi_label in enumerate(self.poi_labels.values()):
+            # Preserve first occurrence if duplicate labels exist
+            self._poi_positions_by_label.setdefault(poi_label, self.poi_positions[idx])
+
     @property
     def num_start_pos(self) -> int:
         """
@@ -330,6 +367,23 @@ class MapDefinition:
             ),
             None,
         )
+
+    def get_poi_by_label(self, label: str) -> Vec2D:
+        """Retrieve POI position by human-readable label.
+
+        Args:
+            label: POI label to search for.
+
+        Returns:
+            POI position as a Vec2D tuple.
+
+        Raises:
+            KeyError: If the requested label does not exist.
+        """
+        try:
+            return self._poi_positions_by_label[label]
+        except KeyError as exc:  # pragma: no cover - thin wrapper
+            raise KeyError(f"No POI with label '{label}' found in map.") from exc
 
     def get_map_bounds(self):
         """Returns the min and max of x and y bounds.
@@ -390,6 +444,16 @@ class MapDefinition:
         # Prepared obstacles will be lazily recreated when needed
         if not hasattr(self, "_prepared_obstacles"):
             self._prepared_obstacles = None
+        # Legacy pickle compatibility: initialize missing POI-related fields
+        if not hasattr(self, "_poi_positions_by_label"):
+            self._poi_positions_by_label = {}
+        if not hasattr(self, "poi_labels"):
+            self.poi_labels = {}
+        if not hasattr(self, "poi_positions"):
+            self.poi_positions = []
+        if not hasattr(self, "single_pedestrians"):
+            self.single_pedestrians = []
+        self._build_poi_lookup()
 
 
 @dataclass

@@ -30,7 +30,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.maps.verification.logging import configure_logging
+from robot_sf.common.logging import configure_logging
 
 
 def parse_args():

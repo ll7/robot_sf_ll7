@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Simple corridor test map for global planner with POI routing -->
+
+<svg
+   width="50"
+   height="20"
+   viewBox="0 0 50 20"
+   version="1.1"
+   id="svg_corridor_test"
+   sodipodi:docname="planner_test_corridor.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="6.147478"
+     inkscape:cx="41.155088"
+     inkscape:cy="36.763043"
+     inkscape:window-width="3440"
+     inkscape:window-height="1353"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg_corridor_test" />
+  <defs
+     id="defs1" />
+  <g
+     id="layer1"
+     inkscape:label="Layer 1">
+    <!-- Spawn zone (yellow) -->
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="spawn_zone"
+       width="4"
+       height="4"
+       x="1"
+       y="8"
+       inkscape:label="robot_spawn_zone" />
+    <!-- Goal zone (orange) -->
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="goal_zone"
+       width="4"
+       height="4"
+       x="45"
+       y="8"
+       inkscape:label="robot_goal_zone" />
+    <!-- Simple rectangular obstacle in center -->
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0"
+       id="obs_center"
+       width="8"
+       height="10"
+       x="20"
+       y="5"
+       inkscape:label="obstacle" />
+  </g>
+  <!-- POI group for waypoint testing -->
+  <g
+     id="pois"
+     inkscape:label="POIs">
+    <!-- POI 1: Before obstacle -->
+    <circle
+       class="poi"
+       id="poi_before"
+       cx="15"
+       cy="10"
+       r="0.5"
+       inkscape:label="before_obs" />
+    <!-- POI 2: After obstacle -->
+    <circle
+       class="poi"
+       id="poi_after"
+       cx="35"
+       cy="10"
+       r="0.5"
+       inkscape:label="after_obs" />
+  </g>
+  <path
+     style="fill:none;stroke:#0310b4;stroke-width:0.5;stroke-linejoin:bevel;stroke-opacity:1"
+     d="M 41.154351,10.324336 31.09777,18.411261 23.036387,17.495737 14.209149,16.654408 8.3596404,11.720025"
+     id="path2"
+     inkscape:label="robot_route_0_0"
+     sodipodi:nodetypes="ccccc" />
+</svg>

@@ -17,6 +17,7 @@ Performance:
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -326,7 +327,9 @@ def rasterize_pedestrians(
     count = 0
     for pedestrian in pedestrians:
         try:
-            rasterize_circle(pedestrian, grid_array, config, grid_origin_x, grid_origin_y, value)
+            rasterize_circle_fast(
+                pedestrian, grid_array, config, grid_origin_x, grid_origin_y, value
+            )
             count += 1
         except (ValueError, IndexError, TypeError) as e:
             logger.warning(f"Failed to rasterize pedestrian {pedestrian}: {e}")
@@ -366,11 +369,47 @@ def rasterize_robot(
     # Create Circle2D as tuple (center, radius)
     robot_circle: Circle2D = (robot_position, robot_radius)
     try:
-        rasterize_circle(robot_circle, grid_array, config, grid_origin_x, grid_origin_y, value)
+        rasterize_circle_fast(robot_circle, grid_array, config, grid_origin_x, grid_origin_y, value)
         return True
     except (ValueError, IndexError, TypeError) as e:
         logger.warning(f"Failed to rasterize robot at {robot_pose}: {e}")
         return False
+
+
+def rasterize_circle_fast(
+    circle: Circle2D,
+    grid_array: np.ndarray,
+    config: GridConfig,
+    grid_origin_x: float = 0.0,
+    grid_origin_y: float = 0.0,
+    value: float = 1.0,
+) -> None:
+    """Vectorized circle rasterization for performance-sensitive paths."""
+    (cx, cy), radius = circle
+    res = config.resolution
+    if radius <= 0:
+        return
+
+    col_c = (cx - grid_origin_x) / res
+    row_c = (cy - grid_origin_y) / res
+
+    rad_cells = math.ceil(radius / res)
+    row_min = max(0, math.floor(row_c - rad_cells))
+    row_max = min(config.grid_height - 1, math.ceil(row_c + rad_cells))
+    col_min = max(0, math.floor(col_c - rad_cells))
+    col_max = min(config.grid_width - 1, math.ceil(col_c + rad_cells))
+
+    if row_min > row_max or col_min > col_max:
+        return
+
+    y_idx, x_idx = np.ogrid[row_min : row_max + 1, col_min : col_max + 1]
+    dist_sq = (y_idx - row_c) ** 2 + (x_idx - col_c) ** 2
+    mask = dist_sq <= (radius / res) ** 2
+    if not np.any(mask):
+        return
+
+    region = grid_array[row_min : row_max + 1, col_min : col_max + 1]
+    region[mask] = np.maximum(region[mask], value)
 
 
 def rasterize_polygon(

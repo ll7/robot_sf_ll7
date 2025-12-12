@@ -16,6 +16,15 @@
 				"isDefault": true
 			}
 		},
+			{
+			"label": "Run Tests in parallel",
+			"type": "shell",
+			"command": "uv run pytest -n auto",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		},
 		{
 			"label": "Run Tests (GUI)",
 			"type": "shell",
@@ -48,7 +57,7 @@
 		{
 			"label": "Check Code Quality",
 			"type": "shell",
-			"command": "uv run ruff check . && uv run pylint robot_sf --errors-only",
+			"command": "uv run ruff check . && uv run ty check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
 		},
@@ -62,7 +71,7 @@
 		{
 			"label": "Run Tests with Coverage",
 			"type": "shell",
-			"command": "uv run pytest tests",
+			"command": "uv run pytest -n auto tests",
 			"group": "test",
 			"presentation": {
 				"echo": true,

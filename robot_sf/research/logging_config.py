@@ -1,83 +1,24 @@
-"""Logging configuration for the research reporting module.
+"""Logging configuration for the research module (deprecated).
 
-This module provides centralized logging setup using Loguru as the
-canonical logging facade (per Constitution Principle XII).
+This module is deprecated. Use robot_sf.common.logging instead.
 
-Key Features:
-    - Structured logging with context fields
-    - Conditional verbosity for debug mode
-    - Per-module loggers with appropriate levels
-    - Integration with existing robot_sf logging patterns
+For backwards compatibility, this module re-exports the unified logging
+functions from robot_sf.common.logging.
 
-Usage:
-    >>> from robot_sf.research.logging_config import get_logger
-    >>> logger = get_logger(__name__)
-    >>> logger.info("Report generation started", experiment="demo", seeds=3)
+New code should use:
+    >>> from robot_sf.common.logging import configure_logging, get_logger
 """
 
 from __future__ import annotations
 
-import sys
-from typing import Any
-
 from loguru import logger
-
-
-def configure_research_logging(level: str = "INFO", enable_debug: bool = False) -> None:
-    """Configure logging for research module.
-
-    Args:
-        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        enable_debug: If True, enable debug-level messages for research module
-
-    Note:
-        This function is idempotent - safe to call multiple times.
-    """
-    # Remove default logger if present
-    logger.remove()
-
-    # Add console handler with appropriate format
-    log_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-        "<level>{message}</level>"
-    )
-
-    logger.add(
-        sys.stderr,
-        format=log_format,
-        level="DEBUG" if enable_debug else level,
-        colorize=True,
-    )
-
-
-def get_logger(name: str) -> Any:
-    """Get a logger instance for the specified module.
-
-    Args:
-        name: Module name (typically __name__)
-
-    Returns:
-        Loguru logger bound to the module context
-
-    Example:
-        >>> logger = get_logger(__name__)
-        >>> logger.info("Processing metrics", seed=42, variant_id="bc10_ds200")
-    """
-    return logger.bind(module=name)
 
 
 def log_seed_failure(seed: int | str | None, policy_type: str | None, reason: str) -> None:
     """Emit a standardized warning for seed-level failures."""
-
     logger.warning(
         "Seed run failed or missing",
         seed=seed,
         policy_type=policy_type or "unknown",
         reason=reason,
     )
-
-
-# Default configuration on module import
-configure_research_logging()

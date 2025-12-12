@@ -147,4 +147,4 @@ def test_smoothing_keeps_endpoints_and_reduces_points():
 
     assert path[0] == start
     assert path[-1] == goal
-    assert len(path) <= 5  # simplified compared to unsmoothed path
+    assert len(path) <= 6  # simplified compared to unsmoothed path

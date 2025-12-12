@@ -407,8 +407,9 @@ class VisibilityPlanner:
             return waypoints
 
         smoothed = douglas_peucker(waypoints, self.config.smoothing_epsilon)
-        smoothed = _dedup_consecutive(smoothed)
-        smoothed = _prune_collinear(smoothed)
+        smoothed = _dedup_consecutive(smoothed, tol=self.config.smoothing_epsilon * 0.25)
+        smoothed = _prune_collinear(smoothed, tol=self.config.smoothing_epsilon * 0.1)
+        smoothed = _dedup_consecutive(smoothed, tol=self.config.smoothing_epsilon * 0.25)
         try:
             self._validate_path(smoothed, inflated_obstacles)
             return smoothed

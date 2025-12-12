@@ -14,6 +14,8 @@ from shapely.prepared import PreparedGeometry, prep
 from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
+from robot_sf.planner import PlanningError
+from robot_sf.planner.visibility_planner import PlanningFailedError
 
 
 @dataclass
@@ -55,7 +57,8 @@ class RouteNavigator:
         Returns:
             Vec2D: Current waypoint coordinates.
         """
-
+        if not self.waypoints:
+            raise ValueError("RouteNavigator has no waypoints; cannot fetch current waypoint.")
         return self.waypoints[self.waypoint_id]
 
     @property
@@ -91,10 +94,18 @@ class RouteNavigator:
         Args:
             pos: New robot position.
         """
+        if not self.waypoints:
+            self.pos = pos
+            self.reached_waypoint = False
+            return
 
         reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
         if reached_waypoint:
-            self.waypoint_id = min(len(self.waypoints) - 1, self.waypoint_id + 1)
+            next_idx = self.waypoint_id + 1
+            if self.waypoints:
+                self.waypoint_id = min(len(self.waypoints) - 1, next_idx)
+            else:
+                self.waypoint_id = 0
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
@@ -104,9 +115,9 @@ class RouteNavigator:
         Args:
             route: Ordered list of waypoints to follow.
         """
-
         self.waypoints = route
         self.waypoint_id = 0
+        self.reached_waypoint = False
 
 
 def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Vec2D]:
@@ -124,23 +135,32 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     use_planner = getattr(map_def, "_use_planner", False)
 
     if use_planner and planner is not None:
-        spawn_idx = (
-            spawn_id if spawn_id is not None else randint(0, len(map_def.robot_spawn_zones) - 1)
-        )
-        goal_idx = randint(0, len(map_def.robot_goal_zones) - 1)
+        if not map_def.robot_routes_by_spawn_id:
+            msg = "Planner mode enabled but no robot routes are defined on the map."
+            raise ValueError(msg)
+
+        if spawn_id is None:
+            spawn_id = sample(list(map_def.robot_routes_by_spawn_id.keys()), k=1)[0]
+
+        routes_for_spawn = map_def.robot_routes_by_spawn_id.get(spawn_id)
+        if not routes_for_spawn:
+            msg = f"Planner mode: no routes found for spawn_id={spawn_id}"
+            raise ValueError(msg)
+
+        route_choice = sample(routes_for_spawn, k=1)[0]
         prepared_obstacles = get_prepared_obstacles(map_def)
-        start = sample_zone(
-            map_def.robot_spawn_zones[spawn_idx], 1, obstacle_polygons=prepared_obstacles
-        )[0]
-        goal = sample_zone(
-            map_def.robot_goal_zones[goal_idx], 1, obstacle_polygons=prepared_obstacles
-        )[0]
-        planned = planner.plan(start, goal)
-        if isinstance(planned, tuple):
-            route, _ = planned
+        start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+        goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+        try:
+            planned = planner.plan(start, goal)
+        except (PlanningFailedError, PlanningError):
+            pass
         else:
-            route = planned
-        return route
+            if isinstance(planned, tuple):
+                route, _ = planned
+            else:
+                route = planned
+            return route
 
     # If no spawn_id is provided, choose a random one
     spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)

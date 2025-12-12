@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
-from python_motion_planning.common import Visualizer
+from python_motion_planning.common import TYPES, Visualizer
 
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.common.logging import configure_logging
@@ -15,13 +15,7 @@ from robot_sf.nav.motion_planning_adapter import (
 )
 from robot_sf.nav.svg_map_parser import convert_map
 
-try:
-    from python_motion_planning.common import TYPES
-except ImportError:  # pragma: no cover - optional runtime dependency
-    TYPES = None  # type: ignore[assignment]
-
-
-MAP_PATH = Path("maps/svg_maps/classic_overtaking.svg")
+MAP_PATH = Path("maps/svg_maps/example_map_with_obstacles.svg")
 """svg map file to load for the test."""
 
 
@@ -44,20 +38,17 @@ def main():
         r=cfg.inflate_radius_cells,
     )
 
-    if TYPES is None:
-        logger.warning("python_motion_planning not installed; skipping obstacle count.")
-    else:
-        type_map_np = np.asarray(grid.type_map)
-        obstacle_cells = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
-        total_cells = type_map_np.size
-        logger.info(
-            "Obstacle cells: {obs} ({pct:.2f}% of grid)",
-            obs=obstacle_cells,
-            pct=obstacle_cells / total_cells * 100,
-        )
+    type_map_np = np.asarray(grid.type_map)
+    obstacle_cells = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
+    total_cells = type_map_np.size
+    logger.info(
+        "Obstacle cells: {obs} ({pct:.2f}% of grid)",
+        obs=obstacle_cells,
+        pct=obstacle_cells / total_cells * 100,
+    )
 
     vis = Visualizer("Path Visualizer")
-    vis.plot_grid_map(grid)
+    vis.plot_grid_map(grid, equal=True)
     # save fig attribute from vis to output/plots/motion_planning_adapter_grid.png
     output_dir = get_artifact_category_path("plots")
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -113,7 +113,7 @@ class ClassicPlanVisualizer(Visualizer):
     def plot_grid_map(  # type: ignore[override]
         self,
         grid_map: Grid,
-        equal: bool = False,
+        equal: bool = True,
         alpha_3d: dict | None = None,
         show_esdf: bool = False,
         alpha_esdf: float = 0.5,

@@ -107,7 +107,7 @@ class SvgMapConverter:
             FileNotFoundError: If svg_file_str path does not exist (raised via raise_fatal_with_remedy).
             xml.etree.ElementTree.ParseError: If SVG has invalid XML syntax (raised via raise_fatal_with_remedy).
         """
-        logger.info(f"Loading the root of the SVG file: {self.svg_file_str}")
+        logger.debug(f"Loading the root of the SVG file: {self.svg_file_str}")
 
         # Parse the SVG file with actionable error handling
         try:
@@ -565,7 +565,7 @@ class SvgMapConverter:
             (0, 0, 0, height),  # left
             (width, width, 0, height),  # right
         ]
-        logger.debug(f"Bounds: {bounds}")
+        # logger.debug(f"Bounds: {bounds}")
         ped_goal_zones: list[Rect] = []
         ped_crowded_zones: list[Rect] = []
 
@@ -725,14 +725,13 @@ def convert_map(svg_file: str):
         ...     print(f"Loaded map with {len(map_def.obstacles)} obstacles")
     """
 
-    logger.debug("Converting SVG map to MapDefinition object.")
-    logger.info(f"SVG file: {svg_file}")
+    logger.debug(f'Converting SVG map "{svg_file}" to MapDefinition object.')
 
     try:
         converter = SvgMapConverter(svg_file)
         assert isinstance(converter.map_definition, MapDefinition)
         md: MapDefinition = converter.map_definition
-        logger.info(
+        logger.debug(
             "SVG map {svg_file} converted: robot_routes={rr} ped_routes={pr} spawn_zones={sz} goal_zones={gz}",
             svg_file=svg_file,
             rr=len(md.robot_routes),

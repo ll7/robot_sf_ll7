@@ -504,14 +504,53 @@ class SvgMapConverter:
         if not ped_crowded_zones:
             logger.debug("No crowded zones found in the SVG file (optional)")
 
-    def _ensure_robot_routes(self, robot_routes: list[GlobalRoute]) -> None:
-        """Raise when no robot routes were parsed."""
+    @staticmethod
+    def _zone_center(zone: Zone) -> tuple[float, float]:
+        """Return the centroid of a rectangular zone."""
+        xs = [p[0] for p in zone]
+        ys = [p[1] for p in zone]
+        return (sum(xs) / len(xs), sum(ys) / len(ys))
+
+    def _ensure_robot_routes(
+        self,
+        robot_routes: list[GlobalRoute],
+        robot_spawn_zones: list[Rect],
+        robot_goal_zones: list[Rect],
+    ) -> list[GlobalRoute]:
+        """Ensure at least one robot route exists, generating straight-line defaults if absent.
+
+        Returns:
+            Parsed routes when present, otherwise synthesized straight-line routes between
+            spawn and goal zone centers.
+        """
         if robot_routes:
-            return
-        raise ValueError(
-            "SVG map conversion produced zero robot routes. "
-            "Ensure at least one 'robot_route_*_*' path label exists.",
+            return robot_routes
+
+        if not robot_spawn_zones or not robot_goal_zones:
+            raise ValueError(
+                "SVG map conversion produced zero robot routes and spawn/goal zones are missing; "
+                "ensure at least one 'robot_route_*_*' path label exists or provide spawn/goal zones.",
+            )
+
+        logger.warning(
+            "No robot routes found; generating straight-line routes between spawn and goal zone centers.",
         )
+        fallback_routes: list[GlobalRoute] = []
+        for spawn_idx, spawn_zone in enumerate(robot_spawn_zones):
+            spawn_center = self._zone_center(spawn_zone)
+            for goal_idx, goal_zone in enumerate(robot_goal_zones):
+                goal_center = self._zone_center(goal_zone)
+                fallback_routes.append(
+                    GlobalRoute(
+                        spawn_idx,
+                        goal_idx,
+                        [spawn_center, goal_center],
+                        spawn_zone,
+                        goal_zone,
+                    )
+                )
+
+        return fallback_routes
 
     def _process_rects(
         self,
@@ -609,8 +648,31 @@ class SvgMapConverter:
         """
         Create a MapDefinition object from the path and rectangle information.
         """
-        width: float = float(self.svg_root.attrib.get("width"))
-        height: float = float(self.svg_root.attrib.get("height"))
+
+        def _parse_svg_length(value: str | None) -> float | None:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                match = re.match(r"([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)", value)
+                return float(match.group(1)) if match else None
+
+        width: float | None = _parse_svg_length(self.svg_root.attrib.get("width"))
+        height: float | None = _parse_svg_length(self.svg_root.attrib.get("height"))
+
+        if width is None or height is None:
+            view_box = self.svg_root.attrib.get("viewBox") or self.svg_root.attrib.get("viewbox")
+            if view_box:
+                parts = view_box.replace(",", " ").split()
+                if len(parts) == 4:
+                    _, _, vb_width, vb_height = parts
+                    width = width or _parse_svg_length(vb_width)
+                    height = height or _parse_svg_length(vb_height)
+
+        if width is None or height is None:
+            msg = "SVG width/height missing and could not be inferred from viewBox."
+            raise ValueError(msg)
 
         # Process rectangles first
         (
@@ -637,7 +699,7 @@ class SvgMapConverter:
         single_pedestrians = self._process_single_pedestrians_from_circles()
 
         self._log_map_warnings(obstacles, ped_routes, ped_crowded_zones)
-        self._ensure_robot_routes(robot_routes)
+        robot_routes = self._ensure_robot_routes(robot_routes, robot_spawn_zones, robot_goal_zones)
 
         poi_positions, poi_labels = self._process_pois()
 

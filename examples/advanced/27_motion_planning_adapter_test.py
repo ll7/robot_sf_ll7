@@ -20,7 +20,7 @@ from robot_sf.nav.motion_planning_adapter import (
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
-MAP_PATH = Path("maps/svg_maps/classic_doorway.svg")
+MAP_PATH = Path("maps/svg_maps/map3_1350_buildings_inkscape.svg")
 """svg map file to load for the test."""
 
 

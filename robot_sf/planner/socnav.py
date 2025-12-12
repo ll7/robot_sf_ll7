@@ -102,7 +102,7 @@ class OccupancyAwarePlannerMixin:
             }
             ped_state = {
                 "positions": observation.get("pedestrians_positions"),
-                "count": self._as_1d_float(observation.get("pedestrians_count", [0]), pad=1)[0],
+                "count": self._as_1d_float(observation.get("pedestrians_count", [0]), pad=1),
                 "radius": self._as_1d_float(observation.get("pedestrians_radius", [0.0]), pad=1)[0],
             }
         return robot_state, goal_state, ped_state

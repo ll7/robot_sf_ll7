@@ -1,5 +1,6 @@
 """Global planner primitives for SVG-based waypoint generation."""
 
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
@@ -23,7 +24,7 @@ class PlannerConfig:
     enable_smoothing: bool = True
     smoothing_epsilon: float = 0.1
     cache_graphs: bool = True
-    fallback_on_failure: bool = True
+    fallback_on_failure: bool = False
 
     def __post_init__(self) -> None:
         """Validate configuration constraints."""
@@ -93,14 +94,19 @@ class GlobalPlanner:
         self._validate_bounds(goal)
         via_points = self._resolve_via_pois(via_pois or [])
 
+        if not self.map_def.obstacles:
+            logger.warning("No obstacles in map; returning direct path.")
+            return self._path_without_obstacles(start, goal, via_points)
+
         planning_obstacles = self._inflate_obstacles()
         collision_obstacles = self._inflate_obstacles_for_collision()
         graph_obstacles = self._prepare_graph_obstacles(planning_obstacles)
         start_safe = self._project_to_free_space(start, planning_obstacles)
         goal_safe = self._project_to_free_space(goal, planning_obstacles)
 
-        if not self.map_def.obstacles:
-            return self._path_without_obstacles(start_safe, goal_safe, via_points)
+        # CRITICAL: Also project via points to free space!
+        # POIs might be placed in areas that become blocked after inflation
+        via_points_safe = [self._project_to_free_space(vp, planning_obstacles) for vp in via_points]
 
         logger.debug(
             "Planning path start={start} goal={goal} via={vias} inflated_obs={count}",
@@ -112,16 +118,24 @@ class GlobalPlanner:
 
         planner_graph = self._get_or_build_graph(graph_obstacles)
         if planner_graph._built:
-            waypoints = self._compute_waypoints(planner_graph, start_safe, goal_safe, via_points)
+            logger.debug("Computing waypoints.")
+            waypoints = self._compute_waypoints(
+                planner_graph, start_safe, goal_safe, via_points_safe
+            )
             return self._finalize_path(
                 waypoints, planning_obstacles, collision_obstacles, start_safe, goal_safe
             )
 
-        # Fallback: Add intermediate waypoint to ensure at least 3 waypoints for navigation
-        mid_x = (start_safe[0] + goal_safe[0]) / 2
-        mid_y = (start_safe[1] + goal_safe[1]) / 2
-        intermediate = (mid_x, mid_y)
-        return [start_safe, intermediate, goal_safe]
+        else:
+            logger.warning("Visibility graph not built; returning midpoint fallback path.")
+            if not self.config.fallback_on_failure:
+                raise PlanningFailedError(
+                    start=start_safe, goal=goal_safe, reason="Graph build failed"
+                )
+            return [
+                start_safe,
+                goal_safe,
+            ]
 
     def plan_multi_goal(
         self, start: Vec2D, goals: list[Vec2D], *, optimize_order: bool = True
@@ -185,6 +199,7 @@ class GlobalPlanner:
 
             graph = VisibilityGraph()
             graph.build(polygons)
+            logger.debug("Visibility graph built successfully.")
             return graph
         except (ValueError, ZeroDivisionError) as e:
             # pyvisgraph can fail on certain polygon configurations (numerical issues)
@@ -213,36 +228,101 @@ class GlobalPlanner:
         goal: Vec2D,
         via_points: list[Vec2D],
     ) -> list[Vec2D]:
-        """Compute waypoints across any via points, applying fallback when needed.
+        """Compute waypoints across any via points using the visibility graph.
+
+        Adds via points as permanent vertices in the visibility graph to ensure
+        that pyvisgraph properly routes through them with visibility checking,
+        rather than taking direct line-of-sight paths.
 
         Returns:
             Combined waypoint list from start through any via points to goal.
         """
+        if not planner_graph._built:
+            logger.warning("Visibility graph not built; using straight line path")
+            return [start, *via_points, goal]
+
+        # Add via points to the visibility graph as permanent vertices
+        # This ensures shortest_path() routes through them properly
+        for via_point in via_points:
+            logger.debug("Adding via point {point} to visibility graph", point=via_point)
+            planner_graph.add_waypoint(via_point)
+
         waypoints: list[Vec2D] = []
-        current_start = start
+        current_pos = start
+
+        # Route through each intermediate point in sequence
         for intermediate in [*via_points, goal]:
-            segment = planner_graph.shortest_path(current_start, intermediate)
+            logger.debug(
+                "Planning segment: from={pos} to={dest}",
+                pos=current_pos,
+                dest=intermediate,
+            )
+
+            # Request shortest path using pyvisgraph's built-in obstacle avoidance
+            segment = planner_graph.shortest_path(current_pos, intermediate)
+
             if not segment:
                 if self.config.fallback_on_failure:
                     logger.warning(
-                        "No path found; returning straight line fallback between {start} and {goal}",
-                        start=current_start,
-                        goal=intermediate,
+                        "No path found from {pos} to {dest}; using direct fallback",
+                        pos=current_pos,
+                        dest=intermediate,
                     )
-                    waypoints.extend([current_start, intermediate])
-                    current_start = intermediate
-                    continue
-                raise PlanningFailedError(
-                    start=current_start, goal=intermediate, reason="No path found"
-                )
+                    segment = [current_pos, intermediate]
+                else:
+                    raise PlanningFailedError(
+                        start=current_pos,
+                        goal=intermediate,
+                        reason="No collision-free path found by visibility graph",
+                    )
 
-            if waypoints:
-                # Avoid duplicating the connecting waypoint
+            # Append segment, avoiding duplicate waypoint at connection
+            if waypoints and segment:
                 waypoints.extend(segment[1:])
             else:
                 waypoints.extend(segment)
-            current_start = intermediate
+
+            current_pos = intermediate
+            logger.debug("Segment returned {count} waypoints", count=len(segment) if segment else 0)
+
+        logger.debug("Total waypoints computed: {count}", count=len(waypoints))
         return waypoints
+
+    def _find_nearest_collision_free_vertex(
+        self, point: Vec2D, vertices: set[Vec2D], from_point: Vec2D
+    ) -> Vec2D | None:
+        """Find the nearest graph vertex with collision-free path from current position.
+
+        Args:
+            point: Target point coordinates.
+            vertices: Set of available graph vertex coordinates.
+            from_point: Current position to check collision-free path from.
+
+        Returns:
+            Coordinates of the nearest collision-free vertex, or None if none found.
+        """
+        collision_obstacles = self._inflate_obstacles_for_collision()
+        min_dist = float("inf")
+        nearest = None
+        px, py = point
+
+        for vx, vy in vertices:
+            # Check if path from current position to this vertex is collision-free
+            test_line = LineString([from_point, (vx, vy)])
+            collides = False
+
+            for obs in collision_obstacles:
+                if obs.intersects(test_line) and not obs.touches(test_line):
+                    collides = True
+                    break
+
+            if not collides:
+                dist = math.hypot(vx - px, vy - py)
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest = (vx, vy)
+
+        return nearest
 
     def _finalize_path(
         self,
@@ -336,16 +416,46 @@ class GlobalPlanner:
     def _project_to_free_space(self, point: Vec2D, obstacles: Iterable[Polygon]) -> Vec2D:
         """Move a point onto the nearest obstacle boundary if it lies inside.
 
+        Also applies a small buffer to ensure the point is truly exterior to polygons,
+        as pyvisgraph assumes start/goal points are strictly outside all obstacles.
+
         Returns:
             The original point when already collision-free, otherwise the projected point.
         """
         pt = Point(point)
+        min_clearance = 0.05  # Small buffer to ensure point is exterior
+
         for poly in obstacles:
-            if poly.contains(pt):
+            if poly.contains(pt) or poly.touches(pt) or poly.distance(pt) < min_clearance:
+                # Project to boundary and push slightly outward
                 _, nearest = nearest_points(pt, poly.exterior)
-                projected = (nearest.x, nearest.y)
+
+                # Calculate outward normal direction from nearest point
+                nearest_coord = (nearest.x, nearest.y)
+                dx = point[0] - nearest.x
+                dy = point[1] - nearest.y
+                dist = math.hypot(dx, dy)
+
+                if dist < 1e-6:
+                    # Point is exactly on boundary; use centroid direction
+                    cx, cy = poly.centroid.x, poly.centroid.y
+                    dx = nearest.x - cx
+                    dy = nearest.y - cy
+                    dist = math.hypot(dx, dy)
+
+                if dist > 1e-6:
+                    # Normalize and push outward
+                    dx /= dist
+                    dy /= dist
+                    projected = (nearest.x + dx * min_clearance, nearest.y + dy * min_clearance)
+                else:
+                    # Fallback: just use nearest boundary point
+                    projected = nearest_coord
+
                 logger.warning(
-                    "Projected point {pt} to nearest free boundary {proj}", pt=point, proj=projected
+                    "Projected point {pt} outside obstacle to {proj}",
+                    pt=point,
+                    proj=projected,
                 )
                 return projected
         return point
@@ -399,7 +509,9 @@ class GlobalPlanner:
             for poly in obstacles:
                 if poly.crosses(segment) or poly.contains(segment):
                     logger.warning(
-                        "Narrow passage detected: path segment intersects inflated obstacle boundary."
+                        "Narrow passage detected: "
+                        + f"path segment from {start_pt} to {end_pt} "
+                        + "intersects inflated obstacle boundary. "
                     )
                 elif poly.touches(segment):
                     logger.warning(

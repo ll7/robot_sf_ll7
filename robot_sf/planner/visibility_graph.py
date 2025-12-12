@@ -70,6 +70,25 @@ class VisibilityGraph:
             return []
         return [(p.x, p.y) for p in points]
 
+    def add_waypoint(self, waypoint: tuple[float, float]) -> None:
+        """Add a waypoint as a permanent vertex in the visibility graph.
+
+        This ensures the waypoint becomes part of the routing graph, allowing
+        shortest_path() to properly route through intermediate waypoints.
+
+        Args:
+            waypoint: Waypoint coordinates as (x, y).
+        """
+        if not self._built:
+            raise RuntimeError("VisibilityGraph must be built before adding waypoints.")
+
+        pt = vg.Point(*waypoint)
+        # Add the point to the visibility graph permanently
+        self._vg.update([pt])
+
+        # Rebuild the NetworkX graph to reflect the new connectivity
+        self._nx_graph = self._build_networkx_graph()
+
     def _build_networkx_graph(self) -> nx.Graph:
         """Create a NetworkX view of the internal graph for diagnostics.
 

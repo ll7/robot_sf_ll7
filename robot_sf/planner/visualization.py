@@ -186,6 +186,85 @@ def _plot_path(path: list[Vec2D], via_points: list[Vec2D], ax: Axes) -> None:
         )
 
 
+def plot_visibility_graph(
+    planner: GlobalPlanner,
+    *,
+    title: str | None = None,
+    save_path: str | Path | None = None,
+    ax: Axes | None = None,
+    show: bool = True,
+    flip_y: bool = True,
+) -> plt.Figure:
+    """Plot the visibility graph structure, obstacles, and POIs.
+
+    Shows how the planner constructs its graph vertices (at obstacle corners)
+    and edges (straight-line visibility paths between non-colliding points).
+
+    Args:
+        planner: Planner instance to extract graph and obstacles from.
+        title: Optional plot title.
+        save_path: When set, write the figure to this location (directories are created).
+        ax: Optional Matplotlib axes to draw on; a new figure is created otherwise.
+        show: When True, call ``plt.show()`` after rendering.
+        flip_y: Invert the y-axis to match SVG coordinate origin (top-left).
+
+    Returns:
+        Matplotlib Figure containing the rendered visibility graph.
+    """
+    figure, axes = _init_axes(planner, ax=ax, title=title, flip_y=flip_y)
+
+    inflated_obstacles = planner.build_inflated_obstacles()
+    _plot_obstacles(inflated_obstacles, axes)
+
+    # Plot the visibility graph if available
+    if planner._graph is not None and planner._graph.networkx_graph is not None:
+        _plot_visibility_graph_edges(planner._graph.networkx_graph, axes)
+        _plot_visibility_graph_vertices(planner._graph.networkx_graph, axes)
+
+    _plot_pois(planner, axes)
+
+    axes.legend(loc="upper right", frameon=True)
+    axes.grid(True, linestyle="--", alpha=0.3)
+    figure.tight_layout()
+
+    if save_path:
+        _save_figure(figure, save_path)
+    if show:
+        plt.show()
+    return figure
+
+
+def _plot_visibility_graph_edges(graph, ax: Axes) -> None:
+    """Plot visibility graph edges (straight-line paths between nodes)."""
+    if not graph or not graph.edges():
+        return
+    for u, v in graph.edges():
+        x = [u[0], v[0]]
+        y = [u[1], v[1]]
+        ax.plot(x, y, color="#9ca3af", linewidth=0.8, alpha=0.6, zorder=1)
+    logger.debug("Plotted {count} visibility graph edges", count=len(list(graph.edges())))
+
+
+def _plot_visibility_graph_vertices(graph, ax: Axes) -> None:
+    """Plot visibility graph vertices (obstacle corners and key points)."""
+    if not graph or not graph.nodes():
+        return
+    nodes = list(graph.nodes())
+    xs = [n[0] for n in nodes]
+    ys = [n[1] for n in nodes]
+    ax.scatter(
+        xs,
+        ys,
+        color="#6366f1",
+        s=12,
+        marker=".",
+        alpha=0.7,
+        label=f"visibility graph ({len(nodes)} nodes)",
+        zorder=2,
+    )
+    logger.debug("Plotted {count} visibility graph vertices", count=len(nodes))
+
+
 def _save_figure(fig: plt.Figure, target: str | Path) -> None:
     """Persist the figure to disk, creating parent directories as needed."""
     target_path = Path(target)

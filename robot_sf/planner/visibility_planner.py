@@ -513,14 +513,16 @@ class VisibilityPlanner:
             segment = LineString([start_pt, end_pt])
             for poly in obstacles:
                 if poly.crosses(segment) or poly.contains(segment):
-                    logger.warning(
-                        "Narrow passage detected: "
-                        + f"path segment from {start_pt} to {end_pt} "
-                        + "intersects inflated obstacle boundary. "
+                    raise PlanningFailedError(
+                        start=path[0],
+                        goal=path[-1],
+                        reason="Path segment intersects inflated obstacle",
                     )
                 elif poly.touches(segment):
-                    logger.warning(
-                        "Narrow passage detected: path segment touches inflated obstacle."
+                    raise PlanningFailedError(
+                        start=path[0],
+                        goal=path[-1],
+                        reason="Path segment touches inflated obstacle",
                     )
 
     def _prepare_graph_obstacles(self, polygons: list[Polygon]) -> list[Polygon]:

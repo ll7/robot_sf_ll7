@@ -213,7 +213,7 @@ def visualize_grid(
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         vis.fig.savefig(str(output_path))
-        logger.info(f"Saved grid visualization to {output_path}")
+        logger.success(f"Saved grid visualization to {output_path}")
     else:
         ensure_interactive_backend()
         vis.show()

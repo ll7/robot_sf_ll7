@@ -465,7 +465,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 
 - Clear, intent‑revealing names; small, cohesive functions; robust error handling.
 - Follow existing style; document non‑obvious choices with comments/docstrings.
-- Add helpful comments to quickly understand the cod
+- Add helpful comments to quickly understand the code’s purpose and logic.
 - Avoid duplication; prefer composition and reuse.
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).

@@ -262,6 +262,8 @@ class ClassicGlobalPlanner:
         if last_error is not None:
             error_msg = f"{error_msg}; last error: {last_error}"
         logger.error(error_msg)
+        logger.error("Planning from {start} to {goal} failed.", start=start, goal=goal)
+        logger.error("Consider increasing the cells per meter value.")
         raise PlanningError(error_msg)
 
     def _scale_path_info(

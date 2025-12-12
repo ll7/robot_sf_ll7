@@ -14,7 +14,7 @@ def test_planner_config_defaults():
     assert config.enable_smoothing is True
     assert config.smoothing_epsilon == 0.1
     assert config.cache_graphs is True
-    assert config.fallback_on_failure is True
+    assert config.fallback_on_failure is False
 
 
 def test_planner_config_rejects_non_positive_radius():

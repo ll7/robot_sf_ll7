@@ -147,6 +147,7 @@ def _visualize_planning_debug(  # noqa: C901
 
     plt.tight_layout()
     save_path = Path("output/plots/poi_routing_debug.png")
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     print(f"[DEBUG] Saved debug visualization to {save_path}")
     print("[DEBUG] Note: Red zones = inflated obstacles (keep-out regions)")

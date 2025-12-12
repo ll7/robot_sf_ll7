@@ -51,6 +51,7 @@ dependencies = [
     "shapely>=2.1.2",
     "networkx>=3.6",
     "pyvisgraph>=0.2.1",
+    "python-motion-planning==2.0.dev1",
 ]
 
 [project.optional-dependencies]

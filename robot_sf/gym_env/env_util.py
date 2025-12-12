@@ -611,13 +611,13 @@ def create_spaces_with_image(
     ):
         grid_config = getattr(env_config, "grid_config", None)
         if grid_config is not None and isinstance(grid_config, GridConfig):
-            grid_box, meta_space = make_grid_observation_spaces(grid_config)
+            grid_box, meta_spaces = make_grid_observation_spaces(grid_config)
             orig_dict = dict(orig_obs_space.spaces)
             norm_dict = dict(observation_space.spaces)
             orig_dict["occupancy_grid"] = grid_box
             norm_dict["occupancy_grid"] = grid_box
-            orig_dict["occupancy_grid_meta"] = meta_space
-            norm_dict["occupancy_grid_meta"] = meta_space
+            orig_dict.update(meta_spaces)
+            norm_dict.update(meta_spaces)
             orig_obs_space = spaces.Dict(orig_dict)
             observation_space = spaces.Dict(norm_dict)
 

@@ -45,6 +45,44 @@ class PlannerConfig:
             )
 
 
+def _dedup_consecutive(points: list[Vec2D], tol: float = 1e-9) -> list[Vec2D]:
+    """Remove consecutive duplicate points within tolerance.
+
+    Returns:
+        list[Vec2D]: Points with consecutive duplicates removed.
+    """
+    if not points:
+        return []
+    deduped = [points[0]]
+    for pt in points[1:]:
+        prev = deduped[-1]
+        if abs(pt[0] - prev[0]) > tol or abs(pt[1] - prev[1]) > tol:
+            deduped.append(pt)
+    return deduped
+
+
+def _prune_collinear(points: list[Vec2D], tol: float = 1e-6) -> list[Vec2D]:
+    """Drop intermediate points that are collinear within tolerance.
+
+    Returns:
+        list[Vec2D]: Points with collinear intermediates removed.
+    """
+    if len(points) < 3:
+        return points
+    pruned: list[Vec2D] = [points[0]]
+    for i in range(1, len(points) - 1):
+        prev = pruned[-1]
+        curr = points[i]
+        nxt = points[i + 1]
+        cross = abs(
+            (curr[0] - prev[0]) * (nxt[1] - prev[1]) - (curr[1] - prev[1]) * (nxt[0] - prev[0])
+        )
+        if cross > tol:
+            pruned.append(curr)
+    pruned.append(points[-1])
+    return pruned
+
+
 class PlanningFailedError(Exception):
     """Raised when no valid path exists between start and goal."""
 
@@ -369,6 +407,8 @@ class VisibilityPlanner:
             return waypoints
 
         smoothed = douglas_peucker(waypoints, self.config.smoothing_epsilon)
+        smoothed = _dedup_consecutive(smoothed)
+        smoothed = _prune_collinear(smoothed)
         try:
             self._validate_path(smoothed, inflated_obstacles)
             return smoothed

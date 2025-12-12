@@ -25,6 +25,18 @@ class OccupancyAwarePlannerMixin:
 
     _CHANNEL_KEYS = tuple(channel.value for channel in OBSERVATION_CHANNEL_ORDER)
 
+    @staticmethod
+    def _as_1d_float(values: Any, *, pad: int | None = None, default: float = 0.0) -> np.ndarray:
+        """Normalize metadata values to at least 1D float array with optional padding.
+
+        Returns:
+            np.ndarray: At-least-1D float array, padded to length ``pad`` when provided.
+        """
+        arr = np.atleast_1d(np.asarray(values, dtype=float))
+        if pad is not None and arr.size < pad:
+            arr = np.pad(arr, (0, pad - arr.size), constant_values=default)
+        return arr
+
     def _extract_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]] | None:
         """Extract occupancy grid tensor and metadata from observation.
 
@@ -62,6 +74,8 @@ class OccupancyAwarePlannerMixin:
             grid_arr = np.asarray(grid)
         except (TypeError, ValueError):
             return None
+        if grid_arr.ndim < 3:
+            return None
         return grid_arr, meta
 
     def _socnav_fields(self, observation: dict) -> tuple[dict, dict, dict]:
@@ -75,20 +89,21 @@ class OccupancyAwarePlannerMixin:
             goal_state = observation.get("goal", {})
             ped_state = observation.get("pedestrians", {})
         else:
+            pos_arr = self._as_1d_float(observation.get("robot_position", [0.0, 0.0]), pad=2)
             robot_state = {
-                "position": observation.get("robot_position"),
-                "heading": observation.get("robot_heading"),
-                "speed": observation.get("robot_speed"),
-                "radius": observation.get("robot_radius"),
+                "position": pos_arr,
+                "heading": self._as_1d_float(observation.get("robot_heading", [0.0]), pad=1)[0],
+                "speed": self._as_1d_float(observation.get("robot_speed", [0.0]), pad=1)[0],
+                "radius": self._as_1d_float(observation.get("robot_radius", [0.0]), pad=1)[0],
             }
             goal_state = {
-                "current": observation.get("goal_current"),
-                "next": observation.get("goal_next"),
+                "current": self._as_1d_float(observation.get("goal_current", [0.0, 0.0]), pad=2),
+                "next": self._as_1d_float(observation.get("goal_next", [0.0, 0.0]), pad=2),
             }
             ped_state = {
                 "positions": observation.get("pedestrians_positions"),
-                "count": observation.get("pedestrians_count"),
-                "radius": observation.get("pedestrians_radius"),
+                "count": self._as_1d_float(observation.get("pedestrians_count", [0]), pad=1)[0],
+                "radius": self._as_1d_float(observation.get("pedestrians_radius", [0.0]), pad=1)[0],
             }
         return robot_state, goal_state, ped_state
 
@@ -103,7 +118,10 @@ class OccupancyAwarePlannerMixin:
             return -1
         try:
             pos = self._CHANNEL_KEYS.index(key)
-            return int(indices[pos])
+            idx_arr = self._as_1d_float(indices)
+            if pos >= idx_arr.size:
+                return -1
+            return int(idx_arr[pos])
         except (ValueError, TypeError, IndexError):
             return -1
 
@@ -134,13 +152,17 @@ class OccupancyAwarePlannerMixin:
         """
         origin = np.asarray(meta.get("origin", [0.0, 0.0]), dtype=float)
         size = np.asarray(meta.get("size", [0.0, 0.0]), dtype=float)
-        resolution_arr = np.asarray(meta.get("resolution", [0.0]), dtype=float)
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]))
         if resolution_arr.size == 0 or resolution_arr[0] <= 0:
             return None
         resolution = float(resolution_arr[0])
 
-        use_ego = bool(np.asarray(meta.get("use_ego_frame", [0.0]), dtype=float)[0] > 0.5)
-        pose_arr = np.asarray(meta.get("robot_pose", [0.0, 0.0, 0.0]), dtype=float)
+        origin = self._as_1d_float(origin, pad=2)
+        size = self._as_1d_float(size, pad=2)
+
+        use_ego_arr = self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)
+        use_ego = bool(use_ego_arr[0] > 0.5)
+        pose_arr = self._as_1d_float(meta.get("robot_pose", [0.0, 0.0, 0.0]), pad=3)
         if use_ego:
             pose_tuple = ((float(pose_arr[0]), float(pose_arr[1])), float(pose_arr[2]))
             point = np.asarray(
@@ -171,11 +193,16 @@ class OccupancyAwarePlannerMixin:
         """
         if channel_idx < 0:
             return 0.0
-        grid_shape = (grid.shape[1], grid.shape[2])
+        if grid.ndim < 3:
+            return 1.0
+        channels, height, width = grid.shape[0], grid.shape[1], grid.shape[2]
+        grid_shape = (height, width)
         indices = self._world_to_grid(point, meta, grid_shape)
         if indices is None:
             return 1.0
         row, col = indices
+        if channel_idx >= channels:
+            return 1.0
         return float(grid[channel_idx, row, col])
 
     def _path_penalty(
@@ -196,6 +223,8 @@ class OccupancyAwarePlannerMixin:
             return 0.0, 0.0
 
         grid, meta = grid_payload
+        if grid.ndim < 3:
+            return 0.0, 0.0
         channel_idx = self._preferred_channel(meta)
         ped_idx = self._grid_channel_index(meta, "pedestrians")
         direction = direction / (np.linalg.norm(direction) + 1e-9)
@@ -326,9 +355,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             tuple: (linear_velocity, angular_velocity)
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
-        robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
-        goal = np.asarray(goal_state["current"], dtype=float)
+        robot_pos = self._as_1d_float(robot_state["position"], pad=2)[:2]
+        robot_heading = float(self._as_1d_float(robot_state["heading"], pad=1)[0])
+        goal = self._as_1d_float(goal_state["current"], pad=2)[:2]
 
         to_goal = goal - robot_pos
         distance = float(np.linalg.norm(to_goal))
@@ -337,7 +366,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
 
         # Light pedestrian repulsion to keep base planner pedestrian-aware
         ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
-        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0]) if ped_state else 0
+        ped_count = (
+            int(self._as_1d_float(ped_state.get("count", [0]), pad=1)[0]) if ped_state else 0
+        )
         ped_positions = ped_positions[:ped_count]
         repulse = np.zeros(2, dtype=float)
         for ped in ped_positions:

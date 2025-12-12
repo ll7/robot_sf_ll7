@@ -59,7 +59,7 @@ def main() -> None:
     # Plan a path to trigger graph construction
     start = (5.0, 5.0)
     goal = (45.0, 25.0)
-    path = planner.plan(start, goal)
+    _ = planner.plan(start, goal)  # Triggers graph construction
 
     print("\nVisibility graph constructed with:")
     if planner._graph and planner._graph.networkx_graph:

@@ -224,7 +224,7 @@ class ClassicGlobalPlanner:
                     goal=goal,
                     inflation=inflation,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - broad catch to retry with smaller inflation
                 last_error = exc
                 logger.warning(
                     "Planning attempt failed with inflation {inflation}: {error}",

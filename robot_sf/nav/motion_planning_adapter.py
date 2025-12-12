@@ -63,6 +63,7 @@ class ClassicPlanVisualizer(Visualizer):
         meters_per_cell: float | None = None,
         cells_per_meter: float | None = None,
     ) -> None:
+        """Initialize the classic planner visualizer with optional scaling metadata."""
         super().__init__(figname, figsize)
         self._meters_per_cell = meters_per_cell or (
             1.0 / cells_per_meter if cells_per_meter else None
@@ -71,6 +72,11 @@ class ClassicPlanVisualizer(Visualizer):
     def _resolve_meters_per_cell(
         self, grid_map: Grid, meters_per_cell: float | None
     ) -> float | None:
+        """Derive meters-per-cell from explicit overrides or grid metadata.
+
+        Returns:
+            Meters-per-cell value if discoverable, otherwise None.
+        """
         if meters_per_cell is not None:
             return meters_per_cell
         if self._meters_per_cell is not None:
@@ -86,6 +92,7 @@ class ClassicPlanVisualizer(Visualizer):
         return None
 
     def _set_world_axis_formatters(self, grid_map: Grid, meters_per_cell: float | None) -> None:
+        """Label axes in meters when scale information is available."""
         scale_factor = self._resolve_meters_per_cell(grid_map, meters_per_cell)
         if scale_factor is None or grid_map.dim != 2:
             return
@@ -105,6 +112,7 @@ class ClassicPlanVisualizer(Visualizer):
         alpha_esdf: float = 0.5,
         meters_per_cell: float | None = None,
     ) -> None:
+        """Plot grid cells and relabel axes in meters when scaling is known."""
         resolved_alpha = alpha_3d if alpha_3d is not None else self._DEFAULT_ALPHA_3D
 
         super().plot_grid_map(

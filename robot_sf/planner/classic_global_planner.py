@@ -20,6 +20,7 @@ Example:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -57,6 +58,30 @@ class ClassicPlannerConfig:
     inflate_radius_cells: int | None = 2
     add_boundary_obstacles: bool = True
     algorithm: str = "theta_star"
+
+    def __post_init__(self) -> None:
+        """Validate planner configuration."""
+        if not isinstance(self.cells_per_meter, (int, float)) or not math.isfinite(
+            self.cells_per_meter
+        ):
+            raise ValueError("cells_per_meter must be a finite number")
+        if self.cells_per_meter <= 0:
+            raise ValueError("cells_per_meter must be greater than zero")
+
+        if self.inflate_radius_cells is not None:
+            if (
+                isinstance(self.inflate_radius_cells, float)
+                and self.inflate_radius_cells.is_integer()
+            ):
+                self.inflate_radius_cells = int(self.inflate_radius_cells)
+            if not isinstance(self.inflate_radius_cells, int) or self.inflate_radius_cells < 0:
+                raise ValueError("inflate_radius_cells must be an int >= 0 or None")
+
+        if not isinstance(self.add_boundary_obstacles, bool):
+            raise ValueError("add_boundary_obstacles must be a bool")
+
+        if not isinstance(self.algorithm, str) or not self.algorithm:
+            raise ValueError("algorithm must be a non-empty string")
 
 
 class PlanningError(Exception):
@@ -140,8 +165,8 @@ class ClassicGlobalPlanner:
         Returns:
             Tuple of (grid_x, grid_y) indices.
         """
-        grid_x = int(world_x * self.config.cells_per_meter)
-        grid_y = int(world_y * self.config.cells_per_meter)
+        grid_x = math.floor(world_x * self.config.cells_per_meter)
+        grid_y = math.floor(world_y * self.config.cells_per_meter)
         return grid_x, grid_y
 
     def _grid_to_world(self, grid_x: int, grid_y: int) -> tuple[float, float]:
@@ -180,6 +205,15 @@ class ClassicGlobalPlanner:
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
 
+        def _validate_point(name: str, gx: int, gy: int) -> None:
+            if not (0 <= gx < self.grid.type_map.shape[0]) or not (
+                0 <= gy < self.grid.type_map.shape[1]
+            ):
+                raise PlanningError(
+                    f"{name} out of grid bounds: world={start if name == 'start' else goal}, "
+                    f"grid=({gx}, {gy}), grid_shape={self.grid.type_map.shape}"
+                )
+
         logger.debug(
             "Planning from {start} to {goal} (world coords: {start_w} → {goal_w})",
             start=start_grid,
@@ -202,8 +236,10 @@ class ClassicGlobalPlanner:
             grid = self._build_grid(inflation)
 
             # Mark start and goal in grid
-            grid.type_map[start_grid] = TYPES.START
-            grid.type_map[goal_grid] = TYPES.GOAL
+            _validate_point("start", *start_grid)
+            _validate_point("goal", *goal_grid)
+            grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
+            grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
 
             if self.config.algorithm == "theta_star":
                 planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)

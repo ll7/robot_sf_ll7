@@ -67,13 +67,17 @@ def main() -> None:
     goal_world = (40.0, 5.0)
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
-    path_world = planner.plan(start_world, goal_world)
+    path_world, path_info = planner.plan(start_world, goal_world)
 
     if not path_world:
         logger.error("Planning failed!")
         return
 
-    logger.info("Found path with {n} waypoints", n=len(path_world))
+    logger.info(
+        "Found path with {n} waypoints (length≈{length:.2f} m)",
+        n=len(path_world),
+        length=path_info.get("length") if path_info else float("nan"),
+    )
 
     # Convert path to grid coordinates for visualization
     path_grid = [planner._world_to_grid(x, y) for x, y in path_world]

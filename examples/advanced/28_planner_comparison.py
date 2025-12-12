@@ -81,7 +81,7 @@ def main() -> None:
     )
 
     try:
-        classic_path = classic_planner.plan(start, goal)
+        classic_path, classic_info = classic_planner.plan(start, goal)
         logger.info(
             "ClassicGlobalPlanner: Found path with {n} waypoints",
             n=len(classic_path),
@@ -90,6 +90,7 @@ def main() -> None:
     except Exception as e:
         logger.error(f"ClassicGlobalPlanner failed: {e}")
         classic_path = []
+        classic_info = {}
 
     # Summary
     logger.info("\n=== Summary ===")
@@ -114,7 +115,8 @@ def main() -> None:
         logger.info(
             "✓ ClassicGlobalPlanner: {n} waypoints, path length ≈ {length:.1f}m",
             n=len(classic_path),
-            length=sum(
+            length=classic_info.get("length")
+            or sum(
                 (
                     (classic_path[i + 1][0] - classic_path[i][0]) ** 2
                     + (classic_path[i + 1][1] - classic_path[i][1]) ** 2

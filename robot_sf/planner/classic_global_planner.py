@@ -15,7 +15,7 @@ Example:
     >>> from robot_sf.planner.classic_global_planner import ClassicGlobalPlanner
     >>> map_def = convert_map("maps/svg_maps/example.svg")
     >>> planner = ClassicGlobalPlanner(map_def, cells_per_meter=1.0)
-    >>> path = planner.plan(start=(5.0, 5.0), goal=(45.0, 25.0))
+    >>> path, info = planner.plan(start=(5.0, 5.0), goal=(45.0, 25.0))
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class ClassicGlobalPlanner:
         self,
         start: tuple[float, float],
         goal: tuple[float, float],
-    ) -> list[tuple[float, float]]:
+    ) -> tuple[list[tuple[float, float]], dict | None]:
         """Plan a path from start to goal with inflation fallback.
 
         Args:
@@ -163,8 +163,9 @@ class ClassicGlobalPlanner:
             goal: Goal position (x, y) in world coordinates (meters).
 
         Returns:
-            List of waypoints [(x, y), ...] in world coordinates.
-            Empty list if planning fails.
+            Tuple of:
+                - List of waypoints [(x, y), ...] in world coordinates.
+                - Optional path info dict from the underlying planner with length scaled to meters.
 
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
@@ -204,10 +205,14 @@ class ClassicGlobalPlanner:
                 raise ValueError(msg)
 
             try:
-                path_grid, _ = planner.plan()
+                plan_result = planner.plan()
+                path_grid, path_info = (
+                    plan_result if isinstance(plan_result, tuple) else (plan_result, None)
+                )
 
                 if path_grid:
                     path_world = [self._grid_to_world(x, y) for x, y in path_grid]
+                    scaled_info = self._scale_path_info(path_info, grid, inflation)
                     self._grid = grid
                     logger.info(
                         "Found path with {n} waypoints from {start} to {goal} using inflation {inflation}",
@@ -216,7 +221,7 @@ class ClassicGlobalPlanner:
                         goal=goal,
                         inflation=inflation,
                     )
-                    return path_world
+                    return path_world, scaled_info
 
                 logger.warning(
                     "No path found from {start} to {goal} with inflation {inflation}",
@@ -248,6 +253,31 @@ class ClassicGlobalPlanner:
             error_msg = f"{error_msg}; last error: {last_error}"
         logger.error(error_msg)
         raise PlanningError(error_msg)
+
+    def _scale_path_info(
+        self,
+        path_info: dict | None,
+        grid: Grid,
+        inflation: int | None,
+    ) -> dict | None:
+        """Convert planner path_info to world units and annotate metadata.
+
+        Returns:
+            Copy of path_info with length converted to meters and inflation annotated,
+            or the original object when no conversion is possible.
+        """
+        if path_info is None:
+            return None
+        if not isinstance(path_info, dict):
+            return path_info
+
+        meters_per_cell = getattr(grid, "meters_per_cell", 1.0 / self.config.cells_per_meter)
+        scaled_info = dict(path_info)
+        length_cells = path_info.get("length")
+        if isinstance(length_cells, (int, float)):
+            scaled_info["length"] = float(length_cells) * meters_per_cell
+        scaled_info["inflation_cells"] = inflation
+        return scaled_info
 
 
 __all__ = [

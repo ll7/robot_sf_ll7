@@ -135,7 +135,12 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
         goal = sample_zone(
             map_def.robot_goal_zones[goal_idx], 1, obstacle_polygons=prepared_obstacles
         )[0]
-        return planner.plan(start, goal)
+        planned = planner.plan(start, goal)
+        if isinstance(planned, tuple):
+            route, _ = planned
+        else:
+            route = planned
+        return route
 
     # If no spawn_id is provided, choose a random one
     spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)

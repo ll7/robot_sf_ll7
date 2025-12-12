@@ -63,7 +63,14 @@ class ClassicPlanVisualizer(Visualizer):
         meters_per_cell: float | None = None,
         cells_per_meter: float | None = None,
     ) -> None:
-        """Initialize the classic planner visualizer with optional scaling metadata."""
+        """Initialize the classic planner visualizer with optional scaling metadata.
+
+        Args:
+            figname: Title for the figure window.
+            figsize: Figure dimensions as (width, height) in inches.
+            meters_per_cell: Scale factor for axis labels (meters per cell).
+            cells_per_meter: Alternative scale factor (cells per meter).
+        """
         super().__init__(figname, figsize)
         self._meters_per_cell = meters_per_cell or (
             1.0 / cells_per_meter if cells_per_meter else None

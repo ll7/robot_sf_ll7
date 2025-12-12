@@ -49,9 +49,9 @@ def configure_logging(verbose: bool = False) -> None:
     logger.remove()  # Remove default handler
 
     log_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        # "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>{file}</cyan>:<cyan>{line}</cyan> : \n"
+        "<cyan>{file}</cyan>:<cyan>{line}</cyan> | "
         "<level>{message}</level>"
     )
 

@@ -63,6 +63,7 @@ def main() -> None:
     output_dir = get_artifact_category_path("plots")
     # Set to None or empty string to show interactively instead of saving
     visualize_grid(grid, output_dir / "motion_planning_adapter_grid.png", title="Map Visualizer")
+    visualize_grid(grid, None, title="Map Visualizer (Interactive)")
 
     logger.info("✓ Adapter grid generation completed.")
 

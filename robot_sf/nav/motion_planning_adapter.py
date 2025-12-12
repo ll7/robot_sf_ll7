@@ -216,10 +216,29 @@ def visualize_grid(
         logger.info(f"Saved grid visualization to {output_path}")
     else:
         ensure_interactive_backend()
-        vis.fig.show()
+        vis.show()
         logger.info("Showing grid visualization interactively")
 
     vis.close()
+
+
+def set_start_goal_on_grid(
+    grid: Grid,  # type: ignore[name-defined]
+    start: tuple[int, int],
+    goal: tuple[int, int],
+) -> Grid:  # type: ignore[name-defined]
+    """Set start and goal positions on the grid.
+
+    Args:
+        grid: Grid to modify.
+        start: (x, y) tuple for start position in grid coordinates.
+        goal: (x, y) tuple for goal position in grid coordinates.
+    Returns:
+        Grid with start and goal positions marked.
+    """
+    grid.type_map[start] = TYPES.START
+    grid.type_map[goal] = TYPES.GOAL
+    return grid
 
 
 def get_obstacle_statistics(grid: Grid) -> dict[str, float]:  # type: ignore[name-defined]

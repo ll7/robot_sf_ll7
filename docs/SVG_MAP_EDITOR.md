@@ -21,6 +21,17 @@ These settings should be checked before building a map.
 
 [Further reference](https://github.com/ll7/robot_sf_ll7/issues/40)
 
+### Quick Start (Template)
+
+To avoid common labeling mistakes, start from the Inkscape template:
+
+```bash
+cp maps/templates/map_template.svg maps/svg_maps/my_map.svg
+```
+
+Open `maps/svg_maps/my_map.svg` in Inkscape and edit/duplicate/delete elements as needed.
+All simulation-relevant SVG elements must have the exact `inkscape:label` values described below.
+
 ### Building the map
 
 Colours can be selected as desired, as the simulation uses its own colour scheme.
@@ -34,7 +45,7 @@ Use layers to make it clearer.
 
 Obstacles should be avoided by the vehicle and the pedestrians.\
 Draw them by using the rectangle tool.\
-Set the label to **obstacle**
+Set the label to **obstacle** (exactly; do not add suffixes like `_0`).
 
 [Obstacle Issue](https://github.com/ll7/robot_sf_ll7/issues/55)
 
@@ -61,6 +72,24 @@ Set the labels to **ped_spawn_zone** and **ped_goal_zone**
 For the path you don't need to set specific waypoints, just make sure the path doesn't collide with an obstacle.\
 Set the label to **ped_route_\<spawn\>_\<goal\>**
 
+Optionally, you can add crowded zones (areas with higher pedestrian density) as rectangles labeled
+**ped_crowded_zone**.
+
+#### POIs (Points of Interest)
+
+POIs are circles that can be used as named waypoints (e.g., for routing demos).
+
+- Create a **circle** element (not an ellipse; hold Ctrl while drawing to keep it a circle).
+- Set the circle **class** to `poi`.
+- Set the `inkscape:label` to the desired POI name (e.g., `kitchen`, `charging`).
+
+#### Single Pedestrians (Optional)
+
+To define individually controlled pedestrians, use circles labeled:
+
+- `single_ped_<id>_start`
+- `single_ped_<id>_goal` (optional)
+
 ### Colours
 
 Colours used in the example map:
@@ -72,6 +101,8 @@ Colours used in the example map:
 - ped_spawn_zone: #23ff00
 - ped_goal_zone: #107400
 - ped_route: #c40202
+- ped_crowded_zone: #b3b3b3
+- poi: #8c4bff
 
 The colours for the simulation can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
 

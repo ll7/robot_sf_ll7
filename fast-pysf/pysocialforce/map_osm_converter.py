@@ -145,7 +145,7 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     return root
 
 
-def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool = False):
+def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool = False) -> None:
     """
     Saves the root element as an SVG file.
 

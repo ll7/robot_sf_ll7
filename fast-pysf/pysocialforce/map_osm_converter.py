@@ -158,10 +158,9 @@ def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool 
     output_path = Path(filename)
     if add_conversion_time:
         now = time.strftime("%Y%m%d-%H%M%S")
-        if output_path.suffix:
-            output_path = output_path.with_name(f"{output_path.stem}_{now}{output_path.suffix}")
-        else:
-            output_path = output_path.with_name(f"{output_path.name}_{now}.svg")
+        output_path = output_path.with_name(
+            f"{output_path.stem}_{now}{output_path.suffix or '.svg'}"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Saving the new SVG file: {}", output_path)

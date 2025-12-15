@@ -8,6 +8,11 @@ OUTPUT_SVG_PATH = "maps/obstacle_svg_maps/uni_campus_1350_obstacles.svg"
 
 
 def main():
+    """Convert an OSM SVG map to an obstacle SVG map.
+
+    This example demonstrates how to convert an OpenStreetMap SVG export
+    into a format suitable for robot simulation by extracting obstacles.
+    """
     configure_logging()
     import_svg_from_osm(OSM_SVG_PATH, OUTPUT_SVG_PATH, map_scale_factor=1350)
 

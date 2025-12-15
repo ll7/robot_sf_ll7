@@ -420,6 +420,11 @@ class SvgMapConverter:
             if not circle.label:
                 continue
 
+            # Circles can represent multiple concepts (e.g., POIs via class="poi"). Only treat
+            # circles explicitly labeled as single pedestrian markers as candidates here.
+            if not circle.label.startswith("single_ped_"):
+                continue
+
             m = pattern.match(circle.label)
             if not m:
                 logger.warning(
@@ -764,7 +769,7 @@ class SvgMapConverter:
         return spawn, goal
 
 
-def convert_map(svg_file: str):
+def convert_map(svg_file: str) -> MapDefinition | None:
     """Create a MapDefinition object from an SVG file.
 
     Parses the SVG file and converts labeled elements into a structured MapDefinition.

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="200"
+   height="200"
+   viewBox="0 0 52.916665 52.916666"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   sodipodi:docname="map_template.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="4.8304849"
+     inkscape:cx="57.447649"
+     inkscape:cy="94.607479"
+     inkscape:window-width="3440"
+     inkscape:window-height="1353"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer3" />
+  <defs
+     id="defs1">
+    <rect
+       x="62.105566"
+       y="43.059859"
+       width="5.7965195"
+       height="28.56856"
+       id="rect2" />
+    <rect
+       x="38.298432"
+       y="71.835438"
+       width="30.638747"
+       height="12.421114"
+       id="rect1" />
+    <rect
+       x="38.298431"
+       y="71.835442"
+       width="36.228247"
+       height="12.835151"
+       id="rect1-9" />
+    <rect
+       x="38.298431"
+       y="71.835442"
+       width="30.638746"
+       height="12.421114"
+       id="rect1-4" />
+    <rect
+       x="38.298431"
+       y="71.835442"
+       width="30.638746"
+       height="12.421114"
+       id="rect1-5" />
+  </defs>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="txt">
+    <text
+       xml:space="preserve"
+       id="text1"
+       style="font-size:10.6667px;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1);display:inline;fill:#000000;fill-opacity:1;stroke:#0300d5"
+       transform="matrix(0.26458333,0,0,0.26458333,2.24572,-17.52757)"
+       inkscape:label="robot"><tspan
+         x="38.298828"
+         y="81.567492"
+         id="tspan4"><tspan
+           style="stroke:#000000"
+           id="tspan2">robot</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       id="text1-0"
+       style="font-size:10.6667px;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1-5);display:inline;fill:#000000;fill-opacity:1;stroke:#010000;stroke-opacity:1"
+       transform="matrix(0.26458333,0,0,0.26458333,16.100397,-17.635681)"
+       inkscape:label="ped"><tspan
+         x="38.298828"
+         y="81.567492"
+         id="tspan5">ped</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text1-5"
+       style="font-size:10.6667px;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1-9);display:inline;fill:#000000;fill-opacity:1;stroke:#030000;stroke-opacity:1"
+       transform="matrix(0.26458333,0,0,0.26458333,-8.8085886,-13.627919)"
+       inkscape:label="spawn"><tspan
+         x="38.298828"
+         y="81.567492"
+         id="tspan6">spawn</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text1-4"
+       style="font-size:10.6667px;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1-4);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       transform="matrix(0.26458333,0,0,0.26458333,-7.9879958,0.214915)"
+       inkscape:label="goal"><tspan
+         x="38.298828"
+         y="81.567492"
+         id="tspan7">goal</tspan></text>
+  </g>
+  <rect
+     style="fill:#000000;fill-opacity:0.22094691;stroke:#b40305;stroke-width:0.264583;stroke-opacity:1"
+     id="rect7"
+     width="10.954731"
+     height="8.6542377"
+     x="39.108391"
+     y="10.79041"
+     ry="0.054773659"
+     inkscape:label="ped_crowded_zone" />
+  <g
+     inkscape:groupmode="layer"
+     id="layer4"
+     inkscape:label="pedestrian">
+    <rect
+       style="fill:#107400;fill-opacity:1;stroke:#107400;stroke-width:0.0672082;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect6"
+       width="5.4942021"
+       height="3.3308041"
+       x="27.238325"
+       y="19.440102"
+       ry="0.070360474"
+       inkscape:label="ped_goal_zone" />
+    <rect
+       style="fill:#23ff00;fill-opacity:1;stroke:#23ff00;stroke-width:0.0628139;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5-6"
+       width="4.5705709"
+       height="3.6476367"
+       x="27.74111"
+       y="5.5987387"
+       ry="0.070222855"
+       inkscape:label="ped_spawn_zone" />
+    <path
+       style="fill:#000000;fill-opacity:0;stroke:#b40305;stroke-width:0.285382;stroke-opacity:1"
+       d="M 30.709262,11.286085 30.199047,17.798728"
+       id="path7"
+       inkscape:label="ped_route_0_0" />
+  </g>
+  <g
+     inkscape:label="robot"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3"
+       width="6.0914354"
+       height="3.9923832"
+       x="12.71389"
+       y="5.4893842"
+       ry="0.083166033"
+       inkscape:label="robot_spawn_zone" />
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#ff6c00;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4"
+       width="6.202405"
+       height="4.0997829"
+       x="12.609881"
+       y="18.824427"
+       ry="0.11542043"
+       inkscape:label="robot_goal_zone" />
+    <path
+       style="fill:#000000;fill-opacity:0;stroke:#3544ff;stroke-width:0.264583;stroke-opacity:1"
+       d="M 15.062756,10.680863 15.281851,17.36325"
+       id="path6"
+       inkscape:label="robot_route_0_0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Obstacles">
+    <path
+       style="fill:#000000;fill-opacity:1;stroke:#0300d5;stroke-width:0.264583"
+       d="M 27.989338,34.123988 23.771767,42.449586 30.39938,47.48876 C 30.39938,47.48876 34.343083,43.43551 34.671725,43.325962 35.000367,43.216417 48.200817,43.983248 48.200817,43.983248 L 43.818926,34.28831 Z"
+       id="path1"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#0000ff;stroke-width:0.264583;stroke-opacity:1"
+       id="rect5"
+       width="10.954731"
+       height="8.3803701"
+       x="8.2160482"
+       y="36.205387"
+       ry="0.11542043"
+       inkscape:label="obstacle"
+       inkscape:transform-center-x="1.1502468"
+       inkscape:transform-center-y="-8.1612751" />
+  </g>
+</svg>

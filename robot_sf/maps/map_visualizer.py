@@ -11,13 +11,33 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
+from loguru import logger
 from matplotlib.patches import Polygon
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from robot_sf.nav.global_route import GlobalRoute
     from robot_sf.nav.map_config import MapDefinition
+
+_DEFAULT_FIG_MAX_SIDE_IN = 20.0
+_DEFAULT_FIG_MIN_SIDE_IN = 4.0
+_DEFAULT_FIG_INCHES_PER_UNIT = 0.15
+
+
+def _compute_figsize(map_width: float, map_height: float) -> tuple[float, float]:
+    """Compute a Matplotlib figure size scaled to map dimensions.
+
+    Returns:
+        Tuple of ``(width_in, height_in)`` for ``plt.subplots(figsize=...)``.
+    """
+    if map_width <= 0 or map_height <= 0:
+        return (10, 8)
+    fig_w = map_width * _DEFAULT_FIG_INCHES_PER_UNIT
+    fig_h = map_height * _DEFAULT_FIG_INCHES_PER_UNIT
+    fig_w = max(_DEFAULT_FIG_MIN_SIDE_IN, min(_DEFAULT_FIG_MAX_SIDE_IN, fig_w))
+    fig_h = max(_DEFAULT_FIG_MIN_SIDE_IN, min(_DEFAULT_FIG_MAX_SIDE_IN, fig_h))
+    return (fig_w, fig_h)
 
 
 # Colors follow docs/SVG_MAP_EDITOR.md suggestions.
@@ -33,12 +53,31 @@ BOUNDARY_COLOR = "#5b5b5b"
 POI_COLOR = "#8c4bff"
 
 
-def _plot_zones(ax, zones: Iterable[tuple], color: str, label: str, alpha: float = 0.5) -> None:
+def _zone_to_polygon(zone: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Normalize a 3-point rectangle encoding to a 4-corner polygon for plotting.
+
+    Returns:
+        List of polygon vertices suitable for Matplotlib's ``Polygon`` patch.
+    """
+    points = list(zone)
+    if len(points) == 3:
+        a, b, c = points
+        d = (a[0] + c[0] - b[0], a[1] + c[1] - b[1])
+        return [a, b, c, d]
+    return points
+
+
+def _plot_zones(
+    ax, zones: Iterable[Sequence[tuple[float, float]]], color: str, label: str, alpha: float = 0.5
+) -> None:
     for idx, zone in enumerate(zones):
-        patch = Polygon(zone, closed=True, facecolor=color, edgecolor="black", alpha=alpha)
+        polygon = _zone_to_polygon(zone)
+        if len(polygon) < 3:
+            continue
+        patch = Polygon(polygon, closed=True, facecolor=color, edgecolor="black", alpha=alpha)
         ax.add_patch(patch)
-        center_x = sum(pt[0] for pt in zone) / len(zone)
-        center_y = sum(pt[1] for pt in zone) / len(zone)
+        center_x = sum(pt[0] for pt in polygon) / len(polygon)
+        center_y = sum(pt[1] for pt in polygon) / len(polygon)
         ax.text(center_x, center_y, f"{label}{idx}", ha="center", va="center", fontsize=8)
 
 
@@ -73,6 +112,7 @@ def visualize_map_definition(
     *,
     title: str | None = None,
     equal_aspect: bool = True,
+    invert_y: bool = True,
     show: bool = False,
 ) -> None:
     """Render a MapDefinition with consistent colors for quick inspection.
@@ -82,9 +122,14 @@ def visualize_map_definition(
         output_path: Optional path to save the figure (PNG). When None, only shows if ``show`` is True.
         title: Optional plot title.
         equal_aspect: Whether to enforce equal axis scaling.
+        invert_y: If True, invert Y to match SVG/screen coordinates (y increases downward).
         show: Whether to display the plot interactively.
     """
-    fig, ax = plt.subplots(figsize=(10, 8))
+    map_width = float(getattr(map_def, "width", 0.0) or 0.0)
+    map_height = float(getattr(map_def, "height", 0.0) or 0.0)
+    figsize = _compute_figsize(map_width, map_height)
+
+    fig, ax = plt.subplots(figsize=figsize)
 
     # Obstacles
     for obstacle in map_def.obstacles:
@@ -117,7 +162,10 @@ def visualize_map_definition(
         ax.set_aspect("equal", adjustable="box")
 
     ax.set_xlim(0, map_def.width)
-    ax.set_ylim(0, map_def.height)
+    if invert_y:
+        ax.set_ylim(map_def.height, 0)
+    else:
+        ax.set_ylim(0, map_def.height)
 
     if title:
         ax.set_title(title)
@@ -132,6 +180,7 @@ def visualize_map_definition(
         out_path = Path(output_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_path, bbox_inches="tight")
+        logger.info(f"Saved map visualization to {out_path}")
 
     if show and not output_path:
         plt.show()

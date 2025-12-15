@@ -7,12 +7,10 @@ This example demonstrates:
 3. Visualizing the planned path on the grid
 """
 
-from pathlib import Path
-
 from loguru import logger
 
 from robot_sf.common import ensure_interactive_backend
-from robot_sf.common.artifact_paths import get_artifact_category_path
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 from robot_sf.common.logging import configure_logging
 from robot_sf.nav.motion_planning_adapter import (
     get_obstacle_statistics,
@@ -20,8 +18,9 @@ from robot_sf.nav.motion_planning_adapter import (
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
-MAP_PATH = Path(
-    "maps/obstacle_svg_maps/uni_campus_1350_obstacles_lake_traverse_with_simple_routes.svg"
+MAP_PATH = (
+    get_repository_root()
+    / "maps/obstacle_svg_maps/uni_campus_1350_obstacles_lake_traverse_with_simple_routes.svg"
 )
 """svg map file to load for the test."""
 

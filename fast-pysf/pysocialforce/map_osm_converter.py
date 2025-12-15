@@ -7,6 +7,7 @@ to a new SVG file that contains only the buildings.
 import re
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from loguru import logger
 
@@ -45,14 +46,18 @@ def extract_buildings_as_obstacle(
         - map_scale_factor is appropriate for your coordinate system
         - Source SVG viewBox dimensions are as expected
     """
-    logger.info("Converting Map: %s", map_full_name)
+    logger.info("Converting map: {}", map_full_name)
     tree = ET.parse(map_full_name)
     root = tree.getroot()
 
     # Calculate composite scale factor from map scale and OSM calibration constants
     # Formula: (user_scale / reference_scale) * (1 / coordinate_adjustment)
     scale_factor = (map_scale_factor / OSM_REFERENCE_SCALE) * (1 / OSM_COORDINATE_ADJUSTMENT)
-    logger.debug("Scale factor: %s (from map_scale=%s)", scale_factor, map_scale_factor)
+    logger.debug(
+        "Scale factor: {scale_factor} (from map_scale_factor={map_scale_factor})",
+        scale_factor=scale_factor,
+        map_scale_factor=map_scale_factor,
+    )
 
     # Identify all elements with the specified color
     # Initialize an empty list to store the elements
@@ -72,10 +77,10 @@ def extract_buildings_as_obstacle(
 
     if "viewBox" in root.attrib:
         viewbox = list(map(float, root.attrib["viewBox"].split()))
-        logger.debug("old viewbox: %s", viewbox)
+        logger.debug("Old viewBox: {}", viewbox)
         viewbox[2] *= scale_factor  # Scale the width
         viewbox[3] *= scale_factor  # Scale the height
-        logger.debug("new viewbox: %s", viewbox)
+        logger.debug("New viewBox: {}", viewbox)
         new_root.attrib["viewBox"] = " ".join(map(str, viewbox))
 
     for elem in elements:
@@ -150,8 +155,14 @@ def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool 
         add_conversion_time (bool): Whether to add the current time to the filename.
     """
     tree = ET.ElementTree(root)
+    output_path = Path(filename)
     if add_conversion_time:
         now = time.strftime("%Y%m%d-%H%M%S")
-        filename = filename.replace(".svg", f"_{now}.svg")
-    tree.write(filename)
-    logger.info("Saving the new SVG file: %s", filename)
+        if output_path.suffix:
+            output_path = output_path.with_name(f"{output_path.stem}_{now}{output_path.suffix}")
+        else:
+            output_path = output_path.with_name(f"{output_path.name}_{now}.svg")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Saving the new SVG file: {}", output_path)
+    tree.write(output_path, encoding="utf-8", xml_declaration=True)

@@ -7,6 +7,8 @@ This example demonstrates:
 3. Visualizing the planned path on the grid
 """
 
+import time
+
 from loguru import logger
 
 from robot_sf.common import ensure_interactive_backend
@@ -65,16 +67,19 @@ def main() -> None:
     goal_world = (400, 200.0)
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
-    path_world, path_info = planner.plan(start_world, goal_world)
+    t0 = time.perf_counter()
+    path_world, path_info = planner.plan(start_world, goal_world, algorithm="a_star")
+    dt = time.perf_counter() - t0
 
     if not path_world:
         logger.error("Planning failed!")
         return
 
     logger.info(
-        "Found path with {n} waypoints (length≈{length:.2f} m)",
+        "Found path with {n} waypoints (length≈{length:.2f} m) in {dt:.2f}s",
         n=len(path_world),
         length=path_info.get("length") if path_info else float("nan"),
+        dt=dt,
     )
 
     planner.visualize_path(

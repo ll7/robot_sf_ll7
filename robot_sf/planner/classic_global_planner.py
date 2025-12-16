@@ -418,8 +418,8 @@ class ClassicGlobalPlanner:
         if show_expands:
             expands = self._extract_expands(path_info)
             if expands:
-                # Create a deep copy to avoid modifying the cached grid.
-                grid = copy.deepcopy(self.grid)
+                # Create a shallow copy to avoid modifying the cached grid.
+                grid = copy.copy(self.grid)
                 grid.fill_expands(expands)
                 logger.debug(
                     "Visualizing path with {n} expanded nodes overlayed",

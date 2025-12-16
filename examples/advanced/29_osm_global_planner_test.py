@@ -84,6 +84,9 @@ def main() -> None:
         path_style="--",
         path_color="C4",
         linewidth=2,
+        marker="x",
+        path_info=path_info,
+        show_expands=True,
     )
 
     logger.info("✓ Path planning completed.")

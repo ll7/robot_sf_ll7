@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from matplotlib import colors as mcolors
 from matplotlib.ticker import FuncFormatter
 from python_motion_planning.common import TYPES, Grid, Visualizer
 from shapely.affinity import scale
@@ -86,6 +87,9 @@ class ClassicPlanVisualizer(Visualizer):
             if meters_per_cell is not None
             else (1.0 / cells_per_meter if cells_per_meter is not None else None)
         )
+        self.cmap_dict[TYPES.EXPAND] = "#dddddd"
+        self.cmap = mcolors.ListedColormap([list(self.cmap_dict.values())])
+        self.norm = mcolors.BoundaryNorm([list(range(self.cmap.N + 1))], self.cmap.N)
 
     def _resolve_meters_per_cell(
         self, grid_map: Grid, meters_per_cell: float | None

@@ -88,8 +88,8 @@ class ClassicPlanVisualizer(Visualizer):
             else (1.0 / cells_per_meter if cells_per_meter is not None else None)
         )
         self.cmap_dict[TYPES.EXPAND] = "#dddddd"
-        self.cmap = mcolors.ListedColormap([list(self.cmap_dict.values())])
-        self.norm = mcolors.BoundaryNorm([list(range(self.cmap.N + 1))], self.cmap.N)
+        self.cmap = mcolors.ListedColormap(list(self.cmap_dict.values()))
+        self.norm = mcolors.BoundaryNorm(list(range(self.cmap.N + 1)), self.cmap.N)
 
     def _resolve_meters_per_cell(
         self, grid_map: Grid, meters_per_cell: float | None
@@ -423,6 +423,9 @@ def set_start_goal_on_grid(
 
 def get_obstacle_statistics(grid: Grid) -> dict[str, float]:  # type: ignore[name-defined]
     """Calculate statistics about obstacles in a grid.
+
+    TODO: Percentage for obstacles is likely not calculated correctly.
+    `INFO   | 29_osm_global_planner_test.py:55 | Planning grid: (513, 393), 0 obstacle cells (0.00%)`
 
     Args:
         grid: Grid to analyze.

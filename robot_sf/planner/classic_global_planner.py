@@ -20,6 +20,7 @@ Example:
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -417,6 +418,8 @@ class ClassicGlobalPlanner:
         if show_expands:
             expands = self._extract_expands(path_info)
             if expands:
+                # Create a deep copy to avoid modifying the cached grid.
+                grid = copy.deepcopy(self.grid)
                 grid.fill_expands(expands)
                 logger.debug(
                     "Visualizing path with {n} expanded nodes overlayed",

@@ -197,7 +197,11 @@ class ClassicGlobalPlanner:
         return world_x, world_y
 
     def _normalize_algorithm(self, override: str | None = None) -> str:
-        """Normalize the algorithm name and validate support."""
+        """Normalize the algorithm name and validate support.
+
+        Returns:
+            Normalized algorithm identifier ('theta_star' or 'a_star').
+        """
         algo_raw = (override or self.config.algorithm).strip().lower()
         if algo_raw in {"theta_star", "thetastar", "theta"}:
             return "theta_star"
@@ -205,6 +209,63 @@ class ClassicGlobalPlanner:
             return "a_star"
         msg = f"Unsupported algorithm: {override or self.config.algorithm}"
         raise ValueError(msg)
+
+    def _validate_point(self, name: str, gx: int, gy: int, grid: Grid) -> None:
+        """Ensure a grid point is within bounds.
+
+        Returns:
+            None. Raises PlanningError when point is out of bounds.
+        """
+        if not (0 <= gx < grid.type_map.shape[0]) or not (0 <= gy < grid.type_map.shape[1]):
+            raise PlanningError(
+                f"{name} out of grid bounds: grid=({gx}, {gy}), grid_shape={grid.type_map.shape}"
+            )
+
+    def _make_planner(self, algo: str, grid: Grid, start: tuple[int, int], goal: tuple[int, int]):
+        """Instantiate the requested planner.
+
+        Returns:
+            Concrete planner instance for the requested algorithm.
+        """
+        if algo == "theta_star":
+            logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
+            return ThetaStar(map_=grid, start=start, goal=goal)
+        if algo == "a_star":
+            return AStar(map_=grid, start=start, goal=goal)
+        msg = f"Unsupported algorithm: {algo}"
+        raise ValueError(msg)
+
+    def _run_single_plan(
+        self,
+        start_grid: tuple[int, int],
+        goal_grid: tuple[int, int],
+        algo: str,
+        inflation: int | None,
+    ) -> tuple[Grid, list[tuple[int, int]], list[tuple[float, float]], dict | None]:
+        """Execute one planning attempt for a given inflation radius.
+
+        Returns:
+            tuple[Grid, list[tuple[int, int]], list[tuple[float, float]], dict | None]:
+                - grid: The constructed planning grid for this attempt.
+                - path_grid: Waypoints in grid coordinates.
+                - path_world: Waypoints in world coordinates.
+                - path_info: Optional planner metadata scaled to meters.
+        """
+        grid = self._build_grid(inflation)
+        self._validate_point("start", *start_grid, grid=grid)
+        self._validate_point("goal", *goal_grid, grid=grid)
+        grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
+        grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
+
+        planner = self._make_planner(algo, grid, start_grid, goal_grid)
+        plan_result = planner.plan()
+        path_grid, path_info = (
+            plan_result if isinstance(plan_result, tuple) else (plan_result, None)
+        )
+
+        path_world = [self._grid_to_world(x, y) for x, y in path_grid] if path_grid else []
+        scaled_info = self._scale_path_info(path_info, grid, inflation)
+        return grid, path_grid, path_world, scaled_info
 
     def plan(
         self,
@@ -220,8 +281,9 @@ class ClassicGlobalPlanner:
             algorithm: Optional algorithm override ('theta_star', 'a_star'); defaults to config.
 
         Returns:
-            tuple[list[tuple[float, float]], dict | None]: Waypoints in world coordinates and
-            optional path metadata with length scaled to meters.
+            tuple[list[tuple[float, float]], dict | None]:
+                - path_world: Waypoints in world coordinates.
+                - path_info: Optional planner metadata with length scaled to meters.
 
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
@@ -229,15 +291,6 @@ class ClassicGlobalPlanner:
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
         algo = self._normalize_algorithm(algorithm)
-
-        def _validate_point(name: str, gx: int, gy: int) -> None:
-            if not (0 <= gx < self.grid.type_map.shape[0]) or not (
-                0 <= gy < self.grid.type_map.shape[1]
-            ):
-                raise PlanningError(
-                    f"{name} out of grid bounds: world={start if name == 'start' else goal}, "
-                    f"grid=({gx}, {gy}), grid_shape={self.grid.type_map.shape}"
-                )
 
         logger.debug(
             "Planning from {start} to {goal} (world coords: {start_w} → {goal_w})",
@@ -258,32 +311,11 @@ class ClassicGlobalPlanner:
         last_error: Exception | None = None
 
         for idx, inflation in enumerate(attempt_radii):
-            grid = self._build_grid(inflation)
-
-            # Mark start and goal in grid
-            _validate_point("start", *start_grid)
-            _validate_point("goal", *goal_grid)
-            grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
-            grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
-
-            if algo == "theta_star":
-                planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)
-                logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
-            elif algo == "a_star":
-                planner = AStar(map_=grid, start=start_grid, goal=goal_grid)
-            else:
-                msg = f"Unsupported algorithm: {algo}"
-                raise ValueError(msg)
-
             try:
-                plan_result = planner.plan()
-                path_grid, path_info = (
-                    plan_result if isinstance(plan_result, tuple) else (plan_result, None)
+                grid, path_grid, path_world, scaled_info = self._run_single_plan(
+                    start_grid, goal_grid, algo, inflation
                 )
-
-                if path_grid:
-                    path_world = [self._grid_to_world(x, y) for x, y in path_grid]
-                    scaled_info = self._scale_path_info(path_info, grid, inflation)
+                if path_world:
                     self._grid = grid
                     self._last_path_grid = path_grid
                     self._last_path_world = path_world

@@ -111,3 +111,47 @@ def test_plan_returns_expand_metadata(tmp_path):
     assert info.get("expand")
     assert info.get("inflation_cells") == 0
     assert info.get("length", 0) == pytest.approx(expected_goal[0] - expected_start[0])
+
+
+def test_plan_accepts_algorithm_override(monkeypatch, tmp_path):
+    """plan should honor per-call algorithm override."""
+    map_def = _make_basic_map(tmp_path)
+    calls = {"a": 0, "theta": 0}
+
+    class DummyAStar:
+        def __init__(self, map_, start, goal):
+            calls["a"] += 1
+            self.start = start
+            self.goal = goal
+
+        def plan(self):
+            return [self.start, self.goal], {"expand": {}}
+
+    class DummyThetaStar:
+        def __init__(self, map_, start, goal):
+            calls["theta"] += 1
+            self.start = start
+            self.goal = goal
+
+        def plan(self):
+            return [self.start, self.goal], {"expand": {}}
+
+    monkeypatch.setattr("robot_sf.planner.classic_global_planner.AStar", DummyAStar)
+    monkeypatch.setattr("robot_sf.planner.classic_global_planner.ThetaStar", DummyThetaStar)
+
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            algorithm="theta_star",
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+
+    path, info = planner.plan((0.5, 0.5), (1.5, 0.5), algorithm="a_star")
+
+    assert calls["a"] == 1
+    assert calls["theta"] == 0
+    assert path[-1] == planner._grid_to_world(*planner._world_to_grid(1.5, 0.5))
+    assert info is not None

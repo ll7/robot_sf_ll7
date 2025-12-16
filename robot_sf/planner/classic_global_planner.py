@@ -20,6 +20,7 @@ Example:
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -60,7 +61,11 @@ class ClassicPlannerConfig:
     algorithm: str = "theta_star"
 
     def __post_init__(self) -> None:
-        """Validate planner configuration."""
+        """Validate planner configuration.
+
+        Raises:
+            ValueError: If any configuration field is invalid.
+        """
         if not isinstance(self.cells_per_meter, (int, float)) or not math.isfinite(
             self.cells_per_meter
         ):
@@ -142,6 +147,14 @@ class ClassicGlobalPlanner:
         return self._grid
 
     def _build_grid(self, inflate_radius_cells: int | None) -> Grid:
+        """Create a motion-planning grid from the map definition.
+
+        Args:
+            inflate_radius_cells: Number of cells to inflate obstacles with, or None.
+
+        Returns:
+            A populated motion-planning grid.
+        """
         grid_config = MotionPlanningGridConfig(
             cells_per_meter=self.config.cells_per_meter,
             inflate_radius_cells=inflate_radius_cells,
@@ -195,9 +208,8 @@ class ClassicGlobalPlanner:
             goal: Goal position (x, y) in world coordinates (meters).
 
         Returns:
-            Tuple of:
-                - List of waypoints [(x, y), ...] in world coordinates.
-                - Optional path info dict from the underlying planner with length scaled to meters.
+            tuple[list[tuple[float, float]], dict | None]: Waypoints in world coordinates and
+            optional path metadata with length scaled to meters.
 
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
@@ -310,6 +322,11 @@ class ClassicGlobalPlanner:
     ) -> dict | None:
         """Convert planner path_info to world units and annotate metadata.
 
+        Args:
+            path_info: Raw path metadata from the planner.
+            grid: Grid used for planning.
+            inflation: Inflation radius (cells) applied during planning.
+
         Returns:
             Copy of path_info with length converted to meters and inflation annotated,
             or the original object when no conversion is possible.
@@ -327,13 +344,36 @@ class ClassicGlobalPlanner:
         scaled_info["inflation_cells"] = inflation
         return scaled_info
 
+    @staticmethod
+    def _extract_expands(path_info: dict | None) -> dict | None:
+        """Return the expand dictionary from path_info when available.
+
+        Args:
+            path_info: Planner metadata that may contain expand data.
+
+        Returns:
+            Dictionary of expanded nodes when present; otherwise None.
+        """
+        if not isinstance(path_info, dict):
+            return None
+        expands = path_info.get("expand")
+        if isinstance(expands, dict):
+            return expands
+        return None
+
     def visualize_grid(
         self,
         output_path: Path | str | None = None,
         title: str = "Planning Grid",
         equal_aspect: bool = True,
     ) -> None:
-        """Visualize the current planning grid."""
+        """Visualize the current planning grid.
+
+        Args:
+            output_path: Where to write the figure; shows interactively when None/empty.
+            title: Title for the visualization window.
+            equal_aspect: Whether to enforce equal aspect ratio.
+        """
         render_grid(self.grid, output_path=output_path, title=title, equal_aspect=equal_aspect)
 
     def visualize_path(
@@ -345,18 +385,54 @@ class ClassicGlobalPlanner:
         path_style: str = "--",
         path_color: str = "C4",
         linewidth: float = 2.0,
-        marker: str | None = None,
+        marker: str | None = "x",
+        path_info: dict | None = None,
+        show_expands: bool = True,
     ) -> None:
-        """Visualize a planned path using the cached grid and path data."""
+        """Visualize a planned path using the cached grid and path data.
+
+        Args:
+            path_world: Waypoints in world coordinates; defaults to last planned path.
+            output_path: Where to write the figure; shows interactively when None/empty.
+            title: Title for the visualization window.
+            equal_aspect: Whether to enforce equal aspect ratio.
+            path_style: Matplotlib linestyle for the path.
+            path_color: Matplotlib color for the path.
+            linewidth: Line width for the rendered path.
+            marker: Optional marker for waypoints.
+            path_info: Optional planner metadata; defaults to the last plan result.
+            show_expands: Whether to overlay expanded nodes when expand data is available.
+
+        Raises:
+            PlanningError: If no path is available to visualize.
+        """
         if path_world is None:
             path_world = self._last_path_world
+        if path_info is None:
+            path_info = self._last_path_info
         if not path_world:
             msg = "No path available to visualize; run plan() or provide path_world."
             raise PlanningError(msg)
 
+        grid = self.grid
+        if show_expands:
+            expands = self._extract_expands(path_info)
+            if expands:
+                # Create a shallow copy to avoid modifying the cached grid.
+                grid = copy.copy(self.grid)
+                grid.fill_expands(expands)
+                logger.debug(
+                    "Visualizing path with {n} expanded nodes overlayed",
+                    n=len(expands),
+                )
+            else:
+                logger.warning(
+                    "Expanded area requested but path_info is missing expand data; skipping."
+                )
+
         path_grid = [self._world_to_grid(x, y) for x, y in path_world]
         render_path(
-            self.grid,
+            grid,
             path_grid,
             output_path=output_path,
             title=title,

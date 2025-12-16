@@ -6,9 +6,31 @@ which validates end-to-end functionality with real SVG maps and path planning.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
+from python_motion_planning.common import TYPES
 
-from robot_sf.nav.motion_planning_adapter import MotionPlanningGridConfig, _world_to_grid
+from robot_sf.nav.motion_planning_adapter import (
+    MotionPlanningGridConfig,
+    _world_to_grid,
+    map_definition_to_motion_planning_grid,
+)
+from robot_sf.nav.svg_map_parser import convert_map
+
+
+def _make_obstacle_map(tmp_path):
+    svg = tmp_path / "inflation.svg"
+    svg.write_text(
+        """
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="5" height="5">
+  <rect inkscape:label="obstacle" x="2" y="2" width="1" height="1" />
+  <rect inkscape:label="robot_spawn_zone" x="0.2" y="0.2" width="0.5" height="0.5" />
+  <rect inkscape:label="robot_goal_zone" x="4.2" y="0.2" width="0.5" height="0.5" />
+  <path inkscape:label="robot_route_0_0" d="M 0.2 0.2 L 4.7 0.2" />
+</svg>
+        """.strip()
+    )
+    return convert_map(str(svg))
 
 
 class TestMotionPlanningGridConfig:
@@ -78,3 +100,32 @@ class TestWorldToGrid:
         assert _world_to_grid(0.0, 1.0) == 0
         assert _world_to_grid(0.0, 2.0) == 0
         assert _world_to_grid(0.0, 0.5) == 0
+
+
+def test_inflation_marks_cells(tmp_path):
+    """Grid inflation should mark cells with TYPES.INFLATION."""
+    map_def = _make_obstacle_map(tmp_path)
+
+    grid_no_inflation = map_definition_to_motion_planning_grid(
+        map_def,
+        MotionPlanningGridConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=None,
+            add_boundary_obstacles=False,
+        ),
+    )
+    grid_inflated = map_definition_to_motion_planning_grid(
+        map_def,
+        MotionPlanningGridConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=1,
+            add_boundary_obstacles=False,
+        ),
+    )
+
+    type_map_no = np.asarray(grid_no_inflation.type_map.array)
+    type_map_inflated = np.asarray(grid_inflated.type_map.array)
+
+    assert np.count_nonzero(type_map_no == TYPES.OBSTACLE) > 0
+    assert np.count_nonzero(type_map_no == TYPES.INFLATION) == 0
+    assert np.count_nonzero(type_map_inflated == TYPES.INFLATION) > 0

@@ -205,7 +205,7 @@ class ClassicGlobalPlanner:
         """Normalize the algorithm name and validate support.
 
         Returns:
-            Normalized algorithm identifier ('theta_star' or 'a_star').
+            Normalized algorithm identifier ('theta_star', 'theta_star_v2', or 'a_star').
 
         Args:
             override: Optional algorithm name overriding the config default.

@@ -60,7 +60,7 @@ class ClassicPlannerConfig:
     cells_per_meter: float = 1.0
     inflate_radius_cells: int | None = 2
     add_boundary_obstacles: bool = True
-    algorithm: str = "theta_star"
+    algorithm: str = "theta_star_v2"
 
     def __post_init__(self) -> None:
         """Validate planner configuration.

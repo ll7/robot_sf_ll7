@@ -201,6 +201,12 @@ class ClassicGlobalPlanner:
 
         Returns:
             Normalized algorithm identifier ('theta_star' or 'a_star').
+
+        Args:
+            override: Optional algorithm name overriding the config default.
+
+        Raises:
+            ValueError: If the requested algorithm is unsupported.
         """
         algo_raw = (override or self.config.algorithm).strip().lower()
         if algo_raw in {"theta_star", "thetastar", "theta"}:
@@ -213,8 +219,14 @@ class ClassicGlobalPlanner:
     def _validate_point(self, name: str, gx: int, gy: int, grid: Grid) -> None:
         """Ensure a grid point is within bounds.
 
-        Returns:
-            None. Raises PlanningError when point is out of bounds.
+        Args:
+            name: Label for the point (e.g., "start" or "goal").
+            gx: Grid X index.
+            gy: Grid Y index.
+            grid: Grid used for validation.
+
+        Raises:
+            PlanningError: When the point lies outside the grid bounds.
         """
         if not (0 <= gx < grid.type_map.shape[0]) or not (0 <= gy < grid.type_map.shape[1]):
             raise PlanningError(
@@ -226,6 +238,15 @@ class ClassicGlobalPlanner:
 
         Returns:
             Concrete planner instance for the requested algorithm.
+
+        Args:
+            algo: Normalized algorithm name.
+            grid: Planning grid.
+            start: Start cell (x, y).
+            goal: Goal cell (x, y).
+
+        Raises:
+            ValueError: If the algorithm name is unsupported.
         """
         if algo == "theta_star":
             logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
@@ -250,6 +271,12 @@ class ClassicGlobalPlanner:
                 - path_grid: Waypoints in grid coordinates.
                 - path_world: Waypoints in world coordinates.
                 - path_info: Optional planner metadata scaled to meters.
+
+        Args:
+            start_grid: Start cell (x, y).
+            goal_grid: Goal cell (x, y).
+            algo: Normalized algorithm name.
+            inflation: Inflation radius in cells for this attempt.
         """
         grid = self._build_grid(inflation)
         self._validate_point("start", *start_grid, grid=grid)

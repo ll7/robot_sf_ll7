@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from python_motion_planning.common import TYPES
-from python_motion_planning.path_planner import ThetaStar
+from python_motion_planning.path_planner import AStar, ThetaStar
 
 from robot_sf.nav.motion_planning_adapter import (
     MotionPlanningGridConfig,
@@ -196,16 +196,28 @@ class ClassicGlobalPlanner:
         world_y = grid_y / self.config.cells_per_meter
         return world_x, world_y
 
+    def _normalize_algorithm(self, override: str | None = None) -> str:
+        """Normalize the algorithm name and validate support."""
+        algo_raw = (override or self.config.algorithm).strip().lower()
+        if algo_raw in {"theta_star", "thetastar", "theta"}:
+            return "theta_star"
+        if algo_raw in {"a_star", "astar", "a*", "a-star"}:
+            return "a_star"
+        msg = f"Unsupported algorithm: {override or self.config.algorithm}"
+        raise ValueError(msg)
+
     def plan(
         self,
         start: tuple[float, float],
         goal: tuple[float, float],
+        algorithm: str | None = None,
     ) -> tuple[list[tuple[float, float]], dict | None]:
         """Plan a path from start to goal with inflation fallback.
 
         Args:
             start: Start position (x, y) in world coordinates (meters).
             goal: Goal position (x, y) in world coordinates (meters).
+            algorithm: Optional algorithm override ('theta_star', 'a_star'); defaults to config.
 
         Returns:
             tuple[list[tuple[float, float]], dict | None]: Waypoints in world coordinates and
@@ -216,6 +228,7 @@ class ClassicGlobalPlanner:
         """
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
+        algo = self._normalize_algorithm(algorithm)
 
         def _validate_point(name: str, gx: int, gy: int) -> None:
             if not (0 <= gx < self.grid.type_map.shape[0]) or not (
@@ -253,10 +266,13 @@ class ClassicGlobalPlanner:
             grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
             grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
 
-            if self.config.algorithm == "theta_star":
+            if algo == "theta_star":
                 planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)
+                logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
+            elif algo == "a_star":
+                planner = AStar(map_=grid, start=start_grid, goal=goal_grid)
             else:
-                msg = f"Unsupported algorithm: {self.config.algorithm}"
+                msg = f"Unsupported algorithm: {algo}"
                 raise ValueError(msg)
 
             try:
@@ -273,10 +289,11 @@ class ClassicGlobalPlanner:
                     self._last_path_world = path_world
                     self._last_path_info = scaled_info
                     logger.info(
-                        "Found path with {n} waypoints from {start} to {goal} using inflation {inflation}",
+                        "Found path with {n} waypoints from {start} to {goal} using {algo} and inflation {inflation}",
                         n=len(path_world),
                         start=start,
                         goal=goal,
+                        algo=algo,
                         inflation=inflation,
                     )
                     return path_world, scaled_info

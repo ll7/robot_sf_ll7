@@ -96,6 +96,10 @@ class ClassicPlanVisualizer(Visualizer):
     ) -> float | None:
         """Derive meters-per-cell from explicit overrides or grid metadata.
 
+        Args:
+            grid_map: Grid to read metadata from.
+            meters_per_cell: Optional explicit override.
+
         Returns:
             Meters-per-cell value if discoverable, otherwise None.
         """
@@ -114,7 +118,12 @@ class ClassicPlanVisualizer(Visualizer):
         return None
 
     def _set_world_axis_formatters(self, grid_map: Grid, meters_per_cell: float | None) -> None:
-        """Label axes in meters when scale information is available."""
+        """Label axes in meters when scale information is available.
+
+        Args:
+            grid_map: Grid being visualized.
+            meters_per_cell: Scale factor to apply for labeling.
+        """
         scale_factor = self._resolve_meters_per_cell(grid_map, meters_per_cell)
         if scale_factor is None or grid_map.dim != 2:
             return
@@ -134,7 +143,16 @@ class ClassicPlanVisualizer(Visualizer):
         alpha_esdf: float = 0.5,
         meters_per_cell: float | None = None,
     ) -> None:
-        """Plot grid cells and relabel axes in meters when scaling is known."""
+        """Plot grid cells and relabel axes in meters when scaling is known.
+
+        Args:
+            grid_map: Grid to render.
+            equal: Whether to force equal aspect ratio.
+            alpha_3d: Optional per-cell-type alpha values.
+            show_esdf: Whether to overlay ESDF heatmap.
+            alpha_esdf: Alpha for ESDF overlay.
+            meters_per_cell: Optional override for axis labeling scale.
+        """
         resolved_alpha = alpha_3d if alpha_3d is not None else self._DEFAULT_ALPHA_3D
 
         super().plot_grid_map(

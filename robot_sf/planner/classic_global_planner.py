@@ -27,7 +27,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from python_motion_planning.common import TYPES
-from python_motion_planning.path_planner import ThetaStar
+from python_motion_planning.path_planner import AcceleratedThetaStar as ThetaStar
+from python_motion_planning.path_planner import AStar
 
 from robot_sf.nav.motion_planning_adapter import (
     MotionPlanningGridConfig,
@@ -35,6 +36,7 @@ from robot_sf.nav.motion_planning_adapter import (
 )
 from robot_sf.nav.motion_planning_adapter import visualize_grid as render_grid
 from robot_sf.nav.motion_planning_adapter import visualize_path as render_path
+from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -58,7 +60,7 @@ class ClassicPlannerConfig:
     cells_per_meter: float = 1.0
     inflate_radius_cells: int | None = 2
     add_boundary_obstacles: bool = True
-    algorithm: str = "theta_star"
+    algorithm: str = "theta_star_v2"
 
     def __post_init__(self) -> None:
         """Validate planner configuration.
@@ -99,7 +101,10 @@ class ClassicGlobalPlanner:
     """Classic grid-based global planner using python_motion_planning.
 
     This planner converts vector-based SVG maps to rasterized grids and
-    uses algorithms from python_motion_planning for path planning.
+    uses algorithms from python_motion_planning for path planning. It supports
+    multiple algorithms (Theta*, high-performance Theta*, A*) with per-call
+    overrides, inflation fallbacks, cached grid reuse, and convenience
+    visualization helpers.
 
     Attributes:
         map_def: The MapDefinition to plan in.
@@ -196,35 +201,157 @@ class ClassicGlobalPlanner:
         world_y = grid_y / self.config.cells_per_meter
         return world_x, world_y
 
+    def _normalize_algorithm(self, override: str | None = None) -> str:
+        """Normalize the algorithm name and validate support.
+
+        Returns:
+            Normalized algorithm identifier ('theta_star', 'theta_star_v2', or 'a_star').
+
+        Args:
+            override: Optional algorithm name overriding the config default.
+
+        Raises:
+            ValueError: If the requested algorithm is unsupported.
+        """
+        algo_raw = (override or self.config.algorithm).strip().lower()
+        if algo_raw in {"theta_star", "thetastar", "theta"}:
+            return "theta_star"
+        if algo_raw in {"a_star", "astar", "a*", "a-star"}:
+            return "a_star"
+        if algo_raw in {"theta_star_v2", "theta_v2", "thetafast", "theta_star_fast", "theta2"}:
+            return "theta_star_v2"
+        msg = f"Unsupported algorithm: {override or self.config.algorithm}"
+        raise ValueError(msg)
+
+    def _validate_grid_point(self, name: str, gx: int, gy: int, grid: Grid) -> None:
+        """Ensure a grid point is within bounds and not colliding.
+
+        Args:
+            name: Label for the point (e.g., "start" or "goal").
+            gx: Grid X index.
+            gy: Grid Y index.
+            grid: Grid used for validation.
+
+        Raises:
+            PlanningError: When the point lies outside the grid bounds or inside an obstacle/inflation.
+        """
+        if not (0 <= gx < grid.type_map.shape[0]) or not (0 <= gy < grid.type_map.shape[1]):
+            raise PlanningError(
+                f"{name} out of grid bounds: grid=({gx}, {gy}), grid_shape={grid.type_map.shape}"
+            )
+        cell_value = grid.type_map[gx][gy]
+        if cell_value in {TYPES.OBSTACLE, TYPES.INFLATION}:
+            raise PlanningError(
+                f"{name} is in an invalid cell (value={cell_value}); choose a free/start/goal cell."
+            )
+
+    def validate_point(
+        self, point_world: tuple[float, float], grid: Grid | None = None
+    ) -> tuple[int, int]:
+        """Validate a world-space point against the planning grid.
+
+        Args:
+            point_world: Coordinate (x, y) in world meters.
+            grid: Optional grid to validate against; defaults to the planner's grid.
+
+        Returns:
+            tuple[int, int]: The validated grid indices corresponding to the world point.
+
+        Raises:
+            PlanningError: If the point is out of bounds or lies inside obstacles/inflation.
+        """
+        grid_obj = grid or self.grid
+        gx, gy = self._world_to_grid(*point_world)
+        self._validate_grid_point("point", gx, gy, grid_obj)
+        return gx, gy
+
+    def _make_planner(self, algo: str, grid: Grid, start: tuple[int, int], goal: tuple[int, int]):
+        """Instantiate the requested planner.
+
+        Returns:
+            Concrete planner instance for the requested algorithm.
+
+        Args:
+            algo: Normalized algorithm name.
+            grid: Planning grid.
+            start: Start cell (x, y).
+            goal: Goal cell (x, y).
+
+        Raises:
+            ValueError: If the algorithm name is unsupported.
+        """
+        if algo == "theta_star":
+            logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
+            return ThetaStar(map_=grid, start=start, goal=goal)
+        if algo == "theta_star_v2":
+            return HighPerformanceThetaStar(map_=grid, start=start, goal=goal)
+        if algo == "a_star":
+            return AStar(map_=grid, start=start, goal=goal)
+        msg = f"Unsupported algorithm: {algo}"
+        raise ValueError(msg)
+
+    def _run_single_plan(
+        self,
+        start_grid: tuple[int, int],
+        goal_grid: tuple[int, int],
+        algo: str,
+        inflation: int | None,
+    ) -> tuple[Grid, list[tuple[int, int]], list[tuple[float, float]], dict | None]:
+        """Execute one planning attempt for a given inflation radius.
+
+        Returns:
+            tuple[Grid, list[tuple[int, int]], list[tuple[float, float]], dict | None]:
+                - grid: The constructed planning grid for this attempt.
+                - path_grid: Waypoints in grid coordinates.
+                - path_world: Waypoints in world coordinates.
+                - path_info: Optional planner metadata scaled to meters.
+
+        Args:
+            start_grid: Start cell (x, y).
+            goal_grid: Goal cell (x, y).
+            algo: Normalized algorithm name.
+            inflation: Inflation radius in cells for this attempt.
+        """
+        grid = self._build_grid(inflation)
+        self._validate_grid_point("start", *start_grid, grid=grid)
+        self._validate_grid_point("goal", *goal_grid, grid=grid)
+        grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
+        grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
+
+        planner = self._make_planner(algo, grid, start_grid, goal_grid)
+        plan_result = planner.plan()
+        path_grid, path_info = (
+            plan_result if isinstance(plan_result, tuple) else (plan_result, None)
+        )
+
+        path_world = [self._grid_to_world(x, y) for x, y in path_grid] if path_grid else []
+        scaled_info = self._scale_path_info(path_info, grid, inflation)
+        return grid, path_grid, path_world, scaled_info
+
     def plan(
         self,
         start: tuple[float, float],
         goal: tuple[float, float],
+        algorithm: str | None = None,
     ) -> tuple[list[tuple[float, float]], dict | None]:
         """Plan a path from start to goal with inflation fallback.
 
         Args:
             start: Start position (x, y) in world coordinates (meters).
             goal: Goal position (x, y) in world coordinates (meters).
+            algorithm: Optional algorithm override ('theta_star', 'a_star'); defaults to config.
 
         Returns:
-            tuple[list[tuple[float, float]], dict | None]: Waypoints in world coordinates and
-            optional path metadata with length scaled to meters.
+            tuple[list[tuple[float, float]], dict | None]:
+                - path_world: Waypoints in world coordinates.
+                - path_info: Optional planner metadata with length scaled to meters.
 
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
         """
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
-
-        def _validate_point(name: str, gx: int, gy: int) -> None:
-            if not (0 <= gx < self.grid.type_map.shape[0]) or not (
-                0 <= gy < self.grid.type_map.shape[1]
-            ):
-                raise PlanningError(
-                    f"{name} out of grid bounds: world={start if name == 'start' else goal}, "
-                    f"grid=({gx}, {gy}), grid_shape={self.grid.type_map.shape}"
-                )
+        algo = self._normalize_algorithm(algorithm)
 
         logger.debug(
             "Planning from {start} to {goal} (world coords: {start_w} → {goal_w})",
@@ -245,38 +372,21 @@ class ClassicGlobalPlanner:
         last_error: Exception | None = None
 
         for idx, inflation in enumerate(attempt_radii):
-            grid = self._build_grid(inflation)
-
-            # Mark start and goal in grid
-            _validate_point("start", *start_grid)
-            _validate_point("goal", *goal_grid)
-            grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
-            grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
-
-            if self.config.algorithm == "theta_star":
-                planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)
-            else:
-                msg = f"Unsupported algorithm: {self.config.algorithm}"
-                raise ValueError(msg)
-
             try:
-                plan_result = planner.plan()
-                path_grid, path_info = (
-                    plan_result if isinstance(plan_result, tuple) else (plan_result, None)
+                grid, path_grid, path_world, scaled_info = self._run_single_plan(
+                    start_grid, goal_grid, algo, inflation
                 )
-
-                if path_grid:
-                    path_world = [self._grid_to_world(x, y) for x, y in path_grid]
-                    scaled_info = self._scale_path_info(path_info, grid, inflation)
+                if path_world:
                     self._grid = grid
                     self._last_path_grid = path_grid
                     self._last_path_world = path_world
                     self._last_path_info = scaled_info
                     logger.info(
-                        "Found path with {n} waypoints from {start} to {goal} using inflation {inflation}",
+                        "Found path with {n} waypoints from {start} to {goal} using {algo} and inflation {inflation}",
                         n=len(path_world),
                         start=start,
                         goal=goal,
+                        algo=algo,
                         inflation=inflation,
                     )
                     return path_world, scaled_info

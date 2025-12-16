@@ -68,7 +68,7 @@ def main() -> None:
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
     t0 = time.perf_counter()
-    path_world, path_info = planner.plan(start_world, goal_world, algorithm="a_star")
+    path_world, path_info = planner.plan(start_world, goal_world, algorithm="theta_star_v2")
     dt = time.perf_counter() - t0
 
     if not path_world:

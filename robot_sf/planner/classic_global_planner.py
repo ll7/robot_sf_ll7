@@ -27,8 +27,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from python_motion_planning.common import TYPES
-from python_motion_planning.path_planner import AcceleratedThetaStar as ThetaStar
-from python_motion_planning.path_planner import AStar
+from python_motion_planning.path_planner import AStar, ThetaStar
 
 from robot_sf.nav.motion_planning_adapter import (
     MotionPlanningGridConfig,

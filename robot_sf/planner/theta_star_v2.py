@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from python_motion_planning.common import TYPES
-from python_motion_planning.path_planner import AcceleratedThetaStar as UpstreamThetaStar
+from python_motion_planning.path_planner import ThetaStar
 
 try:  # Optional accelerator
     from numba import njit
@@ -145,7 +145,7 @@ def _bind_fast_in_collision(grid: Grid) -> None:
     grid.in_collision = MethodType(fast_in_collision, grid)  # type: ignore[attr-defined]
 
 
-class HighPerformanceThetaStar(UpstreamThetaStar):
+class HighPerformanceThetaStar(ThetaStar):
     """Theta* variant with optimized line-of-sight collision checking.
 
     This class wraps the upstream Theta* but replaces the grid's in_collision with

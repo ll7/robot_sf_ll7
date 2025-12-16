@@ -27,7 +27,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from python_motion_planning.common import TYPES
-from python_motion_planning.path_planner import AStar, ThetaStar
+from python_motion_planning.path_planner import AcceleratedThetaStar as ThetaStar
+from python_motion_planning.path_planner import AStar
 
 from robot_sf.nav.motion_planning_adapter import (
     MotionPlanningGridConfig,
@@ -35,6 +36,7 @@ from robot_sf.nav.motion_planning_adapter import (
 )
 from robot_sf.nav.motion_planning_adapter import visualize_grid as render_grid
 from robot_sf.nav.motion_planning_adapter import visualize_path as render_path
+from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -99,7 +101,10 @@ class ClassicGlobalPlanner:
     """Classic grid-based global planner using python_motion_planning.
 
     This planner converts vector-based SVG maps to rasterized grids and
-    uses algorithms from python_motion_planning for path planning.
+    uses algorithms from python_motion_planning for path planning. It supports
+    multiple algorithms (Theta*, high-performance Theta*, A*) with per-call
+    overrides, inflation fallbacks, cached grid reuse, and convenience
+    visualization helpers.
 
     Attributes:
         map_def: The MapDefinition to plan in.
@@ -213,6 +218,8 @@ class ClassicGlobalPlanner:
             return "theta_star"
         if algo_raw in {"a_star", "astar", "a*", "a-star"}:
             return "a_star"
+        if algo_raw in {"theta_star_v2", "theta_v2", "thetafast", "theta_star_fast", "theta2"}:
+            return "theta_star_v2"
         msg = f"Unsupported algorithm: {override or self.config.algorithm}"
         raise ValueError(msg)
 
@@ -276,6 +283,8 @@ class ClassicGlobalPlanner:
         if algo == "theta_star":
             logger.warning("Theta_star can be roughly 20x slower than A_star on large grids.")
             return ThetaStar(map_=grid, start=start, goal=goal)
+        if algo == "theta_star_v2":
+            return HighPerformanceThetaStar(map_=grid, start=start, goal=goal)
         if algo == "a_star":
             return AStar(map_=grid, start=start, goal=goal)
         msg = f"Unsupported algorithm: {algo}"

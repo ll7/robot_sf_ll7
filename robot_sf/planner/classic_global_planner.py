@@ -216,8 +216,8 @@ class ClassicGlobalPlanner:
         msg = f"Unsupported algorithm: {override or self.config.algorithm}"
         raise ValueError(msg)
 
-    def _validate_point(self, name: str, gx: int, gy: int, grid: Grid) -> None:
-        """Ensure a grid point is within bounds.
+    def _validate_grid_point(self, name: str, gx: int, gy: int, grid: Grid) -> None:
+        """Ensure a grid point is within bounds and not colliding.
 
         Args:
             name: Label for the point (e.g., "start" or "goal").
@@ -226,12 +226,37 @@ class ClassicGlobalPlanner:
             grid: Grid used for validation.
 
         Raises:
-            PlanningError: When the point lies outside the grid bounds.
+            PlanningError: When the point lies outside the grid bounds or inside an obstacle/inflation.
         """
         if not (0 <= gx < grid.type_map.shape[0]) or not (0 <= gy < grid.type_map.shape[1]):
             raise PlanningError(
                 f"{name} out of grid bounds: grid=({gx}, {gy}), grid_shape={grid.type_map.shape}"
             )
+        cell_value = grid.type_map[gx][gy]
+        if cell_value in {TYPES.OBSTACLE, TYPES.INFLATION}:
+            raise PlanningError(
+                f"{name} is in an invalid cell (value={cell_value}); choose a free/start/goal cell."
+            )
+
+    def validate_point(
+        self, point_world: tuple[float, float], grid: Grid | None = None
+    ) -> tuple[int, int]:
+        """Validate a world-space point against the planning grid.
+
+        Args:
+            point_world: Coordinate (x, y) in world meters.
+            grid: Optional grid to validate against; defaults to the planner's grid.
+
+        Returns:
+            tuple[int, int]: The validated grid indices corresponding to the world point.
+
+        Raises:
+            PlanningError: If the point is out of bounds or lies inside obstacles/inflation.
+        """
+        grid_obj = grid or self.grid
+        gx, gy = self._world_to_grid(*point_world)
+        self._validate_grid_point("point", gx, gy, grid_obj)
+        return gx, gy
 
     def _make_planner(self, algo: str, grid: Grid, start: tuple[int, int], goal: tuple[int, int]):
         """Instantiate the requested planner.
@@ -279,8 +304,8 @@ class ClassicGlobalPlanner:
             inflation: Inflation radius in cells for this attempt.
         """
         grid = self._build_grid(inflation)
-        self._validate_point("start", *start_grid, grid=grid)
-        self._validate_point("goal", *goal_grid, grid=grid)
+        self._validate_grid_point("start", *start_grid, grid=grid)
+        self._validate_grid_point("goal", *goal_grid, grid=grid)
         grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START
         grid.type_map[goal_grid[0]][goal_grid[1]] = TYPES.GOAL
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import types
 
 import pytest
+from python_motion_planning.common import TYPES
 
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig, PlanningError
@@ -22,6 +23,36 @@ def _make_basic_map(tmp_path):
         """.strip()
     )
     return convert_map(str(svg))
+
+
+def _make_map_with_obstacle(tmp_path):
+    svg = tmp_path / "blocked.svg"
+    svg.write_text(
+        """
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="3" height="3">
+  <rect inkscape:label="obstacle" x="1" y="1" width="1" height="1" />
+  <rect inkscape:label="robot_spawn_zone" x="0.2" y="0.2" width="0.5" height="0.5" />
+  <rect inkscape:label="robot_goal_zone" x="2.2" y="0.2" width="0.5" height="0.5" />
+  <path inkscape:label="robot_route_0_0" d="M 0.2 0.2 L 2.7 0.2" />
+</svg>
+        """.strip()
+    )
+    return convert_map(str(svg))
+
+
+class SequenceRng:
+    """Deterministic RNG returning a preset sequence."""
+
+    def __init__(self, values):
+        """Store a looping sequence of integers to replay via randrange."""
+        self._values = list(values)
+        self._idx = 0
+
+    def randrange(self, upper):
+        """Return the next value modulo the given upper bound."""
+        value = self._values[self._idx % len(self._values)]
+        self._idx += 1
+        return value % upper
 
 
 def test_scale_path_info_scales_length_and_sets_inflation(tmp_path):
@@ -198,3 +229,48 @@ def test_validate_point_allows_free_cell(tmp_path):
 
     gx, gy = planner.validate_point((0.4, 0.4))
     assert (gx, gy) == planner._world_to_grid(0.4, 0.4)
+
+
+def test_random_valid_point_on_grid_skips_invalid_cells(tmp_path):
+    """random_valid_point_on_grid should reject obstacles and return a free world point."""
+    map_def = _make_map_with_obstacle(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    rng = SequenceRng([1, 1, 0, 0])  # obstacle first, then a free cell
+
+    point = planner.random_valid_point_on_grid(rng=rng, max_attempts=3)
+
+    assert point == planner._grid_to_world(0, 0)
+    cell_value = planner.grid.type_map[0][0]
+    assert cell_value not in (TYPES.OBSTACLE, TYPES.INFLATION)
+
+
+def test_plan_random_path_is_reproducible_with_seed(tmp_path):
+    """plan_random_path should produce deterministic start/goal and path for the same seed."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+            algorithm="theta_star_v2",
+        ),
+    )
+
+    path1, info1, start1, goal1 = planner.plan_random_path(seed=7, max_attempts=5)
+    path2, info2, start2, goal2 = planner.plan_random_path(seed=7, max_attempts=5)
+
+    assert start1 == start2
+    assert goal1 == goal2
+    assert path1 == path2
+    assert path1[0] == planner._grid_to_world(*planner._world_to_grid(*start1))
+    assert path1[-1] == planner._grid_to_world(*planner._world_to_grid(*goal1))
+    assert info1 is not None
+    assert info2 is not None

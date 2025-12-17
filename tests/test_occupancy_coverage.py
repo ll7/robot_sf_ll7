@@ -285,8 +285,11 @@ class TestCoverageVerification:
             if not coverage_file.exists():
                 pytest.skip("Coverage data not available (run with pytest --cov)")
 
-            with coverage_file.open() as f:
-                data = json.load(f)
+            try:
+                with coverage_file.open() as f:
+                    data = json.load(f)
+            except json.JSONDecodeError as exc:
+                pytest.skip(f"Coverage data unreadable: {exc}")
 
             # Find occupancy_grid.py in coverage data
             occ_grid_file = None

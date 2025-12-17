@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import math
+import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -264,6 +265,43 @@ class ClassicGlobalPlanner:
         self._validate_grid_point("point", gx, gy, grid_obj)
         return gx, gy
 
+    def random_valid_point_on_grid(
+        self,
+        seed: int | None = None,
+        grid: Grid | None = None,
+        max_attempts: int = 1000,
+        rng: random.Random | None = None,
+    ) -> tuple[float, float]:
+        """Sample a random valid world-space point on the planning grid.
+
+        Args:
+            seed: Optional random seed for reproducibility (ignored when rng is provided).
+            grid: Optional grid to validate against; defaults to the planner's grid.
+            max_attempts: Maximum number of sampling attempts before failing.
+            rng: Optional pre-seeded random generator to reuse across calls.
+
+        Returns:
+            tuple[float, float]: World coordinates of a valid free cell.
+
+        Raises:
+            PlanningError: If no valid point is found within the allowed attempts.
+        """
+        grid_obj = grid or self.grid
+        generator = rng if rng is not None else random.Random(seed)
+        width, height = grid_obj.type_map.shape
+
+        for _ in range(max_attempts):
+            gx = generator.randrange(width)
+            gy = generator.randrange(height)
+            try:
+                self._validate_grid_point("random point", gx, gy, grid_obj)
+            except PlanningError:
+                continue
+            return self._grid_to_world(gx, gy)
+
+        msg = f"Failed to sample a valid grid point after {max_attempts} attempts"
+        raise PlanningError(msg)
+
     def _make_planner(self, algo: str, grid: Grid, start: tuple[int, int], goal: tuple[int, int]):
         """Instantiate the requested planner.
 
@@ -422,6 +460,57 @@ class ClassicGlobalPlanner:
         logger.error("Planning from {start} to {goal} failed.", start=start, goal=goal)
         logger.error("Consider increasing the cells per meter value.")
         raise PlanningError(error_msg)
+
+    def plan_random_path(
+        self,
+        algorithm: str | None = None,
+        seed: int | None = None,
+        max_attempts: int = 20,
+    ) -> tuple[list[tuple[float, float]], dict | None, tuple[float, float], tuple[float, float]]:
+        """Plan a path between two randomly sampled valid points.
+
+        Args:
+            algorithm: Optional algorithm override; defaults to the planner configuration.
+            seed: Optional random seed for reproducibility.
+            max_attempts: Maximum attempts to sample points and find a valid path.
+
+        Returns:
+            tuple[list[tuple[float, float]], dict | None, tuple[float, float], tuple[float, float]]:
+                The planned path in world coordinates, path metadata, start, and goal.
+
+        Raises:
+            PlanningError: If no valid path can be found after the allowed attempts.
+        """
+        rng = random.Random(seed)
+        last_error: Exception | None = None
+
+        for attempt_idx in range(max_attempts):
+            start = self.random_valid_point_on_grid(rng=rng)
+            goal = self.random_valid_point_on_grid(rng=rng)
+            if start == goal:
+                continue
+
+            try:
+                path_world, path_info = self.plan(start=start, goal=goal, algorithm=algorithm)
+                logger.info(
+                    "Random path planned on attempt {attempt}: {start} -> {goal}",
+                    attempt=attempt_idx + 1,
+                    start=start,
+                    goal=goal,
+                )
+                return path_world, path_info, start, goal
+            except PlanningError as exc:
+                last_error = exc
+                logger.debug(
+                    "Random planning attempt {attempt} failed: {error}",
+                    attempt=attempt_idx + 1,
+                    error=exc,
+                )
+
+        msg = f"Failed to plan random path after {max_attempts} attempts"
+        if last_error is not None:
+            msg = f"{msg}; last error: {last_error}"
+        raise PlanningError(msg)
 
     def _scale_path_info(
         self,

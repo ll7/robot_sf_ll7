@@ -532,10 +532,10 @@ class SvgMapConverter:
             return robot_routes
 
         if not robot_spawn_zones or not robot_goal_zones:
-            raise ValueError(
-                "SVG map conversion produced zero robot routes and spawn/goal zones are missing; "
-                "ensure at least one 'robot_route_*_*' path label exists or provide spawn/goal zones.",
+            logger.warning(
+                "No robot routes found and spawn/goal zones are missing; planner may fail without routes."
             )
+            return []
 
         logger.warning(
             "No robot routes found; generating straight-line routes between spawn and goal zone centers.",

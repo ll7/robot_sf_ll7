@@ -206,6 +206,8 @@ class MapDefinition:
                 self.robot_routes_by_spawn_id[route.spawn_id].append(route)
             else:
                 self.robot_routes_by_spawn_id[route.spawn_id] = [route]
+        if not self.robot_routes:
+            logger.warning("MapDefinition has no robot routes; planners may synthesize defaults.")
 
         if self.width <= 0 or self.height <= 0:
             logger.critical(

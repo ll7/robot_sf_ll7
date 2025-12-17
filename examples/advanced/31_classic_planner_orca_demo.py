@@ -101,7 +101,7 @@ def main(steps: int = 600, seed: int | None = 13) -> None:
     for step_idx in range(steps):
         linear, angular = policy.act(obs)
         action = action_adapter.from_velocity_command((linear, angular))
-        obs, reward, done, truncated, info = env.step(action)
+        obs, _reward, done, truncated, info = env.step(action)
         env.render()
 
         if done or truncated:

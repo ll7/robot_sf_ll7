@@ -21,8 +21,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
 MAP_PATH = (
-    get_repository_root()
-    / "maps/obstacle_svg_maps/uni_campus_1350_obstacles_lake_traverse_with_simple_routes.svg"
+    get_repository_root() / "maps/obstacle_svg_maps/uni_campus_with_lake_as_obstacle_and_routes.svg"
 )
 """svg map file to load for the test."""
 
@@ -43,7 +42,7 @@ def main() -> None:
 
     # Create planner
     planner_config = ClassicPlannerConfig(
-        cells_per_meter=1.0,
+        cells_per_meter=2.0,
         inflate_radius_cells=3,
         algorithm="theta_star",
     )

@@ -146,3 +146,14 @@ For detailed information about the verification workflow, see [specs/001-map-ver
 ### New Features
 
 If you want to implement new features: [svg_map_parser.py](../robot_sf/nav/svg_map_parser.py)
+
+
+### Example: Handling Lakes in OSM Exports
+
+This workflow shows how to include a lake as an obstacle when working with OSM-based exports such as `maps/osm_svg_maps/uni_campus_1350.svg`.
+
+1. Export the SVG from the OSM website and keep the scale factor in the filename (e.g., `_1350`) so downstream tools can reuse it. If you only need buildings, run `examples/example_osm_svg_to_obstacle_svg.py` on the export. The script filters elements by the building color string and applies the scale factor to produce a building-only SVG.
+2. The lake in this example does not share the building color, so it is skipped as an obstacle. To include it, open the OSM SVG in Inkscape (or edit the XML directly), locate the lake path, and change its color to exactly match the building color string. Reading the color value from the SVG source and pasting it into the lake’s style can be faster than using the GUI.
+3. After recoloring, the lake becomes one large obstacle with no crossings. To create crossings, split the shape: use the **Eraser** tool to cut the lake where crossings should exist (it will still be a single path), then use the **Shape Builder** tool to click each desired section and confirm to turn the pieces into separate objects.
+4. Select each new lake section, open **Object Properties**, set the **Label** to `obstacle`, and click **Set** so the parser treats every piece as an obstacle.
+5. Save the updated SVG. You now have a lake represented as multiple obstacle objects that allow crossings where you split the shape.

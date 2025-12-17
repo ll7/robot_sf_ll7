@@ -390,6 +390,7 @@ When contributing to the project:
 ## Planner Documentation
 
 - **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
+- **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
 
 ---
 

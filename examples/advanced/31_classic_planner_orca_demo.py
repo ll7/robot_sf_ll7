@@ -43,7 +43,7 @@ if SET_SEED is not None:
     np.random.seed(SET_SEED)
 
 
-def main(steps: int = 600, seed: int | None = 13) -> None:
+def main(steps: int = 600, seed: int | None = SET_SEED) -> None:
     """Run a short ORCA-style rollout guided by the classic global planner."""
     configure_logging(verbose=True)
     ensure_interactive_backend()

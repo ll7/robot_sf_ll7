@@ -18,6 +18,8 @@ from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.planner import PlanningError
 from robot_sf.planner.visibility_planner import PlanningFailedError
 
+_PLANNER_RETRY_ATTEMPTS = 5
+
 
 @dataclass
 class RouteNavigator:
@@ -149,9 +151,8 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
             raise ValueError(msg)
 
         prepared_obstacles = get_prepared_obstacles(map_def)
-        max_attempts = 5
 
-        for attempt in range(max_attempts):
+        for attempt in range(_PLANNER_RETRY_ATTEMPTS):
             route_choice = sample(routes_for_spawn, k=1)[0]
             start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
             goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
@@ -161,7 +162,7 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
                 logger.warning(
                     "Planner attempt %s/%s failed for spawn_id=%s: %s",
                     attempt + 1,
-                    max_attempts,
+                    _PLANNER_RETRY_ATTEMPTS,
                     spawn_id,
                     exc,
                 )
@@ -173,13 +174,13 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
                 len(route),
                 spawn_id,
                 attempt + 1,
-                max_attempts,
+                _PLANNER_RETRY_ATTEMPTS,
             )
             return route
 
         logger.warning(
             "Planner failed after %s attempts for spawn_id=%s; falling back to predefined route.",
-            max_attempts,
+            _PLANNER_RETRY_ATTEMPTS,
             spawn_id,
         )
 

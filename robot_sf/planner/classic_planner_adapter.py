@@ -80,7 +80,9 @@ class PlannerActionAdapter:
         if abs(target_speed) < 1e-6:
             steer = 0.0
         else:
-            steer = math.atan(angular_target * config.wheelbase / max(abs(target_speed), 1e-6))
+            steer = math.atan(
+                angular_target * config.wheelbase / max(abs(target_speed), 1e-6)
+            ) * np.sign(target_speed)
         steer = float(np.clip(steer, -config.max_steer, config.max_steer))
 
         action = np.array([accel, steer], dtype=np.float32)

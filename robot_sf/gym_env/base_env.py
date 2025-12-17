@@ -11,7 +11,12 @@ from loguru import logger
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.planner import GlobalPlanner, PlannerConfig
+from robot_sf.planner import (
+    ClassicPlannerConfig,
+    GlobalPlanner,
+    PlannerConfig,
+    attach_classic_global_planner,
+)
 from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 from robot_sf.sim.registry import get_backend
@@ -218,10 +223,18 @@ class BaseEnv(Env):
 
 
 def attach_planner_to_map(map_def, env_config) -> None:
-    """Attach a GlobalPlanner instance to the map when enabled in config."""
+    """Attach a planner instance to the map when enabled in config."""
     if not getattr(env_config, "use_planner", False):
         return
     if getattr(map_def, "_use_planner", False) and getattr(map_def, "_global_planner", None):
+        return
+
+    backend = getattr(env_config, "planner_backend", "visibility") or "visibility"
+    if backend.lower() == "classic":
+        classic_cfg = getattr(env_config, "planner_classic_config", None)
+        if classic_cfg is None:
+            classic_cfg = ClassicPlannerConfig()
+        attach_classic_global_planner(map_def, planner_config=classic_cfg)
         return
 
     clearance = getattr(env_config, "planner_clearance_margin", 0.3)

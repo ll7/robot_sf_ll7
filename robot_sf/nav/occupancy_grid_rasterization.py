@@ -75,7 +75,7 @@ def rasterize_line_segment(
     max_y = grid_origin_y + config.height
     clipped = _clip_line_to_rect(start, end, min_x, max_x, min_y, max_y)
     if clipped is None:
-        logger.debug(f"Line segment {line} outside grid bounds, skipping")
+        logger.log("SPAM", f"Line segment {line} outside grid bounds, skipping")
         return
     start_clipped, end_clipped = clipped
 

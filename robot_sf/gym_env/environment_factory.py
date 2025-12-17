@@ -391,7 +391,6 @@ def _validate_and_log_config(config: Any) -> None:
         resolved.get("backend", "fast-pysf"),
         len(resolved.get("sensors", [])),
     )
-    logger.debug("Full resolved config: {}", resolved)
 
 
 def _normalize_factory_inputs(

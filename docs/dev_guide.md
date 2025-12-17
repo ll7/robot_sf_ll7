@@ -177,6 +177,26 @@ Custom backends can be registered via `robot_sf.sim.registry.register_backend()`
 **Error handling:**
 Unknown backend names fall back to legacy `init_simulators()` with a warning. For strict validation, use `robot_sf.gym_env.config_validation.validate_config()` before environment creation.
 
+### Planner selection (visibility vs classic grid)
+
+Global planning can be toggled via `RobotSimulationConfig`:
+
+```python
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
+
+config = RobotSimulationConfig(
+    use_planner=True,
+    planner_backend="classic",  # or "visibility" (default)
+    planner_classic_config=ClassicPlannerConfig(cells_per_meter=1.0, inflate_radius_cells=2),
+)
+env = make_robot_env(config=config)
+```
+
+- `"visibility"` uses the existing visibility-graph planner.
+- `"classic"` uses the grid-based planner (Theta*/A* family) with the provided `ClassicPlannerConfig`.
+
 ### Utility Modules
 
 All shared utility functions and type definitions live in `robot_sf/common/`:

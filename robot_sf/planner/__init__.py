@@ -18,6 +18,10 @@ from robot_sf.planner.classic_global_planner import (
     ClassicPlannerConfig,
     PlanningError,
 )
+from robot_sf.planner.classic_planner_adapter import (
+    PlannerActionAdapter,
+    attach_classic_global_planner,
+)
 from robot_sf.planner.poi_sampler import POISampler
 from robot_sf.planner.visibility_planner import (
     PlannerConfig,
@@ -30,19 +34,16 @@ from robot_sf.planner.visualization import plot_global_plan, plot_visibility_gra
 GlobalPlanner = VisibilityPlanner
 
 __all__ = [
-    # Classic grid-based planner
     "ClassicGlobalPlanner",
     "ClassicPlannerConfig",
-    # Backwards compatibility
     "GlobalPlanner",
-    # Utilities
     "POISampler",
-    # Visibility graph planner
+    "PlannerActionAdapter",
     "PlannerConfig",
     "PlanningError",
     "PlanningFailedError",
-    # Visualization
     "VisibilityPlanner",
+    "attach_classic_global_planner",
     "plot_global_plan",
     "plot_visibility_graph",
 ]

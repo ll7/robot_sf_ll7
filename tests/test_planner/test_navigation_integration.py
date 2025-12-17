@@ -5,7 +5,7 @@ from robot_sf.gym_env.base_env import attach_planner_to_map
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.navigation import sample_route
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.planner import GlobalPlanner, PlanningError
+from robot_sf.planner import ClassicGlobalPlanner, GlobalPlanner, PlanningError
 
 
 def test_sample_route_uses_planner_when_enabled(tmp_path):
@@ -77,3 +77,16 @@ def test_attach_planner_to_map_sets_flags():
 
     assert getattr(map_def, "_use_planner", False) is True
     assert isinstance(getattr(map_def, "_global_planner", None), GlobalPlanner)
+
+
+def test_attach_planner_to_map_supports_classic_backend():
+    config = RobotSimulationConfig(
+        use_planner=True,
+        planner_backend="classic",
+    )
+    map_def = convert_map("tests/fixtures/test_maps/simple_corridor.svg")
+
+    attach_planner_to_map(map_def, config)
+
+    assert getattr(map_def, "_use_planner", False) is True
+    assert isinstance(getattr(map_def, "_global_planner", None), ClassicGlobalPlanner)

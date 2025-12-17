@@ -18,6 +18,10 @@ from robot_sf.planner.classic_global_planner import (
     ClassicPlannerConfig,
     PlanningError,
 )
+from robot_sf.planner.classic_planner_adapter import (
+    PlannerActionAdapter,
+    attach_classic_global_planner,
+)
 from robot_sf.planner.poi_sampler import POISampler
 from robot_sf.planner.visibility_planner import (
     PlannerConfig,
@@ -33,6 +37,8 @@ __all__ = [
     # Classic grid-based planner
     "ClassicGlobalPlanner",
     "ClassicPlannerConfig",
+    "PlannerActionAdapter",
+    "attach_classic_global_planner",
     # Backwards compatibility
     "GlobalPlanner",
     # Utilities

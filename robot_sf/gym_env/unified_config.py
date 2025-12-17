@@ -17,6 +17,7 @@ from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
+from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
@@ -87,6 +88,9 @@ class RobotSimulationConfig(BaseSimulationConfig):
         default=0.5,
         metadata={"doc": "Alpha blending for grid overlay (0.0=transparent, 1.0=opaque)"},
     )
+    # Planner backend selection: "visibility" (default) or "classic"
+    planner_backend: str = field(default="visibility")
+    planner_classic_config: ClassicPlannerConfig | None = field(default=None)
 
     def __post_init__(self):
         """Validate robot-specific configuration.
@@ -151,6 +155,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
         """Validate planner-related configuration."""
         if self.planner_clearance_margin < 0:
             raise ValueError("planner_clearance_margin cannot be negative")
+        if self.planner_backend not in {"visibility", "classic"}:
+            raise ValueError("planner_backend must be one of {'visibility', 'classic'}")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

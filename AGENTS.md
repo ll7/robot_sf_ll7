@@ -21,4 +21,4 @@ Adopt the conventional commit style seen in history (e.g., `refactor: adjust obs
 
 ## Donts
 
-- Never change code in `.venv`. You can change dependencies in `pyproject.toml` and run `uv sync` to update
+- Never change code in `.venv`. To manage dependencies, edit `pyproject.toml` and run `uv sync` to update the virtual environment.

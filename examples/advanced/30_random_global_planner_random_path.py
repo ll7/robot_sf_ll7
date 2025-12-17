@@ -48,9 +48,6 @@ def main() -> None:
         obs=stats["obstacle_count"],
         pct=stats["obstacle_percentage"],
     )
-    planner.visualize_grid(
-        output_dir / "classic_planner_random_grid.png", title="Random Planner Grid"
-    )
 
     seed = 69
     logger.info("Sampling random start and goal with seed={seed}", seed=seed)

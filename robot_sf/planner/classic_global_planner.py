@@ -482,7 +482,7 @@ class ClassicGlobalPlanner:
             PlanningError: If no valid path can be found after the allowed attempts.
         """
         rng = random.Random(seed)
-        last_error: Exception | None = None
+        last_error: PlanningError | None = None
 
         for attempt_idx in range(max_attempts):
             start = self.random_valid_point_on_grid(rng=rng)

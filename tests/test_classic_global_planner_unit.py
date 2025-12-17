@@ -44,10 +44,12 @@ class SequenceRng:
     """Deterministic RNG returning a preset sequence."""
 
     def __init__(self, values):
+        """Store a looping sequence of integers to replay via randrange."""
         self._values = list(values)
         self._idx = 0
 
     def randrange(self, upper):
+        """Return the next value modulo the given upper bound."""
         value = self._values[self._idx % len(self._values)]
         self._idx += 1
         return value % upper

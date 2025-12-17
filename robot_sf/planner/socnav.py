@@ -92,9 +92,9 @@ class OccupancyAwarePlannerMixin:
             pos_arr = self._as_1d_float(observation.get("robot_position", [0.0, 0.0]), pad=2)
             robot_state = {
                 "position": pos_arr,
-                "heading": self._as_1d_float(observation.get("robot_heading", [0.0]), pad=1)[0],
-                "speed": self._as_1d_float(observation.get("robot_speed", [0.0]), pad=1)[0],
-                "radius": self._as_1d_float(observation.get("robot_radius", [0.0]), pad=1)[0],
+                "heading": self._as_1d_float(observation.get("robot_heading", [0.0]), pad=1),
+                "speed": self._as_1d_float(observation.get("robot_speed", [0.0]), pad=1),
+                "radius": self._as_1d_float(observation.get("robot_radius", [0.0]), pad=1),
             }
             goal_state = {
                 "current": self._as_1d_float(observation.get("goal_current", [0.0, 0.0]), pad=2),

@@ -51,7 +51,11 @@ class PlannerActionAdapter:
     time_step: float
 
     def from_velocity_command(self, command: Iterable[float]) -> np.ndarray:
-        """Map a (v, w) command into the simulator action space and clip to limits."""
+        """Map a (v, w) command into the simulator action space and clip to limits.
+
+        Returns:
+            np.ndarray: Action formatted for the robot's configured action space.
+        """
         linear_target, angular_target = command
         if isinstance(self.robot, BicycleDriveRobot):
             return self._bicycle_action(linear_target, angular_target)
@@ -61,7 +65,11 @@ class PlannerActionAdapter:
         raise ValueError(msg)
 
     def _bicycle_action(self, linear_target: float, angular_target: float) -> np.ndarray:
-        """Compute acceleration/steering commands for a bicycle-drive robot."""
+        """Compute acceleration/steering commands for a bicycle-drive robot.
+
+        Returns:
+            np.ndarray: Clipped acceleration and steering command.
+        """
         config = self.robot.config
         current_speed, _ = self.robot.current_speed
 
@@ -79,7 +87,11 @@ class PlannerActionAdapter:
         return np.clip(action, self.action_space.low, self.action_space.high)
 
     def _differential_action(self, linear_target: float, angular_target: float) -> np.ndarray:
-        """Compute linear/angular deltas for a differential-drive robot."""
+        """Compute linear/angular deltas for a differential-drive robot.
+
+        Returns:
+            np.ndarray: Clipped delta-linear and delta-angular command.
+        """
         config = self.robot.config
         current_linear, current_angular = self.robot.current_speed
         target_linear = float(np.clip(linear_target, 0.0, config.max_linear_speed))

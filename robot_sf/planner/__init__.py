@@ -34,21 +34,16 @@ from robot_sf.planner.visualization import plot_global_plan, plot_visibility_gra
 GlobalPlanner = VisibilityPlanner
 
 __all__ = [
-    # Classic grid-based planner
     "ClassicGlobalPlanner",
     "ClassicPlannerConfig",
-    "PlannerActionAdapter",
-    "attach_classic_global_planner",
-    # Backwards compatibility
     "GlobalPlanner",
-    # Utilities
     "POISampler",
-    # Visibility graph planner
+    "PlannerActionAdapter",
     "PlannerConfig",
     "PlanningError",
     "PlanningFailedError",
-    # Visualization
     "VisibilityPlanner",
+    "attach_classic_global_planner",
     "plot_global_plan",
     "plot_visibility_graph",
 ]

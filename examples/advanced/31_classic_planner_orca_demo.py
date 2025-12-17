@@ -31,6 +31,20 @@ else:
 
     os.environ.setdefault("MPLBACKEND", "Agg")
 
+SET_SEED = 7
+if SET_SEED is not None:
+    import random
+
+    random.seed(SET_SEED)
+
+    import torch
+
+    torch.manual_seed(SET_SEED)
+
+    import numpy as np
+
+    np.random.seed(SET_SEED)
+
 
 def main(steps: int = 600, seed: int | None = 13) -> None:
     """Run a short ORCA-style rollout guided by the classic global planner."""

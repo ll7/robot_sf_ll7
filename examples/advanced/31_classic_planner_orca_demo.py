@@ -15,10 +15,7 @@ from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
-from robot_sf.planner.classic_planner_adapter import (
-    PlannerActionAdapter,
-    attach_classic_global_planner,
-)
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.socnav import make_orca_policy
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -56,14 +53,6 @@ def main(steps: int = 600, seed: int | None = 13) -> None:
         root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
     )
     map_def = convert_map(str(map_path))
-    attach_classic_global_planner(
-        map_def,
-        ClassicPlannerConfig(
-            cells_per_meter=1.0,
-            inflate_radius_cells=2,
-            algorithm="theta_star_v2",
-        ),
-    )
     map_pool = MapDefinitionPool(map_defs={"lake": map_def})
 
     see_everything = False
@@ -92,6 +81,12 @@ def main(steps: int = 600, seed: int | None = 13) -> None:
         include_grid_in_observation=True,
         grid_config=grid_cfg,
         show_occupancy_grid=True,
+        planner_backend="classic",
+        planner_classic_config=ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=2,
+            algorithm="theta_star_v2",
+        ),
         sim_config=SimulationSettings(
             stack_steps=1,
             difficulty=0,

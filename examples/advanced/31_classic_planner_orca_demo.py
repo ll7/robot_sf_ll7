@@ -23,7 +23,13 @@ from robot_sf.planner.socnav import make_orca_policy
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-# os.environ.setdefault("MPLBACKEND", "Agg")
+PYGAME_WINDOW = True
+if PYGAME_WINDOW:
+    logger.info("Using interactive pygame backend for rendering")
+else:
+    import os
+
+    os.environ.setdefault("MPLBACKEND", "Agg")
 
 
 def main(steps: int = 600, seed: int | None = 13) -> None:
@@ -46,13 +52,25 @@ def main(steps: int = 600, seed: int | None = 13) -> None:
     )
     map_pool = MapDefinitionPool(map_defs={"lake": map_def})
 
-    grid_cfg = GridConfig(
-        width=map_def.width,
-        height=map_def.height,
-        resolution=1.0,
-        use_ego_frame=False,
-        center_on_robot=False,
-    )
+    see_everything = False
+    if see_everything:
+        # see everything
+        grid_cfg = GridConfig(
+            width=map_def.width,
+            height=map_def.height,
+            resolution=1.0,
+            use_ego_frame=False,
+            center_on_robot=False,
+        )
+    else:
+        # see robot area
+        grid_cfg = GridConfig(
+            width=20.0,
+            height=20.0,
+            resolution=1.0,
+            use_ego_frame=False,
+            center_on_robot=True,
+        )
     env_config = RobotSimulationConfig(
         map_pool=map_pool,
         observation_mode=ObservationMode.SOCNAV_STRUCT,

@@ -411,6 +411,7 @@ addopts = [
     "--cov=robot_sf",
     "--cov-report=html",
     "--cov-report=json",
+    "--durations=10",
 ]
 testpaths = ["tests", "fast-pysf/tests"]
 filterwarnings = [

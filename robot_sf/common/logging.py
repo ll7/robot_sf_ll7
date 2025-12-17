@@ -51,11 +51,10 @@ def configure_logging(verbose: bool = False) -> None:
     logger.remove()  # Remove default handler
 
     log_format = (
-        # "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <7}</level>| "
-        # "<level>{level.icon} </level>"
+        "<level>{message}</level> | "
         "<dim><cyan>{file}:{line}</cyan></dim> | "
-        "<level>{message}</level>"
+        "<dim><cyan>{elapsed}</cyan></dim>"
     )
 
     logger.add(
@@ -66,6 +65,12 @@ def configure_logging(verbose: bool = False) -> None:
         backtrace=True if verbose else False,
         diagnose=True if verbose else False,
     )
+
+    # Define a very low-importance level for high-volume debug chatter.
+    try:
+        logger.level("SPAM")
+    except ValueError:
+        logger.level("SPAM", no=5, color="<dim><white>")
 
     # Configure log level colors
     logger.level("DEBUG", color="<dim><white>")

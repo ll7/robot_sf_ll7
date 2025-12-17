@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from math import atan2, dist
 from random import randint, sample
 
+from loguru import logger
 from shapely.geometry import Polygon
 from shapely.prepared import PreparedGeometry, prep
 
@@ -147,20 +148,40 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
             msg = f"Planner mode: no routes found for spawn_id={spawn_id}"
             raise ValueError(msg)
 
-        route_choice = sample(routes_for_spawn, k=1)[0]
         prepared_obstacles = get_prepared_obstacles(map_def)
-        start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
-        goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
-        try:
-            planned = planner.plan(start, goal)
-        except (PlanningFailedError, PlanningError):
-            pass
-        else:
-            if isinstance(planned, tuple):
-                route, _ = planned
-            else:
-                route = planned
+        max_attempts = 5
+
+        for attempt in range(max_attempts):
+            route_choice = sample(routes_for_spawn, k=1)[0]
+            start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+            goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+            try:
+                planned = planner.plan(start, goal)
+            except (PlanningFailedError, PlanningError) as exc:
+                logger.warning(
+                    "Planner attempt %s/%s failed for spawn_id=%s: %s",
+                    attempt + 1,
+                    max_attempts,
+                    spawn_id,
+                    exc,
+                )
+                continue
+
+            route = planned[0] if isinstance(planned, tuple) else planned
+            logger.info(
+                "Planner produced route with %d waypoints for spawn_id=%s on attempt %s/%s",
+                len(route),
+                spawn_id,
+                attempt + 1,
+                max_attempts,
+            )
             return route
+
+        logger.warning(
+            "Planner failed after %s attempts for spawn_id=%s; falling back to predefined route.",
+            max_attempts,
+            spawn_id,
+        )
 
     # If no spawn_id is provided, choose a random one
     spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)

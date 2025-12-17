@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import os
-
 from loguru import logger
 
 from robot_sf.common import ensure_interactive_backend
@@ -25,7 +23,7 @@ from robot_sf.planner.socnav import make_orca_policy
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-os.environ.setdefault("MPLBACKEND", "Agg")
+# os.environ.setdefault("MPLBACKEND", "Agg")
 
 
 def main(steps: int = 600, seed: int | None = 13) -> None:

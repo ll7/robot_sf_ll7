@@ -237,7 +237,9 @@ def attach_planner_to_map(map_def, env_config) -> None:
         classic_cfg = getattr(env_config, "planner_classic_config", None)
         if classic_cfg is None:
             classic_cfg = ClassicPlannerConfig()
-        attach_classic_global_planner(map_def, planner_config=classic_cfg)
+        planner = attach_classic_global_planner(map_def, planner_config=classic_cfg)
+        map_def._global_planner = planner
+        map_def._use_planner = True
         return
 
     clearance = getattr(env_config, "planner_clearance_margin", 0.3)

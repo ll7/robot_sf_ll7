@@ -159,29 +159,36 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
             try:
                 planned = planner.plan(start, goal)
             except (PlanningFailedError, PlanningError) as exc:
+                start_fmt = f"({start[0]:.2f}, {start[1]:.2f})"
+                goal_fmt = f"({goal[0]:.2f}, {goal[1]:.2f})"
                 logger.warning(
-                    "Planner attempt %s/%s failed for spawn_id=%s: %s",
-                    attempt + 1,
-                    _PLANNER_RETRY_ATTEMPTS,
-                    spawn_id,
-                    exc,
+                    "Planner attempt {attempt}/{max_attempts} failed for spawn_id={spawn_id} "
+                    "start={start} goal={goal}: {err}",
+                    attempt=attempt + 1,
+                    max_attempts=_PLANNER_RETRY_ATTEMPTS,
+                    spawn_id=spawn_id,
+                    start=start_fmt,
+                    goal=goal_fmt,
+                    err=exc,
                 )
                 continue
 
             route = planned[0] if isinstance(planned, tuple) else planned
             logger.info(
-                "Planner produced route with %d waypoints for spawn_id=%s on attempt %s/%s",
-                len(route),
-                spawn_id,
-                attempt + 1,
-                _PLANNER_RETRY_ATTEMPTS,
+                "Planner produced route with {n_waypoints} waypoints for spawn_id={spawn_id} "
+                "on attempt {attempt}/{max_attempts}",
+                n_waypoints=len(route),
+                spawn_id=spawn_id,
+                attempt=attempt + 1,
+                max_attempts=_PLANNER_RETRY_ATTEMPTS,
             )
             return route
 
-        logger.warning(
-            "Planner failed after %s attempts for spawn_id=%s; falling back to predefined route.",
-            _PLANNER_RETRY_ATTEMPTS,
-            spawn_id,
+        logger.error(
+            "Planner failed after {attempts} attempts for spawn_id={spawn_id}; "
+            "falling back to predefined route.",
+            attempts=_PLANNER_RETRY_ATTEMPTS,
+            spawn_id=spawn_id,
         )
 
     # If no spawn_id is provided, choose a random one

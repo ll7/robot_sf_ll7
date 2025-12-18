@@ -22,6 +22,145 @@ from robot_sf.planner.visibility_planner import PlanningFailedError
 _PLANNER_RETRY_ATTEMPTS = 5
 
 
+def _select_spawn_id(map_def: MapDefinition, spawn_id: int | None) -> int:
+    """Pick a spawn id, falling back to first available or zero.
+
+    Returns:
+        int: Selected spawn identifier.
+    """
+    if spawn_id is not None:
+        return spawn_id
+    available_spawns = list(map_def.robot_routes_by_spawn_id.keys())
+    return sample(available_spawns, k=1)[0] if available_spawns else 0
+
+
+def _sample_start_goal_global(
+    bounds: tuple[float, float, float, float],
+    obstacles: list[PreparedGeometry],
+    attempt: int,
+) -> tuple[Vec2D, Vec2D] | None:
+    """Sample start/goal from free space; return None on failure.
+
+    Returns:
+        tuple[Vec2D, Vec2D] | None: Sampled start and goal or None when sampling fails.
+    """
+    try:
+        start, goal = sample_free_points_in_bounds(bounds, 2, obstacle_polygons=obstacles)
+    except RuntimeError as exc:
+        logger.warning(
+            "Global sampling failed on attempt {attempt}: {err}",
+            attempt=attempt,
+            err=exc,
+        )
+        return None
+    if start == goal:
+        logger.warning(
+            "Global sampling produced identical start/goal on attempt {attempt}; resampling.",
+            attempt=attempt,
+        )
+        return None
+    return start, goal
+
+
+def _sample_start_goal_from_routes(
+    routes_for_spawn: list,
+    obstacles: list[PreparedGeometry],
+) -> tuple[Vec2D, Vec2D]:
+    """Sample start/goal from route spawn/goal zones.
+
+    Returns:
+        tuple[Vec2D, Vec2D]: Sampled start and goal points.
+    """
+    route_choice = sample(routes_for_spawn, k=1)[0]
+    start = sample_zone(route_choice.spawn_zone, 1, obstacle_polygons=obstacles)[0]
+    goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=obstacles)[0]
+    return start, goal
+
+
+def _plan_with_planner(
+    map_def: MapDefinition,
+    planner,
+    spawn_id: int | None,
+    global_sampling: bool,
+    prepared_obstacles: list[PreparedGeometry],
+) -> tuple[list[Vec2D] | None, int]:
+    """Attempt to plan using the configured planner; return route or None plus chosen spawn_id.
+
+    Returns:
+        tuple[list[Vec2D] | None, int]: Planned route (or None) and the spawn id used.
+    """
+    if not map_def.robot_routes_by_spawn_id and not global_sampling:
+        msg = "Planner mode enabled but no robot routes are defined on the map."
+        raise ValueError(msg)
+
+    spawn_id = _select_spawn_id(map_def, spawn_id)
+    routes_for_spawn = map_def.robot_routes_by_spawn_id.get(spawn_id, [])
+    if not routes_for_spawn and not global_sampling:
+        msg = f"Planner mode: no routes found for spawn_id={spawn_id}"
+        raise ValueError(msg)
+    if not routes_for_spawn and global_sampling:
+        logger.warning(
+            "Global sampling enabled but no predefined routes for spawn_id={spawn_id}; "
+            "fallback routes will be unavailable.",
+            spawn_id=spawn_id,
+        )
+
+    bounds = map_def.get_map_bounds()
+
+    for attempt in range(_PLANNER_RETRY_ATTEMPTS):
+        sampled = (
+            _sample_start_goal_global(
+                bounds,
+                prepared_obstacles,
+                attempt=attempt + 1,
+            )
+            if global_sampling
+            else _sample_start_goal_from_routes(routes_for_spawn, prepared_obstacles)
+        )
+        if sampled is None:
+            continue
+        start, goal = sampled
+        try:
+            planned = planner.plan(start, goal)
+        except (PlanningFailedError, PlanningError) as exc:
+            start_fmt = f"({start[0]:.2f}, {start[1]:.2f})"
+            goal_fmt = f"({goal[0]:.2f}, {goal[1]:.2f})"
+            logger.warning(
+                "Planner attempt {attempt}/{max_attempts} failed for spawn_id={spawn_id} "
+                "start={start} goal={goal}: {err}",
+                attempt=attempt + 1,
+                max_attempts=_PLANNER_RETRY_ATTEMPTS,
+                spawn_id=spawn_id,
+                start=start_fmt,
+                goal=goal_fmt,
+                err=exc,
+            )
+            continue
+
+        route = planned[0] if isinstance(planned, tuple) else planned
+        logger.info(
+            "Planner produced route with {n_waypoints} waypoints for spawn_id={spawn_id} "
+            "on attempt {attempt}/{max_attempts}",
+            n_waypoints=len(route),
+            spawn_id=spawn_id,
+            attempt=attempt + 1,
+            max_attempts=_PLANNER_RETRY_ATTEMPTS,
+        )
+        return route, spawn_id
+
+    logger.error(
+        "Planner failed after {attempts} attempts for spawn_id={spawn_id}; "
+        "falling back to predefined route.",
+        attempts=_PLANNER_RETRY_ATTEMPTS,
+        spawn_id=spawn_id,
+    )
+    if global_sampling and not map_def.robot_routes_by_spawn_id:
+        raise PlanningError(
+            "Planner failed with global sampling and no predefined routes available for fallback.",
+        )
+    return None, spawn_id
+
+
 @dataclass
 class RouteNavigator:
     """Tracks progress along an ordered list of waypoints.
@@ -139,111 +278,28 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     use_planner = getattr(map_def, "_use_planner", False)
     global_sampling = bool(getattr(map_def, "_sample_positions_globally", False))
     prepared_obstacles = get_prepared_obstacles(map_def)
+    chosen_spawn = spawn_id
 
     if use_planner and planner is not None:
-        if not map_def.robot_routes_by_spawn_id and not global_sampling:
-            msg = "Planner mode enabled but no robot routes are defined on the map."
-            raise ValueError(msg)
-
-        if spawn_id is None:
-            available_spawns = list(map_def.robot_routes_by_spawn_id.keys())
-            spawn_id = sample(available_spawns, k=1)[0] if available_spawns else 0
-
-        routes_for_spawn = map_def.robot_routes_by_spawn_id.get(spawn_id, [])
-        if not routes_for_spawn and not global_sampling:
-            msg = f"Planner mode: no routes found for spawn_id={spawn_id}"
-            raise ValueError(msg)
-        if not routes_for_spawn and global_sampling:
-            logger.warning(
-                "Global sampling enabled but no predefined routes for spawn_id={spawn_id}; "
-                "fallback routes will be unavailable.",
-                spawn_id=spawn_id,
-            )
-
-        bounds = map_def.get_map_bounds()
-
-        for attempt in range(_PLANNER_RETRY_ATTEMPTS):
-            if global_sampling:
-                try:
-                    start, goal = sample_free_points_in_bounds(
-                        bounds,
-                        2,
-                        obstacle_polygons=prepared_obstacles,
-                    )
-                except RuntimeError as exc:
-                    logger.warning(
-                        "Global sampling failed on attempt {attempt}/{max_attempts}: {err}",
-                        attempt=attempt + 1,
-                        max_attempts=_PLANNER_RETRY_ATTEMPTS,
-                        err=exc,
-                    )
-                    continue
-                if start == goal:
-                    logger.warning(
-                        "Global sampling produced identical start/goal on attempt {attempt}; resampling.",
-                        attempt=attempt + 1,
-                    )
-                    continue
-            else:
-                route_choice = sample(routes_for_spawn, k=1)[0]
-                start = sample_zone(
-                    route_choice.spawn_zone,
-                    1,
-                    obstacle_polygons=prepared_obstacles,
-                )[0]
-                goal = sample_zone(
-                    route_choice.goal_zone,
-                    1,
-                    obstacle_polygons=prepared_obstacles,
-                )[0]
-            try:
-                planned = planner.plan(start, goal)
-            except (PlanningFailedError, PlanningError) as exc:
-                start_fmt = f"({start[0]:.2f}, {start[1]:.2f})"
-                goal_fmt = f"({goal[0]:.2f}, {goal[1]:.2f})"
-                logger.warning(
-                    "Planner attempt {attempt}/{max_attempts} failed for spawn_id={spawn_id} "
-                    "start={start} goal={goal}: {err}",
-                    attempt=attempt + 1,
-                    max_attempts=_PLANNER_RETRY_ATTEMPTS,
-                    spawn_id=spawn_id,
-                    start=start_fmt,
-                    goal=goal_fmt,
-                    err=exc,
-                )
-                continue
-
-            route = planned[0] if isinstance(planned, tuple) else planned
-            logger.info(
-                "Planner produced route with {n_waypoints} waypoints for spawn_id={spawn_id} "
-                "on attempt {attempt}/{max_attempts}",
-                n_waypoints=len(route),
-                spawn_id=spawn_id,
-                attempt=attempt + 1,
-                max_attempts=_PLANNER_RETRY_ATTEMPTS,
-            )
-            return route
-
-        logger.error(
-            "Planner failed after {attempts} attempts for spawn_id={spawn_id}; "
-            "falling back to predefined route.",
-            attempts=_PLANNER_RETRY_ATTEMPTS,
-            spawn_id=spawn_id,
+        planned_route, chosen_spawn = _plan_with_planner(
+            map_def,
+            planner,
+            spawn_id,
+            global_sampling,
+            prepared_obstacles,
         )
-        if global_sampling and not map_def.robot_routes_by_spawn_id:
-            raise PlanningError(
-                "Planner failed with global sampling and no predefined routes available for fallback.",
-            )
+        if planned_route is not None:
+            return planned_route
 
     # If no spawn_id is provided, choose a random one
     if not map_def.robot_routes_by_spawn_id:
         raise PlanningError("No robot routes available for fallback after planner failure.")
-    if spawn_id is None or spawn_id not in map_def.robot_routes_by_spawn_id:
+    if chosen_spawn is None or chosen_spawn not in map_def.robot_routes_by_spawn_id:
         available_spawns = list(map_def.robot_routes_by_spawn_id.keys())
-        spawn_id = sample(available_spawns, k=1)[0]
+        chosen_spawn = sample(available_spawns, k=1)[0]
 
     # Get the routes for the chosen spawn_id
-    routes = map_def.robot_routes_by_spawn_id[spawn_id]
+    routes = map_def.robot_routes_by_spawn_id[chosen_spawn]
 
     # Sample a route from the routes
     route = sample(routes, k=1)[0]

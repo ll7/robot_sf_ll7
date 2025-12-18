@@ -294,9 +294,13 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     # If no spawn_id is provided, choose a random one
     if not map_def.robot_routes_by_spawn_id:
         raise PlanningError("No robot routes available for fallback after planner failure.")
-    if chosen_spawn is None or chosen_spawn not in map_def.robot_routes_by_spawn_id:
+    if chosen_spawn is None:
         available_spawns = list(map_def.robot_routes_by_spawn_id.keys())
         chosen_spawn = sample(available_spawns, k=1)[0]
+    elif chosen_spawn not in map_def.robot_routes_by_spawn_id:
+        raise PlanningError(
+            f"No robot routes for spawn_id={chosen_spawn} to fall back on after planner failure.",
+        )
 
     # Get the routes for the chosen spawn_id
     routes = map_def.robot_routes_by_spawn_id[chosen_spawn]

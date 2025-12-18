@@ -53,7 +53,7 @@ def _sample_start_goal_global(
             err=exc,
         )
         return None
-    if start == goal:
+    if dist(start, goal) < 1e-9:
         logger.warning(
             "Global sampling produced identical start/goal on attempt {attempt}; resampling.",
             attempt=attempt,

@@ -270,6 +270,23 @@ class SvgMapConverter:
         logger.debug(f"Parsed {len(circle_info)} circles in the SVG file")
         self.circle_info = circle_info
 
+    def _apply_viewbox_offset(self, offset_x: float, offset_y: float) -> None:
+        """Shift all parsed SVG elements by the viewBox origin to normalize to (0,0)."""
+        if abs(offset_x) < 1e-9 and abs(offset_y) < 1e-9:
+            return
+
+        for path in self.path_info:
+            coords = np.asarray(path.coordinates, dtype=float)
+            path.coordinates = coords - np.array([offset_x, offset_y])
+
+        for rect in self.rect_info:
+            rect.x -= offset_x
+            rect.y -= offset_y
+
+        for circle in self.circle_info:
+            circle.cx -= offset_x
+            circle.cy -= offset_y
+
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
         """Process a path labeled as obstacle.
 
@@ -665,19 +682,25 @@ class SvgMapConverter:
 
         width: float | None = _parse_svg_length(self.svg_root.attrib.get("width"))
         height: float | None = _parse_svg_length(self.svg_root.attrib.get("height"))
+        view_min_x = 0.0
+        view_min_y = 0.0
 
-        if width is None or height is None:
-            view_box = self.svg_root.attrib.get("viewBox") or self.svg_root.attrib.get("viewbox")
-            if view_box:
-                parts = view_box.replace(",", " ").split()
-                if len(parts) == 4:
-                    _, _, vb_width, vb_height = parts
-                    width = width or _parse_svg_length(vb_width)
-                    height = height or _parse_svg_length(vb_height)
+        view_box = self.svg_root.attrib.get("viewBox") or self.svg_root.attrib.get("viewbox")
+        if view_box:
+            parts = view_box.replace(",", " ").split()
+            if len(parts) == 4:
+                vb_min_x, vb_min_y, vb_width, vb_height = parts
+                view_min_x = _parse_svg_length(vb_min_x) or 0.0
+                view_min_y = _parse_svg_length(vb_min_y) or 0.0
+                width = width or _parse_svg_length(vb_width)
+                height = height or _parse_svg_length(vb_height)
 
         if width is None or height is None:
             msg = "SVG width/height missing and could not be inferred from viewBox."
             raise ValueError(msg)
+
+        # Normalize coordinates when the SVG viewBox does not start at (0,0).
+        self._apply_viewbox_offset(view_min_x, view_min_y)
 
         # Process rectangles first
         (

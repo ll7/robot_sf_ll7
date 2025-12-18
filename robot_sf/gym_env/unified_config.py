@@ -88,8 +88,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
         default=0.5,
         metadata={"doc": "Alpha blending for grid overlay (0.0=transparent, 1.0=opaque)"},
     )
-    # Planner backend selection: "visibility" (default) or "classic"
-    planner_backend: str = field(default="visibility")
+    # Planner backend selection: "classic" (default) or "visibility"
+    planner_backend: str = field(default="classic")
     planner_classic_config: ClassicPlannerConfig | None = field(default=None)
 
     def __post_init__(self):

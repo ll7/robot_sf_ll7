@@ -39,6 +39,8 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import Polygon
+from shapely.validation import explain_validity
 
 from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.common.types import Line2D, Rect, Zone
@@ -304,6 +306,17 @@ class SvgMapConverter:
                 f"Closing polygon: first and last vertices of obstacle <{path.id}> differ",
             )
             vertices.append(vertices[0])
+
+        # Validate obstacle geometry to flag self-intersections or degenerate shapes early.
+        poly = Polygon(vertices)
+        if not poly.is_valid or poly.is_empty:
+            logger.warning(
+                "Obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
+                pid=path.id,
+                valid=poly.is_valid,
+                empty=poly.is_empty,
+                reason=explain_validity(poly),
+            )
 
         return Obstacle(vertices)
 

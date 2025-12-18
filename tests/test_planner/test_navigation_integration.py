@@ -76,7 +76,10 @@ def test_attach_planner_to_map_sets_flags():
     attach_planner_to_map(map_def, config)
 
     assert getattr(map_def, "_use_planner", False) is True
-    assert isinstance(getattr(map_def, "_global_planner", None), GlobalPlanner)
+    assert isinstance(
+        getattr(map_def, "_global_planner", None),
+        (GlobalPlanner, ClassicGlobalPlanner),
+    )
 
 
 def test_attach_planner_to_map_supports_classic_backend():

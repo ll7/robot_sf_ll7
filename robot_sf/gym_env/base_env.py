@@ -224,6 +224,9 @@ class BaseEnv(Env):
 
 def attach_planner_to_map(map_def, env_config) -> None:
     """Attach a planner instance to the map when enabled in config."""
+    map_def._sample_positions_globally = bool(
+        getattr(env_config, "sample_positions_globally", False),
+    )
     if not getattr(env_config, "use_planner", False):
         return
     if getattr(map_def, "_use_planner", False) and getattr(map_def, "_global_planner", None):

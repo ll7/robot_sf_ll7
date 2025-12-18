@@ -125,6 +125,8 @@ class ClassicGlobalPlanner:
         """
         self.map_def = map_def
         self.config = config or ClassicPlannerConfig()
+        self._width_cells = math.ceil(self.map_def.width * self.config.cells_per_meter)
+        self._height_cells = math.ceil(self.map_def.height * self.config.cells_per_meter)
         self._grid: Grid | None = None
         self._last_path_world: list[tuple[float, float]] | None = None
         self._last_path_grid: list[tuple[int, int]] | None = None
@@ -184,7 +186,7 @@ class ClassicGlobalPlanner:
             Tuple of (grid_x, grid_y) indices.
         """
         grid_x = math.floor(world_x * self.config.cells_per_meter)
-        grid_y = math.floor(world_y * self.config.cells_per_meter)
+        grid_y = self._height_cells - 1 - math.floor(world_y * self.config.cells_per_meter)
         return grid_x, grid_y
 
     def _grid_to_world(self, grid_x: int, grid_y: int) -> tuple[float, float]:
@@ -197,8 +199,8 @@ class ClassicGlobalPlanner:
         Returns:
             Tuple of (world_x, world_y) coordinates in meters.
         """
-        world_x = grid_x / self.config.cells_per_meter
-        world_y = grid_y / self.config.cells_per_meter
+        world_x = (grid_x + 0.5) / self.config.cells_per_meter
+        world_y = (self._height_cells - 1 - grid_y + 0.5) / self.config.cells_per_meter
         return world_x, world_y
 
     def _normalize_algorithm(self, override: str | None = None) -> str:

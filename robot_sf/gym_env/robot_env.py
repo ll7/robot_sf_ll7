@@ -345,11 +345,11 @@ class RobotEnv(BaseEnv):
         if env_config.use_occupancy_grid and env_config.grid_config is not None:
             grid = OccupancyGrid(config=env_config.grid_config)
             logger.info(
-                "Occupancy grid initialized (observe=%s, visualize=%s): shape=%s, resolution=%.3fm",
-                self.include_grid_in_observation,
-                env_config.show_occupancy_grid,
-                grid.shape,
-                env_config.grid_config.resolution,
+                "Occupancy grid initialized (observe={observe}, visualize={visualize}): shape={shape}, resolution={resolution:.3f}m",
+                observe=self.include_grid_in_observation,
+                visualize=env_config.show_occupancy_grid,
+                shape=grid.shape,
+                resolution=env_config.grid_config.resolution,
             )
             return grid
         return None
@@ -744,6 +744,10 @@ class RobotEnv(BaseEnv):
         # Prepare pedestrian action visualization
         ped_actions_np = prepare_pedestrian_actions(self.simulator)
 
+        nav = self.simulator.robot_navs[0]
+        remaining_waypoints = nav.waypoints[nav.waypoint_id :] if nav.waypoints else []
+        planned_path = [robot_pos, *remaining_waypoints] if remaining_waypoints else None
+
         # Package the state for visualization
         state = VisualizableSimState(
             timestep=self.state.timestep,
@@ -753,6 +757,7 @@ class RobotEnv(BaseEnv):
             ray_vecs=ray_vecs_np,
             ped_actions=ped_actions_np,
             time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
+            planned_path=planned_path,
         )
 
         return state

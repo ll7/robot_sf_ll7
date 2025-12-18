@@ -141,7 +141,9 @@ class SvgMapConverter:
             logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
             return None
 
-        np_coordinates = np.array(filtered_coordinates, dtype=float)
+        coordinates = tuple(
+            map(tuple, np.array(filtered_coordinates, dtype=float).tolist()),
+        )
 
         label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
         path_id = path.attrib.get("id")
@@ -154,7 +156,7 @@ class SvgMapConverter:
             label = ""
 
         return SvgPath(
-            coordinates=np_coordinates,
+            coordinates=coordinates,
             label=label,
             id=path_id or "",
         )
@@ -223,7 +225,7 @@ class SvgMapConverter:
 
         For 'path' elements, the 'd' attribute is parsed to extract the coordinates. Each path is
         represented as a SvgPath object with the following attributes:
-        - 'coordinates': a numpy array of shape (n, 2) containing the x and y coordinates
+        - 'coordinates': a tuple of (x, y) waypoints
         - 'label': the 'inkscape:label' attribute of the path
         - 'id': the 'id' attribute of the path
 
@@ -275,9 +277,10 @@ class SvgMapConverter:
         if abs(offset_x) < 1e-9 and abs(offset_y) < 1e-9:
             return
 
+        offset = np.array([offset_x, offset_y])
         for path in self.path_info:
-            coords = np.asarray(path.coordinates, dtype=float)
-            path.coordinates = coords - np.array([offset_x, offset_y])
+            coords = np.asarray(path.coordinates, dtype=float) - offset
+            path.coordinates = tuple(map(tuple, coords.tolist()))
 
         for rect in self.rect_info:
             rect.x -= offset_x

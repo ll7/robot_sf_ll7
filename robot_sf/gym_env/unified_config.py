@@ -46,6 +46,12 @@ class BaseSimulationConfig(TelemetryConfigMixin):
     backend: str = "fast-pysf"
     sensors: list[dict] = field(default_factory=list)
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
+    sample_positions_globally: bool = field(
+        default=False,
+        metadata={
+            "doc": "When True, sample start/goal anywhere in free space instead of spawn/goal zones."
+        },
+    )
 
     def __post_init__(self):
         """Validate that all required fields are initialized.
@@ -106,6 +112,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._validate_grid_observation()
         self._validate_grid_visualization()
         self._validate_planner_config()
+        self._validate_global_sampling()
 
     def _init_grid_config(self) -> None:
         """Initialize and validate the occupancy grid configuration.
@@ -157,6 +164,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
             raise ValueError("planner_clearance_margin cannot be negative")
         if self.planner_backend not in {"visibility", "classic"}:
             raise ValueError("planner_backend must be one of {'visibility', 'classic'}")
+
+    def _validate_global_sampling(self) -> None:
+        """Ensure global sampling is only enabled when planner-based routing is active."""
+        if self.sample_positions_globally and not self.use_planner:
+            raise ValueError("sample_positions_globally=True requires use_planner=True")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

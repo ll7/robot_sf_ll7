@@ -28,7 +28,7 @@ else:
 
     os.environ.setdefault("MPLBACKEND", "Agg")
 
-SET_SEED = 7
+SET_SEED = 4
 if SET_SEED is not None:
     import random
 
@@ -82,6 +82,7 @@ def main(steps: int = 1000, seed: int | None = SET_SEED) -> None:
         grid_config=grid_cfg,
         show_occupancy_grid=True,
         planner_backend="classic",
+        sample_positions_globally=True,
         planner_classic_config=ClassicPlannerConfig(
             cells_per_meter=1.0,
             inflate_radius_cells=2,
@@ -117,10 +118,10 @@ def main(steps: int = 1000, seed: int | None = SET_SEED) -> None:
     obs, _ = env.reset(seed=seed)
     output_dir = get_artifact_category_path("plots")
     logger.info(
-        "Starting ORCA demo on %s with planner %s; outputs -> %s",
-        map_path.name,
-        env_config.use_planner,
-        output_dir,
+        "Starting ORCA demo on {map_name} with planner {planner_name}; outputs -> {out}",
+        map_name=map_path.name,
+        planner_name=env_config.use_planner,
+        out=output_dir,
     )
 
     for step_idx in range(steps):

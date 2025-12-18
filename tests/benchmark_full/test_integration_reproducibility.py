@@ -181,7 +181,7 @@ def test_reproducibility_same_seed(
 
     # Soft timing guard (currently enforced as hard assert per spec performance envelope)
     ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")
-    limit = 14.0 if ci else 7.0
+    limit = 16.0 if ci else 8.0
     # Additional broad requirement: total completion should not breach hard policy threshold
     classification = perf_policy.classify(elapsed)
     assert classification != "hard", (

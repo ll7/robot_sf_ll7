@@ -141,6 +141,9 @@ class VisualizableSimState:
     time_per_step_in_secs: float | None = None
     """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
 
+    planned_path: list[Vec2D] | None = None
+    """Optional planned path waypoints for debugging (world coordinates)."""
+
     def __post_init__(self):
         """validate the visualizable state"""
         if self.time_per_step_in_secs is None:
@@ -399,6 +402,7 @@ class SimulationView:
         self._draw_sensor_data(state)
         self._draw_actions(state)
         self._draw_entities(state)
+        self._draw_planned_path(state)
         # Draw occupancy grid overlay after entities so it appears on top
         if hasattr(state, "robot_pose") and state.robot_pose is not None:
             # numpy arrays are not directly truthy; require non-empty content
@@ -887,6 +891,16 @@ class SimulationView:
                 [self._scale_tuple((x, y)) for x, y in route.waypoints],
                 width=1,
             )
+
+    def _draw_planned_path(self, state: VisualizableSimState) -> None:
+        """Draw the current planned path (debug helper)."""
+        path = getattr(state, "planned_path", None)
+        if not path or len(path) < 2:
+            return
+        scaled = [self._scale_tuple((x, y)) for x, y in path]
+        pygame.draw.lines(self.screen, (0, 180, 0), False, scaled, width=3)
+        for pt in scaled:
+            pygame.draw.circle(self.screen, (0, 120, 0), pt, max(3, int(self.scaling * 0.2)))
 
     def _draw_coordinates(self, x, y):
         """

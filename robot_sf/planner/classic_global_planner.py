@@ -458,8 +458,7 @@ class ClassicGlobalPlanner:
                     break
 
             is_last_attempt = idx == len(attempt_radii) - 1
-            if abort_due_to_invalid_cell:
-                break
+
             if not is_last_attempt:
                 next_inflation = attempt_radii[idx + 1]
                 logger.warning(

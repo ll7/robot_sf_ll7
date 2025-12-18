@@ -82,6 +82,7 @@ def main(steps: int = 1000, seed: int | None = SET_SEED) -> None:
         grid_config=grid_cfg,
         show_occupancy_grid=True,
         planner_backend="classic",
+        sample_positions_globally=True,
         planner_classic_config=ClassicPlannerConfig(
             cells_per_meter=1.0,
             inflate_radius_cells=2,

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 from shapely.geometry import Point as _ShapelyPoint
-from shapely.prepared import PreparedGeometry
 
-from robot_sf.common.types import Vec2D
 from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from shapely.prepared import PreparedGeometry
+
+    from robot_sf.common.types import Vec2D
 
 
 def _point_outside_obstacles(point: Vec2D, prepared_obstacles: list[PreparedGeometry]) -> bool:
@@ -52,7 +57,7 @@ def sample_free_points_in_bounds(
         xs = np.random.uniform(x_min, x_max, current_batch)
         ys = np.random.uniform(y_min, y_max, current_batch)
         attempts += current_batch
-        candidates = list(zip(xs, ys))
+        candidates = list(zip(xs, ys, strict=False))
 
         if prepared:
             filtered = [

@@ -62,8 +62,11 @@ def main() -> None:
     planner.visualize_grid(output_dir / "classic_planner_grid.png", title="Planning Grid")
 
     # Plan path (world coordinates)
-    start_world = (20.0, 20.0)
-    goal_world = (400, 200.0)
+    # start_world = (20.0, 20.0)
+    # goal_world = (400, 200.0)
+    # (387.91921930095964, 196.68746505300913) to (479.11223104658836, 224.83680708688962)
+    start_world = (387.9, 196.7)
+    goal_world = (479.1, 224.8)
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
     t0 = time.perf_counter()

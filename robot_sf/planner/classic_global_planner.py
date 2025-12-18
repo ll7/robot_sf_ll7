@@ -241,8 +241,16 @@ class ClassicGlobalPlanner:
             )
         cell_value = grid.type_map[gx][gy]
         if cell_value in {TYPES.OBSTACLE, TYPES.INFLATION}:
+            if cell_value == TYPES.OBSTACLE:
+                cell_desc = "obstacle"
+            elif cell_value == TYPES.INFLATION:
+                cell_desc = "inflated area"
+            else:
+                cell_desc = "unknown"
+            world_x, world_y = self._grid_to_world(gx, gy)
             raise PlanningError(
-                f"{name} is in an invalid cell (value={cell_value}); choose a free/start/goal cell."
+                f"{name} at ({world_x:.2f}, {world_y:.2f}) is in an invalid cell "
+                f"({cell_desc}); choose a free/start/goal cell."
             )
 
     def validate_point(
@@ -407,6 +415,7 @@ class ClassicGlobalPlanner:
             attempt_radii = list(range(start_radius, -1, -1))
 
         last_error: Exception | None = None
+        abort_due_to_invalid_cell = False
 
         for idx, inflation in enumerate(attempt_radii):
             try:
@@ -441,8 +450,16 @@ class ClassicGlobalPlanner:
                     inflation=inflation,
                     error=exc,
                 )
+                if isinstance(exc, PlanningError) and "is in an invalid cell" in str(exc):
+                    abort_due_to_invalid_cell = True
+                    logger.warning(
+                        "Start/goal lies in an invalid cell; aborting inflation fallback so caller can resample."
+                    )
+                    break
 
             is_last_attempt = idx == len(attempt_radii) - 1
+            if abort_due_to_invalid_cell:
+                break
             if not is_last_attempt:
                 next_inflation = attempt_radii[idx + 1]
                 logger.warning(
@@ -450,14 +467,19 @@ class ClassicGlobalPlanner:
                     next_inflation=next_inflation,
                 )
 
-        error_msg = (
-            "Planning failed after trying inflation radii "
-            f"{[r if r is not None else 'none' for r in attempt_radii]}"
-        )
+        if abort_due_to_invalid_cell:
+            error_msg = "Planning aborted because start/goal is in an invalid cell; resample start/goal and retry."
+        else:
+            error_msg = (
+                "Planning failed after trying inflation radii "
+                f"{[r if r is not None else 'none' for r in attempt_radii]}"
+            )
         if last_error is not None:
             error_msg = f"{error_msg}; last error: {last_error}"
         logger.error(error_msg)
-        logger.error("Planning from {start} to {goal} failed.", start=start, goal=goal)
+        start_fmt = f"({start[0]:.2f}, {start[1]:.2f})"
+        goal_fmt = f"({goal[0]:.2f}, {goal[1]:.2f})"
+        logger.error(f"Planning from {start_fmt} to {goal_fmt} failed.")
         logger.error("Consider increasing the cells per meter value.")
         raise PlanningError(error_msg)
 

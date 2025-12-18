@@ -37,6 +37,7 @@ from matplotlib.ticker import FuncFormatter
 from python_motion_planning.common import TYPES, Grid, Visualizer
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
+from shapely.validation import explain_validity
 
 from robot_sf.common import ensure_interactive_backend
 
@@ -272,10 +273,19 @@ def map_definition_to_motion_planning_grid(
         grid.fill_boundary_with_obstacles()
 
     # Rasterize all obstacles
-    for obstacle in map_def.obstacles:
+    for idx, obstacle in enumerate(map_def.obstacles):
         poly = Polygon(obstacle.vertices)
-        if not poly.is_valid or poly.is_empty:
-            logger.warning("Skipping invalid obstacle during grid rasterization.")
+        if not poly.is_valid:
+            logger.warning(
+                "Skipping invalid obstacle during grid rasterization "
+                f"(index={idx}, "  # vertices={obstacle.vertices}, "
+                f"valid={poly.is_valid}, reason={explain_validity(poly)})",
+            )
+            continue
+        elif poly.is_empty:
+            logger.warning(
+                "Skipping empty obstacle during grid rasterization (index={idx})", idx=idx
+            )
             continue
         _mark_obstacle_cells(grid, poly, cfg.cells_per_meter, TYPES)
 

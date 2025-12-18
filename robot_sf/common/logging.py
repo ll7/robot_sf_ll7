@@ -31,7 +31,7 @@ from loguru import logger
 def configure_logging(verbose: bool = False) -> None:
     """Configure the global loguru logger.
 
-    # <https://loguru.readthedocs.io/en/stable/>
+    <https://loguru.readthedocs.io/en/stable/>
 
     Call this once at application startup to configure logging for all modules.
     After this, use `from loguru import logger` everywhere and the configuration
@@ -74,7 +74,7 @@ def configure_logging(verbose: bool = False) -> None:
 
     # Configure log level colors
     logger.level("DEBUG", color="<dim><white>")
-    logger.level("SUCCESS", color="<fg #00ff00><bold>", icon="✅")
+    logger.level("SUCCESS", color="<fg #00dd00><bold>", icon="✅")
     logger.level("ERROR", color="<fg #ff0000><bold>", icon="❌")
     logger.level("WARNING", color="<fg #ffff00><bold>", icon="⚠️")
 

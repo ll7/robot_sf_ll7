@@ -141,7 +141,9 @@ class SvgMapConverter:
             logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
             return None
 
-        np_coordinates = np.array(filtered_coordinates, dtype=float)
+        coordinates = tuple(
+            map(tuple, np.array(filtered_coordinates, dtype=float).tolist()),
+        )
 
         label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
         path_id = path.attrib.get("id")
@@ -154,7 +156,7 @@ class SvgMapConverter:
             label = ""
 
         return SvgPath(
-            coordinates=np_coordinates,
+            coordinates=coordinates,
             label=label,
             id=path_id or "",
         )
@@ -223,7 +225,7 @@ class SvgMapConverter:
 
         For 'path' elements, the 'd' attribute is parsed to extract the coordinates. Each path is
         represented as a SvgPath object with the following attributes:
-        - 'coordinates': a numpy array of shape (n, 2) containing the x and y coordinates
+        - 'coordinates': a tuple of (x, y) waypoints
         - 'label': the 'inkscape:label' attribute of the path
         - 'id': the 'id' attribute of the path
 
@@ -269,6 +271,24 @@ class SvgMapConverter:
         self.rect_info = rect_info
         logger.debug(f"Parsed {len(circle_info)} circles in the SVG file")
         self.circle_info = circle_info
+
+    def _apply_viewbox_offset(self, offset_x: float, offset_y: float) -> None:
+        """Shift all parsed SVG elements by the viewBox origin to normalize to (0,0)."""
+        if abs(offset_x) < 1e-9 and abs(offset_y) < 1e-9:
+            return
+
+        offset = np.array([offset_x, offset_y])
+        for path in self.path_info:
+            coords = np.asarray(path.coordinates, dtype=float) - offset
+            path.coordinates = tuple(map(tuple, coords.tolist()))
+
+        for rect in self.rect_info:
+            rect.x -= offset_x
+            rect.y -= offset_y
+
+        for circle in self.circle_info:
+            circle.cx -= offset_x
+            circle.cy -= offset_y
 
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
         """Process a path labeled as obstacle.
@@ -665,19 +685,25 @@ class SvgMapConverter:
 
         width: float | None = _parse_svg_length(self.svg_root.attrib.get("width"))
         height: float | None = _parse_svg_length(self.svg_root.attrib.get("height"))
+        view_min_x = 0.0
+        view_min_y = 0.0
 
-        if width is None or height is None:
-            view_box = self.svg_root.attrib.get("viewBox") or self.svg_root.attrib.get("viewbox")
-            if view_box:
-                parts = view_box.replace(",", " ").split()
-                if len(parts) == 4:
-                    _, _, vb_width, vb_height = parts
-                    width = width or _parse_svg_length(vb_width)
-                    height = height or _parse_svg_length(vb_height)
+        view_box = self.svg_root.attrib.get("viewBox") or self.svg_root.attrib.get("viewbox")
+        if view_box:
+            parts = view_box.replace(",", " ").split()
+            if len(parts) == 4:
+                vb_min_x, vb_min_y, vb_width, vb_height = parts
+                view_min_x = _parse_svg_length(vb_min_x) or 0.0
+                view_min_y = _parse_svg_length(vb_min_y) or 0.0
+                width = width or _parse_svg_length(vb_width)
+                height = height or _parse_svg_length(vb_height)
 
         if width is None or height is None:
             msg = "SVG width/height missing and could not be inferred from viewBox."
             raise ValueError(msg)
+
+        # Normalize coordinates when the SVG viewBox does not start at (0,0).
+        self._apply_viewbox_offset(view_min_x, view_min_y)
 
         # Process rectangles first
         (

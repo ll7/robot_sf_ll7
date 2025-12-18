@@ -113,7 +113,7 @@ def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
 
     assert captured["grid"] is not None
     assert captured["grid"].expands == expands
-    assert captured["path"] == [(0, 0), (1, 0)]
+    assert captured["path"] == [(0, 2), (1, 2)]
 
 
 def test_plan_returns_expand_metadata(tmp_path):

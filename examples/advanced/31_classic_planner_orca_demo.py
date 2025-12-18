@@ -43,9 +43,9 @@ if SET_SEED is not None:
     np.random.seed(SET_SEED)
 
 
-def main(steps: int = 600, seed: int | None = SET_SEED) -> None:
+def main(steps: int = 1000, seed: int | None = SET_SEED) -> None:
     """Run a short ORCA-style rollout guided by the classic global planner."""
-    configure_logging(verbose=True)
+    configure_logging(verbose=False)
     ensure_interactive_backend()
 
     root = get_repository_root()
@@ -91,7 +91,7 @@ def main(steps: int = 600, seed: int | None = SET_SEED) -> None:
             stack_steps=1,
             difficulty=0,
             ped_density_by_difficulty=[0.03],
-            time_per_step_in_secs=0.2,
+            time_per_step_in_secs=0.1,
         ),
         robot_config=BicycleDriveSettings(
             radius=0.5,
@@ -143,7 +143,7 @@ def main(steps: int = 600, seed: int | None = SET_SEED) -> None:
             break
 
     env.close()
-    logger.info("✓ Classic planner + ORCA demo complete.")
+    logger.success("✓ Classic planner + ORCA demo complete.")
 
 
 if __name__ == "__main__":

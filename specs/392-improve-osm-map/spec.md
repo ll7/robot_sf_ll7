@@ -14,7 +14,7 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 - **Polygon validity**: Self-intersecting SVG paths cause parsing failures
 - **Driveable area implicit**: Free space is defined as "obstacles' complement" rather than semantic walkable areas
 
-**Solution**: Replace the SVG export with a **PBF-based pipeline** that:
+**Solution**: Keep the original SVG export but add an optional **PBF-based pipeline** that:
 
 1. Ingests local OSM PBF files (ground truth)
 2. Filters ways/areas by semantic tags (highway=footway/path/pedestrian + area=yes, etc.)
@@ -22,13 +22,17 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 4. Derives obstacles as the geometric complement within map bounds (removes guesswork)
 5. Outputs a `MapDefinition` directly (programmatic, reproducible)
 6. Renders a visual background (PNG/SVG-like) from the same PBF for verification
+7. Find a solution for spawn/goal/crowded zones and route annotation via code/config rather than Inkscape or decide to use the inkscape-based roundtrip.
 
 **Key architectural decisions**:
 
 - **Data source**: Local PBF files (reproducible, offline, no rate limits)
 - **MVP scope**: Hybrid approach — driveable areas (footway/path/cycleway/pedestrian) + building obstacles (most impactful); water/landuse optional
 - **Output format**: `MapDefinition` objects (code-first, no Inkscape round-tripping)
+  - Map should have clear driveable area bounds that our lidar simulation and path planners can use.
 - **Visual context**: Render map background from PBF for verification; spawn/goal zones annotated in code/config
+
+Further details are specified in `specs/392-improve-osm-map/research`.
 
 ---
 
@@ -36,9 +40,9 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 
 ### User Story 1 — Data Engineer: Convert OSM PBF to MapDefinition (Priority: P1)
 
-**Scenario**: A data engineer has downloaded a PBF extract (e.g., `uni_campus.pbf`) and wants to generate a `MapDefinition` suitable for robot navigation in seconds, without manual SVG editing.
+**Scenario**: A data engineer has downloaded a PBF extract (e.g., `uni_campus.pbf` from https://extract.bbbike.org/) and wants to generate a `MapDefinition` suitable for robot navigation in seconds, without manual SVG editing.
 
-**Why this priority**: Core MVP — directly replaces the broken SVG workflow. Unblocks all downstream users.
+**Why this priority**: Core MVP — directly replaces the error prone SVG workflow. Unblocks all downstream users.
 
 **Independent Test**: Can be fully tested by loading a small PBF fixture, calling `osm_to_map_definition(pbf_file=...)`, and verifying the output is a valid `MapDefinition` with non-empty obstacles and bounds matching the query region.
 
@@ -72,7 +76,24 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 
 ---
 
-### User Story 3 — Robot Sim User: Annotate Spawn/Goal Zones Programmatically (Priority: P2)
+### User Story 3 — Visual Editing: Zones and Routes over Background (Priority: P1)
+
+**Scenario**: A user wants a simple visual interface to place and edit spawn zones, goal zones, crowded zones, and robot/pedestrian routes over a PBF‑derived background. The editor saves a small YAML in world coordinates (meters), diff‑friendly in git, and reproducible across machines.
+
+**Why this priority**: Visual authoring accelerates iteration and validation while keeping PBF as the canonical source. It replaces Inkscape round‑tripping with a deterministic, code‑first flow.
+
+**Independent Test**: Render a background from a small PBF, launch the editor, draw zones/routes, save YAML, reload it, and verify the `MapDefinition` contains those annotations aligned with the background and driveable areas.
+
+**Acceptance Scenarios**:
+
+1. **Given** a rendered background and affine transform, **When** the user draws a polygon for a spawn zone, **Then** it is stored in YAML using world coordinates and reloads identically across runs.
+2. **Given** existing zones/routes in YAML, **When** the user edits vertices (move/add/remove) and saves, **Then** the saved YAML remains minimal and diff‑friendly (stable ordering, fixed precision).
+3. **Given** snapping enabled, **When** the user draws near the edge of a driveable area, **Then** vertices snap to the nearest valid point (within a configurable tolerance) and validation warns if any vertex lies outside.
+4. **Given** a route polyline crossing an obstacle, **When** saving, **Then** the editor surfaces a warning and highlights the offending segment.
+
+---
+
+### User Story 4 — Robot Sim User: Annotate Spawn/Goal Zones Programmatically (Priority: P2)
 
 **Scenario**: After MapDefinition generation, a user wants to specify robot spawn zones, goal zones, and crowded pedestrian areas without touching Inkscape. They provide these as code configuration (YAML or Python).
 
@@ -90,21 +111,6 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 
 ---
 
-### User Story 4 — Maintenance: Update Map When Real-World OSM Data Changes (Priority: P3)
-
-**Scenario**: OSM editors update the campus map (e.g., new building, sidewalk widening). A maintainer re-runs the PBF extraction and regenerates the `MapDefinition` automatically. Existing spawn/goal zone configs are reapplied without modification.
-
-**Why this priority**: Long-term sustainability. Decouples map data from OSM updates.
-
-**Independent Test**: Can be fully tested by simulating an OSM update (e.g., adding a building tag), re-running the pipeline, and verifying the new `MapDefinition` reflects the change while zone configs remain valid.
-
-**Acceptance Scenarios**:
-
-1. **Given** an updated PBF reflecting real-world changes, **When** re-running the pipeline with the same config, **Then** the new `MapDefinition` reflects OSM updates while zones remain in place.
-
-2. **Given** zone configs that reference specific regions (e.g., "north quadrant spawn zone"), **When** zones are validated, **Then** out-of-bounds zones are flagged for review before application.
-
----
 
 ### Edge Cases
 
@@ -112,6 +118,10 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 - How does the system handle ways tagged with conflicting attributes (e.g., `highway=footway` but `access=no`)? → Conservative approach: exclude such ways from driveable areas; log warnings.
 - What if a PBF has extremely large multipolygons (e.g., a sprawling park boundary)? → Polygon validity checks and simplification (Shapely `buffer(0)`, `simplify`) prevent crashes.
 - How are self-intersecting obstacle polygons handled? → Automatically repaired with `Shapely.buffer(0)` and logged.
+
+- What if a user clicks outside the map bounds or driveable area? → The editor prevents commits or warns and snaps to the nearest valid point, configurable per tool.
+- What if two zones overlap or a route intersects a zone? → The editor warns on overlaps/intersections and allows resolution via vertex edits.
+- What if the background transform changes (e.g., different DPI or extent)? → The YAML remains in world coordinates; re‑rendered background reads the same transform to ensure alignment.
 
 ---
 
@@ -134,6 +144,15 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 - **FR-013**: System MUST support programmatic annotation of spawn zones, goal zones, and crowded pedestrian areas via Python config (dict/dataclass) or YAML.
 - **FR-014**: System MUST provide a demo script (under `examples/`) showing end-to-end PBF-to-MapDefinition pipeline with visualization.
 - **FR-015**: System MUST maintain backward compatibility with existing `svg_map_parser.py` (no breaking changes).
+
+- **FR-016**: System MUST provide a lightweight visual editor to create and edit spawn zones, goal zones, crowded zones (polygons), and routes (polylines) over a PBF‑rendered background.
+- **FR-017**: The editor MUST save annotations to a human‑readable YAML using world coordinates (meters) with stable ordering and fixed numeric precision.
+- **FR-018**: The editor MUST load and reapply the same affine transform used by the background renderer so overlays align pixel‑perfectly across sessions.
+- **FR-019**: The editor MUST support vertex‑level operations (add/move/delete), multi‑selection, and undo/redo.
+- **FR-020**: The system MUST validate that zones/routes lie inside driveable areas; out‑of‑bounds points SHALL trigger warnings (non‑blocking) with highlighted geometry.
+- **FR-021**: The editor SHOULD support optional snapping to driveable area boundaries within a configurable tolerance.
+- **FR-022**: The system SHOULD support optional export to a layered SVG (background + vector overlays) for external review; SVG import is OPTIONAL.
+- **FR-023**: The YAML schema MUST be versioned and documented; changes MUST be backward‑compatible or provide a migration helper.
 
 ### Key Entities
 
@@ -160,6 +179,11 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 - **SC-009**: **No breakage** — Existing tests for `svg_map_parser.py` and `MapDefinition` remain passing (backward compatibility).
 - **SC-010**: **User feedback** — At least one successful end-to-end test on a real campus PBF (e.g., `uni_campus_1350.pbf`).
 
+- **SC-011**: **Visual editing speed** — A user can add a spawn zone and a route on a known campus background in ≤ 2 minutes from editor launch to saved YAML.
+- **SC-012**: **Deterministic YAML** — Saving the same annotations twice produces identical YAML given the same input and transform.
+- **SC-013**: **Alignment** — Reloaded annotations align with the rendered background to within ≤ 1 pixel at 100% zoom across two separate sessions/machines.
+- **SC-014**: **Validation coverage** — Editor warns on 100% of tested out‑of‑bounds vertices and obstacle‑crossing route segments in integration tests.
+
 ---
 
 ## Assumptions
@@ -180,6 +204,7 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 - **Dependency footprint**: OSMnx, GeoPandas, Shapely, PyProj (totaling ~50 MB installed). Acceptable given the advanced GIS nature of the feature.
 - **Performance**: Large PBFs (> 100 MB) may take 10+ seconds; acceptable for one-time map generation, not for real-time queries.
 - **Offline**: Requires pre-downloaded PBF; no live Overpass API queries in MVP (avoids rate limits, keeps deterministic).
+- Verify the approach with file located in `specs/392-improve-osm-map/research`
 
 ### Trade-offs
 
@@ -222,7 +247,21 @@ Currently, map creation from OpenStreetMap uses a lossy, color-based SVG export 
 
 ---
 
-### Phase 3: Zone Annotation & Config (Weeks 3–4)
+### Phase 2b: Visual Editor for Zones & Routes (Weeks 3–4)
+
+**Deliverable**: A lightweight matplotlib‑based click editor (or similar) to draw/edit polygons and polylines over the background, saving deterministic YAML in world coordinates.
+
+- [ ] Editor app: open background + transform, draw/edit polygons (spawn/goal/crowded), polylines (routes)
+- [ ] YAML schema: versioned, documented; stable ordering and precision; world‑coordinate storage
+- [ ] Validation: snapping (optional), out‑of‑bounds and obstacle‑crossing warnings with overlays
+- [ ] Round‑trip tests: load → edit → save → reload produces identical geometry and alignment
+- [ ] Optional export: layered SVG for external review (import optional)
+
+**Definition of Done**: Users can add/edit zones/routes visually, save YAML deterministically, and reload with perfect alignment; warnings trigger on invalid edits.
+
+---
+
+### Phase 3: Zone Annotation & Config (Weeks 4–5)
 
 **Deliverable**: Programmatic spawn/goal zone annotation via Python/YAML config.
 

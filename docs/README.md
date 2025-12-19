@@ -110,6 +110,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Simulation & UI
 - **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
 - **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
+- **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
+  - **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)
+  - **API Reference**: 6 helper functions (zones, routes, config management, YAML loading)
+  - **Examples**: 4 realistic scenarios (simple navigation, urban intersection, variable density, load/verify)
 - **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 - **[Occupancy Grid Guide](./dev/occupancy/Update_or_extend_occupancy.md)** - Configure grid observations, spawn queries, and pygame overlays
 - **[Circle Rasterization Fix](./dev/issues/circle-rasterization-fix/README.md)** - Clarifies circle overlap handling in occupancy grid rasterization

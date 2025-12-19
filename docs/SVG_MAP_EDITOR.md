@@ -143,6 +143,75 @@ The verifier performs the following checks:
 
 For detailed information about the verification workflow, see [specs/001-map-verification/quickstart.md](../specs/001-map-verification/quickstart.md).
 
+### OSM-Based Map Extraction (Alternative Approach)
+
+For a **programmatic, reproducible, and offline** alternative to manual SVG editing, Robot SF now supports **OpenStreetMap (OSM) data import**. This approach automatically extracts map geometry, renders backgrounds, and defines zones—all without requiring manual Inkscape edits.
+
+#### Quick Comparison
+
+| Approach | Effort | Reproducibility | Offline | Semantic Data |
+|----------|--------|---|---------|---|
+| **Manual SVG Editor** | High (manual) | Moderate (requires re-editing) | ✓ Yes | Limited to labels |
+| **OSM Extraction** | Low (code) | ✓ Excellent (deterministic) | ✓ Yes (after download) | ✓ Rich (tags, types) |
+
+#### When to Use OSM Extraction
+
+✓ **Use OSM extraction if**:
+- You need **reproducible scenarios** (same code → same geometry)
+- You work with **real-world maps** (cities, campus layouts)
+- You want **fast iteration** (edit code, not GUI)
+- You need **semantic data** (zone types, density levels)
+
+✓ **Use manual editor if**:
+- You need custom artistic layouts
+- You want quick one-off maps
+- You prefer visual feedback while editing
+
+#### Getting Started with OSM
+
+For a complete workflow guide—including PBF acquisition, map extraction, zone definition, and examples—see:
+
+**[📖 Complete OSM Workflow Guide](./osm_map_workflow.md)**
+
+Key resources:
+- **Quick Start** (3 options: editor, programmatic, hybrid)
+- **Detailed Workflow** (6 steps with code examples)
+- **Programmatic API** (6 helper functions for zone/route creation)
+- **Troubleshooting** (10+ common issues + fixes)
+- **Real-world Examples** (4 working scenarios)
+
+#### Programmatic API Preview
+
+```python
+from robot_sf.maps.osm_zones_config import create_spawn_zone, create_goal_zone, create_route
+
+# Define zones in code (no GUI needed)
+spawn = create_spawn_zone("robot_start", polygon=[(0, 0), (10, 0), (10, 10)])
+goal = create_goal_zone("target", polygon=[(50, 50), (60, 50), (60, 60)])
+route = create_route("main_path", waypoints=[(10, 10), (50, 50)])
+
+# Save to YAML (deterministic, versionable)
+from robot_sf.maps.osm_zones_yaml import save_zones_yaml
+config = create_config_with_zones_routes([spawn, goal], [route])
+save_zones_yaml(config, "scenario.yaml")
+```
+
+#### Features
+
+- **Semantic Zone Creation**: Spawn zones, goal zones, pedestrian density zones, routes
+- **Deterministic Output**: Same code → byte-identical YAML (fully reproducible)
+- **Round-trip Compatibility**: Programmatic ≡ editor (can mix and match workflows)
+- **Full Documentation**: API reference, troubleshooting, 5+ examples
+- **Backward Compatible**: Works alongside existing SVG maps
+
+#### Next Steps
+
+1. **Quick Start** (10 min): See [osm_map_workflow.md: Quick Start](./osm_map_workflow.md#quick-start)
+2. **Detailed Workflow** (30 min): Follow [osm_map_workflow.md: Detailed Workflow](./osm_map_workflow.md#detailed-workflow)
+3. **Example Scenarios** (15 min): Run `examples/osm_programmatic_scenario.py`
+
+---
+
 ### New Features
 
 If you want to implement new features: [svg_map_parser.py](../robot_sf/nav/svg_map_parser.py)

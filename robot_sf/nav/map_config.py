@@ -11,6 +11,7 @@ from math import sqrt
 import matplotlib.axes
 import numpy as np
 from loguru import logger
+from shapely.geometry import Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
@@ -183,6 +184,10 @@ class MapDefinition:
 
     poi_labels: dict[str, str] = field(default_factory=dict)
     """Mapping from POI identifiers to human-readable labels."""
+
+    allowed_areas: list[Polygon] | None = None
+    """Explicit driveable areas from OSM. Optional, used for path planning bounds."""
+
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -428,6 +433,29 @@ class MapDefinition:
         for obstacle in self.obstacles:
             vertices = np.array(obstacle.vertices)
             ax.fill(vertices[:, 0], vertices[:, 1], "black")
+
+    def is_point_in_driveable_area(self, point: Vec2D) -> bool:
+        """Check if a point is in a driveable area.
+
+        If allowed_areas is set (from OSM), checks containment in those explicit areas.
+        Otherwise, checks that the point is NOT in any obstacle.
+
+        Args:
+            point: (x, y) coordinate tuple
+
+        Returns:
+            True if point is in driveable area, False otherwise
+        """
+        from shapely.geometry import Point
+
+        p = Point(point)
+
+        if self.allowed_areas is not None:
+            # Use explicit driveable areas if present (from OSM)
+            return any(poly.contains(p) for poly in self.allowed_areas)
+
+        # Fallback: point is driveable if NOT in any obstacle
+        return not any(obs.contains_point(point) for obs in self.obstacles)
 
     def __getstate__(self):
         """Customize pickling to drop non-serializable prepared geometries.

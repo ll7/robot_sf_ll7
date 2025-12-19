@@ -243,9 +243,9 @@ def main() -> None:
         return
 
     logger.info("")
-    logger.info("╔" + "=" * 68 + "╗")
-    logger.info("║" + " " * 15 + "OSM ZONES EDITOR DEMONSTRATION" + " " * 23 + "║")
-    logger.info("╚" + "=" * 68 + "╝")
+    logger.info(f"╔{'=' * 68}╗")
+    logger.info(f"║{' ' * 15}OSM ZONES EDITOR DEMONSTRATION{' ' * 23}║")
+    logger.info(f"╚{'=' * 68}╝")
     logger.info("")
 
     # Setup output directory
@@ -253,7 +253,7 @@ def main() -> None:
     output_yaml = output_dir / "zones.yaml"
 
     # Render background map
-    png_path, affine_data = render_background(args.pbf_file, output_dir)
+    png_path, _ = render_background(args.pbf_file, output_dir)
 
     # Load map definition for validation
     try:

@@ -21,10 +21,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# Setup paths
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
 from robot_sf.maps.osm_zones_config import (
     create_crowded_zone,
     create_goal_zone,
@@ -38,6 +34,7 @@ class ValidationReport:
     """Collect and report validation results."""
 
     def __init__(self):
+        """Initialize a fresh report with timing metadata."""
         self.tests = []
         self.start_time = datetime.now()
 
@@ -191,7 +188,7 @@ def test_basic_functionality(report: ValidationReport):
     # Test YAML loading
     start = time.time()
     try:
-        loaded_config = load_zones_yaml(yaml_path)
+        _ = load_zones_yaml(yaml_path)
         duration = time.time() - start
         report.record("Basic Functionality", "load_zones_yaml", True, duration)
         print(f"✅ YAML loaded in {duration:.4f}s")
@@ -255,8 +252,6 @@ def test_production_scenarios(report: ValidationReport):
                 waypoints = [(k * 5, k * 3) for k in range(5)]
                 routes[f"route_{j}"] = create_route(f"route_{j}", waypoints)
 
-            config = OSMZonesConfig(zones=zones, routes=routes)
-
             duration = time.time() - start
             report.record(
                 "Production Scenarios",
@@ -298,10 +293,6 @@ def test_stress_scenarios(report: ValidationReport):
             for j in range(case["routes"]):
                 waypoints = [(k * 10, (k * j) % 100) for k in range(waypoint_count)]
                 routes[f"route_{j}"] = create_route(f"route_{j}", waypoints)
-
-            from robot_sf.maps.osm_zones_yaml import OSMZonesConfig
-
-            config = OSMZonesConfig(zones=zones, routes=routes)
 
             duration = time.time() - start
             report.record(
@@ -409,10 +400,9 @@ def test_performance_benchmarks(report: ValidationReport):
         save_time = time.time() - t0
 
         t0 = time.time()
-        loaded = load_zones_yaml(yaml_path)
+        _ = load_zones_yaml(yaml_path)
         load_time = time.time() - t0
 
-        total = save_time + load_time
         duration = time.time() - start
 
         report.record(

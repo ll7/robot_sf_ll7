@@ -39,6 +39,7 @@ from typing import Any
 
 import yaml
 from loguru import logger
+from shapely.geometry import Polygon as ShapelyPolygon
 
 from robot_sf.common.types import Vec2D
 
@@ -67,7 +68,11 @@ class Zone:
     """Custom metadata (density, pedestrian_type, etc.)."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to serializable dict with 3-decimal precision."""
+        """Convert to serializable dict with 3-decimal precision.
+
+        Returns:
+            Dictionary ready for YAML serialization.
+        """
         result = {
             "name": self.name,
             "type": self.type,
@@ -81,7 +86,11 @@ class Zone:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Zone":
-        """Reconstruct from dict."""
+        """Reconstruct from dict.
+
+        Returns:
+            Zone instance populated from serialized data.
+        """
         return cls(
             name=data["name"],
             type=data["type"],
@@ -108,7 +117,11 @@ class Route:
     """Custom metadata (speed_preference, accessibility, etc.)."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to serializable dict with 3-decimal precision."""
+        """Convert to serializable dict with 3-decimal precision.
+
+        Returns:
+            Dictionary representation of the route.
+        """
         result = {
             "name": self.name,
             "waypoints": [[round(x, 3), round(y, 3)] for x, y in self.waypoints],
@@ -121,7 +134,11 @@ class Route:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Route":
-        """Reconstruct from dict."""
+        """Reconstruct from dict.
+
+        Returns:
+            Route instance populated from serialized data.
+        """
         return cls(
             name=data["name"],
             waypoints=data["waypoints"],
@@ -147,7 +164,11 @@ class OSMZonesConfig:
     """Global metadata (map source, creation timestamp, etc.)."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to serializable dict with sorted keys."""
+        """Convert to serializable dict with sorted keys.
+
+        Returns:
+            Dictionary representation suitable for YAML serialization.
+        """
         zones_dict = {}
         for name, zone in sorted(self.zones.items()):
             zones_dict[name] = zone.to_dict()
@@ -170,7 +191,11 @@ class OSMZonesConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "OSMZonesConfig":
-        """Reconstruct from dict."""
+        """Reconstruct from dict.
+
+        Returns:
+            OSMZonesConfig instance populated from serialized data.
+        """
         zones = {}
         for name, zone_data in (data.get("zones") or {}).items():
             zones[name] = Zone.from_dict(zone_data)
@@ -291,60 +316,57 @@ def validate_zones_yaml(config: OSMZonesConfig, map_def: Any | None = None) -> l
     Returns:
         List of warning/error messages (empty = valid)
     """
-    warnings = []
+    warnings: list[str] = []
 
-    # Check empty config
     if not config.zones and not config.routes:
         warnings.append("Warning: No zones or routes defined")
 
-    # Validate zones
-    zone_names = set()
+    warnings.extend(_validate_zones(config, map_def))
+    warnings.extend(_validate_routes(config, map_def))
+    return warnings
+
+
+def _validate_zones(config: OSMZonesConfig, map_def: Any | None) -> list[str]:
+    """Validate zone definitions for duplicates, geometry, and bounds.
+
+    Returns:
+        List of warnings/errors detected for zones.
+    """
+    warnings: list[str] = []
+    zone_names: set[str] = set()
+
     for name, zone in config.zones.items():
-        # Check duplicate names
         if name in zone_names:
             warnings.append(f"Error: Duplicate zone name: {name}")
         zone_names.add(name)
 
-        # Check polygon validity
         if len(zone.polygon) < 3:
             warnings.append(f"Error: Zone '{name}' has fewer than 3 points")
 
-        # Check bounds (if map_def provided)
         if map_def:
-            bounds = map_def.bounds
-            for i, (x, y) in enumerate(zone.polygon):
-                if not (bounds.xmin <= x <= bounds.xmax and bounds.ymin <= y <= bounds.ymax):
-                    warnings.append(
-                        f"Warning: Zone '{name}' point {i} ({x:.1f}, {y:.1f}) outside map bounds"
-                    )
+            warnings.extend(_validate_zone_bounds(name, zone, map_def))
+            warnings.extend(_validate_zone_obstacles(name, zone, map_def))
 
-            # Check obstacle intersection (if allowed_areas provided)
-            if hasattr(map_def, "allowed_areas") and map_def.allowed_areas:
-                try:
-                    from shapely.geometry import Polygon as ShapelyPolygon
+    return warnings
 
-                    zone_poly = ShapelyPolygon(zone.polygon)
-                    for obstacle in map_def.obstacles:
-                        obs_poly = ShapelyPolygon(obstacle)
-                        if zone_poly.intersects(obs_poly):
-                            warnings.append(f"Warning: Zone '{name}' crosses an obstacle")
-                            break
-                except Exception as e:
-                    logger.debug(f"Obstacle check failed: {e}")
 
-    # Validate routes
-    route_names = set()
+def _validate_routes(config: OSMZonesConfig, map_def: Any | None) -> list[str]:
+    """Validate route definitions for duplicates, waypoint count, and bounds.
+
+    Returns:
+        List of warnings/errors detected for routes.
+    """
+    warnings: list[str] = []
+    route_names: set[str] = set()
+
     for name, route in config.routes.items():
-        # Check duplicate names
         if name in route_names:
             warnings.append(f"Error: Duplicate route name: {name}")
         route_names.add(name)
 
-        # Check waypoints
         if len(route.waypoints) < 2:
             warnings.append(f"Error: Route '{name}' has fewer than 2 waypoints")
 
-        # Check bounds (if map_def provided)
         if map_def:
             bounds = map_def.bounds
             for i, (x, y) in enumerate(route.waypoints):
@@ -354,6 +376,44 @@ def validate_zones_yaml(config: OSMZonesConfig, map_def: Any | None = None) -> l
                         f"({x:.1f}, {y:.1f}) outside map bounds"
                     )
 
+    return warnings
+
+
+def _validate_zone_bounds(name: str, zone: Zone, map_def: Any) -> list[str]:
+    """Check zone vertices against map bounds.
+
+    Returns:
+        Warnings for vertices outside map bounds.
+    """
+    warnings: list[str] = []
+    bounds = map_def.bounds
+    for i, (x, y) in enumerate(zone.polygon):
+        if not (bounds.xmin <= x <= bounds.xmax and bounds.ymin <= y <= bounds.ymax):
+            warnings.append(
+                f"Warning: Zone '{name}' point {i} ({x:.1f}, {y:.1f}) outside map bounds"
+            )
+    return warnings
+
+
+def _validate_zone_obstacles(name: str, zone: Zone, map_def: Any) -> list[str]:
+    """Check zone intersection with obstacles when allowed areas exist.
+
+    Returns:
+        Warnings when zone intersects known obstacles.
+    """
+    warnings: list[str] = []
+    if not getattr(map_def, "allowed_areas", None):
+        return warnings
+
+    try:
+        zone_poly = ShapelyPolygon(zone.polygon)
+        for obstacle in getattr(map_def, "obstacles", []):
+            obs_poly = ShapelyPolygon(obstacle)
+            if zone_poly.intersects(obs_poly):
+                warnings.append(f"Warning: Zone '{name}' crosses an obstacle")
+                break
+    except (ValueError, TypeError) as e:
+        logger.debug(f"Obstacle check failed: {e}")
     return warnings
 
 

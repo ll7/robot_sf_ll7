@@ -572,7 +572,7 @@ class TestProgrammaticEditorEquivalence:
             assert reloaded_zone.priority == zone.priority
             # Compare polygon structure (handle list vs tuple from YAML)
             assert len(reloaded_zone.polygon) == len(zone.polygon)
-            for p1, p2 in zip(reloaded_zone.polygon, zone.polygon):
+            for p1, p2 in zip(reloaded_zone.polygon, zone.polygon, strict=True):
                 assert round(p1[0], 3) == round(p2[0], 3)
                 assert round(p1[1], 3) == round(p2[1], 3)
 

@@ -27,6 +27,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+from shapely.errors import TopologicalError
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 from shapely.ops import unary_union
 
@@ -134,7 +135,7 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
                 if not gdf_layer.empty:
                     gdfs.append(gdf_layer)
                     logger.info(f"Loaded {len(gdf_layer)} features from layer '{layer}'")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.debug(f"Could not load layer '{layer}': {e}")
                 continue
 
@@ -146,7 +147,7 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
         logger.info(f"Loaded {len(gdf)} total features from {pbf_file}")
         return gdf
 
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise ValueError(f"Failed to load PBF file {pbf_file}: {e}") from e
 
 
@@ -255,7 +256,6 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
     # Get bounds and compute centroid
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
     centroid_x = (bounds[0] + bounds[2]) / 2
-    centroid_y = (bounds[1] + bounds[3]) / 2
 
     # Calculate UTM zone from longitude
     utm_zone = int((centroid_x + 180) / 6) + 1
@@ -304,7 +304,7 @@ def buffer_ways(
                 # Already a polygon, keep as-is but validate
                 if geom.is_valid and not geom.is_empty:
                     buffered.append(geom)
-        except Exception as e:
+        except (ValueError, TopologicalError) as e:
             logger.warning(f"Failed to buffer geometry: {e}")
             continue
 
@@ -344,7 +344,7 @@ def cleanup_polygons(polys: list[Polygon]) -> list[Polygon]:
                     cleaned.append(poly)
                 elif isinstance(poly, MultiPolygon):
                     cleaned.extend([p for p in poly.geoms if p.area > 0.1])
-        except Exception as e:
+        except (ValueError, TopologicalError) as e:
             logger.warning(f"Failed to cleanup polygon: {e}")
             continue
 
@@ -372,7 +372,7 @@ def compute_obstacles(
 
     try:
         obstacles_union = bounds_poly.difference(walkable_union)
-    except Exception as e:
+    except (ValueError, TopologicalError) as e:
         logger.warning(f"Failed to compute obstacle complement: {e}")
         return []
 
@@ -433,10 +433,10 @@ def osm_to_map_definition(
     if driveable_ways.empty:
         raise ValueError(f"No driveable ways found in {pbf_file}")
 
-    obstacles_gdf = extract_obstacles(gdf, tag_filters)
+    _ = extract_obstacles(gdf, tag_filters)
 
     # Project to UTM
-    gdf_utm, utm_zone = project_to_utm(gdf)
+    gdf_utm, _utm_zone = project_to_utm(gdf)
     driveable_ways_utm, _ = project_to_utm(driveable_ways)
 
     # Buffer & cleanup

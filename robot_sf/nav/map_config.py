@@ -11,7 +11,7 @@ from math import sqrt
 import matplotlib.axes
 import numpy as np
 from loguru import logger
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
@@ -446,8 +446,6 @@ class MapDefinition:
         Returns:
             True if point is in driveable area, False otherwise
         """
-        from shapely.geometry import Point
-
         p = Point(point)
 
         if self.allowed_areas is not None:

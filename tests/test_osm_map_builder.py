@@ -226,9 +226,7 @@ class TestRendering:
         """Test rendering creates PNG file."""
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        affine = render_osm_background(
-            str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50
-        )
+        _ = render_osm_background(str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50)
 
         png_file = output_dir / "background.png"
         assert png_file.exists()
@@ -243,9 +241,7 @@ class TestRendering:
         """Test rendering creates affine transform JSON."""
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        affine = render_osm_background(
-            str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50
-        )
+        _ = render_osm_background(str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50)
 
         json_file = output_dir / "affine_transform.json"
         assert json_file.exists()

@@ -59,14 +59,11 @@ Test Coverage:
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-import numpy as np
 from loguru import logger
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from matplotlib.image import imread
 from shapely.geometry import Point, Polygon
 
@@ -88,6 +85,13 @@ from robot_sf.maps.osm_zones_yaml import (
     load_zones_yaml,
     save_zones_yaml,
 )
+
+if TYPE_CHECKING:
+    import numpy as np
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+ShapelyPolygon = Polygon
 
 # ============================================================================
 # Enums & Type Definitions
@@ -164,7 +168,11 @@ class UndoRedoStack:
         self.redo_stack.clear()
 
     def undo(self, editor: "OSMZonesEditor") -> bool:
-        """Execute undo. Returns True if successful."""
+        """Execute undo.
+
+        Returns:
+            True if an action was undone, False when stack is empty.
+        """
         if not self.undo_stack:
             logger.warning("Undo stack is empty")
             return False
@@ -174,7 +182,11 @@ class UndoRedoStack:
         return True
 
     def redo(self, editor: "OSMZonesEditor") -> bool:
-        """Execute redo. Returns True if successful."""
+        """Execute redo.
+
+        Returns:
+            True if an action was redone, False when stack is empty.
+        """
         if not self.redo_stack:
             logger.warning("Redo stack is empty")
             return False
@@ -409,7 +421,7 @@ class OSMZonesEditor:
                 try:
                     self.affine_data = load_affine_transform(str(affine_candidate))
                     logger.info(f"Auto-loaded affine transform from {affine_candidate}")
-                except Exception as e:
+                except (OSError, ValueError, KeyError) as e:
                     logger.warning(f"Failed to auto-load affine: {e}")
 
         # Vertex markers cache (T027)
@@ -542,7 +554,7 @@ class OSMZonesEditor:
         if self.affine_data:
             try:
                 polygon_pixels = [world_to_pixel(pt, self.affine_data) for pt in zone.polygon]
-            except Exception as e:
+            except (ValueError, TypeError, KeyError) as e:
                 logger.warning(f"Failed to convert zone polygon: {e}")
 
         polygon_patch = mpatches.Polygon(
@@ -565,7 +577,7 @@ class OSMZonesEditor:
         if self.affine_data:
             try:
                 waypoints_pixels = [world_to_pixel(pt, self.affine_data) for pt in route.waypoints]
-            except Exception as e:
+            except (ValueError, TypeError, KeyError) as e:
                 logger.warning(f"Failed to convert route waypoints: {e}")
 
         xs = [p[0] for p in waypoints_pixels]
@@ -591,85 +603,76 @@ class OSMZonesEditor:
         if not self.ax or not self.current_polygon:
             return
 
-        # Convert world → pixel for display
-        pixel_points = []
-        if self.affine_data:
-            try:
-                for world_pt in self.current_polygon:
-                    pixel_pt = world_to_pixel(world_pt, self.affine_data)
-                    pixel_points.append(pixel_pt)
-            except Exception as e:
-                logger.warning(f"Failed to convert world to pixel: {e}")
-                pixel_points = self.current_polygon  # Fallback
-        else:
-            pixel_points = self.current_polygon
-
+        pixel_points = self._current_polygon_pixels()
         if not pixel_points:
             return
 
-        # Draw line connecting vertices (T031: use red if invalid)
         if len(pixel_points) > 1:
-            xs = [p[0] for p in pixel_points]
-            ys = [p[1] for p in pixel_points]
-            # Color depends on validation state (T031)
-            line_color = "red" if not self._last_validation.get("valid", True) else "yellow"
-            self.ax.plot(xs, ys, "o-", color=line_color, linewidth=2, markersize=8, label="Current")
-
-            # Draw vertex circles and labels with hover/drag visual feedback (T028)
-            for i, (px, py) in enumerate(pixel_points):
-                # Determine color based on state (T028)
-                if i == self._dragging_vertex_idx:
-                    # Currently being dragged
-                    color = "cyan"
-                    radius = 14
-                    linewidth = 2.5
-                elif i == self._hovered_vertex_idx:
-                    # Hovered (visual feedback)
-                    color = "lime"
-                    radius = 12
-                    linewidth = 2.0
-                else:
-                    # Normal vertex
-                    color = "yellow"
-                    radius = 10
-                    linewidth = 1.5
-
-                # Circle marker
-                circle = mpatches.Circle(
-                    (px, py), radius=radius, color=color, alpha=0.7, ec="black", linewidth=linewidth
-                )
-                self.ax.add_patch(circle)
-
-                # Index label
-                world_x, world_y = self.current_polygon[i]
-                label_text = f"V{i}\n({world_x:.1f},{world_y:.1f})"
-                self.ax.text(px + 15, py, label_text, fontsize=8, color="white", weight="bold")
+            self._draw_polygon_lines(pixel_points)
+            self._draw_vertex_markers(pixel_points)
         else:
-            # Just show first vertex
-            px, py = pixel_points[0]
+            self._draw_single_vertex(pixel_points[0])
 
-            # Determine color for single vertex (T028)
-            if 0 == self._dragging_vertex_idx:
-                color = "cyan"
-                radius = 14
-                linewidth = 2.5
-            elif 0 == self._hovered_vertex_idx:
-                color = "lime"
-                radius = 12
-                linewidth = 2.0
-            else:
-                color = "yellow"
-                radius = 10
-                linewidth = 1.5
+    def _current_polygon_pixels(self) -> list[Vec2D]:
+        """Convert current polygon to pixel coordinates with fallback.
 
+        Returns:
+            Pixel-space vertices; falls back to original coordinates on failure.
+        """
+        if not self.current_polygon:
+            return []
+        if not self.affine_data:
+            return self.current_polygon
+        try:
+            return [world_to_pixel(world_pt, self.affine_data) for world_pt in self.current_polygon]
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to convert world to pixel: {e}")
+            return self.current_polygon
+
+    def _draw_polygon_lines(self, pixel_points: list[Vec2D]) -> None:
+        """Draw connecting lines for the in-progress polygon."""
+        xs = [p[0] for p in pixel_points]
+        ys = [p[1] for p in pixel_points]
+        line_color = "red" if not self._last_validation.get("valid", True) else "yellow"
+        self.ax.plot(xs, ys, "o-", color=line_color, linewidth=2, markersize=8, label="Current")
+
+    def _draw_vertex_markers(self, pixel_points: list[Vec2D]) -> None:
+        """Draw vertex markers and labels for multi-point polygons."""
+        for i, (px, py) in enumerate(pixel_points):
+            color, radius, linewidth = self._vertex_style(i)
             circle = mpatches.Circle(
                 (px, py), radius=radius, color=color, alpha=0.7, ec="black", linewidth=linewidth
             )
             self.ax.add_patch(circle)
 
-            world_x, world_y = self.current_polygon[0]
-            label_text = f"V0\n({world_x:.1f},{world_y:.1f})"
+            world_x, world_y = self.current_polygon[i]
+            label_text = f"V{i}\n({world_x:.1f},{world_y:.1f})"
             self.ax.text(px + 15, py, label_text, fontsize=8, color="white", weight="bold")
+
+    def _draw_single_vertex(self, pixel_point: Vec2D) -> None:
+        """Draw a single vertex marker with label."""
+        px, py = pixel_point
+        color, radius, linewidth = self._vertex_style(0)
+        circle = mpatches.Circle(
+            (px, py), radius=radius, color=color, alpha=0.7, ec="black", linewidth=linewidth
+        )
+        self.ax.add_patch(circle)
+
+        world_x, world_y = self.current_polygon[0]
+        label_text = f"V0\n({world_x:.1f},{world_y:.1f})"
+        self.ax.text(px + 15, py, label_text, fontsize=8, color="white", weight="bold")
+
+    def _vertex_style(self, idx: int) -> tuple[str, int, float]:
+        """Style tuple for a vertex index.
+
+        Returns:
+            Color, radius, and line width to render the vertex marker.
+        """
+        if idx == self._dragging_vertex_idx:
+            return "cyan", 14, 2.5
+        if idx == self._hovered_vertex_idx:
+            return "lime", 12, 2.0
+        return "yellow", 10, 1.5
 
     # ========================================================================
     # Helper Methods for Vertex Editing (T028)
@@ -699,7 +702,7 @@ class OSMZonesEditor:
 
                 if distance <= self._vertex_drag_threshold:
                     return idx
-            except Exception as e:
+            except (ValueError, TypeError, KeyError) as e:
                 logger.debug(f"Failed to convert vertex {idx} to pixel: {e}")
                 continue
 
@@ -782,59 +785,66 @@ class OSMZonesEditor:
             # Create point for current vertex position
             current_point = Point(world_x, world_y)
 
-            # Try to find nearest point on any allowed area boundary
-            best_snap_dist = tolerance_m
-            best_snap_pos = (world_x, world_y)
-            found_snap = False
+            snap_candidate = self._nearest_boundary_point(current_point, allowed_areas)
+            if snap_candidate:
+                nearest_pt, snap_dist = snap_candidate
+                if snap_dist < tolerance_m:
+                    logger.info(
+                        f"Snapped vertex from ({world_x:.2f}, {world_y:.2f}) to "
+                        f"({nearest_pt.x:.2f}, {nearest_pt.y:.2f}) [distance: {snap_dist:.3f}m]"
+                    )
+                    return (nearest_pt.x, nearest_pt.y)
 
-            for area in allowed_areas:
-                try:
-                    # Convert list of tuples to Shapely Polygon if needed
-                    if isinstance(area, (list, tuple)):
-                        boundary_poly = Polygon(area)
-                    else:
-                        boundary_poly = area
-
-                    # Find nearest point on boundary
-                    if nearest_points is not None:
-                        nearest_pt = nearest_points(current_point, boundary_poly.boundary)[1]
-                    else:
-                        # Fallback: compute distance manually to exterior coordinates
-                        min_dist = float("inf")
-                        nearest_pt = current_point
-                        for coord in boundary_poly.exterior.coords:
-                            dist = current_point.distance(Point(coord))
-                            if dist < min_dist:
-                                min_dist = dist
-                                nearest_pt = Point(coord)
-
-                    snap_dist = current_point.distance(nearest_pt)
-
-                    # Use this snap point if it's closer and within tolerance
-                    if snap_dist < best_snap_dist:
-                        best_snap_dist = snap_dist
-                        best_snap_pos = (nearest_pt.x, nearest_pt.y)
-                        found_snap = True
-                        logger.debug(
-                            f"Snap point found: ({best_snap_pos[0]:.2f}, {best_snap_pos[1]:.2f}) "
-                            f"at distance {best_snap_dist:.3f}m"
-                        )
-
-                except Exception as e:
-                    logger.debug(f"Error snapping to boundary {area}: {e}")
-                    continue
-
-            if found_snap:
-                logger.info(
-                    f"Snapped vertex from ({world_x:.2f}, {world_y:.2f}) to "
-                    f"({best_snap_pos[0]:.2f}, {best_snap_pos[1]:.2f}) [distance: {best_snap_dist:.3f}m]"
-                )
-                return best_snap_pos
-
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"Snapping failed: {e}")
 
         return world_x, world_y
+
+    def _nearest_boundary_point(
+        self, current_point: Point, allowed_areas: list
+    ) -> tuple[Point, float] | None:
+        """Find the nearest boundary point among allowed areas.
+
+        Returns:
+            Tuple of nearest point and distance, or None when no boundary found.
+        """
+        best_snap_dist = float("inf")
+        best_point: Point | None = None
+
+        for area in allowed_areas:
+            try:
+                boundary_poly = Polygon(area) if isinstance(area, (list, tuple)) else area
+                nearest_pt = (
+                    nearest_points(current_point, boundary_poly.boundary)[1]
+                    if nearest_points is not None
+                    else self._nearest_manual_point(current_point, boundary_poly)
+                )
+                snap_dist = current_point.distance(nearest_pt)
+                if snap_dist < best_snap_dist:
+                    best_snap_dist = snap_dist
+                    best_point = nearest_pt
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(f"Error snapping to boundary {area}: {e}")
+                continue
+
+        if best_point is None:
+            return None
+        return best_point, best_snap_dist
+
+    def _nearest_manual_point(self, current_point: Point, boundary_poly: Polygon) -> Point:
+        """Fallback nearest-point search using exterior coordinates.
+
+        Returns:
+            Nearest point on the polygon boundary to the provided point.
+        """
+        min_dist = float("inf")
+        nearest_pt = current_point
+        for coord in boundary_poly.exterior.coords:
+            dist = current_point.distance(Point(coord))
+            if dist < min_dist:
+                min_dist = dist
+                nearest_pt = Point(coord)
+        return nearest_pt
 
     def _validate_polygon(self, polygon: list[Vec2D] | None = None) -> dict[str, list[str]]:
         """Validate current or provided polygon for out-of-bounds and obstacle crossing (T031).
@@ -865,101 +875,124 @@ class OSMZonesEditor:
             logger.debug("Polygon has < 3 vertices, skipping validation")
             return result
 
-        try:
-            from shapely.geometry import Polygon as ShapelyPolygon
+        poly_shape = self._build_polygon_shape(poly, result)
+        if poly_shape is None:
+            return result
 
-            # Create Shapely polygon from vertices
-            try:
-                poly_shape = ShapelyPolygon(poly)
-                if not poly_shape.is_valid:
-                    # Try to fix self-intersecting polygon
-                    poly_shape = poly_shape.buffer(0)
-                    if not poly_shape.is_valid:
-                        result["errors"].append("Polygon is self-intersecting (invalid geometry)")
-                        result["valid"] = False
-                        return result
-            except Exception as e:
-                result["errors"].append(f"Failed to create polygon geometry: {e}")
-                result["valid"] = False
-                return result
+        self._check_out_of_bounds(poly_shape, result)
+        self._check_obstacle_crossings(poly_shape, result)
 
-            # Check 1: Out-of-bounds (polygon extends outside allowed_areas)
-            allowed_areas = getattr(self.map_definition, "allowed_areas", None)
-            if allowed_areas and len(allowed_areas) > 0:
-                try:
-                    # Union all allowed areas
-                    allowed_union = None
-                    for area in allowed_areas:
-                        try:
-                            if isinstance(area, (list, tuple)):
-                                area_poly = ShapelyPolygon(area)
-                            else:
-                                area_poly = area
-                            if allowed_union is None:
-                                allowed_union = area_poly
-                            else:
-                                allowed_union = allowed_union.union(area_poly)
-                        except Exception as e:
-                            logger.debug(f"Error processing allowed area: {e}")
-                            continue
-
-                    if allowed_union is not None:
-                        # Check if polygon is completely within allowed union
-                        if not poly_shape.within(allowed_union):
-                            # Calculate how much is outside
-                            difference = poly_shape.difference(allowed_union)
-                            if difference.area > 0:
-                                result["errors"].append(
-                                    f"Zone extends outside allowed areas "
-                                    f"(out-of-bounds area: {difference.area:.3f} m²)"
-                                )
-                                result["valid"] = False
-                                logger.warning("Out-of-bounds zone detected")
-                except Exception as e:
-                    logger.debug(f"Error checking bounds: {e}")
-
-            # Check 2: Obstacle crossing (polygon overlaps with obstacles)
-            obstacles = getattr(self.map_definition, "obstacles", None)
-            if obstacles and len(obstacles) > 0:
-                try:
-                    for obstacle_idx, obstacle in enumerate(obstacles):
-                        try:
-                            # Convert obstacle to Shapely geometry if needed
-                            if hasattr(obstacle, "vertices"):
-                                # Obstacle object with vertices attribute
-                                obs_poly = ShapelyPolygon(obstacle.vertices)
-                            elif isinstance(obstacle, (list, tuple)):
-                                obs_poly = ShapelyPolygon(obstacle)
-                            else:
-                                obs_poly = obstacle
-
-                            # Check if zone intersects obstacle
-                            if poly_shape.intersects(obs_poly):
-                                intersection = poly_shape.intersection(obs_poly)
-                                if intersection.area > 0:
-                                    result["errors"].append(
-                                        f"Zone crosses obstacle #{obstacle_idx} "
-                                        f"(overlap area: {intersection.area:.3f} m²)"
-                                    )
-                                    result["valid"] = False
-                                    logger.warning(
-                                        f"Obstacle crossing detected at obstacle {obstacle_idx}"
-                                    )
-                        except Exception as e:
-                            logger.debug(f"Error processing obstacle {obstacle_idx}: {e}")
-                            continue
-                except Exception as e:
-                    logger.debug(f"Error checking obstacles: {e}")
-
-            if not result["valid"]:
-                logger.info(f"Validation failed: {'; '.join(result['errors'])}")
-
-        except Exception as e:
-            logger.warning(f"Validation failed with exception: {e}")
-            result["valid"] = False
-            result["errors"].append(f"Validation exception: {e}")
+        if not result["valid"]:
+            logger.info(f"Validation failed: {'; '.join(result['errors'])}")
 
         return result
+
+    def _build_polygon_shape(
+        self, vertices: list[Vec2D], result: dict[str, list[str]]
+    ) -> Polygon | None:
+        """Create a valid Shapely polygon or record the error.
+
+        Returns:
+            Valid polygon geometry or None when creation/repair fails.
+        """
+        try:
+            poly_shape = ShapelyPolygon(vertices)
+            if poly_shape.is_valid:
+                return poly_shape
+            poly_shape = poly_shape.buffer(0)
+            if poly_shape.is_valid:
+                return poly_shape
+            result["errors"].append("Polygon is self-intersecting (invalid geometry)")
+        except (ValueError, TypeError) as e:
+            result["errors"].append(f"Failed to create polygon geometry: {e}")
+
+        result["valid"] = False
+        return None
+
+    def _check_out_of_bounds(self, poly_shape: Polygon, result: dict[str, list[str]]) -> None:
+        """Check that polygon stays within allowed areas, if provided."""
+        allowed_areas = getattr(self.map_definition, "allowed_areas", None)
+        if not allowed_areas:
+            return
+
+        try:
+            allowed_union = self._union_allowed_areas(allowed_areas)
+            if allowed_union and not poly_shape.within(allowed_union):
+                difference = poly_shape.difference(allowed_union)
+                if difference.area > 0:
+                    result["errors"].append(
+                        "Zone extends outside allowed areas "
+                        f"(out-of-bounds area: {difference.area:.3f} m²)"
+                    )
+                    result["valid"] = False
+                    logger.warning("Out-of-bounds zone detected")
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"Error checking bounds: {e}")
+
+    def _union_allowed_areas(self, allowed_areas: list[Any]) -> Polygon | None:
+        """Union allowed areas into a single geometry.
+
+        Returns:
+            Combined polygon of all allowed areas, or None if none are usable.
+        """
+        allowed_union = None
+        for area in allowed_areas:
+            try:
+                area_poly = self._to_polygon(area)
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(f"Error processing allowed area: {e}")
+                continue
+
+            allowed_union = area_poly if allowed_union is None else allowed_union.union(area_poly)
+        return allowed_union
+
+    def _to_polygon(self, area: Any) -> Polygon:
+        """Convert list/tuple areas to shapely polygons.
+
+        Returns:
+            Shapely polygon for the provided area definition.
+        """
+        if isinstance(area, (list, tuple)):
+            return ShapelyPolygon(area)
+        return area
+
+    def _check_obstacle_crossings(self, poly_shape: Polygon, result: dict[str, list[str]]) -> None:
+        """Check for overlaps between polygon and known obstacles."""
+        obstacles = getattr(self.map_definition, "obstacles", None)
+        if not obstacles:
+            return
+
+        try:
+            for obstacle_idx, obstacle in enumerate(obstacles):
+                try:
+                    obs_poly = self._obstacle_polygon(obstacle)
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.debug(f"Error processing obstacle {obstacle_idx}: {e}")
+                    continue
+
+                if not poly_shape.intersects(obs_poly):
+                    continue
+
+                intersection = poly_shape.intersection(obs_poly)
+                if intersection.area > 0:
+                    result["errors"].append(
+                        "Zone crosses obstacle "
+                        f"#{obstacle_idx} (overlap area: {intersection.area:.3f} m²)"
+                    )
+                    result["valid"] = False
+                    logger.warning(f"Obstacle crossing detected at obstacle {obstacle_idx}")
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"Error checking obstacles: {e}")
+
+    def _obstacle_polygon(self, obstacle: Any) -> Polygon:
+        """Return a shapely polygon for an obstacle definition.
+
+        Returns:
+            Shapely polygon describing the obstacle.
+        """
+        if hasattr(obstacle, "vertices"):
+            return ShapelyPolygon(obstacle.vertices)
+        return self._to_polygon(obstacle)
 
     # ========================================================================
     # Event Handlers (T027-T033 foundation)
@@ -980,65 +1013,75 @@ class OSMZonesEditor:
 
         logger.debug(f"Click at pixel ({pixel_x:.1f}, {pixel_y:.1f}), mode={self.mode.value}")
 
-        # Convert pixel → world coordinates (T027)
+        world_x, world_y = self._pixel_to_world_safe(pixel_x, pixel_y)
+
+        if event.button == 1:
+            self._handle_left_click(world_x, world_y, pixel_x, pixel_y)
+        elif event.button == 3:
+            self._handle_right_click(pixel_x, pixel_y)
+
+        self._redraw()
+
+    def _pixel_to_world_safe(self, pixel_x: float, pixel_y: float) -> tuple[float, float]:
+        """Convert pixel coordinates to world space with logging and fallback.
+
+        Returns:
+            Converted world coordinates, or the original pixel values if conversion fails.
+        """
         if self.affine_data:
             try:
                 world_x, world_y = pixel_to_world((pixel_x, pixel_y), self.affine_data)
                 logger.debug(f"  → World coordinates: ({world_x:.2f}, {world_y:.2f})")
-            except Exception as e:
+                return world_x, world_y
+            except (ValueError, TypeError, KeyError) as e:
                 logger.warning(f"Failed to convert pixel to world: {e}")
-                world_x, world_y = pixel_x, pixel_y  # Fallback to pixel coords
         else:
-            # No affine transform - use pixel coordinates as-is
-            world_x, world_y = pixel_x, pixel_y
             logger.debug("  (using pixel coordinates, no affine transform loaded)")
+        return pixel_x, pixel_y
 
-        # Left click: start drag or add vertex (T028 drag detection)
-        if event.button == 1:
-            if self.mode == EditorMode.DRAW:
-                # Check if clicking near an existing vertex (T028 drag start)
-                vertex_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
-                if vertex_idx is not None:
-                    # Start dragging this vertex
-                    self._dragging_vertex_idx = vertex_idx
-                    logger.info(f"Started dragging vertex {vertex_idx}")
-                else:
-                    # Add new vertex (T029: push to history)
-                    index = len(self.current_polygon)
-                    self.current_polygon.append((world_x, world_y))
-                    action = AddVertexAction((world_x, world_y), index)
-                    self.history.push_action(action)
-                    logger.info(
-                        f"Added vertex #{len(self.current_polygon)}: ({world_x:.2f}, {world_y:.2f})"
-                    )
-            elif self.mode == EditorMode.IDLE:
-                # Start new polygon/route
-                self.current_polygon = [(world_x, world_y)]
-                self.mode = EditorMode.DRAW
-                logger.info(
-                    f"Started drawing {self.draw_mode.value} at ({world_x:.2f}, {world_y:.2f})"
-                )
+    def _handle_left_click(
+        self, world_x: float, world_y: float, pixel_x: float, pixel_y: float
+    ) -> None:
+        """Handle left-click interactions in draw/idle modes."""
+        if self.mode == EditorMode.DRAW:
+            vertex_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
+            if vertex_idx is not None:
+                self._dragging_vertex_idx = vertex_idx
+                logger.info(f"Started dragging vertex {vertex_idx}")
+                return
 
-        # Right click: delete vertex at click position or cancel (T028 smart delete)
-        elif event.button == 3:
-            if self.mode == EditorMode.DRAW and len(self.current_polygon) > 0:
-                # Check if clicking near a vertex (T028 smart delete)
-                vertex_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
-                if vertex_idx is not None:
-                    # Delete the clicked vertex
-                    self._delete_vertex_at_index(vertex_idx)
-                else:
-                    # Click not on vertex - delete last one (backward compatibility)
-                    deleted = self.current_polygon.pop()
-                    logger.info(
-                        f"Deleted last vertex ({deleted[0]:.2f}, {deleted[1]:.2f}), "
-                        f"remaining: {len(self.current_polygon)}"
-                    )
-                    if not self.current_polygon:
-                        self.mode = EditorMode.IDLE
-                        logger.info("Drawing cancelled (no vertices left)")
+            index = len(self.current_polygon)
+            self.current_polygon.append((world_x, world_y))
+            action = AddVertexAction((world_x, world_y), index)
+            self.history.push_action(action)
+            logger.info(
+                f"Added vertex #{len(self.current_polygon)}: ({world_x:.2f}, {world_y:.2f})"
+            )
+            return
 
-        self._redraw()
+        if self.mode == EditorMode.IDLE:
+            self.current_polygon = [(world_x, world_y)]
+            self.mode = EditorMode.DRAW
+            logger.info(f"Started drawing {self.draw_mode.value} at ({world_x:.2f}, {world_y:.2f})")
+
+    def _handle_right_click(self, pixel_x: float, pixel_y: float) -> None:
+        """Handle right-click deletion logic."""
+        if self.mode != EditorMode.DRAW or not self.current_polygon:
+            return
+
+        vertex_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
+        if vertex_idx is not None:
+            self._delete_vertex_at_index(vertex_idx)
+            return
+
+        deleted = self.current_polygon.pop()
+        logger.info(
+            f"Deleted last vertex ({deleted[0]:.2f}, {deleted[1]:.2f}), "
+            f"remaining: {len(self.current_polygon)}"
+        )
+        if not self.current_polygon:
+            self.mode = EditorMode.IDLE
+            logger.info("Drawing cancelled (no vertices left)")
 
     def _on_motion(self, event: Any) -> None:
         """Motion handler for vertex dragging and hover feedback (T028, T030).
@@ -1078,7 +1121,7 @@ class OSMZonesEditor:
                 self._last_validation = self._validate_polygon()
                 if not self._last_validation["valid"]:
                     logger.warning(f"Polygon validation failed: {self._last_validation['errors']}")
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
                 logger.warning(f"Failed during drag: {e}")
                 self._dragging_vertex_idx = None
 
@@ -1100,77 +1143,94 @@ class OSMZonesEditor:
 
         logger.debug(f"Key pressed: {event.key}")
 
-        # T028: Stop dragging on any key press
-        if self._dragging_vertex_idx is not None:
-            self._dragging_vertex_idx = None
-            logger.debug("Drag cancelled due to key press")
-            self._redraw()
+        if self._stop_drag_on_key_press():
             return
 
-        # Mode switching
-        if event.key == "p":
-            self.draw_mode = DrawMode.ZONE
-            logger.info("Switched to ZONE mode (P)")
-            self._update_title()
-            self._redraw()
+        key_actions = {
+            "p": self._activate_zone_mode,
+            "r": self._activate_route_mode,
+            "shift": self._toggle_snapping,
+            "h": self._show_help,
+            "ctrl+z": self._undo_action,
+            "ctrl+y": self._redo_action,
+            "ctrl+s": self._save_if_configured,
+            "escape": self._cancel_drawing,
+        }
+
+        action = key_actions.get(event.key)
+        if action:
+            action()
             return
 
-        if event.key == "r":
-            self.draw_mode = DrawMode.ROUTE
-            logger.info("Switched to ROUTE mode (R)")
-            self._update_title()
-            self._redraw()
-            return
-
-        # Snapping toggle
-        if event.key == "shift":
-            self.snap_enabled = not self.snap_enabled
-            logger.info(f"Snapping: {self.snap_enabled}")
-            self._update_title()
-            self._redraw()
-            return
-
-        # Help menu (T033)
-        if event.key == "h":
-            self._show_help()
-            return
-
-        # Undo/Redo
-        if event.key == "ctrl+z":
-            if self.history.undo(self):
-                logger.info("Undo executed")
-            self._redraw()
-            return
-
-        if event.key == "ctrl+y":
-            if self.history.redo(self):
-                logger.info("Redo executed")
-            self._redraw()
-            return
-
-        # Save
-        if event.key == "ctrl+s":
-            if self.output_yaml:
-                self._save_yaml()
-            else:
-                logger.warning("No output YAML path specified")
-            return
-
-        # Finish polygon (Enter)
         if event.key == "enter" and self.mode == EditorMode.DRAW:
-            if len(self.current_polygon) >= 3:
-                self._finish_current_polygon()
-            else:
-                logger.warning("Polygon needs at least 3 vertices")
-            return
+            self._finish_polygon_if_ready()
 
-        # Cancel (Escape)
-        if event.key == "escape":
-            self.current_polygon = []
-            self.mode = EditorMode.IDLE
-            logger.info("Drawing cancelled")
-            self._redraw()
-            return
+    def _stop_drag_on_key_press(self) -> bool:
+        """Stop vertex dragging on key press.
+
+        Returns:
+            True if a drag was cancelled, False otherwise.
+        """
+        if self._dragging_vertex_idx is None:
+            return False
+        self._dragging_vertex_idx = None
+        logger.debug("Drag cancelled due to key press")
+        self._redraw()
+        return True
+
+    def _activate_zone_mode(self) -> None:
+        """Switch editor to zone drawing mode."""
+        self.draw_mode = DrawMode.ZONE
+        logger.info("Switched to ZONE mode (P)")
+        self._update_title()
+        self._redraw()
+
+    def _activate_route_mode(self) -> None:
+        """Switch editor to route drawing mode."""
+        self.draw_mode = DrawMode.ROUTE
+        logger.info("Switched to ROUTE mode (R)")
+        self._update_title()
+        self._redraw()
+
+    def _toggle_snapping(self) -> None:
+        """Toggle snapping to allowed areas."""
+        self.snap_enabled = not self.snap_enabled
+        logger.info(f"Snapping: {self.snap_enabled}")
+        self._update_title()
+        self._redraw()
+
+    def _undo_action(self) -> None:
+        """Undo last change and refresh display."""
+        if self.history.undo(self):
+            logger.info("Undo executed")
+        self._redraw()
+
+    def _redo_action(self) -> None:
+        """Redo last undone change and refresh display."""
+        if self.history.redo(self):
+            logger.info("Redo executed")
+        self._redraw()
+
+    def _save_if_configured(self) -> None:
+        """Save YAML if output path is available."""
+        if self.output_yaml:
+            self._save_yaml()
+        else:
+            logger.warning("No output YAML path specified")
+
+    def _finish_polygon_if_ready(self) -> None:
+        """Finish polygon if enough vertices exist."""
+        if len(self.current_polygon) >= 3:
+            self._finish_current_polygon()
+        else:
+            logger.warning("Polygon needs at least 3 vertices")
+
+    def _cancel_drawing(self) -> None:
+        """Cancel current drawing session."""
+        self.current_polygon = []
+        self.mode = EditorMode.IDLE
+        logger.info("Drawing cancelled")
+        self._redraw()
 
     # ========================================================================
     # Polygon Management
@@ -1220,7 +1280,7 @@ class OSMZonesEditor:
         try:
             save_zones_yaml(self.config, self.output_yaml)
             logger.info(f"Saved zones to {self.output_yaml}")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error(f"Failed to save YAML: {e}")
 
     def load_yaml(self, yaml_file: str) -> None:
@@ -1229,7 +1289,7 @@ class OSMZonesEditor:
             self.config = load_zones_yaml(yaml_file)
             logger.info(f"Loaded zones from {yaml_file}")
             self._redraw()
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error(f"Failed to load YAML: {e}")
 
     # ========================================================================

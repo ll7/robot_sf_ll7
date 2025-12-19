@@ -214,7 +214,7 @@ class TestOSMBackwardCompat:
             num_episodes = 2  # Minimal for smoke test
 
             for episode in range(num_episodes):
-                obs, info = env.reset()
+                _obs, _info = env.reset()
                 episode_reward = 0.0
                 done = False
                 steps = 0
@@ -222,7 +222,7 @@ class TestOSMBackwardCompat:
 
                 while not done and steps < max_steps:
                     action = env.action_space.sample()
-                    obs, reward, terminated, truncated, info = env.step(action)
+                    _obs, reward, terminated, truncated, _info = env.step(action)
 
                     episode_reward += float(reward)
                     done = terminated or truncated

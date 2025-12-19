@@ -1329,7 +1329,9 @@ class TestSaveTrigger:
             loaded_zone = loaded_config.zones["test_zone"]
             assert len(loaded_zone.polygon) == len(original_zone.polygon)
             # YAML converts tuples to lists, so compare values not types
-            for loaded_point, original_point in zip(loaded_zone.polygon, original_zone.polygon):
+            for loaded_point, original_point in zip(
+                loaded_zone.polygon, original_zone.polygon, strict=True
+            ):
                 assert list(loaded_point) == list(original_point)
 
 

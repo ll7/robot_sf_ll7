@@ -256,14 +256,21 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
     # Get bounds and compute centroid
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
     centroid_x = (bounds[0] + bounds[2]) / 2
+    centroid_y = (bounds[1] + bounds[3]) / 2
 
     # Calculate UTM zone from longitude
     utm_zone = int((centroid_x + 180) / 6) + 1
-    utm_crs = f"EPSG:326{utm_zone:02d}"
+    if not 1 <= utm_zone <= 60:
+        logger.warning(f"Computed UTM zone {utm_zone} outside valid range [1, 60]; clamping")
+        utm_zone = max(1, min(utm_zone, 60))
+
+    hemisphere = "N" if centroid_y >= 0 else "S"
+    utm_crs_prefix = "326" if hemisphere == "N" else "327"
+    utm_crs = f"EPSG:{utm_crs_prefix}{utm_zone:02d}"
 
     # Project
     gdf_utm = gdf.to_crs(utm_crs)
-    logger.info(f"Projected to UTM zone {utm_zone}")
+    logger.info(f"Projected to UTM zone {utm_zone}{hemisphere} ({utm_crs})")
 
     return gdf_utm, utm_zone
 

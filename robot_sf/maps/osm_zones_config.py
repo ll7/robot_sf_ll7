@@ -54,6 +54,33 @@ from robot_sf.common.types import Vec2D
 from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, Route, Zone, load_zones_yaml
 
 
+def _validate_and_convert_polygon(
+    polygon: list[tuple[float, float]] | list[Vec2D],
+) -> list[Vec2D]:
+    """Convert polygon vertices to Vec2D tuples and validate basic geometry."""
+    polygon_vecs: list[Vec2D] = []
+    try:
+        for point in polygon:
+            if isinstance(point, (list, tuple)) and len(point) == 2:
+                polygon_vecs.append((float(point[0]), float(point[1])))
+            else:
+                raise TypeError(f"Invalid point format: {point}")
+    except (ValueError, TypeError) as e:
+        raise TypeError(f"Failed to convert polygon to Vec2D: {e}") from e
+
+    if len(polygon_vecs) < 3:
+        raise ValueError(f"Polygon must have ≥3 points, got {len(polygon_vecs)}")
+
+    x1, y1 = polygon_vecs[0]
+    x2, y2 = polygon_vecs[1]
+    x3, y3 = polygon_vecs[2]
+    cross = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
+    if abs(cross) < 1e-6:
+        raise ValueError("Polygon points appear to be collinear (degenerate polygon)")
+
+    return polygon_vecs
+
+
 def create_spawn_zone(
     name: str,
     polygon: list[tuple[float, float]] | list[Vec2D],
@@ -90,29 +117,7 @@ def create_spawn_zone(
         >>> zone.type
         'spawn'
     """
-    # Convert to Vec2D tuples and validate
-    polygon_vecs: list[Vec2D] = []
-    try:
-        for point in polygon:
-            if isinstance(point, (list, tuple)) and len(point) == 2:
-                polygon_vecs.append((float(point[0]), float(point[1])))
-            else:
-                raise TypeError(f"Invalid point format: {point}")
-    except (ValueError, TypeError) as e:
-        raise TypeError(f"Failed to convert polygon to Vec2D: {e}") from e
-
-    if len(polygon_vecs) < 3:
-        raise ValueError(f"Polygon must have ≥3 points, got {len(polygon_vecs)}")
-
-    # Check for collinearity (basic validation)
-    if len(polygon_vecs) >= 3:
-        x1, y1 = polygon_vecs[0]
-        x2, y2 = polygon_vecs[1]
-        x3, y3 = polygon_vecs[2]
-        # Cross product to check collinearity
-        cross = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
-        if abs(cross) < 1e-6:
-            raise ValueError("Polygon points appear to be collinear (degenerate polygon)")
+    polygon_vecs = _validate_and_convert_polygon(polygon)
 
     zone = Zone(
         name=name,
@@ -159,28 +164,7 @@ def create_goal_zone(
         >>> zone.type
         'goal'
     """
-    # Reuse spawn zone creation logic but with type='goal'
-    # (validation is the same)
-    polygon_vecs: list[Vec2D] = []
-    try:
-        for point in polygon:
-            if isinstance(point, (list, tuple)) and len(point) == 2:
-                polygon_vecs.append((float(point[0]), float(point[1])))
-            else:
-                raise TypeError(f"Invalid point format: {point}")
-    except (ValueError, TypeError) as e:
-        raise TypeError(f"Failed to convert polygon to Vec2D: {e}") from e
-
-    if len(polygon_vecs) < 3:
-        raise ValueError(f"Polygon must have ≥3 points, got {len(polygon_vecs)}")
-
-    if len(polygon_vecs) >= 3:
-        x1, y1 = polygon_vecs[0]
-        x2, y2 = polygon_vecs[1]
-        x3, y3 = polygon_vecs[2]
-        cross = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
-        if abs(cross) < 1e-6:
-            raise ValueError("Polygon points appear to be collinear (degenerate polygon)")
+    polygon_vecs = _validate_and_convert_polygon(polygon)
 
     zone = Zone(
         name=name,
@@ -232,27 +216,7 @@ def create_crowded_zone(
     if density <= 0:
         raise ValueError(f"Density must be >0, got {density}")
 
-    # Convert and validate polygon
-    polygon_vecs: list[Vec2D] = []
-    try:
-        for point in polygon:
-            if isinstance(point, (list, tuple)) and len(point) == 2:
-                polygon_vecs.append((float(point[0]), float(point[1])))
-            else:
-                raise TypeError(f"Invalid point format: {point}")
-    except (ValueError, TypeError) as e:
-        raise TypeError(f"Failed to convert polygon to Vec2D: {e}") from e
-
-    if len(polygon_vecs) < 3:
-        raise ValueError(f"Polygon must have ≥3 points, got {len(polygon_vecs)}")
-
-    if len(polygon_vecs) >= 3:
-        x1, y1 = polygon_vecs[0]
-        x2, y2 = polygon_vecs[1]
-        x3, y3 = polygon_vecs[2]
-        cross = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
-        if abs(cross) < 1e-6:
-            raise ValueError("Polygon points appear to be collinear (degenerate polygon)")
+    polygon_vecs = _validate_and_convert_polygon(polygon)
 
     # Store density in metadata
     meta = metadata or {}

@@ -272,17 +272,21 @@ def save_zones_yaml(config: OSMZonesConfig, yaml_file: str) -> None:
 
     data = config.to_dict()
 
-    # Custom YAML representer for deterministic output
+    # Custom YAML Dumper for deterministic output without mutating global state
+    class SortedDumper(yaml.SafeDumper):
+        pass
+
     def represent_dict_sorted(dumper, data):
         return dumper.represent_mapping("tag:yaml.org,2002:map", sorted(data.items()))
 
-    yaml.add_representer(dict, represent_dict_sorted)
+    SortedDumper.add_representer(dict, represent_dict_sorted)
 
     try:
         with open(path, "w") as f:
             yaml.dump(
                 data,
                 f,
+                Dumper=SortedDumper,
                 default_flow_style=False,
                 sort_keys=True,
                 allow_unicode=True,
@@ -368,13 +372,17 @@ def _validate_routes(config: OSMZonesConfig, map_def: Any | None) -> list[str]:
             warnings.append(f"Error: Route '{name}' has fewer than 2 waypoints")
 
         if map_def:
-            bounds = map_def.bounds
-            for i, (x, y) in enumerate(route.waypoints):
-                if not (bounds.xmin <= x <= bounds.xmax and bounds.ymin <= y <= bounds.ymax):
-                    warnings.append(
-                        f"Warning: Route '{name}' waypoint {i} "
-                        f"({x:.1f}, {y:.1f}) outside map bounds"
-                    )
+            try:
+                xmin, xmax, ymin, ymax = _extract_bounds_extents(map_def.bounds)
+            except ValueError as e:
+                warnings.append(f"Error: Unable to validate route '{name}' bounds: {e}")
+            else:
+                for i, (x, y) in enumerate(route.waypoints):
+                    if not (xmin <= x <= xmax and ymin <= y <= ymax):
+                        warnings.append(
+                            f"Warning: Route '{name}' waypoint {i} "
+                            f"({x:.1f}, {y:.1f}) outside map bounds"
+                        )
 
     return warnings
 
@@ -386,9 +394,14 @@ def _validate_zone_bounds(name: str, zone: Zone, map_def: Any) -> list[str]:
         Warnings for vertices outside map bounds.
     """
     warnings: list[str] = []
-    bounds = map_def.bounds
+    try:
+        xmin, xmax, ymin, ymax = _extract_bounds_extents(map_def.bounds)
+    except ValueError as e:
+        warnings.append(f"Error: Unable to validate zone '{name}' bounds: {e}")
+        return warnings
+
     for i, (x, y) in enumerate(zone.polygon):
-        if not (bounds.xmin <= x <= bounds.xmax and bounds.ymin <= y <= bounds.ymax):
+        if not (xmin <= x <= xmax and ymin <= y <= ymax):
             warnings.append(
                 f"Warning: Zone '{name}' point {i} ({x:.1f}, {y:.1f}) outside map bounds"
             )
@@ -415,6 +428,21 @@ def _validate_zone_obstacles(name: str, zone: Zone, map_def: Any) -> list[str]:
     except (ValueError, TypeError) as e:
         logger.debug(f"Obstacle check failed: {e}")
     return warnings
+
+
+def _extract_bounds_extents(bounds: list[tuple[Vec2D, Vec2D]]) -> tuple[float, float, float, float]:
+    """Return xmin, xmax, ymin, ymax from Line2D bounds list."""
+    if not bounds:
+        raise ValueError("map bounds are empty")
+
+    x_coords = [pt[0] for line in bounds for pt in line]
+    y_coords = [pt[1] for line in bounds for pt in line]
+    if not x_coords or not y_coords:
+        raise ValueError("map bounds contain no coordinates")
+
+    xmin, xmax = min(x_coords), max(x_coords)
+    ymin, ymax = min(y_coords), max(y_coords)
+    return xmin, xmax, ymin, ymax
 
 
 # ============================================================================

@@ -429,6 +429,7 @@ class OSMZonesEditor:
 
         # Vertex editing state (T028)
         self._dragging_vertex_idx: int | None = None  # Index of vertex being dragged
+        self._drag_start_pos: Vec2D | None = None  # Original position when drag began
         self._hovered_vertex_idx: int | None = None  # Index of hovered vertex (for visual feedback)
         self._vertex_drag_threshold = 15  # pixels - distance to detect vertex click
 
@@ -470,6 +471,7 @@ class OSMZonesEditor:
 
         # Connect event handlers
         self.fig.canvas.mpl_connect("button_press_event", self._on_click)
+        self.fig.canvas.mpl_connect("button_release_event", self._on_button_release)
         self.fig.canvas.mpl_connect("motion_notify_event", self._on_motion)
         self.fig.canvas.mpl_connect("key_press_event", self._on_key_press)
 
@@ -1047,6 +1049,7 @@ class OSMZonesEditor:
             vertex_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
             if vertex_idx is not None:
                 self._dragging_vertex_idx = vertex_idx
+                self._drag_start_pos = self.current_polygon[vertex_idx]
                 logger.info(f"Started dragging vertex {vertex_idx}")
                 return
 
@@ -1093,6 +1096,7 @@ class OSMZonesEditor:
         """
         if not event.inaxes or self.mode != EditorMode.DRAW:
             self._dragging_vertex_idx = None
+            self._drag_start_pos = None
             self._hovered_vertex_idx = None
             return
 
@@ -1112,7 +1116,7 @@ class OSMZonesEditor:
                 # Apply snapping if enabled (T030)
                 world_x, world_y = self._snap_to_boundary(world_x, world_y)
 
-                self._move_vertex(self._dragging_vertex_idx, world_x, world_y)
+                self._move_vertex(self._dragging_vertex_idx, world_x, world_y, record_action=False)
                 logger.debug(
                     f"Dragging vertex {self._dragging_vertex_idx} to ({world_x:.2f}, {world_y:.2f})"
                 )
@@ -1124,6 +1128,7 @@ class OSMZonesEditor:
             except (ValueError, TypeError, KeyError, AttributeError) as e:
                 logger.warning(f"Failed during drag: {e}")
                 self._dragging_vertex_idx = None
+                self._drag_start_pos = None
 
         # Update hover feedback (T028 visual feedback)
         hovered_idx = self._find_vertex_at_pixel(pixel_x, pixel_y)
@@ -1173,10 +1178,36 @@ class OSMZonesEditor:
         """
         if self._dragging_vertex_idx is None:
             return False
-        self._dragging_vertex_idx = None
+        self._finish_drag()
         logger.debug("Drag cancelled due to key press")
         self._redraw()
         return True
+
+    def _finish_drag(self) -> None:
+        """Record a single move action for the completed drag."""
+        if self._dragging_vertex_idx is not None and self._drag_start_pos is not None:
+            try:
+                new_pos = self.current_polygon[self._dragging_vertex_idx]
+            except IndexError:
+                new_pos = None
+            else:
+                if self._drag_start_pos != new_pos:
+                    action = MoveVertexAction(
+                        self._dragging_vertex_idx, self._drag_start_pos, new_pos
+                    )
+                    self.history.push_action(action)
+
+        self._dragging_vertex_idx = None
+        self._drag_start_pos = None
+
+    def _on_button_release(self, event: Any) -> None:
+        """Finalize drag and record history on mouse button release."""
+        if event.button != 1:
+            return
+        if self._dragging_vertex_idx is None:
+            return
+        self._finish_drag()
+        self._redraw()
 
     def _activate_zone_mode(self) -> None:
         """Switch editor to zone drawing mode."""
@@ -1244,23 +1275,30 @@ class OSMZonesEditor:
             logger.warning(f"{self.draw_mode.value} needs at least {min_points} points")
             return
 
+        # Preserve polygon for history actions
+        polygon_copy = list(self.current_polygon)
+
         if self.draw_mode == DrawMode.ZONE:
             zone_name = f"zone_{len(self.config.zones) + 1}"
             zone = Zone(
                 name=zone_name,
                 type="spawn",  # Default; could be made configurable
-                polygon=self.current_polygon,
+                polygon=polygon_copy,
             )
             self.config.zones[zone_name] = zone
+            action = FinishPolygonAction(polygon_copy, zone_name, DrawMode.ZONE, "spawn")
+            self.history.push_action(action)
             logger.info(f"Added zone: {zone_name} with {len(self.current_polygon)} vertices")
         else:
             route_name = f"route_{len(self.config.routes) + 1}"
             route = Route(
                 name=route_name,
-                waypoints=self.current_polygon,
+                waypoints=polygon_copy,
                 route_type="pedestrian",
             )
             self.config.routes[route_name] = route
+            action = FinishPolygonAction(polygon_copy, route_name, DrawMode.ROUTE)
+            self.history.push_action(action)
             logger.info(f"Added route: {route_name} with {len(self.current_polygon)} waypoints")
 
         self.current_polygon = []

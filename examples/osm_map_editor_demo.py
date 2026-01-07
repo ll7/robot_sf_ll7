@@ -88,7 +88,7 @@ def render_background(pbf_file: str, output_dir: Path) -> tuple[Path, dict]:
         render_result = render_osm_background(
             pbf_file=pbf_file,
             output_dir=str(output_dir),
-            pixels_per_meter=0.5,
+            pixels_per_meter=2.0,  # Increased from 0.5 for better detail
             dpi=100,
         )
         affine_data = render_result["affine_transform"]

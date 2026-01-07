@@ -56,12 +56,13 @@ def main() -> None:
 
     # Render PNG background
     logger.info("Rendering PNG background...")
-    affine_data = render_osm_background(
+    render_result = render_osm_background(
         pbf_file=pbf_file,
         output_dir=output_dir,
         pixels_per_meter=0.5,
         dpi=100,
     )
+    affine_data = render_result["affine_transform"]
 
     logger.info("✅ Background rendered:")
     logger.info(f"   Pixel per meter: {affine_data['pixel_per_meter']}")

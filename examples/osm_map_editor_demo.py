@@ -45,16 +45,17 @@ Dependencies:
 """
 
 import argparse
-import logging
 from pathlib import Path
 
+from loguru import logger
+
+from robot_sf.common.logging import configure_logging
 from robot_sf.maps.osm_background_renderer import render_osm_background
 from robot_sf.maps.osm_zones_editor import OSMZonesEditor
 from robot_sf.maps.osm_zones_yaml import Zone, load_zones_yaml, save_zones_yaml
 from robot_sf.nav.osm_map_builder import osm_to_map_definition
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger(__name__)
+configure_logging()
 
 
 def setup_output_directory() -> Path:
@@ -83,14 +84,15 @@ def render_background(pbf_file: str, output_dir: Path) -> tuple[Path, dict]:
     logger.info("=" * 70)
 
     try:
-        affine_data = render_osm_background(
+        render_result = render_osm_background(
             pbf_file=pbf_file,
             output_dir=str(output_dir),
             pixels_per_meter=0.5,
             dpi=100,
         )
+        affine_data = render_result["affine_transform"]
 
-        png_path = output_dir / "background.png"
+        png_path = Path(render_result["png_path"])
         logger.info(f"✅ Background rendered: {png_path}")
         logger.info(f"   Pixel dimensions: {affine_data['pixel_dimensions']}")
         logger.info(f"   Bounds (meters): {affine_data['bounds_meters']}")
@@ -101,7 +103,12 @@ def render_background(pbf_file: str, output_dir: Path) -> tuple[Path, dict]:
         logger.info("   Skipping background render in headless mode")
         # Return dummy values for headless mode
         png_path = output_dir / "background.png"
-        affine_data = {"pixel_dimensions": (800, 600), "bounds_meters": [0, 0, 100, 100]}
+        affine_data = {
+            "pixel_dimensions": (800, 600),
+            "bounds_meters": [0.0, 0.0, 100.0, 100.0],
+            "pixel_per_meter": 1.0,
+            "origin": "upper",
+        }
         return png_path, affine_data
 
 

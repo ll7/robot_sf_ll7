@@ -12,17 +12,20 @@ Tests verify:
 These are smoke tests - they verify functionality without deep assertions.
 """
 
+import os
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pytest
+from shapely.geometry import box
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, Route, Zone, save_zones_yaml
-from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.osm_map_builder import osm_to_map_definition
+from robot_sf.planner.visibility_planner import VisibilityPlanner
 
 
 class TestOSMBackwardCompat:
@@ -81,6 +84,15 @@ class TestOSMBackwardCompat:
         return map_def
 
     @pytest.fixture
+    def map_def_with_allowed_areas(self) -> MapDefinition:
+        """Load a sample map and inject allowed_areas to validate compatibility."""
+        map_pool = MapDefinitionPool()
+        map_name = sorted(map_pool.map_defs.keys())[0]
+        map_def = map_pool.map_defs[map_name]
+        map_def.allowed_areas = [box(0.0, 0.0, map_def.width, map_def.height)]
+        return map_def
+
+    @pytest.fixture
     def sample_zones_config(self) -> OSMZonesConfig:
         """Create sample zones configuration."""
         return OSMZonesConfig(
@@ -128,12 +140,24 @@ class TestOSMBackwardCompat:
         """Test that robot environment works with OSM-derived MapDefinition.
 
         This is a critical smoke test verifying backward compatibility.
-
-        Note: This test uses default maps since OSM obstacle format needs special handling
-        in fast-pysf. The key test is that OSM structures don't break the environment factory.
         """
-        # Skip this test for now - OSM obstacle format incompatibility with fast-pysf
-        pytest.skip("OSM obstacle format needs special handling in fast-pysf backend")
+        map_pool = MapDefinitionPool(
+            maps_folder=".",
+            map_defs={"osm_smoke": osm_map_definition},
+        )
+        config = RobotSimulationConfig(map_pool=map_pool)
+        env = make_robot_env(config=config, debug=False)
+
+        try:
+            obs, info = env.reset()
+            assert obs is not None
+            assert isinstance(info, dict)
+
+            action = env.action_space.sample()
+            obs, _reward, _terminated, _truncated, _info = env.step(action)
+            assert obs is not None
+        finally:
+            env.close()
 
     def test_environment_reset_step_loop(self):
         """Test environment reset and step loop with standard map.
@@ -240,6 +264,82 @@ class TestOSMBackwardCompat:
 
         finally:
             env.close()
+
+    def test_pygame_visualization_unchanged(
+        self, map_def_with_allowed_areas: MapDefinition
+    ) -> None:
+        """Ensure pygame rendering still works when allowed_areas is present to preserve UI workflows."""
+        os.environ.setdefault("DISPLAY", "")
+        os.environ.setdefault("MPLBACKEND", "Agg")
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
+        pygame = pytest.importorskip("pygame")
+
+        from robot_sf.render.sim_view import SimulationView, VisualizableSimState
+
+        pygame.init()
+        try:
+            sim_view = SimulationView(map_def=map_def_with_allowed_areas, width=200, height=200)
+            state = VisualizableSimState(
+                timestep=0,
+                robot_action=None,
+                robot_pose=((1.0, 1.0), 0.0),
+                pedestrian_positions=np.zeros((0, 2)),
+                ray_vecs=np.zeros((0, 2, 2)),
+                ped_actions=np.zeros((0, 2, 2)),
+            )
+            sim_view.render(state, target_fps=1)
+        finally:
+            pygame.quit()
+
+    def test_sensor_suite_unchanged(self, map_def_with_allowed_areas: MapDefinition) -> None:
+        """Verify sensor initialization still works with allowed_areas populated to protect observations."""
+        map_pool = MapDefinitionPool(
+            maps_folder=".",
+            map_defs={"osm_allowed": map_def_with_allowed_areas},
+        )
+        config = RobotSimulationConfig(map_pool=map_pool)
+        env = make_robot_env(config=config, debug=False)
+
+        try:
+            obs, info = env.reset()
+            assert obs is not None
+            assert isinstance(info, dict)
+
+            action = env.action_space.sample()
+            obs, _reward, _terminated, _truncated, _info = env.step(action)
+            assert obs is not None
+        finally:
+            env.close()
+
+    def test_planner_compatibility(self) -> None:
+        """Confirm global planner still operates when allowed_areas is set to preserve routing behavior."""
+        width = 10.0
+        height = 10.0
+        spawn_zone = ((0.0, 0.0), (width, 0.0), (width, height))
+        map_def = MapDefinition(
+            width=width,
+            height=height,
+            obstacles=[],
+            robot_spawn_zones=[spawn_zone],
+            ped_spawn_zones=[spawn_zone],
+            robot_goal_zones=[spawn_zone],
+            bounds=[
+                ((0.0, 0.0), (width, 0.0)),
+                ((width, 0.0), (width, height)),
+                ((width, height), (0.0, height)),
+                ((0.0, height), (0.0, 0.0)),
+            ],
+            robot_routes=[],
+            ped_goal_zones=[spawn_zone],
+            ped_crowded_zones=[],
+            ped_routes=[],
+            allowed_areas=[box(0.0, 0.0, width, height)],
+        )
+
+        planner = VisibilityPlanner(map_def)
+        path = planner.plan(start=(1.0, 1.0), goal=(9.0, 9.0))
+        assert len(path) >= 2
 
     @pytest.mark.skipif(
         not Path("test_scenarios/osm_fixtures/sample_block.pbf").exists(),

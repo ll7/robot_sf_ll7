@@ -21,19 +21,18 @@ Design decisions:
 - Deterministic output (same PBF → same MapDefinition)
 """
 
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+from loguru import logger
+from shapely.affinity import translate
 from shapely.errors import TopologicalError
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 from shapely.ops import unary_union
 
 from robot_sf.nav.map_config import MapDefinition, Obstacle
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -144,6 +143,8 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
 
         # Combine all layers, ensuring uniform structure
         gdf = pd.concat(gdfs, ignore_index=False).reset_index(drop=True)
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326", allow_override=True)
         logger.info(f"Loaded {len(gdf)} total features from {pbf_file}")
         return gdf
 
@@ -252,6 +253,9 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
     """
     if gdf.empty:
         raise ValueError("Cannot project empty GeoDataFrame")
+
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326", allow_override=True)
 
     # Get bounds and compute centroid
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
@@ -465,9 +469,19 @@ def osm_to_map_definition(
     bounds = gdf_utm.total_bounds
     obstacles_polys = compute_obstacles(bounds, walkable_union)
 
+    minx, miny, maxx, maxy = bounds
+    width = maxx - minx
+    height = maxy - miny
+
+    # Shift geometries into a local frame with (0, 0) at the map bounds.
+    xoff = -minx
+    yoff = -miny
+    buffered_local = [translate(poly, xoff=xoff, yoff=yoff) for poly in buffered]
+    obstacles_local = [translate(poly, xoff=xoff, yoff=yoff) for poly in obstacles_polys]
+
     # Create Obstacle objects
     obstacles_list = []
-    for obs_poly in obstacles_polys:
+    for obs_poly in obstacles_local:
         vertices = list(obs_poly.exterior.coords)[:-1]  # Remove duplicate last point
         obstacles_list.append(Obstacle(vertices=vertices))
 
@@ -476,16 +490,11 @@ def osm_to_map_definition(
     )
 
     # Build MapDefinition
-    # Get bounds and dimensions
-    minx, miny, maxx, maxy = bounds
-    width = maxx - minx
-    height = maxy - miny
-
     # Create default spawn/goal zones from bounds
     # Rect is tuple[Vec2D, Vec2D, Vec2D] (corner1, corner2, corner3)
-    corner1 = (minx, miny)
-    corner2 = (maxx, miny)
-    corner3 = (maxx, maxy)
+    corner1 = (0.0, 0.0)
+    corner2 = (width, 0.0)
+    corner3 = (width, height)
     default_spawn_zone = (corner1, corner2, corner3)
 
     # Build MapDefinition with all required fields
@@ -498,13 +507,13 @@ def osm_to_map_definition(
         robot_goal_zones=[default_spawn_zone],
         ped_goal_zones=[default_spawn_zone],
         bounds=[
-            ((minx, miny), (maxx, miny)),  # bottom
-            ((maxx, miny), (maxx, maxy)),  # right
-            ((maxx, maxy), (minx, maxy)),  # top
-            ((minx, maxy), (minx, miny)),  # left
+            ((0.0, 0.0), (width, 0.0)),  # bottom
+            ((width, 0.0), (width, height)),  # right
+            ((width, height), (0.0, height)),  # top
+            ((0.0, height), (0.0, 0.0)),  # left
         ],
         robot_routes=[],
         ped_routes=[],
         ped_crowded_zones=[],
-        allowed_areas=buffered,  # Explicit walkable areas from OSM
+        allowed_areas=buffered_local,  # Explicit walkable areas in local frame
     )

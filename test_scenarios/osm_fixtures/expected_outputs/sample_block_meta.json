@@ -1,0 +1,23 @@
+{
+  "affine_transform": {
+    "bounds_meters": [
+      0.0,
+      0.0,
+      3986.036211771774,
+      8923.08419812005
+    ],
+    "dpi": 50,
+    "origin": "upper",
+    "pixel_dimensions": [
+      997,
+      2231
+    ],
+    "pixel_origin": [
+      0.0,
+      0.0
+    ],
+    "pixel_per_meter": 0.25
+  },
+  "pbf_file": "test_scenarios/osm_fixtures/sample_block.pbf",
+  "utm_zone": 32
+}

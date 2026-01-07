@@ -12,18 +12,19 @@ Key features:
 
 Output format:
 - PNG: Rasterized map background
-- JSON: Affine transform with pixel_per_meter, bounds_meters, pixel_dimensions
+- JSON: Metadata with nested affine_transform (pixel_per_meter, bounds_meters, pixel_dimensions)
 """
 
 import json
-import logging
 from pathlib import Path
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
+from loguru import logger
+from shapely.affinity import translate
 
-logger = logging.getLogger(__name__)
+from robot_sf.nav.osm_map_builder import project_to_utm
 
 
 def _load_osm_data(pbf_file: str) -> gpd.GeoDataFrame:
@@ -66,8 +67,8 @@ def _compute_pixel_dimensions(
     if not (width_m > 0 and height_m > 0):
         raise ValueError(f"Invalid bounds: width={width_m}, height={height_m}")
 
-    pixel_width = int(width_m * pixels_per_meter)
-    pixel_height = int(height_m * pixels_per_meter)
+    pixel_width = max(1, int(round(width_m * pixels_per_meter)))
+    pixel_height = max(1, int(round(height_m * pixels_per_meter)))
 
     max_pixels = 4000
     if pixel_width > max_pixels or pixel_height > max_pixels:
@@ -149,7 +150,7 @@ def render_osm_background(
         figure_size: Base figure size in inches (default 10x10)
 
     Returns:
-        Affine metadata dictionary including pixel scale, bounds, and pixel dimensions.
+        Dictionary with png_path and affine_transform metadata.
 
     Raises:
         FileNotFoundError: If pbf_file does not exist
@@ -166,57 +167,95 @@ def render_osm_background(
     if gdf.empty:
         raise ValueError(f"PBF file is empty: {pbf_file}")
 
-    bounds = gdf.total_bounds
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326", allow_override=True)
+
+    gdf_utm, utm_zone = project_to_utm(gdf)
+    bounds = gdf_utm.total_bounds
+    minx, miny, maxx, maxy = bounds
+    width_m = maxx - minx
+    height_m = maxy - miny
+
+    # Translate to a local frame so pixel→world transforms align with MapDefinition.
+    def _shift_geometry(geom):
+        if geom is None or geom.is_empty:
+            return geom
+        return translate(geom, xoff=-minx, yoff=-miny)
+
+    gdf_local = gdf_utm.copy()
+    gdf_local["geometry"] = gdf_local["geometry"].apply(_shift_geometry)
+    bounds_local = (0.0, 0.0, width_m, height_m)
     pixel_width, pixel_height, figure_inches_x, figure_inches_y = _compute_pixel_dimensions(
-        bounds, pixels_per_meter, dpi
+        bounds_local, pixels_per_meter, dpi
     )
 
     fig, ax = plt.subplots(figsize=(figure_inches_x, figure_inches_y), dpi=dpi)
-    ax.set_xlim(bounds[0], bounds[2])
-    ax.set_ylim(bounds[1], bounds[3])
+    ax.set_xlim(0.0, width_m)
+    ax.set_ylim(0.0, height_m)
     ax.set_aspect("equal")
-    ax.invert_yaxis()
     ax.set_axis_off()
+    ax.set_position([0.0, 0.0, 1.0, 1.0])
 
-    _plot_layers(gdf, ax)
+    _plot_layers(gdf_local, ax)
 
     png_path = output_path / "background.png"
-    fig.savefig(str(png_path), bbox_inches="tight", pad_inches=0, dpi=dpi)
+    fig.savefig(str(png_path), dpi=dpi)
     plt.close(fig)
     logger.info(f"Saved PNG: {png_path}")
 
-    affine_data = {
+    affine_transform = {
+        "pixel_origin": [0.0, 0.0],
         "pixel_per_meter": pixels_per_meter,
-        "bounds_meters": list(bounds),
+        "bounds_meters": [0.0, 0.0, width_m, height_m],
         "pixel_dimensions": [pixel_width, pixel_height],
         "dpi": dpi,
+        "origin": "upper",
+    }
+
+    metadata = {
+        "pbf_file": str(pbf_file),
+        "utm_zone": utm_zone,
+        "affine_transform": affine_transform,
     }
 
     json_path = output_path / "affine_transform.json"
-    with open(json_path, "w") as f:
-        json.dump(affine_data, f, indent=2)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, sort_keys=True)
     logger.info(f"Saved affine JSON: {json_path}")
 
-    return affine_data
+    return {
+        "png_path": str(png_path),
+        "affine_transform": affine_transform,
+    }
 
 
 def validate_affine_transform(
-    point_pixel: tuple[float, float],
     affine_data: dict,
+    point_pixel: tuple[float, float] | None = None,
     tolerance_pixels: float = 1.0,
+    tolerance_meters: float = 0.1,
 ) -> bool:
     """Validate round-trip pixel↔world transformation.
 
     Returns:
-        True when round-trip pixel→world→pixel is within tolerance.
+        True when round-trip pixel→world→pixel and world→pixel→world stay within tolerance.
     """
+    if point_pixel is None:
+        point_pixel = (0.0, 0.0)
+
     world = pixel_to_world(point_pixel, affine_data)
     point_pixel_recovered = world_to_pixel(world, affine_data)
-    error = (
+    pixel_error = (
         (point_pixel[0] - point_pixel_recovered[0]) ** 2
         + (point_pixel[1] - point_pixel_recovered[1]) ** 2
     ) ** 0.5
-    return error <= tolerance_pixels
+
+    world_recovered = pixel_to_world(point_pixel_recovered, affine_data)
+    world_error = (
+        (world[0] - world_recovered[0]) ** 2 + (world[1] - world_recovered[1]) ** 2
+    ) ** 0.5
+
+    return pixel_error <= tolerance_pixels and world_error <= tolerance_meters
 
 
 def pixel_to_world(
@@ -230,9 +269,15 @@ def pixel_to_world(
     """
     px, py = point_pixel
     pixel_per_meter = affine_data["pixel_per_meter"]
-    minx, miny, _, _ = affine_data["bounds_meters"]
-    world_x = minx + (px / pixel_per_meter)
-    world_y = miny + (py / pixel_per_meter)
+    minx, miny, maxx, maxy = affine_data["bounds_meters"]
+    origin_x, origin_y = affine_data.get("pixel_origin", (0.0, 0.0))
+    origin = affine_data.get("origin", "lower")
+
+    world_x = minx + ((px - origin_x) / pixel_per_meter)
+    if origin == "upper":
+        world_y = maxy - ((py - origin_y) / pixel_per_meter)
+    else:
+        world_y = miny + ((py - origin_y) / pixel_per_meter)
     return (world_x, world_y)
 
 
@@ -247,16 +292,22 @@ def world_to_pixel(
     """
     world_x, world_y = point_world
     pixel_per_meter = affine_data["pixel_per_meter"]
-    minx, miny, _, _ = affine_data["bounds_meters"]
-    pixel_x = (world_x - minx) * pixel_per_meter
-    pixel_y = (world_y - miny) * pixel_per_meter
+    minx, miny, maxx, maxy = affine_data["bounds_meters"]
+    origin_x, origin_y = affine_data.get("pixel_origin", (0.0, 0.0))
+    origin = affine_data.get("origin", "lower")
+
+    pixel_x = origin_x + ((world_x - minx) * pixel_per_meter)
+    if origin == "upper":
+        pixel_y = origin_y + ((maxy - world_y) * pixel_per_meter)
+    else:
+        pixel_y = origin_y + ((world_y - miny) * pixel_per_meter)
     return (pixel_x, pixel_y)
 
 
 def save_affine_transform(affine_data: dict, output_path: str) -> None:
     """Save affine transform to JSON file."""
-    with open(output_path, "w") as f:
-        json.dump(affine_data, f, indent=2)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(affine_data, f, indent=2, sort_keys=True)
     logger.info(f"Saved: {output_path}")
 
 
@@ -266,7 +317,10 @@ def load_affine_transform(input_path: str) -> dict:
     Returns:
         Dictionary with affine metadata loaded from disk.
     """
-    with open(input_path) as f:
+    with open(input_path, encoding="utf-8") as f:
         affine_data = json.load(f)
+    if isinstance(affine_data, dict) and "affine_transform" in affine_data:
+        logger.info(f"Loaded: {input_path}")
+        return affine_data["affine_transform"]
     logger.info(f"Loaded: {input_path}")
     return affine_data

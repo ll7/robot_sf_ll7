@@ -163,8 +163,9 @@ output = render_osm_background(
     simplify_m=0.5,
 )
 
-print(f"PNG: {output['png_file']}")
-print(f"Affine: {output['affine_data']}")
+affine = output["affine_transform"]
+print(f"PNG: {output['png_path']}")
+print(f"Affine: {affine}")
 ```
 
 ### Step 4a: Define Zones Visually (Editor)

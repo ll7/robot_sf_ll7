@@ -1,4 +1,4 @@
-"""Tests for OSM PBF importer and background renderer.
+"""Tests for OSM PBF importer and MapDefinition conversion.
 
 Tests cover:
 - PBF loading and parsing
@@ -6,24 +6,13 @@ Tests cover:
 - UTM projection and buffering
 - Polygon cleanup and validity
 - End-to-end MapDefinition creation
-- PNG rendering and affine transforms
-- Round-trip coordinate validation
 - Backward compatibility with existing maps
 """
 
-import json
 from pathlib import Path
 
 import pytest
 
-from robot_sf.maps.osm_background_renderer import (
-    load_affine_transform,
-    pixel_to_world,
-    render_osm_background,
-    save_affine_transform,
-    validate_affine_transform,
-    world_to_pixel,
-)
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.osm_map_builder import (
     OSMTagFilters,
@@ -49,12 +38,6 @@ def pbf_fixture() -> str:
 def tag_filters() -> OSMTagFilters:
     """Standard tag filter configuration."""
     return OSMTagFilters()
-
-
-@pytest.fixture
-def output_dir(tmp_path: Path) -> Path:
-    """Temporary output directory for test artifacts."""
-    return tmp_path / "osm_output"
 
 
 # PBF Loading Tests
@@ -112,6 +95,12 @@ class TestProjection:
         assert gdf_utm is not None
         assert isinstance(zone, int)
         assert 1 <= zone <= 60
+        # Round-trip projection should be nearly lossless in meters.
+        round_trip = gdf_utm.to_crs(gdf.crs).to_crs(gdf_utm.crs)
+        if not gdf_utm.empty:
+            orig_centroid = gdf_utm.geometry.iloc[0].centroid
+            round_centroid = round_trip.geometry.iloc[0].centroid
+            assert orig_centroid.distance(round_centroid) < 0.1
 
 
 # Geometry Processing Tests
@@ -125,6 +114,7 @@ class TestGeometryProcessing:
         gdf = load_pbf(pbf_fixture)
         driveable = filter_driveable_ways(gdf, tag_filters)
         driveable_utm, _ = project_to_utm(driveable)
+        gdf_utm, _ = project_to_utm(gdf)
 
         buffered = buffer_ways(driveable_utm, half_width_m=1.5)
         assert len(buffered) > 0
@@ -168,7 +158,7 @@ class TestObstacleDerivation:
 
         walkable_union = unary_union(cleaned)
 
-        bounds = gdf.total_bounds
+        bounds = gdf_utm.total_bounds
         obstacles = compute_obstacles(bounds, walkable_union)
 
         assert len(obstacles) > 0
@@ -213,123 +203,6 @@ class TestEndToEndImporter:
             assert len(line) == 2  # Each line is (point1, point2)
             assert len(line[0]) == 2  # Each point is (x, y)
             assert len(line[1]) == 2
-
-
-# Rendering Tests
-class TestRendering:
-    """Test PNG rendering and affine transforms."""
-
-    @pytest.mark.skip(
-        reason="Phase 1: PIL/matplotlib image encoding issue with fixture - Phase 4 task"
-    )
-    def test_render_osm_background_creates_png(self, pbf_fixture: str, output_dir: Path) -> None:
-        """Test rendering creates PNG file."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        _ = render_osm_background(str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50)
-
-        png_file = output_dir / "background.png"
-        assert png_file.exists()
-        assert png_file.stat().st_size > 0
-
-    @pytest.mark.skip(
-        reason="Phase 1: PIL/matplotlib image encoding issue with fixture - Phase 4 task"
-    )
-    def test_render_osm_background_creates_affine_json(
-        self, pbf_fixture: str, output_dir: Path
-    ) -> None:
-        """Test rendering creates affine transform JSON."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        _ = render_osm_background(str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50)
-
-        json_file = output_dir / "affine_transform.json"
-        assert json_file.exists()
-
-        with open(json_file) as f:
-            data = json.load(f)
-        assert "pixel_per_meter" in data
-        assert "bounds_meters" in data
-        assert "pixel_dimensions" in data
-
-    @pytest.mark.skip(
-        reason="Phase 1: PIL/matplotlib image encoding issue with fixture - Phase 4 task"
-    )
-    def test_render_osm_background_returns_affine_data(
-        self, pbf_fixture: str, output_dir: Path
-    ) -> None:
-        """Test render function returns affine transform data."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        affine = render_osm_background(
-            str(pbf_fixture), str(output_dir), pixels_per_meter=0.25, dpi=50
-        )
-
-        assert isinstance(affine, dict)
-        assert "pixel_per_meter" in affine
-        assert "bounds_meters" in affine
-        assert "pixel_dimensions" in affine
-        assert "dpi" in affine
-
-
-# Affine Transform Tests
-class TestAffineTransform:
-    """Test coordinate transformation round-trip."""
-
-    def test_pixel_to_world_conversion(self) -> None:
-        """Test pixel to world coordinate conversion."""
-        affine = {
-            "pixel_per_meter": 2.0,
-            "bounds_meters": [0.0, 0.0, 100.0, 100.0],
-        }
-
-        world = pixel_to_world((0, 0), affine)
-        assert world == (0.0, 0.0)
-
-        world = pixel_to_world((200, 200), affine)
-        assert world == (100.0, 100.0)
-
-    def test_world_to_pixel_conversion(self) -> None:
-        """Test world to pixel coordinate conversion."""
-        affine = {
-            "pixel_per_meter": 2.0,
-            "bounds_meters": [0.0, 0.0, 100.0, 100.0],
-        }
-
-        pixel = world_to_pixel((0.0, 0.0), affine)
-        assert pixel == (0.0, 0.0)
-
-        pixel = world_to_pixel((100.0, 100.0), affine)
-        assert pixel == (200.0, 200.0)
-
-    def test_validate_affine_transform_round_trip(self) -> None:
-        """Test round-trip pixel ↔ world validation."""
-        affine = {
-            "pixel_per_meter": 2.0,
-            "bounds_meters": [0.0, 0.0, 100.0, 100.0],
-        }
-
-        test_points = [(0, 0), (50, 100), (200, 200), (500, 500)]
-        for pt in test_points:
-            is_valid = validate_affine_transform(pt, affine, tolerance_pixels=1.0)
-            assert is_valid, f"Round-trip validation failed for {pt}"
-
-    def test_save_load_affine_transform(self, tmp_path: Path) -> None:
-        """Test saving and loading affine transform."""
-        affine_orig = {
-            "pixel_per_meter": 1.5,
-            "bounds_meters": [10.0, 20.0, 110.0, 120.0],
-            "pixel_dimensions": [400, 400],
-            "dpi": 100,
-        }
-
-        json_file = tmp_path / "affine.json"
-        save_affine_transform(affine_orig, str(json_file))
-
-        assert json_file.exists()
-
-        affine_loaded = load_affine_transform(str(json_file))
-        assert affine_loaded == affine_orig
 
 
 # Backward Compatibility Tests

@@ -52,6 +52,11 @@ dependencies = [
     "networkx>=3.6",
     "pyvisgraph>=0.2.1",
     "python-motion-planning==2.0.dev1",
+    # OSM map extraction (Issue #392)
+    "osmnx>=1.9",
+    "geopandas>=0.14",
+    "pyproj>=3.6",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

@@ -39,7 +39,7 @@ from robot_sf.common.artifacts import (
 from robot_sf.common.compat import validate_compatibility
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.geometry import euclid_dist
-from robot_sf.common.matplotlib_utils import ensure_interactive_backend
+from robot_sf.common.matplotlib_utils import ensure_interactive_backend, is_headless_environment
 from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.common.seed import SeedReport, set_global_seed
 from robot_sf.common.types import (
@@ -100,6 +100,7 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     "euclid_dist",
     # Matplotlib utilities (from .matplotlib_utils)
     "ensure_interactive_backend",
+    "is_headless_environment",
     # Metrics utilities
     "metric_samples",
     # Errors (from .errors)

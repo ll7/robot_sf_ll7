@@ -157,7 +157,7 @@ class TestObstacleDerivation:
 
         walkable_union = unary_union(cleaned)
 
-        bounds = gdf.total_bounds
+        bounds = driveable_utm.total_bounds
         obstacles = compute_obstacles(bounds, walkable_union)
 
         assert len(obstacles) > 0

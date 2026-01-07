@@ -596,8 +596,8 @@ save_zones_yaml(config, "simple_navigation.yaml")
 zones = [
     create_spawn_zone("s_north", [(45, 0), (55, 0), (55, 10)]),
     create_spawn_zone("s_south", [(45, 90), (55, 90), (55, 100)]),
-    create_goal_zone("g_north", [(45, 90), (55, 100)]),
-    create_goal_zone("g_south", [(45, 0), (55, 10)]),
+    create_goal_zone("g_north", [(45, 90), (55, 90), (55, 100), (45, 100)]),
+    create_goal_zone("g_south", [(45, 0), (55, 0), (55, 10), (45, 10)]),
 ]
 
 routes = [

@@ -21,6 +21,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
+from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Literal, cast
 
@@ -359,7 +360,7 @@ def _plot_subprocess_worker(
     output_dir: str,
     scenario_filter: str | None,
     baseline_filter: str | None,
-    conn,
+    conn: Connection,
 ) -> None:
     """Generate plots in a child process and return artifacts via a pipe."""
     try:
@@ -398,6 +399,15 @@ def _generate_plots_subprocess(
     child_conn.close()
 
     try:
+        if not parent_conn.poll(timeout=300):
+            process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+            raise VisualizationError(
+                "Plot subprocess timed out after 300 seconds",
+                "plot",
+            )
         status, payload = parent_conn.recv()
     except EOFError as exc:  # pragma: no cover - subprocess crashed before sending
         process.join()
@@ -409,6 +419,13 @@ def _generate_plots_subprocess(
         parent_conn.close()
 
     process.join()
+
+    if process.exitcode not in (0, None):
+        raise VisualizationError(
+            f"Plot subprocess exited with code {process.exitcode}",
+            "plot",
+            {"exitcode": process.exitcode},
+        )
 
     if status != "ok":
         raise VisualizationError(f"Plot subprocess failed: {payload}", "plot")

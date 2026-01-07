@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -26,6 +26,76 @@ from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, Route, Zone, save_zones
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.osm_map_builder import osm_to_map_definition
 from robot_sf.planner.visibility_planner import VisibilityPlanner
+
+
+def _select_spawn_goal_polygons(allowed_areas: list[Polygon]) -> tuple[Polygon, Polygon]:
+    """Pick polygons for spawn and goal zones from allowed areas.
+
+    Args:
+        allowed_areas: Candidate allowed-area polygons from the OSM MapDefinition.
+
+    Returns:
+        Tuple of (spawn_polygon, goal_polygon). Falls back to the same polygon
+        when only one valid polygon is available.
+    """
+    candidates = [poly for poly in allowed_areas if not poly.is_empty]
+    if not candidates:
+        raise ValueError("No valid allowed_areas polygons available for zone selection.")
+    candidates.sort(key=lambda poly: poly.area, reverse=True)
+    spawn_poly = candidates[0]
+    goal_poly = candidates[1] if len(candidates) > 1 else spawn_poly
+    return spawn_poly, goal_poly
+
+
+def _triangle_from_polygon(polygon: Polygon, size: float = 2.0) -> tuple[tuple[float, float], ...]:
+    """Create a small triangle entirely contained within the given polygon.
+
+    Args:
+        polygon: Polygon to place the triangle within.
+        size: Target triangle edge offset in meters before clamping.
+
+    Returns:
+        Triangle vertices as a tuple of (x, y) coordinates.
+    """
+    inner = polygon.buffer(-size)
+    if inner.is_empty:
+        inner = polygon
+
+    point = inner.representative_point()
+    minx, miny, maxx, maxy = inner.bounds
+    span_x = (maxx - minx) / 6.0
+    span_y = (maxy - miny) / 6.0
+    span = max(min(size, span_x, span_y), 0.1)
+
+    for factor in (1.0, 0.5, 0.25, 0.1):
+        offset = span * factor
+        triangle = (
+            (point.x - offset, point.y - offset),
+            (point.x + offset, point.y - offset),
+            (point.x, point.y + offset),
+        )
+        if Polygon(triangle).within(polygon):
+            return triangle
+
+    # Last-resort tiny triangle around the point.
+    return (
+        (point.x, point.y),
+        (point.x + 0.1, point.y),
+        (point.x, point.y + 0.1),
+    )
+
+
+def _point_from_polygon(polygon: Polygon) -> tuple[float, float]:
+    """Return a stable point inside the polygon for route waypoints.
+
+    Args:
+        polygon: Polygon to sample from.
+
+    Returns:
+        (x, y) coordinates for a waypoint inside the polygon.
+    """
+    point = polygon.representative_point()
+    return (float(point.x), float(point.y))
 
 
 class TestOSMBackwardCompat:
@@ -50,15 +120,13 @@ class TestOSMBackwardCompat:
             line_buffer_m=1.5,
         )
 
-        # OSM maps don't have robot routes by default - add minimal spawn zones and routes
-        # for testing environment creation
-        # Rect = tuple[Vec2D, Vec2D, Vec2D] (triangle)
-        spawn_zone = ((20.0, 20.0), (40.0, 20.0), (30.0, 40.0))
-        goal_zone = (
-            (map_def.width - 60, map_def.height - 60),
-            (map_def.width - 20, map_def.height - 60),
-            (map_def.width - 40, map_def.height - 20),
-        )
+        if not map_def.allowed_areas:
+            pytest.skip("OSM MapDefinition has no allowed_areas for zone placement.")
+
+        spawn_poly, goal_poly = _select_spawn_goal_polygons(map_def.allowed_areas)
+        spawn_zone = _triangle_from_polygon(spawn_poly)
+        goal_zone = _triangle_from_polygon(goal_poly)
+        waypoint = _point_from_polygon(spawn_poly)
 
         map_def.robot_spawn_zones = [spawn_zone]
         map_def.robot_goal_zones = [goal_zone]
@@ -71,15 +139,14 @@ class TestOSMBackwardCompat:
         route = GlobalRoute(
             spawn_id=0,
             goal_id=0,
-            waypoints=[
-                (30.0, 30.0),
-                (map_def.width / 2, map_def.height / 2),
-                (map_def.width - 40, map_def.height - 40),
-            ],
+            waypoints=[waypoint],
             spawn_zone=spawn_zone,
             goal_zone=goal_zone,
         )
         map_def.robot_routes = [route]
+
+        # Manually populate robot_routes_by_spawn_id since we modified after __post_init__
+        map_def.robot_routes_by_spawn_id = {0: [route]}
 
         return map_def
 

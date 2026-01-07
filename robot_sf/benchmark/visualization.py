@@ -21,13 +21,15 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
-from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 # Third-party
 import numpy as np
 from loguru import logger
+
+if TYPE_CHECKING:
+    from multiprocessing.connection import Connection
 
 
 def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:

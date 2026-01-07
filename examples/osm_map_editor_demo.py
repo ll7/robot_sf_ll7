@@ -186,7 +186,7 @@ def create_demo_zones_headless(output_yaml: Path) -> None:
         },
     )
 
-    save_zones_yaml(config, output_yaml)
+    save_zones_yaml(config, str(output_yaml))
     logger.info(f"✅ Demo zones saved: {output_yaml}")
     logger.info(f"   Zones: {len(config.zones)}")
     logger.info(f"   Routes: {len(config.routes)}")
@@ -208,7 +208,7 @@ def verify_yaml_roundtrip(output_yaml: Path) -> None:
         logger.info("   (This is expected if you didn't save in the editor)")
         return
 
-    config = load_zones_yaml(output_yaml)
+    config = load_zones_yaml(str(output_yaml))
     logger.info(f"✅ YAML loaded successfully: {output_yaml}")
     logger.info(f"   Zones: {len(config.zones)}")
     logger.info(f"   Routes: {len(config.routes)}")

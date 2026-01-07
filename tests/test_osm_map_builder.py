@@ -114,7 +114,6 @@ class TestGeometryProcessing:
         gdf = load_pbf(pbf_fixture)
         driveable = filter_driveable_ways(gdf, tag_filters)
         driveable_utm, _ = project_to_utm(driveable)
-        gdf_utm, _ = project_to_utm(gdf)
 
         buffered = buffer_ways(driveable_utm, half_width_m=1.5)
         assert len(buffered) > 0
@@ -158,7 +157,7 @@ class TestObstacleDerivation:
 
         walkable_union = unary_union(cleaned)
 
-        bounds = gdf_utm.total_bounds
+        bounds = gdf.total_bounds
         obstacles = compute_obstacles(bounds, walkable_union)
 
         assert len(obstacles) > 0

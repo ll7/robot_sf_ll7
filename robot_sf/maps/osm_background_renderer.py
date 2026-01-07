@@ -67,8 +67,8 @@ def _compute_pixel_dimensions(
     if not (width_m > 0 and height_m > 0):
         raise ValueError(f"Invalid bounds: width={width_m}, height={height_m}")
 
-    pixel_width = max(1, int(round(width_m * pixels_per_meter)))
-    pixel_height = max(1, int(round(height_m * pixels_per_meter)))
+    pixel_width = max(1, round(width_m * pixels_per_meter))
+    pixel_height = max(1, round(height_m * pixels_per_meter))
 
     max_pixels = 4000
     if pixel_width > max_pixels or pixel_height > max_pixels:
@@ -269,7 +269,7 @@ def pixel_to_world(
     """
     px, py = point_pixel
     pixel_per_meter = affine_data["pixel_per_meter"]
-    minx, miny, maxx, maxy = affine_data["bounds_meters"]
+    minx, miny, _, maxy = affine_data["bounds_meters"]
     origin_x, origin_y = affine_data.get("pixel_origin", (0.0, 0.0))
     origin = affine_data.get("origin", "lower")
 
@@ -292,12 +292,14 @@ def world_to_pixel(
     """
     world_x, world_y = point_world
     pixel_per_meter = affine_data["pixel_per_meter"]
-    minx, miny, maxx, maxy = affine_data["bounds_meters"]
+    minx, miny, _, _ = affine_data["bounds_meters"]
     origin_x, origin_y = affine_data.get("pixel_origin", (0.0, 0.0))
     origin = affine_data.get("origin", "lower")
 
     pixel_x = origin_x + ((world_x - minx) * pixel_per_meter)
     if origin == "upper":
+        # Get maxy from affine_data for upper origin
+        _, _, _, maxy = affine_data["bounds_meters"]
         pixel_y = origin_y + ((maxy - world_y) * pixel_per_meter)
     else:
         pixel_y = origin_y + ((world_y - miny) * pixel_per_meter)

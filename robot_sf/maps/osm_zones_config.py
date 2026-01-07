@@ -57,7 +57,11 @@ from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, Route, Zone, load_zones
 def _validate_and_convert_polygon(
     polygon: list[tuple[float, float]] | list[Vec2D],
 ) -> list[Vec2D]:
-    """Convert polygon vertices to Vec2D tuples and validate basic geometry."""
+    """Convert polygon vertices to Vec2D tuples and validate basic geometry.
+
+    Returns:
+        List of Vec2D tuples representing the validated polygon vertices.
+    """
     polygon_vecs: list[Vec2D] = []
     try:
         for point in polygon:

@@ -396,11 +396,11 @@ def test_performance_benchmarks(report: ValidationReport):
         yaml_path = Path("/tmp/benchmark_config.yaml")
 
         t0 = time.time()
-        save_zones_yaml(config, yaml_path)
+        save_zones_yaml(config, str(yaml_path))
         save_time = time.time() - t0
 
         t0 = time.time()
-        _ = load_zones_yaml(yaml_path)
+        _ = load_zones_yaml(str(yaml_path))
         load_time = time.time() - t0
 
         duration = time.time() - start
@@ -482,9 +482,9 @@ def test_real_world_scenario(report: ValidationReport):
 
         # Save and verify
         scenario_path = Path("/tmp/realistic_urban_scenario.yaml")
-        save_zones_yaml(config, scenario_path)
+        save_zones_yaml(config, str(scenario_path))
 
-        loaded = load_zones_yaml(scenario_path)
+        loaded = load_zones_yaml(str(scenario_path))
         assert len(loaded.zones) == len(zones)
         assert len(loaded.routes) == len(routes)
 

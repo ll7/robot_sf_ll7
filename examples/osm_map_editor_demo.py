@@ -70,7 +70,15 @@ def setup_output_directory() -> Path:
     return output_dir
 
 
-def render_background(pbf_file: str, output_dir: Path) -> tuple[Path, dict]:
+def render_background(
+    pbf_file: str,
+    output_dir: Path,
+    *,
+    pixels_per_meter: float | None,
+    max_pixels: int,
+    min_pixels_per_meter: float,
+    max_pixels_per_meter: float,
+) -> tuple[Path, dict]:
     """Render OSM background map from PBF file.
 
     Args:
@@ -80,16 +88,19 @@ def render_background(pbf_file: str, output_dir: Path) -> tuple[Path, dict]:
     Returns:
         Tuple of (png_path, affine_data)
     """
-    logger.info("=" * 70)
-    logger.info("STEP 1: Rendering OSM Background Map")
-    logger.info("=" * 70)
+    print("=" * 70)
+    print("STEP 1: Rendering OSM Background Map")
+    print("=" * 70)
 
     try:
         render_result = render_osm_background(
             pbf_file=pbf_file,
             output_dir=str(output_dir),
-            pixels_per_meter=2.0,  # Increased from 0.5 for better detail
+            pixels_per_meter=pixels_per_meter,
             dpi=100,
+            max_pixels=max_pixels,
+            min_pixels_per_meter=min_pixels_per_meter,
+            max_pixels_per_meter=max_pixels_per_meter,
         )
         affine_data = render_result["affine_transform"]
 
@@ -126,20 +137,20 @@ def launch_interactive_editor(
     Returns:
         Editor instance
     """
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("STEP 2: Launching Interactive Editor")
-    logger.info("=" * 70)
-    logger.info("The editor window will open shortly.")
-    logger.info("Press 'H' in the editor window to see all keyboard shortcuts.")
-    logger.info("")
-    logger.info("Quick start:")
-    logger.info("  1. Press 'P' to enter zone drawing mode")
-    logger.info("  2. Click to add vertices to your zone")
-    logger.info("  3. Press 'Enter' to finish the zone")
-    logger.info("  4. Press 'Ctrl+S' to save to YAML")
-    logger.info("  5. Close the window when done")
-    logger.info("")
+    print("")
+    print("=" * 70)
+    print("STEP 2: Launching Interactive Editor")
+    print("=" * 70)
+    print("The editor window will open shortly.")
+    print("Press 'H' in the editor window to see all keyboard shortcuts.")
+    print("")
+    print("Quick start:")
+    print("  1. Press 'P' to enter zone drawing mode")
+    print("  2. Click to add vertices to your zone")
+    print("  3. Press 'Enter' to finish the zone")
+    print("  4. Press 'Ctrl+S' to save to YAML")
+    print("  5. Close the window when done")
+    print("")
 
     editor = OSMZonesEditor(
         png_file=str(png_path),
@@ -156,10 +167,10 @@ def create_demo_zones_headless(output_yaml: Path) -> None:
     Args:
         output_yaml: Path where zones YAML will be saved
     """
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("HEADLESS MODE: Creating Demo Zones Programmatically")
-    logger.info("=" * 70)
+    print("")
+    print("=" * 70)
+    print("HEADLESS MODE: Creating Demo Zones Programmatically")
+    print("=" * 70)
 
     from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, Route
 
@@ -199,10 +210,10 @@ def verify_yaml_roundtrip(output_yaml: Path) -> None:
     Args:
         output_yaml: Path to zones YAML file
     """
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("STEP 3: Verifying YAML Round-Trip")
-    logger.info("=" * 70)
+    print("")
+    print("=" * 70)
+    print("STEP 3: Verifying YAML Round-Trip")
+    print("=" * 70)
 
     if not output_yaml.exists():
         logger.warning(f"❌ YAML file not found: {output_yaml}")
@@ -248,6 +259,30 @@ def main() -> None:
         default="test_scenarios/osm_fixtures/sample_block.pbf",
         help="Path to OSM PBF file (default: test_scenarios/osm_fixtures/sample_block.pbf)",
     )
+    parser.add_argument(
+        "--pixels-per-meter",
+        type=float,
+        default=None,
+        help="Pixels per meter for background rendering (auto-fit when omitted)",
+    )
+    parser.add_argument(
+        "--max-pixels",
+        type=int,
+        default=4000,
+        help="Max pixel dimension before downscaling (raise to reduce clamping)",
+    )
+    parser.add_argument(
+        "--min-pixels-per-meter",
+        type=float,
+        default=0.5,
+        help="Lower bound when auto-selecting pixels-per-meter",
+    )
+    parser.add_argument(
+        "--max-pixels-per-meter",
+        type=float,
+        default=10.0,
+        help="Upper bound when auto-selecting pixels-per-meter",
+    )
     args = parser.parse_args()
 
     # Verify PBF file exists
@@ -257,10 +292,10 @@ def main() -> None:
         logger.info("Download a sample from: https://extract.bbbike.org/")
         return
 
-    logger.info("")
-    logger.info(f"╔{'=' * 68}╗")
-    logger.info(f"║{' ' * 15}OSM ZONES EDITOR DEMONSTRATION{' ' * 23}║")
-    logger.info(f"╚{'=' * 68}╝")
+    print("")
+    print(f"╔{'=' * 68}╗")
+    print(f"║{' ' * 15}OSM ZONES EDITOR DEMONSTRATION{' ' * 23}║")
+    print(f"╚{'=' * 68}╝")
     logger.info("")
 
     # Setup output directory
@@ -268,7 +303,14 @@ def main() -> None:
     output_yaml = output_dir / "zones.yaml"
 
     # Render background map
-    png_path, _ = render_background(args.pbf_file, output_dir)
+    png_path, _ = render_background(
+        args.pbf_file,
+        output_dir,
+        pixels_per_meter=args.pixels_per_meter,
+        max_pixels=args.max_pixels,
+        min_pixels_per_meter=args.min_pixels_per_meter,
+        max_pixels_per_meter=args.max_pixels_per_meter,
+    )
 
     # Check if PNG was actually created (rendering might fail in headless environment)
     if not png_path.exists():
@@ -298,21 +340,21 @@ def main() -> None:
     verify_yaml_roundtrip(output_yaml)
 
     # Summary
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("DEMONSTRATION COMPLETE")
-    logger.info("=" * 70)
-    logger.info(f"Output directory: {output_dir}")
-    logger.info("  - background.png: Rendered OSM map")
-    logger.info("  - affine_transform.json: Coordinate transform data")
+    print("")
+    print("=" * 70)
+    print("DEMONSTRATION COMPLETE")
+    print("=" * 70)
+    print(f"Output directory: {output_dir}")
+    print("  - background.png: Rendered OSM map")
+    print("  - affine_transform.json: Coordinate transform data")
     if output_yaml.exists():
-        logger.info("  - zones.yaml: Saved zones/routes configuration")
-    logger.info("")
-    logger.info("Next steps:")
-    logger.info("  1. Inspect the generated files in the output directory")
-    logger.info("  2. Edit zones.yaml manually or re-run the editor")
-    logger.info("  3. Use the zones configuration in your robot navigation environment")
-    logger.info("")
+        print("  - zones.yaml: Saved zones/routes configuration")
+    print("")
+    print("Next steps:")
+    print("  1. Inspect the generated files in the output directory")
+    print("  2. Edit zones.yaml manually or re-run the editor")
+    print("  3. Use the zones configuration in your robot navigation environment")
+    print("")
 
 
 if __name__ == "__main__":

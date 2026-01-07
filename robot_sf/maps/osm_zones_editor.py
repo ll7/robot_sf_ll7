@@ -426,6 +426,7 @@ class OSMZonesEditor:
 
         # Vertex markers cache (T027)
         self._vertex_markers: list[mpatches.Circle] = []
+        self._overlay_artists: list[Any] = []
 
         # Vertex editing state (T028)
         self._dragging_vertex_idx: int | None = None  # Index of vertex being dragged
@@ -468,6 +469,10 @@ class OSMZonesEditor:
             # Continue with empty axes
             self.ax.set_xlim(0, 1000)
             self.ax.set_ylim(0, 1000)
+
+        # Set axis labels with units
+        self.ax.set_xlabel("X (m)")
+        self.ax.set_ylabel("Y (m)")
 
         # Connect event handlers
         self.fig.canvas.mpl_connect("button_press_event", self._on_click)
@@ -524,12 +529,7 @@ class OSMZonesEditor:
         if not self.ax or not self.fig:
             return
 
-        # Clear overlays (keep background)
-        artists_to_remove = [
-            a for a in self.ax.get_children() if isinstance(a, (mpatches.Polygon, mpatches.Circle))
-        ]
-        for artist in artists_to_remove:
-            artist.remove()
+        self._clear_overlays()
 
         # Redraw zones
         for zone_name, zone in self.config.zones.items():
@@ -568,6 +568,7 @@ class OSMZonesEditor:
             label=label or zone.name,
         )
         self.ax.add_patch(polygon_patch)
+        self._overlay_artists.append(polygon_patch)
 
     def _draw_route(self, route: Route, label: str = "") -> None:
         """Draw a route as a polyline on axes (T027 with world→pixel conversion)."""
@@ -585,7 +586,7 @@ class OSMZonesEditor:
         xs = [p[0] for p in waypoints_pixels]
         ys = [p[1] for p in waypoints_pixels]
 
-        self.ax.plot(
+        line_artists = self.ax.plot(
             xs,
             ys,
             "o-",
@@ -594,6 +595,7 @@ class OSMZonesEditor:
             markersize=5,
             label=label or route.name,
         )
+        self._overlay_artists.extend(line_artists)
 
     def _draw_current_polygon(self) -> None:
         """Draw vertices being added in DRAW mode with markers (T027-T028).
@@ -636,7 +638,10 @@ class OSMZonesEditor:
         xs = [p[0] for p in pixel_points]
         ys = [p[1] for p in pixel_points]
         line_color = "red" if not self._last_validation.get("valid", True) else "yellow"
-        self.ax.plot(xs, ys, "o-", color=line_color, linewidth=2, markersize=8, label="Current")
+        line_artists = self.ax.plot(
+            xs, ys, "o-", color=line_color, linewidth=2, markersize=8, label="Current"
+        )
+        self._overlay_artists.extend(line_artists)
 
     def _draw_vertex_markers(self, pixel_points: list[Vec2D]) -> None:
         """Draw vertex markers and labels for multi-point polygons."""
@@ -646,10 +651,14 @@ class OSMZonesEditor:
                 (px, py), radius=radius, color=color, alpha=0.7, ec="black", linewidth=linewidth
             )
             self.ax.add_patch(circle)
+            self._overlay_artists.append(circle)
 
             world_x, world_y = self.current_polygon[i]
             label_text = f"V{i}\n({world_x:.1f},{world_y:.1f})"
-            self.ax.text(px + 15, py, label_text, fontsize=8, color="white", weight="bold")
+            text_artist = self.ax.text(
+                px + 15, py, label_text, fontsize=8, color="black", weight="bold"
+            )
+            self._overlay_artists.append(text_artist)
 
     def _draw_single_vertex(self, pixel_point: Vec2D) -> None:
         """Draw a single vertex marker with label."""
@@ -659,10 +668,23 @@ class OSMZonesEditor:
             (px, py), radius=radius, color=color, alpha=0.7, ec="black", linewidth=linewidth
         )
         self.ax.add_patch(circle)
+        self._overlay_artists.append(circle)
 
         world_x, world_y = self.current_polygon[0]
         label_text = f"V0\n({world_x:.1f},{world_y:.1f})"
-        self.ax.text(px + 15, py, label_text, fontsize=8, color="white", weight="bold")
+        text_artist = self.ax.text(
+            px + 15, py, label_text, fontsize=8, color="black", weight="bold"
+        )
+        self._overlay_artists.append(text_artist)
+
+    def _clear_overlays(self) -> None:
+        """Remove drawn overlays (zones, routes, vertex markers, labels, lines)."""
+        for artist in list(self._overlay_artists):
+            try:
+                artist.remove()
+            except ValueError:
+                logger.debug("Overlay already removed")
+        self._overlay_artists.clear()
 
     def _vertex_style(self, idx: int) -> tuple[str, int, float]:
         """Style tuple for a vertex index.

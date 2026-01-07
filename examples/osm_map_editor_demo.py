@@ -50,6 +50,7 @@ from pathlib import Path
 from loguru import logger
 
 from robot_sf.common.logging import configure_logging
+from robot_sf.common.matplotlib_utils import ensure_interactive_backend
 from robot_sf.maps.osm_background_renderer import render_osm_background
 from robot_sf.maps.osm_zones_editor import OSMZonesEditor
 from robot_sf.maps.osm_zones_yaml import Zone, load_zones_yaml, save_zones_yaml
@@ -228,6 +229,13 @@ def verify_yaml_roundtrip(output_yaml: Path) -> None:
 
 def main() -> None:
     """Run the complete OSM map editor demonstration."""
+    # Ensure interactive matplotlib backend for editor GUI
+    interactive_available = ensure_interactive_backend(verbose=True)
+    if not interactive_available:
+        logger.warning(
+            "No interactive matplotlib backend available, will fall back to headless mode if needed"
+        )
+
     parser = argparse.ArgumentParser(description="OSM Zones Editor Demo")
     parser.add_argument(
         "--headless",
@@ -261,6 +269,12 @@ def main() -> None:
 
     # Render background map
     png_path, _ = render_background(args.pbf_file, output_dir)
+
+    # Check if PNG was actually created (rendering might fail in headless environment)
+    if not png_path.exists():
+        logger.warning("Background PNG not created - likely running in headless environment")
+        logger.info("Switching to headless mode automatically")
+        args.headless = True
 
     # Load map definition for validation
     try:

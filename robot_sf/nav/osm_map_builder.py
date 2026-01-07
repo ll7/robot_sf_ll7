@@ -507,10 +507,10 @@ def osm_to_map_definition(
         robot_goal_zones=[default_spawn_zone],
         ped_goal_zones=[default_spawn_zone],
         bounds=[
-            ((0.0, 0.0), (width, 0.0)),  # bottom
-            ((width, 0.0), (width, height)),  # right
-            ((width, height), (0.0, height)),  # top
-            ((0.0, height), (0.0, 0.0)),  # left
+            (0.0, width, 0.0, 0.0),  # bottom
+            (0.0, width, height, height),  # top
+            (0.0, 0.0, 0.0, height),  # left
+            (width, width, 0.0, height),  # right
         ],
         robot_routes=[],
         ped_routes=[],

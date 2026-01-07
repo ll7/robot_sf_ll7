@@ -444,8 +444,6 @@ def osm_to_map_definition(
     if driveable_ways.empty:
         raise ValueError(f"No driveable ways found in {pbf_file}")
 
-    _ = extract_obstacles(gdf, tag_filters)
-
     # Project to UTM
     gdf_utm, _utm_zone = project_to_utm(gdf)
     driveable_ways_utm, _ = project_to_utm(driveable_ways)

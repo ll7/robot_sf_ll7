@@ -193,15 +193,15 @@ class TestEndToEndImporter:
     def test_osm_to_map_definition_has_valid_bounds(
         self, pbf_fixture: str, tag_filters: OSMTagFilters
     ) -> None:
-        """Test MapDefinition has valid bounds as list of Line2D."""
+        """Test MapDefinition has valid bounds as map edge line segments."""
         map_def = osm_to_map_definition(pbf_fixture, tag_filters=tag_filters)
 
         assert map_def.bounds is not None
         assert len(map_def.bounds) == 4  # 4 sides: bottom, right, top, left
         for line in map_def.bounds:
-            assert len(line) == 2  # Each line is (point1, point2)
-            assert len(line[0]) == 2  # Each point is (x, y)
-            assert len(line[1]) == 2
+            assert len(line) == 4  # Each line is (x_start, x_end, y_start, y_end)
+            assert line[0] <= line[1]
+            assert line[2] <= line[3]
 
 
 # Backward Compatibility Tests

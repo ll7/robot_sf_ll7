@@ -27,6 +27,30 @@ from shapely.affinity import translate
 from robot_sf.nav.osm_map_builder import project_to_utm
 
 
+def _visible_features_mask(gdf: gpd.GeoDataFrame) -> pd.Series:
+    """Return mask of features that contribute to the rendered layers."""
+
+    mask = pd.Series(False, index=gdf.index)
+    if "building" in gdf.columns:
+        mask = mask | gdf["building"].notna()
+
+    if "highway" in gdf.columns:
+        mask = mask | gdf["highway"].notna()
+
+    water_mask: pd.Series | bool = False
+    if "waterway" in gdf.columns:
+        water_mask = gdf["waterway"].notna()
+    if "natural" in gdf.columns:
+        natural_water = gdf["natural"] == "water"
+        water_mask = (
+            water_mask | natural_water if isinstance(water_mask, pd.Series) else natural_water
+        )
+
+    if isinstance(water_mask, pd.Series):
+        mask = mask | water_mask
+    return mask
+
+
 def _load_osm_data(pbf_file: str) -> gpd.GeoDataFrame:
     """Load OSM data from the available PBF layers.
 
@@ -53,7 +77,10 @@ def _load_osm_data(pbf_file: str) -> gpd.GeoDataFrame:
 
 
 def _compute_pixel_dimensions(
-    bounds: list[float] | tuple[float, float, float, float], pixels_per_meter: float, dpi: int
+    bounds: list[float] | tuple[float, float, float, float],
+    pixels_per_meter: float,
+    dpi: int,
+    max_pixels: int = 4000,
 ) -> tuple[int, int, float, float]:
     """Derive pixel dimensions and figure size from bounds and scale.
 
@@ -70,7 +97,6 @@ def _compute_pixel_dimensions(
     pixel_width = max(1, round(width_m * pixels_per_meter))
     pixel_height = max(1, round(height_m * pixels_per_meter))
 
-    max_pixels = 4000
     if pixel_width > max_pixels or pixel_height > max_pixels:
         scale_factor = min(max_pixels / pixel_width, max_pixels / pixel_height)
         pixel_width = int(pixel_width * scale_factor)
@@ -80,6 +106,36 @@ def _compute_pixel_dimensions(
     figure_inches_x = pixel_width / dpi
     figure_inches_y = pixel_height / dpi
     return pixel_width, pixel_height, figure_inches_x, figure_inches_y
+
+
+def suggest_pixels_per_meter(
+    bounds: list[float] | tuple[float, float, float, float],
+    *,
+    max_pixels: int = 4000,
+    min_pixels_per_meter: float = 0.5,
+    max_pixels_per_meter: float = 10.0,
+) -> float:
+    """Suggest a pixels-per-meter value that fits the map inside ``max_pixels``.
+
+    Args:
+        bounds: (minx, miny, maxx, maxy) in meters.
+        max_pixels: Largest allowed dimension before downscaling.
+        min_pixels_per_meter: Lower bound for the suggested scale.
+        max_pixels_per_meter: Upper bound for the suggested scale.
+
+    Returns:
+        Suggested pixels-per-meter value, clamped to provided limits.
+    """
+
+    minx, miny, maxx, maxy = bounds
+    width_m = maxx - minx
+    height_m = maxy - miny
+    if width_m <= 0 or height_m <= 0:
+        raise ValueError(f"Invalid bounds for scale suggestion: width={width_m}, height={height_m}")
+
+    longest_side = max(width_m, height_m)
+    suggested = max_pixels / longest_side
+    return max(min_pixels_per_meter, min(max_pixels_per_meter, suggested))
 
 
 def _plot_buildings(gdf, ax) -> None:
@@ -133,9 +189,12 @@ def _plot_layers(gdf, ax) -> None:
 def render_osm_background(
     pbf_file: str,
     output_dir: str = "output/maps/",
-    pixels_per_meter: float = 2.0,
+    pixels_per_meter: float | None = None,
     dpi: int = 100,
     figure_size: tuple[float, float] = (10, 10),
+    max_pixels: int = 4000,
+    min_pixels_per_meter: float = 0.5,
+    max_pixels_per_meter: float = 10.0,
 ) -> dict:
     """Render OSM PBF to PNG background with affine transform metadata.
 
@@ -145,9 +204,12 @@ def render_osm_background(
     Args:
         pbf_file: Path to OSM PBF file
         output_dir: Output directory for PNG and JSON files
-        pixels_per_meter: Scale factor (default 2.0 pixels/meter)
+        pixels_per_meter: Scale factor in pixels/meter (auto-fit when None)
         dpi: DPI for figure rendering (default 100)
         figure_size: Base figure size in inches (default 10x10)
+        max_pixels: Maximum dimension in pixels before downscaling (default 4000)
+        min_pixels_per_meter: Lower bound for auto-fit scale (default 0.5)
+        max_pixels_per_meter: Upper bound for auto-fit scale (default 10.0)
 
     Returns:
         Dictionary with png_path and affine_transform metadata.
@@ -171,7 +233,11 @@ def render_osm_background(
         gdf = gdf.set_crs("EPSG:4326", allow_override=True)
 
     gdf_utm, utm_zone = project_to_utm(gdf)
-    bounds = gdf_utm.total_bounds
+
+    visible_mask = _visible_features_mask(gdf_utm)
+    gdf_visible = gdf_utm.loc[visible_mask].copy() if visible_mask.any() else gdf_utm.copy()
+
+    bounds = gdf_visible.total_bounds
     minx, miny, maxx, maxy = bounds
     width_m = maxx - minx
     height_m = maxy - miny
@@ -182,11 +248,22 @@ def render_osm_background(
             return geom
         return translate(geom, xoff=-minx, yoff=-miny)
 
-    gdf_local = gdf_utm.copy()
+    gdf_local = gdf_visible.copy()
     gdf_local["geometry"] = gdf_local["geometry"].apply(_shift_geometry)
     bounds_local = (0.0, 0.0, width_m, height_m)
+    if pixels_per_meter is None:
+        pixels_per_meter = suggest_pixels_per_meter(
+            bounds_local,
+            max_pixels=max_pixels,
+            min_pixels_per_meter=min_pixels_per_meter,
+            max_pixels_per_meter=max_pixels_per_meter,
+        )
+        logger.info(
+            f"Auto-selected pixels_per_meter={pixels_per_meter:.2f} to fit within {max_pixels}px"
+        )
+
     pixel_width, pixel_height, figure_inches_x, figure_inches_y = _compute_pixel_dimensions(
-        bounds_local, pixels_per_meter, dpi
+        bounds_local, pixels_per_meter, dpi, max_pixels=max_pixels
     )
 
     fig, ax = plt.subplots(figsize=(figure_inches_x, figure_inches_y), dpi=dpi)

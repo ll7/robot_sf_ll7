@@ -30,7 +30,7 @@ from loguru import logger
 from shapely.affinity import translate
 from shapely.errors import TopologicalError
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
-from shapely.ops import unary_union
+from shapely.ops import triangulate, unary_union
 
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 
@@ -403,6 +403,30 @@ def compute_obstacles(
     return result
 
 
+def _flatten_obstacle_polygons(obstacles: list[Polygon]) -> list[Polygon]:
+    """Return obstacle polygons without interior holes.
+
+    MapDefinition obstacles cannot represent holes; triangulate polygons with
+    interiors and keep only triangles within the original geometry so walkable
+    holes are not reintroduced as obstacles.
+    """
+    flattened: list[Polygon] = []
+    for poly in obstacles:
+        if poly.is_empty:
+            continue
+        if not poly.interiors:
+            flattened.append(poly)
+            continue
+        try:
+            triangles = [tri for tri in triangulate(poly) if tri.within(poly)]
+        except (ValueError, TopologicalError) as exc:
+            logger.warning(f"Failed to triangulate obstacle polygon: {exc}")
+            flattened.append(poly)
+            continue
+        flattened.extend(triangles)
+    return flattened
+
+
 def osm_to_map_definition(
     pbf_file: str,
     bbox: tuple | None = None,
@@ -466,6 +490,7 @@ def osm_to_map_definition(
     # Compute obstacles
     bounds = gdf_utm.total_bounds
     obstacles_polys = compute_obstacles(bounds, walkable_union)
+    obstacles_polys = _flatten_obstacle_polygons(obstacles_polys)
 
     minx, miny, maxx, maxy = bounds
     width = maxx - minx

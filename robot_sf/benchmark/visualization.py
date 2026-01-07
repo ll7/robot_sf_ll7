@@ -15,6 +15,7 @@ import gc
 import importlib
 import importlib.util
 import json
+import multiprocessing as mp
 import os
 import tempfile
 import xml.etree.ElementTree as ET
@@ -292,6 +293,14 @@ def generate_benchmark_plots_from_file(
     if not os.path.exists(episodes_path):
         raise FileNotFoundError(f"Episodes file not found: {episodes_path}")
 
+    if _should_use_plot_subprocess():
+        return _generate_plots_subprocess(
+            str(episodes_path),
+            output_dir,
+            scenario_filter,
+            baseline_filter,
+        )
+
     episodes = _load_episodes(str(episodes_path))
     return generate_benchmark_plots_from_data(
         episodes,
@@ -338,6 +347,73 @@ def generate_benchmark_plots(
             scenario_filter,
             baseline_filter,
         )
+
+
+def _should_use_plot_subprocess() -> bool:
+    """Return True when plot generation should run in a subprocess."""
+    return os.environ.get("ROBOT_SF_VISUALIZATION_SUBPROCESS", "1") != "0"
+
+
+def _plot_subprocess_worker(
+    episodes_path: str,
+    output_dir: str,
+    scenario_filter: str | None,
+    baseline_filter: str | None,
+    conn,
+) -> None:
+    """Generate plots in a child process and return artifacts via a pipe."""
+    try:
+        episodes = _load_episodes(episodes_path)
+        artifacts = generate_benchmark_plots_from_data(
+            episodes,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
+        )
+        conn.send(("ok", artifacts))
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        conn.send(("err", f"{type(exc).__name__}: {exc}"))
+    finally:
+        conn.close()
+
+
+def _generate_plots_subprocess(
+    episodes_path: str,
+    output_dir: str,
+    scenario_filter: str | None,
+    baseline_filter: str | None,
+) -> list[VisualArtifact]:
+    """Run plot generation in a subprocess to keep parent RSS stable.
+
+    Returns:
+        List of generated VisualArtifact metadata from the subprocess.
+    """
+    ctx = mp.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    process = ctx.Process(
+        target=_plot_subprocess_worker,
+        args=(episodes_path, output_dir, scenario_filter, baseline_filter, child_conn),
+    )
+    process.start()
+    child_conn.close()
+
+    try:
+        status, payload = parent_conn.recv()
+    except EOFError as exc:  # pragma: no cover - subprocess crashed before sending
+        process.join()
+        raise VisualizationError(
+            "Plot subprocess exited without returning results",
+            "plot",
+        ) from exc
+    finally:
+        parent_conn.close()
+
+    process.join()
+
+    if status != "ok":
+        raise VisualizationError(f"Plot subprocess failed: {payload}", "plot")
+
+    return payload
 
 
 def _check_matplotlib_available() -> None:

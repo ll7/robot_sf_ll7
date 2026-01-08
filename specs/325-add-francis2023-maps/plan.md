@@ -22,6 +22,7 @@
   - required behaviors (static, slow, wait, follow, lead, group)
   - whether current capabilities suffice or code changes are required
 - Identify which existing maps can be reused and which must be created anew.
+- Mapping table: `specs/325-add-francis2023-maps/scenario_mapping.md`.
 
 ## Phase 2: Base SVG maps (geometry-first)
 

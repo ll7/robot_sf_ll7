@@ -409,7 +409,11 @@ def _resolve_speed_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
 ) -> float | None:
-    """Resolve speed override for a pedestrian definition."""
+    """Resolve speed override for a pedestrian definition.
+
+    Returns:
+        float | None: Resolved speed override or existing speed.
+    """
     if "speed_m_s" not in entry:
         return ped.speed_m_s
     value = entry.get("speed_m_s")
@@ -423,7 +427,11 @@ def _resolve_wait_override(
     trajectory: list[tuple[float, float]] | None,
     trajectory_labels: list[str] | None,
 ) -> list[PedestrianWaitRule] | None:
-    """Resolve wait overrides for a pedestrian definition."""
+    """Resolve wait overrides for a pedestrian definition.
+
+    Returns:
+        list[PedestrianWaitRule] | None: Resolved wait rules or existing waits.
+    """
     if "wait_at" not in entry:
         return ped.wait_at
     return _parse_wait_overrides(
@@ -437,7 +445,11 @@ def _resolve_note_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
 ) -> str | None:
-    """Resolve an optional note override for a pedestrian definition."""
+    """Resolve an optional note override for a pedestrian definition.
+
+    Returns:
+        str | None: Resolved note text or existing note.
+    """
     if "note" not in entry:
         return ped.note
     value = entry.get("note")
@@ -448,7 +460,12 @@ def _resolve_role_overrides(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
 ) -> tuple[str | None, str | None, tuple[float, float] | None]:
-    """Resolve role, target, and offset overrides for a pedestrian definition."""
+    """Resolve role, target, and offset overrides for a pedestrian definition.
+
+    Returns:
+        tuple[str | None, str | None, tuple[float, float] | None]: Role, target id,
+        and role offset tuple.
+    """
     if "role" in entry:
         role_value = entry.get("role")
         role = str(role_value) if role_value is not None else None

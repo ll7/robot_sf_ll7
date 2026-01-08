@@ -19,6 +19,29 @@ from robot_sf.nav.obstacle import Obstacle
 
 
 @dataclass
+class PedestrianWaitRule:
+    """
+    Represents a wait action at a specific trajectory waypoint.
+
+    Attributes:
+        waypoint_index (int): Index into the pedestrian's trajectory list.
+        wait_s (float): Duration in seconds to wait at the waypoint.
+        note (str | None): Optional human-readable note for documentation.
+    """
+
+    waypoint_index: int
+    wait_s: float
+    note: str | None = None
+
+    def __post_init__(self):
+        """Validate waypoint index and wait duration."""
+        if self.waypoint_index < 0:
+            raise ValueError("wait_at waypoint_index must be >= 0")
+        if self.wait_s < 0:
+            raise ValueError("wait_at wait_s must be >= 0")
+
+
+@dataclass
 class SinglePedestrianDefinition:
     """
     Represents an individually controlled pedestrian with a unique ID, start position,
@@ -29,12 +52,18 @@ class SinglePedestrianDefinition:
         start (Vec2D): Starting position as (x, y) coordinates
         goal (Vec2D | None): Goal position for goal-based navigation (mutually exclusive with trajectory)
         trajectory (list[Vec2D] | None): List of waypoints for trajectory-based movement (mutually exclusive with goal)
+        speed_m_s (float | None): Optional per-pedestrian speed override (m/s).
+        wait_at (list[PedestrianWaitRule] | None): Optional waits at trajectory waypoints.
+        note (str | None): Optional human-readable note for scenario documentation.
     """
 
     id: str
     start: Vec2D
     goal: Vec2D | None = None
     trajectory: list[Vec2D] | None = None
+    speed_m_s: float | None = None
+    wait_at: list[PedestrianWaitRule] | None = None
+    note: str | None = None
 
     def __post_init__(self):
         """
@@ -50,6 +79,8 @@ class SinglePedestrianDefinition:
         self._validate_goal_trajectory_exclusivity()
         self._validate_goal()
         self._validate_trajectory()
+        self._validate_speed()
+        self._validate_waits()
         self._warn_if_static()
 
     def _validate_id(self):
@@ -116,6 +147,32 @@ class SinglePedestrianDefinition:
 
         # Check for duplicate consecutive waypoints
         self._warn_duplicate_waypoints()
+
+    def _validate_speed(self):
+        """Validate optional speed override."""
+        if self.speed_m_s is None:
+            return
+        try:
+            if float(self.speed_m_s) <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Pedestrian '{self.id}': speed_m_s must be a positive number, got: {self.speed_m_s!r}"
+            ) from None
+
+    def _validate_waits(self):
+        """Validate optional wait rules."""
+        if self.wait_at is None:
+            return
+        if not isinstance(self.wait_at, list):
+            raise ValueError(
+                f"Pedestrian '{self.id}': wait_at must be a list, got: {type(self.wait_at)}"
+            )
+        for rule in self.wait_at:
+            if not isinstance(rule, PedestrianWaitRule):
+                raise ValueError(
+                    f"Pedestrian '{self.id}': wait_at entries must be PedestrianWaitRule instances"
+                )
 
     def _warn_duplicate_waypoints(self):
         """Warn about duplicate consecutive trajectory waypoints."""
@@ -587,138 +644,267 @@ class MapDefinitionPool:
         return random.choice(list(self.map_defs.values()))
 
 
-def serialize_map(map_structure: dict) -> MapDefinition:
+def _normalize_position(pos: Vec2D, *, min_x: float, min_y: float) -> Vec2D:
+    """Normalize a position against map margins.
+
+    Args:
+        pos: Original position as (x, y).
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
+
+    Returns:
+        Vec2D: Normalized position.
     """
-    Converts a map structure dictionary into a MapDefinition object.
+    return (pos[0] - min_x, pos[1] - min_y)
 
-    Parameters
-    ----------
-    map_structure : dict
-        The map structure dictionary.
 
-    Returns
-    -------
-    MapDefinition
-        The MapDefinition object.
+def _normalize_zone(rect: Rect, *, min_x: float, min_y: float) -> Rect:
+    """Normalize a rectangular zone using map margins.
+
+    Args:
+        rect: Zone represented by three points.
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
+
+    Returns:
+        Rect: Normalized zone.
     """
-
-    # Extract the x and y margins and calculate the width and height
-    (min_x, max_x), (min_y, max_y) = (
-        map_structure["x_margin"],
-        map_structure["y_margin"],
+    return (
+        _normalize_position(rect[0], min_x=min_x, min_y=min_y),
+        _normalize_position(rect[1], min_x=min_x, min_y=min_y),
+        _normalize_position(rect[2], min_x=min_x, min_y=min_y),
     )
-    width, height = max_x - min_x, max_y - min_y
 
-    # Function to normalize a position
-    def norm_pos(pos: Vec2D) -> Vec2D:
-        """TODO docstring. Document this function.
 
-        Args:
-            pos: TODO docstring.
+def _normalize_zones(zones: list[Rect], *, min_x: float, min_y: float) -> list[Rect]:
+    """Normalize a list of zones using map margins.
 
-        Returns:
-            TODO docstring.
-        """
-        return (pos[0] - min_x, pos[1] - min_y)
+    Args:
+        zones: List of zone rectangles.
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
 
-    # Normalize the obstacles
-    obstacles = [
-        Obstacle([norm_pos(p) for p in vertices]) for vertices in map_structure["obstacles"]
+    Returns:
+        list[Rect]: Normalized zones.
+    """
+    return [_normalize_zone(zone, min_x=min_x, min_y=min_y) for zone in zones]
+
+
+def _normalize_obstacles(
+    obstacle_vertices: list[list[Vec2D]],
+    *,
+    min_x: float,
+    min_y: float,
+) -> list[Obstacle]:
+    """Normalize obstacle vertices using map margins.
+
+    Args:
+        obstacle_vertices: Raw obstacle vertex lists.
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
+
+    Returns:
+        list[Obstacle]: Normalized obstacles.
+    """
+    return [
+        Obstacle([_normalize_position(p, min_x=min_x, min_y=min_y) for p in vertices])
+        for vertices in obstacle_vertices
     ]
 
-    # Function to normalize a zone
-    def norm_zone(rect: Rect) -> Rect:
-        """TODO docstring. Document this function.
 
-        Args:
-            rect: TODO docstring.
+def _normalize_routes(
+    route_defs: list[dict],
+    *,
+    spawn_zones: list[Rect],
+    goal_zones: list[Rect],
+    min_x: float,
+    min_y: float,
+) -> list[GlobalRoute]:
+    """Normalize route definitions into GlobalRoute objects.
 
-        Returns:
-            TODO docstring.
-        """
-        return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
+    Args:
+        route_defs: Raw route dictionaries.
+        spawn_zones: Normalized spawn zones for lookups.
+        goal_zones: Normalized goal zones for lookups.
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
 
-    # Normalize the zones
-    robot_goal_zones = [norm_zone(z) for z in map_structure["robot_goal_zones"]]
-    robot_spawn_zones = [norm_zone(z) for z in map_structure["robot_spawn_zones"]]
-    ped_goal_zones = [norm_zone(z) for z in map_structure["ped_goal_zones"]]
-    ped_spawn_zones = [norm_zone(z) for z in map_structure["ped_spawn_zones"]]
-    ped_crowded_zones = [norm_zone(z) for z in map_structure["ped_crowded_zones"]]
-
-    # Normalize the routes
-    robot_routes = [
+    Returns:
+        list[GlobalRoute]: Normalized routes.
+    """
+    return [
         GlobalRoute(
-            o["spawn_id"],
-            o["goal_id"],
-            [norm_pos(p) for p in o["waypoints"]],
-            robot_spawn_zones[o["spawn_id"]],
-            robot_goal_zones[o["goal_id"]],
+            entry["spawn_id"],
+            entry["goal_id"],
+            [_normalize_position(point, min_x=min_x, min_y=min_y) for point in entry["waypoints"]],
+            spawn_zones[entry["spawn_id"]],
+            goal_zones[entry["goal_id"]],
         )
-        for o in map_structure["robot_routes"]
-    ]
-    ped_routes = [
-        GlobalRoute(
-            o["spawn_id"],
-            o["goal_id"],
-            [norm_pos(p) for p in o["waypoints"]],
-            ped_spawn_zones[o["spawn_id"]],
-            ped_goal_zones[o["goal_id"]],
-        )
-        for o in map_structure["ped_routes"]
+        for entry in route_defs
     ]
 
-    # Function to reverse a route
-    def reverse_route(route: GlobalRoute) -> GlobalRoute:
-        """TODO docstring. Document this function.
 
-        Args:
-            route: TODO docstring.
+def _reverse_route(route: GlobalRoute) -> GlobalRoute:
+    """Create a reversed route for a GlobalRoute.
 
-        Returns:
-            TODO docstring.
-        """
-        return GlobalRoute(
-            route.goal_id,
-            route.spawn_id,
-            list(reversed(route.waypoints)),
-            route.goal_zone,
-            route.spawn_zone,
+    Args:
+        route: Route to reverse.
+
+    Returns:
+        GlobalRoute: Reversed route.
+    """
+    return GlobalRoute(
+        route.goal_id,
+        route.spawn_id,
+        list(reversed(route.waypoints)),
+        route.goal_zone,
+        route.spawn_zone,
+    )
+
+
+def _parse_wait_rules(wait_rules: list[dict] | None) -> list[PedestrianWaitRule] | None:
+    """Parse wait rules from JSON map definitions.
+
+    Returns:
+        list[PedestrianWaitRule] | None: Parsed wait rules or ``None`` when unset.
+    """
+    if wait_rules is None:
+        return None
+    if not isinstance(wait_rules, list):
+        raise ValueError("single_pedestrians.wait_at must be a list of wait rules")
+    parsed: list[PedestrianWaitRule] = []
+    for idx, rule in enumerate(wait_rules):
+        if not isinstance(rule, dict):
+            raise ValueError(
+                f"single_pedestrians.wait_at[{idx}] must be a mapping, got {type(rule)}"
+            )
+        if "waypoint_index" not in rule:
+            raise ValueError(f"single_pedestrians.wait_at[{idx}] missing required waypoint_index")
+        if "wait_s" not in rule:
+            raise ValueError(f"single_pedestrians.wait_at[{idx}] missing required wait_s")
+        note = rule.get("note")
+        parsed.append(
+            PedestrianWaitRule(
+                waypoint_index=int(rule["waypoint_index"]),
+                wait_s=float(rule["wait_s"]),
+                note=str(note) if note is not None else None,
+            )
         )
+    return parsed
 
-    # Reverse the robot routes and add them to the list of routes
-    rev_robot_routes = [reverse_route(r) for r in robot_routes]
-    robot_routes = robot_routes + rev_robot_routes
 
-    # Parse single pedestrians if present
-    single_pedestrians = []
-    if "single_pedestrians" in map_structure:
-        for ped_def in map_structure["single_pedestrians"]:
-            ped_id = ped_def["id"]
-            start = norm_pos(tuple(ped_def["start"]))
-            goal = norm_pos(tuple(ped_def["goal"])) if ped_def.get("goal") else None
-            trajectory = (
-                [norm_pos(tuple(wp)) for wp in ped_def["trajectory"]]
-                if ped_def.get("trajectory")
-                else None
+def _parse_single_pedestrians(
+    map_structure: dict,
+    *,
+    min_x: float,
+    min_y: float,
+) -> list[SinglePedestrianDefinition]:
+    """Parse single pedestrian definitions from a JSON map definition.
+
+    Args:
+        map_structure: Raw map structure dictionary.
+        min_x: Minimum x margin.
+        min_y: Minimum y margin.
+
+    Returns:
+        list[SinglePedestrianDefinition]: Parsed single pedestrians.
+    """
+    if "single_pedestrians" not in map_structure:
+        return []
+    single_pedestrians: list[SinglePedestrianDefinition] = []
+    for ped_def in map_structure["single_pedestrians"]:
+        ped_id = ped_def["id"]
+        start = _normalize_position(tuple(ped_def["start"]), min_x=min_x, min_y=min_y)
+        goal = (
+            _normalize_position(tuple(ped_def["goal"]), min_x=min_x, min_y=min_y)
+            if ped_def.get("goal")
+            else None
+        )
+        trajectory = (
+            [
+                _normalize_position(tuple(wp), min_x=min_x, min_y=min_y)
+                for wp in ped_def["trajectory"]
+            ]
+            if ped_def.get("trajectory")
+            else None
+        )
+        speed = ped_def.get("speed_m_s")
+        wait_at = _parse_wait_rules(ped_def.get("wait_at"))
+        note = ped_def.get("note")
+        single_pedestrians.append(
+            SinglePedestrianDefinition(
+                id=ped_id,
+                start=start,
+                goal=goal,
+                trajectory=trajectory,
+                speed_m_s=float(speed) if speed is not None else None,
+                wait_at=wait_at,
+                note=str(note) if note is not None else None,
             )
-            single_pedestrians.append(
-                SinglePedestrianDefinition(
-                    id=ped_id,
-                    start=start,
-                    goal=goal,
-                    trajectory=trajectory,
-                )
-            )
+        )
+    return single_pedestrians
 
-    # Define the map bounds
-    map_bounds = [
+
+def _build_map_bounds(width: float, height: float) -> list[Line2D]:
+    """Build boundary lines for a rectangular map.
+
+    Args:
+        width: Map width.
+        height: Map height.
+
+    Returns:
+        list[Line2D]: Boundary lines.
+    """
+    return [
         (0, width, 0, 0),  # bottom
         (0, width, height, height),  # top
         (0, 0, 0, height),  # left
-        (width, width, 0, height),
-    ]  # right
+        (width, width, 0, height),  # right
+    ]
 
-    # Return the MapDefinition object
+
+def serialize_map(map_structure: dict) -> MapDefinition:
+    """Convert a map structure dictionary into a MapDefinition object.
+
+    Args:
+        map_structure: The map structure dictionary.
+
+    Returns:
+        MapDefinition: The parsed map definition.
+    """
+    (min_x, max_x), (min_y, max_y) = map_structure["x_margin"], map_structure["y_margin"]
+    width, height = max_x - min_x, max_y - min_y
+
+    obstacles = _normalize_obstacles(map_structure["obstacles"], min_x=min_x, min_y=min_y)
+    robot_goal_zones = _normalize_zones(map_structure["robot_goal_zones"], min_x=min_x, min_y=min_y)
+    robot_spawn_zones = _normalize_zones(
+        map_structure["robot_spawn_zones"], min_x=min_x, min_y=min_y
+    )
+    ped_goal_zones = _normalize_zones(map_structure["ped_goal_zones"], min_x=min_x, min_y=min_y)
+    ped_spawn_zones = _normalize_zones(map_structure["ped_spawn_zones"], min_x=min_x, min_y=min_y)
+    ped_crowded_zones = _normalize_zones(
+        map_structure["ped_crowded_zones"], min_x=min_x, min_y=min_y
+    )
+
+    robot_routes = _normalize_routes(
+        map_structure["robot_routes"],
+        spawn_zones=robot_spawn_zones,
+        goal_zones=robot_goal_zones,
+        min_x=min_x,
+        min_y=min_y,
+    )
+    ped_routes = _normalize_routes(
+        map_structure["ped_routes"],
+        spawn_zones=ped_spawn_zones,
+        goal_zones=ped_goal_zones,
+        min_x=min_x,
+        min_y=min_y,
+    )
+    robot_routes = robot_routes + [_reverse_route(route) for route in robot_routes]
+
+    single_pedestrians = _parse_single_pedestrians(map_structure, min_x=min_x, min_y=min_y)
+    map_bounds = _build_map_bounds(width, height)
+
     return MapDefinition(
         width,
         height,

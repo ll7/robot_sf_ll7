@@ -8,11 +8,14 @@
   `configs/scenarios/francis2023.yaml`) with `name`, `map_file`, `simulation_config`,
   and `metadata` to define the scenarios.
 - For single-pedestrian scenarios, set `ped_density=0` and rely on
-  `single_ped_<id>_start/goal` markers in the map.
+  `single_ped_<id>_start/goal` markers in the map as the base geometry. Use scenario
+  YAML overlays for per-scenario goals/trajectories, `speed_m_s`, `wait_at`, and `note`.
 - For crowd/flow scenarios, use `ped_route_*` paths and `ped_crowded_zone`
   rectangles rather than ad-hoc spawning.
 - Behavior-only differences (wait, follow, lead, join/leave, etc.) will require
   code support beyond maps and scenario configs.
+- Prefer POI labels in SVGs for readability, with a preview helper to visualize
+  trajectories and waits (`scripts/tools/preview_scenario_trajectories.py`).
 
 ## Phase 1: Map inventory and scenario mapping
 
@@ -23,6 +26,7 @@
   - whether current capabilities suffice or code changes are required
 - Identify which existing maps can be reused and which must be created anew.
 - Mapping table: `specs/325-add-francis2023-maps/scenario_mapping.md`.
+- Status: done.
 
 ## Phase 2: Base SVG maps (geometry-first)
 
@@ -33,28 +37,44 @@
   - entering/exiting room, entering/exiting elevator
 - Encode single pedestrians with `single_ped_<id>_start/goal` markers.
 - Use obstacles and boundaries to constrain routes and visibility as in the figure.
+- Status: done (initial geometry + boundary obstacles in `maps/svg_maps/francis2023/`).
 
 ## Phase 3: Scenario matrix configuration
 
 - Add `configs/scenarios/francis2023.yaml` with:
   - `map_file` entries pointing to the new SVGs
   - `simulation_config` settings for episode length, ped density, and speed scaling
+  - `single_pedestrians` overlays using:
+    - `goal` or `goal_poi`
+    - `trajectory` or `trajectory_poi`
+    - optional `speed_m_s`, `wait_at`, `note`
   - `metadata` fields to record archetype, flow, and behavioral tags
   - seed lists for reproducibility
 
+## Phase 3b: POI annotations and verification
+
+- Add POI circles (with labels) to the Francis SVGs to make overlays readable.
+- Re-run map verification for the updated SVGs.
+
 ## Phase 4: Behavior support for non-geometry scenarios
 
-- Extend `SinglePedestrianDefinition` to optionally include:
-  - `speed_m_s` for per-ped speed control
-  - `behavior` or `role` tag (wait, follow, lead, accompany, join, leave)
-  - optional waypoint timing or a simple "wait at point" flag
+### Phase 4a: Overlay parsing and preview helper
+
+- Extend `SinglePedestrianDefinition` to optionally include `speed_m_s`, `wait_at`, and `note`.
+- Parse scenario overlays in `robot_sf/training/scenario_loader.py` (goal/trajectory, POI support).
+- Add a preview helper (`scripts/tools/preview_scenario_trajectories.py`) to visualize overlays.
+- Status: done.
+
+### Phase 4b: Runtime behavior controller
+
+- Extend single-ped runtime behavior to honor waits and role tags
+  (wait, follow, lead, accompany, join, leave).
 - Add a `SinglePedestrianBehavior` controller that:
   - advances trajectory waypoints when reached
   - applies waits where specified
   - updates the pedestrian goal so PySocialForce moves toward the next waypoint
 - Update the SVG/JSON map loaders to accept these optional fields:
-  - SVG: add a lightweight encoding strategy (for example, use POI labels or a
-    small JSON companion file per map if SVG labeling becomes too complex).
+  - SVG: add a lightweight encoding strategy (POI labels or companion overlay file).
   - JSON: parse the new fields in `robot_sf/nav/map_config.py`.
 - Wire the new behavior controller into `robot_sf/sim/simulator.py` alongside
   the existing `CrowdedZoneBehavior` and `FollowRouteBehavior`.

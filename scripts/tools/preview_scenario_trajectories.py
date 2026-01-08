@@ -135,6 +135,8 @@ def _annotation_text(ped: SinglePedestrianDefinition) -> str:
     parts = [ped.id]
     if ped.speed_m_s is not None:
         parts.append(f"{ped.speed_m_s:.2f} m/s")
+    if ped.role:
+        parts.append(f"role={ped.role}")
     if ped.note:
         parts.append(ped.note)
     return " | ".join(parts)

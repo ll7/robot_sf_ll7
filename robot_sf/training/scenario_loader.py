@@ -370,15 +370,16 @@ def _resolve_wait_waypoint_index(
     return waypoint_index
 
 
-def _apply_single_pedestrian_override(
+def _resolve_goal_trajectory_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
     map_def: MapDefinition,
-) -> SinglePedestrianDefinition:
-    """Apply overrides to a single pedestrian definition.
+) -> tuple[tuple[float, float] | None, list[tuple[float, float]] | None, list[str] | None]:
+    """Resolve goal/trajectory overrides while enforcing mutual exclusivity.
 
     Returns:
-        SinglePedestrianDefinition: Updated pedestrian definition.
+        tuple[Vec2D | None, list[Vec2D] | None, list[str] | None]:
+            Updated goal, trajectory, and optional trajectory label list.
     """
     goal_override, goal_specified = _resolve_point_override(
         entry,
@@ -391,7 +392,7 @@ def _apply_single_pedestrian_override(
         map_def=map_def,
     )
 
-    if goal_override is not _MISSING and trajectory_override is not _MISSING:
+    if goal_specified and trajectory_specified:
         if goal_override is not None and trajectory_override is not None:
             raise ValueError(f"single_pedestrians '{ped.id}' cannot set both goal and trajectory")
 
@@ -401,25 +402,96 @@ def _apply_single_pedestrian_override(
     if goal is not None and trajectory is not None:
         raise ValueError(f"single_pedestrians '{ped.id}' cannot define both goal and trajectory")
 
-    speed_specified = "speed_m_s" in entry
-    speed = (
-        float(entry["speed_m_s"]) if speed_specified and entry["speed_m_s"] is not None else None
-    )
-    if not speed_specified:
-        speed = ped.speed_m_s
+    return goal, trajectory, trajectory_labels
 
-    wait_specified = "wait_at" in entry
-    wait_at = _parse_wait_overrides(
-        entry.get("wait_at") if wait_specified else None,
+
+def _resolve_speed_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> float | None:
+    """Resolve speed override for a pedestrian definition."""
+    if "speed_m_s" not in entry:
+        return ped.speed_m_s
+    value = entry.get("speed_m_s")
+    return float(value) if value is not None else None
+
+
+def _resolve_wait_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+    *,
+    trajectory: list[tuple[float, float]] | None,
+    trajectory_labels: list[str] | None,
+) -> list[PedestrianWaitRule] | None:
+    """Resolve wait overrides for a pedestrian definition."""
+    if "wait_at" not in entry:
+        return ped.wait_at
+    return _parse_wait_overrides(
+        entry.get("wait_at"),
         trajectory=trajectory,
         trajectory_labels=trajectory_labels,
     )
-    if not wait_specified:
-        wait_at = ped.wait_at
 
-    note = str(entry["note"]) if "note" in entry and entry["note"] is not None else None
+
+def _resolve_note_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> str | None:
+    """Resolve an optional note override for a pedestrian definition."""
     if "note" not in entry:
-        note = ped.note
+        return ped.note
+    value = entry.get("note")
+    return str(value) if value is not None else None
+
+
+def _resolve_role_overrides(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> tuple[str | None, str | None, tuple[float, float] | None]:
+    """Resolve role, target, and offset overrides for a pedestrian definition."""
+    if "role" in entry:
+        role_value = entry.get("role")
+        role = str(role_value) if role_value is not None else None
+    else:
+        role = ped.role
+
+    if "role_target_id" in entry:
+        target_value = entry.get("role_target_id")
+        role_target_id = str(target_value) if target_value is not None else None
+    else:
+        role_target_id = ped.role_target_id
+
+    if "role_offset" in entry:
+        offset_value = entry.get("role_offset")
+        role_offset = (
+            _coerce_point(offset_value, "role_offset") if offset_value is not None else None
+        )
+    else:
+        role_offset = ped.role_offset
+
+    return role, role_target_id, role_offset
+
+
+def _apply_single_pedestrian_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+    map_def: MapDefinition,
+) -> SinglePedestrianDefinition:
+    """Apply overrides to a single pedestrian definition.
+
+    Returns:
+        SinglePedestrianDefinition: Updated pedestrian definition.
+    """
+    goal, trajectory, trajectory_labels = _resolve_goal_trajectory_override(ped, entry, map_def)
+    speed = _resolve_speed_override(ped, entry)
+    wait_at = _resolve_wait_override(
+        ped,
+        entry,
+        trajectory=trajectory,
+        trajectory_labels=trajectory_labels,
+    )
+    note = _resolve_note_override(ped, entry)
+    role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
 
     return SinglePedestrianDefinition(
         id=ped.id,
@@ -429,6 +501,9 @@ def _apply_single_pedestrian_override(
         speed_m_s=speed,
         wait_at=wait_at,
         note=note,
+        role=role,
+        role_target_id=role_target_id,
+        role_offset=role_offset,
     )
 
 

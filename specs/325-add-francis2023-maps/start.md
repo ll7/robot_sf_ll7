@@ -26,6 +26,8 @@
   overtaking, crossing, doorway, static humans).
 - Scenario overlays can override single pedestrians by id, including `goal`/`trajectory`,
   POI-based overrides, `speed_m_s`, `wait_at`, and `note` fields.
+- Single pedestrians now advance trajectory waypoints at runtime, honor wait rules,
+  and support role tags (wait/follow/lead/accompany/join/leave).
 - Preview helper: `scripts/tools/preview_scenario_trajectories.py` renders overlays
   on top of map geometry.
 
@@ -33,17 +35,8 @@
 
 - Scenario YAML exists (`configs/scenarios/francis2023.yaml`), but only covers
   geometry-first entries.
-- Several scenarios imply scripted pedestrian behavior that is not supported:
-  - "wait" / "proceed" behaviors at intersections
-  - "join group", "leave group"
-  - "follow human", "lead human", "accompany peer"
-  - pedestrians that stop or gesture
-- Single-pedestrian trajectories do not currently advance across waypoints.
-  - `SinglePedestrianDefinition` can include a trajectory, but there is no
-    behavior class that updates the goal to the next waypoint during simulation.
-- Per-pedestrian speed control is not supported.
-  - Only global `peds_speed_mult` and `PedSpawnConfig.initial_speed` exist.
-  - "slow walking pedestrian" would currently require a global slow-down.
+- Single-pedestrian runtime behaviors (wait/follow/lead/accompany/join/leave) are now
+  supported, but higher-level gesture semantics still require explicit scenario tuning.
 - Crowd/flow scenarios (parallel traffic, perpendicular traffic, circular crossing,
   robot crowding) are not yet mapped or configured.
 

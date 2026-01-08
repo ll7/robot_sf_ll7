@@ -60,10 +60,10 @@ class ScopeResolver:
             return self._resolve_ci()
         elif scope == "changed":
             return self._resolve_changed()
-        elif scope.endswith(".svg"):
-            return self._resolve_specific(scope)
         elif "*" in scope or "?" in scope:
             return self._resolve_glob(scope)
+        elif scope.endswith(".svg"):
+            return self._resolve_specific(scope)
         else:
             # Try as exact map ID (without .svg)
             return self._resolve_specific(f"{scope}.svg")
@@ -117,7 +117,7 @@ class ScopeResolver:
                 full_path = (self.repo_root / file_path).resolve()
 
                 # Check if it's in svg_maps and is an SVG
-                if full_path.parent == maps_dir and full_path.suffix == ".svg":
+                if full_path.suffix == ".svg" and full_path.is_relative_to(maps_dir):
                     map_id = full_path.stem
                     map_record = self.inventory.get_map_by_id(map_id)
                     if map_record:
@@ -190,7 +190,7 @@ class ScopeResolver:
             If no maps match
         """
         maps_dir = self.inventory.maps_root
-        matched_files = list(maps_dir.glob(pattern))
+        matched_files = list(maps_dir.rglob(pattern))
 
         matched_maps = []
         for svg_file in matched_files:

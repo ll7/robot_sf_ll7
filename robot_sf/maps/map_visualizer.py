@@ -70,7 +70,13 @@ def _zone_to_polygon(zone: Sequence[tuple[float, float]]) -> list[tuple[float, f
 
 
 def _plot_zones(
-    ax, zones: Iterable[Sequence[tuple[float, float]]], color: str, label: str, alpha: float = 0.5
+    ax,
+    zones: Iterable[Sequence[tuple[float, float]]],
+    color: str,
+    label: str,
+    alpha: float = 0.5,
+    *,
+    label_zones: bool = True,
 ) -> None:
     for idx, zone in enumerate(zones):
         polygon = _zone_to_polygon(zone)
@@ -78,9 +84,10 @@ def _plot_zones(
             continue
         patch = Polygon(polygon, closed=True, facecolor=color, edgecolor="black", alpha=alpha)
         ax.add_patch(patch)
-        center_x = sum(pt[0] for pt in polygon) / len(polygon)
-        center_y = sum(pt[1] for pt in polygon) / len(polygon)
-        ax.text(center_x, center_y, f"{label}{idx}", ha="center", va="center", fontsize=8)
+        if label_zones:
+            center_x = sum(pt[0] for pt in polygon) / len(polygon)
+            center_y = sum(pt[1] for pt in polygon) / len(polygon)
+            ax.text(center_x, center_y, f"{label}{idx}", ha="center", va="center", fontsize=8)
 
 
 def _plot_routes(ax, routes: Iterable[GlobalRoute], color: str, prefix: str) -> None:
@@ -137,6 +144,9 @@ def render_map_definition(
     equal_aspect: bool = True,
     invert_y: bool = True,
     show_legend: bool = True,
+    show_zone_labels: bool = True,
+    show_routes: bool = True,
+    show_pois: bool = True,
 ) -> None:
     """Render map geometry into an existing Matplotlib axes."""
     # Obstacles
@@ -151,18 +161,51 @@ def render_map_definition(
         ax.plot([x1, x2], [y1, y2], color=BOUNDARY_COLOR, linestyle="--", linewidth=1)
 
     # Zones
-    _plot_zones(ax, map_def.robot_spawn_zones, ROBOT_SPAWN_COLOR, "RS ")
-    _plot_zones(ax, map_def.robot_goal_zones, ROBOT_GOAL_COLOR, "RG ")
-    _plot_zones(ax, map_def.ped_spawn_zones, PED_SPAWN_COLOR, "PS ")
-    _plot_zones(ax, map_def.ped_goal_zones, PED_GOAL_COLOR, "PG ")
-    _plot_zones(ax, map_def.ped_crowded_zones, PED_CROWDED_COLOR, "CZ ", alpha=0.3)
+    _plot_zones(
+        ax,
+        map_def.robot_spawn_zones,
+        ROBOT_SPAWN_COLOR,
+        "RS ",
+        label_zones=show_zone_labels,
+    )
+    _plot_zones(
+        ax,
+        map_def.robot_goal_zones,
+        ROBOT_GOAL_COLOR,
+        "RG ",
+        label_zones=show_zone_labels,
+    )
+    _plot_zones(
+        ax,
+        map_def.ped_spawn_zones,
+        PED_SPAWN_COLOR,
+        "PS ",
+        label_zones=show_zone_labels,
+    )
+    _plot_zones(
+        ax,
+        map_def.ped_goal_zones,
+        PED_GOAL_COLOR,
+        "PG ",
+        label_zones=show_zone_labels,
+    )
+    _plot_zones(
+        ax,
+        map_def.ped_crowded_zones,
+        PED_CROWDED_COLOR,
+        "CZ ",
+        alpha=0.3,
+        label_zones=show_zone_labels,
+    )
 
     # Routes
-    _plot_routes(ax, map_def.robot_routes, ROBOT_ROUTE_COLOR, "R ")
-    _plot_routes(ax, map_def.ped_routes, PED_ROUTE_COLOR, "P ")
+    if show_routes:
+        _plot_routes(ax, map_def.robot_routes, ROBOT_ROUTE_COLOR, "R ")
+        _plot_routes(ax, map_def.ped_routes, PED_ROUTE_COLOR, "P ")
 
     # POIs
-    _plot_pois(ax, map_def)
+    if show_pois:
+        _plot_pois(ax, map_def)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")

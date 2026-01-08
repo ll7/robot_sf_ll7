@@ -50,11 +50,13 @@
     - optional `speed_m_s`, `wait_at`, `note`
   - `metadata` fields to record archetype, flow, and behavioral tags
   - seed lists for reproducibility
+- Status: draft complete for geometry-first scenarios; behavior-driven entries pending.
 
 ## Phase 3b: POI annotations and verification
 
 - Add POI circles (with labels) to the Francis SVGs to make overlays readable.
 - Re-run map verification for the updated SVGs.
+- Status: POI circles added; verification complete.
 
 ## Phase 4: Behavior support for non-geometry scenarios
 

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Francis 2023 (k): Narrow Doorway -->
+<svg
+  width="30"
+  height="10"
+  viewBox="0 0 30 10"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="9" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="10" fill="#000000" inkscape:label="obstacle" />
+    <rect x="29" y="0" width="1" height="10" fill="#000000" inkscape:label="obstacle" />
+    <rect x="15" y="1" width="1" height="3" fill="#000000" inkscape:label="obstacle" />
+    <rect x="15" y="6" width="1" height="3" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="2" y="4" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="26" y="4" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 4.5 5 L 25.5 5" stroke="#0300d5" stroke-width="0.3" fill="none" inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <circle cx="27" cy="5" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_start" />
+    <circle cx="3" cy="5" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_goal" />
+  </g>
+</svg>

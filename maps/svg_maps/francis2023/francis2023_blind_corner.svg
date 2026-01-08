@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Francis 2023 (i): Blind Corner -->
+<svg
+  width="30"
+  height="30"
+  viewBox="0 0 30 30"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="29" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="30" fill="#000000" inkscape:label="obstacle" />
+    <rect x="29" y="0" width="1" height="30" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="24" height="24" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="2" y="26" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="26" y="2" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 4.5 27 L 24.5 27 L 27 24.5 L 27 4.5" stroke="#0300d5" stroke-width="0.3" fill="none"
+      inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <circle cx="27" cy="4" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_start" />
+    <circle cx="27" cy="26" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_goal" />
+  </g>
+</svg>

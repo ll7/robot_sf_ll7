@@ -45,6 +45,9 @@ Each single pedestrian is defined by:
 | `speed_m_s` | `float \| None` | No | Optional speed override for this pedestrian (m/s) |
 | `wait_at` | `list[PedestrianWaitRule] \| None` | No | Optional waits at trajectory waypoints (trajectory required) |
 | `note` | `str \| None` | No | Optional note for scenario documentation |
+| `role` | `str \| None` | No | Optional runtime behavior role (`wait`, `follow`, `lead`, `accompany`, `join`, `leave`) |
+| `role_target_id` | `str \| None` | No | Optional target identifier for role behaviors (e.g., `robot:0`, other ped id) |
+| `role_offset` | `Vec2D \| None` | No | Optional `(forward, lateral)` offset for robot-relative roles |
 
 ### Constraints
 
@@ -52,6 +55,15 @@ Each single pedestrian is defined by:
 - **Static Pedestrians**: If neither goal nor trajectory is provided, the pedestrian remains static
 - **Unique IDs**: All pedestrian IDs within a map must be unique
 - **Wait Rules**: `wait_at` requires a trajectory; wait indices refer to trajectory waypoints
+- **Role Offsets**: `role_offset` is interpreted in the robot frame `(forward, left)` for follow/lead/accompany roles
+
+### Role Behavior Notes
+
+- `follow`, `lead`, and `accompany` update the pedestrian goal relative to a robot pose.
+  Use `role_target_id: "robot:0"` to target the first robot (default).
+- `join` steers toward a target pedestrian group and attaches once within the goal threshold.
+  Use `role_target_id` to reference another pedestrian id.
+- `leave` detaches from the current group once per episode, then follows its trajectory/goal.
 
 ### Wait Rule Format
 
@@ -159,6 +171,9 @@ Optional override fields:
 - `speed_m_s`
 - `wait_at`
 - `note`
+- `role`
+- `role_target_id`
+- `role_offset`
 
 If the map defines a `goal` but you want a `trajectory`, set `goal: null` in the override.
 When using `trajectory_poi`, each `wait_at` entry can specify `poi` instead of `waypoint_index`.

@@ -209,6 +209,14 @@ uv run python scripts/tools/preview_scenario_trajectories.py \
   --scenario-id classic_head_on_corridor
 ```
 
+Render all scenarios in a file:
+
+```bash
+uv run python scripts/tools/preview_scenario_trajectories.py \
+  --scenario configs/scenarios/francis2023.yaml \
+  --all
+```
+
 For headless usage, set `MPLBACKEND=Agg` before running.
 
 ## Programmatic Definition

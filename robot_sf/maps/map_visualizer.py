@@ -17,6 +17,8 @@ from matplotlib.patches import Polygon
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    from matplotlib.axes import Axes
+
     from robot_sf.nav.global_route import GlobalRoute
     from robot_sf.nav.map_config import MapDefinition
 
@@ -106,31 +108,37 @@ def _plot_pois(ax, map_def) -> None:
             ax.text(poi[0], poi[1], poi_labels[idx], color=POI_COLOR, fontsize=8)
 
 
-def visualize_map_definition(
-    map_def: MapDefinition,
-    output_path: str | Path | None = None,
-    *,
-    title: str | None = None,
-    equal_aspect: bool = True,
-    invert_y: bool = True,
-    show: bool = False,
-) -> None:
-    """Render a MapDefinition with consistent colors for quick inspection.
+def _deduplicate_legend(ax) -> None:
+    """Create a legend without duplicate labels."""
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    by_label = dict(zip(labels, handles, strict=False))
+    ax.legend(by_label.values(), by_label.keys(), loc="upper right")
 
-    Args:
-        map_def: Parsed map definition (from SVG or JSON).
-        output_path: Optional path to save the figure (PNG). When None, only shows if ``show`` is True.
-        title: Optional plot title.
-        equal_aspect: Whether to enforce equal axis scaling.
-        invert_y: If True, invert Y to match SVG/screen coordinates (y increases downward).
-        show: Whether to display the plot interactively.
+
+def create_map_figure(map_def: MapDefinition) -> tuple[plt.Figure, Axes]:
+    """Create a Matplotlib figure sized to a map definition.
+
+    Returns:
+        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]: Figure and axes pair.
     """
     map_width = float(getattr(map_def, "width", 0.0) or 0.0)
     map_height = float(getattr(map_def, "height", 0.0) or 0.0)
     figsize = _compute_figsize(map_width, map_height)
+    return plt.subplots(figsize=figsize)
 
-    fig, ax = plt.subplots(figsize=figsize)
 
+def render_map_definition(
+    map_def: MapDefinition,
+    ax: Axes,
+    *,
+    title: str | None = None,
+    equal_aspect: bool = True,
+    invert_y: bool = True,
+    show_legend: bool = True,
+) -> None:
+    """Render map geometry into an existing Matplotlib axes."""
     # Obstacles
     for obstacle in map_def.obstacles:
         patch = Polygon(
@@ -170,11 +178,39 @@ def visualize_map_definition(
     if title:
         ax.set_title(title)
 
-    # Deduplicate legend entries
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        by_label = dict(zip(labels, handles, strict=False))
-        ax.legend(by_label.values(), by_label.keys(), loc="upper right")
+    if show_legend:
+        _deduplicate_legend(ax)
+
+
+def visualize_map_definition(
+    map_def: MapDefinition,
+    output_path: str | Path | None = None,
+    *,
+    title: str | None = None,
+    equal_aspect: bool = True,
+    invert_y: bool = True,
+    show: bool = False,
+) -> None:
+    """Render a MapDefinition with consistent colors for quick inspection.
+
+    Args:
+        map_def: Parsed map definition (from SVG or JSON).
+        output_path: Optional path to save the figure (PNG). When None, only shows
+            if ``show`` is True.
+        title: Optional plot title.
+        equal_aspect: Whether to enforce equal axis scaling.
+        invert_y: If True, invert Y to match SVG/screen coordinates (y increases downward).
+        show: Whether to display the plot interactively.
+    """
+    fig, ax = create_map_figure(map_def)
+    render_map_definition(
+        map_def,
+        ax,
+        title=title,
+        equal_aspect=equal_aspect,
+        invert_y=invert_y,
+        show_legend=True,
+    )
 
     if output_path:
         out_path = Path(output_path)
@@ -188,4 +224,4 @@ def visualize_map_definition(
         plt.close(fig)
 
 
-__all__ = ["visualize_map_definition"]
+__all__ = ["create_map_figure", "render_map_definition", "visualize_map_definition"]

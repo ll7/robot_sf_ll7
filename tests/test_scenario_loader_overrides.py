@@ -92,3 +92,25 @@ def test_apply_single_pedestrian_overrides_trajectory_poi_wait():
     assert ped.wait_at[0].waypoint_index == 1
     assert ped.wait_at[0].wait_s == pytest.approx(1.5)
     assert ped.wait_at[0].note == "yield"
+
+
+def test_apply_single_pedestrian_overrides_role_fields():
+    """Verify role-related overrides are applied to single pedestrians."""
+    map_def = _build_map_with_pois()
+
+    apply_single_pedestrian_overrides(
+        map_def,
+        [
+            {
+                "id": "ped1",
+                "role": "follow",
+                "role_target_id": "robot:0",
+                "role_offset": [1.0, -0.5],
+            }
+        ],
+    )
+
+    ped = map_def.single_pedestrians[0]
+    assert ped.role == "follow"
+    assert ped.role_target_id == "robot:0"
+    assert ped.role_offset == (1.0, -0.5)

@@ -55,6 +55,9 @@ class SinglePedestrianDefinition:
         speed_m_s (float | None): Optional per-pedestrian speed override (m/s).
         wait_at (list[PedestrianWaitRule] | None): Optional waits at trajectory waypoints.
         note (str | None): Optional human-readable note for scenario documentation.
+        role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
+        role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
+        role_offset (Vec2D | None): Optional (forward, lateral) offset for follow/lead/accompany roles.
     """
 
     id: str
@@ -64,6 +67,9 @@ class SinglePedestrianDefinition:
     speed_m_s: float | None = None
     wait_at: list[PedestrianWaitRule] | None = None
     note: str | None = None
+    role: str | None = None
+    role_target_id: str | None = None
+    role_offset: Vec2D | None = None
 
     def __post_init__(self):
         """
@@ -81,6 +87,9 @@ class SinglePedestrianDefinition:
         self._validate_trajectory()
         self._validate_speed()
         self._validate_waits()
+        self._validate_role()
+        self._validate_role_target()
+        self._validate_role_offset()
         self._warn_if_static()
 
     def _validate_id(self):
@@ -188,11 +197,50 @@ class SinglePedestrianDefinition:
 
     def _warn_if_static(self):
         """Warn if pedestrian has neither goal nor trajectory (static)."""
-        if self.goal is None and self.trajectory is None:
+        if self.goal is None and self.trajectory is None and self.role is None:
             logger.warning(
                 f"Pedestrian '{self.id}': neither goal nor trajectory specified. "
                 "Pedestrian will remain static."
             )
+
+    def _validate_role(self) -> None:
+        """Validate and normalize the optional role field."""
+        if self.role is None:
+            return
+        if not isinstance(self.role, str):
+            raise ValueError(f"Pedestrian '{self.id}': role must be a string, got {self.role!r}")
+        normalized = self.role.strip().lower()
+        if not normalized or normalized == "none":
+            self.role = None
+            return
+        allowed = {"wait", "follow", "lead", "accompany", "join", "leave"}
+        if normalized not in allowed:
+            raise ValueError(
+                f"Pedestrian '{self.id}': role must be one of {sorted(allowed)}, got {self.role!r}"
+            )
+        self.role = normalized
+
+    def _validate_role_target(self) -> None:
+        """Validate optional role target identifiers."""
+        if self.role_target_id is None:
+            return
+        if not isinstance(self.role_target_id, str) or not self.role_target_id.strip():
+            raise ValueError(
+                f"Pedestrian '{self.id}': role_target_id must be a non-empty string, "
+                f"got {self.role_target_id!r}"
+            )
+        self.role_target_id = self.role_target_id.strip()
+
+    def _validate_role_offset(self) -> None:
+        """Validate optional role offsets for follow/lead/accompany behavior."""
+        if self.role_offset is None:
+            return
+        if not isinstance(self.role_offset, (tuple, list)) or len(self.role_offset) != 2:
+            raise ValueError(
+                f"Pedestrian '{self.id}': role_offset must be a 2-item tuple/list, "
+                f"got {self.role_offset!r}"
+            )
+        self.role_offset = (float(self.role_offset[0]), float(self.role_offset[1]))
 
 
 @dataclass
@@ -831,6 +879,18 @@ def _parse_single_pedestrians(
         speed = ped_def.get("speed_m_s")
         wait_at = _parse_wait_rules(ped_def.get("wait_at"))
         note = ped_def.get("note")
+        role = ped_def.get("role")
+        role_target_id = ped_def.get("role_target_id")
+        role_offset = ped_def.get("role_offset")
+        role_target_value = str(role_target_id) if role_target_id is not None else None
+        role_offset_tuple = None
+        if role_offset is not None:
+            if not isinstance(role_offset, (list, tuple)) or len(role_offset) != 2:
+                raise ValueError(
+                    "single_pedestrians.role_offset must be a 2-item list or tuple, "
+                    f"got: {role_offset!r}"
+                )
+            role_offset_tuple = (float(role_offset[0]), float(role_offset[1]))
         single_pedestrians.append(
             SinglePedestrianDefinition(
                 id=ped_id,
@@ -840,6 +900,9 @@ def _parse_single_pedestrians(
                 speed_m_s=float(speed) if speed is not None else None,
                 wait_at=wait_at,
                 note=str(note) if note is not None else None,
+                role=str(role) if role is not None else None,
+                role_target_id=role_target_value,
+                role_offset=role_offset_tuple,
             )
         )
     return single_pedestrians

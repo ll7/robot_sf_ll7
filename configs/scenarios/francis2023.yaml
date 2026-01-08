@@ -6,8 +6,9 @@
 # Notes:
 # - Single-pedestrian scenarios set ped_density=0 and rely on the
 #   single_ped_h1_start/goal markers in each SVG.
-# - Speed overrides are provisional and can be retuned once behavior support lands.
-# - Gesture/role behaviors (wait, follow, lead, join/leave, accompany) are deferred.
+# - Speed overrides are provisional and can be retuned as behavior tuning progresses.
+# - Gesture/role behaviors (wait, follow, lead, join/leave, accompany) are supported but
+#   not yet configured in this geometry-first draft.
 # - POIs are available at the single-ped markers: poi_h1_start and poi_h1_goal.
 
 scenarios:

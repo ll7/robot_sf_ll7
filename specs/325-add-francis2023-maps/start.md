@@ -8,6 +8,7 @@
     `robot_route_<spawn>_<goal>`, `ped_route_<spawn>_<goal>`, `ped_crowded_zone`.
   - Single pedestrians can be placed via circles labeled
     `single_ped_<id>_start` and `single_ped_<id>_goal`.
+  - POIs are supported via circles with class `poi` and a descriptive label.
 - MapDefinition supports:
   - obstacles, robot routes, ped routes, ped crowded zones
   - `single_pedestrians` (start + goal or trajectory)
@@ -23,12 +24,15 @@
     and `metadata` (see `robot_sf/benchmark/full_classic/planning.py`).
 - Baseline map examples already exist under `maps/svg_maps/` (classic interactions,
   overtaking, crossing, doorway, static humans).
+- Scenario overlays can override single pedestrians by id, including `goal`/`trajectory`,
+  POI-based overrides, `speed_m_s`, `wait_at`, and `note` fields.
+- Preview helper: `scripts/tools/preview_scenario_trajectories.py` renders overlays
+  on top of map geometry.
 
 ## What is missing for the Francis 2023 scenarios
 
-- No maps for the Francis 2023 Figure 7 scenarios exist yet in `maps/svg_maps/`.
-- No scenario matrix (YAML) exists to define these scenarios for training or
-  benchmarking workflows.
+- Scenario YAML exists (`configs/scenarios/francis2023.yaml`), but only covers
+  geometry-first entries.
 - Several scenarios imply scripted pedestrian behavior that is not supported:
   - "wait" / "proceed" behaviors at intersections
   - "join group", "leave group"
@@ -40,9 +44,21 @@
 - Per-pedestrian speed control is not supported.
   - Only global `peds_speed_mult` and `PedSpawnConfig.initial_speed` exist.
   - "slow walking pedestrian" would currently require a global slow-down.
+- Crowd/flow scenarios (parallel traffic, perpendicular traffic, circular crossing,
+  robot crowding) are not yet mapped or configured.
 
 ## Spec context
 
-- This spec folder currently contains only:
+- This spec folder includes:
   - `Readme.md` with the citation
   - `Fig7_Francis2023_scenarios.png` (reference diagram)
+  - `plan.md` and `scenario_mapping.md` for the build plan
+  - `start.md` (this document)
+
+## Current Francis 2023 assets
+
+- SVG maps under `maps/svg_maps/francis2023/` for Fig. 7a, 7b, 7c, 7d, 7e, 7f, 7i–7o.
+  - Each map includes boundary obstacles and POI markers (`poi_h1_start`, `poi_h1_goal`).
+- Scenario matrix: `configs/scenarios/francis2023.yaml` (geometry-first entries).
+  - Uses `goal_poi: poi_h1_goal` overlays for readability.
+- Map verification: `output/validation/francis2023_map_verification.json` (latest run).

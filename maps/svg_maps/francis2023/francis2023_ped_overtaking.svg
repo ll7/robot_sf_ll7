@@ -21,7 +21,9 @@
   <g inkscape:label="pedestrians">
     <circle cx="1.5" cy="6" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_start" />
+    <circle cx="1.5" cy="6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
     <circle cx="35" cy="6" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_goal" />
+    <circle cx="35" cy="6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
   </g>
 </svg>

@@ -10,6 +10,8 @@ Conventions
 - Robot uses `robot_spawn_zone`, `robot_goal_zone`, and `robot_route_0_0`.
 - Single pedestrian markers define the human start/goal only; speed and
   waiting/gesture behaviors are not encoded yet.
+- POI markers are duplicated at the single-ped start/goal positions using
+  `poi_h1_start` and `poi_h1_goal` (class `poi`) to support scenario overlays.
 - Each map includes an outer obstacle boundary to keep agents inside the map.
 
 Maps

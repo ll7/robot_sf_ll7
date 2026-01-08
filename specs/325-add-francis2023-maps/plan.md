@@ -80,6 +80,7 @@
   - JSON: parse the new fields in `robot_sf/nav/map_config.py`.
 - Wire the new behavior controller into `robot_sf/sim/simulator.py` alongside
   the existing `CrowdedZoneBehavior` and `FollowRouteBehavior`.
+ - Status: done.
 
 ## Phase 5: Crowd and flow scenarios
 

@@ -1,0 +1,229 @@
+## Francis 2023 Scenario Matrix (geometry-first)
+#
+# Based on Fig. 7 in Francis et al. (2023). These entries correspond to the
+# geometry-only SVG maps under maps/svg_maps/francis2023/.
+#
+# Notes:
+# - Single-pedestrian scenarios set ped_density=0 and rely on the
+#   single_ped_h1_start/goal markers in each SVG.
+# - Speed overrides are provisional and can be retuned once behavior support lands.
+# - Gesture/role behaviors (wait, follow, lead, join/leave, accompany) are deferred.
+# - POIs are available at the single-ped markers: poi_h1_start and poi_h1_goal.
+
+scenarios:
+  - name: francis2023_frontal_approach
+    map_file: "../../maps/svg_maps/francis2023/francis2023_frontal_approach.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7a"
+      archetype: frontal_approach
+      flow: bi
+      behavior: none
+    seeds: [201, 202, 203]
+
+  - name: francis2023_pedestrian_obstruction
+    map_file: "../../maps/svg_maps/francis2023/francis2023_ped_obstruction.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        speed_m_s: 0.3
+        note: "slow walker (tuning pending)"
+    robot_config: {}
+    metadata:
+      figure: "7b"
+      archetype: pedestrian_obstruction
+      flow: uni
+      behavior: slow_ped
+    seeds: [204, 205, 206]
+
+  - name: francis2023_pedestrian_overtaking
+    map_file: "../../maps/svg_maps/francis2023/francis2023_ped_overtaking.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        speed_m_s: 0.8
+        note: "fast walker (tuning pending)"
+    robot_config: {}
+    metadata:
+      figure: "7c"
+      archetype: pedestrian_overtaking
+      flow: uni
+      behavior: fast_ped
+    seeds: [207, 208, 209]
+
+  - name: francis2023_robot_overtaking
+    map_file: "../../maps/svg_maps/francis2023/francis2023_robot_overtaking.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        speed_m_s: 0.3
+        note: "slow walker (tuning pending)"
+    robot_config: {}
+    metadata:
+      figure: "7d"
+      archetype: robot_overtaking
+      flow: uni
+      behavior: slow_ped
+    seeds: [210, 211, 212]
+
+  - name: francis2023_down_path
+    map_file: "../../maps/svg_maps/francis2023/francis2023_down_path.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7e"
+      archetype: down_path
+      flow: uni
+      behavior: none
+    seeds: [213, 214, 215]
+
+  - name: francis2023_intersection_no_gesture
+    map_file: "../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7f"
+      archetype: intersection_no_gesture
+      flow: perpendicular
+      behavior: none
+    seeds: [216, 217, 218]
+
+  - name: francis2023_blind_corner
+    map_file: "../../maps/svg_maps/francis2023/francis2023_blind_corner.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7i"
+      archetype: blind_corner
+      flow: bi
+      behavior: none
+    seeds: [219, 220, 221]
+
+  - name: francis2023_narrow_hallway
+    map_file: "../../maps/svg_maps/francis2023/francis2023_narrow_hallway.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7j"
+      archetype: narrow_hallway
+      flow: bi
+      behavior: none
+    seeds: [222, 223, 224]
+
+  - name: francis2023_narrow_doorway
+    map_file: "../../maps/svg_maps/francis2023/francis2023_narrow_doorway.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7k"
+      archetype: narrow_doorway
+      flow: bi
+      behavior: none
+    seeds: [225, 226, 227]
+
+  - name: francis2023_entering_room
+    map_file: "../../maps/svg_maps/francis2023/francis2023_entering_room.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7l"
+      archetype: entering_room
+      flow: enter
+      behavior: none
+    seeds: [228, 229, 230]
+
+  - name: francis2023_exiting_room
+    map_file: "../../maps/svg_maps/francis2023/francis2023_exiting_room.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7m"
+      archetype: exiting_room
+      flow: exit
+      behavior: none
+    seeds: [231, 232, 233]
+
+  - name: francis2023_entering_elevator
+    map_file: "../../maps/svg_maps/francis2023/francis2023_entering_elevator.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7n"
+      archetype: entering_elevator
+      flow: enter
+      behavior: none
+    seeds: [234, 235, 236]
+
+  - name: francis2023_exiting_elevator
+    map_file: "../../maps/svg_maps/francis2023/francis2023_exiting_elevator.svg"
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      figure: "7o"
+      archetype: exiting_elevator
+      flow: exit
+      behavior: none
+    seeds: [237, 238, 239]
+
+# Pending: intersection wait/proceed, group/join/leave, follow/lead/accompany,
+# and crowd/traffic scenarios once behavior support and additional maps land.

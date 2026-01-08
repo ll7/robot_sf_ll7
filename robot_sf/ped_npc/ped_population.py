@@ -474,7 +474,8 @@ def populate_single_pedestrians(
     Returns:
         tuple[np.ndarray, list[dict]]:
             - NumPy array of pedestrian states (Nx7): [x, y, vx, vy, gx, gy, tau]
-            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info
+            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info,
+              and optional per-ped speed/note fields
     """
     if not single_pedestrians:
         return np.empty((0, 7)), []
@@ -484,18 +485,19 @@ def populate_single_pedestrians(
     metadata = []
 
     for i, ped in enumerate(single_pedestrians):
+        ped_speed = ped.speed_m_s if ped.speed_m_s is not None else initial_speed
         # Position (x, y)
         ped_states[i, 0:2] = ped.start
 
         # Initial velocity pointing toward goal or first trajectory waypoint
         if ped.goal is not None:
             direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])
-            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 2:4] = [ped_speed * cos(direction), ped_speed * sin(direction)]
             ped_states[i, 4:6] = ped.goal
         elif ped.trajectory:
             first_wp = ped.trajectory[0]
             direction = atan2(first_wp[1] - ped.start[1], first_wp[0] - ped.start[0])
-            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 2:4] = [ped_speed * cos(direction), ped_speed * sin(direction)]
             # For trajectory-based, goal is first waypoint initially
             ped_states[i, 4:6] = first_wp
         else:
@@ -514,6 +516,8 @@ def populate_single_pedestrians(
                 "has_trajectory": ped.trajectory is not None and len(ped.trajectory) > 0,
                 "trajectory": ped.trajectory if ped.trajectory else [],
                 "current_waypoint_index": 0,
+                "speed_m_s": ped_speed,
+                "note": ped.note,
             }
         )
 

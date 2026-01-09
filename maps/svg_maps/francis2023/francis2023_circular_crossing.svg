@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Francis 2023 (x): Circular Crossing -->
+<svg
+  width="20"
+  height="20"
+  viewBox="0 0 20 20"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="20" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19" width="20" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="20" fill="#000000" inkscape:label="obstacle" />
+    <rect x="19" y="0" width="1" height="20" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="2" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="16" y="9" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 4.5 10 L 15.5 10" stroke="#0300d5" stroke-width="0.3" fill="none"
+      inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <rect x="14" y="4" width="2" height="2" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+    <rect x="14" y="14" width="2" height="2" fill="#107400" inkscape:label="ped_goal_zone" />
+    <path d="M 15 5 L 13.5 3.5 L 10 3 L 6.5 3.5 L 5 5 L 4 8 L 4 12 L 5 15 L 6.5 16.5 L 10 17 L 13.5 16.5 L 15 15"
+      stroke="#c40202" stroke-width="0.3" fill="none" inkscape:label="ped_route_0_0" />
+  </g>
+</svg>

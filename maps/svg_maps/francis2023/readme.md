@@ -2,8 +2,9 @@
 
 These SVGs implement the geometry-first subset of the Francis et al. (2023)
 scenario figure. Each map uses the standard SVG labeling conventions from
-`docs/SVG_MAP_EDITOR.md` and places a single pedestrian via
-`single_ped_h1_start` / `single_ped_h1_goal` markers.
+`docs/SVG_MAP_EDITOR.md`. Most maps place a single pedestrian via
+`single_ped_h1_start` / `single_ped_h1_goal` markers; group scenarios include
+multiple `single_ped_h*` markers for the cluster.
 
 Conventions
 - Scale: 1 SVG unit = 1 meter.
@@ -39,9 +40,26 @@ Maps
   room; pedestrian inside the elevator.
 - `francis2023_exiting_elevator.svg` (Fig 7o): robot exits the elevator; pedestrian
   outside the doorway.
+- `francis2023_join_group.svg` (Fig 7p): open area with a small pedestrian cluster and
+  a joiner start position.
+- `francis2023_leave_group.svg` (Fig 7q): open area with a small pedestrian cluster and
+  a designated leaver start position.
+- `francis2023_crowd_navigation.svg` (Fig 7u): open area with a crowded zone for
+  dense pedestrian sampling as the robot crosses.
+- `francis2023_parallel_traffic.svg` (Fig 7v): corridor with two parallel pedestrian
+  routes moving in the robot's direction.
+- `francis2023_perpendicular_traffic.svg` (Fig 7w): intersection geometry with a
+  perpendicular pedestrian route crossing the robot path.
+- `francis2023_circular_crossing.svg` (Fig 7x): open area with a circular pedestrian
+  route intersecting the robot's straight path.
+- `francis2023_robot_crowding.svg` (Fig 7y): dense crowded zone covering the robot
+  route to induce crowding.
 
 Notes
 - Overtaking and obstruction scenarios will need per-ped speed control to match
   the intended behavior in the paper.
-- Gesture-based scenarios (wait/proceed, join/leave, follow/lead/accompany) are
-  not covered here and require behavior scripting beyond the SVG geometry.
+- Gesture-based scenarios (wait/proceed, join/leave, follow/lead/accompany) now
+  rely on scenario YAML overrides and runtime behavior logic; geometry in these maps
+  provides only the base layout.
+- Crowd/traffic scenarios depend on `ped_density` tuning plus the ped routes or
+  crowded zones embedded in each SVG.

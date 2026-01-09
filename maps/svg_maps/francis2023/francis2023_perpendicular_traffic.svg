@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Francis 2023 (w): Perpendicular Traffic -->
+<svg
+  width="30"
+  height="30"
+  viewBox="0 0 30 30"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="29" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="30" fill="#000000" inkscape:label="obstacle" />
+    <rect x="29" y="0" width="1" height="30" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="12" height="12" fill="#000000" inkscape:label="obstacle" />
+    <rect x="18" y="0" width="12" height="12" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="18" width="12" height="12" fill="#000000" inkscape:label="obstacle" />
+    <rect x="18" y="18" width="12" height="12" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="2" y="13" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="26" y="13" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 4.5 14 L 25.5 14" stroke="#0300d5" stroke-width="0.3" fill="none"
+      inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <rect x="13" y="26" width="2" height="2" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+    <rect x="13" y="2" width="2" height="2" fill="#107400" inkscape:label="ped_goal_zone" />
+    <path d="M 14 25.5 L 14 4.5" stroke="#c40202" stroke-width="0.3" fill="none"
+      inkscape:label="ped_route_0_0" />
+  </g>
+</svg>

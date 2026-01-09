@@ -21,7 +21,7 @@
   <g inkscape:label="robot">
     <rect x="20" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
     <rect x="2" y="9" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
-    <path d="M 21 10 L 14 10 L 4.5 10" stroke="#0300d5" stroke-width="0.3" fill="none"
+    <path d="M 18 10 L 14 10 L 4.5 10" stroke="#0300d5" stroke-width="0.3" fill="none"
       inkscape:label="robot_route_0_0" />
   </g>
   <g inkscape:label="pedestrians">

@@ -19,9 +19,9 @@
     <rect x="12" y="11" width="1" height="2" fill="#000000" inkscape:label="obstacle" />
   </g>
   <g inkscape:label="robot">
-    <rect x="2" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="3" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
     <rect x="14" y="9" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
-    <path d="M 4.5 10 L 12 10 L 15 10" stroke="#0300d5" stroke-width="0.3" fill="none"
+    <path d="M 7 10 L 12 10 L 15 10" stroke="#0300d5" stroke-width="0.3" fill="none"
       inkscape:label="robot_route_0_0" />
   </g>
   <g inkscape:label="pedestrians">

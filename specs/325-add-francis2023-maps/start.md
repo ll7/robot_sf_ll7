@@ -31,15 +31,6 @@
 - Preview helper: `scripts/tools/preview_scenario_trajectories.py` renders overlays
   on top of map geometry.
 
-## What is missing for the Francis 2023 scenarios
-
-- Scenario YAML exists (`configs/scenarios/francis2023.yaml`), but only covers
-  geometry-first entries.
-- Single-pedestrian runtime behaviors (wait/follow/lead/accompany/join/leave) are now
-  supported, but higher-level gesture semantics still require explicit scenario tuning.
-- Crowd/flow scenarios (parallel traffic, perpendicular traffic, circular crossing,
-  robot crowding) are not yet mapped or configured.
-
 ## Spec context
 
 - This spec folder includes:
@@ -50,8 +41,20 @@
 
 ## Current Francis 2023 assets
 
-- SVG maps under `maps/svg_maps/francis2023/` for Fig. 7a, 7b, 7c, 7d, 7e, 7f, 7i–7o.
+- SVG maps under `maps/svg_maps/francis2023/` cover Fig. 7a through 7y, including the
+  join/leave and crowd/traffic layouts.
   - Each map includes boundary obstacles and POI markers (`poi_h1_start`, `poi_h1_goal`).
-- Scenario matrix: `configs/scenarios/francis2023.yaml` (geometry-first entries).
-  - Uses `goal_poi: poi_h1_goal` overlays for readability.
+- Scenario matrix: `configs/scenarios/francis2023.yaml`.
+  - Geometry-first entries plus behavior-driven scenarios (wait/proceed, follow/lead,
+    accompany, join/leave) and crowd/traffic scenarios with initial `ped_density` tuning.
+  - Speed overrides and waits are encoded directly in the per-ped overlays.
 - Map verification: `output/validation/francis2023_map_verification.json` (latest run).
+- Scenario previews: `output/preview/scenario_trajectories/` (full-style renders for
+  the Francis scenarios, including crowd/traffic flows).
+
+## Remaining work
+
+- Review the crowd/traffic preview PNGs and adjust routes/zones or `ped_density` to
+  better match the intended Fig. 7 flows.
+- If these scenarios are user-facing, link them in `docs/README.md` and update
+  `CHANGELOG.md`.

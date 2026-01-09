@@ -97,3 +97,64 @@
 - Update `docs/README.md` and `CHANGELOG.md` if these scenarios are user-facing.
 - Add or extend tests if new behavior logic is introduced (especially for
   trajectory waypoint advancement and per-ped speed).
+
+## Current state (session snapshot)
+
+- New crowd/traffic SVGs added under `maps/svg_maps/francis2023/`:
+  `francis2023_crowd_navigation.svg`, `francis2023_parallel_traffic.svg`,
+  `francis2023_perpendicular_traffic.svg`, `francis2023_circular_crossing.svg`,
+  `francis2023_robot_crowding.svg`.
+- Join/leave maps updated with per-ped goal POIs; scenario overrides now include
+  static anchors (`role: wait`) and leave uses `goal_poi: poi_h1_goal`.
+- `configs/scenarios/francis2023.yaml` includes behavior-driven entries plus
+  crowd/traffic scenarios with initial `ped_density` tuning:
+  crowd=0.06, parallel=0.04, perpendicular=0.10, circular=0.06, crowding=0.10.
+- Map verification run (local mode) for all new crowd/traffic SVGs.
+- Full-style previews rendered for the new crowd/traffic scenarios under
+  `output/preview/scenario_trajectories/`.
+- Sanity sweep (10 steps each) confirms nonzero ped counts:
+  crowd=7, parallel=8, perpendicular=7, circular=6, crowding=20.
+- New SVGs are still untracked (need `git add` when ready).
+
+## Next steps
+
+- Review the crowd/traffic preview PNGs and adjust routes/zones if flows look off.
+- Refine `ped_density` values to better match the Francis 2023 intent.
+- Regenerate previews after tuning (consider `--style full` for route visibility).
+- Update `docs/README.md` to link the Francis 2023 scenarios if this is a user-facing addition.
+
+## Validation / testing commands
+
+- Verify new maps (local):
+  - `source .venv/bin/activate`
+  - `MPLCONFIGDIR=$PWD/output/tmp/mplconfig XDG_CACHE_HOME=$PWD/output/tmp/cache MPLBACKEND=Agg \\`
+    `python scripts/validation/verify_maps.py --scope francis2023_crowd_navigation.svg --mode local`
+  - Repeat for: `francis2023_parallel_traffic.svg`, `francis2023_perpendicular_traffic.svg`,
+    `francis2023_circular_crossing.svg`, `francis2023_robot_crowding.svg`.
+- Generate previews (full style for routes/zones):
+  - `MPLCONFIGDIR=$PWD/output/tmp/mplconfig XDG_CACHE_HOME=$PWD/output/tmp/cache MPLBACKEND=Agg \\`
+    `python scripts/tools/preview_scenario_trajectories.py --scenario configs/scenarios/francis2023.yaml --scenario-id francis2023_parallel_traffic --style full`
+  - Repeat for the other crowd/traffic scenario IDs (or use `--all` for full batch output).
+- Quick sanity sweep (ped counts + 10 steps):
+  - `MPLCONFIGDIR=$PWD/output/tmp/mplconfig XDG_CACHE_HOME=$PWD/output/tmp/cache MPLBACKEND=Agg \\`
+    `python - <<'PY'`
+    `from pathlib import Path`
+    `from robot_sf.gym_env.environment_factory import make_robot_env`
+    `from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios, select_scenario`
+    `scenario_path = Path("configs/scenarios/francis2023.yaml").resolve()`
+    `scenarios = load_scenarios(scenario_path)`
+    `scenario_ids = ["francis2023_crowd_navigation","francis2023_parallel_traffic","francis2023_perpendicular_traffic","francis2023_circular_crossing","francis2023_robot_crowding"]`
+    `for scenario_id in scenario_ids:`
+    `    scenario = select_scenario(scenarios, scenario_id)`
+    `    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)`
+    `    env = make_robot_env(config=config)`
+    `    env.reset()`
+    `    ped_pos = getattr(env.simulator, "ped_pos", None)`
+    `    ped_count = int(ped_pos.shape[0]) if ped_pos is not None else 0`
+    `    print(f"{scenario_id}: ped_count={ped_count}")`
+    `    for _ in range(10):`
+    `        _, _, terminated, truncated, _ = env.step(env.action_space.sample())`
+    `        if terminated or truncated:`
+    `            break`
+    `    env.close()`
+    `PY`

@@ -158,3 +158,23 @@
     `            break`
     `    env.close()`
     `PY`
+
+## Handoff checklist
+
+- Confirm untracked SVGs are staged:
+  `maps/svg_maps/francis2023/francis2023_crowd_navigation.svg`,
+  `maps/svg_maps/francis2023/francis2023_parallel_traffic.svg`,
+  `maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg`,
+  `maps/svg_maps/francis2023/francis2023_circular_crossing.svg`,
+  `maps/svg_maps/francis2023/francis2023_robot_crowding.svg`,
+  `maps/svg_maps/francis2023/francis2023_join_group.svg`,
+  `maps/svg_maps/francis2023/francis2023_leave_group.svg`.
+- Review previews in `output/preview/scenario_trajectories/` for crowd/traffic flows
+  and update routes/zones if the geometry does not match Fig. 7 intent.
+- Re-run map verification for the new maps after any edits.
+- Re-run the sanity sweep (ped counts + 10 steps) and confirm ped counts are within
+  expected ranges after density tweaks.
+- Decide whether to link the Francis 2023 scenarios in `docs/README.md` and update
+  if this should be user-facing.
+- Keep `output/tmp` as the location for matplotlib caches; ensure `.cache` and
+  `.mplconfig` do not reappear at the repo root.

@@ -115,6 +115,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - **API Reference**: 6 helper functions (zones, routes, config management, YAML loading)
   - **Examples**: 4 realistic scenarios (simple navigation, urban intersection, variable density, load/verify)
 - **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
+- **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
+  scenario matrix for Fig. 7 archetypes; definitions in
+  [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml)
 - **[Occupancy Grid Guide](./dev/occupancy/Update_or_extend_occupancy.md)** - Configure grid observations, spawn queries, and pygame overlays
 - **[Circle Rasterization Fix](./dev/issues/circle-rasterization-fix/README.md)** - Clarifies circle overlap handling in occupancy grid rasterization
 - **[Telemetry Pane & Headless Artifacts](../specs/343-telemetry-viz/quickstart.md)** - Enable docked charts in Pygame, replay/export telemetry, and run headless smoke tests
@@ -165,6 +168,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 - [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
+- **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
+  scenario matrix in [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml).
 - **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
 
 ### 📊 Analysis & Tools  

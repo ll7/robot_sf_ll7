@@ -289,7 +289,7 @@ class RobotEnv(BaseEnv):
 
         # Assign the reward function; ensure a valid callable even if None passed via factory
         if reward_func is None:  # defensive: factory allows Optional
-            logger.warning(
+            logger.debug(
                 "No reward_func provided to RobotEnv; falling back to simple_reward for safety.",
             )
         self.reward_func = reward_func or simple_reward

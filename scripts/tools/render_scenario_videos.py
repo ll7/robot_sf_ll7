@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -49,7 +48,7 @@ from robot_sf.training.scenario_loader import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
 
 @dataclass
@@ -240,6 +239,141 @@ def _defensive_obs_adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
     return np.concatenate((ray_state, drive_state), axis=0)
 
 
+def _sync_policy_spaces(env, policy_model: Any | None) -> None:
+    """Sync env spaces to the policy model when available."""
+    if policy_model is None:
+        return
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is not None:
+        env.observation_space = obs_space
+    action_space = getattr(policy_model, "action_space", None)
+    if action_space is not None:
+        env.action_space = action_space
+
+
+def _resolve_goal_action(
+    *,
+    action_space: Any | None,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    scenario_name: str,
+    seed: int,
+) -> bool:
+    """Determine whether to use the goal-seeking controller."""
+    use_goal_action = policy_model is None
+    if use_goal_action:
+        if action_space is None or getattr(action_space, "shape", None) != (2,):
+            use_goal_action = False
+        else:
+            low = np.asarray(getattr(action_space, "low", [0.0, 0.0]), dtype=float)
+            if not (low.shape == (2,) and float(low[0]) >= 0.0):
+                use_goal_action = False
+    if use_goal_action:
+        logger.info("Scenario {} seed {} uses goal-seeking policy.", scenario_name, seed)
+    elif policy_model is None or policy_obs_adapter is None:
+        logger.warning(
+            "Scenario {} seed {} policy fallback: random actions.",
+            scenario_name,
+            seed,
+        )
+    return use_goal_action
+
+
+def _adapt_obs_for_policy(
+    obs: Mapping[str, Any],
+    *,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+) -> Mapping[str, Any] | np.ndarray:
+    """Apply the policy observation adapter when needed."""
+    if policy_model is not None and policy_obs_adapter is not None:
+        return policy_obs_adapter(obs)
+    return obs
+
+
+def _select_action(
+    *,
+    env,
+    obs: Any,
+    action_space: Any | None,
+    use_goal_action: bool,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    robot_speed: float,
+) -> np.ndarray:
+    """Choose an action based on the selected policy mode."""
+    if use_goal_action:
+        return _goal_action(env, speed=robot_speed)
+    if policy_model is not None and policy_obs_adapter is not None:
+        action, _ = policy_model.predict(obs, deterministic=True)
+        return action
+    if action_space is not None:
+        return action_space.sample()
+    return np.zeros(2)
+
+
+def _run_steps(
+    *,
+    env,
+    obs: Any,
+    action_space: Any | None,
+    use_goal_action: bool,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    robot_speed: float,
+    max_steps: int,
+) -> int:
+    """Advance the environment until termination or the step budget."""
+    steps = 0
+    for _ in range(max_steps):
+        action = _select_action(
+            env=env,
+            obs=obs,
+            action_space=action_space,
+            use_goal_action=use_goal_action,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+            robot_speed=robot_speed,
+        )
+        obs, _, terminated, truncated, _ = env.step(action)
+        obs = _adapt_obs_for_policy(
+            obs,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+        )
+        env.render()
+        steps += 1
+        if terminated or truncated:
+            break
+    return steps
+
+
+def _close_env(env) -> None:
+    """Best-effort shutdown for the environment."""
+    for method in ("exit", "close"):
+        try:
+            getattr(env, method)()
+        except Exception:
+            pass
+
+
+def _validate_video(
+    video_path: Path,
+    *,
+    status: str,
+    note: str | None,
+) -> tuple[str, str | None]:
+    """Verify the output video and update the status if missing."""
+    if status != "success":
+        return status, note
+    try:
+        if not video_path.exists() or video_path.stat().st_size == 0:
+            return "missing", "video missing or empty"
+    except OSError as exc:
+        return "missing", f"video stat failed: {exc}"
+    return status, note
+
+
 def _run_episode(
     scenario: Mapping[str, Any],
     *,
@@ -276,65 +410,39 @@ def _run_episode(
     note = None
     error = None
     try:
-        if policy_model is not None:
-            if getattr(policy_model, "observation_space", None) is not None:
-                env.observation_space = policy_model.observation_space
-            if getattr(policy_model, "action_space", None) is not None:
-                env.action_space = policy_model.action_space
+        _sync_policy_spaces(env, policy_model)
         obs, _ = env.reset()
-        use_goal_action = policy_model is None
         action_space = getattr(env, "action_space", None)
-        if use_goal_action:
-            if action_space is not None and getattr(action_space, "shape", None) == (2,):
-                low = np.asarray(getattr(action_space, "low", [0.0, 0.0]), dtype=float)
-                if not (low.shape == (2,) and float(low[0]) >= 0.0):
-                    use_goal_action = False
-        if use_goal_action:
-            logger.info("Scenario {} seed {} uses goal-seeking policy.", scenario_name, seed)
-        elif policy_model is not None and policy_obs_adapter is not None:
-            obs = policy_obs_adapter(obs)
-        else:
-            logger.warning(
-                "Scenario {} seed {} policy fallback: random actions.",
-                scenario_name,
-                seed,
-            )
-        for _ in range(max_steps):
-            if use_goal_action:
-                action = _goal_action(env, speed=robot_speed)
-            elif policy_model is not None and policy_obs_adapter is not None:
-                action, _ = policy_model.predict(obs, deterministic=True)
-            else:
-                action = action_space.sample() if action_space is not None else np.zeros(2)
-            obs, _, terminated, truncated, _ = env.step(action)
-            if policy_model is not None and policy_obs_adapter is not None:
-                obs = policy_obs_adapter(obs)
-            env.render()
-            steps += 1
-            if terminated or truncated:
-                break
+        use_goal_action = _resolve_goal_action(
+            action_space=action_space,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+            scenario_name=scenario_name,
+            seed=seed,
+        )
+        obs = _adapt_obs_for_policy(
+            obs,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+        )
+        steps = _run_steps(
+            env=env,
+            obs=obs,
+            action_space=action_space,
+            use_goal_action=use_goal_action,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+            robot_speed=robot_speed,
+            max_steps=max_steps,
+        )
     except Exception as exc:
         status = "error"
         error = repr(exc)
         logger.exception("Scenario run failed: {} seed={}", scenario_name, seed)
     finally:
-        try:
-            env.exit()
-        except Exception:
-            pass
-        try:
-            env.close()
-        except Exception:
-            pass
+        _close_env(env)
 
-    if status == "success":
-        try:
-            if not video_path.exists() or video_path.stat().st_size == 0:
-                status = "missing"
-                note = "video missing or empty"
-        except OSError as exc:
-            status = "missing"
-            note = f"video stat failed: {exc}"
+    status, note = _validate_video(video_path, status=status, note=note)
 
     return RenderResult(
         scenario_id=scenario_name,

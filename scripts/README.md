@@ -421,6 +421,16 @@ uv run python scripts/tools/preview_scenario_trajectories.py \
 ```
 **Details**: Writes a PNG under `output/preview/scenario_trajectories/` by default. Use `MPLBACKEND=Agg` for headless runs.
 
+### `tools/render_scenario_videos.py`
+**Purpose**: Render MP4 videos for every scenario in a scenario matrix  
+**Usage**:
+```bash
+uv run python scripts/tools/render_scenario_videos.py \
+  --scenario configs/scenarios/francis2023.yaml \
+  --all
+```
+**Details**: Writes videos under a timestamped folder in `output/recordings/` and saves a `manifest.json`. Use `--policy ppo --model-path model/run_023.zip` to drive the robot with the defensive PPO policy.
+
 ### `tools/compare_training_runs.py`
 **Purpose**: Comparison tool for analyzing training runs  
 **Usage**:

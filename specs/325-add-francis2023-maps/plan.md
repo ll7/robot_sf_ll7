@@ -88,6 +88,7 @@
   - crowd navigation, parallel traffic, perpendicular traffic
   - circular crossing, robot crowding
 - Calibrate `ped_density` and routes to approximate the intended flows in the figure.
+- Status: done (initial density tuning applied; refine as needed).
 
 ## Phase 6: Validation and documentation
 

@@ -21,17 +21,18 @@ Legend
 | m | Exiting Room | `maps/svg_maps/francis2023/francis2023_exiting_room.svg` | done | none (single ped) | Robot exits room with ped outside. |
 | n | Entering Elevator | `maps/svg_maps/francis2023/francis2023_entering_elevator.svg` | done | none (single ped) | Robot enters elevator; ped inside. |
 | o | Exiting Elevator | `maps/svg_maps/francis2023/francis2023_exiting_elevator.svg` | done | none (single ped) | Robot exits elevator; ped outside. |
-| p | Join Group | TBD (open area or corridor map) | pending | group join behavior | Requires group formation or join logic. |
-| q | Leave Group | TBD (open area or corridor map) | pending | group leave behavior | Requires group split logic. |
-| r | Following Human | TBD (corridor map) | pending | follow behavior | Ped acts as leader; robot follows. |
-| s | Leading Human | TBD (corridor map) | pending | lead behavior | Ped follows robot; requires scripted follower. |
-| t | Accompanying Peer | TBD (corridor map) | pending | side-by-side behavior | Requires paired formation/maintained offset. |
-| u | Crowd Navigation | TBD (open area + crowded zones) | pending | crowd density + routes | Needs crowd spawning and density tuning. |
-| v | Parallel Traffic | TBD (corridor + routes) | pending | multi-ped parallel flow | Multiple pedestrian routes in same direction. |
-| w | Perpendicular Traffic | TBD (crossing routes) | pending | multi-ped perpendicular flow | Crossing flows with routes. |
-| x | Circular Crossing | TBD (circular layout) | pending | multi-ped circulate flow | Requires circular route topology. |
-| y | Robot Crowding | TBD (open area + crowded zones) | pending | crowd density + routes | High-density crowd around robot. |
+| p | Join Group | `maps/svg_maps/francis2023/francis2023_join_group.svg` | done | group join behavior | Requires group formation or join logic. |
+| q | Leave Group | `maps/svg_maps/francis2023/francis2023_leave_group.svg` | done | group leave behavior | Requires group split logic. |
+| r | Following Human | `maps/svg_maps/francis2023/francis2023_down_path.svg` | done | follow behavior (role) | Ped acts as leader; robot follows. |
+| s | Leading Human | `maps/svg_maps/francis2023/francis2023_down_path.svg` | done | lead behavior (role) | Ped follows robot; requires scripted follower. |
+| t | Accompanying Peer | `maps/svg_maps/francis2023/francis2023_down_path.svg` | done | side-by-side behavior (role) | Requires paired formation/maintained offset. |
+| u | Crowd Navigation | `maps/svg_maps/francis2023/francis2023_crowd_navigation.svg` | done | crowd density + crowded zone | Needs density tuning for desired crowding. |
+| v | Parallel Traffic | `maps/svg_maps/francis2023/francis2023_parallel_traffic.svg` | done | multi-ped parallel flow | Multiple pedestrian routes in same direction. |
+| w | Perpendicular Traffic | `maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg` | done | multi-ped perpendicular flow | Crossing flow perpendicular to robot. |
+| x | Circular Crossing | `maps/svg_maps/francis2023/francis2023_circular_crossing.svg` | done | circular flow route | Pedestrians circulate on a looped route. |
+| y | Robot Crowding | `maps/svg_maps/francis2023/francis2023_robot_crowding.svg` | done | high crowd density | Dense crowd around the robot path. |
 
 Notes
 - Geometry-only SVGs include outer obstacle boundaries to keep agents inside the map.
-- Scenario YAML definitions are still pending for all Francis 2023 entries.
+- Scenario YAML definitions live in `configs/scenarios/francis2023.yaml`; crowd/traffic
+  entries still need density tuning for best fidelity.

@@ -538,7 +538,7 @@ class SvgMapConverter:
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
         if not ped_routes:
-            logger.warning("No pedestrian routes found in the SVG file")
+            logger.debug("No pedestrian routes found in the SVG file")
         if not ped_crowded_zones:
             logger.debug("No crowded zones found in the SVG file (optional)")
 

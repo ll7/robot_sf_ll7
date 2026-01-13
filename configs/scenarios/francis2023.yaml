@@ -390,7 +390,7 @@ scenarios:
     map_file: "../../maps/svg_maps/francis2023/francis2023_crowd_navigation.svg"
     simulation_config:
       max_episode_steps: 400
-      ped_density: 0.06
+      ped_density: 0.08
     robot_config: {}
     metadata:
       figure: "7u"
@@ -442,7 +442,7 @@ scenarios:
     map_file: "../../maps/svg_maps/francis2023/francis2023_robot_crowding.svg"
     simulation_config:
       max_episode_steps: 400
-      ped_density: 0.10
+      ped_density: 0.12
     robot_config: {}
     metadata:
       figure: "7y"

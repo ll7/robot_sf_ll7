@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from gymnasium import spaces as gym_spaces
 from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import load_trained_policy
@@ -239,6 +240,103 @@ def _defensive_obs_adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
     return np.concatenate((ray_state, drive_state), axis=0)
 
 
+def _make_drive_state_adapter(
+    expected_shape: tuple[int, ...],
+) -> Callable[[Mapping[str, Any]], np.ndarray]:
+    """Return an adapter that extracts drive_state and matches the expected shape."""
+
+    def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        drive_state = np.asarray(orig_obs[OBS_DRIVE_STATE])
+        if (
+            expected_shape
+            and len(expected_shape) == 1
+            and drive_state.shape[:1] == (1,)
+            and drive_state.shape[1:] == expected_shape
+        ):
+            drive_state = np.squeeze(drive_state, axis=0)
+        return drive_state
+
+    return _adapter
+
+
+def _make_ray_obs_adapter(
+    expected_shape: tuple[int, ...],
+) -> Callable[[Mapping[str, Any]], np.ndarray]:
+    """Return an adapter that extracts ray observations and matches the expected shape."""
+
+    def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        ray_state = np.asarray(orig_obs[OBS_RAYS])
+        if (
+            expected_shape
+            and len(expected_shape) == 1
+            and ray_state.shape[:1] == (1,)
+            and ray_state.shape[1:] == expected_shape
+        ):
+            ray_state = np.squeeze(ray_state, axis=0)
+        return ray_state
+
+    return _adapter
+
+
+def _resolve_policy_obs_adapter(
+    policy_model: Any | None,
+) -> Callable[[Mapping[str, Any]], np.ndarray] | None:
+    """Pick an observation adapter based on the PPO policy observation space."""
+    if policy_model is None:
+        return None
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is None:
+        logger.warning("PPO policy missing observation_space; using defensive adapter.")
+        return _defensive_obs_adapter
+    if isinstance(obs_space, gym_spaces.Dict):
+        logger.info("PPO policy expects dict observations; skipping adapter.")
+        return None
+    if isinstance(obs_space, gym_spaces.Box):
+        shape = tuple(obs_space.shape)
+        if len(shape) == 1 and shape[0] == 5:
+            logger.info("PPO policy expects drive_state vector; using drive-state adapter.")
+            return _make_drive_state_adapter(shape)
+        if len(shape) == 1 and shape[0] == 272:
+            logger.info("PPO policy expects ray vector; using ray adapter.")
+            return _make_ray_obs_adapter(shape)
+        if len(shape) == 2 and shape[1] == 5:
+            logger.info("PPO policy expects drive_state stack; using drive-state adapter.")
+            return _make_drive_state_adapter(shape)
+        if len(shape) == 2 and shape[1] == 272:
+            logger.info("PPO policy expects ray stack; using ray adapter.")
+            return _make_ray_obs_adapter(shape)
+    logger.info("PPO policy expects flat observations; using defensive adapter.")
+    return _defensive_obs_adapter
+
+
+def _resolve_policy_stack_steps(policy_model: Any | None) -> int | None:
+    """Infer stack_steps from the PPO policy observation space when possible."""
+    if policy_model is None:
+        return None
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is None:
+        return None
+    if isinstance(obs_space, gym_spaces.Dict):
+        spaces = getattr(obs_space, "spaces", {})
+        for key in (OBS_DRIVE_STATE, OBS_RAYS):
+            subspace = spaces.get(key)
+            if subspace is None:
+                continue
+            shape = getattr(subspace, "shape", None)
+            if shape and len(shape) >= 1:
+                return int(shape[0])
+        for subspace in spaces.values():
+            shape = getattr(subspace, "shape", None)
+            if shape and len(shape) >= 1:
+                return int(shape[0])
+        return None
+    if isinstance(obs_space, gym_spaces.Box):
+        shape = getattr(obs_space, "shape", None)
+        if shape and len(shape) > 1:
+            return int(shape[0])
+    return None
+
+
 def _sync_policy_spaces(env, policy_model: Any | None) -> None:
     """Sync env spaces to the policy model when available."""
     if policy_model is None:
@@ -270,7 +368,7 @@ def _resolve_goal_action(
                 use_goal_action = False
     if use_goal_action:
         logger.info("Scenario {} seed {} uses goal-seeking policy.", scenario_name, seed)
-    elif policy_model is None or policy_obs_adapter is None:
+    elif policy_model is None:
         logger.warning(
             "Scenario {} seed {} policy fallback: random actions.",
             scenario_name,
@@ -304,7 +402,7 @@ def _select_action(
     """Choose an action based on the selected policy mode."""
     if use_goal_action:
         return _goal_action(env, speed=robot_speed)
-    if policy_model is not None and policy_obs_adapter is not None:
+    if policy_model is not None:
         action, _ = policy_model.predict(obs, deterministic=True)
         return action
     if action_space is not None:
@@ -395,7 +493,11 @@ def _run_episode(
 
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     if policy_name == "ppo":
-        config.sim_config.stack_steps = 1
+        policy_stack_steps = _resolve_policy_stack_steps(policy_model)
+        if policy_stack_steps is not None:
+            config.sim_config.stack_steps = policy_stack_steps
+        elif policy_obs_adapter is not None:
+            config.sim_config.stack_steps = 1
     env = make_robot_env(
         config=config,
         seed=int(seed),
@@ -520,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
     policy_obs_adapter = None
     if args.policy == "ppo":
         policy_model = load_trained_policy(str(args.model_path))
-        policy_obs_adapter = _defensive_obs_adapter
+        policy_obs_adapter = _resolve_policy_obs_adapter(policy_model)
 
     results: list[RenderResult] = []
     for scenario in scenarios:

@@ -56,6 +56,7 @@ scripts/
 │   ├── run_tracker_cli.py            # Run tracking CLI
 │   ├── compare_training_runs.py      # Training comparison
 │   ├── preview_scenario_trajectories.py # Scenario trajectory preview helper
+│   ├── render_scenario_videos.py     # Render scenario videos from trajectories
 │   ├── migrate_artifacts.py          # Artifact migration
 │   ├── check_artifact_root.py        # Artifact policy guard
 │   └── validate_report.py            # Report validation

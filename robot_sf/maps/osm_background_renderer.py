@@ -199,7 +199,8 @@ def render_osm_background(
     """Render OSM PBF to PNG background with affine transform metadata.
 
     Loads OSM PBF file and renders buildings, water, and streets to PNG format.
-    Generates JSON metadata with affine transform for coordinate mapping.
+    Generates JSON metadata with affine transform for coordinate mapping. All geometry
+    is projected to a local UTM zone to ensure meter-based scaling.
 
     Args:
         pbf_file: Path to OSM PBF file
@@ -233,6 +234,11 @@ def render_osm_background(
         gdf = gdf.set_crs("EPSG:4326", allow_override=True)
 
     gdf_utm, utm_zone = project_to_utm(gdf)
+    if gdf_utm.crs is None or getattr(gdf_utm.crs, "is_geographic", False):
+        raise ValueError(
+            "OSM background rendering requires a projected CRS for meter-based scaling."
+        )
+    utm_crs = gdf_utm.crs.to_string()
 
     visible_mask = _visible_features_mask(gdf_utm)
     gdf_visible = gdf_utm.loc[visible_mask].copy() if visible_mask.any() else gdf_utm.copy()
@@ -292,6 +298,7 @@ def render_osm_background(
     metadata = {
         "pbf_file": str(pbf_file),
         "utm_zone": utm_zone,
+        "utm_crs": utm_crs,
         "affine_transform": affine_transform,
     }
 

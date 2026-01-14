@@ -1,18 +1,34 @@
-"""Observation helpers shared by training scripts.
+"""Observation helpers shared by training and playback scripts.
 
-Provides utilities to ensure Stable-Baselines3 policies encounter the same flattened
-observation space regardless of where the environment is instantiated.
+Provides utilities to align observation shapes with Stable-Baselines3 policies.
+
+Quick reference:
+- maybe_flatten_env_observations: wrap dict observations with FlattenObservation.
+- resolve_policy_obs_adapter: select an adapter for PPO checkpoints.
+- resolve_policy_stack_steps: infer stack_steps from a PPO observation space.
+- sync_policy_spaces: align env observation/action spaces with a loaded policy.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 from gymnasium import spaces as gym_spaces
 from gymnasium.wrappers import FlattenObservation
 from loguru import logger
 
-__all__ = ["maybe_flatten_env_observations"]
+from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+
+__all__ = [
+    "maybe_flatten_env_observations",
+    "resolve_policy_obs_adapter",
+    "resolve_policy_stack_steps",
+    "sync_policy_spaces",
+]
 
 
 def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> Any:
@@ -35,3 +51,161 @@ def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> An
         return FlattenObservation(env)
 
     return env
+
+
+def _reshape_box_obs(obs: np.ndarray, expected_shape: tuple[int, ...]) -> np.ndarray:
+    """Reshape or repeat observations to match the expected Box shape.
+
+    Returns:
+        Reshaped or repeated observation array matching expected_shape.
+    """
+    if obs.shape == expected_shape:
+        return obs
+    if len(expected_shape) == 1:
+        if obs.ndim == 2 and obs.shape[0] == 1 and obs.shape[1:] == expected_shape:
+            return np.squeeze(obs, axis=0)
+        return obs
+    if len(expected_shape) == 2:
+        stack, features = expected_shape
+        if obs.ndim == 1 and obs.shape == (features,):
+            return np.repeat(obs[np.newaxis, :], stack, axis=0)
+        if obs.ndim == 2 and obs.shape[1:] == (features,):
+            if obs.shape[0] == 1:
+                return np.repeat(obs, stack, axis=0)
+    return obs
+
+
+def _make_drive_state_adapter(
+    expected_shape: tuple[int, ...],
+) -> Callable[[Mapping[str, Any]], np.ndarray]:
+    """Return an adapter that extracts drive_state and matches the expected shape.
+
+    Returns:
+        Callable adapter that extracts drive_state observations and reshapes them.
+    """
+
+    def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        drive_state = np.asarray(orig_obs[OBS_DRIVE_STATE])
+        return _reshape_box_obs(drive_state, expected_shape)
+
+    return _adapter
+
+
+def _make_ray_obs_adapter(
+    expected_shape: tuple[int, ...],
+) -> Callable[[Mapping[str, Any]], np.ndarray]:
+    """Return an adapter that extracts ray observations and matches the expected shape.
+
+    Returns:
+        Callable adapter that extracts ray observations and reshapes them.
+    """
+
+    def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        ray_state = np.asarray(orig_obs[OBS_RAYS])
+        return _reshape_box_obs(ray_state, expected_shape)
+
+    return _adapter
+
+
+def resolve_policy_obs_adapter(
+    policy_model: Any | None,
+    *,
+    fallback_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None = None,
+) -> Callable[[Mapping[str, Any]], np.ndarray] | None:
+    """Select an observation adapter based on the PPO policy observation space.
+
+    Returns:
+        Observation adapter callable for the policy, or None if no adapter needed.
+    """
+    if policy_model is None:
+        return None
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is None:
+        if fallback_adapter is not None:
+            logger.warning("PPO policy missing observation_space; using fallback adapter.")
+        return fallback_adapter
+    if isinstance(obs_space, gym_spaces.Dict):
+        logger.info("PPO policy expects dict observations; skipping adapter.")
+        return None
+    if isinstance(obs_space, gym_spaces.Box):
+        shape = tuple(obs_space.shape)
+        if shape and shape[-1] == 5:
+            logger.info("PPO policy expects drive_state observations; using drive-state adapter.")
+            return _make_drive_state_adapter(shape)
+        if shape and shape[-1] == 272:
+            logger.info("PPO policy expects ray observations; using ray adapter.")
+            return _make_ray_obs_adapter(shape)
+    if fallback_adapter is not None:
+        logger.info("PPO policy expects flat observations; using fallback adapter.")
+    return fallback_adapter
+
+
+def _extract_stack_from_shape(shape: tuple[int, ...] | None) -> int | None:
+    """Extract stack dimension from observation shape.
+
+    Returns:
+        Stack dimension if shape is valid, None otherwise.
+    """
+    if shape and len(shape) >= 1:
+        return int(shape[0])
+    return None
+
+
+def _extract_stack_from_dict_space(obs_space: gym_spaces.Dict) -> int | None:
+    """Extract stack dimension from a Dict observation space.
+
+    Returns:
+        Stack dimension if found, None otherwise.
+    """
+    spaces = getattr(obs_space, "spaces", {})
+    # Check priority keys first
+    for key in (OBS_DRIVE_STATE, OBS_RAYS):
+        subspace = spaces.get(key)
+        if subspace is not None:
+            shape = getattr(subspace, "shape", None)
+            result = _extract_stack_from_shape(shape)
+            if result is not None:
+                return result
+    # Fallback to any subspace
+    for subspace in spaces.values():
+        shape = getattr(subspace, "shape", None)
+        result = _extract_stack_from_shape(shape)
+        if result is not None:
+            return result
+    return None
+
+
+def resolve_policy_stack_steps(policy_model: Any | None) -> int | None:
+    """Infer stack_steps from the PPO policy observation space when possible.
+
+    Returns:
+        Inferred stack_steps from policy observation space, or None if unavailable.
+    """
+    if policy_model is None:
+        return None
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is None:
+        return None
+
+    # Handle Dict spaces
+    if isinstance(obs_space, gym_spaces.Dict):
+        return _extract_stack_from_dict_space(obs_space)
+
+    # Handle Box spaces
+    if isinstance(obs_space, gym_spaces.Box):
+        shape = getattr(obs_space, "shape", None)
+        if shape and len(shape) > 1:
+            return int(shape[0])
+    return None
+
+
+def sync_policy_spaces(env: Any, policy_model: Any | None) -> None:
+    """Align env observation/action spaces with a loaded policy when available."""
+    if policy_model is None:
+        return
+    obs_space = getattr(policy_model, "observation_space", None)
+    if obs_space is not None:
+        env.observation_space = obs_space
+    action_space = getattr(policy_model, "action_space", None)
+    if action_space is not None:
+        env.action_space = action_space

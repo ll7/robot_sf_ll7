@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New extractor report generator: `scripts/research/generate_extractor_report.py` converts multi-extractor `summary.json` into research-ready `report.md`/`report.tex` with figures, reproducibility metadata, and baseline comparisons.
 - Inkscape SVG map template (`maps/templates/map_template.svg`) and quickstart updates in `docs/SVG_MAP_EDITOR.md`.
 - Classic planner backend option in `RobotSimulationConfig` (`planner_backend="classic"` with `planner_classic_config`) plus ORCA demo consuming it (`examples/advanced/31_classic_planner_orca_demo.py`); planner attachment now supports grid-based planning without manual wiring.
+- Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
+- Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
+- Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
 
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)

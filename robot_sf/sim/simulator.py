@@ -41,7 +41,7 @@ from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
-from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
+from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
@@ -103,7 +103,12 @@ class Simulator:
             self.map_def.ped_crowded_zones,
             obstacle_polygons=get_prepared_obstacles(self.map_def),
             single_pedestrians=self.map_def.single_pedestrians,
+            time_step_s=self.config.time_per_step_in_secs,
+            single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
         )
+        for behavior in self.peds_behaviors:
+            if isinstance(behavior, SinglePedestrianBehavior):
+                behavior.set_robot_pose_provider(lambda: self.robot_poses)
 
         if self.peds_have_obstacle_forces is None:
             logger.warning(

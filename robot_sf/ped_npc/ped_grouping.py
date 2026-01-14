@@ -66,6 +66,19 @@ class PedestrianStates:
         """
         self.pysf_states()[ped_id, 4:6] = new_goal
 
+    def set_velocity(self, ped_id: int, new_velocity: Vec2D):
+        """
+        Set the velocity of a pedestrian.
+
+        Parameters
+        ----------
+        ped_id : int
+            The ID of the pedestrian.
+        new_velocity : Vec2D
+            The new (vx, vy) velocity.
+        """
+        self.pysf_states()[ped_id, 2:4] = new_velocity
+
     def reposition(self, ped_id: int, new_pos: Vec2D):
         """
         Reposition a pedestrian to a new position.
@@ -227,6 +240,28 @@ class PedestrianGroupings:
                 self.groups[old_gid].remove(ped_id)
             self.group_by_ped_id[ped_id] = new_gid
         return new_gid
+
+    def add_to_group(self, ped_id: int, group_id: int) -> None:
+        """Add a pedestrian to an existing group, removing them from any prior group."""
+        if ped_id in self.group_by_ped_id:
+            old_gid = self.group_by_ped_id[ped_id]
+            if old_gid == group_id:
+                return
+            self.groups[old_gid].discard(ped_id)
+        if group_id not in self.groups:
+            self.groups[group_id] = set()
+        self.groups[group_id].add(ped_id)
+        self.group_by_ped_id[ped_id] = group_id
+
+    def ensure_group_for_ped(self, ped_id: int) -> int:
+        """Ensure a pedestrian belongs to a group, creating a single-member group if needed.
+
+        Returns:
+            int: The group id the pedestrian belongs to.
+        """
+        if ped_id in self.group_by_ped_id:
+            return self.group_by_ped_id[ped_id]
+        return self.new_group({ped_id})
 
     def remove_group(self, group_id: int):
         """TODO docstring. Document this function.

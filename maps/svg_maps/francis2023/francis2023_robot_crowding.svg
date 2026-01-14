@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Francis 2023 (y): Robot Crowding -->
+<svg
+  width="20"
+  height="20"
+  viewBox="0 0 20 20"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="20" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19" width="20" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="20" fill="#000000" inkscape:label="obstacle" />
+    <rect x="19" y="0" width="1" height="20" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="3" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="16" y="9" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 7 10 L 15.5 10" stroke="#0300d5" stroke-width="0.3" fill="none"
+      inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <rect x="3" y="3" width="14" height="14" fill="#b3b3b3" inkscape:label="ped_crowded_zone" />
+  </g>
+</svg>

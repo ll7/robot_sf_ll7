@@ -85,11 +85,19 @@ class MapInventory:
             logger.warning(f"Cannot load inventory: {self.maps_root} does not exist")
             return
 
-        svg_files = list(self.maps_root.glob("*.svg"))
+        svg_files = sorted(self.maps_root.rglob("*.svg"))
         logger.info(f"Discovered {len(svg_files)} SVG files in {self.maps_root}")
 
         for svg_file in svg_files:
             map_id = svg_file.stem
+            if map_id in self._inventory:
+                logger.warning(
+                    "Duplicate map id '{}' at {}; already registered at {}",
+                    map_id,
+                    svg_file,
+                    self._inventory[map_id].file_path,
+                )
+                continue
 
             # Get file modification time
             try:

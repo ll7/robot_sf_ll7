@@ -8,6 +8,8 @@ This guide explains how to define individually controlled pedestrians with expli
 - [Pedestrian Definition Format](#pedestrian-definition-format)
 - [SVG Map Definition](#svg-map-definition)
 - [JSON Map Definition](#json-map-definition)
+- [Scenario YAML Overrides](#scenario-yaml-overrides)
+- [Preview Helper](#preview-helper)
 - [Programmatic Definition](#programmatic-definition)
 - [Validation Rules](#validation-rules)
 - [Examples](#examples)
@@ -40,12 +42,38 @@ Each single pedestrian is defined by:
 | `start` | `Vec2D` | Yes | Starting position as `(x, y)` tuple |
 | `goal` | `Vec2D \| None` | No | Goal position for navigation (mutually exclusive with trajectory) |
 | `trajectory` | `list[Vec2D] \| None` | No | List of waypoints to follow (mutually exclusive with goal) |
+| `speed_m_s` | `float \| None` | No | Optional speed override for this pedestrian (m/s) |
+| `wait_at` | `list[PedestrianWaitRule] \| None` | No | Optional waits at trajectory waypoints (trajectory required) |
+| `note` | `str \| None` | No | Optional note for scenario documentation |
+| `role` | `str \| None` | No | Optional runtime behavior role (`wait`, `follow`, `lead`, `accompany`, `join`, `leave`) |
+| `role_target_id` | `str \| None` | No | Optional target identifier for role behaviors (e.g., `robot:0`, other ped id) |
+| `role_offset` | `Vec2D \| None` | No | Optional `(forward, lateral)` offset for robot-relative roles |
 
 ### Constraints
 
 - **Mutually Exclusive**: A pedestrian can have either a `goal` OR a `trajectory`, but not both
 - **Static Pedestrians**: If neither goal nor trajectory is provided, the pedestrian remains static
 - **Unique IDs**: All pedestrian IDs within a map must be unique
+- **Wait Rules**: `wait_at` requires a trajectory; wait indices refer to trajectory waypoints
+- **Role Offsets**: `role_offset` is interpreted in the robot frame `(forward, left)` for follow/lead/accompany roles
+
+### Role Behavior Notes
+
+- `follow`, `lead`, and `accompany` update the pedestrian goal relative to a robot pose.
+  Use `role_target_id: "robot:0"` to target the first robot (default).
+- `join` steers toward a target pedestrian group and attaches once within the goal threshold.
+  Use `role_target_id` to reference another pedestrian id.
+- `leave` detaches from the current group once per episode, then follows its trajectory/goal.
+
+### Wait Rule Format
+
+Each wait rule includes:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `waypoint_index` | `int` | Yes | Index into the trajectory list where the pedestrian waits |
+| `wait_s` | `float` | Yes | Wait duration in seconds |
+| `note` | `str \| None` | No | Optional note for documentation |
 
 ## SVG Map Definition
 
@@ -104,7 +132,16 @@ Add a `single_pedestrians` array to your map JSON:
         [80, 80],
         [120, 120],
         [160, 80]
-      ]
+      ],
+      "speed_m_s": 1.2,
+      "wait_at": [
+        {
+          "waypoint_index": 1,
+          "wait_s": 2.0,
+          "note": "pause at midpoint"
+        }
+      ],
+      "note": "tourist loop"
     },
     {
       "id": "vendor",
@@ -119,6 +156,83 @@ Add a `single_pedestrians` array to your map JSON:
 - Coordinates are absolute within the map bounds
 - The map loader will automatically normalize coordinates based on `x_margin` and `y_margin`
 - Ensure all coordinates are within map bounds for proper validation
+
+## Scenario YAML Overrides
+
+Scenario configuration files can override map-defined single pedestrians without editing the SVG/JSON.
+Use the `single_pedestrians` list under a scenario entry to override by `id`.
+POI labels come from SVG circles tagged as POIs (see `docs/SVG_MAP_EDITOR.md`).
+
+Supported override keys (mutually exclusive pairs):
+- `goal` or `goal_poi`
+- `trajectory` or `trajectory_poi`
+
+Optional override fields:
+- `speed_m_s`
+- `wait_at`
+- `note`
+- `role`
+- `role_target_id`
+- `role_offset`
+
+If the map defines a `goal` but you want a `trajectory`, set `goal: null` in the override.
+When using `trajectory_poi`, each `wait_at` entry can specify `poi` instead of `waypoint_index`.
+
+### Example (POI-based)
+
+```yaml
+scenarios:
+  - name: frontal_approach_slow
+    map_file: "../../maps/svg_maps/francis2023/francis2023_frontal_approach.svg"
+    single_pedestrians:
+      - id: ped1
+        goal_poi: "hallway_end"
+        speed_m_s: 0.6
+        note: "slow walker"
+      - id: ped2
+        goal: null
+        trajectory_poi: ["cross_start", "cross_mid", "cross_end"]
+        wait_at:
+          - poi: "cross_mid"
+            wait_s: 2.0
+            note: "yield gesture"
+```
+
+### Example (Coordinate-based)
+
+```yaml
+scenarios:
+  - name: overtaking_demo
+    map_file: "../../maps/svg_maps/francis2023/francis2023_ped_overtaking.svg"
+    single_pedestrians:
+      - id: ped1
+        goal: null
+        trajectory:
+          - [5.0, 8.0]
+          - [15.0, 8.0]
+          - [25.0, 8.0]
+        speed_m_s: 1.0
+```
+
+## Preview Helper
+
+Use the preview helper to visualize trajectories and wait points on top of the map geometry:
+
+```bash
+uv run python scripts/tools/preview_scenario_trajectories.py \
+  --scenario configs/scenarios/classic_interactions.yaml \
+  --scenario-id classic_head_on_corridor
+```
+
+Render all scenarios in a file:
+
+```bash
+uv run python scripts/tools/preview_scenario_trajectories.py \
+  --scenario configs/scenarios/francis2023.yaml \
+  --all
+```
+
+For headless usage, set `MPLBACKEND=Agg` before running.
 
 ## Programmatic Definition
 

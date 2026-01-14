@@ -43,6 +43,7 @@ from robot_sf.ped_npc.ped_behavior import (
     CrowdedZoneBehavior,
     FollowRouteBehavior,
     PedestrianBehavior,
+    SinglePedestrianBehavior,
 )
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons, sample_zone
@@ -474,7 +475,8 @@ def populate_single_pedestrians(
     Returns:
         tuple[np.ndarray, list[dict]]:
             - NumPy array of pedestrian states (Nx7): [x, y, vx, vy, gx, gy, tau]
-            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info
+            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info,
+              and optional per-ped speed, wait rules, role tags, and note fields
     """
     if not single_pedestrians:
         return np.empty((0, 7)), []
@@ -484,23 +486,28 @@ def populate_single_pedestrians(
     metadata = []
 
     for i, ped in enumerate(single_pedestrians):
+        ped_speed = ped.speed_m_s if ped.speed_m_s is not None else initial_speed
+        role = ped.role
         # Position (x, y)
         ped_states[i, 0:2] = ped.start
 
         # Initial velocity pointing toward goal or first trajectory waypoint
         if ped.goal is not None:
             direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])
-            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 2:4] = [ped_speed * cos(direction), ped_speed * sin(direction)]
             ped_states[i, 4:6] = ped.goal
         elif ped.trajectory:
             first_wp = ped.trajectory[0]
             direction = atan2(first_wp[1] - ped.start[1], first_wp[0] - ped.start[0])
-            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 2:4] = [ped_speed * cos(direction), ped_speed * sin(direction)]
             # For trajectory-based, goal is first waypoint initially
             ped_states[i, 4:6] = first_wp
         else:
             # Static pedestrian (no goal, no trajectory)
-            ped_states[i, 2:4] = [0, 0]
+            if role in {"follow", "lead", "accompany", "join", "leave"}:
+                ped_states[i, 2:4] = [ped_speed, 0]
+            else:
+                ped_states[i, 2:4] = [0, 0]
             ped_states[i, 4:6] = ped.start  # Goal equals start for static peds
 
         # Tau (relaxation time) - use default 0.5 seconds
@@ -514,6 +521,12 @@ def populate_single_pedestrians(
                 "has_trajectory": ped.trajectory is not None and len(ped.trajectory) > 0,
                 "trajectory": ped.trajectory if ped.trajectory else [],
                 "current_waypoint_index": 0,
+                "speed_m_s": ped_speed,
+                "note": ped.note,
+                "wait_at": ped.wait_at or [],
+                "role": ped.role,
+                "role_target_id": ped.role_target_id,
+                "role_offset": ped.role_offset,
             }
         )
 
@@ -527,6 +540,8 @@ def populate_simulation(
     ped_crowded_zones: list[Zone],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
+    time_step_s: float = 0.1,
+    single_ped_goal_threshold: float | None = None,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -548,13 +563,15 @@ def populate_simulation(
             Can be raw coordinate lists or Shapely PreparedGeometry objects.
         single_pedestrians: Optional list of SinglePedestrianDefinition objects
             for individually controlled pedestrians with explicit goals/trajectories.
+        time_step_s: Simulation step time in seconds (used for wait behavior).
+        single_ped_goal_threshold: Optional distance threshold for single-ped waypoint arrival.
 
     Returns:
         Tuple of (pysf_state, groups, ped_behaviors):
             - pysf_state: PedestrianStates view of all pedestrians for physics engine.
             - groups: PedestrianGroupings tracking group memberships.
             - ped_behaviors: List of PedestrianBehavior controllers for crowd dynamics
-              (includes CrowdedZoneBehavior and FollowRouteBehavior).
+              (includes CrowdedZoneBehavior, FollowRouteBehavior, and SinglePedestrianBehavior).
 
     Example:
         >>> pysf_state, groups, behaviors = populate_simulation(
@@ -599,7 +616,7 @@ def populate_simulation(
     # Adjust group IDs for routes
     combined_groups = crowd_groups + [{id + route_offset for id in peds} for peds in route_groups]
 
-    # Single pedestrians are individual (no groups), so no group entries needed
+    # Single pedestrians start as single-member groups for optional join/leave behaviors.
 
     # Create pedestrian state views
     pysf_state = PedestrianStates(lambda: ped_states)
@@ -619,4 +636,18 @@ def populate_simulation(
     crowd_behavior = CrowdedZoneBehavior(crowd_groupings, zone_assignments, ped_crowded_zones)
     route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
     ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
+
+    if single_pedestrians:
+        for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
+            groups.new_group({ped_id})
+        ped_behaviors.append(
+            SinglePedestrianBehavior(
+                pysf_state,
+                groups,
+                single_pedestrians,
+                single_offset,
+                time_step_s=time_step_s,
+                goal_proximity_threshold=single_ped_goal_threshold,
+            )
+        )
     return pysf_state, groups, ped_behaviors

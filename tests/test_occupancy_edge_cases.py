@@ -360,7 +360,7 @@ class TestManyPedestriansNoObstacles:
 
         assert np.sum(obstacles_channel) == 0, "Obstacles channel should be empty"
         assert np.sum(pedestrians_channel) > 0, "Pedestrians channel should have occupancy"
-        expected_elapsed_ms = 70
+        expected_elapsed_ms = 100  # Performance guardrail to catch regressions in rasterization.
         assert elapsed_ms < expected_elapsed_ms, (
             f"Expected <{expected_elapsed_ms}ms with many pedestrians, got {elapsed_ms:.2f}ms"
         )

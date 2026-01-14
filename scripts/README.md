@@ -23,6 +23,7 @@ This directory contains all executable scripts for the Robot SF project, organiz
 - **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
 - **Validate changes** → [`validation/`](#validation-directory)
 - **Compare training runs** → [`tools/compare_training_runs.py`](#toolscompare_training_runspy)
+- **Preview scenario trajectories** → [`tools/preview_scenario_trajectories.py`](#toolspreview_scenario_trajectoriespy)
 - **Work with SNQI metrics** → [`SNQI scripts`](#snqi-weight-scripts)
 - **Check performance** → [`validation/performance_smoke_test.py`](#validationperformance_smoke_testpy)
 - **Migrate artifacts** → [`tools/migrate_artifacts.py`](#toolsmigrate_artifactspy)
@@ -54,6 +55,8 @@ scripts/
 ├── tools/                             # Utilities & helpers
 │   ├── run_tracker_cli.py            # Run tracking CLI
 │   ├── compare_training_runs.py      # Training comparison
+│   ├── preview_scenario_trajectories.py # Scenario trajectory preview helper
+│   ├── render_scenario_videos.py     # Render scenario videos from trajectories
 │   ├── migrate_artifacts.py          # Artifact migration
 │   ├── check_artifact_root.py        # Artifact policy guard
 │   └── validate_report.py            # Report validation
@@ -408,6 +411,26 @@ uv run python scripts/tools/run_tracker_cli.py perf-tests \
     --output output/run-tracker/perf-tests/latest \
     --num-resets 5
 ```
+
+### `tools/preview_scenario_trajectories.py`
+**Purpose**: Preview single-pedestrian trajectories on top of scenario maps  
+**Usage**:
+```bash
+uv run python scripts/tools/preview_scenario_trajectories.py \
+  --scenario configs/scenarios/classic_interactions.yaml \
+  --scenario-id classic_head_on_corridor
+```
+**Details**: Writes a PNG under `output/preview/scenario_trajectories/` by default. Use `MPLBACKEND=Agg` for headless runs.
+
+### `tools/render_scenario_videos.py`
+**Purpose**: Render MP4 videos for every scenario in a scenario matrix  
+**Usage**:
+```bash
+uv run python scripts/tools/render_scenario_videos.py \
+  --scenario configs/scenarios/francis2023.yaml \
+  --all
+```
+**Details**: Writes videos under a timestamped folder in `output/recordings/` and saves a `manifest.json`. Use `--policy ppo --model-path model/run_023.zip` to drive the robot with the defensive PPO policy.
 
 ### `tools/compare_training_runs.py`
 **Purpose**: Comparison tool for analyzing training runs  

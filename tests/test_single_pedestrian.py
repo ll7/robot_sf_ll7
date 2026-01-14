@@ -93,6 +93,26 @@ class TestSinglePedestrianSpawning:
         assert metadata[0]["has_goal"] is True
         assert metadata[0]["has_trajectory"] is False
 
+    def test_populate_single_pedestrians_speed_override(self):
+        """Verify per-ped speed overrides are honored for reproducible motion."""
+        start: Vec2D = (2.0, 2.0)
+        goal: Vec2D = (8.0, 8.0)
+        ped = SinglePedestrianDefinition(
+            id="ped_speed",
+            start=start,
+            goal=goal,
+            speed_m_s=1.2,
+            note="slow",
+        )
+
+        ped_states, metadata = populate_single_pedestrians([ped], initial_speed=0.5)
+
+        assert ped_states.shape == (1, 7)
+        speed = np.linalg.norm(ped_states[0, 2:4])
+        assert speed == pytest.approx(1.2)
+        assert metadata[0]["speed_m_s"] == pytest.approx(1.2)
+        assert metadata[0]["note"] == "slow"
+
     def test_populate_single_pedestrians_with_trajectory(self):
         """Test spawning a single pedestrian with a predefined trajectory."""
         start: Vec2D = (2.0, 2.0)

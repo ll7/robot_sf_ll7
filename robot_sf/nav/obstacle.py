@@ -24,6 +24,7 @@ Typical usage:
 from dataclasses import dataclass, field
 
 import numpy as np
+from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Vec2D
 from robot_sf.nav.nav_types import SvgRectangle
@@ -59,6 +60,7 @@ class Obstacle:
     vertices: list[Vec2D]
     lines: list[Line2D] = field(init=False)
     vertices_np: np.ndarray = field(init=False)
+    _polygon: Polygon | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
         """Validate and process vertices to generate lines and numpy array representation.
@@ -106,8 +108,13 @@ class Obstacle:
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
 
-        if not self.vertices:
-            pass
+        self._polygon = Polygon(self.vertices) if len(self.vertices) >= 3 else None
+
+    def contains_point(self, point: Vec2D) -> bool:
+        """Return True if the point lies inside the obstacle polygon."""
+        if self._polygon is None:
+            return False
+        return self._polygon.contains(Point(point))
 
 
 def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:

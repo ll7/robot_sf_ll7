@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.osm_map_builder import (
     OSMTagFilters,
     buffer_ways,
@@ -254,6 +255,37 @@ class TestBackwardCompat:
 
         # Obstacles should be list of Obstacle objects
         assert len(map_def.obstacles) > 0
+
+
+class TestMapDefinitionDriveableArea:
+    """Test driveable area checks for legacy maps without explicit allowed areas."""
+
+    def test_is_point_in_driveable_area_falls_back_to_obstacles(self) -> None:
+        """Verify obstacle containment gates driveable checks to keep legacy maps safe."""
+        obstacle = Obstacle(vertices=[(4.0, 4.0), (6.0, 4.0), (6.0, 6.0), (4.0, 6.0)])
+        zone = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0))
+        map_def = MapDefinition(
+            width=10.0,
+            height=10.0,
+            obstacles=[obstacle],
+            robot_spawn_zones=[zone],
+            ped_spawn_zones=[zone],
+            robot_goal_zones=[zone],
+            ped_goal_zones=[zone],
+            bounds=[
+                (0.0, 10.0, 0.0, 0.0),
+                (0.0, 10.0, 10.0, 10.0),
+                (0.0, 0.0, 0.0, 10.0),
+                (10.0, 10.0, 0.0, 10.0),
+            ],
+            robot_routes=[],
+            ped_routes=[],
+            ped_crowded_zones=[],
+            allowed_areas=None,
+        )
+
+        assert not map_def.is_point_in_driveable_area((5.0, 5.0))
+        assert map_def.is_point_in_driveable_area((1.0, 1.0))
 
 
 if __name__ == "__main__":

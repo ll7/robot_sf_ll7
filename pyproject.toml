@@ -49,7 +49,7 @@ dependencies = [
     "pysocialforce",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
-    "networkx>=3.6",
+    "networkx>=2.8,<3.0",
     "pyvisgraph>=0.2.1",
     "python-motion-planning==2.0.dev1",
     # OSM map extraction (Issue #392)

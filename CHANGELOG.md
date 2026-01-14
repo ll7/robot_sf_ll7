@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - OSM map conversion now decomposes obstacle polygons with holes before building `MapDefinition` obstacles, preventing walkable areas from being treated as obstacles during spawning and grid generation.
+- Resolved OSM dependency pinning by aligning `networkx` with current `osmnx` constraints to avoid unsatisfiable installs.
+- OSM driveable-area fallback now checks obstacle containment safely, preventing `AttributeError` when `allowed_areas` is absent.
+- OSM map extraction now subtracts explicit obstacle features from walkable areas and respects configured buffer widths.
+- OSM background rendering now validates projected CRS usage and records the UTM CRS in metadata for correct meter-scale overlays.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

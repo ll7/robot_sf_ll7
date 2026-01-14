@@ -427,6 +427,86 @@ def _flatten_obstacle_polygons(obstacles: list[Polygon]) -> list[Polygon]:
     return flattened
 
 
+def _polygons_from_geometry(geometry) -> list[Polygon]:
+    """Extract polygon components from a Shapely geometry.
+
+    Returns:
+        List of non-empty Polygon geometries.
+    """
+    if geometry is None or geometry.is_empty:
+        return []
+    if isinstance(geometry, Polygon):
+        return [geometry]
+    if isinstance(geometry, MultiPolygon):
+        return [poly for poly in geometry.geoms if not poly.is_empty]
+    geoms = getattr(geometry, "geoms", None)
+    if geoms is None:
+        return []
+    return [geom for geom in geoms if isinstance(geom, Polygon) and not geom.is_empty]
+
+
+def _collect_obstacle_polys(
+    obstacles_gdf: gpd.GeoDataFrame,
+    line_buffer_m: float,
+) -> list[Polygon]:
+    """Project and buffer obstacle features into cleaned polygons.
+
+    Args:
+        obstacles_gdf: GeoDataFrame of obstacle features in WGS84.
+        line_buffer_m: Half-width buffer distance in meters.
+
+    Returns:
+        List of cleaned obstacle polygons in projected coordinates.
+    """
+    if obstacles_gdf.empty:
+        return []
+    obstacles_utm, _ = project_to_utm(obstacles_gdf)
+    obstacle_polys = buffer_ways(obstacles_utm, line_buffer_m)
+    return cleanup_polygons(obstacle_polys)
+
+
+def _build_walkable_polys(
+    driveable_ways_utm: gpd.GeoDataFrame,
+    obstacle_polys: list[Polygon],
+    line_buffer_m: float,
+) -> list[Polygon]:
+    """Create cleaned walkable polygons from driveable ways and obstacles.
+
+    Args:
+        driveable_ways_utm: Driveable ways projected into a metric CRS.
+        obstacle_polys: Obstacle polygons in the same projected CRS.
+        line_buffer_m: Half-width buffer distance in meters.
+
+    Returns:
+        List of cleaned walkable polygons in projected coordinates.
+    """
+    buffered = buffer_ways(driveable_ways_utm, line_buffer_m)
+    buffered = cleanup_polygons(buffered)
+
+    if not buffered:
+        raise ValueError("No valid driveable areas after buffering and cleanup")
+
+    walkable_union = unary_union(buffered)
+    if walkable_union.is_empty:
+        raise ValueError("Walkable union is empty")
+
+    if isinstance(walkable_union, LineString):
+        walkable_union = walkable_union.buffer(line_buffer_m)
+
+    if obstacle_polys:
+        obstacles_union = unary_union(obstacle_polys)
+        if not obstacles_union.is_empty:
+            try:
+                walkable_union = walkable_union.difference(obstacles_union)
+            except (ValueError, TopologicalError) as exc:
+                logger.warning(f"Failed to subtract obstacle features from walkable areas: {exc}")
+
+    walkable_polys = cleanup_polygons(_polygons_from_geometry(walkable_union))
+    if not walkable_polys:
+        raise ValueError("No valid driveable areas after obstacle exclusion")
+    return walkable_polys
+
+
 def osm_to_map_definition(
     pbf_file: str,
     bbox: tuple | None = None,
@@ -440,13 +520,14 @@ def osm_to_map_definition(
     2. Filter driveable ways and obstacles
     3. Project to local UTM
     4. Buffer ways and cleanup geometry
-    5. Compute obstacles via complement
-    6. Create MapDefinition with bounds, obstacles, allowed_areas
+    5. Subtract explicit obstacle features from walkable areas
+    6. Compute obstacles via complement
+    7. Create MapDefinition with bounds, obstacles, allowed_areas
 
     Args:
         pbf_file: Path to OSM PBF file
         bbox: Optional bounding box filter
-        line_buffer_m: Width of way buffers (default 1.5m)
+        line_buffer_m: Half-width buffer distance for driveable lines (default 1.5m)
         tag_filters: OSMTagFilters config (defaults to standard)
 
     Returns:
@@ -467,25 +548,14 @@ def osm_to_map_definition(
     driveable_ways = filter_driveable_ways(gdf, tag_filters)
     if driveable_ways.empty:
         raise ValueError(f"No driveable ways found in {pbf_file}")
+    obstacles_gdf = extract_obstacles(gdf, tag_filters)
 
     # Project to UTM
     gdf_utm, _utm_zone = project_to_utm(gdf)
     driveable_ways_utm, _ = project_to_utm(driveable_ways)
-
-    # Buffer & cleanup
-    buffered = buffer_ways(driveable_ways_utm, line_buffer_m / 2)
-    buffered = cleanup_polygons(buffered)
-
-    if not buffered:
-        raise ValueError("No valid driveable areas after buffering and cleanup")
-
-    walkable_union = unary_union(buffered)
-    if walkable_union.is_empty:
-        raise ValueError("Walkable union is empty")
-
-    # Ensure walkable_union is a Polygon
-    if isinstance(walkable_union, LineString):
-        walkable_union = walkable_union.buffer(line_buffer_m / 2)
+    obstacle_polys = _collect_obstacle_polys(obstacles_gdf, line_buffer_m)
+    walkable_polys = _build_walkable_polys(driveable_ways_utm, obstacle_polys, line_buffer_m)
+    walkable_union = unary_union(walkable_polys)
 
     # Compute obstacles
     bounds = gdf_utm.total_bounds
@@ -499,7 +569,7 @@ def osm_to_map_definition(
     # Shift geometries into a local frame with (0, 0) at the map bounds.
     xoff = -minx
     yoff = -miny
-    buffered_local = [translate(poly, xoff=xoff, yoff=yoff) for poly in buffered]
+    buffered_local = [translate(poly, xoff=xoff, yoff=yoff) for poly in walkable_polys]
     obstacles_local = [translate(poly, xoff=xoff, yoff=yoff) for poly in obstacles_polys]
 
     # Create Obstacle objects
@@ -509,7 +579,7 @@ def osm_to_map_definition(
         obstacles_list.append(Obstacle(vertices=vertices))
 
     logger.info(
-        f"Created MapDefinition with {len(obstacles_list)} obstacles and {len(buffered)} allowed areas"
+        f"Created MapDefinition with {len(obstacles_list)} obstacles and {len(buffered_local)} allowed areas"
     )
 
     # Build MapDefinition

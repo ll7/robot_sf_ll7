@@ -110,9 +110,6 @@ class Obstacle:
 
         self._polygon = Polygon(self.vertices) if len(self.vertices) >= 3 else None
 
-        if not self.vertices:
-            pass
-
     def contains_point(self, point: Vec2D) -> bool:
         """Return True if the point lies inside the obstacle polygon."""
         if self._polygon is None:

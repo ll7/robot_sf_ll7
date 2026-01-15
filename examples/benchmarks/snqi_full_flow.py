@@ -28,7 +28,7 @@ from pathlib import Path
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
-DEFAULT_SCHEMA = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+DEFAULT_SCHEMA = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _run(cmd: list[str]) -> None:

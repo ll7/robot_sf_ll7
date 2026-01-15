@@ -14,7 +14,7 @@ from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 if TYPE_CHECKING:
     from pathlib import Path
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):

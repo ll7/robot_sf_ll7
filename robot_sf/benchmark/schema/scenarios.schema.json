@@ -7,11 +7,22 @@
     "minItems": 1,
     "items": {
         "type": "object",
-        "required": [
-            "id",
-            "density",
-            "flow",
-            "obstacle"
+        "oneOf": [
+            {
+                "required": [
+                    "id",
+                    "density",
+                    "flow",
+                    "obstacle"
+                ]
+            },
+            {
+                "required": [
+                    "name",
+                    "map_file",
+                    "simulation_config"
+                ]
+            }
         ],
         "properties": {
             "id": {
@@ -32,7 +43,11 @@
                     "uni",
                     "bi",
                     "cross",
-                    "merge"
+                    "merge",
+                    "converging",
+                    "perpendicular",
+                    "enter",
+                    "exit"
                 ]
             },
             "obstacle": {
@@ -77,6 +92,72 @@
             "repeats": {
                 "type": "integer",
                 "minimum": 1
+            },
+            "name": {
+                "type": "string",
+                "minLength": 1
+            },
+            "scenario_id": {
+                "type": "string",
+                "minLength": 1
+            },
+            "map_file": {
+                "type": "string",
+                "minLength": 1
+            },
+            "simulation_config": {
+                "type": "object"
+            },
+            "robot_config": {
+                "type": "object"
+            },
+            "single_pedestrians": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "goal_poi": {
+                            "type": "string"
+                        },
+                        "start_poi": {
+                            "type": "string"
+                        },
+                        "speed_m_s": {
+                            "type": "number"
+                        },
+                        "wait_at": {
+                            "type": "array"
+                        },
+                        "role": {
+                            "type": "string"
+                        },
+                        "role_target_id": {
+                            "type": "string"
+                        },
+                        "role_offset": {
+                            "type": "array"
+                        },
+                        "note": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                }
+            },
+            "metadata": {
+                "type": "object"
+            },
+            "seeds": {
+                "type": "array",
+                "items": {
+                    "type": "integer"
+                }
+            },
+            "supported": {
+                "type": "boolean"
             }
         },
         "additionalProperties": true

@@ -14,7 +14,7 @@ from robot_sf.benchmark.baseline_stats import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_compute_baseline_stats_from_records(tmp_path: Path):

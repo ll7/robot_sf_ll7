@@ -13,7 +13,7 @@ from robot_sf.benchmark.aggregate import (
 )
 from robot_sf.benchmark.runner import run_batch
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _make_sample_jsonl(tmp_path: Path) -> Path:

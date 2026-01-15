@@ -30,7 +30,7 @@ def test_collision_sanity(tmp_path: Path):
             {"id": "C00_collision_sanity", "preset": "collision_sanity", "repeats": 1},
         ],
         out_path=str(out_path),
-        schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+        schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
         base_seed=0,
         repeats_override=1,
         horizon=10,

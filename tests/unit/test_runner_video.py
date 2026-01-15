@@ -11,7 +11,7 @@ import pytest
 import robot_sf.benchmark.runner as runner_mod
 from robot_sf.benchmark.runner import run_batch
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 @pytest.mark.skipif(

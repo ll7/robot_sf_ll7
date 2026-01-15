@@ -10,7 +10,7 @@ from robot_sf.benchmark.cli import cli_main
 if TYPE_CHECKING:
     from pathlib import Path
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 4) -> None:

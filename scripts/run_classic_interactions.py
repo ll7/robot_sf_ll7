@@ -48,7 +48,7 @@ from robot_sf.common.artifact_paths import (
 )
 
 SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
-SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
+SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 DEFAULT_OUT = get_artifact_category_path("benchmarks") / "classic_interactions/episodes.jsonl"
 
 

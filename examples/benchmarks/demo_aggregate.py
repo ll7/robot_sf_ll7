@@ -68,7 +68,7 @@ def main() -> None:
     run_batch(
         scenarios_or_path=str(matrix_path),
         out_path=str(episodes_path),
-        schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+        schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
         base_seed=0,
         repeats_override=None,
         horizon=8,

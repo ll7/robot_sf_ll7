@@ -55,7 +55,7 @@ YAML
 robot_sf_bench run \
   --matrix /tmp/matrix.yaml \
   --out /tmp/episodes.jsonl \
-  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --horizon 3 --dt 0.1 --base-seed 0 --quiet
 
 echo "Wrote: /tmp/episodes.jsonl"

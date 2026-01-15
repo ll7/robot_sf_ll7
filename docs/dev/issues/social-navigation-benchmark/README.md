@@ -22,6 +22,10 @@ The benchmark focuses on evaluating **robot navigation policies in dynamic pedes
 ## 2. Current Status
 See `todo.md` for granular task tracking. This README gives conceptual overview; `todo.md` contains the actionable checklist.
 
+Schema note (2026-01-14):
+- The canonical episode schema is `robot_sf/benchmark/schemas/episode.schema.v1.json`.
+- `docs/dev/issues/social-navigation-benchmark/episode_schema.json` is historical and should not be edited going forward.
+
 ### Running episodes, batches, and CLI (new)
 You can now generate episode records and run batches directly from Python.
 
@@ -45,7 +49,7 @@ scenario = {
 record = run_episode(scenario, seed=123, horizon=15, dt=0.1, record_forces=False)
 
 # Validate against the JSON schema and append to JSONL
-schema_path = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+schema_path = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 schema = load_schema(schema_path)
 validate_episode(record, schema)
 validate_and_write(record, schema_path, "results/episodes.jsonl")
@@ -72,7 +76,7 @@ scenarios = [
 summary = run_batch(
 	scenarios,
 	out_path="results/episodes.jsonl",
-	schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+	schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
 	base_seed=42,
 	horizon=50,
 	dt=0.1,
@@ -89,7 +93,7 @@ from robot_sf.benchmark.runner import run_batch
 summary = run_batch(
 	"docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml",
 	out_path="results/matrix_episodes.jsonl",
-	schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+	schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
 	base_seed=0,
 )
 ```
@@ -107,7 +111,7 @@ CLI usage:
 robot_sf_bench run \
 	--matrix docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml \
 	--out results/episodes.jsonl \
-	--schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+	--schema robot_sf/benchmark/schemas/episode.schema.v1.json \
 	--base-seed 0 \
 	--horizon 50 \
 	--dt 0.1
@@ -117,7 +121,7 @@ robot_sf_bench baseline \
 	--matrix docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml \
 	--out results/baseline_stats.json \
 	--jsonl results/baseline_episodes.jsonl \
-	--schema docs/dev/issues/social-navigation-benchmark/episode_schema.json
+	--schema robot_sf/benchmark/schemas/episode.schema.v1.json
 
 # Quick scenario diversity summary (histograms)
 robot_sf_bench summary \

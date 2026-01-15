@@ -117,7 +117,7 @@ You can compute SNQI on the fly while generating episodes via the unified benchm
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
   --out results/episodes.jsonl \
-  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --snqi-weights model/snqi_canonical_weights_v1.json \
   --snqi-baseline results/baseline_stats.json
 ```
@@ -131,14 +131,14 @@ End-to-end (baseline stats + run):
 uv run robot_sf_bench baseline \
   --matrix configs/baselines/example_matrix.yaml \
   --out results/baseline_stats.json \
-  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --horizon 100 --dt 0.1 --record-forces
 
 # 2) Run the episodes and compute SNQI inline
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
   --out results/episodes.jsonl \
-  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --snqi-weights model/snqi_canonical_weights_v1.json \
   --snqi-baseline results/baseline_stats.json
 ```
@@ -149,7 +149,7 @@ Alternatively, if you have an output JSON from the optimization or recomputation
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
   --out results/episodes.jsonl \
-  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --snqi-weights-from results/snqi_opt_report.json \
   --snqi-baseline results/baseline_stats.json
 ```

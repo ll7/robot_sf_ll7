@@ -34,15 +34,10 @@ if TYPE_CHECKING:
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
-        path: TODO docstring.
-        default: TODO docstring.
+    """Read a dotted-path value from a nested dict, falling back to default.
 
     Returns:
-        TODO docstring.
+        Value at the path or the default.
     """
     cur: Any = d
     for part in path.split("."):
@@ -54,13 +49,10 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
 
 
 def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
+    """Extract numeric scalar items from a metrics row.
 
     Returns:
-        TODO docstring.
+        Mapping of metric names to numeric values.
     """
     out: dict[str, float] = {}
     for k, v in d.items():
@@ -78,15 +70,10 @@ def _group_rows(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, list[dict[str, Any]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Group flattened records by a dotted-path key with fallback.
 
     Returns:
-        TODO docstring.
+        Mapping of group key to flattened rows.
     """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
@@ -103,14 +90,10 @@ def _collect_metric_names(
     groups: dict[str, list[dict[str, Any]]],
     metrics: Sequence[str] | None,
 ) -> set[str]:
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
-        metrics: TODO docstring.
+    """Collect metric names from groups unless explicitly provided.
 
     Returns:
-        TODO docstring.
+        Set of metric names to evaluate.
     """
     if metrics is not None:
         return set(metrics)
@@ -122,13 +105,10 @@ def _collect_metric_names(
 
 
 def _stats_for_vals(vals: list[float]) -> dict[str, float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        vals: TODO docstring.
+    """Compute mean/std/cv for a list of values, ignoring non-finite.
 
     Returns:
-        TODO docstring.
+        Dictionary with mean, std, cv, and count.
     """
     if not vals:
         return {"mean": float("nan"), "std": float("nan"), "cv": float("nan"), "count": 0.0}

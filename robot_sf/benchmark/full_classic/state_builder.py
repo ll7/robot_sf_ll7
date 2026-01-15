@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class _MinimalState:
-    """TODO docstring. Document this class."""
+    """Minimal state wrapper for SimulationView rendering."""
 
     timestep: int
     robot_pose: tuple[tuple[float, float], float]

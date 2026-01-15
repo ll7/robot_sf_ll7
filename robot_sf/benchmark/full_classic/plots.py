@@ -23,7 +23,7 @@ except ImportError:
 
 @dataclass
 class _PlotArtifact:  # lightweight internal representation matching data model subset
-    """TODO docstring. Document this class."""
+    """Internal plot artifact used for manifests."""
 
     kind: str
     path_pdf: str
@@ -32,11 +32,7 @@ class _PlotArtifact:  # lightweight internal representation matching data model 
 
 
 def _safe_fig_close(fig):  # pragma: no cover - trivial
-    """TODO docstring. Document this function.
-
-    Args:
-        fig: TODO docstring.
-    """
+    """Close a matplotlib figure safely."""
     try:
         # Clear and fully close to avoid accumulating many open figures triggering warnings.
         fig.clf()
@@ -59,15 +55,10 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
 
 
 def _write_placeholder_text(path: Path, title: str, lines: list[str]):
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-        title: TODO docstring.
-        lines: TODO docstring.
+    """Write a text-only placeholder plot to disk.
 
     Returns:
-        Boolean indicating success (True) or failure/unavailable (False).
+        True when the placeholder was written successfully.
     """
     if plt is None:
         return False
@@ -103,14 +94,10 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
 
 
 def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
-        out_dir: TODO docstring.
+    """Render a distribution plot for success/collision rates.
 
     Returns:
-        TODO docstring.
+        Plot artifact metadata.
     """
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
@@ -158,14 +145,10 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        out_dir: TODO docstring.
+    """Render a basic trajectory plot from replay steps.
 
     Returns:
-        TODO docstring.
+        Plot artifact metadata.
     """
     pdf_path = out_dir / "trajectories_basic.pdf"
     if plt is None:
@@ -208,14 +191,10 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
 
 
 def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
-        out_dir: TODO docstring.
+    """Render a placeholder KDE-style histogram for path efficiency.
 
     Returns:
-        TODO docstring.
+        Plot artifact metadata.
     """
     pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
@@ -246,14 +225,10 @@ def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
-        out_dir: TODO docstring.
+    """Render a placeholder Pareto scatter plot.
 
     Returns:
-        TODO docstring.
+        Plot artifact metadata.
     """
     pdf_path = out_dir / "pareto_placeholder.pdf"
     if plt is None:
@@ -288,14 +263,10 @@ def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
-    """TODO docstring. Document this function.
-
-    Args:
-        out_dir: TODO docstring.
-        records: TODO docstring.
+    """Render a placeholder histogram for episode lengths.
 
     Returns:
-        TODO docstring.
+        Plot artifact metadata.
     """
     pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:

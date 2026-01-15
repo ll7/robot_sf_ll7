@@ -231,13 +231,10 @@ def format_episode_summary_table(rows: Iterable[dict[str, Any]]) -> str:
     col_widths = {h: max(len(h), *(len(str(cast("Any", r)[h])) for r in rows)) for h in headers}
 
     def fmt_row(r: dict[str, Any]) -> str:
-        """TODO docstring. Document this function.
-
-        Args:
-            r: TODO docstring.
+        """Format a row dict into a padded table row.
 
         Returns:
-            TODO docstring.
+            Padded string row for the summary table.
         """
         return " | ".join(str(cast("Any", r)[h]).ljust(col_widths[h]) for h in headers)
 

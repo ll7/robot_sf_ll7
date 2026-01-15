@@ -16,7 +16,7 @@ import numpy as np
 
 @dataclass
 class RandomPlannerConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for the random planner."""
 
     mode: str = "velocity"  # "velocity" or "unicycle"
     v_max: float = 2.0
@@ -28,7 +28,7 @@ class RandomPlannerConfig:
 
 @dataclass
 class Observation:
-    """TODO docstring. Document this class."""
+    """Minimal observation container for baseline compatibility."""
 
     dt: float
     robot: dict[str, Any]
@@ -37,7 +37,7 @@ class Observation:
 
 
 class RandomPlanner:
-    """TODO docstring. Document this class."""
+    """Random policy baseline producing stochastic actions."""
 
     def __init__(
         self,
@@ -45,11 +45,11 @@ class RandomPlanner:
         *,
         seed: int | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the random planner.
 
         Args:
-            config: TODO docstring.
-            seed: TODO docstring.
+            config: Planner configuration or dict payload.
+            seed: Optional RNG seed.
         """
         self.config = self._parse_config(config)
         self._rng = np.random.default_rng(seed)
@@ -58,13 +58,13 @@ class RandomPlanner:
         self,
         config: dict[str, Any] | RandomPlannerConfig,
     ) -> RandomPlannerConfig:
-        """TODO docstring. Document this function.
+        """Normalize config input into a RandomPlannerConfig.
 
         Args:
-            config: TODO docstring.
+            config: Configuration object or dict.
 
         Returns:
-            TODO docstring.
+            Parsed RandomPlannerConfig.
         """
         if isinstance(config, dict):
             return RandomPlannerConfig(**config)  # type: ignore[arg-type]
@@ -73,31 +73,31 @@ class RandomPlanner:
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def reset(self, *, seed: int | None = None) -> None:
-        """TODO docstring. Document this function.
+        """Reset the planner RNG seed.
 
         Args:
-            seed: TODO docstring.
+            seed: Optional seed value.
         """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
 
     def configure(self, config: dict[str, Any] | RandomPlannerConfig) -> None:
-        """TODO docstring. Document this function.
+        """Update the planner configuration.
 
         Args:
-            config: TODO docstring.
+            config: Configuration object or dict.
         """
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         # Support dict-style Observation
-        """TODO docstring. Document this function.
+        """Return a random action for the given observation.
 
         Args:
-            obs: TODO docstring.
+            obs: Observation payload (unused; present for API consistency).
 
         Returns:
-            TODO docstring.
+            Action dict in configured action space.
         """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -134,19 +134,24 @@ class RandomPlanner:
         raise ValueError(f"Unknown mode: {self.config.mode}")
 
     def close(self) -> None:  # For API symmetry
-        """TODO docstring. Document this function."""
+        """No-op for API symmetry."""
         pass
 
     def get_metadata(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
+        """Return planner metadata for episode records.
 
 
         Returns:
-            TODO docstring.
+            Metadata dict.
         """
         cfg = asdict(self.config)
         cfg_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
-        return {"algorithm": "random", "config": cfg, "config_hash": cfg_hash}
+        return {
+            "algorithm": "random",
+            "config": cfg,
+            "config_hash": cfg_hash,
+            "status": "ok",
+        }
 
 
 __all__ = ["Observation", "RandomPlanner", "RandomPlannerConfig"]

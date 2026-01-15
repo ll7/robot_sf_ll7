@@ -48,16 +48,10 @@ def _group_values(
     fallback_group_by: str,
     metric: str,
 ) -> dict[str, list[float]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
-        metric: TODO docstring.
+    """Collect metric values grouped by a dotted key.
 
     Returns:
-        TODO docstring.
+        Mapping of group id to list of metric values.
     """
     out: dict[str, list[float]] = {}
     for r in records:
@@ -137,17 +131,7 @@ def _dominates(
     x_higher_better: bool,
     y_higher_better: bool,
 ) -> bool:
-    """TODO docstring. Document this function.
-
-    Args:
-        a: TODO docstring.
-        b: TODO docstring.
-        x_higher_better: TODO docstring.
-        y_higher_better: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Return True if point a Pareto-dominates point b."""
     ax, ay = a
     bx, by = b
     # Normalize to "lower is better" by flipping signs if higher is better

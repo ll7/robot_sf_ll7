@@ -39,7 +39,7 @@ __all__ = ["EffectSizeEntry", "EffectSizeReport", "compute_effect_sizes"]
 
 @dataclass
 class EffectSizeEntry:  # matches data model
-    """TODO docstring. Document this class."""
+    """Effect size comparison for a single metric."""
 
     metric: str
     density_low: str
@@ -50,21 +50,17 @@ class EffectSizeEntry:  # matches data model
 
 @dataclass
 class EffectSizeReport:
-    """TODO docstring. Document this class."""
+    """Effect size report for an archetype."""
 
     archetype: str
     comparisons: list[EffectSizeEntry]
 
 
 def compute_effect_sizes(groups, cfg):  # T032
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
-        cfg: TODO docstring.
+    """Compute effect sizes across densities for each archetype.
 
     Returns:
-        List of EffectSizeReport objects containing comparisons for each archetype.
+        List of EffectSizeReport entries.
     """
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
@@ -82,13 +78,10 @@ def compute_effect_sizes(groups, cfg):  # T032
 
 
 def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        groups: TODO docstring.
+    """Group AggregateMetricsGroup entries by archetype and density.
 
     Returns:
-        TODO docstring.
+        Mapping of archetype to density -> group.
     """
     result: dict[str, dict[str, object]] = {}
     for g in groups:
@@ -97,15 +90,10 @@ def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
 
 
 def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
-    """TODO docstring. Document this function.
-
-    Args:
-        ref_group: TODO docstring.
-        density_map: TODO docstring.
-        reference_density: TODO docstring.
+    """Build effect size comparisons for a single archetype.
 
     Returns:
-        List of EffectSizeEntry objects from comparing reference to other densities.
+        List of EffectSizeEntry comparisons.
     """
     comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
@@ -119,16 +107,10 @@ def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
 
 
 def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
-    """TODO docstring. Document this function.
-
-    Args:
-        ref_group: TODO docstring.
-        other_group: TODO docstring.
-        ref_density: TODO docstring.
-        other_density: TODO docstring.
+    """Compute Cohen's h and deltas for rate metrics.
 
     Returns:
-        List of EffectSizeEntry objects for rate-based metrics.
+        List of EffectSizeEntry entries.
     """
     entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
@@ -155,16 +137,10 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
 
 
 def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density):
-    """TODO docstring. Document this function.
-
-    Args:
-        ref_group: TODO docstring.
-        other_group: TODO docstring.
-        ref_density: TODO docstring.
-        other_density: TODO docstring.
+    """Compute Glass's Δ and mean diffs for continuous metrics.
 
     Returns:
-        List of EffectSizeEntry objects for continuous metrics.
+        List of EffectSizeEntry entries.
     """
     entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
@@ -189,15 +165,10 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
 
 
 def _glass_delta(ref_metric, diff, n):
-    """TODO docstring. Document this function.
-
-    Args:
-        ref_metric: TODO docstring.
-        diff: TODO docstring.
-        n: TODO docstring.
+    """Compute Glass's Δ with fallback when CI is missing.
 
     Returns:
-        Glass's Delta standardized effect size, or 0.0 if cannot be computed.
+        Standardized effect size value.
     """
     ci = getattr(ref_metric, "mean_ci", None)
     if not ci or n <= 1:

@@ -22,8 +22,13 @@ from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
+from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
+from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    resolve_map_definition,
+)
 
 from .aggregation import aggregate_metrics
 from .effects import compute_effect_sizes
@@ -55,7 +60,7 @@ except ImportError:
 
 @dataclass
 class BenchmarkManifest:
-    """TODO docstring. Document this class."""
+    """Manifest metadata for a benchmark run."""
 
     output_root: Path
     git_hash: str
@@ -120,6 +125,13 @@ def _ensure_algo_metadata(
             "Corrected mismatched algorithm metadata for episode",
         )
 
+    algo_meta = record.get("algorithm_metadata")
+    if algo_meta is None or not isinstance(algo_meta, dict):
+        algo_meta = {}
+        record["algorithm_metadata"] = algo_meta
+    algo_meta.setdefault("algorithm", algo_value)
+    algo_meta.setdefault("status", "ok")
+
     record["algo"] = algo_value
     return record
 
@@ -155,13 +167,10 @@ def _compute_git_hash(root: Path) -> str:
 
 
 def _prepare_output_dirs(cfg):
-    """TODO docstring. Document this function.
-
-    Args:
-        cfg: TODO docstring.
+    """Create and return output directories for benchmark artifacts.
 
     Returns:
-        Tuple of (root, episodes_dir, aggregates_dir, reports_dir, plots_dir) Path objects.
+        Tuple of (root, episodes_dir, aggregates_dir, reports_dir, plots_dir).
     """
     root = Path(cfg.output_root)
     episodes_dir = root / "episodes"
@@ -179,16 +188,10 @@ def _init_manifest(
     cfg,
     scenario_matrix_hash: str,
 ) -> BenchmarkManifest:
-    """TODO docstring. Document this function.
-
-    Args:
-        root: TODO docstring.
-        episodes_path: TODO docstring.
-        cfg: TODO docstring.
-        scenario_matrix_hash: TODO docstring.
+    """Initialize a manifest instance for the current run.
 
     Returns:
-        TODO docstring.
+        BenchmarkManifest instance.
     """
     return BenchmarkManifest(
         output_root=root,
@@ -226,15 +229,7 @@ def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
 
 
 def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
-    """TODO docstring. Document this function.
-
-    Args:
-        root: TODO docstring.
-        groups: TODO docstring.
-        effects: TODO docstring.
-        precision_report: TODO docstring.
-
-    """
+    """Write aggregate/report JSON artifacts for an iteration."""
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
     _write_json(
@@ -257,14 +252,7 @@ def _episode_id_from_job(job) -> str:
 
 
 def _scan_existing_episode_ids(path: Path) -> set[str]:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-
-    Returns:
-        Set of episode IDs found in the episodes file.
-    """
+    """Return episode_id values already present in an episodes JSONL file."""
     ids: set[str] = set()
     if not path.exists():
         return ids
@@ -302,13 +290,10 @@ _DEFAULT_SNQI_WEIGHTS = {
 
 @lru_cache(maxsize=4)
 def _load_snqi_weights(path: str | None):
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Load SNQI weights from JSON or fall back to defaults.
 
     Returns:
-        Dictionary of SNQI weights, either from file or default values.
+        Weight mapping dictionary.
     """
     if not path:
         return dict(_DEFAULT_SNQI_WEIGHTS)
@@ -324,14 +309,10 @@ def _load_snqi_weights(path: str | None):
 
 
 def _resolve_horizon(job, cfg) -> int:
-    """TODO docstring. Document this function.
-
-    Args:
-        job: TODO docstring.
-        cfg: TODO docstring.
+    """Resolve horizon with smoke-mode caps applied.
 
     Returns:
-        TODO docstring.
+        Horizon length in steps.
     """
     horizon = int(getattr(job, "horizon", 0) or 0)
     if getattr(cfg, "smoke", False):
@@ -341,15 +322,10 @@ def _resolve_horizon(job, cfg) -> int:
 
 
 def _build_env_config(scenario, cfg, horizon: int):
-    """TODO docstring. Document this function.
-
-    Args:
-        scenario: TODO docstring.
-        cfg: TODO docstring.
-        horizon: TODO docstring.
+    """Construct a RobotSimulationConfig for a scenario.
 
     Returns:
-        Robot environment configuration object.
+        RobotSimulationConfig instance.
     """
     raw = dict(getattr(scenario, "raw", {}))
     matrix_path = Path(cfg.scenario_matrix_path)
@@ -378,13 +354,10 @@ def _build_env_config(scenario, cfg, horizon: int):
 
 
 def _simple_goal_policy(simulator) -> np.ndarray:
-    """TODO docstring. Document this function.
-
-    Args:
-        simulator: TODO docstring.
+    """Simple goal-seeking controller returning (v, omega).
 
     Returns:
-        TODO docstring.
+        Array of [linear, angular] command values.
     """
     robot_pos = np.asarray(simulator.robot_pos[0], dtype=float)
     goal = np.asarray(simulator.goal_pos[0], dtype=float)
@@ -401,14 +374,10 @@ def _simple_goal_policy(simulator) -> np.ndarray:
 
 
 def _stack_ped_positions(series: list[np.ndarray], fill_value: float = 0.0) -> np.ndarray:
-    """TODO docstring. Document this function.
-
-    Args:
-        series: TODO docstring.
-        fill_value: TODO docstring.
+    """Stack variable-length pedestrian arrays into a padded tensor.
 
     Returns:
-        TODO docstring.
+        Padded array of shape (T, max_peds, 2).
     """
     max_len = max((len(p) for p in series), default=0)
     if max_len == 0:
@@ -456,14 +425,10 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
 
 
 def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
-    """TODO docstring. Document this function.
-
-    Args:
-        pos: TODO docstring.
-        dt: TODO docstring.
+    """Compute velocity and acceleration from positions with simple differencing.
 
     Returns:
-        TODO docstring.
+        Tuple of (velocities, accelerations).
     """
     if len(pos) == 0:
         return np.zeros((0, 2), dtype=float), np.zeros((0, 2), dtype=float)
@@ -481,13 +446,10 @@ def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _capture_visual_state(env):
-    """TODO docstring. Document this function.
-
-    Args:
-        env: TODO docstring.
+    """Capture optional visualization state for replay artifacts.
 
     Returns:
-        Tuple of (ray_vecs, ped_actions, robot_goal) or (None, None, None) if unavailable.
+        Tuple of (ray_vecs, ped_actions, robot_goal) or (None, None, None).
     """
     if not hasattr(env, "_prepare_visualizable_state"):
         return None, None, None
@@ -530,26 +492,23 @@ def _compute_episode_metrics(
     goal: np.ndarray,
     horizon: int,
 ) -> dict[str, float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        job: TODO docstring.
-        scenario: TODO docstring.
-        cfg: TODO docstring.
-        robot_pos: TODO docstring.
-        robot_vel: TODO docstring.
-        robot_acc: TODO docstring.
-        ped_pos: TODO docstring.
-        ped_forces: TODO docstring.
-        dt: TODO docstring.
-        reached_goal_step: TODO docstring.
-        goal: TODO docstring.
-        horizon: TODO docstring.
+    """Compute episode metrics for the classic benchmark pipeline.
 
     Returns:
-        TODO docstring.
+        Mapping of metric name to computed value.
     """
-    shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
+    map_def = None
+    map_path = getattr(scenario, "map_path", None)
+    if map_path:
+        try:
+            map_def = resolve_map_definition(str(map_path), scenario_path=Path(str(map_path)))
+        except Exception:  # pragma: no cover - defensive fallback
+            map_def = None
+    shortest_path = (
+        compute_shortest_path_length(map_def, robot_pos[0], goal)
+        if len(robot_pos)
+        else float("nan")
+    )
     if not math.isfinite(shortest_path):
         logger.bind(
             event="metrics_shortest_path_nan",
@@ -559,12 +518,16 @@ def _compute_episode_metrics(
         ).warning(
             "Shortest path is NaN because the robot trajectory is empty; downstream aggregation may propagate NaN.",
         )
+    obstacles = None
+    if map_def is not None:
+        obstacles = sample_obstacle_points(map_def.obstacles, map_def.bounds)
     ep = EpisodeData(
         robot_pos=robot_pos,
         robot_vel=robot_vel,
         robot_acc=robot_acc,
         peds_pos=ped_pos,
         ped_forces=ped_forces,
+        obstacles=obstacles,
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
@@ -594,17 +557,10 @@ def _compute_episode_metrics(
 
 
 def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
-    """TODO docstring. Document this function.
-
-    Args:
-        job: TODO docstring.
-        cfg: TODO docstring.
-        horizon: TODO docstring.
-        episode_id: TODO docstring.
-        scenario: TODO docstring.
+    """Initialize the Gym environment and replay capture for a job.
 
     Returns:
-        Tuple of (env, dt, replay_cap, goal_vec).
+        Tuple of (env, dt, replay_capture, goal_vector).
     """
     config = _build_env_config(scenario, cfg, horizon)
     capture_replay = bool(getattr(cfg, "capture_replay", False))
@@ -657,16 +613,10 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
 
 
 def _rollout_episode(env, horizon: int, dt: float, replay_cap):
-    """TODO docstring. Document this function.
-
-    Args:
-        env: TODO docstring.
-        horizon: TODO docstring.
-        dt: TODO docstring.
-        replay_cap: TODO docstring.
+    """Execute a rollout and collect trajectories and replay metadata.
 
     Returns:
-        Tuple of (robot_positions, ped_positions, ped_forces, reached_goal_step, terminated, truncated, info).
+        Tuple of (robot_positions, ped_positions, ped_forces, reached_goal_step).
     """
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
@@ -715,11 +665,7 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
 
 
 def _close_env(env):
-    """TODO docstring. Document this function.
-
-    Args:
-        env: TODO docstring.
-    """
+    """Best-effort environment cleanup."""
     try:
         env.exit()
     except Exception:  # pragma: no cover
@@ -890,14 +836,14 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
 
 
 def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple[list[object], int]:
-    """TODO docstring. Document this function.
+    """Split incoming jobs into runnable jobs and skipped count.
 
     Args:
-        existing_ids: TODO docstring.
-        job_iter: TODO docstring.
+        existing_ids: Episode IDs already present on disk.
+        job_iter: Iterable of job payloads (scenario + seed).
 
     Returns:
-        TODO docstring.
+        Tuple of (jobs_to_run, skipped_count).
     """
     run_list: list[object] = []
     skip_count = 0
@@ -941,24 +887,24 @@ def _execute_seq(
 
 
 def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
-    """TODO docstring. Document this function.
+    """Run a single job with a lightweight config payload for multiprocessing.
 
     Args:
-        job: TODO docstring.
-        cfg_payload: TODO docstring.
+        job: Episode job payload.
+        cfg_payload: Serializable config values to build a temp config.
 
     Returns:
         Episode record dictionary with wall_time_sec added.
     """
 
     class _TempCfg:
-        """TODO docstring. Document this class."""
+        """Namespace-like wrapper for passing config values into worker jobs."""
 
         def __init__(self, payload):
-            """TODO docstring. Document this function.
+            """Populate config fields from a dict payload.
 
             Args:
-                payload: TODO docstring.
+                payload: Mapping of config keys to values.
             """
             for k, v in payload.items():
                 setattr(self, k, v)
@@ -1247,11 +1193,11 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
 
 
 def _write_json(path: Path, obj):  # helper
-    """TODO docstring. Document this function.
+    """Write JSON to disk with a temp file for atomic replace.
 
     Args:
-        path: TODO docstring.
-        obj: TODO docstring.
+        path: Output path to write.
+        obj: JSON-serializable payload.
     """
     try:
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -1263,10 +1209,10 @@ def _write_json(path: Path, obj):  # helper
 
 
 def _serialize_groups(groups):
-    """TODO docstring. Document this function.
+    """Serialize aggregation group objects into JSON-friendly dicts.
 
     Args:
-        groups: TODO docstring.
+        groups: Iterable of aggregation group objects.
 
     Returns:
         List of serialized group dictionaries.
@@ -1294,10 +1240,10 @@ def _serialize_groups(groups):
 
 
 def _serialize_effects(effects):
-    """TODO docstring. Document this function.
+    """Serialize effect-size reports into JSON-friendly dicts.
 
     Args:
-        effects: TODO docstring.
+        effects: Iterable of effect report objects.
 
     Returns:
         List of serialized effect size report dictionaries.
@@ -1323,10 +1269,10 @@ def _serialize_effects(effects):
 
 
 def _serialize_precision(report):
-    """TODO docstring. Document this function.
+    """Serialize precision report into a JSON-friendly dictionary.
 
     Args:
-        report: TODO docstring.
+        report: Precision report object.
 
     Returns:
         Dictionary containing serialized precision report.

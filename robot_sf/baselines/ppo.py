@@ -42,7 +42,7 @@ from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 
 @dataclass
 class PPOPlannerConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for the PPO planner adapter."""
 
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
@@ -81,26 +81,28 @@ class PPOPlanner:
         *,
         seed: int | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the PPO planner and load the model if available.
 
         Args:
-            config: TODO docstring.
-            seed: TODO docstring.
+            config: Planner configuration or dict payload.
+            seed: Optional seed for reproducibility.
         """
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
+        self._status = "ok"
+        self._fallback_reason: str | None = None
         self._load_model()
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
-        """TODO docstring. Document this function.
+        """Normalize config input into a PPOPlannerConfig instance.
 
         Args:
-            cfg: TODO docstring.
+            cfg: Configuration object or dict.
 
         Returns:
-            TODO docstring.
+            Parsed PPOPlannerConfig.
         """
         if isinstance(cfg, PPOPlannerConfig):
             return cfg
@@ -109,7 +111,7 @@ class PPOPlanner:
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
     def _load_model(self) -> None:
-        """TODO docstring. Document this function."""
+        """Load the PPO model from disk or enter fallback mode."""
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
             warn_soft_degrade(
                 "PPO",
@@ -117,6 +119,8 @@ class PPOPlanner:
                 "will use fallback-to-goal if enabled",
             )
             self._model = None
+            self._status = "fallback"
+            self._fallback_reason = "sb3_missing"
             return
         mp = Path(self.config.model_path)
         if not mp.exists():
@@ -127,6 +131,8 @@ class PPOPlanner:
                     "will use fallback-to-goal navigation",
                 )
                 self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "model_missing"
                 return
             raise_fatal_with_remedy(
                 f"PPO model file not found: {mp}",
@@ -136,6 +142,8 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
+            self._status = "ok"
+            self._fallback_reason = None
         except (RuntimeError, ValueError, OSError) as e:
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
@@ -144,6 +152,8 @@ class PPOPlanner:
                     "will use fallback-to-goal navigation",
                 )
                 self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "model_load_failed"
                 return
             raise_fatal_with_remedy(
                 f"Failed to load PPO model from {mp}: {e}",
@@ -153,16 +163,16 @@ class PPOPlanner:
 
     def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model
-        """TODO docstring. Document this function.
+        """Reset planner state (currently only updates seed).
 
         Args:
-            seed: TODO docstring.
+            seed: Optional new seed value.
         """
         if seed is not None:
             self._seed = seed
 
     def close(self) -> None:
-        """TODO docstring. Document this function."""
+        """Release the loaded PPO model."""
         self._model = None
 
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
@@ -173,13 +183,13 @@ class PPOPlanner:
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
-        """TODO docstring. Document this function.
+        """Compute a planner action for the given observation.
 
         Args:
-            obs: TODO docstring.
+            obs: SocNav-style observation or Observation instance.
 
         Returns:
-            TODO docstring.
+            Action dict in either velocity or unicycle format.
         """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -194,18 +204,22 @@ class PPOPlanner:
         except (RuntimeError, ValueError, OSError):
             # Fallback for robustness on common prediction errors
             if self.config.fallback_to_goal:
+                if self._status != "fallback":
+                    self._status = "fallback"
+                if self._fallback_reason is None:
+                    self._fallback_reason = "prediction_failed"
                 return self._fallback_action(obs)
             raise
 
     # --- Helpers -------------------------------------------------------
     def _predict_action(self, obs: Observation) -> np.ndarray | None:
-        """TODO docstring. Document this function.
+        """Run PPO inference and return the raw action vector.
 
         Args:
-            obs: TODO docstring.
+            obs: Benchmark observation.
 
         Returns:
-            TODO docstring.
+            Action vector or None when unavailable.
         """
         if self._model is None:
             return None
@@ -231,13 +245,13 @@ class PPOPlanner:
             return None
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
-        """TODO docstring. Document this function.
+        """Convert the benchmark observation into model input format.
 
         Args:
-            obs: TODO docstring.
+            obs: Benchmark observation.
 
         Returns:
-            TODO docstring.
+            Model-ready observation array.
         """
         if self.config.obs_mode == "image":
             img = obs.robot.get("image") if isinstance(obs.robot, dict) else None
@@ -248,13 +262,13 @@ class PPOPlanner:
         return self._vectorize(obs)
 
     def _vectorize(self, obs: Observation) -> np.ndarray:
-        """TODO docstring. Document this function.
+        """Build a compact vector observation from the structured input.
 
         Args:
-            obs: TODO docstring.
+            obs: Benchmark observation.
 
         Returns:
-            TODO docstring.
+            Flattened vector observation.
         """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rv = np.asarray(obs.robot["velocity"], dtype=float)
@@ -280,14 +294,14 @@ class PPOPlanner:
         return vec
 
     def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
-        """TODO docstring. Document this function.
+        """Convert a raw action vector to the benchmark action dict.
 
         Args:
-            act: TODO docstring.
-            _obs: TODO docstring.
+            act: Raw action vector.
+            _obs: Observation (unused; reserved for future use).
 
         Returns:
-            TODO docstring.
+            Action dict in configured action space.
         """
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
@@ -308,13 +322,13 @@ class PPOPlanner:
         return {"vx": vx, "vy": vy}
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
-        """TODO docstring. Document this function.
+        """Return a simple goal-seeking action when PPO is unavailable.
 
         Args:
-            obs: TODO docstring.
+            obs: Benchmark observation.
 
         Returns:
-            TODO docstring.
+            Goal-directed action dict.
         """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
@@ -334,16 +348,19 @@ class PPOPlanner:
 
     # --- Metadata ------------------------------------------------------
     def get_metadata(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
+        """Return metadata describing the planner and load status.
 
 
         Returns:
-            TODO docstring.
+            Metadata dict including status/fallback info.
         """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
         cfg["model_path"] = str(Path(self.config.model_path))
-        return {"algorithm": "ppo", "config": cfg}
+        meta = {"algorithm": "ppo", "config": cfg, "status": self._status}
+        if self._fallback_reason:
+            meta["fallback_reason"] = self._fallback_reason
+        return meta
 
 
 __all__ = ["PPOPlanner", "PPOPlannerConfig"]

@@ -34,14 +34,10 @@ DEFAULT_METRICS: list[str] = [
 
 
 def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        key: TODO docstring.
+    """Extract metric values from episode records.
 
     Returns:
-        TODO docstring.
+        List of numeric values for the metric.
     """
     vals: list[float] = []
     for rec in records:
@@ -56,14 +52,10 @@ def compute_baseline_stats_from_records(
     records: list[dict[str, Any]],
     metrics: Iterable[str] | None = None,
 ) -> dict[str, dict[str, float]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        metrics: TODO docstring.
+    """Compute per-metric median and p95 statistics.
 
     Returns:
-        TODO docstring.
+        Mapping of metric name to summary statistics.
     """
     if metrics is None:
         metrics = tuple(DEFAULT_METRICS)
@@ -100,27 +92,10 @@ def run_and_compute_baseline(
     progress_cb=None,
 ) -> dict[str, dict[str, float]]:
     # Optionally run batch to collect JSONL
-    """TODO docstring. Document this function.
-
-    Args:
-        scenarios_or_path: TODO docstring.
-        out_json: TODO docstring.
-        out_jsonl: TODO docstring.
-        schema_path: TODO docstring.
-        base_seed: TODO docstring.
-        repeats_override: TODO docstring.
-        horizon: TODO docstring.
-        dt: TODO docstring.
-        record_forces: TODO docstring.
-        metrics: TODO docstring.
-        algo: TODO docstring.
-        algo_config_path: TODO docstring.
-        workers: TODO docstring.
-        resume: TODO docstring.
-        progress_cb: TODO docstring.
+    """Run episodes as needed and write baseline stats to JSON.
 
     Returns:
-        TODO docstring.
+        Mapping of metric name to baseline statistics.
     """
     tmp_jsonl: str | None = None
     if out_jsonl is not None:

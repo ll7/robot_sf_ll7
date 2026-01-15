@@ -67,12 +67,7 @@ def simulation_view_ready() -> bool:  # T030
 
 @lru_cache(maxsize=1)
 def has_pygame() -> bool:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Return True if pygame imports cleanly."""
     try:
         pygame = importlib.import_module("pygame")  # type: ignore
         _ = pygame.time.get_ticks  # access attribute to avoid unused warning
@@ -86,12 +81,7 @@ def has_pygame() -> bool:
 
 @lru_cache(maxsize=1)
 def has_moviepy() -> bool:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Return True if moviepy imports cleanly."""
     try:
         moviepy = importlib.import_module("moviepy")  # type: ignore
         _ = getattr(moviepy, "__version__", None)
@@ -105,12 +95,7 @@ def has_moviepy() -> bool:
 
 @lru_cache(maxsize=1)
 def ffmpeg_in_path() -> bool:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Return True if ffmpeg is discoverable in PATH."""
     return shutil.which("ffmpeg") is not None
 
 

@@ -39,7 +39,7 @@ except ImportError:
 
 @dataclass
 class EncodeResult:
-    """TODO docstring. Document this class."""
+    """Result metadata for a video encoding attempt."""
 
     path: Path
     status: str  # success|skipped|failed
@@ -66,7 +66,7 @@ def _iter_first(
         return None, iter(())
 
     def chain_first():  # local generator
-        """TODO docstring. Document this function."""
+        """Yield the first frame followed by the remaining iterator."""
         yield first
         yield from it
 
@@ -95,7 +95,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     stop_flag: list[bool] = [False]
 
     def _sampler():
-        """TODO docstring. Document this function."""
+        """Sample process RSS for peak tracking."""
         while not stop_flag[0]:
             try:
                 rss = process.memory_info().rss / (1024 * 1024)
@@ -110,7 +110,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     th.start()
 
     def _stop():
-        """TODO docstring. Document this function."""
+        """Stop the memory sampler thread."""
         stop_flag[0] = True
         try:
             th.join(timeout=0.5)
@@ -122,13 +122,10 @@ def _start_memory_sampler(sample: bool, interval: float):
 
 
 def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
-    """TODO docstring. Document this function.
-
-    Args:
-        first: TODO docstring.
+    """Validate that a first frame has the expected dtype/shape.
 
     Returns:
-        TODO docstring.
+        Tuple of (is_valid, error_note).
     """
     if first is None:
         return False, "no-frames"

@@ -19,14 +19,7 @@ class AggregationMetadataError(ValueError):
         missing_fields: Iterable[str] | None = None,
         advice: str | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
-
-        Args:
-            message: TODO docstring.
-            episode_id: TODO docstring.
-            missing_fields: TODO docstring.
-            advice: TODO docstring.
-        """
+        """Initialize an aggregation metadata error with context."""
         super().__init__(message)
         self.episode_id = episode_id
         self.missing_fields: tuple[str, ...] = tuple(missing_fields or ())

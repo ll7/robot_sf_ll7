@@ -87,13 +87,10 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
 
 def _load_episodes_jsonl(path: Path) -> list[dict]:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Load a JSONL file of episode records, skipping malformed lines.
 
     Returns:
-        TODO docstring.
+        List of parsed episode dicts.
     """
     episodes: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
@@ -109,14 +106,10 @@ def _load_episodes_jsonl(path: Path) -> list[dict]:
 
 
 def _extract_metric_values(episodes: Iterable[dict], metric: str) -> list[float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        episodes: TODO docstring.
-        metric: TODO docstring.
+    """Extract a numeric metric across episode records.
 
     Returns:
-        TODO docstring.
+        List of numeric metric values.
     """
     vals = []
     for ep in episodes:

@@ -190,6 +190,11 @@ class Simulator:
         """Current (x, y) positions of all pedestrians."""
         return self.pysf_state.ped_positions
 
+    @property
+    def ped_vel(self):
+        """Current (vx, vy) velocities of all pedestrians."""
+        return self.pysf_state.ped_velocities
+
     def reset_state(self):
         """Reset robot navigation and spawn positions.
 

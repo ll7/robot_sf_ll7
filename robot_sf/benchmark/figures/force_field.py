@@ -20,7 +20,7 @@ __all__ = ["generate_force_field_figure", "main"]
 
 
 def _latex_rcparams() -> None:
-    """TODO docstring. Document this function."""
+    """Apply LaTeX-style plotting defaults."""
     apply_latex_style()
 
 
@@ -112,11 +112,10 @@ def generate_force_field_figure(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
-
+    """Build CLI argument parser for force-field figure generation.
 
     Returns:
-        TODO docstring.
+        Configured ArgumentParser instance.
     """
     parser = argparse.ArgumentParser(description="Generate force-field figure outputs")
     parser.add_argument("--png", default="docs/img/fig-force-field.png")
@@ -131,13 +130,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
-
-    Args:
-        argv: TODO docstring.
+    """CLI entrypoint for force-field figure generation.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     args = build_arg_parser().parse_args(argv)
     generate_force_field_figure(

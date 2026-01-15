@@ -32,13 +32,10 @@ MANIFEST_FILES = {
 
 
 def _load_json(path: Path):  # type: ignore[no-untyped-def]
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Read JSON from disk.
 
     Returns:
-        Parsed JSON data from the file.
+        Parsed JSON payload.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)

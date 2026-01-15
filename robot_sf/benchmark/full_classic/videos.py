@@ -55,12 +55,7 @@ class _VideoArtifact:
     # Backward compatibility for older tests expecting .path_mp4
     @property
     def path_mp4(self) -> str:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Back-compat alias for filename used by older tests."""
         return self.filename or ""
 
 
@@ -108,13 +103,10 @@ def _render_episode_frames(seed: int, N: int) -> tuple[list, list[float], list[f
 
 
 def _build_outcome(rec) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        rec: TODO docstring.
+    """Map episode record flags to a display outcome label.
 
     Returns:
-        TODO docstring.
+        Outcome label string.
     """
     collision_flag = bool(rec.get("collisions") or rec.get("collision"))
     success_flag = bool(rec.get("success", not collision_flag))
@@ -158,14 +150,10 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
 
     def _mk_skip(rec, note: str):  # helper
         # Provide deterministic filename even when skipped (legacy expectation)
-        """TODO docstring. Document this function.
-
-        Args:
-            rec: TODO docstring.
-            note: TODO docstring.
+        """Create a skipped video artifact with a note.
 
         Returns:
-            _VideoArtifact object with skipped status and provided note.
+            Video artifact with skipped status.
         """
         episode_id = rec.get("episode_id", "unknown")
         mp4_name = f"video_{episode_id}.mp4"

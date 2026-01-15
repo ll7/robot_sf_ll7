@@ -304,6 +304,7 @@ class RobotEnv(BaseEnv):
 
         # Store configuration for factory pattern compatibility
         self.config = env_config
+        self.grid_config = env_config.grid_config
 
         # Initialize optional occupancy grid
         self.occupancy_grid = self._build_occupancy_grid(env_config)
@@ -492,11 +493,14 @@ class RobotEnv(BaseEnv):
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid
+            use_ego_frame = False
+            if self.grid_config is not None:
+                use_ego_frame = bool(getattr(self.grid_config, "use_ego_frame", False))
             self.occupancy_grid.generate(
                 obstacles=obstacles,
                 pedestrians=pedestrians,
                 robot_pose=robot_pose,
-                ego_frame=False,
+                ego_frame=use_ego_frame,
                 obstacle_polygons=obstacle_polygons,
             )
             # Update observation with new grid

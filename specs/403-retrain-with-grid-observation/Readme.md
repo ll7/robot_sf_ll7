@@ -107,11 +107,27 @@ Metadata handling:
 
 ## Notes
 ### Decisions (current)
-- **Observation/action interface target**: SocNav structured + occupancy grid, unicycle actions.
-- **Grid frame**: ego frame (per benchmark plan).
-- **Grid resolution/extent**: 0.5 m, 32×32 m (per benchmark plan) → 64×64 cells.
-- **Next waypoint signal**: required in observation (goal "next" / next_target_angle).
-- **Next waypoint representation**: vector in the robot’s local (ego) frame.
+- **Observation/action interface target**: SocNav structured + occupancy grid, unicycle actions.  
+  *Why:* benchmark plan selected this contract; keeps planners comparable and grid provides obstacle context.
+- **Grid frame**: ego frame (per benchmark plan).  
+  *Why:* ego-frame invariance simplifies policy inputs and aligns ped velocity frame.
+- **Grid resolution/extent**: 0.5 m, 32×32 m (per benchmark plan) → 64×64 cells.  
+  *Why:* balances obstacle context with runtime cost; fixed for reproducibility.
+- **Next waypoint signal**: required in observation (goal "next" / next_target_angle).  
+  *Why:* local planners need near-term routing guidance with fixed global route.
+- **Next waypoint representation**: vector in the robot’s local (ego) frame.  
+  *Why:* provides directional info without global coordinate dependence.
+- **Training duration**: 10M steps per seed for full runs.  
+  *Why:* aligns with existing PPO baselines and gives room for stable learning.
+- **n_envs selection**: auto-set to `cores-1` by default (with manual override).  
+  *Why:* maximizes throughput while leaving headroom for system overhead.
+- **Grid metadata in policy input**: excluded (fixed grid config; keep for debug only).  
+  *Why:* metadata is constant/noisy for a fixed grid; policy should focus on dynamics.
+- **Evaluation cadence**: enabled (periodic evaluation during training).  
+  *Why:* required for learning curves, curriculum comparisons, and ablation analysis.
+- **Training scenario sources**: use both `configs/scenarios/classic_interactions.yaml`
+  and `configs/scenarios/francis2023.yaml`.  
+  *Why:* increases diversity and reduces overfitting to a single scenario distribution.
 
 ### Open Questions (must answer)
 - Are we committing to the benchmark grid config (0.5 m / 32×32 / ego frame) for training?
@@ -122,6 +138,41 @@ Metadata handling:
 - Do we need checkpoint-level evaluation curves, or just final policy comparisons?
 - Which feature-extractor baseline do we commit to for the first full run?
 - Do we want a pedestrian-encoder (MLP/attention) or simple flattening first?
+
+### Planned Ablations
+- See `Ablations.md` for the running list of ablation ideas and rules.
+
+### Hold-out Set Feasibility (notes)
+- We **do have enough scenario diversity** to define a hold-out set without new maps.
+  `configs/scenarios/classic_interactions.yaml` spans multiple archetypes
+  (crossing, head_on_corridor, overtaking, bottleneck, doorway, merging,
+  t_intersection, group_crossing) with multiple density levels.
+- **Pedestrian stochasticity ≠ generalization**: random pedestrian motion gives
+  variability, but it does not replace testing on unseen maps/archetypes.
+- Recommended hold-out approaches:
+  - Hold out 1–2 archetypes (e.g., bottleneck + merging) for evaluation only.
+  - Or hold out a full scenario config (e.g., `francis2023.yaml`) if we want
+    map-distribution shift.
+
+### Proposed Hold-out Split (draft)
+**Classic interactions (hold out all densities):**
+- `classic_bottleneck_*`  
+  *Why:* narrow choke-points are distinct and failure‑prone.
+- `classic_group_crossing_*`  
+  *Why:* only group‑behavior archetype; tests generalization to group dynamics.
+
+**Francis 2023 (hold out specific scenarios):**
+- `francis2023_crowd_navigation`  
+  *Why:* only crowd‑density scenario in the Francis set (multi‑ped dynamic).
+- `francis2023_intersection_wait`  
+  *Why:* introduces explicit pedestrian wait/yield behavior.
+- `francis2023_blind_corner`  
+  *Why:* occlusion/visibility challenge not covered by other Francis maps.
+- `francis2023_narrow_doorway`  
+  *Why:* tight passage geometry (distinct from classic bottleneck layout).
+
+This keeps ~75–80% of scenarios for training while reserving a diverse
+evaluation slice across geometry and behavior types.
 
 ### Hyperparameter Strategy (proposal)
 We should stay flexible but **structured**:
@@ -138,8 +189,8 @@ Suggested sweep candidates:
 ### Baseline Hyperparameter Set (proposal)
 *These are starting points to validate learning; not final.*
 - **Algorithm**: PPO (`MultiInputPolicy`)
-- **Total timesteps**: 5–10M per seed for full run (start with 0.5–1M for smoke)
-- **n_envs**: 8–16 (dependent on CPU/GPU and sim speed)
+- **Total timesteps**: 10M per seed for full run (start with 0.5–1M for smoke)
+- **n_envs**: auto (`cores-1`), allow override; use `cores/2` if memory-bound
 - **n_steps**: 2048 or 4096
 - **batch_size**: 64 or 128
 - **learning_rate**: 3e-4 (try 1e-4 if unstable)
@@ -170,6 +221,39 @@ Goal: 10–20 runs on a reduced scenario set, then choose 1 config for full trai
 Compute budgeting idea:
 - Run each sweep config for **0.5–1M steps**, 1–2 seeds.
 - Select top 1–2 configs for **full run** (5–10M steps, 5+ seeds).
+
+### Reward Design (proposal + cautions)
+**Primary recommendation:** Keep the **default `simple_reward`** for the first
+publication-facing run to avoid confounds. The novelty should be the observation
+space (grid + SocNav), not reward shaping.
+
+**Optional reward variants (for ablations only):**
+- `punish_action_reward` (smoothness penalty on action change).
+- Grid-based clearance penalty (see `examples/occupancy_reward_shaping.py`).
+
+**Why be conservative:**
+- Shaping can improve learning but may reduce comparability with prior policies.
+- Reward definitions should align with evaluation metrics (success, collisions,
+  comfort/force, SNQI) to avoid optimizing a different objective.
+
+Decision rule:
+- Run a baseline with `simple_reward` first.
+- If learning is unstable or plateaus, introduce a **single** shaping change and
+  treat it as a documented ablation (not the main result).
+
+### Experiment Tracking (best practice)
+**Record every training decision in three places:**
+1) **This spec** (decisions + rationale + open questions).
+2) **Training config** (YAML or script arguments).
+3) **Run manifest / metadata** under `output/` (include: reward name, seed, grid config,
+   map/scenario set, code commit hash).
+
+Suggested log fields:
+- `reward_name` (e.g., `simple_reward`, `punish_action_reward`)
+- `reward_params` (penalties, coefficients)
+- `grid_config` (resolution, size, channels, frame)
+- `obs_mode` (socnav_struct + grid)
+- `git_commit` / `git_dirty`
 
 ### Observation Space Notes (current understanding)
 **Grid observation** (when `include_grid_in_observation=True`):

@@ -30,8 +30,9 @@ decisions, ideas, and open questions.
 - Benchmark plan **specifies**: ego frame grid, 0.5 m resolution, 32×32 m extent, unicycle actions,
   and pedestrians ordered by distance (closest-first).
 - Code defaults **do not** enforce this automatically; we must set config explicitly.
-- `peds_have_obstacle_forces` (ped-robot repulsion) is **not explicitly specified** in benchmark docs
-  and defaults to `False` unless set.
+- `peds_have_obstacle_forces` controls **pedestrian obstacle forces only**; ped-robot repulsion
+  is controlled separately via `sim_config.prf_config.is_active`. Neither is explicitly
+  specified in benchmark docs.
 - PPO baseline adapter currently supports vector/image obs; **grid observation support is missing**.
 
 ## Inputs
@@ -42,6 +43,7 @@ decisions, ideas, and open questions.
   - Legacy: `scripts/training_ppo.py` (fast but less reproducible).
   - Structured: `scripts/training/train_expert_ppo.py` + configs under `configs/training/ppo_imitation/`.
 - Example grid usage: `examples/quickstart/04_occupancy_grid.py`, `examples/occupancy_reward_shaping.py`.
+- Combined scenario config: `configs/scenarios/classic_interactions_francis2023.yaml`.
 
 ## Output Artifacts
 - Training run manifests (per seed) and evaluation manifests.
@@ -62,6 +64,55 @@ decisions, ideas, and open questions.
 - Decide number of **seeds** for uncertainty bands (recommend ≥5).
 - Define **evaluation cadence** (e.g., every N episodes or checkpoints).
 - Define **hold-out evaluation** set if generalization is a goal.
+
+### Training Pipeline (explicit, reproducible)
+**Reproducibility target:** another lab should be able to re-run the experiment
+from this description with no hidden assumptions.
+
+**Entry point (preferred):**
+- `scripts/training/train_expert_ppo.py` with a dedicated YAML config.
+
+**Config requirements:**
+- `scenario_config`: `configs/scenarios/classic_interactions_francis2023.yaml`.
+- `policy_id`: new policy name (include grid in name).
+- `seeds`: 5 seeds for main run.
+- `total_timesteps`: 10,000,000.
+- `evaluation`: cadence schedule (0.5M early, 1M later) and hold-out set.
+
+**Artifacts (must be saved):**
+- training run manifest
+- evaluation manifest
+- JSONL episodes
+- aggregated plots/tables with CI bands
+
+**Hyperparameters:** start with baseline config; track overrides in the run manifest.
+
+**Important limitation (current code):**
+- `train_expert_ppo.py` selects a **single scenario** via `select_scenario(...)`.
+  To train across multiple scenarios, we must extend the pipeline or create a
+  wrapper that samples scenarios per episode.
+
+### Execution Plan (Ubuntu, draft)
+1) **Environment setup**
+   - `uv sync --all-extras`
+   - `source .venv/bin/activate`
+2) **Headless run**
+   - Ensure `SDL_VIDEODRIVER=dummy` if any visualization is triggered.
+3) **Launch training**
+   - `uv run python scripts/training/train_expert_ppo.py --config <new_config.yaml>`
+4) **Monitoring**
+   - Track evaluation outputs + manifests under `output/`.
+   - Optional: TensorBoard if enabled in PPO config.
+
+### Checkpoint Evaluation (proposal)
+Do **not** rely on average reward alone. For each evaluation checkpoint:
+- Run a fixed evaluation set (hold-out scenarios).
+- Compute and log: success rate, collisions, near misses, comfort/force metrics, SNQI,
+  path efficiency, time-to-goal.
+- Record mean + CI across seeds (bootstrap).
+
+If training pipeline metrics are limited, perform a **separate benchmark evaluation**
+on saved checkpoints using the benchmark CLI.
 
 ### Feature Extractor Design (proposal)
 **Goal:** Multi-input policy that processes the occupancy grid like an image while
@@ -119,25 +170,39 @@ Metadata handling:
   *Why:* provides directional info without global coordinate dependence.
 - **Training duration**: 10M steps per seed for full runs.  
   *Why:* aligns with existing PPO baselines and gives room for stable learning.
+- **Seed count**: start with 5 seeds; increase to 10 if variance is too high.  
+  *Why:* 5 seeds gives usable uncertainty bands; expand only if CI is unstable.
+- **Pedestrian forces**: enable **both** obstacle forces and ped‑robot repulsion.  
+  *Why:* most plausible scenario—peds avoid static obstacles and respond to the robot.  
+  *Config:* `peds_have_obstacle_forces=True`, `sim_config.prf_config.is_active=True`.
 - **n_envs selection**: auto-set to `cores-1` by default (with manual override).  
   *Why:* maximizes throughput while leaving headroom for system overhead.
 - **Grid metadata in policy input**: excluded (fixed grid config; keep for debug only).  
   *Why:* metadata is constant/noisy for a fixed grid; policy should focus on dynamics.
 - **Evaluation cadence**: enabled (periodic evaluation during training).  
   *Why:* required for learning curves, curriculum comparisons, and ablation analysis.
+- **Evaluation cadence schedule**: 0.5M-step evals for the first 2–3M steps, then
+  every 1M steps for the remainder.  
+  *Why:* higher resolution early where learning is fastest; lower overhead later.
 - **Training scenario sources**: use both `configs/scenarios/classic_interactions.yaml`
   and `configs/scenarios/francis2023.yaml`.  
   *Why:* increases diversity and reduces overfitting to a single scenario distribution.
+- **Training scenario config file**: `configs/scenarios/classic_interactions_francis2023.yaml`.  
+  *Why:* training pipeline expects a single scenario_config input; merged file ensures
+  both sets are consistently used.
+- **Hold-out split**: adopt the proposed split (see below).  
+  *Why:* preserves diverse training coverage while reserving distinct geometry/behavior
+  cases for generalization evaluation.
+- **Main baseline uses grid**: train the primary policy with SocNav + occupancy grid.  
+  *Why:* grid provides obstacle context missing from SocNav fields; aligns with benchmark contract.
+- **Feature extractor baseline**: simple grid CNN + flattened SocNav MLP (no ped encoder).  
+  *Why:* minimizes complexity for first run; advanced encoders are tracked as ablations.
+- **Checkpoint evaluation**: periodic evaluations throughout training (not final-only).  
+  *Why:* needed for learning curves and curriculum/ablation comparisons.
 
 ### Open Questions (must answer)
-- Are we committing to the benchmark grid config (0.5 m / 32×32 / ego frame) for training?
-- Do we include grid metadata fields (`occupancy_grid_meta_*`) in the policy input?
-- Should pedestrians exert repulsive forces on the robot (`peds_have_obstacle_forces`)?
-- How many training seeds are feasible for uncertainty bands?
-- Do we evaluate on the same scenarios as training or hold out a test set?
-- Do we need checkpoint-level evaluation curves, or just final policy comparisons?
-- Which feature-extractor baseline do we commit to for the first full run?
-- Do we want a pedestrian-encoder (MLP/attention) or simple flattening first?
+- Do we want a pedestrian-encoder (MLP/attention) beyond baseline (ablation priority)?
+- How should we train across multiple scenarios given the current pipeline uses one scenario?
 
 ### Planned Ablations
 - See `Ablations.md` for the running list of ablation ideas and rules.

@@ -11,7 +11,8 @@ feature extractor, simple_reward, fixed grid config).
 
 ## Candidate Ablations (initial list)
 1) **Observation ablation**
-   - SocNav + grid (baseline) vs SocNav‑only (no grid).
+   - SocNav + grid (baseline) vs SocNav‑only (no grid).  
+     *Why:* isolate contribution of obstacle context from the grid.
 2) **Pedestrian encoder**
    - Flatten ped fields (baseline) vs ped encoder + pooling/attention.
 3) **Reward shaping**

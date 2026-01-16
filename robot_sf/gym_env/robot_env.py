@@ -492,15 +492,12 @@ class RobotEnv(BaseEnv):
             ]
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
-            # Regenerate grid
-            use_ego_frame = False
-            if self.grid_config is not None:
-                use_ego_frame = bool(getattr(self.grid_config, "use_ego_frame", False))
+            # Regenerate grid (allow grid config to opt into ego frame)
             self.occupancy_grid.generate(
                 obstacles=obstacles,
                 pedestrians=pedestrians,
                 robot_pose=robot_pose,
-                ego_frame=use_ego_frame,
+                ego_frame=False,
                 obstacle_polygons=obstacle_polygons,
             )
             # Update observation with new grid
@@ -582,12 +579,12 @@ class RobotEnv(BaseEnv):
             ]
             # Get robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
-            # Generate grid
+            # Generate grid (allow grid config to opt into ego frame)
             self.occupancy_grid.generate(
                 obstacles=obstacles,
                 pedestrians=pedestrians,
                 robot_pose=robot_pose,
-                ego_frame=False,  # Use world frame by default
+                ego_frame=False,
                 obstacle_polygons=obstacle_polygons,
             )
             # Add grid to observation

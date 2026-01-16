@@ -82,7 +82,7 @@ Missing decisions:
 
 We are benchmarking local planner with fixed global routes. The global planner is (both visibility graph and grid based) are sub-feature of a planned extension of adversarial testing.
 
-We will try to use a merged set of scenarios. More scenarios mean a broader test of the capabilities. However, we currently don't know if all scenarios are completly suitable for our benchmark.
+We will try to use a merged set of scenarios. More scenarios mean a broader test of the capabilities. However, we currently don't know if all scenarios are completely suitable for our benchmark.
 
 ### B) Pipeline mismatch: synthetic runner vs. map-based Gym environment
 

@@ -30,7 +30,6 @@ artifacts during benchmark runs while keeping CI and resume flows stable.
   `notes`, plus performance fields `encode_seconds` and `overhead_ratio`.
 - Schema updates are mirrored in:
   - `robot_sf/benchmark/schemas/episode.schema.v1.json`
-  - `robot_sf/benchmark/schemas/episode.schema.v1.json`
   - Contract copy under `specs/120-social-navigation-benchmark-plan/contracts/`.
 - Contract tests validate the schema and the integration test asserts presence
   of the manifest when videos are produced.

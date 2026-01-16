@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Default global planner selection now prefers the classic Theta* (v2) grid planner, and benchmark shortest-path calculations use the same planner.
 - Occupancy grid rasterization now logs out-of-bounds obstacle segments at DEBUG instead of the custom SPAM level.
+- Benchmark CLI list-algorithms now reports only implemented baseline planners to avoid registry KeyErrors.
 - Expert PPO training and trajectory collection now honor scenario YAML entries, including map files, simulation overrides, and scenario identifiers, while publishing `scenario_coverage` metadata consistent with dataset validators.
 - **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
   - Moved `robot_sf/util/types.py` → `robot_sf/common/types.py`

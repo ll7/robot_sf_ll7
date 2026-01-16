@@ -101,18 +101,8 @@ def _handle_list_algorithms(_args) -> int:
         Exit code (0 for success).
     """
     try:
-        # Show built-in simple policy and map-based planner adapters
-        algorithms = [
-            "simple_policy",
-            "goal",
-            "socnav_sampling",
-            "social_force",
-            "orca",
-            "sacadrl",
-            "rvo",
-            "dwa",
-            "teb",
-        ]
+        # Only advertise algorithms that can be resolved by the baselines registry.
+        algorithms = ["simple_policy"]
 
         # Try to load baseline algorithms
         try:
@@ -122,7 +112,11 @@ def _handle_list_algorithms(_args) -> int:
         except ImportError:
             pass
 
+        seen: set[str] = set()
         for algo in algorithms:
+            if algo in seen:
+                continue
+            seen.add(algo)
             print(algo)
 
         return 0

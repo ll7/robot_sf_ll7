@@ -15,7 +15,6 @@ multi-processing are future work.
 from __future__ import annotations
 
 import json
-import math
 import os
 import platform
 import time
@@ -51,7 +50,7 @@ else:
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
@@ -819,7 +818,7 @@ def _compute_metrics(
         Metrics dictionary for the episode.
     """
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
-    return _post_process_metrics(
+    return post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
@@ -982,60 +981,6 @@ __all__ = [
     "run_episode",
     "validate_and_write",
 ]
-
-
-def _post_process_metrics(
-    metrics_raw: dict[str, Any],
-    *,
-    snqi_weights: dict[str, float] | None,
-    snqi_baseline: dict[str, dict[str, float]] | None,
-) -> dict[str, Any]:
-    """Normalize metric output and compute SNQI if configured.
-
-    Returns:
-        Normalized metrics dictionary.
-    """
-    metrics: dict[str, Any] = dict(metrics_raw.items())
-    metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
-    fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
-    if fq:
-        metrics["force_quantiles"] = {
-            "q50": float(fq.get("force_q50", float("nan"))),
-            "q90": float(fq.get("force_q90", float("nan"))),
-            "q95": float(fq.get("force_q95", float("nan"))),
-        }
-        for k in list(fq.keys()):
-            metrics.pop(k, None)
-    if snqi_weights is not None:
-        snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
-        metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
-    for count_key in ("collisions", "near_misses", "force_exceed_events"):
-        if count_key in metrics and metrics[count_key] is not None:
-            try:
-                metrics[count_key] = int(metrics[count_key])
-            except Exception:  # pragma: no cover
-                pass
-    return _sanitize_metrics(metrics)
-
-
-def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
-    """Remove NaN/inf metric entries to keep JSON serialization clean.
-
-    Returns:
-        Cleaned metrics dictionary with NaN/inf values removed.
-    """
-
-    clean: dict[str, Any] = {}
-    for key, val in metrics.items():
-        if isinstance(val, dict):
-            nested = _sanitize_metrics(val)
-            if nested:
-                clean[key] = nested
-            continue
-        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-            continue
-        clean[key] = val
-    return clean
 
 
 def _expand_jobs(

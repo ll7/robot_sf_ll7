@@ -13,7 +13,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -77,28 +77,6 @@ def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float,
     angular = float(np.clip(heading_error, -1.0, 1.0))
     linear = float(np.clip(dist, 0.0, max_speed * max(0.0, 1.0 - abs(heading_error) / np.pi)))
     return linear, angular
-
-
-def _post_process_metrics(
-    metrics_raw: dict[str, Any],
-    *,
-    snqi_weights: dict[str, float] | None,
-    snqi_baseline: dict[str, dict[str, float]] | None,
-) -> dict[str, Any]:
-    metrics: dict[str, Any] = dict(metrics_raw.items())
-    metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
-    fq = {k: v for k, v in metrics.items() if str(k).startswith("force_q")}
-    if fq:
-        metrics["force_quantiles"] = {
-            "q50": float(fq.get("force_q50", float("nan"))),
-            "q90": float(fq.get("force_q90", float("nan"))),
-            "q95": float(fq.get("force_q95", float("nan"))),
-        }
-        for k in list(fq.keys()):
-            metrics.pop(k, None)
-    if snqi_weights is not None:
-        metrics["snqi"] = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
-    return metrics
 
 
 def _build_policy(  # noqa: C901
@@ -347,7 +325,7 @@ def _run_map_episode(  # noqa: C901
             reached_goal_step=reached_goal_step,
         )
         metrics_raw = compute_all_metrics(ep, horizon=horizon_val, shortest_path_len=shortest_path)
-    metrics = _post_process_metrics(
+    metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,

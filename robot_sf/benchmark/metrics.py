@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -1797,6 +1797,59 @@ def compute_all_metrics(
     return values
 
 
+def post_process_metrics(
+    metrics_raw: dict[str, float],
+    *,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+) -> dict[str, Any]:
+    """Normalize metric output and compute SNQI if configured.
+
+    Returns:
+        Normalized metrics dictionary.
+    """
+    metrics: dict[str, Any] = dict(metrics_raw.items())
+    metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
+    fq = {k: v for k, v in metrics.items() if str(k).startswith("force_q")}
+    if fq:
+        metrics["force_quantiles"] = {
+            "q50": float(fq.get("force_q50", float("nan"))),
+            "q90": float(fq.get("force_q90", float("nan"))),
+            "q95": float(fq.get("force_q95", float("nan"))),
+        }
+        for k in list(fq.keys()):
+            metrics.pop(k, None)
+    if snqi_weights is not None:
+        snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+        metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
+    for count_key in ("collisions", "near_misses", "force_exceed_events"):
+        if count_key in metrics and metrics[count_key] is not None:
+            try:
+                metrics[count_key] = int(metrics[count_key])
+            except Exception:  # pragma: no cover
+                pass
+    return _sanitize_metrics(metrics)
+
+
+def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Remove NaN/inf metric entries to keep JSON serialization clean.
+
+    Returns:
+        Cleaned metrics dictionary with NaN/inf values removed.
+    """
+    clean: dict[str, Any] = {}
+    for key, val in metrics.items():
+        if isinstance(val, dict):
+            nested = _sanitize_metrics(val)
+            if nested:
+                clean[key] = nested
+            continue
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            continue
+        clean[key] = val
+    return clean
+
+
 __all__ = [
     "METRIC_NAMES",
     "EpisodeData",
@@ -1830,6 +1883,7 @@ __all__ = [
     "near_misses",
     "path_efficiency",
     "path_length",
+    "post_process_metrics",
     "snqi",
     "space_compliance",
     "stalled_time",

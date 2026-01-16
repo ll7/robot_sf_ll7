@@ -104,7 +104,6 @@ def _handle_list_algorithms(_args) -> int:
         # Only advertise algorithms that can be resolved by the baselines registry.
         algorithms = ["simple_policy"]
 
-        # Try to load baseline algorithms
         try:
             baseline_module = importlib.import_module("robot_sf.baselines")
             baseline_algos = baseline_module.list_baselines()
@@ -113,6 +112,7 @@ def _handle_list_algorithms(_args) -> int:
             pass
 
         seen: set[str] = set()
+
         for algo in algorithms:
             if algo in seen:
                 continue

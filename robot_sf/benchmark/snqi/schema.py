@@ -35,34 +35,21 @@ EXPECTED_SCHEMA_VERSION = 1
 
 @dataclass
 class _FieldSpec:
-    """TODO docstring. Document this class."""
+    """Field specification for required/optional keys."""
 
     name: str
     required: bool = True
 
 
 def _expect_keys(d: Mapping[str, Any], specs: Iterable[_FieldSpec], ctx: str) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
-        specs: TODO docstring.
-        ctx: TODO docstring.
-    """
+    """Validate that required keys exist within a mapping."""
     for spec in specs:
         if spec.required and spec.name not in d:
             raise ValueError(f"Missing required key '{spec.name}' in {ctx}")
 
 
 def _is_number(x: Any) -> bool:
-    """TODO docstring. Document this function.
-
-    Args:
-        x: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Return True for int/float values (excluding bools)."""
     return isinstance(x, int | float) and not isinstance(x, bool)
 
 
@@ -84,11 +71,7 @@ def assert_all_finite(obj: Any, path: str = "$") -> None:
 
 
 def _validate_metadata(meta: Mapping[str, Any]) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        meta: TODO docstring.
-    """
+    """Validate the _metadata block for schema outputs."""
     _expect_keys(
         meta,
         [
@@ -111,11 +94,7 @@ def _validate_metadata(meta: Mapping[str, Any]) -> None:
 
 def _validate_optimization(obj: Mapping[str, Any]) -> None:
     # Required top-level keys (besides _metadata)
-    """TODO docstring. Document this function.
-
-    Args:
-        obj: TODO docstring.
-    """
+    """Validate shape of an optimization output payload."""
     required = ["recommended"]
     for key in required:
         if key not in obj:
@@ -132,11 +111,7 @@ def _validate_optimization(obj: Mapping[str, Any]) -> None:
 
 
 def _validate_recompute(obj: Mapping[str, Any]) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        obj: TODO docstring.
-    """
+    """Validate shape of a recompute output payload."""
     if "recommended_weights" not in obj:
         raise ValueError("Recompute output missing 'recommended_weights'")
     weights = obj["recommended_weights"]
@@ -149,11 +124,7 @@ def _validate_recompute(obj: Mapping[str, Any]) -> None:
 
 def _validate_sensitivity(obj: Mapping[str, Any]) -> None:
     # Expect at least one analysis block
-    """TODO docstring. Document this function.
-
-    Args:
-        obj: TODO docstring.
-    """
+    """Validate shape of a sensitivity output payload."""
     expected_any = ["weight_sweep", "pairwise", "ablation", "normalization"]
     if not any(k in obj for k in expected_any):
         raise ValueError("Sensitivity output missing analysis sections")

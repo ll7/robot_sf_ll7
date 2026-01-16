@@ -1,0 +1,18 @@
+# Example config for the SocNav SocialForce planner adapter (map-based runner).
+# Keys map to robot_sf.planner.socnav.SocNavPlannerConfig.
+
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+angular_gain: 1.0
+goal_tolerance: 0.25
+
+social_force_repulsion_weight: 0.8
+orca_avoidance_weight: 1.2
+sacadrl_neighbors: 3
+sacadrl_bias_weight: 0.6
+
+occupancy_lookahead: 2.5
+occupancy_heading_sweep: 2.094395102  # 2*pi/3
+occupancy_candidates: 7
+occupancy_weight: 2.0
+occupancy_angle_weight: 0.3

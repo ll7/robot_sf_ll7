@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ThumbMeta:
-    """TODO docstring. Document this class."""
+    """Metadata for a rendered scenario thumbnail."""
 
     scenario_id: str
     png: str
@@ -41,7 +41,7 @@ class ThumbMeta:
 
 def _latex_rcparams():
     # Maintain backward compatibility for existing imports; delegate to shared helper
-    """TODO docstring. Document this function."""
+    """Apply LaTeX-style rcparams for thumbnail plots."""
     apply_latex_style(
         {
             "font.size": 8,
@@ -56,38 +56,23 @@ def _latex_rcparams():
 
 def _scenario_seed(base_seed: int, scenario_id: str) -> int:
     # Small stable hash to offset base seed per scenario
-    """TODO docstring. Document this function.
-
-    Args:
-        base_seed: TODO docstring.
-        scenario_id: TODO docstring.
+    """Derive a deterministic per-scenario seed from a base seed.
 
     Returns:
-        TODO docstring.
+        Deterministic seed value.
     """
     h = hashlib.sha256(scenario_id.encode()).hexdigest()[:8]
     return (base_seed + int(h, 16)) % (2**31 - 1)
 
 
 def _draw_obstacles(ax, obstacles: Sequence[tuple[float, float, float, float]]):
-    """TODO docstring. Document this function.
-
-    Args:
-        ax: TODO docstring.
-        obstacles: TODO docstring.
-    """
+    """Draw obstacle segments on the axes."""
     for x1, y1, x2, y2 in obstacles:
         ax.plot([x1, x2], [y1, y2], color="#444", lw=1.2, alpha=0.9)
 
 
 def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
-    """TODO docstring. Document this function.
-
-    Args:
-        ax: TODO docstring.
-        pos: TODO docstring.
-        goals: TODO docstring.
-    """
+    """Draw agent positions and optional goal vectors."""
     if pos.size == 0:
         return
     ax.scatter(pos[:, 0], pos[:, 1], s=10, c="#1f77b4", alpha=0.7, edgecolors="none")
@@ -105,13 +90,10 @@ def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
 
 def _extract_goals_from_state(state: np.ndarray) -> np.ndarray:
     # state cols: [x,y,vx,vy,goalx,goaly,tau]
-    """TODO docstring. Document this function.
-
-    Args:
-        state: TODO docstring.
+    """Extract goal positions from a scenario state array.
 
     Returns:
-        TODO docstring.
+        Goal position array with shape (n, 2).
     """
     if state.shape[1] >= 6:
         return state[:, 4:6]
@@ -186,17 +168,10 @@ def save_scenario_thumbnails(
     out_pdf: bool = False,
     figsize: tuple[float, float] = (3.2, 2.0),
 ) -> list[ThumbMeta]:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenarios: TODO docstring.
-        out_dir: TODO docstring.
-        base_seed: TODO docstring.
-        out_pdf: TODO docstring.
-        figsize: TODO docstring.
+    """Render thumbnails for multiple scenarios.
 
     Returns:
-        TODO docstring.
+        List of thumbnail metadata entries.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

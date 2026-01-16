@@ -15,22 +15,15 @@ from loguru import logger
 
 
 def _ensure_parent(path: Path) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-    """
+    """Create parent directories for a target path."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
-    """TODO docstring. Document this function.
-
-    Args:
-        obj: TODO docstring.
+    """Convert complex objects into JSON-serializable structures.
 
     Returns:
-        Serialized object suitable for JSON encoding.
+        JSON-serializable representation of the object.
     """
     if isinstance(obj, str | int | float | bool) or obj is None:
         return obj
@@ -52,12 +45,7 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-        data: TODO docstring.
-    """
+    """Write JSON atomically via a temporary file and replace."""
     tmp_fd, tmp_path = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
     try:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:

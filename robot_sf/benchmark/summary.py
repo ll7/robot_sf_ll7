@@ -134,30 +134,20 @@ def plot_histograms(
     *,
     bins: int = 30,
 ) -> list[str]:
-    """TODO docstring. Document this function.
-
-    Args:
-        mins: TODO docstring.
-        speeds: TODO docstring.
-        out_dir: TODO docstring.
-        bins: TODO docstring.
+    """Plot histograms for min distance and average speed.
 
     Returns:
-        TODO docstring.
+        List of written image paths.
     """
     out_paths: list[str] = []
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     def _save(fig, name: str) -> str:
-        """TODO docstring. Document this function.
-
-        Args:
-            fig: TODO docstring.
-            name: TODO docstring.
+        """Save a histogram figure and return its path.
 
         Returns:
-            TODO docstring.
+            Path string for the saved figure.
         """
         path = str(Path(out_dir) / name)
         fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -185,14 +175,10 @@ def plot_histograms(
 
 
 def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> list[str]:
-    """TODO docstring. Document this function.
-
-    Args:
-        paths: TODO docstring.
-        out_dir: TODO docstring.
+    """Load episodes and write summary histogram plots.
 
     Returns:
-        TODO docstring.
+        List of written image paths.
     """
     mins, speeds = collect_values(_iter_records(paths))
     return plot_histograms(mins, speeds, out_dir)

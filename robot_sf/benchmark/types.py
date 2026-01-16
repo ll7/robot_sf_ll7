@@ -41,11 +41,10 @@ class ScenarioSpec:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:  # stable conversion
-        """TODO docstring. Document this function.
-
+        """Convert to a JSON-serializable dict.
 
         Returns:
-            TODO docstring.
+            Dict representation of the scenario spec.
         """
         return asdict(self)
 
@@ -61,23 +60,18 @@ class MetricsBundle:
     values: dict[str, float]
 
     def get(self, name: str, default: float | None = None) -> float | None:
-        """TODO docstring. Document this function.
-
-        Args:
-            name: TODO docstring.
-            default: TODO docstring.
+        """Return a metric value or a default.
 
         Returns:
-            TODO docstring.
+            Metric value if present, otherwise the provided default.
         """
         return self.values.get(name, default)
 
     def to_dict(self) -> dict[str, float]:
-        """TODO docstring. Document this function.
-
+        """Convert to a plain dict.
 
         Returns:
-            TODO docstring.
+            Dict of metric values.
         """
         return dict(self.values)
 
@@ -103,11 +97,10 @@ class EpisodeRecord:
     raw: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert to a JSON-serializable dict.
 
         Returns:
-            TODO docstring.
+            Dict representation of the episode record.
         """
         d = asdict(self)
         # flatten metrics bundle for JSON writing
@@ -124,11 +117,10 @@ class SNQIWeights:
     meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert to a JSON-serializable dict.
 
         Returns:
-            TODO docstring.
+            Dict representation of SNQI weights.
         """
         return {"version": self.version, "weights": dict(self.weights), "meta": self.meta or {}}
 
@@ -148,11 +140,10 @@ class ResumeManifest:
     )
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert to a JSON-serializable dict.
 
         Returns:
-            TODO docstring.
+            Dict representation of the resume manifest.
         """
         return {
             "version": self.version,

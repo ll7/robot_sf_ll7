@@ -219,12 +219,7 @@ def validate_schema_references(schema: dict[str, Any]) -> list[str]:
     errors = []
 
     def check_refs(obj: Any, path: str = "") -> None:
-        """TODO docstring. Document this function.
-
-        Args:
-            obj: TODO docstring.
-            path: TODO docstring.
-        """
+        """Recursively validate $ref fields for basic structure."""
         if isinstance(obj, dict):
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key

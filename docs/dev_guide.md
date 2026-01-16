@@ -188,14 +188,14 @@ from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
 
 config = RobotSimulationConfig(
     use_planner=True,
-    planner_backend="classic",  # or "visibility" (default)
+    planner_backend="classic",  # or "visibility"
     planner_classic_config=ClassicPlannerConfig(cells_per_meter=1.0, inflate_radius_cells=2),
 )
 env = make_robot_env(config=config)
 ```
 
-- `"visibility"` uses the existing visibility-graph planner.
-- `"classic"` uses the grid-based planner (Theta*/A* family) with the provided `ClassicPlannerConfig`.
+- `"classic"` uses the grid-based planner (Theta*/A* family) and is the default.
+- `"visibility"` uses the visibility-graph planner.
 
 ### Utility Modules
 

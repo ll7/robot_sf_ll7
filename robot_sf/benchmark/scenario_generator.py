@@ -55,7 +55,7 @@ _DENSITY_COUNTS = {"low": 10, "med": 25, "high": 40}
 
 @dataclass
 class GeneratedScenario:
-    """TODO docstring. Document this class."""
+    """Container for a generated scenario and its metadata."""
 
     simulator: Any
     state: np.ndarray
@@ -65,13 +65,10 @@ class GeneratedScenario:
 
 
 def _select_counts(params: dict[str, Any]) -> int:
-    """TODO docstring. Document this function.
-
-    Args:
-        params: TODO docstring.
+    """Choose agent count based on density.
 
     Returns:
-        TODO docstring.
+        Number of agents for the scenario.
     """
     density = params.get("density", "med")
     return int(_DENSITY_COUNTS.get(density, _DENSITY_COUNTS["med"]))
@@ -79,14 +76,10 @@ def _select_counts(params: dict[str, Any]) -> int:
 
 def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
     # Uniform in central bounding box with small margin
-    """TODO docstring. Document this function.
-
-    Args:
-        rng: TODO docstring.
-        n: TODO docstring.
+    """Sample initial positions uniformly within the arena bounds.
 
     Returns:
-        TODO docstring.
+        Array of shape (n, 2) with positions.
     """
     margin = 0.5
     xs = rng.uniform(margin, AREA_WIDTH - margin, size=n)
@@ -95,13 +88,10 @@ def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
 
 
 def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        kind: TODO docstring.
+    """Construct obstacle segments for a named obstacle layout.
 
     Returns:
-        TODO docstring.
+        List of obstacle line segments.
     """
     if kind == "open":
         return []
@@ -125,15 +115,10 @@ def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
 
 
 def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
-    """TODO docstring. Document this function.
-
-    Args:
-        flow: TODO docstring.
-        goal_topology: TODO docstring.
-        pos: TODO docstring.
+    """Assign goal positions based on flow and topology settings.
 
     Returns:
-        TODO docstring.
+        Array of goal positions aligned with ``pos``.
     """
     n = pos.shape[0]
     goals = np.zeros_like(pos)
@@ -169,15 +154,10 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
 
 
 def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[int]:
-    """TODO docstring. Document this function.
-
-    Args:
-        rng: TODO docstring.
-        n: TODO docstring.
-        fraction: TODO docstring.
+    """Assign group IDs for a fraction of agents.
 
     Returns:
-        TODO docstring.
+        List of group IDs per agent (or -1 for ungrouped).
     """
     if fraction <= 0:
         return [-1] * n
@@ -197,13 +177,10 @@ def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[in
 
 
 def _speed_variation(speed_var: str) -> float:
-    """TODO docstring. Document this function.
-
-    Args:
-        speed_var: TODO docstring.
+    """Return speed variation scale for the requested setting.
 
     Returns:
-        TODO docstring.
+        Speed variation scalar.
     """
     return 0.2 if speed_var == "low" else 0.5
 

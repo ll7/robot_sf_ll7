@@ -3,7 +3,7 @@
 Usage:
     from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
-    schema = load_schema('docs/dev/issues/social-navigation-benchmark/episode_schema.json')
+    schema = load_schema('robot_sf/benchmark/schemas/episode.schema.v1.json')
     validate_episode(record_dict, schema)
 """
 
@@ -20,13 +20,10 @@ except ImportError as e:  # pragma: no cover
 
 
 def load_schema(path: str | Path) -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Load a JSON schema from disk.
 
     Returns:
-        TODO docstring.
+        Parsed schema dictionary.
     """
     path = Path(path)
     with path.open("r", encoding="utf-8") as f:

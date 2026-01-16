@@ -59,21 +59,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class _Stat:
-    """TODO docstring. Document this class."""
+    """Lightweight file stat snapshot."""
 
     size: int
     mtime_ns: int
 
 
 def _stat_of(path: Path) -> _Stat:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Return size and mtime_ns for a path."""
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
 

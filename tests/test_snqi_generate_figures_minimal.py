@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
+SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 
 
 @pytest.mark.parametrize("success_vals", [[1.0, 0.0]])

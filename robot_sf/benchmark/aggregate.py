@@ -32,13 +32,10 @@ if TYPE_CHECKING:
 
 
 def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        paths: TODO docstring.
+    """Read one or more JSONL files into a list of records.
 
     Returns:
-        TODO docstring.
+        List of parsed episode records.
     """
     if isinstance(paths, str | Path):
         path_list = [paths]
@@ -63,15 +60,10 @@ def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
-        path: TODO docstring.
-        default: TODO docstring.
+    """Resolve a dotted-path value from a dict.
 
     Returns:
-        TODO docstring.
+        Value at the path or default when missing.
     """
     cur: Any = d
     for part in path.split("."):
@@ -86,13 +78,10 @@ _EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
 
 
 def _normalize_algo(value: Any) -> str | None:
-    """TODO docstring. Document this function.
-
-    Args:
-        value: TODO docstring.
+    """Normalize algorithm identifiers to a non-empty string.
 
     Returns:
-        TODO docstring.
+        Normalized string or None if empty/invalid.
     """
     if isinstance(value, str):
         trimmed = value.strip()
@@ -102,13 +91,7 @@ def _normalize_algo(value: Any) -> str | None:
 
 
 def _ensure_mapping(record: dict[str, Any], key: str, episode_id: str | None) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        record: TODO docstring.
-        key: TODO docstring.
-        episode_id: TODO docstring.
-    """
+    """Ensure a record field is a mapping when nested access is required."""
     value = record.get(key)
     if value is not None and not isinstance(value, dict):
         raise AggregationMetadataError(
@@ -125,15 +108,10 @@ def _resolve_group_key(
     group_by: str,
     fallback_group_by: str,
 ) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        record: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Resolve the aggregation group key with metadata fallbacks.
 
     Returns:
-        TODO docstring.
+        Group key string.
     """
     episode_id = record.get("episode_id")
     episode_ref = str(episode_id) if episode_id is not None else None
@@ -174,13 +152,10 @@ def _resolve_group_key(
 
 
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        rec: TODO docstring.
+    """Flatten metrics dict into a flat per-episode row.
 
     Returns:
-        TODO docstring.
+        Flattened metrics row for CSV or aggregation.
     """
     base = {
         "episode_id": rec.get("episode_id"),
@@ -203,13 +178,7 @@ def _ensure_snqi(
     weights: dict[str, float] | None,
     baseline: dict[str, dict[str, float]] | None,
 ) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        rec: TODO docstring.
-        weights: TODO docstring.
-        baseline: TODO docstring.
-    """
+    """Compute and attach SNQI when missing and inputs are provided."""
     if rec.get("metrics") is None:
         return
     if "snqi" in rec["metrics"]:
@@ -231,16 +200,10 @@ def write_episode_csv(
     snqi_baseline: dict[str, dict[str, float]] | None = None,
 ) -> str:
     # Optionally compute SNQI per record if missing
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        out_csv: TODO docstring.
-        snqi_weights: TODO docstring.
-        snqi_baseline: TODO docstring.
+    """Write per-episode metrics to CSV.
 
     Returns:
-        TODO docstring.
+        Path string to the written CSV file.
     """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
@@ -266,13 +229,10 @@ def write_episode_csv(
 
 
 def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
+    """Extract numeric values from a flattened metrics row.
 
     Returns:
-        TODO docstring.
+        Mapping of numeric metric values.
     """
     out: dict[str, float] = {}
     for k, v in d.items():
@@ -296,19 +256,10 @@ def compute_aggregates(
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, float]]]:
     # Optionally compute SNQI per record if missing
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
-        snqi_weights: TODO docstring.
-        snqi_baseline: TODO docstring.
-        expected_algorithms: TODO docstring.
-        logger_ctx: TODO docstring.
+    """Aggregate metrics by group and compute summary statistics.
 
     Returns:
-        TODO docstring.
+        Nested dict of group -> metric -> summary statistics.
     """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
@@ -418,15 +369,10 @@ def _group_flattened(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, list[dict[str, Any]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Group flattened episode rows by aggregation key.
 
     Returns:
-        TODO docstring.
+        Mapping of group key to flattened rows.
     """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
@@ -443,49 +389,20 @@ def _attach_ci_for_group(
     bootstrap_confidence: float,
     bootstrap_seed: int | None,
 ) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        dst_group: TODO docstring.
-        values_by_metric: TODO docstring.
-        bootstrap_samples: TODO docstring.
-        bootstrap_confidence: TODO docstring.
-        bootstrap_seed: TODO docstring.
-    """
+    """Attach bootstrap confidence intervals for each metric in a group."""
     for metric_name, values in values_by_metric.items():
         arr = np.asarray(values, dtype=float)
 
         def mean_fn(a: np.ndarray) -> float:
-            """TODO docstring. Document this function.
-
-            Args:
-                a: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
+            """Return mean for bootstrap sample."""
             return float(np.mean(a))
 
         def median_fn(a: np.ndarray) -> float:
-            """TODO docstring. Document this function.
-
-            Args:
-                a: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
+            """Return median for bootstrap sample."""
             return float(np.median(a))
 
         def p95_fn(a: np.ndarray) -> float:
-            """TODO docstring. Document this function.
-
-            Args:
-                a: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
+            """Return p95 for bootstrap sample."""
             return float(np.percentile(a, 95))
 
         lo_hi_mean = _bootstrap_ci(

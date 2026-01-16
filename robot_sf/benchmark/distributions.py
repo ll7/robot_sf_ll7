@@ -25,16 +25,7 @@ Record = Mapping[str, object]
 
 
 def _get_dotted(d: Mapping[str, object], path: str, default=None):
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
-        path: TODO docstring.
-        default: TODO docstring.
-
-    Returns:
-        The value at the dotted path, or default if not found.
-    """
+    """Return value at dotted path from a mapping."""
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, Mapping) or part not in cur:  # type: ignore[operator]
@@ -59,13 +50,10 @@ def collect_grouped_values(
     """
 
     def _to_float(x: object | None) -> float | None:
-        """TODO docstring. Document this function.
-
-        Args:
-            x: TODO docstring.
+        """Coerce to finite float if possible.
 
         Returns:
-            TODO docstring.
+            Finite float value or None when invalid.
         """
         try:
             v = float(x)  # type: ignore[arg-type]
@@ -95,25 +83,19 @@ def collect_grouped_values(
 
 @dataclass
 class DistPlotMeta:
-    """TODO docstring. Document this class."""
+    """Metadata for generated distribution plots."""
 
     wrote: list[str]
     pdfs: list[str]
 
 
 def _apply_rcparams() -> None:
-    """TODO docstring. Document this function."""
+    """Apply LaTeX-friendly plotting defaults."""
     apply_latex_style()
 
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        ax: TODO docstring.
-        data: TODO docstring.
-        color: TODO docstring.
-    """
+    """Optionally overlay a KDE curve when scipy is available."""
     try:
         stats_module = importlib.import_module("scipy.stats")
         gaussian_kde = stats_module.gaussian_kde

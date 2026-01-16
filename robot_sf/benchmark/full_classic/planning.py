@@ -16,13 +16,10 @@ import yaml  # type: ignore
 
 
 def _parse_yaml_file(p: Path) -> dict:
-    """TODO docstring. Document this function.
-
-    Args:
-        p: TODO docstring.
+    """Load YAML content into a dict.
 
     Returns:
-        TODO docstring.
+        Parsed YAML payload.
     """
     try:
         with p.open("r", encoding="utf-8") as f:
@@ -32,13 +29,10 @@ def _parse_yaml_file(p: Path) -> dict:
 
 
 def _extract_scenarios(root: dict) -> list[dict]:
-    """TODO docstring. Document this function.
-
-    Args:
-        root: TODO docstring.
+    """Extract the scenarios list from a matrix payload.
 
     Returns:
-        TODO docstring.
+        List of scenario dictionaries.
     """
     scenarios = root.get("scenarios") if isinstance(root, dict) else None
     if not isinstance(scenarios, list) or not scenarios:
@@ -50,11 +44,7 @@ _REQUIRED_SC_KEYS = {"name", "map_file", "simulation_config", "metadata"}
 
 
 def _validate_scenario_dicts(scenarios: list[dict]) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenarios: TODO docstring.
-    """
+    """Validate required keys for scenario entries."""
     for idx, sc in enumerate(scenarios):
         if not isinstance(sc, dict):
             raise ValueError(f"Scenario index {idx} not a mapping")
@@ -74,7 +64,7 @@ def _validate_scenario_dicts(scenarios: list[dict]) -> None:
 # Minimal placeholder dataclasses matching data-model (subset for scaffolding)
 @dataclass
 class ScenarioDescriptor:  # duplicated light form; real version will live centrally later
-    """TODO docstring. Document this class."""
+    """Lightweight scenario description for planning and manifesting."""
 
     scenario_id: str
     archetype: str
@@ -89,7 +79,7 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
 
 @dataclass
 class EpisodeJob:  # lightweight form for planning layer
-    """TODO docstring. Document this class."""
+    """Lightweight job description for scenario/seed execution."""
 
     job_id: str
     scenario_id: str
@@ -149,14 +139,10 @@ def _normalise_raw_scenario(index: int, sc: dict) -> tuple[str, str, str, int, s
 
 
 def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarity
-    """TODO docstring. Document this function.
-
-    Args:
-        rng: TODO docstring.
-        count: TODO docstring.
+    """Sample unique seeds from the provided RNG.
 
     Returns:
-        TODO docstring.
+        List of unique seed integers.
     """
     seeds: list[int] = []
     while len(seeds) < count:
@@ -167,15 +153,10 @@ def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarit
 
 
 def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
-    """TODO docstring. Document this function.
-
-    Args:
-        map_file: TODO docstring.
-        cfg: TODO docstring.
-        name: TODO docstring.
+    """Resolve and validate a map path relative to the matrix file.
 
     Returns:
-        TODO docstring.
+        Absolute map path.
     """
     matrix_dir = Path(cfg.scenario_matrix_path).parent
     map_path = Path(map_file)
@@ -187,15 +168,10 @@ def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
 
 
 def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
-    """TODO docstring. Document this function.
-
-    Args:
-        sc: TODO docstring.
-        cfg: TODO docstring.
-        rng: TODO docstring.
+    """Plan seeds using config override, scenario seeds, and RNG fill.
 
     Returns:
-        TODO docstring.
+        List of planned seeds for the scenario.
     """
     cfg_seeds = getattr(cfg, "seeds", None)
     seeds_from_matrix = sc.get("seeds")
@@ -213,25 +189,17 @@ def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
 
 
 def _scenario_id(archetype: str, density: str, name: str) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        archetype: TODO docstring.
-        density: TODO docstring.
-        name: TODO docstring.
+    """Build a sanitized scenario_id from archetype/density/name.
 
     Returns:
-        TODO docstring.
+        Sanitized scenario identifier.
     """
 
     def _san(s: str) -> str:
-        """TODO docstring. Document this function.
-
-        Args:
-            s: TODO docstring.
+        """Sanitize a string for scenario_id construction.
 
         Returns:
-            TODO docstring.
+            Sanitized string.
         """
         return "".join(c if c.isalnum() or c in {"-", "_"} else "_" for c in s.lower())
 
@@ -239,13 +207,10 @@ def _scenario_id(archetype: str, density: str, name: str) -> str:
 
 
 def _hash_fragment(payload: dict) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        payload: TODO docstring.
+    """Compute a stable short hash fragment from a payload.
 
     Returns:
-        TODO docstring.
+        Short hash fragment string.
     """
     hash_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(hash_bytes).hexdigest()[:10]

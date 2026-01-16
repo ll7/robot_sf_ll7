@@ -3,7 +3,7 @@
     "$id": "https://example.com/robot-sf/episode.schema.v1.json",
     "title": "RobotSF Benchmark Episode (v1)",
     "type": "object",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "required": [
         "version",
         "episode_id",
@@ -23,6 +23,9 @@
             "type": "string",
             "minLength": 1
         },
+        "scenario_params": {
+            "type": "object"
+        },
         "seed": {
             "type": "integer"
         },
@@ -33,15 +36,69 @@
         "algo": {
             "type": "string"
         },
+        "algorithm_metadata": {
+            "type": "object",
+            "description": "Metadata about the algorithm/policy used (name, config, status).",
+            "properties": {
+                "algorithm": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "ok",
+                        "fallback",
+                        "error",
+                        "placeholder"
+                    ]
+                },
+                "fallback_reason": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object"
+                },
+                "config_hash": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true
+        },
         "metrics": {
             "type": "object",
             "minProperties": 1,
             "additionalProperties": {
                 "type": [
                     "number",
-                    "integer"
+                    "integer",
+                    "boolean",
+                    "object"
                 ]
             }
+        },
+        "config_hash": {
+            "type": "string"
+        },
+        "git_hash": {
+            "type": "string"
+        },
+        "timestamps": {
+            "type": "object",
+            "required": [
+                "start",
+                "end"
+            ],
+            "properties": {
+                "start": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "end": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            },
+            "additionalProperties": true
         },
         "timing": {
             "type": "object",
@@ -55,6 +112,9 @@
                 }
             },
             "additionalProperties": false
+        },
+        "notes": {
+            "type": "string"
         },
         "tags": {
             "type": "array",

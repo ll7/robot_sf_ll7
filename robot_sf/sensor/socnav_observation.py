@@ -47,6 +47,8 @@ def socnav_observation_space(
 
     ped_positions_high = np.broadcast_to(pos_high, (max_pedestrians, 2)).astype(np.float32)
     ped_positions_low = np.broadcast_to(pos_low, (max_pedestrians, 2)).astype(np.float32)
+    ped_vel_low = np.broadcast_to(-speed_bounds, (max_pedestrians, 2)).astype(np.float32)
+    ped_vel_high = np.broadcast_to(speed_bounds, (max_pedestrians, 2)).astype(np.float32)
 
     return spaces.Dict(
         {
@@ -77,6 +79,11 @@ def socnav_observation_space(
                     "positions": spaces.Box(
                         low=ped_positions_low,
                         high=ped_positions_high,
+                        dtype=np.float32,
+                    ),
+                    "velocities": spaces.Box(
+                        low=ped_vel_low,
+                        high=ped_vel_high,
                         dtype=np.float32,
                     ),
                     "radius": spaces.Box(
@@ -130,6 +137,10 @@ class SocNavObservationFusion:
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
+        try:
+            ped_velocities = np.asarray(self.simulator.ped_vel, dtype=np.float32)
+        except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive fallback
+            ped_velocities = np.zeros_like(ped_positions, dtype=np.float32)
         total_peds = ped_positions.shape[0]
         if total_peds > self.max_pedestrians and not self.truncation_warned:
             logger.warning(
@@ -139,10 +150,33 @@ class SocNavObservationFusion:
                 self.max_pedestrians,
             )
             self.truncation_warned = True
+
+        robot_pose = self.simulator.robots[self.robot_index].pose
+        robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
+        # Order pedestrians by distance to robot (closest-first)
+        if ped_positions.size > 0:
+            rel = ped_positions - robot_pos
+            dists = np.linalg.norm(rel, axis=1)
+            order = np.argsort(dists)
+            ped_positions = ped_positions[order]
+            ped_velocities = ped_velocities[order]
+
         ped_positions = ped_positions[: self.max_pedestrians]
+        ped_velocities = ped_velocities[: self.max_pedestrians]
         padded = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        padded_vel = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
         if ped_positions.size > 0:
             padded[: ped_positions.shape[0]] = ped_positions
+        if ped_velocities.size > 0:
+            # Convert pedestrian velocities to ego frame (rotate by -heading)
+            heading = float(robot_pose[1])
+            cos_h = np.cos(heading)
+            sin_h = np.sin(heading)
+            vx = ped_velocities[:, 0]
+            vy = ped_velocities[:, 1]
+            ego_vx = cos_h * vx + sin_h * vy
+            ego_vy = -sin_h * vx + cos_h * vy
+            padded_vel[: ped_velocities.shape[0]] = np.stack([ego_vx, ego_vy], axis=1)
 
         goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
         next_goal = self.simulator.next_goal_pos[self.robot_index]
@@ -152,7 +186,6 @@ class SocNavObservationFusion:
             else np.zeros(2, dtype=np.float32)
         )
 
-        robot_pose = self.simulator.robots[self.robot_index].pose
         # Wrap heading to [-pi, pi] to stay within declared observation bounds
         wrapped_heading = ((robot_pose[1] + np.pi) % (2 * np.pi)) - np.pi
         robot_speed = np.asarray(
@@ -173,6 +206,7 @@ class SocNavObservationFusion:
             },
             "pedestrians": {
                 "positions": padded,
+                "velocities": padded_vel,
                 "radius": np.array([self.env_config.sim_config.ped_radius], dtype=np.float32),
                 "count": np.array(
                     [float(min(len(ped_positions), self.max_pedestrians))], dtype=np.float32

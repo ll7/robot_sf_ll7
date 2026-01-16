@@ -10,7 +10,7 @@ from robot_sf.benchmark.runner import run_batch
 if TYPE_CHECKING:
     from pathlib import Path
 
-SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_algorithm_metadata_present(tmp_path: Path):

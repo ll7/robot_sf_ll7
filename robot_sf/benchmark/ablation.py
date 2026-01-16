@@ -26,16 +26,7 @@ from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi
 
 
 def _get_nested(d: Mapping[str, Any], dotted: str, default: Any | None = None) -> Any:
-    """TODO docstring. Document this function.
-
-    Args:
-        d: TODO docstring.
-        dotted: TODO docstring.
-        default: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Return a dotted-path value from a mapping."""
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, Mapping) and part in cur:
@@ -50,15 +41,10 @@ def _group_by(
     group_by: str,
     fallback: str,
 ) -> dict[str, list[Mapping[str, Any]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        group_by: TODO docstring.
-        fallback: TODO docstring.
+    """Group records by a dotted key with fallback.
 
     Returns:
-        TODO docstring.
+        Mapping of group id to record list.
     """
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for rec in records:
@@ -72,13 +58,10 @@ def _group_by(
 
 
 def _mean(values: Sequence[float]) -> float:
-    """TODO docstring. Document this function.
-
-    Args:
-        values: TODO docstring.
+    """Compute mean of values or NaN for empty input.
 
     Returns:
-        TODO docstring.
+        Mean value or NaN when no values are present.
     """
     return float(sum(values) / len(values)) if values else float("nan")
 
@@ -88,15 +71,10 @@ def _episode_snqi(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> float:
-    """TODO docstring. Document this function.
-
-    Args:
-        rec: TODO docstring.
-        weights: TODO docstring.
-        baseline: TODO docstring.
+    """Compute SNQI for a single episode record.
 
     Returns:
-        TODO docstring.
+        SNQI score for the record.
     """
     return float(compute_snqi(rec.get("metrics", {}), weights, baseline))
 
@@ -108,17 +86,10 @@ def _compute_group_means(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, float]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        weights: TODO docstring.
-        baseline: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Compute mean SNQI per group.
 
     Returns:
-        TODO docstring.
+        Mapping of group id to mean SNQI.
     """
     groups = _group_by(records, group_by, fallback_group_by)
     means: dict[str, float] = {}
@@ -139,14 +110,10 @@ def _ranking_from_means(
     ascending: bool = False,
 ) -> list[tuple[str, float, int]]:
     # We treat higher SNQI as better -> descending by default; ascending flag kept for symmetry.
-    """TODO docstring. Document this function.
-
-    Args:
-        means: TODO docstring.
-        ascending: TODO docstring.
+    """Create sorted ranking tuples from mean scores.
 
     Returns:
-        TODO docstring.
+        List of (group, mean, count placeholder) tuples sorted by score.
     """
     items = [(g, float(m), 0) for g, m in means.items()]
     items.sort(key=lambda t: t[1], reverse=not ascending)
@@ -156,7 +123,7 @@ def _ranking_from_means(
 
 @dataclass
 class AblationRow:
-    """TODO docstring. Document this class."""
+    """Ablation report row for a single group."""
 
     group: str
     base_rank: int
@@ -218,13 +185,10 @@ def compute_snqi_ablation(
 
 
 def format_markdown(rows: Sequence[AblationRow]) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        rows: TODO docstring.
+    """Format ablation rows as a Markdown table.
 
     Returns:
-        TODO docstring.
+        Markdown table string.
     """
     headers = ["Rank", "Group", "base_mean", *list(WEIGHT_NAMES)]
     # Only include weights that appear in any row
@@ -245,13 +209,10 @@ def format_markdown(rows: Sequence[AblationRow]) -> str:
 
 
 def format_csv(rows: Sequence[AblationRow]) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        rows: TODO docstring.
+    """Format ablation rows as CSV.
 
     Returns:
-        TODO docstring.
+        CSV string for the ablation table.
     """
     used_weights = [w for w in WEIGHT_NAMES if any(w in r.deltas for r in rows)]
     headers = ["rank", "group", "base_mean"] + [f"delta_{w}" for w in used_weights]
@@ -265,13 +226,10 @@ def format_csv(rows: Sequence[AblationRow]) -> str:
 
 
 def to_json(rows: Sequence[AblationRow]) -> list[dict[str, Any]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        rows: TODO docstring.
+    """Convert ablation rows into JSON-serializable dicts.
 
     Returns:
-        TODO docstring.
+        List of JSON-ready dictionaries.
     """
     out: list[dict[str, Any]] = []
     for r in rows:

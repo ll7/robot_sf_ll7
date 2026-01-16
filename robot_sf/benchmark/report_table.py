@@ -36,15 +36,10 @@ def _get_dotted(d: dict[str, object], path: str, default=None):
 
 
 def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None:
-    """TODO docstring. Document this function.
-
-    Args:
-        rec: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Resolve the grouping key from a record with fallback.
 
     Returns:
-        TODO docstring.
+        Group key string or None if missing.
     """
     g = _get_dotted(rec, group_by)
     if g is None:
@@ -54,7 +49,7 @@ def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None
 
 @dataclass
 class TableRow:
-    """TODO docstring. Document this class."""
+    """Row of aggregated metric means for a group."""
 
     group: str
     values: dict[str, float | None]
@@ -66,16 +61,10 @@ def compute_table(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
 ) -> list[TableRow]:
-    """TODO docstring. Document this function.
-
-    Args:
-        records: TODO docstring.
-        metrics: TODO docstring.
-        group_by: TODO docstring.
-        fallback_group_by: TODO docstring.
+    """Compute mean metrics per group.
 
     Returns:
-        TODO docstring.
+        List of TableRow entries.
     """
     sums: dict[str, dict[str, float]] = {}
     counts: dict[str, dict[str, int]] = {}
@@ -112,14 +101,10 @@ def compute_table(
 
 
 def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        rows: TODO docstring.
-        metrics: TODO docstring.
+    """Format table rows as a Markdown table.
 
     Returns:
-        TODO docstring.
+        Markdown table string.
     """
     headers = ["Group", *metrics]
     lines = [
@@ -136,14 +121,10 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
-    """TODO docstring. Document this function.
-
-    Args:
-        rows: TODO docstring.
-        metrics: TODO docstring.
+    """Format table rows as CSV.
 
     Returns:
-        TODO docstring.
+        CSV string for the table.
     """
     buf = StringIO()
     writer = csv.writer(buf)

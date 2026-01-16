@@ -158,36 +158,15 @@ class SchemaVersion:
         return False
 
     def __le__(self, other: "SchemaVersion") -> bool:
-        """TODO docstring. Document this function.
-
-        Args:
-            other: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return True if this version is <= the other version."""
         return self < other or self == other
 
     def __gt__(self, other: "SchemaVersion") -> bool:
-        """TODO docstring. Document this function.
-
-        Args:
-            other: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return True if this version is > the other version."""
         return not (self <= other)
 
     def __ge__(self, other: "SchemaVersion") -> bool:
-        """TODO docstring. Document this function.
-
-        Args:
-            other: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return True if this version is >= the other version."""
         return not (self < other)
 
     def __hash__(self) -> int:

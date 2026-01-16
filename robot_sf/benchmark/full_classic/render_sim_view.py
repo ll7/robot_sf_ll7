@@ -55,7 +55,7 @@ else:  # pragma: no cover - trivial branch
 
 
 def _assert_ready() -> None:
-    """TODO docstring. Document this function."""
+    """Ensure SimulationView and pygame are available before rendering."""
     if not has_pygame() or SimulationView is None or not simulation_view_ready():  # type: ignore
         raise RuntimeError(
             "SimulationView not available (pygame or probe failed); caller should fallback",
@@ -162,15 +162,10 @@ __all__ = ["generate_frames"]
 
 
 def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
-    """TODO docstring. Document this function.
-
-    Args:
-        step: TODO docstring.
-        idx: TODO docstring.
-        dt: TODO docstring.
+    """Build a VisualizableSimState from a replay step.
 
     Returns:
-        TODO docstring.
+        VisualizableSimState instance.
     """
     ped_positions = np.asarray(step.ped_positions or [], dtype=float)
     ray_vecs = (
@@ -201,13 +196,10 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
 
 def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
     # Try to reuse already converted map from episode if present
-    """TODO docstring. Document this function.
-
-    Args:
-        ep: TODO docstring.
+    """Load and cache a converted map definition for an episode.
 
     Returns:
-        TODO docstring.
+        MapDefinition instance or None.
     """
     if hasattr(ep, "_map_def_cache"):
         return ep._map_def_cache
@@ -225,15 +217,10 @@ def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
 
 
 def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
-    """TODO docstring. Document this function.
-
-    Args:
-        episode: TODO docstring.
-        fps: TODO docstring.
-        video_path: TODO docstring.
+    """Construct a SimulationView instance configured for recording.
 
     Returns:
-        SimulationView instance configured for video recording.
+        SimulationView instance.
     """
     map_def = _load_map_def(episode)
     view_kwargs: dict = {

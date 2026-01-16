@@ -101,7 +101,7 @@ _MATPLOTLIB_INITIALIZED = False
 
 
 def _ensure_matplotlib_backend() -> None:
-    """TODO docstring. Document this function."""
+    """Initialize matplotlib to a headless-safe backend once."""
     global _MATPLOTLIB_INITIALIZED
     if _MATPLOTLIB_INITIALIZED:
         return
@@ -111,30 +111,26 @@ def _ensure_matplotlib_backend() -> None:
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function.
-
-    Returns:
-        The matplotlib.pyplot module.
-    """
+    """Return matplotlib.pyplot after ensuring backend setup."""
     _ensure_matplotlib_backend()
     return importlib.import_module("matplotlib.pyplot")
 
 
 def _load_replay_types():
-    """TODO docstring. Document this function.
+    """Load replay dataclasses from the full_classic replay module.
 
     Returns:
-        Tuple of (ReplayEpisode, ReplayStep) classes from replay module.
+        Tuple of (ReplayEpisode, ReplayStep) classes.
     """
     module = importlib.import_module("robot_sf.benchmark.full_classic.replay")
     return module.ReplayEpisode, module.ReplayStep
 
 
 def _load_image_sequence_clip():
-    """TODO docstring. Document this function.
+    """Load moviepy ImageSequenceClip lazily.
 
     Returns:
-        The ImageSequenceClip class from moviepy.
+        ImageSequenceClip class.
     """
     module = importlib.import_module("moviepy.video.io.ImageSequenceClip")
     return module.ImageSequenceClip
@@ -168,13 +164,7 @@ class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
     def __init__(self, message: str, artifact_type: str, details: dict | None = None):
-        """TODO docstring. Document this function.
-
-        Args:
-            message: TODO docstring.
-            artifact_type: TODO docstring.
-            details: TODO docstring.
-        """
+        """Initialize a visualization error with context."""
         super().__init__(message)
         self.artifact_type = artifact_type
         self.details = details or {}
@@ -991,14 +981,10 @@ def _create_pixel_converter(bounds: tuple[float, float, float, float]):
     height, width = 320, 320
 
     def to_pixel(x: float, y: float) -> tuple[int, int]:
-        """TODO docstring. Document this function.
-
-        Args:
-            x: TODO docstring.
-            y: TODO docstring.
+        """Convert world coordinates to frame pixel coordinates.
 
         Returns:
-            TODO docstring.
+            (row, col) pixel coordinates for the frame.
         """
         norm_x = (x - min_x) / span_x
         norm_y = (y - min_y) / span_y
@@ -1087,7 +1073,7 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
-            """TODO docstring. Document this function."""
+            """Yield frames for moviepy encoding."""
             yield from frames
 
         # Create a temporary audio file path (even though audio=False, moviepy expects it)

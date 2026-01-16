@@ -14,13 +14,9 @@ multi-processing are future work.
 
 from __future__ import annotations
 
-import hashlib
-import inspect
 import json
-import math
 import os
 import platform
-import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -53,9 +49,18 @@ else:
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
+from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
+from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
+    episode_identity_hash,
+    index_existing,
+)
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 if TYPE_CHECKING:
@@ -130,123 +135,24 @@ POLICY_STEP_TIMEOUT_SECS: float = 0.2  # step(obs) time budget; fallback to zero
 FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 
-def _git_hash_fallback() -> str:
-    # Best effort; avoid importing subprocess if not needed later
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
-    try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
-        return out.decode().strip()
-    except (
-        subprocess.CalledProcessError,
-        FileNotFoundError,
-        OSError,
-    ) as exc:  # pragma: no cover
-        # Best-effort fallback when git is unavailable or fails; retain behavior
-        logger.debug("_git_hash_fallback failed: %s", exc)
-        return "unknown"
-
-
-def _config_hash(obj: Any) -> str:
-    """Return a stable, deterministic 16-char hash from JSON serialization.
-
-    Args:
-        obj: Object to hash (must be JSON-serializable).
-
-    Returns:
-        16-character hex hash string.
-    """
-    data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
-def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:  # legacy wrapper
-    """Backward-compatible wrapper returning deterministic episode id.
-
-    Uses new `make_episode_id` (sha256-based) while preserving previous readable
-    prefix by embedding scenario id when available. Existing manifests that
-    relied on the old format will naturally diverge (different ids) — identity
-    hash below ensures resume manifests invalidate cleanly.
-
-    Returns:
-        Episode ID string in format <scenario_id>--<seed>.
-    """
-    scenario_id = scenario_params.get("id", "unknown")
-    # For current test suite compatibility and simple resume semantics we use
-    # the legacy id pattern '<scenario_id>--<seed>'. A richer hash-based form
-    # can be reintroduced later once all tests & manifests are migrated.
-    return f"{scenario_id}--{seed}"
-
-
-def _episode_identity_hash() -> str:
-    """Return a short hash that fingerprints episode identity definition.
-
-    Intentionally small and stable across runs of the same code. If the
-    implementation of ``compute_episode_id`` changes, this hash will change
-    as well, which invalidates any previously saved manifest sidecars.
-
-    Returns:
-        12-character hex hash of compute_episode_id implementation.
-    """
-    try:
-        src = inspect.getsource(compute_episode_id)
-    except (OSError, TypeError):
-        # Fallback to function name when source isn't available (e.g., pyc only)
-        src = compute_episode_id.__name__
-    return hashlib.sha256(src.encode()).hexdigest()[:12]
-
-
-def index_existing(out_path: Path) -> set[str]:
-    """Scan an existing JSONL file and return the set of episode_ids found.
-
-    Tolerates malformed lines and missing keys; logs are not emitted here to keep
-    the function side-effect free (caller may log if desired).
-
-    Returns:
-        Set of episode IDs found in the JSONL file.
-    """
-    ids: set[str] = set()
-    try:
-        with out_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    eid = rec.get("episode_id")
-                    if isinstance(eid, str):
-                        ids.add(eid)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    # Ignore malformed JSON lines
-                    continue
-    except FileNotFoundError:
-        return set()
-    except OSError as exc:
-        logger.debug(
-            "index_existing unexpected error reading %s: %s", out_path, exc
-        )  # pragma: no cover
-        return set()
-    return ids
+_episode_identity_hash = episode_identity_hash
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Load a scenario matrix from YAML (stream, list, or dict with scenarios).
 
     Returns:
-        TODO docstring.
+        List of scenario dictionaries.
     """
     with Path(path).open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
     # Allow either YAML stream of docs or a single list
-    scenarios = docs[0] if len(docs) == 1 and isinstance(docs[0], list) else docs
+    if len(docs) == 1 and isinstance(docs[0], list):
+        scenarios = docs[0]
+    elif len(docs) == 1 and isinstance(docs[0], dict) and "scenarios" in docs[0]:
+        scenarios = docs[0].get("scenarios", [])
+    else:
+        scenarios = docs
     return [dict(s) for s in scenarios]
 
 
@@ -319,24 +225,15 @@ def _build_episode_data(
     robot_acc_traj: list[np.ndarray],
     peds_pos_traj: list[np.ndarray],
     ped_forces_traj: list[np.ndarray],
+    obstacles: np.ndarray | None,
     goal: np.ndarray,
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
-    """TODO docstring. Document this function.
-
-    Args:
-        robot_pos_traj: TODO docstring.
-        robot_vel_traj: TODO docstring.
-        robot_acc_traj: TODO docstring.
-        peds_pos_traj: TODO docstring.
-        ped_forces_traj: TODO docstring.
-        goal: TODO docstring.
-        dt: TODO docstring.
-        reached_goal_step: TODO docstring.
+    """Assemble EpisodeData from trajectory buffers and metadata.
 
     Returns:
-        TODO docstring.
+        EpisodeData instance.
     """
     robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
@@ -350,6 +247,7 @@ def _build_episode_data(
         robot_acc=robot_acc,
         peds_pos=peds_pos,
         ped_forces=ped_forces,
+        obstacles=obstacles,
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
@@ -391,7 +289,12 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             """
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
-        return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
+        return policy, {
+            "algorithm": "simple_policy",
+            "config": {},
+            "config_hash": "na",
+            "status": "ok",
+        }
 
     if algo == "simple_policy":
         return _simple_policy_adapter()
@@ -489,17 +392,13 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
+    metadata.setdefault("status", "ok")
 
     return policy_fn, metadata
 
 
 def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        record: TODO docstring.
-        note: TODO docstring.
-    """
+    """Append a human-readable note to the record's notes field."""
     existing = record.get("notes")
     if existing:
         record["notes"] = f"{existing}; {note}"
@@ -518,18 +417,7 @@ def _emit_video_skip(
     steps: int | None,
     error: str | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        record: TODO docstring.
-        episode_id: TODO docstring.
-        scenario_id: TODO docstring.
-        seed: TODO docstring.
-        renderer: TODO docstring.
-        reason: TODO docstring.
-        steps: TODO docstring.
-        error: TODO docstring.
-    """
+    """Record a video skip reason in logs and episode notes."""
     context = {
         "episode_id": episode_id,
         "scenario_id": scenario_id,
@@ -610,14 +498,10 @@ def _try_encode_synthetic_video(
 
     def to_px(x: float, y: float) -> tuple[int, int]:
         # Normalize to [0,1] then scale to pixels; y inverted for image coords
-        """TODO docstring. Document this function.
-
-        Args:
-            x: TODO docstring.
-            y: TODO docstring.
+        """Map world coordinates to image pixel coordinates.
 
         Returns:
-            TODO docstring.
+            Pixel coordinates (x, y).
         """
         nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
         ny = 0.0 if max_y == min_y else (y - min_y) / (max_y - min_y)
@@ -824,23 +708,14 @@ def _simulate_episode_with_policy(
     list[np.ndarray],
     list[np.ndarray],
     list[np.ndarray],
+    list[tuple[float, float, float, float]],
     np.ndarray,
     int | None,
 ]:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenario_params: TODO docstring.
-        seed: TODO docstring.
-        robot_policy: TODO docstring.
-        horizon: TODO docstring.
-        dt: TODO docstring.
-        robot_start: TODO docstring.
-        robot_goal: TODO docstring.
-        record_forces: TODO docstring.
+    """Run a synthetic episode and return trajectories and metadata.
 
     Returns:
-        TODO docstring.
+        Tuple of trajectories, obstacles, goal, and reached-goal step.
     """
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
@@ -863,20 +738,29 @@ def _simulate_episode_with_policy(
     goal_radius = 0.3
     last_vel = robot_vel.copy()
 
+    # Record initial state at t=0 to capture immediate collisions
+    initial_ped_pos = sim.peds.pos().copy()
+    peds_pos_traj.append(initial_ped_pos)
+    if record_forces:
+        forces = np.zeros_like(initial_ped_pos, dtype=float)
+        for i, p in enumerate(initial_ped_pos):
+            forces[i] = wrapper.get_forces_at(p)
+        ped_forces_traj.append(forces)
+    else:
+        ped_forces_traj.append(np.zeros_like(initial_ped_pos, dtype=float))
+    robot_pos_traj.append(robot_pos.copy())
+    robot_vel_traj.append(robot_vel.copy())
+    robot_acc_traj.append(np.zeros_like(robot_vel, dtype=float))
+
     def _step_robot(
         curr_pos: np.ndarray,
         curr_vel: np.ndarray,
         ped_positions: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """TODO docstring. Document this function.
-
-        Args:
-            curr_pos: TODO docstring.
-            curr_vel: TODO docstring.
-            ped_positions: TODO docstring.
+        """Advance robot state using the policy output.
 
         Returns:
-            TODO docstring.
+            Tuple of (new_pos, new_vel, acceleration).
         """
         new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
@@ -884,28 +768,31 @@ def _simulate_episode_with_policy(
         return new_pos, new_vel, acc_vec
 
     for t in range(horizon):
-        ped_pos = sim.peds.pos().copy()
-        peds_pos_traj.append(ped_pos)
+        ped_pos = peds_pos_traj[-1]
 
         robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
         last_vel = robot_vel.copy()
 
+        sim.step()
+
+        ped_pos_next = sim.peds.pos().copy()
+        peds_pos_traj.append(ped_pos_next)
+
         if record_forces:
-            forces = np.zeros_like(ped_pos, dtype=float)
-            for i, p in enumerate(ped_pos):
+            forces = np.zeros_like(ped_pos_next, dtype=float)
+            for i, p in enumerate(ped_pos_next):
                 forces[i] = wrapper.get_forces_at(p)
             ped_forces_traj.append(forces)
         else:
-            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
+            ped_forces_traj.append(np.zeros_like(ped_pos_next, dtype=float))
 
         robot_pos_traj.append(robot_pos.copy())
         robot_vel_traj.append(robot_vel.copy())
         robot_acc_traj.append(acc.copy())
 
         if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
-            reached_goal_step = t
+            reached_goal_step = t + 1
             break
-        sim.step()
 
     return (
         robot_pos_traj,
@@ -913,6 +800,7 @@ def _simulate_episode_with_policy(
         robot_acc_traj,
         peds_pos_traj,
         ped_forces_traj,
+        gen.obstacles,
         np.asarray(robot_goal_arr, dtype=float),
         reached_goal_step,
     )
@@ -924,19 +812,13 @@ def _compute_metrics(
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        ep: TODO docstring.
-        horizon: TODO docstring.
-        snqi_weights: TODO docstring.
-        snqi_baseline: TODO docstring.
+    """Compute metrics and optional SNQI post-processing.
 
     Returns:
-        TODO docstring.
+        Metrics dictionary for the episode.
     """
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
-    return _post_process_metrics(
+    return post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
@@ -950,20 +832,14 @@ def _build_episode_record(
     algo_metadata: dict[str, Any],
     ts_start: str,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenario_params: TODO docstring.
-        seed: TODO docstring.
-        metrics: TODO docstring.
-        algo_metadata: TODO docstring.
-        ts_start: TODO docstring.
+    """Assemble a JSON-serializable episode record.
 
     Returns:
-        TODO docstring.
+        Episode record dictionary.
     """
     episode_id = compute_episode_id(scenario_params, seed)
-    return {
+    record = {
+        "version": "v1",
         "episode_id": episode_id,
         "scenario_id": scenario_params.get("id", "unknown"),
         "seed": seed,
@@ -974,6 +850,10 @@ def _build_episode_record(
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_start},
     }
+    algo_value = scenario_params.get("algo")
+    if algo_value is not None:
+        record["algo"] = algo_value
+    return record
 
 
 def run_episode(
@@ -1024,9 +904,12 @@ def run_episode(
         robot_acc_traj,
         peds_pos_traj,
         ped_forces_traj,
+        obstacle_segments,
         robot_goal_arr,
         reached_goal_step,
     ) = trajectories
+
+    obstacles = sample_obstacle_points(obstacle_segments)
 
     # Build episode data
     ep = _build_episode_data(
@@ -1035,6 +918,7 @@ def run_episode(
         robot_acc_traj,
         peds_pos_traj,
         ped_forces_traj,
+        obstacles,
         robot_goal_arr,
         dt,
         reached_goal_step,
@@ -1044,12 +928,17 @@ def run_episode(
     metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
 
     # Build record
-    record = _build_episode_record(scenario_params, seed, metrics, algo_metadata, ts_start)
+    scenario_params_record = dict(scenario_params)
+    scenario_params_record.setdefault("algo", algo)
+    record = _build_episode_record(scenario_params_record, seed, metrics, algo_metadata, ts_start)
+
+    steps_taken = max(0, len(robot_pos_traj) - 1)
 
     # Handle video
+    video_positions = robot_pos_traj[1:] if len(robot_pos_traj) > 1 else []
     _maybe_encode_video(
         record=record,
-        robot_pos_traj=robot_pos_traj,
+        robot_pos_traj=video_positions,
         videos_dir=videos_dir,
         video_enabled=video_enabled,
         video_renderer=video_renderer,
@@ -1058,6 +947,17 @@ def run_episode(
 
     # Update end time
     record["timestamps"]["end"] = datetime.now(UTC).isoformat()
+    record["steps"] = steps_taken
+    record["horizon"] = horizon
+    wall_time = float(max(1e-9, time.perf_counter() - perf_start))
+    record["wall_time_sec"] = wall_time
+    record["timing"] = {
+        "steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0,
+    }
+    status = "success" if record.get("metrics", {}).get("success") else "failure"
+    if record.get("metrics", {}).get("collisions"):
+        status = "collision"
+    record["status"] = status
     return record
 
 
@@ -1066,13 +966,7 @@ def validate_and_write(
     schema_path: str | Path,
     out_path: str | Path,
 ) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        record: TODO docstring.
-        schema_path: TODO docstring.
-        out_path: TODO docstring.
-    """
+    """Validate an episode record against schema and append to JSONL."""
     schema = load_schema(schema_path)
     validate_episode(record, schema)
     out_path = Path(out_path)
@@ -1089,79 +983,15 @@ __all__ = [
 ]
 
 
-def _post_process_metrics(
-    metrics_raw: dict[str, Any],
-    *,
-    snqi_weights: dict[str, float] | None,
-    snqi_baseline: dict[str, dict[str, float]] | None,
-) -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        metrics_raw: TODO docstring.
-        snqi_weights: TODO docstring.
-        snqi_baseline: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
-    metrics: dict[str, Any] = dict(metrics_raw.items())
-    metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
-    fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
-    if fq:
-        metrics["force_quantiles"] = {
-            "q50": float(fq.get("force_q50", float("nan"))),
-            "q90": float(fq.get("force_q90", float("nan"))),
-            "q95": float(fq.get("force_q95", float("nan"))),
-        }
-        for k in list(fq.keys()):
-            metrics.pop(k, None)
-    if snqi_weights is not None:
-        snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
-        metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
-    for count_key in ("collisions", "near_misses", "force_exceed_events"):
-        if count_key in metrics and metrics[count_key] is not None:
-            try:
-                metrics[count_key] = int(metrics[count_key])
-            except Exception:  # pragma: no cover
-                pass
-    return _sanitize_metrics(metrics)
-
-
-def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
-    """Remove NaN/inf metric entries to keep JSON serialization clean.
-
-    Returns:
-        Cleaned metrics dictionary with NaN/inf values removed.
-    """
-
-    clean: dict[str, Any] = {}
-    for key, val in metrics.items():
-        if isinstance(val, dict):
-            nested = _sanitize_metrics(val)
-            if nested:
-                clean[key] = nested
-            continue
-        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-            continue
-        clean[key] = val
-    return clean
-
-
 def _expand_jobs(
     scenarios: list[dict[str, Any]],
     base_seed: int = 0,
     repeats_override: int | None = None,
 ) -> list[tuple[dict[str, Any], int]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenarios: TODO docstring.
-        base_seed: TODO docstring.
-        repeats_override: TODO docstring.
+    """Expand scenarios into (scenario, seed) jobs.
 
     Returns:
-        TODO docstring.
+        List of (scenario, seed) tuples.
     """
     jobs: list[tuple[dict[str, Any], int]] = []
     for sc in scenarios:
@@ -1198,13 +1028,7 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 
 
 def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        out_path: TODO docstring.
-        schema: TODO docstring.
-        rec: TODO docstring.
-    """
+    """Validate a record against schema and append to JSONL."""
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
@@ -1219,18 +1043,10 @@ def _run_batch_sequential(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        jobs: TODO docstring.
-        out_path: TODO docstring.
-        schema: TODO docstring.
-        fixed_params: TODO docstring.
-        progress_cb: TODO docstring.
-        fail_fast: TODO docstring.
+    """Run batch jobs sequentially and return write count + failures.
 
     Returns:
-        TODO docstring.
+        Tuple of (written_count, failure_records).
     """
     wrote = 0
     failures: list[dict[str, Any]] = []
@@ -1273,19 +1089,10 @@ def _run_batch_parallel(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        jobs: TODO docstring.
-        out_path: TODO docstring.
-        schema: TODO docstring.
-        fixed_params: TODO docstring.
-        workers: TODO docstring.
-        progress_cb: TODO docstring.
-        fail_fast: TODO docstring.
+    """Run batch jobs in parallel and return write count + failures.
 
     Returns:
-        TODO docstring.
+        Tuple of (written_count, failure_records).
     """
     wrote = 0
     failures: list[dict[str, Any]] = []
@@ -1563,6 +1370,23 @@ def run_batch(
         schema_path,
         append,
     )
+
+    # Map-based scenario detection: delegate to map runner
+    if scenarios and any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
+        return run_map_batch(
+            scenarios_or_path,
+            out_path,
+            schema_path,
+            horizon=horizon if horizon > 0 else None,
+            dt=dt if dt > 0 else None,
+            record_forces=record_forces,
+            snqi_weights=snqi_weights,
+            snqi_baseline=snqi_baseline,
+            algo=algo,
+            algo_config_path=algo_config_path,
+            workers=workers,
+            resume=resume,
+        )
 
     # Expand jobs
     jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)

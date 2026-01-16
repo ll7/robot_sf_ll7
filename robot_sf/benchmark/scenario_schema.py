@@ -30,24 +30,23 @@ SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json
 
 
 def load_scenario_schema() -> dict[str, Any]:
-    """TODO docstring. Document this function.
-
+    """Load the benchmark scenario schema from disk.
 
     Returns:
-        TODO docstring.
+        Parsed JSON schema dict.
     """
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:
-    """TODO docstring. Document this function.
+    """Render an RFC6901-style pointer from a jsonschema error path.
 
     Args:
-        path_elems: TODO docstring.
+        path_elems: Iterable of keys/indices describing a JSON path.
 
     Returns:
-        TODO docstring.
+        JSON pointer string ("" for root).
     """
     parts: list[str] = []
     for p in path_elems:
@@ -110,10 +109,18 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
                     },
                 )
 
-    # Duplicate id check across the list
+    # Duplicate id/name check across the list
     seen: dict[str, int] = {}
     for i, s in enumerate(scenarios):
-        sid = s.get("id")
+        sid = (
+            s.get("id")
+            if isinstance(s.get("id"), str)
+            else s.get("name")
+            if isinstance(s.get("name"), str)
+            else s.get("scenario_id")
+            if isinstance(s.get("scenario_id"), str)
+            else None
+        )
         if isinstance(sid, str):
             if sid in seen:
                 errors.append(

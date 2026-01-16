@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian grouping utilities and state accessors."""
 
 from collections.abc import Callable
 from copy import deepcopy
@@ -52,6 +52,17 @@ class PedestrianStates:
             The positions of the pedestrians.
         """
         return self.pysf_states()[:, 0:2]
+
+    @property
+    def ped_velocities(self) -> np.ndarray:
+        """Get the velocities of the pedestrians.
+
+        Returns
+        -------
+        np.ndarray
+            The velocities of the pedestrians.
+        """
+        return self.pysf_states()[:, 2:4]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
         """
@@ -167,70 +178,36 @@ class PedestrianGroupings:
     def groups_as_lists(self) -> list[list[int]]:
         # info: this facilitates slicing over numpy arrays
         #       for some reason, numpy cannot slide over indices provided as set ...
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return pedestrian group ids as lists (numpy-friendly)."""
         return [list(ped_ids) for ped_ids in self.groups.values()]
 
     @property
     def group_ids(self) -> set[int]:
         # info: ignore empty groups
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return ids of non-empty groups."""
         return {k for k in self.groups if len(self.groups[k]) > 0}
 
     def group_centroid(self, group_id: int) -> Vec2D:
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the centroid position of a group."""
         group = self.groups[group_id]
         positions = self.states.pos_of_many(group)
         c_x, c_y = np.mean(positions, axis=0)
         return (c_x, c_y)
 
     def group_size(self, group_id: int) -> int:
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the number of pedestrians in a group."""
         return len(self.groups[group_id])
 
     def goal_of_group(self, group_id: int) -> Vec2D:
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the goal of an arbitrary member of the group."""
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
 
     def new_group(self, ped_ids: set[int]) -> int:
-        """TODO docstring. Document this function.
-
-        Args:
-            ped_ids: TODO docstring.
+        """Create a new group from the given pedestrian ids.
 
         Returns:
-            TODO docstring.
+            The new group id.
         """
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
         self.groups[new_gid] = ped_ids.copy()
@@ -264,32 +241,18 @@ class PedestrianGroupings:
         return self.new_group({ped_id})
 
     def remove_group(self, group_id: int):
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-        """
+        """Remove a group by reassigning members to single-member groups."""
         ped_ids = deepcopy(self.groups[group_id])
         for ped_id in ped_ids:
             self.new_group({ped_id})
         self.groups[group_id].clear()
 
     def redirect_group(self, group_id: int, new_goal: Vec2D):
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-            new_goal: TODO docstring.
-        """
+        """Redirect all members of a group to a new goal."""
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
     def reposition_group(self, group_id: int, new_positions: list[Vec2D]):
-        """TODO docstring. Document this function.
-
-        Args:
-            group_id: TODO docstring.
-            new_positions: TODO docstring.
-        """
+        """Reposition group members using a list of new positions."""
         for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

@@ -25,13 +25,10 @@ if TYPE_CHECKING:
 
 
 def load_classic_matrix(path: str) -> list[dict]:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
+    """Load classic interactions scenario matrix from YAML.
 
     Returns:
-        TODO docstring.
+        List of scenario dictionaries.
     """
     p = Path(path)
     if not p.exists():  # explicit fast failure
@@ -45,14 +42,10 @@ def load_classic_matrix(path: str) -> list[dict]:
 
 
 def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenarios: TODO docstring.
-        name: TODO docstring.
+    """Select a scenario by name or return the first.
 
     Returns:
-        TODO docstring.
+        Selected scenario dictionary.
     """
     if not scenarios:
         raise ValueError("No scenarios available")
@@ -66,13 +59,10 @@ def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
 
 
 def iter_episode_seeds(scenario: dict) -> list[int]:
-    """TODO docstring. Document this function.
-
-    Args:
-        scenario: TODO docstring.
+    """Return the deterministic seed list for a scenario.
 
     Returns:
-        TODO docstring.
+        List of episode seeds.
     """
     seeds = scenario.get("seeds")
     if not isinstance(seeds, list) or not seeds:

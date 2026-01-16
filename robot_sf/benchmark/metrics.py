@@ -1738,6 +1738,9 @@ METRIC_NAMES: list[str] = [
     "curvature_mean",
     "energy",
     "force_gradient_norm_mean",
+    "wall_collisions",
+    "clearing_distance_min",
+    "clearing_distance_avg",
 ]
 
 
@@ -1788,6 +1791,9 @@ def compute_all_metrics(
     values["energy"] = energy(data)
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
+    values["wall_collisions"] = wall_collisions(data)
+    values["clearing_distance_min"] = clearing_distance_min(data)
+    values["clearing_distance_avg"] = clearing_distance_avg(data)
     return values
 
 

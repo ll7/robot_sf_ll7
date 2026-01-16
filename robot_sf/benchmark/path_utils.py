@@ -45,9 +45,7 @@ def compute_shortest_path_length(
         waypoints, _info = planner.plan(
             (float(start[0]), float(start[1])), (float(goal[0]), float(goal[1]))
         )
-    except PlanningError:
-        return float("nan")
-    except ValueError:
+    except (PlanningError, ValueError):
         return float("nan")
     return _path_length(waypoints)
 

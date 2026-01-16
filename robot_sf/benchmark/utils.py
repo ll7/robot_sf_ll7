@@ -10,10 +10,15 @@ Phase A helpers are intentionally small and pure. The public function
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+
+from loguru import logger
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
@@ -198,6 +203,76 @@ def compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
     if fast_mode and max_episodes > 1:
         max_episodes = 1
     return fast_mode, max_episodes
+
+
+def _git_hash_fallback() -> str:
+    """Return the current git hash or 'unknown' if unavailable."""
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+        return out.decode().strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
+        logger.debug("_git_hash_fallback failed: %s", exc)
+        return "unknown"
+
+
+def _config_hash(obj: Any) -> str:
+    """Return a stable, deterministic 16-char hash from JSON serialization."""
+    data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:
+    """Backward-compatible wrapper returning deterministic episode id.
+
+    Uses a readable, stable id format suitable for resume semantics.
+
+    Returns:
+        Episode ID string in format <scenario_id>--<seed>.
+    """
+    scenario_id = (
+        scenario_params.get("id")
+        or scenario_params.get("name")
+        or scenario_params.get("scenario_id")
+        or "unknown"
+    )
+    return f"{scenario_id}--{seed}"
+
+
+def episode_identity_hash() -> str:
+    """Return a short hash that fingerprints episode identity definition."""
+    try:
+        src = inspect.getsource(compute_episode_id)
+    except (OSError, TypeError):
+        src = compute_episode_id.__name__
+    return hashlib.sha256(src.encode()).hexdigest()[:12]
+
+
+def index_existing(out_path: Path) -> set[str]:
+    """Scan an existing JSONL file and return the set of episode_ids found.
+
+    Returns:
+        Set of episode_id values found in the JSONL file.
+    """
+    ids: set[str] = set()
+    try:
+        with out_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                eid = rec.get("episode_id") if isinstance(rec, dict) else None
+                if isinstance(eid, str):
+                    ids.add(eid)
+    except FileNotFoundError:
+        return set()
+    except OSError as exc:
+        logger.debug("index_existing failed reading %s: %s", out_path, exc)
+        return set()
+    return ids
 
 
 def format_episode_summary_table(rows: Iterable[dict[str, Any]]) -> str:

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -20,6 +18,12 @@ from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
+    index_existing,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridConfig
@@ -37,49 +41,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
-
-
-def _config_hash(obj: dict[str, Any]) -> str:
-    data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
-def _git_hash_fallback() -> str:
-    try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
-        return out.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return "unknown"
-
-
-def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:
-    scenario_id = (
-        scenario_params.get("id")
-        or scenario_params.get("name")
-        or scenario_params.get("scenario_id")
-        or "unknown"
-    )
-    return f"{scenario_id}--{seed}"
-
-
-def index_existing(out_path: Path) -> set[str]:
-    ids: set[str] = set()
-    try:
-        with out_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                eid = rec.get("episode_id") if isinstance(rec, dict) else None
-                if isinstance(eid, str):
-                    ids.add(eid)
-    except FileNotFoundError:
-        return set()
-    return ids
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:

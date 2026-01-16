@@ -1,13 +1,19 @@
 """Test episode helper utilities in robot_sf.benchmark.utils."""
 
+import json
 import os
 from unittest.mock import patch
 
 from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
     compute_fast_mode_and_cap,
     determine_episode_outcome,
+    episode_identity_hash,
     format_episode_summary_table,
     format_overlay_text,
+    index_existing,
 )
 
 
@@ -236,3 +242,56 @@ class TestFormatEpisodeSummaryTable:
         result = format_episode_summary_table(episode_generator())
         assert "test" in result
         assert "done" in result
+
+
+class TestBenchmarkUtilsMetadata:
+    """Test benchmark metadata helpers in utils."""
+
+    def test_config_hash_is_deterministic(self):
+        """Verify config hashing is order-independent to keep resumes stable."""
+        first = _config_hash({"b": 2, "a": 1})
+        second = _config_hash({"a": 1, "b": 2})
+        assert first == second
+        assert len(first) == 16
+
+    def test_compute_episode_id_prioritizes_id(self):
+        """Verify episode id uses scenario identifiers so resume keys stay readable."""
+        scenario_params = {"id": "case_a", "name": "ignored", "scenario_id": "ignored"}
+        assert compute_episode_id(scenario_params, 7) == "case_a--7"
+
+    def test_compute_episode_id_fallbacks(self):
+        """Verify episode id falls back consistently when identifiers are missing."""
+        assert compute_episode_id({"name": "named"}, 3) == "named--3"
+        assert compute_episode_id({"scenario_id": "legacy"}, 5) == "legacy--5"
+        assert compute_episode_id({}, 9) == "unknown--9"
+
+    def test_episode_identity_hash_shape(self):
+        """Verify identity hash has stable length for manifest invalidation."""
+        identity = episode_identity_hash()
+        assert len(identity) == 12
+
+    def test_index_existing_reads_episode_ids(self, tmp_path):
+        """Verify resume scanning extracts episode ids and skips malformed lines."""
+        out_path = tmp_path / "episodes.jsonl"
+        lines = [
+            {"episode_id": "a--1"},
+            {"episode_id": "b--2"},
+        ]
+        out_path.write_text(
+            "\n".join(
+                [
+                    json.dumps(lines[0]),
+                    "not-json",
+                    json.dumps({"other": 1}),
+                    json.dumps(lines[1]),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        assert index_existing(out_path) == {"a--1", "b--2"}
+
+    def test_git_hash_fallback_handles_errors(self):
+        """Verify git hash fallback returns 'unknown' when git is unavailable."""
+        with patch("subprocess.check_output", side_effect=FileNotFoundError):
+            assert _git_hash_fallback() == "unknown"

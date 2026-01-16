@@ -14,13 +14,10 @@ multi-processing are future work.
 
 from __future__ import annotations
 
-import hashlib
-import inspect
 import json
 import math
 import os
 import platform
-import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -58,6 +55,13 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
+    episode_identity_hash,
+    index_existing,
+)
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 if TYPE_CHECKING:
@@ -132,108 +136,7 @@ POLICY_STEP_TIMEOUT_SECS: float = 0.2  # step(obs) time budget; fallback to zero
 FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 
-def _git_hash_fallback() -> str:
-    # Best effort; avoid importing subprocess if not needed later
-    """Return the current git hash or 'unknown' if unavailable."""
-    try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
-        return out.decode().strip()
-    except (
-        subprocess.CalledProcessError,
-        FileNotFoundError,
-        OSError,
-    ) as exc:  # pragma: no cover
-        # Best-effort fallback when git is unavailable or fails; retain behavior
-        logger.debug("_git_hash_fallback failed: %s", exc)
-        return "unknown"
-
-
-def _config_hash(obj: Any) -> str:
-    """Return a stable, deterministic 16-char hash from JSON serialization.
-
-    Args:
-        obj: Object to hash (must be JSON-serializable).
-
-    Returns:
-        16-character hex hash string.
-    """
-    data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
-def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:  # legacy wrapper
-    """Backward-compatible wrapper returning deterministic episode id.
-
-    Uses new `make_episode_id` (sha256-based) while preserving previous readable
-    prefix by embedding scenario id when available. Existing manifests that
-    relied on the old format will naturally diverge (different ids) — identity
-    hash below ensures resume manifests invalidate cleanly.
-
-    Returns:
-        Episode ID string in format <scenario_id>--<seed>.
-    """
-    scenario_id = (
-        scenario_params.get("id")
-        or scenario_params.get("name")
-        or scenario_params.get("scenario_id")
-        or "unknown"
-    )
-    # For current test suite compatibility and simple resume semantics we use
-    # the legacy id pattern '<scenario_id>--<seed>'. A richer hash-based form
-    # can be reintroduced later once all tests & manifests are migrated.
-    return f"{scenario_id}--{seed}"
-
-
-def _episode_identity_hash() -> str:
-    """Return a short hash that fingerprints episode identity definition.
-
-    Intentionally small and stable across runs of the same code. If the
-    implementation of ``compute_episode_id`` changes, this hash will change
-    as well, which invalidates any previously saved manifest sidecars.
-
-    Returns:
-        12-character hex hash of compute_episode_id implementation.
-    """
-    try:
-        src = inspect.getsource(compute_episode_id)
-    except (OSError, TypeError):
-        # Fallback to function name when source isn't available (e.g., pyc only)
-        src = compute_episode_id.__name__
-    return hashlib.sha256(src.encode()).hexdigest()[:12]
-
-
-def index_existing(out_path: Path) -> set[str]:
-    """Scan an existing JSONL file and return the set of episode_ids found.
-
-    Tolerates malformed lines and missing keys; logs are not emitted here to keep
-    the function side-effect free (caller may log if desired).
-
-    Returns:
-        Set of episode IDs found in the JSONL file.
-    """
-    ids: set[str] = set()
-    try:
-        with out_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    eid = rec.get("episode_id")
-                    if isinstance(eid, str):
-                        ids.add(eid)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    # Ignore malformed JSON lines
-                    continue
-    except FileNotFoundError:
-        return set()
-    except OSError as exc:
-        logger.debug(
-            "index_existing unexpected error reading %s: %s", out_path, exc
-        )  # pragma: no cover
-        return set()
-    return ids
+_episode_identity_hash = episode_identity_hash
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:

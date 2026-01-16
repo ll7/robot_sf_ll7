@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from robot_sf.planner.visibility_planner import PlanningFailedError, VisibilityPlanner
+from robot_sf.planner.classic_global_planner import (
+    ClassicGlobalPlanner,
+    ClassicPlannerConfig,
+    PlanningError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -28,7 +32,7 @@ def compute_shortest_path_length(
     start: np.ndarray,
     goal: np.ndarray,
 ) -> float:
-    """Return shortest path length using the visibility-graph planner.
+    """Return shortest path length using the classic Theta* global planner.
 
     Returns NaN when map definition is missing or planning fails.
     """
@@ -36,12 +40,14 @@ def compute_shortest_path_length(
         return float("nan")
     if not np.isfinite(start).all() or not np.isfinite(goal).all():
         return float("nan")
-    planner = VisibilityPlanner(map_def)
+    planner = ClassicGlobalPlanner(map_def, config=ClassicPlannerConfig())
     try:
-        waypoints = planner.plan(
+        waypoints, _info = planner.plan(
             (float(start[0]), float(start[1])), (float(goal[0]), float(goal[1]))
         )
-    except PlanningFailedError:
+    except PlanningError:
+        return float("nan")
+    except ValueError:
         return float("nan")
     return _path_length(waypoints)
 

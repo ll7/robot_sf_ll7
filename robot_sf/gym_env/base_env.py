@@ -232,7 +232,7 @@ def attach_planner_to_map(map_def, env_config) -> None:
     if getattr(map_def, "_use_planner", False) and getattr(map_def, "_global_planner", None):
         return
 
-    backend = getattr(env_config, "planner_backend", "visibility") or "visibility"
+    backend = getattr(env_config, "planner_backend", "classic") or "classic"
     if backend.lower() == "classic":
         classic_cfg = getattr(env_config, "planner_classic_config", None)
         if classic_cfg is None:

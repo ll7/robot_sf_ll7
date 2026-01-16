@@ -218,7 +218,7 @@ Missing work:
 #### Decision on metrics inputs (recommended for v1)
 
 - Obstacles: populate `EpisodeData.obstacles` as a dense point cloud sampled from map geometry (fixed spacing, e.g., 0.25–0.5 m). This unblocks wall/clearing metrics without changing metric formulas; upgrade to segment-distance metrics later if needed.
-- Shortest path: define shortest path length using the visibility-graph planner over the map geometry used by the environment, computed once per episode start/goal. If no path exists, return NaN and treat `path_efficiency` as NaN in aggregation.
+- Shortest path: define shortest path length using the classic Theta* (v2) grid planner over the map geometry used by the environment, computed once per episode start/goal. If no path exists, return NaN and treat `path_efficiency` as NaN in aggregation.
 - Force-gradient: treat `force_gradient_norm_mean` as optional for v1. Report NaN unless force-field grid sampling is explicitly enabled, and exclude it from any "core" summary table until wiring is complete.
 
 ### G) Reproducibility and provenance are not unified
@@ -335,7 +335,7 @@ To be included in the v1 benchmark, a baseline must:
 
 | Date       | Decision area | Decision summary | Owner | Doc link |
 |------------|----------------|------------------|-------|----------|
-| 2026-01-14 | Metrics inputs | Obstacle sampling, visibility-graph shortest path, force-gradient optional | TBD | this doc |
+| 2026-01-14 | Metrics inputs | Obstacle sampling, Theta* shortest path, force-gradient optional | TBD | this doc |
 | 2026-01-14 | Reproducibility | Canonical schema expanded; explicit fallback status | TBD | this doc |
 | 2026-01-14 | Behavior semantics | Limited behavior scope + validation pass | TBD | this doc |
 | 2026-01-14 | Evaluation protocol | Fixed seeds + bootstrap CIs + coverage table | TBD | this doc |
@@ -347,7 +347,7 @@ Resolved (2026-01-14 decisions):
 2) Local policy definition: local planner only, fixed global routes.
 3) Observation/action contract: SocNav structured + occupancy grid, unicycle actions.
 4) Metrics optionality: force-gradient optional; obstacle/path metrics required once inputs exist.
-5) Shortest-path efficiency: visibility-graph shortest path length.
+5) Shortest-path efficiency: Theta* (v2) shortest path length.
 6) Seed count and CI targets: fixed seed list per scenario (e.g., 10), 95% bootstrap CIs.
 
 Still open:

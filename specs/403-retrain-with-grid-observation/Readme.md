@@ -65,6 +65,14 @@ decisions, ideas, and open questions.
 - Define **evaluation cadence** (e.g., every N episodes or checkpoints).
 - Define **hold-out evaluation** set if generalization is a goal.
 
+### Scenario Feasibility Gate (planned)
+Before training, run a feasibility sweep to flag scenarios that are likely unsolvable.
+**Why:** unsolvable scenarios are not just “noise” and can bias learning curves and metrics.
+Proposed policy:
+- Use a simple baseline (goal-seeking or sampling planner) to test each scenario.
+- Tag scenarios as **solvable / hard / unsolvable** based on success rate.
+- Exclude unsolvable scenarios from training; optionally keep them as stress-test evaluation.
+
 ### Training Pipeline (explicit, reproducible)
 **Reproducibility target:** another lab should be able to re-run the experiment
 from this description with no hidden assumptions.
@@ -103,6 +111,12 @@ from this description with no hidden assumptions.
 4) **Monitoring**
    - Track evaluation outputs + manifests under `output/`.
    - Optional: TensorBoard if enabled in PPO config.
+
+### Experiment Tracking (TensorBoard vs W&B)
+- **TensorBoard**: default for live curves; no external dependencies.
+- **W&B (optional)**: better for multi-seed comparisons and metadata, but requires
+  account + internet. Overhead is small if logging per eval checkpoint.
+Decision needed: whether to enable W&B for the main run.
 
 ### Checkpoint Evaluation (proposal)
 Do **not** rely on average reward alone. For each evaluation checkpoint:
@@ -206,9 +220,23 @@ Metadata handling:
 
 ### Open Questions (must answer)
 - Do we want a pedestrian-encoder (MLP/attention) beyond baseline (ablation priority)?
+- Do we enable W&B in addition to TensorBoard for the main run?
+- What threshold defines “variance too high” when deciding to expand seeds from 5→10?
+- What is the exact feasibility gate policy (success rate cutoff, baseline policy used)?
 
 ### Planned Ablations
 - See `Ablations.md` for the running list of ablation ideas and rules.
+
+### Related Tracking Docs
+- `Refactor_ped_robot_force_naming.md`: naming confusion + proposed refactor (separate issue).
+
+### Next Actions Checklist (for continuity)
+- [ ] Decide on W&B vs TensorBoard for the main run.
+- [ ] Define variance threshold for expanding seeds 5 → 10.
+- [ ] Define feasibility gate policy (baseline policy + cutoff).
+- [ ] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
+- [ ] Draft training config YAML for Issue 403 run.
+- [ ] Confirm evaluation cadence cutoff (2M vs 3M for 0.5M schedule).
 
 ### Hold-out Set Feasibility (notes)
 - We **do have enough scenario diversity** to define a hold-out set without new maps.

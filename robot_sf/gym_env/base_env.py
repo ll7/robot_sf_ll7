@@ -233,6 +233,7 @@ def attach_planner_to_map(map_def, env_config) -> None:
         return
 
     backend = getattr(env_config, "planner_backend", "classic") or "classic"
+    logger.debug("Attaching {backend} planner to map", backend=backend)
     if backend.lower() == "classic":
         classic_cfg = getattr(env_config, "planner_classic_config", None)
         if classic_cfg is None:

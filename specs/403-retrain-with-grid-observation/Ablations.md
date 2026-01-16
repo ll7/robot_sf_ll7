@@ -24,6 +24,12 @@ feature extractor, simple_reward, fixed grid config).
 6) **Grid channel set**
    - `[OBSTACLES, PEDESTRIANS, COMBINED]` (baseline) vs reduced/expanded channel sets.
 
+## Priority Order (draft)
+1) SocNav + grid vs SocNav‑only
+2) Pedestrian encoder (pooling/attention)
+3) Curriculum on vs off
+4) Reward shaping
+5) Ped‑robot repulsion off
 ## Notes
 - Add new ablations here as ideas arise; prioritize those that address reviewer‑facing
   questions (generalization, stability, interpretability).

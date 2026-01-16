@@ -190,6 +190,10 @@ Metadata handling:
 - **Training scenario config file**: `configs/scenarios/classic_interactions_francis2023.yaml`.  
   *Why:* training pipeline expects a single scenario_config input; merged file ensures
   both sets are consistently used.
+- **Scenario sampling for training**: use a wrapper that selects a scenario at each reset
+  (Option A).  
+  *Why:* enables a single policy to see both scenario sets with deterministic, balanced
+  exposure; minimal changes to the training entry point.
 - **Hold-out split**: adopt the proposed split (see below).  
   *Why:* preserves diverse training coverage while reserving distinct geometry/behavior
   cases for generalization evaluation.
@@ -202,7 +206,6 @@ Metadata handling:
 
 ### Open Questions (must answer)
 - Do we want a pedestrian-encoder (MLP/attention) beyond baseline (ablation priority)?
-- How should we train across multiple scenarios given the current pipeline uses one scenario?
 
 ### Planned Ablations
 - See `Ablations.md` for the running list of ablation ideas and rules.

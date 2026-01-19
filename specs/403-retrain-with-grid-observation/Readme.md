@@ -57,21 +57,24 @@ decisions, ideas, and open questions.
 - Decide **grid config** (resolution, width/height, channels, ego vs world frame).
 - Confirm **action space** (unicycle only) and limits (v_max, omega_max).
 - Decide **pedestrian handling**: max count, ordering, velocity frame (ego vs world).
-- Confirm **ped-robot repulsion** toggle (`peds_have_obstacle_forces`) for benchmark runs.
+- Confirm **pedestrian obstacle forces** (`peds_have_obstacle_forces`) and
+  **ped‑robot repulsion** (`sim_config.prf_config.is_active`) for benchmark runs.
 
 ### Phase 1: Training Protocol (publication-grade)
-- Pick training pipeline: prefer structured imitation pipeline for reproducibility.
-- Decide number of **seeds** for uncertainty bands (recommend ≥5).
-- Define **evaluation cadence** (e.g., every N episodes or checkpoints).
-- Define **hold-out evaluation** set if generalization is a goal.
+- Training pipeline: use `train_expert_ppo.py` + scenario‑sampling wrapper (Option A).
+- **Seeds**: 5 seeds (expand to 10 if 95% CI half‑width on success > 0.10).
+- **Evaluation cadence**: 0.5M‑step evals early, then 1M‑step evals later.
+- **Hold‑out evaluation**: yes, use the approved split to test generalization.
 
 ### Scenario Feasibility Gate (planned)
-Before training, run a feasibility sweep to flag scenarios that are likely unsolvable.
-**Why:** unsolvable scenarios are not just “noise” and can bias learning curves and metrics.
+Feasibility gating happens **after** a full 10M-step policy run; until then, keep all
+scenarios in training.
+**Why:** avoid prematurely removing scenarios before the policy reaches full capability.
 Proposed policy:
-- Use a simple baseline (goal-seeking or sampling planner) to test each scenario.
+- Evaluate the 10M-step policy across seeds on each scenario.
 - Tag scenarios as **solvable / hard / unsolvable** based on success rate.
-- Exclude unsolvable scenarios from training; optionally keep them as stress-test evaluation.
+- If success rate is **< 0.20** after 10M steps, exclude from training in follow-up runs;
+  keep as stress-test evaluation.
 
 ### Training Pipeline (explicit, reproducible)
 **Reproducibility target:** another lab should be able to re-run the experiment
@@ -110,13 +113,12 @@ from this description with no hidden assumptions.
    - `uv run python scripts/training/train_expert_ppo.py --config <new_config.yaml>`
 4) **Monitoring**
    - Track evaluation outputs + manifests under `output/`.
-   - Optional: TensorBoard if enabled in PPO config.
+   - Enable TensorBoard + W&B in PPO config (disable W&B if offline).
 
-### Experiment Tracking (TensorBoard vs W&B)
+### Experiment Tracking (TensorBoard + W&B)
 - **TensorBoard**: default for live curves; no external dependencies.
-- **W&B (optional)**: better for multi-seed comparisons and metadata, but requires
-  account + internet. Overhead is small if logging per eval checkpoint.
-Decision needed: whether to enable W&B for the main run.
+- **W&B**: better for multi-seed comparisons and metadata; requires account + internet.
+Decision: enable **both** for main runs; disable W&B if offline.
 
 ### Checkpoint Evaluation (proposal)
 Do **not** rely on average reward alone. For each evaluation checkpoint:
@@ -186,6 +188,9 @@ Metadata handling:
   *Why:* aligns with existing PPO baselines and gives room for stable learning.
 - **Seed count**: start with 5 seeds; increase to 10 if variance is too high.  
   *Why:* 5 seeds gives usable uncertainty bands; expand only if CI is unstable.
+- **Variance threshold for expanding seeds**: increase to 10 if 95% CI half‑width on
+  primary success rate is > 0.10 at 10M steps.  
+  *Why:* keeps uncertainty bands interpretable without over‑allocating compute.
 - **Pedestrian forces**: enable **both** obstacle forces and ped‑robot repulsion.  
   *Why:* most plausible scenario—peds avoid static obstacles and respond to the robot.  
   *Config:* `peds_have_obstacle_forces=True`, `sim_config.prf_config.is_active=True`.
@@ -217,12 +222,14 @@ Metadata handling:
   *Why:* minimizes complexity for first run; advanced encoders are tracked as ablations.
 - **Checkpoint evaluation**: periodic evaluations throughout training (not final-only).  
   *Why:* needed for learning curves and curriculum/ablation comparisons.
+- **Experiment tracking**: enable TensorBoard **and** W&B for main runs.  
+  *Why:* TensorBoard for live local monitoring; W&B for multi‑seed comparison + metadata.
+- **Scenario feasibility gate**: keep all scenarios in training until after a full
+  10M‑step policy run; exclude only if success rate < 0.20.  
+  *Why:* avoids premature filtering while still allowing cleanup of truly unsolvable cases.
 
 ### Open Questions (must answer)
 - Do we want a pedestrian-encoder (MLP/attention) beyond baseline (ablation priority)?
-- Do we enable W&B in addition to TensorBoard for the main run?
-- What threshold defines “variance too high” when deciding to expand seeds from 5→10?
-- What is the exact feasibility gate policy (success rate cutoff, baseline policy used)?
 
 ### Planned Ablations
 - See `Ablations.md` for the running list of ablation ideas and rules.
@@ -231,9 +238,6 @@ Metadata handling:
 - `Refactor_ped_robot_force_naming.md`: naming confusion + proposed refactor (separate issue).
 
 ### Next Actions Checklist (for continuity)
-- [ ] Decide on W&B vs TensorBoard for the main run.
-- [ ] Define variance threshold for expanding seeds 5 → 10.
-- [ ] Define feasibility gate policy (baseline policy + cutoff).
 - [ ] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
 - [ ] Draft training config YAML for Issue 403 run.
 - [ ] Confirm evaluation cadence cutoff (2M vs 3M for 0.5M schedule).

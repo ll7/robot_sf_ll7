@@ -1,0 +1,34 @@
+# Issue 403: PPO expert training config for grid+SocNav observations.
+# NOTE: Scenario sampling wrapper (Option A) is required to train across all
+# scenarios; this config keeps scenario_id unset to allow sampling at reset.
+policy_id: ppo_expert_grid_socnav_403
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+# 10M steps per seed (full run). Use 0.5–1M for smoke tests.
+total_timesteps: 10000000
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+# Evaluation cadence is time-based (0.5M steps until 3M, then every 1M).
+# The current trainer uses evaluation_episodes after training; keep these for manifests.
+evaluation:
+  frequency_episodes: 10
+  evaluation_episodes: 10
+  hold_out_scenarios:
+    # Classic interactions hold-out archetypes
+    - classic_bottleneck_low
+    - classic_bottleneck_medium
+    - classic_bottleneck_high
+    - classic_group_crossing_low
+    - classic_group_crossing_medium
+    # Francis 2023 hold-out scenarios
+    - francis2023_crowd_navigation
+    - francis2023_intersection_wait
+    - francis2023_blind_corner
+    - francis2023_narrow_doorway

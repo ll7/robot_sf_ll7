@@ -100,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Goal-distance observations now use a fixed 50m cap with runtime clipping, keeping observation bounds consistent across mixed map sizes.
 - SocNav structured observations now cap map-dependent position bounds at 50m with clipping to avoid scenario-switching bound mismatches.
 - Expert PPO evaluation now applies the same environment overrides as training, preventing observation-space mismatches during evaluation.
+- fast-pysf group gaze force now guards against zero-distance divisions to prevent training crashes.
+- Expert PPO CLI now supports `--log-file` to tee stdout/stderr into a log file.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

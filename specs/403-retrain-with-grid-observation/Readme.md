@@ -83,6 +83,7 @@ from this description with no hidden assumptions.
 **Entry point (preferred):**
 - `scripts/training/train_expert_ppo.py` with a dedicated YAML config.
   - Proposed config: `configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml`.
+  - Runbook: `docs/training/issue_403_grid_training.md`.
 
 **Config requirements:**
 - `scenario_config`: `configs/scenarios/classic_interactions_francis2023.yaml`.

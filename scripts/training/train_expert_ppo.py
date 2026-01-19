@@ -31,7 +31,7 @@ from loguru import logger
 try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import CallbackList
-    from stable_baselines3.common.vec_env import DummyVecEnv
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
     raise RuntimeError(
         "Stable-Baselines3 must be installed to run expert PPO training.",
@@ -87,6 +87,35 @@ def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
             )
         )
     return tuple(schedule)
+
+
+def _parse_num_envs(raw: object) -> int | None:
+    """Parse num_envs setting (supports int or 'auto')."""
+    if raw is None:
+        return None
+    if isinstance(raw, str) and raw.strip().lower() == "auto":
+        return None
+    return max(1, int(raw))
+
+
+def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
+    """Resolve the effective number of environments for training."""
+    if config.num_envs is not None:
+        return max(1, int(config.num_envs))
+    cores = os.cpu_count() or 1
+    return max(1, cores - 1)
+
+
+def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
+    """Resolve worker mode ('dummy' or 'subproc') based on config and env count."""
+    mode = config.worker_mode.lower()
+    if mode == "auto":
+        return "subproc" if num_envs > 1 else "dummy"
+    if mode not in {"dummy", "subproc"}:
+        raise ValueError("worker_mode must be one of {'auto', 'dummy', 'subproc'}")
+    if mode == "subproc" and num_envs == 1:
+        return "dummy"
+    return mode
 
 
 def _coerce_grid_channels(values: Sequence[object]) -> list[GridChannel]:
@@ -238,6 +267,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         tracking=dict(data.get("tracking", {}) or {}),
         env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
+        num_envs=_parse_num_envs(data.get("num_envs")),
+        worker_mode=str(data.get("worker_mode", "auto")),
     )
 
 
@@ -485,13 +516,16 @@ def _execute_training(
     )
 
 
-def _collect_scenario_coverage(vec_env: DummyVecEnv | None) -> dict[str, int]:
+def _collect_scenario_coverage(vec_env: DummyVecEnv | SubprocVecEnv | None) -> dict[str, int]:
     """Aggregate scenario coverage counts from scenario-switching workers."""
     coverage: dict[str, int] = {}
     if vec_env is None:
         return coverage
-    for env in getattr(vec_env, "envs", []):
-        env_coverage = getattr(env, "scenario_coverage", None)
+    try:
+        env_coverages = vec_env.get_attr("scenario_coverage")
+    except Exception:  # pragma: no cover - best effort across vec env types
+        env_coverages = []
+    for env_coverage in env_coverages:
         if not env_coverage:
             continue
         for key, value in env_coverage.items():
@@ -586,7 +620,10 @@ def _init_training_model(
     tensorboard_log: Path | None,
 ) -> tuple[PPO, DummyVecEnv, Path | None]:
     """Initialize PPO and the vectorized training environment."""
-    seeds = config.seeds or (0,)
+    base_seed = int(config.seeds[0]) if config.seeds else 0
+    num_envs = _resolve_num_envs(config)
+    worker_mode = _resolve_worker_mode(config, num_envs)
+    env_seeds = [base_seed + idx for idx in range(num_envs)]
     env_fns = [
         _make_training_env(
             int(seed),
@@ -599,17 +636,26 @@ def _init_training_model(
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
         )
-        for seed in seeds
+        for seed in env_seeds
     ]
-    vec_env = DummyVecEnv(env_fns)
+    if worker_mode == "subproc":
+        vec_env = SubprocVecEnv(env_fns)
+    else:
+        vec_env = DummyVecEnv(env_fns)
     policy_kwargs = _resolve_policy_kwargs(config)
     model = PPO(
         "MultiInputPolicy",
         vec_env,
         verbose=1,
-        seed=int(seeds[0]),
+        seed=base_seed,
         tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
         policy_kwargs=policy_kwargs,
+    )
+    logger.info(
+        "Training envs initialized num_envs={} worker_mode={} base_seed={}",
+        num_envs,
+        worker_mode,
+        base_seed,
     )
 
     return model, vec_env, tensorboard_log

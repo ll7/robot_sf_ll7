@@ -3,6 +3,8 @@
 # scenarios; this config keeps scenario_id unset to allow sampling at reset.
 policy_id: ppo_expert_grid_socnav_403
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+num_envs: auto
+worker_mode: auto
 seeds:
   - 123
   - 231

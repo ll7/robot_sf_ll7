@@ -21,6 +21,10 @@ without additional context.
   ```bash
   export SDL_VIDEODRIVER=dummy
   ```
+- CUDA determinism (required on GPU with deterministic algorithms):
+  ```bash
+  export CUBLAS_WORKSPACE_CONFIG=:4096:8
+  ```
 
 ## 2) Configuration (authoritative)
 

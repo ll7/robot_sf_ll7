@@ -24,6 +24,7 @@ source .venv/bin/activate
 export SDL_VIDEODRIVER=dummy
 export ROBOT_SF_ARTIFACT_ROOT="${ROBOT_SF_ARTIFACT_ROOT:-$REPO_ROOT/output}"
 export WANDB_MODE="${WANDB_MODE:-online}"
+export CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}"
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 

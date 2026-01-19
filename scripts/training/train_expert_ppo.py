@@ -98,6 +98,14 @@ def _parse_num_envs(raw: object) -> int | None:
     return max(1, int(raw))
 
 
+def _ensure_cuda_determinism_env() -> None:
+    """Ensure CUDA deterministic workspace configuration is set when available."""
+    if os.environ.get("CUBLAS_WORKSPACE_CONFIG"):
+        return
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    logger.info("Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic CUDA")
+
+
 def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
     """Resolve the effective number of environments for training."""
     if config.num_envs is not None:
@@ -902,6 +910,7 @@ def run_expert_training(
 ) -> ExpertTrainingResult:
     """Execute the expert PPO training workflow and persist manifests."""
 
+    _ensure_cuda_determinism_env()
     if config.seeds:
         common.set_global_seed(int(config.seeds[0]))
 

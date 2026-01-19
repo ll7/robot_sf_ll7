@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from robot_sf.common import ensure_seed_tuple
@@ -25,6 +25,7 @@ class EvaluationSchedule:
     frequency_episodes: int
     evaluation_episodes: int
     hold_out_scenarios: tuple[str, ...] = ()
+    step_schedule: tuple[tuple[int | None, int], ...] = ()
 
 
 @dataclass(slots=True)
@@ -38,6 +39,12 @@ class ExpertTrainingConfig:
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
     scenario_id: str | None = None
+    feature_extractor: str = "default"
+    feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)
+    policy_net_arch: tuple[int, ...] = (64, 64)
+    tracking: dict[str, object] = field(default_factory=dict)
+    env_overrides: dict[str, object] = field(default_factory=dict)
+    env_factory_kwargs: dict[str, object] = field(default_factory=dict)
 
     @classmethod
     def from_raw(
@@ -50,6 +57,12 @@ class ExpertTrainingConfig:
         convergence: ConvergenceCriteria,
         evaluation: EvaluationSchedule,
         scenario_id: str | None = None,
+        feature_extractor: str = "default",
+        feature_extractor_kwargs: dict[str, object] | None = None,
+        policy_net_arch: tuple[int, ...] | list[int] = (64, 64),
+        tracking: dict[str, object] | None = None,
+        env_overrides: dict[str, object] | None = None,
+        env_factory_kwargs: dict[str, object] | None = None,
     ) -> ExpertTrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -65,6 +78,12 @@ class ExpertTrainingConfig:
             convergence=convergence,
             evaluation=evaluation,
             scenario_id=scenario_id,
+            feature_extractor=str(feature_extractor),
+            feature_extractor_kwargs=dict(feature_extractor_kwargs or {}),
+            policy_net_arch=tuple(int(dim) for dim in policy_net_arch),
+            tracking=dict(tracking or {}),
+            env_overrides=dict(env_overrides or {}),
+            env_factory_kwargs=dict(env_factory_kwargs or {}),
         )
 
 

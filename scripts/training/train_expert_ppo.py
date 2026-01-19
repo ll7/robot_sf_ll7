@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import time
@@ -29,6 +30,7 @@ from loguru import logger
 
 try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
+    from stable_baselines3.common.callbacks import CallbackList
     from stable_baselines3.common.vec_env import DummyVecEnv
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
     raise RuntimeError(
@@ -40,7 +42,11 @@ from robot_sf.benchmark.imitation_manifest import (
     write_expert_policy_manifest,
     write_training_run_manifest,
 )
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_imitation_report_dir
+from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
@@ -51,8 +57,105 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
     select_scenario,
 )
+from robot_sf.training.scenario_sampling import (
+    ScenarioSampler,
+    ScenarioSwitchingEnv,
+    scenario_id_from_definition,
+)
 
 MetricSamples = dict[str, list[float]]
+
+
+def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
+    """Parse optional step schedule entries from YAML."""
+    if not raw:
+        return ()
+    if not isinstance(raw, Sequence):
+        raise ValueError("evaluation.step_schedule must be a list of mappings.")
+    schedule: list[tuple[int | None, int]] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            raise ValueError("evaluation.step_schedule entries must be mappings.")
+        until_step = entry.get("until_step")
+        every_steps = entry.get("every_steps")
+        if every_steps is None:
+            raise ValueError("evaluation.step_schedule entries must define every_steps.")
+        schedule.append(
+            (
+                int(until_step) if until_step is not None else None,
+                int(every_steps),
+            )
+        )
+    return tuple(schedule)
+
+
+def _coerce_grid_channels(values: Sequence[object]) -> list[GridChannel]:
+    """Convert channel identifiers to GridChannel enums."""
+    channels: list[GridChannel] = []
+    for value in values:
+        if isinstance(value, GridChannel):
+            channels.append(value)
+        else:
+            channels.append(GridChannel(str(value)))
+    return channels
+
+
+def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None:
+    """Apply top-level environment overrides."""
+    observation_mode = overrides.get("observation_mode")
+    if observation_mode is not None:
+        env_config.observation_mode = ObservationMode(str(observation_mode))
+
+    for key in (
+        "use_occupancy_grid",
+        "include_grid_in_observation",
+        "show_occupancy_grid",
+        "use_planner",
+        "planner_backend",
+        "planner_clearance_margin",
+        "peds_have_obstacle_forces",
+    ):
+        if key in overrides:
+            setattr(env_config, key, overrides[key])
+
+
+def _apply_grid_override(env_config, overrides: Mapping[str, object]) -> None:
+    """Apply occupancy grid overrides to the environment config."""
+    grid_override = overrides.get("grid_config")
+    if grid_override is None:
+        return
+    if isinstance(grid_override, GridConfig):
+        env_config.grid_config = grid_override
+        return
+    if isinstance(grid_override, Mapping):
+        payload = dict(grid_override)
+        if "channels" in payload:
+            payload["channels"] = _coerce_grid_channels(payload["channels"])
+        env_config.grid_config = GridConfig(**payload)
+        return
+    raise ValueError("grid_config override must be a mapping or GridConfig instance")
+
+
+def _apply_sim_overrides(env_config, overrides: Mapping[str, object]) -> None:
+    """Apply sim_config overrides (including ped-robot force flags)."""
+    sim_overrides = overrides.get("sim_config")
+    if not isinstance(sim_overrides, Mapping):
+        return
+    for key, value in sim_overrides.items():
+        if key == "prf_config" and isinstance(value, Mapping):
+            for prf_key, prf_value in value.items():
+                setattr(env_config.sim_config.prf_config, prf_key, prf_value)
+        else:
+            setattr(env_config.sim_config, key, value)
+
+
+def _apply_env_overrides(env_config, overrides: Mapping[str, object]) -> None:
+    """Apply environment overrides from training config."""
+    if not overrides:
+        return
+    _apply_simple_overrides(env_config, overrides)
+    _apply_grid_override(env_config, overrides)
+    _apply_sim_overrides(env_config, overrides)
 
 
 @dataclass(slots=True)
@@ -66,6 +169,27 @@ class ExpertTrainingResult:
     training_run_manifest_path: Path
     checkpoint_path: Path
     metrics: dict[str, common.MetricAggregate]
+
+
+@dataclass(slots=True)
+class ScenarioContext:
+    """Resolved scenario context for training/evaluation."""
+
+    selected_scenario: Mapping[str, Any] | None
+    scenario_label: str
+    scenario_profile: tuple[str, ...]
+    training_exclude: tuple[str, ...]
+
+
+@dataclass(slots=True)
+class TrainingOutputs:
+    """Bundle of outputs from the training/evaluation loop."""
+
+    metrics_raw: MetricSamples
+    episode_records: list[dict[str, object]]
+    model: PPO | None
+    vec_env: DummyVecEnv | None
+    tensorboard_log: Path | None
 
 
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
@@ -86,6 +210,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
 
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
+    step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
 
     convergence = ConvergenceCriteria(
         success_rate=float(convergence_raw["success_rate"]),
@@ -96,6 +221,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         frequency_episodes=int(evaluation_raw["frequency_episodes"]),
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
+        step_schedule=step_schedule,
     )
 
     return ExpertTrainingConfig.from_raw(
@@ -106,74 +232,387 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         policy_id=str(data["policy_id"]),
         convergence=convergence,
         evaluation=evaluation,
+        feature_extractor=str(data.get("feature_extractor", "default")),
+        feature_extractor_kwargs=dict(data.get("feature_extractor_kwargs", {}) or {}),
+        policy_net_arch=tuple(data.get("policy_net_arch", (64, 64))),
+        tracking=dict(data.get("tracking", {}) or {}),
+        env_overrides=dict(data.get("env_overrides", {}) or {}),
+        env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
     )
 
 
 def _make_training_env(
     seed: int,
     *,
-    scenario: Mapping[str, Any],
+    scenario: Mapping[str, Any] | None,
+    scenario_definitions: Sequence[Mapping[str, Any]] | None,
     scenario_path: Path,
+    exclude_scenarios: Sequence[str],
+    suite_name: str,
+    algorithm_name: str,
+    env_overrides: Mapping[str, object],
+    env_factory_kwargs: Mapping[str, object],
 ) -> Callable[[], Any]:
-    """TODO docstring. Document this function.
-
-    Args:
-        seed: TODO docstring.
-        scenario: TODO docstring.
-        scenario_path: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Create a deterministic environment factory for training."""
 
     def _factory() -> Any:
-        """TODO docstring. Document this function.
+        def _build_config(scenario_def: Mapping[str, Any]):
+            env_config = build_robot_config_from_scenario(scenario_def, scenario_path=scenario_path)
+            _apply_env_overrides(env_config, env_overrides)
+            return env_config
 
+        if scenario is not None:
+            env_config = _build_config(scenario)
+            scenario_id = scenario_id_from_definition(scenario, index=0)
+            return make_robot_env(
+                config=env_config,
+                seed=seed,
+                suite_name=suite_name,
+                scenario_name=scenario_id,
+                algorithm_name=algorithm_name,
+                **env_factory_kwargs,
+            )
 
-        Returns:
-            TODO docstring.
-        """
-        env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
-        return make_robot_env(config=env_config, seed=seed)
+        if scenario_definitions is None:
+            raise ValueError("scenario_definitions required when scenario is None.")
+
+        sampler = ScenarioSampler(
+            scenario_definitions,
+            exclude_scenarios=tuple(exclude_scenarios),
+            seed=seed,
+            strategy="random",
+        )
+        return ScenarioSwitchingEnv(
+            scenario_sampler=sampler,
+            scenario_path=scenario_path,
+            config_builder=_build_config,
+            suite_name=suite_name,
+            algorithm_name=algorithm_name,
+            env_factory_kwargs=env_factory_kwargs,
+            seed=seed,
+        )
 
     return _factory
 
 
-def _train_model(
+def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
+    """Build policy kwargs for PPO from the training config."""
+    policy_kwargs: dict[str, Any] = {"net_arch": list(config.policy_net_arch)}
+    extractor = config.feature_extractor.lower()
+    if extractor == "grid_socnav":
+        policy_kwargs["features_extractor_class"] = GridSocNavExtractor
+        policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
+    return policy_kwargs
+
+
+def _resolve_tensorboard_logdir(run_id: str) -> Path:
+    """Return a canonical TensorBoard log directory for the training run."""
+    base = get_imitation_report_dir() / run_id / "tensorboard"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _init_wandb(
+    *,
+    tracking: Mapping[str, object],
+    run_id: str,
+    config: ExpertTrainingConfig,
+    tensorboard_log: Path | None,
+) -> tuple[object | None, object | None]:
+    """Initialize Weights & Biases logging if configured."""
+    wandb_cfg = tracking.get("wandb") if isinstance(tracking, Mapping) else None
+    if not isinstance(wandb_cfg, Mapping) or not wandb_cfg.get("enabled", False):
+        return None, None
+
+    try:  # pragma: no cover - optional dependency
+        import wandb  # type: ignore
+        from wandb.integration.sb3 import WandbCallback  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("W&B requested but not available: {}", exc)
+        return None, None
+
+    wandb_dir = get_artifact_category_path("wandb")
+    wandb_dir.mkdir(parents=True, exist_ok=True)
+    tensorboard_log_str = str(tensorboard_log) if tensorboard_log is not None else ""
+    run = wandb.init(
+        project=str(wandb_cfg.get("project", "robot_sf")),
+        group=str(wandb_cfg.get("group", "ppo-imitation")),
+        job_type=str(wandb_cfg.get("job_type", "expert-training")),
+        name=str(wandb_cfg.get("name", run_id)),
+        notes=str(wandb_cfg.get("notes", "")),
+        dir=str(wandb_dir),
+        config={
+            "policy_id": config.policy_id,
+            "total_timesteps": config.total_timesteps,
+            "seeds": list(config.seeds),
+            "scenario_config": str(config.scenario_config),
+            "feature_extractor": config.feature_extractor,
+            "tensorboard_log": tensorboard_log_str,
+        },
+        sync_tensorboard=True,
+        mode=str(wandb_cfg.get("mode", os.environ.get("WANDB_MODE", "online"))),
+    )
+    callback = WandbCallback(
+        gradient_save_freq=int(wandb_cfg.get("gradient_save_freq", 0)),
+        model_save_path=str(wandb_dir / run_id),
+        verbose=0,
+    )
+    logger.info("W&B run initialized id={} project={}", run.id if run else "unknown", run.project)
+    return run, callback
+
+
+def _build_eval_steps(
+    total_timesteps: int, schedule: tuple[tuple[int | None, int], ...]
+) -> list[int]:
+    """Expand a step schedule into concrete evaluation checkpoints."""
+    default_schedule = (
+        (3_000_000, 500_000),
+        (None, 1_000_000),
+    )
+    use_schedule = schedule or default_schedule
+    checkpoints: list[int] = []
+    current = 0
+    for until, every in use_schedule:
+        upper = total_timesteps if until is None else min(until, total_timesteps)
+        if every <= 0:
+            continue
+        next_step = current + every
+        while next_step <= upper:
+            checkpoints.append(next_step)
+            next_step += every
+        current = upper
+        if upper >= total_timesteps:
+            break
+    if not checkpoints or checkpoints[-1] != total_timesteps:
+        checkpoints.append(total_timesteps)
+    return checkpoints
+
+
+def _resolve_scenario_context(
+    config: ExpertTrainingConfig,
+    scenario_definitions: Sequence[Mapping[str, Any]],
+) -> ScenarioContext:
+    """Resolve scenario selection and profile for training/evaluation."""
+    if config.scenario_id:
+        selected = select_scenario(scenario_definitions, config.scenario_id)
+        label = (
+            config.scenario_id
+            or str(selected.get("name") or selected.get("scenario_id") or "")
+            or config.scenario_config.stem
+        )
+        return ScenarioContext(
+            selected_scenario=selected,
+            scenario_label=label,
+            scenario_profile=(label,),
+            training_exclude=(),
+        )
+
+    sampler = ScenarioSampler(
+        scenario_definitions,
+        exclude_scenarios=tuple(config.evaluation.hold_out_scenarios),
+        seed=int(config.seeds[0]) if config.seeds else None,
+        strategy="cycle",
+    )
+    return ScenarioContext(
+        selected_scenario=None,
+        scenario_label=config.scenario_config.stem,
+        scenario_profile=sampler.scenario_ids,
+        training_exclude=tuple(config.evaluation.hold_out_scenarios),
+    )
+
+
+def _execute_training(
+    *,
+    config: ExpertTrainingConfig,
+    scenario_ctx: ScenarioContext,
+    scenario_definitions: Sequence[Mapping[str, Any]],
+    eval_steps: Sequence[int],
+    run_id: str,
+    dry_run: bool,
+) -> TrainingOutputs:
+    """Run training (or dry-run) and return raw metrics + episode records."""
+    tensorboard_log = (
+        _resolve_tensorboard_logdir(run_id)
+        if bool(config.tracking.get("tensorboard", True))
+        else None
+    )
+    if dry_run:
+        metrics_raw, episode_records = _simulate_dry_run_metrics(
+            config, eval_steps=eval_steps, scenario_id=scenario_ctx.scenario_label
+        )
+        return TrainingOutputs(
+            metrics_raw=metrics_raw,
+            episode_records=episode_records,
+            model=None,
+            vec_env=None,
+            tensorboard_log=tensorboard_log,
+        )
+
+    model, vec_env, tensorboard_log = _init_training_model(
+        config,
+        scenario=scenario_ctx.selected_scenario,
+        scenario_definitions=scenario_definitions,
+        exclude_scenarios=scenario_ctx.training_exclude,
+        run_id=run_id,
+        tensorboard_log=tensorboard_log,
+    )
+    wandb_run, wandb_callback = _init_wandb(
+        tracking=config.tracking,
+        run_id=run_id,
+        config=config,
+        tensorboard_log=tensorboard_log,
+    )
+    metrics_raw, episode_records = _train_with_schedule(
+        model,
+        config=config,
+        scenario_definitions=scenario_definitions,
+        scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
+        hold_out_scenarios=config.evaluation.hold_out_scenarios,
+        eval_steps=eval_steps,
+        wandb_run=wandb_run,
+        wandb_callback=wandb_callback,
+        checkpoint_dir=common.get_expert_policy_dir() / "checkpoints" / config.policy_id,
+    )
+    if wandb_run is not None:  # pragma: no cover - optional dependency
+        wandb_run.finish()
+
+    return TrainingOutputs(
+        metrics_raw=metrics_raw,
+        episode_records=episode_records,
+        model=model,
+        vec_env=vec_env,
+        tensorboard_log=tensorboard_log,
+    )
+
+
+def _collect_scenario_coverage(vec_env: DummyVecEnv | None) -> dict[str, int]:
+    """Aggregate scenario coverage counts from scenario-switching workers."""
+    coverage: dict[str, int] = {}
+    if vec_env is None:
+        return coverage
+    for env in getattr(vec_env, "envs", []):
+        env_coverage = getattr(env, "scenario_coverage", None)
+        if not env_coverage:
+            continue
+        for key, value in env_coverage.items():
+            coverage[key] = coverage.get(key, 0) + int(value)
+    return coverage
+
+
+def _record_eval_metrics(model: PPO, metrics: MetricSamples, *, eval_step: int) -> None:
+    """Record evaluation metrics into the SB3 logger for TensorBoard export."""
+    for name, values in metrics.items():
+        if not values:
+            continue
+        model.logger.record(f"eval/{name}", float(np.mean(values)))
+    model.logger.dump(step=eval_step)
+
+
+def _log_eval_to_wandb(
+    wandb_run: object | None,
+    metrics: MetricSamples,
+    *,
+    eval_step: int,
+) -> None:
+    """Send evaluation aggregates to W&B when enabled."""
+    if wandb_run is None:
+        return
+    payload = {f"eval/{name}": float(np.mean(values)) for name, values in metrics.items() if values}
+    if payload:
+        payload["eval/step"] = eval_step
+        wandb_run.log(payload, step=eval_step)
+
+
+def _train_with_schedule(
+    model: PPO,
+    *,
+    config: ExpertTrainingConfig,
+    scenario_definitions: Sequence[Mapping[str, Any]],
+    scenario_id: str | None,
+    hold_out_scenarios: Sequence[str],
+    eval_steps: Sequence[int],
+    wandb_run: object | None,
+    wandb_callback: object | None,
+    checkpoint_dir: Path | None = None,
+) -> tuple[MetricSamples, list[dict[str, object]]]:
+    """Train PPO in chunks and evaluate at scheduled checkpoints."""
+    episode_records: list[dict[str, object]] = []
+    metrics_raw: MetricSamples = {
+        "success_rate": [],
+        "collision_rate": [],
+        "path_efficiency": [],
+        "comfort_exposure": [],
+        "snqi": [],
+    }
+    timesteps_done = 0
+    callbacks = []
+    if wandb_callback is not None:
+        callbacks.append(wandb_callback)
+    cb = CallbackList(callbacks) if callbacks else None
+
+    for eval_step in eval_steps:
+        train_steps = max(0, eval_step - timesteps_done)
+        if train_steps > 0:
+            logger.info("Training PPO segment steps={} (total={})", train_steps, eval_step)
+            model.learn(total_timesteps=train_steps, reset_num_timesteps=False, callback=cb)
+        metrics_raw, eval_records = _evaluate_policy(
+            model,
+            config,
+            scenario_definitions=scenario_definitions,
+            scenario_path=config.scenario_config,
+            scenario_id=scenario_id,
+            hold_out_scenarios=hold_out_scenarios,
+            eval_step=eval_step,
+        )
+        _record_eval_metrics(model, metrics_raw, eval_step=eval_step)
+        _log_eval_to_wandb(wandb_run, metrics_raw, eval_step=eval_step)
+        if checkpoint_dir is not None:
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
+            model.save(str(checkpoint_path))
+        episode_records.extend(eval_records)
+        timesteps_done = eval_step
+
+    return metrics_raw, episode_records
+
+
+def _init_training_model(
     config: ExpertTrainingConfig,
     *,
-    scenario: Mapping[str, Any],
-) -> tuple[PPO, DummyVecEnv]:
-    """TODO docstring. Document this function.
-
-    Args:
-        config: TODO docstring.
-        scenario: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    scenario: Mapping[str, Any] | None,
+    scenario_definitions: Sequence[Mapping[str, Any]],
+    exclude_scenarios: Sequence[str],
+    run_id: str,
+    tensorboard_log: Path | None,
+) -> tuple[PPO, DummyVecEnv, Path | None]:
+    """Initialize PPO and the vectorized training environment."""
     seeds = config.seeds or (0,)
     env_fns = [
-        _make_training_env(int(seed), scenario=scenario, scenario_path=config.scenario_config)
+        _make_training_env(
+            int(seed),
+            scenario=scenario,
+            scenario_definitions=scenario_definitions,
+            scenario_path=config.scenario_config,
+            exclude_scenarios=exclude_scenarios,
+            suite_name="ppo_imitation",
+            algorithm_name=config.policy_id,
+            env_overrides=config.env_overrides,
+            env_factory_kwargs=config.env_factory_kwargs,
+        )
         for seed in seeds
     ]
     vec_env = DummyVecEnv(env_fns)
-    policy_kwargs = {"net_arch": [64, 64]}
+    policy_kwargs = _resolve_policy_kwargs(config)
     model = PPO(
         "MultiInputPolicy",
         vec_env,
         verbose=1,
         seed=int(seeds[0]),
+        tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
         policy_kwargs=policy_kwargs,
     )
-    logger.info(
-        "Starting PPO optimisation total_timesteps={} num_envs={}",
-        config.total_timesteps,
-        len(env_fns),
-    )
-    model.learn(total_timesteps=config.total_timesteps)
-    return model, vec_env
+
+    return model, vec_env, tensorboard_log
 
 
 def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
@@ -232,18 +671,13 @@ def _evaluate_policy(
     model: PPO,
     config: ExpertTrainingConfig,
     *,
-    scenario: Mapping[str, Any],
+    scenario_definitions: Sequence[Mapping[str, Any]],
+    scenario_path: Path,
+    scenario_id: str | None,
+    hold_out_scenarios: Sequence[str],
+    eval_step: int | None = None,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        model: TODO docstring.
-        config: TODO docstring.
-        scenario: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Evaluate a policy across hold-out or sampled scenarios."""
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -254,12 +688,34 @@ def _evaluate_policy(
     }
     episode_records: list[dict[str, object]] = []
 
+    if scenario_id:
+        sampler = ScenarioSampler(
+            scenario_definitions,
+            include_scenarios=(scenario_id,),
+            seed=0,
+            strategy="cycle",
+        )
+    elif hold_out_scenarios:
+        sampler = ScenarioSampler(
+            scenario_definitions,
+            include_scenarios=tuple(hold_out_scenarios),
+            seed=0,
+            strategy="cycle",
+        )
+    else:
+        sampler = ScenarioSampler(scenario_definitions, seed=0, strategy="cycle")
+
     for episode_idx in range(episodes):
         seed = int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
-        env_config = build_robot_config_from_scenario(
-            scenario, scenario_path=config.scenario_config
+        scenario, scenario_name = sampler.sample()
+        env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        env = make_robot_env(
+            config=env_config,
+            seed=seed,
+            suite_name="ppo_imitation_eval",
+            scenario_name=scenario_name,
+            algorithm_name=config.policy_id,
         )
-        env = make_robot_env(config=env_config, seed=seed)
         obs, _ = env.reset()
         done = False
         info: Mapping[str, object] = {}
@@ -281,6 +737,8 @@ def _evaluate_policy(
                 "episode": episode_idx,
                 "seed": seed,
                 "steps": steps,
+                "scenario_id": scenario_name,
+                "eval_step": eval_step,
                 "metrics": metric_row,
             },
         )
@@ -290,15 +748,11 @@ def _evaluate_policy(
 
 def _simulate_dry_run_metrics(
     config: ExpertTrainingConfig,
+    *,
+    eval_steps: Sequence[int],
+    scenario_id: str,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
-    """TODO docstring. Document this function.
-
-    Args:
-        config: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Generate deterministic placeholder metrics for dry-run mode."""
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -308,35 +762,40 @@ def _simulate_dry_run_metrics(
         "snqi": [],
     }
     episode_records: list[dict[str, object]] = []
+    rng = np.random.default_rng(123)
 
-    for idx in range(episodes):
-        seed = int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
-        success = 1.0 if idx % 5 != 0 else 0.0
-        collision = 0.0 if idx % 3 else 0.2
-        path_eff = max(0.0, 0.85 - 0.05 * idx)
-        comfort = collision * 0.1
-        snqi = success - 0.5 * collision
+    for eval_step in eval_steps:
+        metrics = {key: [] for key in metrics}
+        for idx in range(episodes):
+            seed = int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
+            success = 1.0 if idx % 5 != 0 else 0.0
+            collision = 0.0 if idx % 3 else 0.2
+            path_eff = max(0.0, 0.85 - 0.05 * idx) + float(rng.uniform(-0.01, 0.01))
+            comfort = collision * 0.1
+            snqi = success - 0.5 * collision
 
-        metrics["success_rate"].append(success)
-        metrics["collision_rate"].append(collision)
-        metrics["path_efficiency"].append(path_eff)
-        metrics["comfort_exposure"].append(comfort)
-        metrics["snqi"].append(snqi)
+            metrics["success_rate"].append(success)
+            metrics["collision_rate"].append(collision)
+            metrics["path_efficiency"].append(path_eff)
+            metrics["comfort_exposure"].append(comfort)
+            metrics["snqi"].append(snqi)
 
-        episode_records.append(
-            {
-                "episode": idx,
-                "seed": seed,
-                "steps": config.convergence.plateau_window,
-                "metrics": {
-                    "success_rate": success,
-                    "collision_rate": collision,
-                    "path_efficiency": path_eff,
-                    "comfort_exposure": comfort,
-                    "snqi": snqi,
+            episode_records.append(
+                {
+                    "episode": idx,
+                    "seed": seed,
+                    "steps": config.convergence.plateau_window,
+                    "scenario_id": scenario_id,
+                    "eval_step": eval_step,
+                    "metrics": {
+                        "success_rate": success,
+                        "collision_rate": collision,
+                        "path_efficiency": path_eff,
+                        "comfort_exposure": comfort,
+                        "snqi": snqi,
+                    },
                 },
-            },
-        )
+            )
 
     return metrics, episode_records
 
@@ -401,50 +860,40 @@ def run_expert_training(
         common.set_global_seed(int(config.seeds[0]))
 
     scenario_definitions = load_scenarios(config.scenario_config)
-    selected_scenario = select_scenario(scenario_definitions, config.scenario_id)
-    scenario_label = (
-        config.scenario_id
-        or str(selected_scenario.get("name") or selected_scenario.get("scenario_id") or "")
-        or config.scenario_config.stem
-    )
+    scenario_ctx = _resolve_scenario_context(config, scenario_definitions)
 
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
+    eval_steps = _build_eval_steps(config.total_timesteps, config.evaluation.step_schedule)
 
-    if dry_run:
-        metrics_raw, episode_records = _simulate_dry_run_metrics(config)
-        model = None
-        vec_env = None
-    else:
-        model, vec_env = _train_model(config, scenario=selected_scenario)
-        metrics_raw, episode_records = _evaluate_policy(
-            model,
-            config,
-            scenario=selected_scenario,
-        )
+    outputs = _execute_training(
+        config=config,
+        scenario_ctx=scenario_ctx,
+        scenario_definitions=scenario_definitions,
+        eval_steps=eval_steps,
+        run_id=run_id,
+        dry_run=dry_run,
+    )
 
-    aggregates = _aggregate_metrics(metrics_raw)
+    aggregates = _aggregate_metrics(outputs.metrics_raw)
+    scenario_coverage = _collect_scenario_coverage(outputs.vec_env)
 
     checkpoint_dir = common.get_expert_policy_dir()
     checkpoint_path = checkpoint_dir / f"{config.policy_id}.zip"
     if dry_run:
         checkpoint_path.write_text("dry-run checkpoint placeholder\n", encoding="utf-8")
     else:
-        assert model is not None  # for type-checkers
-        model.save(str(checkpoint_path))
-        if vec_env is not None:
-            vec_env.close()
+        assert outputs.model is not None  # for type-checkers
+        outputs.model.save(str(checkpoint_path))
+        if outputs.vec_env is not None:
+            outputs.vec_env.close()
 
     config_manifest = checkpoint_dir / f"{config.policy_id}.config.yaml"
     if config_path is not None and config_path.exists():
         shutil.copy2(config_path, config_manifest)
     else:  # pragma: no cover - defensive fallback
         config_manifest.write_text(f"policy_id: {config.policy_id}\n", encoding="utf-8")
-
-    scenario_name = scenario_label or (
-        config.scenario_config.name if config.scenario_config else "unknown"
-    )
 
     # Surface executed timesteps; convergence tracking not implemented here yet.
     conv_timesteps = float(config.total_timesteps)
@@ -462,10 +911,15 @@ def run_expert_training(
     primary_keys = ("success_rate", "collision_rate", "path_efficiency", "snqi", "comfort_exposure")
     notes: list[str] = [
         f"dry_run={dry_run}",
-        f"scenario_id={scenario_label}",
+        f"scenario_id={scenario_ctx.scenario_label}",
         f"total_timesteps={config.total_timesteps}",
         f"Converged at {config.total_timesteps} timesteps",
+        f"eval_steps={eval_steps}",
     ]
+    if outputs.tensorboard_log is not None:
+        notes.append(f"tensorboard_log={outputs.tensorboard_log}")
+    if scenario_coverage:
+        notes.append(f"scenario_coverage={scenario_coverage}")
     metrics_synthetic = False
     if all(
         aggregates.get(key, common.MetricAggregate(0.0, 0.0, 0.0, (0.0, 0.0))).mean == 0.0
@@ -505,7 +959,7 @@ def run_expert_training(
         policy_id=config.policy_id,
         version=timestamp.strftime("%Y%m%d"),
         seeds=config.seeds,
-        scenario_profile=(scenario_name,),
+        scenario_profile=scenario_ctx.scenario_profile,
         metrics=aggregates,
         checkpoint_path=checkpoint_path,
         config_manifest=config_manifest,
@@ -516,7 +970,7 @@ def run_expert_training(
     )
 
     episode_log_path = common.get_imitation_report_dir() / "episodes" / f"{run_id}.jsonl"
-    _write_episode_log(episode_log_path, episode_records)
+    _write_episode_log(episode_log_path, outputs.episode_records)
 
     wall_clock_seconds = max(0.0, time.perf_counter() - start_time)
     wall_clock_hours = wall_clock_seconds / 3600.0
@@ -529,6 +983,7 @@ def run_expert_training(
         episode_log_path=episode_log_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
+        scenario_coverage=scenario_coverage,
         notes=notes,
     )
 

@@ -8,6 +8,13 @@ To keep tests fast and deterministic, the implementation supports a ``--dry-run`
 mode that skips heavy PPO optimisation while still exercising the manifest and
 artifact pipeline. Production invocations omit that flag to execute full
 training.
+
+Example usage:
+```bash
+uv run python scripts/training/train_expert_ppo.py \
+    --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
+    --log-level WARNING
+```
 """
 
 from __future__ import annotations

@@ -63,7 +63,7 @@ decisions, ideas, and open questions.
 ### Phase 1: Training Protocol (publication-grade)
 - Training pipeline: use `train_expert_ppo.py` + scenario‑sampling wrapper (Option A).
 - **Seeds**: 5 seeds (expand to 10 if 95% CI half‑width on success > 0.10).
-- **Evaluation cadence**: 0.5M‑step evals early, then 1M‑step evals later.
+- **Evaluation cadence**: 0.5M‑step evals until 3M steps, then 1M‑step evals later.
 - **Hold‑out evaluation**: yes, use the approved split to test generalization.
 
 ### Scenario Feasibility Gate (planned)
@@ -82,6 +82,7 @@ from this description with no hidden assumptions.
 
 **Entry point (preferred):**
 - `scripts/training/train_expert_ppo.py` with a dedicated YAML config.
+  - Proposed config: `configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml`.
 
 **Config requirements:**
 - `scenario_config`: `configs/scenarios/classic_interactions_francis2023.yaml`.
@@ -233,7 +234,7 @@ Metadata handling:
   *Why:* metadata is constant/noisy for a fixed grid; policy should focus on dynamics.
 - **Evaluation cadence**: enabled (periodic evaluation during training).  
   *Why:* required for learning curves, curriculum comparisons, and ablation analysis.
-- **Evaluation cadence schedule**: 0.5M-step evals for the first 2–3M steps, then
+- **Evaluation cadence schedule**: 0.5M-step evals for the first 3M steps, then
   every 1M steps for the remainder.  
   *Why:* higher resolution early where learning is fastest; lower overhead later.
 - **Training scenario sources**: use both `configs/scenarios/classic_interactions.yaml`
@@ -272,8 +273,8 @@ Metadata handling:
 
 ### Next Actions Checklist (for continuity)
 - [x] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
-- [ ] Draft training config YAML for Issue 403 run.
-- [ ] Confirm evaluation cadence cutoff (2M vs 3M for 0.5M schedule).
+- [x] Draft training config YAML for Issue 403 run.
+- [x] Confirm evaluation cadence cutoff (3M for 0.5M schedule).
 
 ### Hold-out Set Feasibility (notes)
 - We **do have enough scenario diversity** to define a hold-out set without new maps.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from gymnasium import Env, spaces
 
 from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
@@ -78,4 +79,57 @@ def test_scenario_switching_env_tracks_coverage() -> None:
     assert set(coverage.keys()) == {"sc_a", "sc_b"}
     assert sum(coverage.values()) == 2
 
+    env.close()
+
+
+def test_scenario_switching_env_allows_obs_bounds_mismatch() -> None:
+    """ScenarioSwitchingEnv tolerates Box bounds differences for map-size variants."""
+    scenarios = [{"name": "sc_a"}, {"name": "sc_b"}]
+    sampler = ScenarioSampler(scenarios, strategy="cycle")
+    obs_a = spaces.Box(low=0.0, high=1.0, shape=(3,), dtype=np.float32)
+    obs_b = spaces.Box(low=0.0, high=2.0, shape=(3,), dtype=np.float32)
+    act_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+    def _factory(*, config, scenario_name, **kwargs):
+        obs_space = obs_a if scenario_name == "sc_a" else obs_b
+        return _DummyEnv(obs_space, act_space, scenario_name)
+
+    env = ScenarioSwitchingEnv(
+        scenario_sampler=sampler,
+        scenario_path="unused",
+        env_factory=_factory,
+        config_builder=lambda scenario: {"name": scenario["name"]},
+        switch_per_reset=True,
+        seed=123,
+    )
+
+    env.reset()
+    env.reset()
+    env.close()
+
+
+def test_scenario_switching_env_rejects_action_mismatch() -> None:
+    """ScenarioSwitchingEnv blocks action space changes to keep policy semantics stable."""
+    scenarios = [{"name": "sc_a"}, {"name": "sc_b"}]
+    sampler = ScenarioSampler(scenarios, strategy="cycle")
+    obs_space = spaces.Box(low=0.0, high=1.0, shape=(3,), dtype=np.float32)
+    act_a = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+    act_b = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
+
+    def _factory(*, config, scenario_name, **kwargs):
+        act_space = act_a if scenario_name == "sc_a" else act_b
+        return _DummyEnv(obs_space, act_space, scenario_name)
+
+    env = ScenarioSwitchingEnv(
+        scenario_sampler=sampler,
+        scenario_path="unused",
+        env_factory=_factory,
+        config_builder=lambda scenario: {"name": scenario["name"]},
+        switch_per_reset=True,
+        seed=123,
+    )
+
+    env.reset()
+    with pytest.raises(ValueError, match="incompatible observation/action spaces"):
+        env.reset()
     env.close()

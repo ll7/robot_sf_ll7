@@ -12,11 +12,30 @@ training.
 
 from __future__ import annotations
 
+import os
+import sys
+
+_ORIGINAL_LOGURU_LEVEL = os.environ.get("LOGURU_LEVEL")
+
+
+def _preconfigure_loguru_level_from_argv() -> None:
+    """Set LOGURU_LEVEL early so import-time logs honor CLI log-level."""
+    if _ORIGINAL_LOGURU_LEVEL is not None:
+        return
+    for idx, arg in enumerate(sys.argv):
+        if arg == "--log-level" and idx + 1 < len(sys.argv):
+            os.environ["LOGURU_LEVEL"] = str(sys.argv[idx + 1]).upper()
+            return
+        if arg.startswith("--log-level="):
+            os.environ["LOGURU_LEVEL"] = arg.split("=", 1)[1].upper()
+            return
+
+
+_preconfigure_loguru_level_from_argv()
+
 import argparse
 import json
-import os
 import shutil
-import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -1102,13 +1121,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    logger.remove()
-    logger.add(sys.stderr, level=str(args.log_level).upper())
+    log_level = str(args.log_level).upper()
+    previous_loguru_level = os.environ.get("LOGURU_LEVEL")
+    os.environ["LOGURU_LEVEL"] = log_level
 
-    config_path = Path(args.config).resolve()
-    config = load_expert_training_config(config_path)
-    run_expert_training(config, config_path=config_path, dry_run=bool(args.dry_run))
-    return 0
+    try:
+        logger.remove()
+        logger.add(sys.stderr, level=log_level)
+
+        config_path = Path(args.config).resolve()
+        config = load_expert_training_config(config_path)
+        run_expert_training(config, config_path=config_path, dry_run=bool(args.dry_run))
+        return 0
+    finally:
+        if previous_loguru_level is None:
+            os.environ.pop("LOGURU_LEVEL", None)
+        else:
+            os.environ["LOGURU_LEVEL"] = previous_loguru_level
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

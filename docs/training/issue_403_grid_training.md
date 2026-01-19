@@ -73,6 +73,18 @@ uv run python scripts/training/train_expert_ppo.py \
   --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml
 ```
 
+### CPU scaling (automatic)
+By default, training uses **one environment per CPU core minus one**. This is controlled by:
+```yaml
+num_envs: auto
+worker_mode: auto
+```
+You can override it:
+```yaml
+num_envs: 8
+worker_mode: subproc   # or dummy
+```
+
 By default this:
 - Trains across multiple scenarios via ScenarioSwitchingEnv.
 - Saves checkpoints at each evaluation step to:

@@ -40,6 +40,29 @@ def _preconfigure_loguru_level_from_argv() -> None:
 
 _preconfigure_loguru_level_from_argv()
 
+
+class _TeeStream:
+    """Write to multiple streams (e.g., terminal + log file)."""
+
+    def __init__(self, *streams: object) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self._streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            if hasattr(stream, "flush"):
+                stream.flush()
+
+    def isatty(self) -> bool:
+        for stream in self._streams:
+            if hasattr(stream, "isatty") and stream.isatty():
+                return True
+        return False
+
 import argparse
 import json
 import shutil
@@ -1115,6 +1138,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
         help="Console log level (default: INFO).",
     )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Optional path to tee stdout/stderr into a log file.",
+    )
     return parser
 
 
@@ -1131,10 +1159,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     log_level = str(args.log_level).upper()
+    log_file = Path(args.log_file).expanduser() if args.log_file else None
     previous_loguru_level = os.environ.get("LOGURU_LEVEL")
     os.environ["LOGURU_LEVEL"] = log_level
 
+    log_handle = None
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
     try:
+        if log_file is not None:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_handle = log_file.open("w", encoding="utf-8")
+            sys.stdout = _TeeStream(original_stdout, log_handle)
+            sys.stderr = _TeeStream(original_stderr, log_handle)
+
         logger.remove()
         logger.add(sys.stderr, level=log_level)
 
@@ -1143,6 +1182,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_expert_training(config, config_path=config_path, dry_run=bool(args.dry_run))
         return 0
     finally:
+        if log_handle is not None:
+            log_handle.close()
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
         if previous_loguru_level is None:
             os.environ.pop("LOGURU_LEVEL", None)
         else:

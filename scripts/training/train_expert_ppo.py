@@ -789,12 +789,14 @@ def _evaluate_policy(
         seed = int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
         scenario, scenario_name = sampler.sample()
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        _apply_env_overrides(env_config, config.env_overrides)
         env = make_robot_env(
             config=env_config,
             seed=seed,
             suite_name="ppo_imitation_eval",
             scenario_name=scenario_name,
             algorithm_name=config.policy_id,
+            **config.env_factory_kwargs,
         )
         obs, _ = env.reset()
         done = False

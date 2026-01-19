@@ -98,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scenario switching during training now tolerates observation-space bound differences across maps while still enforcing action-space compatibility, preventing crashes when sampling mixed-size scenarios.
 - Scenario-level single-pedestrian overrides now clone map definitions to prevent cross-scenario contamination during randomized training.
 - Goal-distance observations now use a fixed 50m cap with runtime clipping, keeping observation bounds consistent across mixed map sizes.
+- SocNav structured observations now cap map-dependent position bounds at 50m with clipping to avoid scenario-switching bound mismatches.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

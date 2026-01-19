@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from gymnasium import Env
+from gymnasium import Env, spaces
 from loguru import logger
 
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -30,6 +30,52 @@ def scenario_id_from_definition(scenario: Mapping[str, Any], *, index: int) -> s
     if not scenario_id:
         raise ValueError(f"Scenario at index {index} is missing a name/scenario_id field.")
     return scenario_id
+
+
+def _spaces_compatible(
+    base: spaces.Space,
+    other: spaces.Space,
+    *,
+    allow_box_bounds_mismatch: bool,
+) -> bool:
+    """Check whether two spaces are compatible for vectorized training."""
+    if type(base) is not type(other):
+        return False
+    if isinstance(base, spaces.Box):
+        if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):
+            return False
+        if allow_box_bounds_mismatch:
+            return True
+        return np.array_equal(base.low, other.low) and np.array_equal(base.high, other.high)
+    if isinstance(base, spaces.Discrete):
+        return base.n == other.n
+    if isinstance(base, spaces.MultiDiscrete):
+        return np.array_equal(base.nvec, other.nvec)
+    if isinstance(base, spaces.MultiBinary):
+        return base.n == other.n
+    if isinstance(base, spaces.Dict):
+        if list(base.spaces.keys()) != list(other.spaces.keys()):
+            return False
+        return all(
+            _spaces_compatible(
+                base.spaces[key],
+                other.spaces[key],
+                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+            )
+            for key in base.spaces
+        )
+    if isinstance(base, spaces.Tuple):
+        if len(base.spaces) != len(other.spaces):
+            return False
+        return all(
+            _spaces_compatible(
+                base_space,
+                other_space,
+                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+            )
+            for base_space, other_space in zip(base.spaces, other.spaces)
+        )
+    return base == other
 
 
 @dataclass(slots=True)
@@ -185,6 +231,7 @@ class ScenarioSwitchingEnv(Env):
         self._current_env: Env | None = None
         self._current_scenario_id: str | None = None
         self._has_reset = False
+        self._warned_obs_bounds = False
 
         self._current_env = self._build_env(seed=seed)
         self.observation_space = self._current_env.observation_space
@@ -233,14 +280,35 @@ class ScenarioSwitchingEnv(Env):
             self.action_space = self._current_env.action_space
         elif self._switch_per_reset and self._has_reset:
             self._current_env.close()
+            previous_scenario_id = self._current_scenario_id
             self._current_env = self._build_env(seed=seed)
-            if (
-                self._current_env.observation_space != self.observation_space
-                or self._current_env.action_space != self.action_space
-            ):
+            obs_strict = _spaces_compatible(
+                self.observation_space,
+                self._current_env.observation_space,
+                allow_box_bounds_mismatch=False,
+            )
+            obs_compatible = _spaces_compatible(
+                self.observation_space,
+                self._current_env.observation_space,
+                allow_box_bounds_mismatch=True,
+            )
+            action_compatible = _spaces_compatible(
+                self.action_space,
+                self._current_env.action_space,
+                allow_box_bounds_mismatch=False,
+            )
+            if not obs_compatible or not action_compatible:
                 raise ValueError(
                     "Scenario switching produced incompatible observation/action spaces."
                 )
+            if not obs_strict and not self._warned_obs_bounds:
+                logger.warning(
+                    "Scenario switching detected observation space bound mismatches; "
+                    "using initial bounds for compatibility. previous={} current={}",
+                    previous_scenario_id,
+                    self._current_scenario_id,
+                )
+                self._warned_obs_bounds = True
 
         self._has_reset = True
         return self._current_env.reset(seed=seed, options=options)

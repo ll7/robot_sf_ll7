@@ -103,6 +103,39 @@ from this description with no hidden assumptions.
   To train across multiple scenarios, we must extend the pipeline or create a
   wrapper that samples scenarios per episode.
 
+### Scenario-Sampling Wrapper (Option A) — design
+**Goal:** sample a scenario **per episode** while keeping SB3 env interfaces stable.
+
+Proposed design:
+- Add a `ScenarioSampler` utility that loads `scenario_config` once and returns
+  scenario dicts by ID, with optional filters:
+  - `include_scenarios`: optional allowlist.
+  - `exclude_scenarios`: hold‑out list from evaluation config.
+  - `weights`: optional per‑scenario weights (fallback uniform).
+- Add a `ScenarioSwitchingEnv` wrapper (Gymnasium `Env`) that:
+  - On `reset()`, samples a scenario (unless `scenario_id` is fixed).
+  - Builds a fresh `RobotSimulationConfig` via `build_robot_config_from_scenario`.
+  - Constructs a new inner env via `make_robot_env(config=..., scenario_name=...)`.
+  - Closes the previous inner env when switching scenarios.
+  - Exposes **stable** `observation_space` and `action_space` (validate on first switch).
+- For SB3 vectorization, use `DummyVecEnv` with one `ScenarioSwitchingEnv` per worker.
+  Each worker gets a deterministic RNG seed (`base_seed + env_idx`) to avoid correlation.
+
+Metadata and logging:
+- Pass `scenario_name` (scenario `name` or `scenario_id`) into `make_robot_env` so
+  JSONL metadata and telemetry are scenario‑aware.
+- Track `scenario_coverage` in the training manifest (counts per scenario ID).
+
+Performance notes:
+- Rebuilding the env per episode may be expensive; if it is, add an optional LRU cache
+  of inner envs keyed by scenario ID (reuse instead of re‑create).
+- Start with **per‑episode switching** for maximum diversity; introduce `hold_k` episodes
+  only if performance is a bottleneck.
+
+Validation rules:
+- Assert all scenarios share the same observation/action spaces; otherwise fail fast.
+- Ensure scenario sampling excludes hold‑out IDs by default during training.
+
 ### Execution Plan (Ubuntu, draft)
 1) **Environment setup**
    - `uv sync --all-extras`
@@ -238,7 +271,7 @@ Metadata handling:
 - `Refactor_ped_robot_force_naming.md`: naming confusion + proposed refactor (separate issue).
 
 ### Next Actions Checklist (for continuity)
-- [ ] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
+- [x] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
 - [ ] Draft training config YAML for Issue 403 run.
 - [ ] Confirm evaluation cadence cutoff (2M vs 3M for 0.5M schedule).
 

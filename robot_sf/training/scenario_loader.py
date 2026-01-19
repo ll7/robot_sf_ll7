@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -176,7 +177,10 @@ def _apply_single_pedestrian_overrides(
     if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
         logger.warning("single_pedestrians overrides provided but no map_pool is loaded")
         return
-    map_def = next(iter(config.map_pool.map_defs.values()))
+    map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    # Avoid mutating cached map definitions shared across scenarios.
+    map_def = deepcopy(map_def)
+    config.map_pool.map_defs[map_name] = map_def
     apply_single_pedestrian_overrides(map_def, overrides)
 
 

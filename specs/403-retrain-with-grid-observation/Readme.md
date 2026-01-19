@@ -1,5 +1,11 @@
 # Issue 403: Retrain with Grid Observation
 
+## TODO
+
+- Benchmark map capture: store static obstacle/traversible map metadata once per map (e.g., `map_id`,
+  source path, size, hash) and write a map artifact (raster `map_traversible` or vector obstacles)
+  under `output/benchmarks/maps/`, then reference it from each episode record to keep data
+  retrievable without bloating JSONL.
 ## Summary
 We want to retrain a robot policy using a grid-based observation space (SocNav structured
 observation + occupancy grid) and make the experiment publication-ready with reproducible

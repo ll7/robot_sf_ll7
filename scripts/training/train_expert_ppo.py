@@ -707,6 +707,12 @@ def _init_training_model(
         seed=base_seed,
         tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
         policy_kwargs=policy_kwargs,
+        learning_rate=1e-4,
+        batch_size=256,
+        n_epochs=4,
+        ent_coef=0.01,
+        clip_range=0.1,
+        target_kl=0.02,
     )
     logger.info(
         "Training envs initialized num_envs={} worker_mode={} base_seed={}",

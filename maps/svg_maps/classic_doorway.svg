@@ -114,16 +114,16 @@
      id="pedestrians"
      inkscape:label="Pedestrians">
     <rect
-       x="14.907151"
-       y="13.671945"
+       x="4"
+       y="20"
        width="4"
        height="4"
        fill="#23ff00"
        inkscape:label="ped_spawn_zone"
        id="rect9" />
     <rect
-       x="26.841808"
-       y="10.328055"
+       x="36"
+       y="4"
        width="4"
        height="4"
        fill="#107400"
@@ -142,9 +142,9 @@
        inkscape:label="robot_route_0_0"
        id="path10"
        sodipodi:nodetypes="cc" />
-    <!-- Pedestrian route scaled -->
+    <!-- Pedestrian route through doorway -->
     <path
-       d="M 19.57829,14.209178 24.199115,13.727224"
+       d="M 6,22 22,13.9 38,6"
        stroke="#c40202"
        stroke-width="1"
        fill="none"

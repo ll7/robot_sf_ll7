@@ -11,6 +11,11 @@ Usage examples:
     --all --policy ppo --model-path model/run_023.zip
 
   uv run python scripts/tools/render_scenario_videos.py \
+    --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
+    --policy ppo --model-path output/wandb/ppo_expert_grid_socnav_403_20260120T074034/model.zip \
+    --all
+
+  uv run python scripts/tools/render_scenario_videos.py \
     --scenario configs/scenarios/francis2023.yaml \
     --scenario-id francis2023_parallel_traffic
 
@@ -51,6 +56,7 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
     select_scenario,
 )
+from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -76,8 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario",
         type=Path,
-        default=Path("configs/scenarios/francis2023.yaml"),
         help="Path to the scenario YAML file.",
+    )
+    parser.add_argument(
+        "--training-config",
+        type=Path,
+        help="Optional expert training config; applies env_overrides and defaults scenario path.",
     )
     parser.add_argument(
         "--scenario-id",
@@ -376,6 +386,8 @@ def _run_episode(
     policy_name: str,
     policy_model: Any | None,
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    env_overrides: Mapping[str, object],
+    env_factory_kwargs: Mapping[str, object],
 ) -> RenderResult:
     """Run a single scenario/seed episode and render a video."""
     scenario_name = _resolve_scenario_name(scenario)
@@ -384,6 +396,7 @@ def _run_episode(
     video_path = output_dir / f"{slug}_seed{seed}_{policy_slug}.mp4"
 
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    _apply_env_overrides(config, env_overrides)
     if policy_name == "ppo":
         policy_stack_steps = resolve_policy_stack_steps(policy_model)
         if policy_stack_steps is not None:
@@ -397,6 +410,7 @@ def _run_episode(
         record_video=True,
         video_path=str(video_path),
         video_fps=float(fps),
+        **env_factory_kwargs,
     )
 
     steps = 0
@@ -465,6 +479,7 @@ def _write_manifest(
     robot_speed: float,
     policy: str,
     model_path: Path | None,
+    training_config: Path | None,
     max_steps: int | None,
     seed_override: list[int],
     max_seeds: int | None,
@@ -479,6 +494,7 @@ def _write_manifest(
         "robot_speed_m_s": robot_speed,
         "policy": policy,
         "model_path": str(model_path) if model_path is not None else None,
+        "training_config": str(training_config) if training_config is not None else None,
         "max_steps_override": max_steps,
         "seed_override": seed_override or None,
         "max_seeds": max_seeds,
@@ -494,7 +510,19 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     configure_logging(verbose=args.verbose)
 
-    scenario_path = args.scenario.resolve()
+    training_config = None
+    env_overrides: Mapping[str, object] = {}
+    env_factory_kwargs: Mapping[str, object] = {}
+    if args.training_config is not None:
+        training_config = load_expert_training_config(args.training_config)
+        env_overrides = training_config.env_overrides
+        env_factory_kwargs = training_config.env_factory_kwargs
+
+    scenario_path = (
+        args.scenario
+        or (training_config.scenario_config if training_config is not None else None)
+        or Path("configs/scenarios/francis2023.yaml")
+    ).resolve()
     scenarios = load_scenarios(scenario_path)
 
     if args.scenario_id and args.all:
@@ -546,6 +574,8 @@ def main(argv: list[str] | None = None) -> int:
                 policy_name=args.policy,
                 policy_model=policy_model,
                 policy_obs_adapter=policy_obs_adapter,
+                env_overrides=env_overrides,
+                env_factory_kwargs=env_factory_kwargs,
             )
             results.append(result)
 
@@ -556,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
         robot_speed=args.robot_speed,
         policy=args.policy,
         model_path=args.model_path if args.policy == "ppo" else None,
+        training_config=args.training_config,
         max_steps=args.max_steps,
         seed_override=args.seed,
         max_seeds=args.max_seeds,

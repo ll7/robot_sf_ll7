@@ -95,7 +95,13 @@ class Simulator:
         initializes robot navigation paths; and resets all agents to start state.
         """
         pysf_config = PySFSimConfig()
-        spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
+        spawn_config = PedSpawnConfig(
+            self.config.peds_per_area_m2,
+            self.config.max_peds_per_group,
+            route_spawn_distribution=self.config.route_spawn_distribution,
+            route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
+            route_spawn_seed=self.config.route_spawn_seed,
+        )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,
             spawn_config,

@@ -578,9 +578,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Rendering videos to {}", output_root)
 
     show_occupancy_grid = (
-        args.show_occupancy_grid
-        if args.show_occupancy_grid is not None
-        else auto_show_grid
+        args.show_occupancy_grid if args.show_occupancy_grid is not None else auto_show_grid
     )
     show_lidar = args.show_lidar if args.show_lidar is not None else not show_occupancy_grid
 

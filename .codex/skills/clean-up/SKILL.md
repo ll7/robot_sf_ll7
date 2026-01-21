@@ -1,6 +1,6 @@
 ---
 name: clean-up
-description: "Clean up the current branch in the Robot SF repo (/Users/lennart/git/robot_sf_ll7) by following docs/dev_guide.md and the repo VS Code tasks; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes."
+description: "Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and the repo VS Code tasks; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes."
 ---
 
 # Clean Up
@@ -8,14 +8,14 @@ description: "Clean up the current branch in the Robot SF repo (/Users/lennart/g
 ## Overview
 
 Clean and validate the current branch for the Robot SF repo by applying the dev guide
-workflow, running Ruff format/fix, and running parallel tests. Stop if the repo is not
-/Users/lennart/git/robot_sf_ll7.
+workflow, running Ruff format/fix, and running parallel tests.
 
 ## Cleanup Workflow
 
 1. Confirm repo and guidance
-   - Verify the working directory is `/Users/lennart/git/robot_sf_ll7` and
-     `docs/dev_guide.md` plus `.vscode/tasks.json` exist.
+   - Verify the working directory looks like the Robot SF repo (e.g., `.git`,
+     `docs/dev_guide.md`, `.specify/memory/constitution.md`, and
+     `.github/copilot-instructions.md` exist).
    - Read `docs/dev_guide.md`, `.specify/memory/constitution.md`, and
      `.github/copilot-instructions.md` to align with required rules.
 

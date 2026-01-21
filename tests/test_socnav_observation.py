@@ -21,9 +21,7 @@ def _build_map_def(width: float, height: float) -> MapDefinition:
     obstacles = [Obstacle([(0, 0), (width, 0), (width, 1), (0, 1)])]
     robot_spawn_zones = [((1, 1), (2, 1), (2, 2))]
     ped_spawn_zones = [((3, 3), (4, 3), (4, 4))]
-    robot_goal_zones = [
-        ((width - 2, height - 2), (width - 1, height - 2), (width - 1, height - 1))
-    ]
+    robot_goal_zones = [((width - 2, height - 2), (width - 1, height - 2), (width - 1, height - 1))]
     bounds = [
         (0, width, 0, 0),
         (0, width, height, height),

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.scenario_loader import (
     _apply_single_pedestrian_overrides,
     apply_single_pedestrian_overrides,

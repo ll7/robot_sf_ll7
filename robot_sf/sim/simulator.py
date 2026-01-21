@@ -93,6 +93,7 @@ class Simulator:
         Sets up pedestrian spawn locations, groups, and behaviors; configures
         PySocialForce physics engine with optional obstacle/interaction forces;
         initializes robot navigation paths; and resets all agents to start state.
+        Route spawning honors SimulationSettings route spawn options when provided.
         """
         pysf_config = PySFSimConfig()
         spawn_config = PedSpawnConfig(

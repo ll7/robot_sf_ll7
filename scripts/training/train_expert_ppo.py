@@ -215,7 +215,12 @@ def _resolve_robot_config_type(
         normalized = value.strip().lower()
         if normalized in {"bicycle", "bicycle_drive", "bicycle_drive_settings"}:
             return BicycleDriveSettings
-        if normalized in {"differential", "diff", "differential_drive", "differential_drive_settings"}:
+        if normalized in {
+            "differential",
+            "diff",
+            "differential_drive",
+            "differential_drive_settings",
+        }:
             return DifferentialDriveSettings
     return None
 

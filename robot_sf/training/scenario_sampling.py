@@ -38,15 +38,15 @@ def _spaces_compatible(
     *,
     allow_box_bounds_mismatch: bool,
 ) -> bool:
-    """Check whether two spaces are compatible for vectorized training."""
+    """Check whether two spaces are compatible for vectorized training.
+
+    Returns:
+        True when spaces are compatible for vectorized training.
+    """
     if type(base) is not type(other):
         return False
     if isinstance(base, spaces.Box):
-        if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):
-            return False
-        if allow_box_bounds_mismatch:
-            return True
-        return np.array_equal(base.low, other.low) and np.array_equal(base.high, other.high)
+        return _box_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
     if isinstance(base, spaces.Discrete):
         return base.n == other.n
     if isinstance(base, spaces.MultiDiscrete):
@@ -54,28 +54,76 @@ def _spaces_compatible(
     if isinstance(base, spaces.MultiBinary):
         return base.n == other.n
     if isinstance(base, spaces.Dict):
-        if list(base.spaces.keys()) != list(other.spaces.keys()):
-            return False
-        return all(
-            _spaces_compatible(
-                base.spaces[key],
-                other.spaces[key],
-                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
-            )
-            for key in base.spaces
-        )
+        return _dict_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
     if isinstance(base, spaces.Tuple):
-        if len(base.spaces) != len(other.spaces):
-            return False
-        return all(
-            _spaces_compatible(
-                base_space,
-                other_space,
-                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
-            )
-            for base_space, other_space in zip(base.spaces, other.spaces)
-        )
+        return _tuple_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
     return base == other
+
+
+def _box_compatible(
+    base: spaces.Box,
+    other: spaces.Box,
+    *,
+    allow_box_bounds_mismatch: bool,
+) -> bool:
+    """Check compatibility for Box spaces.
+
+    Returns:
+        True when Box spaces are compatible.
+    """
+    if type(base) is not type(other):
+        return False
+    if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):
+        return False
+    if allow_box_bounds_mismatch:
+        return True
+    return np.array_equal(base.low, other.low) and np.array_equal(base.high, other.high)
+
+
+def _dict_compatible(
+    base: spaces.Dict,
+    other: spaces.Dict,
+    *,
+    allow_box_bounds_mismatch: bool,
+) -> bool:
+    """Check compatibility for Dict spaces.
+
+    Returns:
+        True when Dict spaces are compatible.
+    """
+    if list(base.spaces.keys()) != list(other.spaces.keys()):
+        return False
+    return all(
+        _spaces_compatible(
+            base.spaces[key],
+            other.spaces[key],
+            allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+        )
+        for key in base.spaces
+    )
+
+
+def _tuple_compatible(
+    base: spaces.Tuple,
+    other: spaces.Tuple,
+    *,
+    allow_box_bounds_mismatch: bool,
+) -> bool:
+    """Check compatibility for Tuple spaces.
+
+    Returns:
+        True when Tuple spaces are compatible.
+    """
+    if len(base.spaces) != len(other.spaces):
+        return False
+    return all(
+        _spaces_compatible(
+            base_space,
+            other_space,
+            allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+        )
+        for base_space, other_space in zip(base.spaces, other.spaces, strict=False)
+    )
 
 
 @dataclass(slots=True)

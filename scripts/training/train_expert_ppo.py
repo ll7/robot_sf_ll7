@@ -716,7 +716,7 @@ def _train_with_schedule(
         if train_steps > 0:
             logger.info("Training PPO segment steps={} (total={})", train_steps, eval_step)
             model.learn(total_timesteps=train_steps, reset_num_timesteps=False, callback=cb)
-        metrics_raw, eval_records = _evaluate_policy(
+        step_metrics, eval_records = _evaluate_policy(
             model,
             config,
             scenario_definitions=scenario_definitions,
@@ -725,8 +725,10 @@ def _train_with_schedule(
             hold_out_scenarios=hold_out_scenarios,
             eval_step=eval_step,
         )
-        _record_eval_metrics(model, metrics_raw, eval_step=eval_step)
-        _log_eval_to_wandb(wandb_run, metrics_raw, eval_step=eval_step)
+        for key, values in step_metrics.items():
+            metrics_raw[key].extend(values)
+        _record_eval_metrics(model, step_metrics, eval_step=eval_step)
+        _log_eval_to_wandb(wandb_run, step_metrics, eval_step=eval_step)
         if checkpoint_dir is not None:
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"

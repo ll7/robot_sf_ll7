@@ -48,7 +48,7 @@ class SimulationSettings:
     max_total_pedestrians: int | None = None
     """Optional upper bound for pedestrians used to size SocNav structured observations."""
     route_spawn_distribution: str = "cluster"
-    """Route pedestrian spawn distribution: 'cluster' (default) or 'spread'."""
+    """Route pedestrian spawn distribution: "cluster" (default) or "spread"."""
     route_spawn_jitter_frac: float = 0.0
     """Fraction of spacing used as jitter when route_spawn_distribution='spread'."""
     route_spawn_seed: int | None = None

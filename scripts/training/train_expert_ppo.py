@@ -744,7 +744,10 @@ def _init_training_model(
     tensorboard_log: Path | None,
     resume_from: Path | None,
 ) -> tuple[PPO, DummyVecEnv, Path | None]:
-    """Initialize PPO and the vectorized training environment."""
+    """Initialize PPO and the vectorized training environment.
+
+    If ``resume_from`` is provided, load the checkpoint and continue training.
+    """
     base_seed = int(config.seeds[0]) if config.seeds else 0
     num_envs = _resolve_num_envs(config)
     worker_mode = _resolve_worker_mode(config, num_envs)

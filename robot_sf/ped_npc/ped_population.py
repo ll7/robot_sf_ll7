@@ -70,6 +70,9 @@ class PedSpawnConfig:
     initial_speed: float = 0.5
     group_size_decay: float = 0.3
     sidewalk_width: float = 3.0
+    route_spawn_distribution: str = "cluster"
+    route_spawn_jitter_frac: float = 0.0
+    route_spawn_seed: int | None = None
 
     def __post_init__(self):
         """
@@ -81,6 +84,13 @@ class PedSpawnConfig:
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
             # Normalize the distribution so that the sum equals 1
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
+        if self.route_spawn_distribution not in {"cluster", "spread"}:
+            raise ValueError(
+                "route_spawn_distribution must be 'cluster' or 'spread' "
+                f"(got {self.route_spawn_distribution!r})"
+            )
+        if self.route_spawn_jitter_frac < 0:
+            raise ValueError("route_spawn_jitter_frac must be >= 0")
 
 
 def sample_route(
@@ -88,6 +98,9 @@ def sample_route(
     num_samples: int,
     sidewalk_width: float,
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
+    *,
+    offset: float | None = None,
+    rng: np.random.Generator | None = None,
 ) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
@@ -97,6 +110,8 @@ def sample_route(
         num_samples: The number of points to sample along the route.
         sidewalk_width: The width of the sidewalk for constraining sample spread.
         obstacle_polygons: Optional prepared or raw obstacle polygons to avoid spawning inside.
+        offset: Optional fixed offset along the route length to anchor sampling.
+        rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
 
     Returns:
         A tuple containing:
@@ -112,7 +127,11 @@ def sample_route(
         raise ValueError("Number of samples must be positive.")
 
     # Randomly choose a starting offset along the total length of the route
-    sampled_offset = np.random.uniform(0, route.total_length)
+    rng_local = rng if rng is not None else np.random
+    if offset is None:
+        sampled_offset = float(rng_local.uniform(0, route.total_length))
+    else:
+        sampled_offset = float(np.clip(offset, 0.0, route.total_length))
 
     # Find the section index that corresponds to the sampled offset
     sec_id = next(
@@ -169,8 +188,8 @@ def sample_route(
     while len(samples) < num_samples and attempts < max_attempts:
         midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
         std_dev = sidewalk_width / 4
-        x_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
-        y_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
+        x_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
+        y_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
         pt = (midpoint[0] + x_offset, midpoint[1] + y_offset)
         attempts += 1
         if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
@@ -309,12 +328,20 @@ class RoutePointsGenerator:
         """
         return self.total_length * self.sidewalk_width
 
-    def generate(self, num_samples: int) -> tuple[list[Vec2D], int, int]:
+    def generate(
+        self,
+        num_samples: int,
+        *,
+        rng: np.random.Generator | None = None,
+        offset: float | None = None,
+    ) -> tuple[list[Vec2D], int, int]:
         """
         Generates sample points within a randomly selected route.
 
         Args:
             num_samples: The number of sample points to generate.
+            rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
+            offset: Optional fixed offset along the route length to anchor sampling.
 
         Returns:
             A tuple containing:
@@ -323,7 +350,8 @@ class RoutePointsGenerator:
                 - The section id of the route where the points were generated (sec_id).
         """
         # Randomly select a route based on the calculated probabilities
-        route_id = np.random.choice(len(self.routes), size=1, p=self._route_probs)[0]
+        rng_local = rng if rng is not None else np.random
+        route_id = rng_local.choice(len(self.routes), size=1, p=self._route_probs)[0]
 
         # Generate sample points using a function `sample_route`
         spawn_pos, sec_id = sample_route(
@@ -331,6 +359,8 @@ class RoutePointsGenerator:
             num_samples,
             self.sidewalk_width,
             obstacle_polygons=self.obstacle_polygons,
+            offset=offset,
+            rng=rng_local if isinstance(rng_local, np.random.Generator) else None,
         )
         return spawn_pos, route_id, sec_id
 
@@ -371,35 +401,91 @@ def populate_ped_routes(
     # List to track the initial sections for each group
     initial_sections = []
 
-    while num_unassigned_peds > 0:
-        # Determine number of members in next group based on configured probabilities
+    if config.route_spawn_distribution == "spread" and total_num_peds > 0:
+        rng = np.random.default_rng(config.route_spawn_seed)
         probs = config.group_member_probs
-        num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
-        num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
-        # Calculate range of IDs for newly assigned pedestrians
-        num_assigned_peds = total_num_peds - num_unassigned_peds
-        ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
-        # Add set of new pedestrian IDs to groups list
-        groups.append(set(ped_ids))
+        group_sizes: list[int] = []
+        while num_unassigned_peds > 0:
+            num_peds_in_group = int(rng.choice(len(probs), p=probs) + 1)
+            num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+            group_sizes.append(num_peds_in_group)
+            num_unassigned_peds -= num_peds_in_group
 
-        # spawn all group members along a uniformly sampled route with respect to the route's length
-        # Generate spawn points for current group, route ID, and section ID
-        spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
-        # Determine group's goal point from the selected route and section
-        group_goal = routes[route_id].sections[sec_id][1]
-        # Record initial section ID for this group
-        initial_sections.append(sec_id)
-        # Assign current route to the latest group
-        route_assignments[len(groups) - 1] = routes[route_id]
+        group_count = len(group_sizes)
+        route_ids = rng.choice(
+            len(routes),
+            size=group_count,
+            p=proportional_spawn_gen._route_probs,
+        )
+        route_to_groups: dict[int, list[int]] = {}
+        for group_idx, route_id in enumerate(route_ids):
+            route_to_groups.setdefault(int(route_id), []).append(group_idx)
 
-        centroid = np.mean(spawn_points, axis=0)
-        rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
-        velocity = np.array([cos(rot), sin(rot)]) * config.initial_speed
-        ped_states[ped_ids, 0:2] = spawn_points
-        ped_states[ped_ids, 2:4] = velocity
-        ped_states[ped_ids, 4:6] = group_goal
+        ped_offset = 0
+        for route_id in sorted(route_to_groups):
+            group_indices = route_to_groups[route_id]
+            route = routes[route_id]
+            ordered_indices = sorted(group_indices)
+            spacing = route.total_length / max(len(ordered_indices), 1)
+            jitter_range = spacing * float(config.route_spawn_jitter_frac)
+            for order, group_idx in enumerate(ordered_indices):
+                base_offset = (order + 0.5) * spacing
+                if jitter_range > 0:
+                    base_offset += float(rng.uniform(-jitter_range, jitter_range))
+                base_offset = float(np.clip(base_offset, 0.0, route.total_length))
+                num_peds_in_group = group_sizes[group_idx]
+                ped_ids = list(range(ped_offset, ped_offset + num_peds_in_group))
+                ped_offset += num_peds_in_group
+                groups.append(set(ped_ids))
 
-        num_unassigned_peds -= num_peds_in_group
+                spawn_points, sec_id = sample_route(
+                    route,
+                    num_peds_in_group,
+                    config.sidewalk_width,
+                    obstacle_polygons=obstacle_polygons,
+                    offset=base_offset,
+                    rng=rng,
+                )
+                group_goal = route.sections[sec_id][1]
+                initial_sections.append(sec_id)
+                route_assignments[len(groups) - 1] = route
+
+                centroid = np.mean(spawn_points, axis=0)
+                rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
+                velocity = np.array([cos(rot), sin(rot)]) * config.initial_speed
+                ped_states[ped_ids, 0:2] = spawn_points
+                ped_states[ped_ids, 2:4] = velocity
+                ped_states[ped_ids, 4:6] = group_goal
+    else:
+        while num_unassigned_peds > 0:
+            # Determine number of members in next group based on configured probabilities
+            probs = config.group_member_probs
+            num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
+            num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+            # Calculate range of IDs for newly assigned pedestrians
+            num_assigned_peds = total_num_peds - num_unassigned_peds
+            ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
+            # Add set of new pedestrian IDs to groups list
+            groups.append(set(ped_ids))
+
+            # spawn all group members along a uniformly sampled route with respect to the route's length
+            # Generate spawn points for current group, route ID, and section ID
+            spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
+            # Determine group's goal point from the selected route and section
+            group_goal = routes[route_id].sections[sec_id][1]
+            # Record initial section ID for this group
+            initial_sections.append(sec_id)
+            # Assign current route to the latest group
+            route_assignments[len(groups) - 1] = routes[route_id]
+
+            centroid = np.mean(spawn_points, axis=0)
+            rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
+            velocity = np.array([cos(rot), sin(rot)]) * config.initial_speed
+            ped_states[ped_ids, 0:2] = spawn_points
+            ped_states[ped_ids, 2:4] = velocity
+            ped_states[ped_ids, 4:6] = group_goal
+
+            num_unassigned_peds -= num_peds_in_group
 
     return ped_states, groups, route_assignments, initial_sections
 

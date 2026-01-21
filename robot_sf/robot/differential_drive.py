@@ -29,6 +29,8 @@ class DifferentialDriveSettings:
     wheel_radius: float = 0.05
     # Distance between the centers of the two wheels of the robot
     interaxis_length: float = 0.3
+    # Whether backwards motion is allowed (enables negative linear speed)
+    allow_backwards: bool = False
 
     def __post_init__(self):
         """
@@ -48,6 +50,11 @@ class DifferentialDriveSettings:
             )
         if self.interaxis_length <= 0:
             raise ValueError("Robot's interaxis length must be positive and non-zero!")
+
+    @property
+    def min_linear_speed(self) -> float:
+        """Return the minimum linear speed based on allow_backwards."""
+        return -self.max_linear_speed if self.allow_backwards else 0.0
 
 
 @dataclass
@@ -101,7 +108,7 @@ class DifferentialDriveMotion:
         """
         dot_x = velocity[0] + action[0]
         dot_orient = velocity[1] + action[1]
-        dot_x = np.clip(dot_x, 0, self.config.max_linear_speed)
+        dot_x = np.clip(dot_x, self.config.min_linear_speed, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
         dot_orient = np.clip(dot_orient, -angular_max, angular_max)
         return dot_x, dot_orient
@@ -229,7 +236,10 @@ class DifferentialDriveRobot:
             [self.config.max_linear_speed, self.config.max_angular_speed],
             dtype=np.float32,
         )
-        low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
+        low = np.array(
+            [self.config.min_linear_speed, -self.config.max_angular_speed],
+            dtype=np.float32,
+        )
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
@@ -246,7 +256,10 @@ class DifferentialDriveRobot:
             [self.config.max_linear_speed, self.config.max_angular_speed],
             dtype=np.float32,
         )
-        low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
+        low = np.array(
+            [self.config.min_linear_speed, -self.config.max_angular_speed],
+            dtype=np.float32,
+        )
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property

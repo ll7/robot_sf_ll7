@@ -19,8 +19,61 @@ uv run python scripts/training/train_expert_ppo.py \
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
+import shutil
 import sys
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, cast
+
+import numpy as np
+import yaml
+from loguru import logger
+
+try:  # pragma: no cover - imported lazily in tests when available
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.callbacks import CallbackList
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
+    raise RuntimeError(
+        "Stable-Baselines3 must be installed to run expert PPO training.",
+    ) from exc
+
+from robot_sf import common
+from robot_sf.benchmark.imitation_manifest import (
+    write_expert_policy_manifest,
+    write_training_run_manifest,
+)
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_imitation_report_dir
+from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.training.imitation_config import (
+    ConvergenceCriteria,
+    EvaluationSchedule,
+    ExpertTrainingConfig,
+)
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    select_scenario,
+)
+from robot_sf.training.scenario_sampling import (
+    ScenarioSampler,
+    ScenarioSwitchingEnv,
+    scenario_id_from_definition,
+)
+
+MetricSamples = dict[str, list[float]]
+
 
 _ORIGINAL_LOGURU_LEVEL = os.environ.get("LOGURU_LEVEL")
 
@@ -62,57 +115,6 @@ class _TeeStream:
             if hasattr(stream, "isatty") and stream.isatty():
                 return True
         return False
-
-import argparse
-import json
-import shutil
-import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any, cast
-
-import numpy as np
-import yaml
-from loguru import logger
-
-try:  # pragma: no cover - imported lazily in tests when available
-    from stable_baselines3 import PPO
-    from stable_baselines3.common.callbacks import CallbackList
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
-    raise RuntimeError(
-        "Stable-Baselines3 must be installed to run expert PPO training.",
-    ) from exc
-
-from robot_sf import common
-from robot_sf.benchmark.imitation_manifest import (
-    write_expert_policy_manifest,
-    write_training_run_manifest,
-)
-from robot_sf.common.artifact_paths import get_artifact_category_path, get_imitation_report_dir
-from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
-from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.observation_mode import ObservationMode
-from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
-from robot_sf.training.imitation_config import (
-    ConvergenceCriteria,
-    EvaluationSchedule,
-    ExpertTrainingConfig,
-)
-from robot_sf.training.scenario_loader import (
-    build_robot_config_from_scenario,
-    load_scenarios,
-    select_scenario,
-)
-from robot_sf.training.scenario_sampling import (
-    ScenarioSampler,
-    ScenarioSwitchingEnv,
-    scenario_id_from_definition,
-)
-
-MetricSamples = dict[str, list[float]]
 
 
 def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
@@ -205,6 +207,50 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
             setattr(env_config, key, overrides[key])
 
 
+def _resolve_robot_config_type(
+    value: object,
+) -> type[BicycleDriveSettings] | type[DifferentialDriveSettings] | None:
+    """Resolve a robot config class from a string override."""
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"bicycle", "bicycle_drive", "bicycle_drive_settings"}:
+            return BicycleDriveSettings
+        if normalized in {"differential", "diff", "differential_drive", "differential_drive_settings"}:
+            return DifferentialDriveSettings
+    return None
+
+
+def _apply_robot_overrides(env_config, overrides: Mapping[str, object]) -> None:
+    """Apply robot drivetrain overrides (e.g., bicycle allow_backwards)."""
+    robot_overrides = overrides.get("robot_config")
+    if robot_overrides is None:
+        return
+    if isinstance(robot_overrides, (BicycleDriveSettings, DifferentialDriveSettings)):
+        env_config.robot_config = robot_overrides
+        return
+    if isinstance(robot_overrides, str):
+        config_cls = _resolve_robot_config_type(robot_overrides)
+        if config_cls is None:
+            raise ValueError(f"robot_config override type '{robot_overrides}' is not supported")
+        env_config.robot_config = config_cls()
+        return
+    if isinstance(robot_overrides, Mapping):
+        payload = dict(robot_overrides)
+        config_type = payload.pop("type", None)
+        if config_type is not None:
+            config_cls = _resolve_robot_config_type(config_type)
+            if config_cls is None:
+                raise ValueError(f"robot_config override type '{config_type}' is not supported")
+            env_config.robot_config = config_cls()
+        target = env_config.robot_config
+        for key, value in payload.items():
+            if not hasattr(target, key):
+                raise ValueError(f"robot_config override has unknown field '{key}'")
+            setattr(target, key, value)
+        return
+    raise ValueError("robot_config override must be a mapping, dataclass, or type string")
+
+
 def _apply_grid_override(env_config, overrides: Mapping[str, object]) -> None:
     """Apply occupancy grid overrides to the environment config."""
     grid_override = overrides.get("grid_config")
@@ -240,6 +286,7 @@ def _apply_env_overrides(env_config, overrides: Mapping[str, object]) -> None:
     if not overrides:
         return
     _apply_simple_overrides(env_config, overrides)
+    _apply_robot_overrides(env_config, overrides)
     _apply_grid_override(env_config, overrides)
     _apply_sim_overrides(env_config, overrides)
 
@@ -413,8 +460,9 @@ def _init_wandb(
         return None, None
 
     try:  # pragma: no cover - optional dependency
-        import wandb  # type: ignore
         from wandb.integration.sb3 import WandbCallback  # type: ignore
+
+        import wandb  # type: ignore
     except Exception as exc:  # pragma: no cover - optional dependency
         logger.warning("W&B requested but not available: {}", exc)
         return None, None
@@ -517,6 +565,7 @@ def _execute_training(
     eval_steps: Sequence[int],
     run_id: str,
     dry_run: bool,
+    resume_from: Path | None,
 ) -> TrainingOutputs:
     """Run training (or dry-run) and return raw metrics + episode records."""
     tensorboard_log = (
@@ -543,6 +592,7 @@ def _execute_training(
         exclude_scenarios=scenario_ctx.training_exclude,
         run_id=run_id,
         tensorboard_log=tensorboard_log,
+        resume_from=resume_from,
     )
     wandb_run, wandb_callback = _init_wandb(
         tracking=config.tracking,
@@ -550,15 +600,26 @@ def _execute_training(
         config=config,
         tensorboard_log=tensorboard_log,
     )
+    start_timesteps = int(getattr(model, "num_timesteps", 0) or 0)
+    if start_timesteps >= max(eval_steps or [0]):
+        logger.warning(
+            "Resume step {} >= final scheduled step {}; running evaluation only.",
+            start_timesteps,
+            max(eval_steps or [0]),
+        )
+        eval_schedule = [start_timesteps]
+    else:
+        eval_schedule = [step for step in eval_steps if step > start_timesteps]
     metrics_raw, episode_records = _train_with_schedule(
         model,
         config=config,
         scenario_definitions=scenario_definitions,
         scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
         hold_out_scenarios=config.evaluation.hold_out_scenarios,
-        eval_steps=eval_steps,
+        eval_steps=eval_schedule,
         wandb_run=wandb_run,
         wandb_callback=wandb_callback,
+        start_timesteps=start_timesteps,
         checkpoint_dir=common.get_expert_policy_dir() / "checkpoints" / config.policy_id,
     )
     if wandb_run is not None:  # pragma: no cover - optional dependency
@@ -624,6 +685,7 @@ def _train_with_schedule(
     eval_steps: Sequence[int],
     wandb_run: object | None,
     wandb_callback: object | None,
+    start_timesteps: int = 0,
     checkpoint_dir: Path | None = None,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
     """Train PPO in chunks and evaluate at scheduled checkpoints."""
@@ -635,7 +697,7 @@ def _train_with_schedule(
         "comfort_exposure": [],
         "snqi": [],
     }
-    timesteps_done = 0
+    timesteps_done = int(max(0, start_timesteps))
     callbacks = []
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
@@ -675,6 +737,7 @@ def _init_training_model(
     exclude_scenarios: Sequence[str],
     run_id: str,
     tensorboard_log: Path | None,
+    resume_from: Path | None,
 ) -> tuple[PPO, DummyVecEnv, Path | None]:
     """Initialize PPO and the vectorized training environment."""
     base_seed = int(config.seeds[0]) if config.seeds else 0
@@ -700,20 +763,29 @@ def _init_training_model(
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_kwargs = _resolve_policy_kwargs(config)
-    model = PPO(
-        "MultiInputPolicy",
-        vec_env,
-        verbose=1,
-        seed=base_seed,
-        tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
-        policy_kwargs=policy_kwargs,
-        learning_rate=1e-4,
-        batch_size=256,
-        n_epochs=4,
-        ent_coef=0.01,
-        clip_range=0.1,
-        target_kl=0.02,
-    )
+    if resume_from is not None:
+        resume_path = Path(resume_from).expanduser()
+        if not resume_path.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+        logger.info("Resuming PPO from {}", resume_path)
+        model = PPO.load(str(resume_path), env=vec_env)
+        if tensorboard_log is not None:
+            model.tensorboard_log = str(tensorboard_log)
+    else:
+        model = PPO(
+            "MultiInputPolicy",
+            vec_env,
+            verbose=1,
+            seed=base_seed,
+            tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
+            policy_kwargs=policy_kwargs,
+            learning_rate=1e-4,
+            batch_size=256,
+            n_epochs=4,
+            ent_coef=0.01,
+            clip_range=0.1,
+            target_kl=0.02,
+        )
     logger.info(
         "Training envs initialized num_envs={} worker_mode={} base_seed={}",
         num_envs,
@@ -964,6 +1036,7 @@ def run_expert_training(
     *,
     config_path: Path | None = None,
     dry_run: bool = False,
+    resume_from: Path | None = None,
 ) -> ExpertTrainingResult:
     """Execute the expert PPO training workflow and persist manifests."""
 
@@ -986,6 +1059,7 @@ def run_expert_training(
         eval_steps=eval_steps,
         run_id=run_id,
         dry_run=dry_run,
+        resume_from=resume_from,
     )
 
     aggregates = _aggregate_metrics(outputs.metrics_raw)
@@ -1149,6 +1223,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to tee stdout/stderr into a log file.",
     )
+    parser.add_argument(
+        "--resume-from",
+        default=None,
+        help="Optional checkpoint path to resume PPO training from.",
+    )
     return parser
 
 
@@ -1185,7 +1264,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         config_path = Path(args.config).resolve()
         config = load_expert_training_config(config_path)
-        run_expert_training(config, config_path=config_path, dry_run=bool(args.dry_run))
+        resume_from = Path(args.resume_from).expanduser() if args.resume_from else None
+        run_expert_training(
+            config,
+            config_path=config_path,
+            dry_run=bool(args.dry_run),
+            resume_from=resume_from,
+        )
         return 0
     finally:
         if log_handle is not None:

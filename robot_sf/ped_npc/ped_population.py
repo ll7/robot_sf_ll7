@@ -62,6 +62,11 @@ class PedSpawnConfig:
         initial_speed: The initial walking speed for pedestrians.
         group_size_decay: The rate at which the probability of larger group sizes decays.
         sidewalk_width: The width of the sidewalk where pedestrians can spawn.
+        route_spawn_distribution: How route pedestrians are placed along a route.
+            "cluster" keeps groups near a shared offset (default behavior).
+            "spread" spaces groups along the route length.
+        route_spawn_jitter_frac: Fraction of spacing used as random jitter when spreading.
+        route_spawn_seed: Optional RNG seed for deterministic spawn placement/jitter.
     """
 
     peds_per_area_m2: float
@@ -384,6 +389,10 @@ def populate_ped_routes(
             - A list of sets where each set contains the indices of pedestrians in a group.
             - A dictionary mapping group indices to their corresponding `GlobalRoute` objects.
             - A list of initial section indices for each pedestrian group.
+
+    Notes:
+        When ``config.route_spawn_distribution`` is "spread", groups are assigned to
+        routes proportionally by length and spaced along each route with optional jitter.
     """
     if not routes:
         return np.zeros((0, 6)), [], {}, []

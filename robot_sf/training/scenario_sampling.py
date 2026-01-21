@@ -281,7 +281,8 @@ class ScenarioSwitchingEnv(Env):
         self._has_reset = False
         self._warned_obs_bounds = False
 
-        self._current_env = self._build_env(seed=seed)
+        env, scenario_id = self._build_env(seed=seed)
+        self._activate_env(env, scenario_id)
         self.observation_space = self._current_env.observation_space
         self.action_space = self._current_env.action_space
         self.metadata = getattr(self._current_env, "metadata", {})
@@ -297,7 +298,7 @@ class ScenarioSwitchingEnv(Env):
         """Return the most recently sampled scenario identifier."""
         return self._current_scenario_id
 
-    def _build_env(self, *, seed: int | None) -> Env:
+    def _build_env(self, *, seed: int | None) -> tuple[Env, str]:
         scenario, scenario_id = self._scenario_sampler.sample()
         env_config = self._config_builder(scenario)
         env_seed = int(seed) if seed is not None else int(self._rng.integers(0, 2**31 - 1))
@@ -309,9 +310,13 @@ class ScenarioSwitchingEnv(Env):
             algorithm_name=self._algorithm_name,
             **self._env_factory_kwargs,
         )
+        return env, scenario_id
+
+    def _activate_env(self, env: Env, scenario_id: str) -> None:
+        """Register a newly accepted environment instance."""
         self._scenario_coverage[scenario_id] = self._scenario_coverage.get(scenario_id, 0) + 1
+        self._current_env = env
         self._current_scenario_id = scenario_id
-        return env
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Reset the current scenario environment (optionally switching scenarios).
@@ -323,29 +328,30 @@ class ScenarioSwitchingEnv(Env):
             self._rng = np.random.default_rng(seed)
 
         if self._current_env is None:
-            self._current_env = self._build_env(seed=seed)
+            env, scenario_id = self._build_env(seed=seed)
+            self._activate_env(env, scenario_id)
             self.observation_space = self._current_env.observation_space
             self.action_space = self._current_env.action_space
         elif self._switch_per_reset and self._has_reset:
-            self._current_env.close()
             previous_scenario_id = self._current_scenario_id
-            self._current_env = self._build_env(seed=seed)
+            new_env, new_scenario_id = self._build_env(seed=seed)
             obs_strict = _spaces_compatible(
                 self.observation_space,
-                self._current_env.observation_space,
+                new_env.observation_space,
                 allow_box_bounds_mismatch=False,
             )
             obs_compatible = _spaces_compatible(
                 self.observation_space,
-                self._current_env.observation_space,
+                new_env.observation_space,
                 allow_box_bounds_mismatch=True,
             )
             action_compatible = _spaces_compatible(
                 self.action_space,
-                self._current_env.action_space,
+                new_env.action_space,
                 allow_box_bounds_mismatch=False,
             )
             if not obs_compatible or not action_compatible:
+                new_env.close()
                 raise ValueError(
                     "Scenario switching produced incompatible observation/action spaces."
                 )
@@ -354,9 +360,11 @@ class ScenarioSwitchingEnv(Env):
                     "Scenario switching detected observation space bound mismatches; "
                     "using initial bounds for compatibility. previous={} current={}",
                     previous_scenario_id,
-                    self._current_scenario_id,
+                    new_scenario_id,
                 )
                 self._warned_obs_bounds = True
+            self._current_env.close()
+            self._activate_env(new_env, new_scenario_id)
 
         self._has_reset = True
         return self._current_env.reset(seed=seed, options=options)

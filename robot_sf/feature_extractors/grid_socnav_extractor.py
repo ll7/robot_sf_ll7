@@ -35,6 +35,11 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
             grid_kernel_sizes = [5, 3, 3]
         if socnav_hidden_dims is None:
             socnav_hidden_dims = [128, 128]
+        if len(grid_channels) != len(grid_kernel_sizes):
+            raise ValueError(
+                "'grid_channels' and 'grid_kernel_sizes' must have the same length, "
+                f"got {len(grid_channels)} and {len(grid_kernel_sizes)}."
+            )
 
         if grid_key not in observation_space.spaces:
             raise ValueError(f"GridSocNavExtractor requires '{grid_key}' in observation space.")

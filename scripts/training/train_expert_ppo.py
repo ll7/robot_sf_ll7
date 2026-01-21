@@ -273,17 +273,24 @@ def _apply_grid_override(env_config, overrides: Mapping[str, object]) -> None:
     raise ValueError("grid_config override must be a mapping or GridConfig instance")
 
 
+def _apply_nested_overrides(config_obj: object, overrides: Mapping[str, object]) -> None:
+    """Recursively apply overrides to a nested config object."""
+    for key, value in overrides.items():
+        if not hasattr(config_obj, key):
+            continue
+        current_attr = getattr(config_obj, key)
+        if isinstance(value, Mapping) and hasattr(current_attr, "__dict__"):
+            _apply_nested_overrides(current_attr, value)
+        else:
+            setattr(config_obj, key, value)
+
+
 def _apply_sim_overrides(env_config, overrides: Mapping[str, object]) -> None:
     """Apply sim_config overrides (including ped-robot force flags)."""
     sim_overrides = overrides.get("sim_config")
     if not isinstance(sim_overrides, Mapping):
         return
-    for key, value in sim_overrides.items():
-        if key == "prf_config" and isinstance(value, Mapping):
-            for prf_key, prf_value in value.items():
-                setattr(env_config.sim_config.prf_config, prf_key, prf_value)
-        else:
-            setattr(env_config.sim_config, key, value)
+    _apply_nested_overrides(env_config.sim_config, sim_overrides)
 
 
 def _apply_env_overrides(env_config, overrides: Mapping[str, object]) -> None:
@@ -326,7 +333,7 @@ class TrainingOutputs:
     metrics_raw: MetricSamples
     episode_records: list[dict[str, object]]
     model: PPO | None
-    vec_env: DummyVecEnv | None
+    vec_env: DummyVecEnv | SubprocVecEnv | None
     tensorboard_log: Path | None
 
 
@@ -536,11 +543,7 @@ def _resolve_scenario_context(
     """Resolve scenario selection and profile for training/evaluation."""
     if config.scenario_id:
         selected = select_scenario(scenario_definitions, config.scenario_id)
-        label = (
-            config.scenario_id
-            or str(selected.get("name") or selected.get("scenario_id") or "")
-            or config.scenario_config.stem
-        )
+        label = config.scenario_id
         return ScenarioContext(
             selected_scenario=selected,
             scenario_label=label,
@@ -743,7 +746,7 @@ def _init_training_model(
     run_id: str,
     tensorboard_log: Path | None,
     resume_from: Path | None,
-) -> tuple[PPO, DummyVecEnv, Path | None]:
+) -> tuple[PPO, DummyVecEnv | SubprocVecEnv, Path | None]:
     """Initialize PPO and the vectorized training environment.
 
     If ``resume_from`` is provided, load the checkpoint and continue training.
@@ -956,7 +959,6 @@ def _simulate_dry_run_metrics(
     rng = np.random.default_rng(123)
 
     for eval_step in eval_steps:
-        metrics = {key: [] for key in metrics}
         for idx in range(episodes):
             seed = int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
             success = 1.0 if idx % 5 != 0 else 0.0

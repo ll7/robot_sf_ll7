@@ -24,7 +24,7 @@ class SimulationSettings:
     difficulty: int = 0
     """Difficulty level"""
 
-    max_peds_per_group: int = 6
+    max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""
 
     ped_radius: float = 0.4
@@ -47,6 +47,12 @@ class SimulationSettings:
     """Pedestrian density by difficulty level"""
     max_total_pedestrians: int | None = None
     """Optional upper bound for pedestrians used to size SocNav structured observations."""
+    route_spawn_distribution: str = "cluster"
+    """Route pedestrian spawn distribution: 'cluster' (default) or 'spread'."""
+    route_spawn_jitter_frac: float = 0.0
+    """Fraction of spacing used as jitter when route_spawn_distribution='spread'."""
+    route_spawn_seed: int | None = None
+    """Optional RNG seed for route spawn placement/jitter."""
 
     def __post_init__(self):
         """
@@ -79,6 +85,17 @@ class SimulationSettings:
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")
+        self._validate_route_spawn_config()
+
+    def _validate_route_spawn_config(self) -> None:
+        """Validate route spawn configuration flags."""
+        if self.route_spawn_distribution not in {"cluster", "spread"}:
+            raise ValueError(
+                "route_spawn_distribution must be 'cluster' or 'spread' (got "
+                f"{self.route_spawn_distribution!r})"
+            )
+        if self.route_spawn_jitter_frac < 0:
+            raise ValueError("route_spawn_jitter_frac must be >= 0")
 
     @property
     def max_sim_steps(self) -> int:

@@ -21,7 +21,8 @@ decisions, ideas, and open questions.
 - Produce reproducible artifacts (manifests + JSONL + plots) under `output/`.
 
 ## Non-Goals
-- No implementation yet; this phase is discovery, requirements, and design.
+- Historical note (pre-implementation): "No implementation yet; this phase is discovery,
+  requirements, and design." Kept for design record.
 - Not committing to a specific algorithm beyond PPO until requirements are clear.
 - No changes to benchmark schema or CLI unless explicitly required later.
 
@@ -39,7 +40,8 @@ decisions, ideas, and open questions.
 - `peds_have_obstacle_forces` controls **pedestrian obstacle forces only**; ped-robot repulsion
   is controlled separately via `sim_config.prf_config.is_active`. Neither is explicitly
   specified in benchmark docs.
-- PPO baseline adapter currently supports vector/image obs; **grid observation support is missing**.
+- PPO baseline adapter now supports grid observations via `GridSocNavExtractor`
+  (resolved; integrated through PPO policy kwargs in `train_expert_ppo.py`).
 
 ## Inputs
 - Benchmark plan decisions: `docs/dev/benchmark_plan_2026-01-14.md` (observation/action contract).

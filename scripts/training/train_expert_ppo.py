@@ -472,9 +472,9 @@ def _init_wandb(
         return None, None
 
     try:  # pragma: no cover - optional dependency
-        from wandb.integration.sb3 import WandbCallback  # type: ignore
-
         import wandb  # type: ignore
+
+        from wandb.integration.sb3 import WandbCallback  # type: ignore
     except Exception as exc:  # pragma: no cover - optional dependency
         logger.warning("W&B requested but not available: {}", exc)
         return None, None

@@ -132,7 +132,7 @@ def test_example_runs_without_error(
 
     start = time.perf_counter()
     try:
-        completed = subprocess.run(  # noqa: PL subprocess-run-check
+        completed = subprocess.run(  # noqa: PLW1510
             command,
             cwd=repo_root_path,
             env=example_env,

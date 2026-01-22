@@ -20,6 +20,7 @@ uv run python scripts/training/train_expert_ppo.py \
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import shutil
@@ -472,9 +473,9 @@ def _init_wandb(
         return None, None
 
     try:  # pragma: no cover - optional dependency
-        from wandb.integration.sb3 import WandbCallback  # type: ignore
-
         import wandb  # type: ignore
+
+        wandb_sb3 = importlib.import_module("wandb.integration.sb3")
     except Exception as exc:  # pragma: no cover - optional dependency
         logger.warning("W&B requested but not available: {}", exc)
         return None, None
@@ -500,7 +501,7 @@ def _init_wandb(
         sync_tensorboard=True,
         mode=str(wandb_cfg.get("mode", os.environ.get("WANDB_MODE", "online"))),
     )
-    callback = WandbCallback(
+    callback = wandb_sb3.WandbCallback(
         gradient_save_freq=int(wandb_cfg.get("gradient_save_freq", 0)),
         model_save_path=str(wandb_dir / run_id),
         verbose=0,

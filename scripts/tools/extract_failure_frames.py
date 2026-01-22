@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
+from PIL import Image
 
 
 @dataclass
@@ -65,6 +66,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=True,
         help="Only extract frames for entries where success=false (default: true).",
+    )
+    parser.add_argument(
+        "--contact-sheets",
+        action="store_true",
+        default=True,
+        help="Generate a contact sheet per video (default: true).",
+    )
+    parser.add_argument(
+        "--sheet-cols",
+        type=int,
+        default=4,
+        help="Number of columns in contact sheets (default: 4).",
+    )
+    parser.add_argument(
+        "--sheet-width",
+        type=int,
+        default=320,
+        help="Resize width for each tile in the contact sheet (default: 320).",
     )
     return parser
 
@@ -161,6 +180,46 @@ def _frame_label(frame_index: int, total_frames: int) -> str:
     return f"end{offset:+d}"
 
 
+def _make_contact_sheet(
+    frame_paths: list[Path],
+    *,
+    output_path: Path,
+    cols: int,
+    tile_width: int,
+) -> None:
+    """Create a simple contact sheet image from extracted frames."""
+    if not frame_paths:
+        return
+    images = []
+    for path in frame_paths:
+        try:
+            img = Image.open(path).convert("RGB")
+        except OSError:
+            continue
+        if tile_width > 0:
+            ratio = tile_width / img.width
+            height = max(1, int(img.height * ratio))
+            img = img.resize((tile_width, height), Image.BILINEAR)
+        images.append(img)
+    if not images:
+        return
+
+    cols = max(1, cols)
+    rows = (len(images) + cols - 1) // cols
+    tile_h = max(img.height for img in images)
+    tile_w = max(img.width for img in images)
+    sheet = Image.new("RGB", (cols * tile_w, rows * tile_h), color=(255, 255, 255))
+
+    for idx, img in enumerate(images):
+        row = idx // cols
+        col = idx % cols
+        x = col * tile_w
+        y = row * tile_h
+        sheet.paste(img, (x, y))
+
+    sheet.save(output_path)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
@@ -199,14 +258,24 @@ def main(argv: list[str] | None = None) -> int:
         out_dir = output_root / video_path.stem
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        frame_outputs: list[Path] = []
         for frame_index in frame_indices:
             label = _frame_label(frame_index, total_frames)
             out_path = out_dir / f"{video_path.stem}_{label}_frame{frame_index:06d}.png"
             try:
                 _extract_frame(video_path, frame_index, out_path)
+                frame_outputs.append(out_path)
                 extracted += 1
             except RuntimeError as exc:
                 logger.warning("Failed to extract frame {}: {}", frame_index, exc)
+        if args.contact_sheets:
+            sheet_path = out_dir / "contact_sheet.png"
+            _make_contact_sheet(
+                frame_outputs,
+                output_path=sheet_path,
+                cols=int(args.sheet_cols),
+                tile_width=int(args.sheet_width),
+            )
 
     logger.info("Extracted {} frames into {}", extracted, output_root)
     return 0

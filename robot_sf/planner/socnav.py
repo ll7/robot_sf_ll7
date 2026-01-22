@@ -315,7 +315,7 @@ class OccupancyAwarePlannerMixin:
 class SocNavPlannerConfig:
     """Simple config for SocNav-like planner adapters."""
 
-    max_linear_speed: float = 1.0
+    max_linear_speed: float = 3.0
     max_angular_speed: float = 1.0
     angular_gain: float = 1.0
     goal_tolerance: float = 0.25

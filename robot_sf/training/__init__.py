@@ -32,6 +32,11 @@ from .multi_extractor_paths import (
     summary_paths,
 )
 from .multi_extractor_summary import write_summary_artifacts
+from .scenario_sampling import (
+    ScenarioSampler,
+    ScenarioSwitchingEnv,
+    scenario_id_from_definition,
+)
 
 __all__ = [
     "DEFAULT_TMP_ROOT",
@@ -44,6 +49,8 @@ __all__ = [
     "ExtractorRunRecord",
     "HardwareProfile",
     "PPOFineTuneConfig",
+    "ScenarioSampler",
+    "ScenarioSwitchingEnv",
     "TrainingRunSummary",
     "TrajectoryCollectionConfig",
     "analyze_imitation_results",
@@ -55,6 +62,7 @@ __all__ = [
     "make_run_directory",
     "resolve_base_output_root",
     "sample_efficiency_ratio",
+    "scenario_id_from_definition",
     "summarize_metric",
     "summary_paths",
     "write_summary_artifacts",

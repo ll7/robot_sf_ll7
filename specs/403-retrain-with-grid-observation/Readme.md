@@ -1,0 +1,430 @@
+# Issue 403: Retrain with Grid Observation
+
+## TODO
+
+- Benchmark map capture: store static obstacle/traversible map metadata once per map (e.g., `map_id`,
+  source path, size, hash) and write a map artifact (raster `map_traversible` or vector obstacles)
+  under `output/benchmarks/maps/`, then reference it from each episode record to keep data
+  retrievable without bloating JSONL.
+## Summary
+We want to retrain a robot policy using a grid-based observation space (SocNav structured
+observation + occupancy grid) and make the experiment publication-ready with reproducible
+metrics and uncertainty bands. This document is the living plan and shared context for
+decisions, ideas, and open questions.
+
+## Goals
+- Define a **human-readable observation-space contract** for the benchmark (fields, shapes,
+  frame, grid config, ordering).
+- Train a new policy that uses **grid observations** and can be compared to existing baselines.
+- Track **publication-grade metrics** (success, collisions, comfort/force, SNQI, etc.) with
+  **uncertainty bands** via multi-seed evaluation.
+- Produce reproducible artifacts (manifests + JSONL + plots) under `output/`.
+
+## Non-Goals
+- Historical note (pre-implementation): "No implementation yet; this phase is discovery,
+  requirements, and design." Kept for design record.
+- Not committing to a specific algorithm beyond PPO until requirements are clear.
+- No changes to benchmark schema or CLI unless explicitly required later.
+
+## Scope
+- Observation-space definition and training/evaluation protocol.
+- Decide on grid configuration, frame, and action limits.
+- Decide on training pipeline (legacy `scripts/training_ppo.py` vs structured imitation pipeline).
+- Define metrics, evaluation cadence, and artifact outputs for publication.
+
+## Assumptions
+- Benchmark plan (2026-01-14) **selects SocNav structured + occupancy grid**.
+- Benchmark plan **specifies**: ego frame grid, 0.5 m resolution, 32×32 m extent, unicycle actions,
+  and pedestrians ordered by distance (closest-first).
+- Code defaults **do not** enforce this automatically; we must set config explicitly.
+- `peds_have_obstacle_forces` controls **pedestrian obstacle forces only**; ped-robot repulsion
+  is controlled separately via `sim_config.prf_config.is_active`. Neither is explicitly
+  specified in benchmark docs.
+- PPO baseline adapter now supports grid observations via `GridSocNavExtractor`
+  (resolved; integrated through PPO policy kwargs in `train_expert_ppo.py`).
+
+## Inputs
+- Benchmark plan decisions: `docs/dev/benchmark_plan_2026-01-14.md` (observation/action contract).
+- Occupancy grid guide: `docs/dev/occupancy/Update_or_extend_occupancy.md`.
+- SocNav structured observation doc: `docs/dev/issues/socnav_structured_observation.md`.
+- Training pipelines:
+  - Legacy: `scripts/training_ppo.py` (fast but less reproducible).
+  - Structured: `scripts/training/train_expert_ppo.py` + configs under `configs/training/ppo_imitation/`.
+- Example grid usage: `examples/quickstart/04_occupancy_grid.py`, `examples/occupancy_reward_shaping.py`.
+- Combined scenario config: `configs/scenarios/classic_interactions_francis2023.yaml`.
+
+## Output Artifacts
+- Training run manifests (per seed) and evaluation manifests.
+- JSONL episode logs for evaluation.
+- Aggregated tables (CSV/Markdown) and plots with uncertainty bands.
+- Model checkpoints under `model/` (or `output/` if policy artifacts should stay outside repo).
+
+## Implementation Plan (current)
+### Phase 0: Clarify and Lock the Observation Contract
+- Define **exact observation fields** (SocNav struct + occupancy grid + metadata?).
+- Decide **grid config** (resolution, width/height, channels, ego vs world frame).
+- Confirm **action space** (unicycle only) and limits (v_max, omega_max).
+- Decide **pedestrian handling**: max count, ordering, velocity frame (ego vs world).
+- Confirm **pedestrian obstacle forces** (`peds_have_obstacle_forces`) and
+  **ped‑robot repulsion** (`sim_config.prf_config.is_active`) for benchmark runs.
+
+### Phase 1: Training Protocol (publication-grade)
+- Training pipeline: use `train_expert_ppo.py` + scenario‑sampling wrapper (Option A).
+- **Seeds**: 5 seeds (expand to 10 if 95% CI half‑width on success > 0.10).
+- **Evaluation cadence**: 0.5M‑step evals until 3M steps, then 1M‑step evals later.
+- **Hold‑out evaluation**: yes, use the approved split to test generalization.
+
+### Scenario Feasibility Gate (planned)
+Feasibility gating happens **after** a full 10M-step policy run; until then, keep all
+scenarios in training.
+**Why:** avoid prematurely removing scenarios before the policy reaches full capability.
+Proposed policy:
+- Evaluate the 10M-step policy across seeds on each scenario.
+- Tag scenarios as **solvable / hard / unsolvable** based on success rate.
+- If success rate is **< 0.20** after 10M steps, exclude from training in follow-up runs;
+  keep as stress-test evaluation.
+
+### Training Pipeline (explicit, reproducible)
+**Reproducibility target:** another lab should be able to re-run the experiment
+from this description with no hidden assumptions.
+
+**Entry point (preferred):**
+- `scripts/training/train_expert_ppo.py` with a dedicated YAML config.
+  - Proposed config: `configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml`.
+  - Runbook: `docs/training/issue_403_grid_training.md`.
+
+**Config requirements:**
+- `scenario_config`: `configs/scenarios/classic_interactions_francis2023.yaml`.
+- `policy_id`: new policy name (include grid in name).
+- `seeds`: 5 seeds for main run.
+- `total_timesteps`: 10,000,000.
+- `evaluation`: cadence schedule (0.5M early, 1M later) and hold-out set.
+
+**Artifacts (must be saved):**
+- training run manifest
+- evaluation manifest
+- JSONL episodes
+- aggregated plots/tables with CI bands
+
+**Hyperparameters:** start with baseline config; track overrides in the run manifest.
+
+**Important limitation (current code):**
+- `train_expert_ppo.py` selects a **single scenario** via `select_scenario(...)`.
+  To train across multiple scenarios, we must extend the pipeline or create a
+  wrapper that samples scenarios per episode.
+
+### Scenario-Sampling Wrapper (Option A) — design
+**Goal:** sample a scenario **per episode** while keeping SB3 env interfaces stable.
+
+Proposed design:
+- Add a `ScenarioSampler` utility that loads `scenario_config` once and returns
+  scenario dicts by ID, with optional filters:
+  - `include_scenarios`: optional allowlist.
+  - `exclude_scenarios`: hold‑out list from evaluation config.
+  - `weights`: optional per‑scenario weights (fallback uniform).
+- Add a `ScenarioSwitchingEnv` wrapper (Gymnasium `Env`) that:
+  - On `reset()`, samples a scenario (unless `scenario_id` is fixed).
+  - Builds a fresh `RobotSimulationConfig` via `build_robot_config_from_scenario`.
+  - Constructs a new inner env via `make_robot_env(config=..., scenario_name=...)`.
+  - Closes the previous inner env when switching scenarios.
+  - Exposes **stable** `observation_space` and `action_space` (validate on first switch).
+- For SB3 vectorization, use `DummyVecEnv` with one `ScenarioSwitchingEnv` per worker.
+  Each worker gets a deterministic RNG seed (`base_seed + env_idx`) to avoid correlation.
+
+Metadata and logging:
+- Pass `scenario_name` (scenario `name` or `scenario_id`) into `make_robot_env` so
+  JSONL metadata and telemetry are scenario‑aware.
+- Track `scenario_coverage` in the training manifest (counts per scenario ID).
+
+Performance notes:
+- Rebuilding the env per episode may be expensive; if it is, add an optional LRU cache
+  of inner envs keyed by scenario ID (reuse instead of re‑create).
+- Start with **per‑episode switching** for maximum diversity; introduce `hold_k` episodes
+  only if performance is a bottleneck.
+
+Validation rules:
+- Assert all scenarios share the same observation/action spaces; otherwise fail fast.
+- Ensure scenario sampling excludes hold‑out IDs by default during training.
+
+### Execution Plan (Ubuntu, draft)
+1) **Environment setup**
+   - `uv sync --all-extras`
+   - `source .venv/bin/activate`
+2) **Headless run**
+   - Ensure `SDL_VIDEODRIVER=dummy` if any visualization is triggered.
+3) **Launch training**
+   - `uv run python scripts/training/train_expert_ppo.py --config <new_config.yaml>`
+4) **Monitoring**
+   - Track evaluation outputs + manifests under `output/`.
+   - Enable TensorBoard + W&B in PPO config (disable W&B if offline).
+
+### Experiment Tracking (TensorBoard + W&B)
+- **TensorBoard**: default for live curves; no external dependencies.
+- **W&B**: better for multi-seed comparisons and metadata; requires account + internet.
+Decision: enable **both** for main runs; disable W&B if offline.
+
+### Checkpoint Evaluation (proposal)
+Do **not** rely on average reward alone. For each evaluation checkpoint:
+- Run a fixed evaluation set (hold-out scenarios).
+- Compute and log: success rate, collisions, near misses, comfort/force metrics, SNQI,
+  path efficiency, time-to-goal.
+- Record mean + CI across seeds (bootstrap).
+
+If training pipeline metrics are limited, perform a **separate benchmark evaluation**
+on saved checkpoints using the benchmark CLI.
+
+### Feature Extractor Design (proposal)
+**Goal:** Multi-input policy that processes the occupancy grid like an image while
+also digesting SocNav scalar/structured fields, including an ego-frame waypoint vector.
+
+Baseline design (simple + robust):
+- **Grid branch (CNN)**: small convolutional stack over `occupancy_grid` (C×64×64),
+  followed by flatten or global pooling.
+- **SocNav branch (MLP)**: flatten all non-grid fields (robot state, goal current/next,
+  ped positions/velocities, map size, timestep).
+- **Ego-frame goal vector**: compute `goal_next - robot_position`, rotate into ego frame
+  using robot heading (derive inside extractor; avoid modifying env for now).
+- **Concatenate** grid features + socnav features → policy MLP head.
+
+Optional upgrades (if baseline underperforms):
+- **Pedestrian encoder**: small MLP per pedestrian + pooling (mean/max) instead of full
+  flattening to reduce sensitivity to padding.
+- **Attention block** for pedestrians (K=10) to improve interaction modeling.
+- **History stacking** (if needed): wrap env to stack a few recent SocNav frames.
+
+Metadata handling:
+- **Exclude grid metadata fields** from the policy input (grid config is fixed).
+  Keep metadata in the observation dict for debugging/compat only.
+
+### Phase 2: Evaluation + Uncertainty
+- Use benchmark metrics (success, collisions, near misses, comfort/force, SNQI).
+- Compute **confidence intervals** across seeds (bootstrap or t-interval).
+- Produce plots with mean + CI bands.
+
+### Phase 3: Integration (later)
+- If policy must run in benchmark, add/extend PPO adapter to accept grid observation.
+
+## Validation
+- Reproducibility: same seed + config → same metrics.
+- Evaluation: fixed scenario set + fixed seeds + deterministic inference.
+- Uncertainty: multi-seed runs produce consistent mean/CI bands.
+
+## Risks
+- Observation mismatch (benchmark plan vs actual config).
+- PPO adapter incompatibility with grid observations.
+- Training instability due to high-dimensional grid input.
+- Results not comparable if action limits or evaluation scenarios drift.
+
+## Notes
+### Decisions (current)
+- **Observation/action interface target**: SocNav structured + occupancy grid, unicycle actions.  
+  *Why:* benchmark plan selected this contract; keeps planners comparable and grid provides obstacle context.
+- **Grid frame**: ego frame (per benchmark plan).  
+  *Why:* ego-frame invariance simplifies policy inputs and aligns ped velocity frame.
+- **Grid resolution/extent**: 0.5 m, 32×32 m (per benchmark plan) → 64×64 cells.  
+  *Why:* balances obstacle context with runtime cost; fixed for reproducibility.
+- **Next waypoint signal**: required in observation (goal "next" / next_target_angle).  
+  *Why:* local planners need near-term routing guidance with fixed global route.
+- **Next waypoint representation**: vector in the robot’s local (ego) frame.  
+  *Why:* provides directional info without global coordinate dependence.
+- **Training duration**: 10M steps per seed for full runs.  
+  *Why:* aligns with existing PPO baselines and gives room for stable learning.
+- **Seed count**: start with 5 seeds; increase to 10 if variance is too high.  
+  *Why:* 5 seeds gives usable uncertainty bands; expand only if CI is unstable.
+- **Variance threshold for expanding seeds**: increase to 10 if 95% CI half‑width on
+  primary success rate is > 0.10 at 10M steps.  
+  *Why:* keeps uncertainty bands interpretable without over‑allocating compute.
+- **Pedestrian forces**: enable **both** obstacle forces and ped‑robot repulsion.  
+  *Why:* most plausible scenario—peds avoid static obstacles and respond to the robot.  
+  *Config:* `peds_have_obstacle_forces=True`, `sim_config.prf_config.is_active=True`.
+- **n_envs selection**: auto-set to `cores-1` by default (with manual override).  
+  *Why:* maximizes throughput while leaving headroom for system overhead.
+- **Grid metadata in policy input**: excluded (fixed grid config; keep for debug only).  
+  *Why:* metadata is constant/noisy for a fixed grid; policy should focus on dynamics.
+- **Evaluation cadence**: enabled (periodic evaluation during training).  
+  *Why:* required for learning curves, curriculum comparisons, and ablation analysis.
+- **Evaluation cadence schedule**: 0.5M-step evals for the first 3M steps, then
+  every 1M steps for the remainder.  
+  *Why:* higher resolution early where learning is fastest; lower overhead later.
+- **Training scenario sources**: use both `configs/scenarios/classic_interactions.yaml`
+  and `configs/scenarios/francis2023.yaml`.  
+  *Why:* increases diversity and reduces overfitting to a single scenario distribution.
+- **Training scenario config file**: `configs/scenarios/classic_interactions_francis2023.yaml`.  
+  *Why:* training pipeline expects a single scenario_config input; merged file ensures
+  both sets are consistently used.
+- **Scenario sampling for training**: use a wrapper that selects a scenario at each reset
+  (Option A).  
+  *Why:* enables a single policy to see both scenario sets with deterministic, balanced
+  exposure; minimal changes to the training entry point.
+- **Hold-out split**: adopt the proposed split (see below).  
+  *Why:* preserves diverse training coverage while reserving distinct geometry/behavior
+  cases for generalization evaluation.
+- **Main baseline uses grid**: train the primary policy with SocNav + occupancy grid.  
+  *Why:* grid provides obstacle context missing from SocNav fields; aligns with benchmark contract.
+- **Feature extractor baseline**: simple grid CNN + flattened SocNav MLP (no ped encoder).  
+  *Why:* minimizes complexity for first run; advanced encoders are tracked as ablations.
+- **Checkpoint evaluation**: periodic evaluations throughout training (not final-only).  
+  *Why:* needed for learning curves and curriculum/ablation comparisons.
+- **Experiment tracking**: enable TensorBoard **and** W&B for main runs.  
+  *Why:* TensorBoard for live local monitoring; W&B for multi‑seed comparison + metadata.
+- **Scenario feasibility gate**: keep all scenarios in training until after a full
+  10M‑step policy run; exclude only if success rate < 0.20.  
+  *Why:* avoids premature filtering while still allowing cleanup of truly unsolvable cases.
+
+### Open Questions (must answer)
+- Do we want a pedestrian-encoder (MLP/attention) beyond baseline (ablation priority)?
+
+### Planned Ablations
+- See `Ablations.md` for the running list of ablation ideas and rules.
+
+### Related Tracking Docs
+- `Refactor_ped_robot_force_naming.md`: naming confusion + proposed refactor (separate issue).
+
+### Next Actions Checklist (for continuity)
+- [x] Design scenario‑sampling wrapper (Option A) and align with training pipeline.
+- [x] Draft training config YAML for Issue 403 run.
+- [x] Confirm evaluation cadence cutoff (3M for 0.5M schedule).
+
+### Hold-out Set Feasibility (notes)
+- We **do have enough scenario diversity** to define a hold-out set without new maps.
+  `configs/scenarios/classic_interactions.yaml` spans multiple archetypes
+  (crossing, head_on_corridor, overtaking, bottleneck, doorway, merging,
+  t_intersection, group_crossing) with multiple density levels.
+- **Pedestrian stochasticity ≠ generalization**: random pedestrian motion gives
+  variability, but it does not replace testing on unseen maps/archetypes.
+- Recommended hold-out approaches:
+  - Hold out 1–2 archetypes (e.g., bottleneck + merging) for evaluation only.
+  - Or hold out a full scenario config (e.g., `francis2023.yaml`) if we want
+    map-distribution shift.
+
+### Proposed Hold-out Split (draft)
+**Classic interactions (hold out all densities):**
+- `classic_bottleneck_*`  
+  *Why:* narrow choke-points are distinct and failure‑prone.
+- `classic_group_crossing_*`  
+  *Why:* only group‑behavior archetype; tests generalization to group dynamics.
+
+**Francis 2023 (hold out specific scenarios):**
+- `francis2023_crowd_navigation`  
+  *Why:* only crowd‑density scenario in the Francis set (multi‑ped dynamic).
+- `francis2023_intersection_wait`  
+  *Why:* introduces explicit pedestrian wait/yield behavior.
+- `francis2023_blind_corner`  
+  *Why:* occlusion/visibility challenge not covered by other Francis maps.
+- `francis2023_narrow_doorway`  
+  *Why:* tight passage geometry (distinct from classic bottleneck layout).
+
+This keeps ~75–80% of scenarios for training while reserving a diverse
+evaluation slice across geometry and behavior types.
+
+### Hyperparameter Strategy (proposal)
+We should stay flexible but **structured**:
+- Start with a **single baseline config** (reasonable defaults) and verify it learns.
+- Run a **small sweep** over 2–4 high-impact knobs (e.g., learning rate, n_steps,
+  entropy coeff, CNN width) using a subset of scenarios.
+- Once a stable config is chosen, run **multi-seed training** for uncertainty bands.
+
+Suggested sweep candidates:
+- PPO: learning rate, n_steps, batch size, clip_range, entropy_coeff, gamma, gae_lambda.
+- CNN: channels per layer, kernel sizes, pooling strategy.
+- MLP: hidden dims for socnav branch and policy head.
+
+### Baseline Hyperparameter Set (proposal)
+*These are starting points to validate learning; not final.*
+- **Algorithm**: PPO (`MultiInputPolicy`)
+- **Total timesteps**: 10M per seed for full run (start with 0.5–1M for smoke)
+- **n_envs**: auto (`cores-1`), allow override; use `cores/2` if memory-bound
+- **n_steps**: 2048 or 4096
+- **batch_size**: 64 or 128
+- **learning_rate**: 3e-4 (try 1e-4 if unstable)
+- **gamma**: 0.99
+- **gae_lambda**: 0.95
+- **clip_range**: 0.2
+- **ent_coef**: 0.0–0.01
+- **vf_coef**: 0.5
+- **max_grad_norm**: 0.5
+- **policy_net**: [256, 256] after concatenated features
+
+Feature extractor baseline:
+- **Grid CNN**: 3–4 conv layers, channels [32, 64, 64], kernel sizes [5, 3, 3],
+  stride 2 or max-pool, global average pool → 128–256 dims.
+- **SocNav MLP**: 2 layers [128, 128].
+- **Concat** → policy MLP.
+
+### Sweep Proposal (small, structured)
+Goal: 10–20 runs on a reduced scenario set, then choose 1 config for full training.
+1) **Learning rate × n_steps** (core stability)
+   - LR ∈ {3e-4, 1e-4}
+   - n_steps ∈ {2048, 4096}
+2) **Entropy coefficient** (exploration)
+   - ent_coef ∈ {0.0, 0.005, 0.01}
+3) **CNN width** (capacity)
+   - channels ∈ {[32,64,64], [64,128,128]}
+
+Compute budgeting idea:
+- Run each sweep config for **0.5–1M steps**, 1–2 seeds.
+- Select top 1–2 configs for **full run** (5–10M steps, 5+ seeds).
+
+### Reward Design (proposal + cautions)
+**Primary recommendation:** Keep the **default `simple_reward`** for the first
+publication-facing run to avoid confounds. The novelty should be the observation
+space (grid + SocNav), not reward shaping.
+
+**Optional reward variants (for ablations only):**
+- `punish_action_reward` (smoothness penalty on action change).
+- Grid-based clearance penalty (see `examples/occupancy_reward_shaping.py`).
+
+**Why be conservative:**
+- Shaping can improve learning but may reduce comparability with prior policies.
+- Reward definitions should align with evaluation metrics (success, collisions,
+  comfort/force, SNQI) to avoid optimizing a different objective.
+
+Decision rule:
+- Run a baseline with `simple_reward` first.
+- If learning is unstable or plateaus, introduce a **single** shaping change and
+  treat it as a documented ablation (not the main result).
+
+### Experiment Tracking (best practice)
+**Record every training decision in three places:**
+1) **This spec** (decisions + rationale + open questions).
+2) **Training config** (YAML or script arguments).
+3) **Run manifest / metadata** under `output/` (include: reward name, seed, grid config,
+   map/scenario set, code commit hash).
+
+Suggested log fields:
+- `reward_name` (e.g., `simple_reward`, `punish_action_reward`)
+- `reward_params` (penalties, coefficients)
+- `grid_config` (resolution, size, channels, frame)
+- `obs_mode` (socnav_struct + grid)
+- `git_commit` / `git_dirty`
+
+### Observation Space Notes (current understanding)
+**Grid observation** (when `include_grid_in_observation=True`):
+- `occupancy_grid`: float32 array shaped `[C, H, W]` with values in `[0, 1]`.
+- Channels follow `GridConfig.channels`; recommended for RL: `OBSTACLES`, `PEDESTRIANS`, `COMBINED`.
+
+**Grid metadata fields** (flattened into the top-level observation dict for SB3):
+- `occupancy_grid_meta_origin` (shape `(2,)`)
+- `occupancy_grid_meta_resolution` (shape `(1,)`)
+- `occupancy_grid_meta_size` (shape `(2,)`)
+- `occupancy_grid_meta_use_ego_frame` (shape `(1,)`)
+- `occupancy_grid_meta_center_on_robot` (shape `(1,)`)
+- `occupancy_grid_meta_channel_indices` (shape `(4,)`, int32)
+- `occupancy_grid_meta_robot_pose` (shape `(3,)`)
+
+**SocNav structured observation** (when `ObservationMode.SOCNAV_STRUCT`):
+- `robot`: position (2), heading (1), speed (1), radius (1)
+- `goal`: current (2), next (2)  ← **next waypoint info available here**
+- `pedestrians`: positions (N×2), velocities (N×2, ego frame), radius (1), count (1)
+- `map`: size (2)
+- `sim`: timestep (1)
+
+**Default lidar observation** (non-SocNav):
+- `rays`: stacked LiDAR history (timesteps × num_rays)
+- `drive_state`: stacked history of `[speed_x, speed_rot, target_distance, target_angle, next_target_angle]`
+  - `next_target_angle` only if `sim_config.use_next_goal=True` (default True)
+
+**SocNav + SB3 flattening behavior**
+- For SB3 compatibility, SocNav nested dicts are flattened to top-level keys
+  (e.g., `robot_position`, `goal_current`, `pedestrians_positions`) and then
+  grid + metadata fields are appended.

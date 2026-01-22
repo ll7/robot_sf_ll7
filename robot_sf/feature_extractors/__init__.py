@@ -9,11 +9,13 @@ All extractors implement the same interface and work with the same observation s
 """
 
 from .attention_extractor import AttentionFeatureExtractor
+from .grid_socnav_extractor import GridSocNavExtractor
 from .lightweight_cnn_extractor import LightweightCNNExtractor
 from .mlp_extractor import MLPFeatureExtractor
 
 __all__ = [
     "AttentionFeatureExtractor",
+    "GridSocNavExtractor",
     "LightweightCNNExtractor",
     "MLPFeatureExtractor",
 ]

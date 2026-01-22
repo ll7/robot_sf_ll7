@@ -95,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OSM driveable-area fallback now checks obstacle containment safely, preventing `AttributeError` when `allowed_areas` is absent.
 - OSM map extraction now subtracts explicit obstacle features from walkable areas and respects configured buffer widths.
 - OSM background rendering now validates projected CRS usage and records the UTM CRS in metadata for correct meter-scale overlays.
+- Scenario switching during training now tolerates observation-space bound differences across maps while still enforcing action-space compatibility, preventing crashes when sampling mixed-size scenarios.
+- Scenario-level single-pedestrian overrides now clone map definitions to prevent cross-scenario contamination during randomized training.
+- Goal-distance observations now use a fixed 50m cap with runtime clipping, keeping observation bounds consistent across mixed map sizes.
+- SocNav structured observations now cap map-dependent position bounds at 50m with clipping to avoid scenario-switching bound mismatches.
+- Expert PPO evaluation now applies the same environment overrides as training, preventing observation-space mismatches during evaluation.
+- fast-pysf group gaze force now guards against zero-distance divisions to prevent training crashes.
+- Expert PPO CLI now supports `--log-file` to tee stdout/stderr into a log file.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

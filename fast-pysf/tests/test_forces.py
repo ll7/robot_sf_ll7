@@ -119,3 +119,13 @@ def test_group_rep_force(generate_scene_with_groups: Simulator):
     assert f(debug=True) == pytest.approx(
         np.array([[0.0, -0.1], [0.0, 0.1], [0.0, -0.01], [0.0, 0.01], [0.0, 0.0]])
     )
+
+
+def test_group_gaze_force_handles_zero_distance():
+    """Group gaze force should not divide by zero when ped distance is zero."""
+    member_pos = np.array([[0.0, 0.0], [0.0, 0.0]], dtype=np.float32)
+    member_directions = np.array([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32)
+    member_dist = np.array([0.0, 0.0], dtype=np.float32)
+    forces_out = forces.group_gaze_force(member_pos, member_directions, member_dist)
+    assert np.all(np.isfinite(forces_out))
+    assert np.allclose(forces_out, 0.0)

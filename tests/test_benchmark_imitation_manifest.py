@@ -148,6 +148,7 @@ def test_training_run_manifest_writes_to_runs_folder(
         episode_log_path=episode_log,
         wall_clock_hours=5.25,
         status=TrainingRunStatus.COMPLETED,
+        scenario_coverage={"scenario_a": 3, "scenario_b": 1},
         notes=["warm start converged"],
     )
 
@@ -159,6 +160,7 @@ def test_training_run_manifest_writes_to_runs_folder(
     assert payload["run_id"] == artifact.run_id
     assert payload["episode_log_path"].startswith("benchmarks/ppo_imitation/")
     assert payload["status"] == TrainingRunStatus.COMPLETED.value
+    assert payload["scenario_coverage"] == {"scenario_a": 3, "scenario_b": 1}
     assert payload["notes"] == ["warm start converged"]
 
 

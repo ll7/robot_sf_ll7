@@ -20,6 +20,9 @@ from robot_sf.sim.simulator import Simulator
 DEFAULT_MAX_PEDS = 64
 """Default upper bound for structured SocNav observations when config doesn't set max_total_pedestrians."""
 
+SOCNAV_POSITION_CAP_M = 50.0
+"""Global cap for SocNav position-like observations to keep bounds consistent."""
+
 
 def socnav_observation_space(
     map_def: MapDefinition,
@@ -32,9 +35,9 @@ def socnav_observation_space(
     Returns:
         spaces.Dict: Structured observation specification for the SocNav mode.
     """
-    width, height = float(map_def.width), float(map_def.height)
+    pos_cap = np.array([SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M], dtype=np.float32)
     pos_low = np.array([0.0, 0.0], dtype=np.float32)
-    pos_high = np.array([width, height], dtype=np.float32)
+    pos_high = pos_cap
     heading_low = np.array([-pi], dtype=np.float32)
     heading_high = np.array([pi], dtype=np.float32)
     # Extract realistic speed limits from robot configuration
@@ -63,7 +66,7 @@ def socnav_observation_space(
                     ),
                     "radius": spaces.Box(
                         low=radius_bounds,
-                        high=np.array([max(width, height)], dtype=np.float32),
+                        high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
                         dtype=np.float32,
                     ),
                 },
@@ -88,7 +91,7 @@ def socnav_observation_space(
                     ),
                     "radius": spaces.Box(
                         low=radius_bounds,
-                        high=np.array([max(width, height)], dtype=np.float32),
+                        high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
                         dtype=np.float32,
                     ),
                     "count": spaces.Box(
@@ -102,7 +105,7 @@ def socnav_observation_space(
                 {
                     "size": spaces.Box(
                         low=pos_low,
-                        high=pos_high,
+                        high=pos_cap,
                         dtype=np.float32,
                     ),
                 },
@@ -186,6 +189,19 @@ class SocNavObservationFusion:
             else np.zeros(2, dtype=np.float32)
         )
 
+        def _clip_positions(values: np.ndarray) -> np.ndarray:
+            return np.clip(values, 0.0, SOCNAV_POSITION_CAP_M)
+
+        robot_pos_clipped = _clip_positions(robot_pos)
+        goal_clipped = _clip_positions(goal)
+        next_goal_clipped = _clip_positions(next_goal_arr)
+        padded = _clip_positions(padded)
+        map_size = np.array(
+            [self.simulator.map_def.width, self.simulator.map_def.height],
+            dtype=np.float32,
+        )
+        map_size = np.minimum(map_size, SOCNAV_POSITION_CAP_M)
+
         # Wrap heading to [-pi, pi] to stay within declared observation bounds
         wrapped_heading = ((robot_pose[1] + np.pi) % (2 * np.pi)) - np.pi
         robot_speed = np.asarray(
@@ -193,7 +209,7 @@ class SocNavObservationFusion:
         )
         return {
             "robot": {
-                "position": np.asarray(robot_pose[0], dtype=np.float32),
+                "position": robot_pos_clipped,
                 "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
                 "radius": np.array(
@@ -201,21 +217,22 @@ class SocNavObservationFusion:
                 ),
             },
             "goal": {
-                "current": goal,
-                "next": next_goal_arr,
+                "current": goal_clipped,
+                "next": next_goal_clipped,
             },
             "pedestrians": {
                 "positions": padded,
                 "velocities": padded_vel,
-                "radius": np.array([self.env_config.sim_config.ped_radius], dtype=np.float32),
+                "radius": np.array(
+                    [min(self.env_config.sim_config.ped_radius, SOCNAV_POSITION_CAP_M)],
+                    dtype=np.float32,
+                ),
                 "count": np.array(
                     [float(min(len(ped_positions), self.max_pedestrians))], dtype=np.float32
                 ),
             },
             "map": {
-                "size": np.array(
-                    [self.simulator.map_def.width, self.simulator.map_def.height], dtype=np.float32
-                ),
+                "size": map_size,
             },
             "sim": {
                 "timestep": np.array(

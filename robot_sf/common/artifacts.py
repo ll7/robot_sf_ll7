@@ -101,6 +101,7 @@ class TrainingRunArtifact:
     episode_log_path: Path
     wall_clock_hours: float
     status: TrainingRunStatus
+    scenario_coverage: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
 

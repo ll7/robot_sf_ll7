@@ -771,6 +771,7 @@ def group_gaze_force(
     out_forces = np.zeros((group_size, 2))
 
     # Iterate over all group members to calculate the force that each should experience.
+    eps = 1e-6
     for i in range(group_size):
         # Calculate the center of mass of the other members excluding the current member.
         other_member_pos = member_pos[np.arange(group_size) != i, :2]
@@ -792,7 +793,10 @@ def group_gaze_force(
 
         # Weigh the influence by the distance to the center of mass and the
         # aforementioned dot product, normalized by the member’s desired separation distance.
-        factor = com_dist * element_prod / member_dist[i]
+        dist = member_dist[i]
+        if dist <= eps:
+            continue
+        factor = com_dist * element_prod / dist
 
         # Project the computed factor onto the pedestrian's direction to obtain
         # the force components.

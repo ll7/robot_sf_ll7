@@ -15,8 +15,8 @@
     <rect x="14" y="4" width="13" height="1" fill="#000000" inkscape:label="obstacle" />
     <rect x="14" y="17" width="13" height="1" fill="#000000" inkscape:label="obstacle" />
     <rect x="27" y="4" width="1" height="14" fill="#000000" inkscape:label="obstacle" />
-    <rect x="14" y="4" width="1" height="5" fill="#000000" inkscape:label="obstacle" />
-    <rect x="14" y="11" width="1" height="6" fill="#000000" inkscape:label="obstacle" />
+    <rect x="14" y="4" width="1" height="3" fill="#000000" inkscape:label="obstacle" />
+    <rect x="14" y="11" width="1" height="4" fill="#000000" inkscape:label="obstacle" />
   </g>
   <g inkscape:label="robot">
     <rect x="20" y="9" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />

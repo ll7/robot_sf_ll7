@@ -11,6 +11,11 @@ Usage examples:
     --all --policy ppo --model-path model/run_023.zip
 
   uv run python scripts/tools/render_scenario_videos.py \
+    --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
+    --policy ppo --model-path output/wandb/ppo_expert_grid_socnav_403_20260120T074034/model.zip \
+    --all
+
+  uv run python scripts/tools/render_scenario_videos.py \
     --scenario configs/scenarios/francis2023.yaml \
     --scenario-id francis2023_parallel_traffic
 
@@ -51,6 +56,7 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
     select_scenario,
 )
+from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -76,8 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario",
         type=Path,
-        default=Path("configs/scenarios/francis2023.yaml"),
         help="Path to the scenario YAML file.",
+    )
+    parser.add_argument(
+        "--training-config",
+        type=Path,
+        help="Optional expert training config; applies env_overrides and defaults scenario path.",
     )
     parser.add_argument(
         "--scenario-id",
@@ -100,6 +110,34 @@ def _build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Frames per second for recorded videos.",
     )
+    grid_group = parser.add_mutually_exclusive_group()
+    grid_group.add_argument(
+        "--show-occupancy-grid",
+        dest="show_occupancy_grid",
+        action="store_true",
+        help="Force occupancy grid overlay on for visualization.",
+    )
+    grid_group.add_argument(
+        "--no-show-occupancy-grid",
+        dest="show_occupancy_grid",
+        action="store_false",
+        help="Force occupancy grid overlay off for visualization.",
+    )
+    parser.set_defaults(show_occupancy_grid=None)
+    lidar_group = parser.add_mutually_exclusive_group()
+    lidar_group.add_argument(
+        "--show-lidar",
+        dest="show_lidar",
+        action="store_true",
+        help="Force lidar rays on for visualization.",
+    )
+    lidar_group.add_argument(
+        "--hide-lidar",
+        dest="show_lidar",
+        action="store_false",
+        help="Force lidar rays off for visualization.",
+    )
+    parser.set_defaults(show_lidar=None)
     parser.add_argument(
         "--policy",
         choices=["goal", "ppo"],
@@ -376,6 +414,10 @@ def _run_episode(
     policy_name: str,
     policy_model: Any | None,
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    env_overrides: Mapping[str, object],
+    env_factory_kwargs: Mapping[str, object],
+    show_occupancy_grid: bool,
+    show_lidar: bool,
 ) -> RenderResult:
     """Run a single scenario/seed episode and render a video."""
     scenario_name = _resolve_scenario_name(scenario)
@@ -384,6 +426,8 @@ def _run_episode(
     video_path = output_dir / f"{slug}_seed{seed}_{policy_slug}.mp4"
 
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    _apply_env_overrides(config, env_overrides)
+    config.show_occupancy_grid = bool(show_occupancy_grid)
     if policy_name == "ppo":
         policy_stack_steps = resolve_policy_stack_steps(policy_model)
         if policy_stack_steps is not None:
@@ -397,7 +441,12 @@ def _run_episode(
         record_video=True,
         video_path=str(video_path),
         video_fps=float(fps),
+        **env_factory_kwargs,
     )
+    if env.sim_ui:
+        env.sim_ui.show_lidar = bool(show_lidar)
+        if show_occupancy_grid:
+            env.sim_ui.grid_alpha = float(getattr(config, "grid_visualization_alpha", 0.5))
 
     steps = 0
     status = "success"
@@ -465,6 +514,7 @@ def _write_manifest(
     robot_speed: float,
     policy: str,
     model_path: Path | None,
+    training_config: Path | None,
     max_steps: int | None,
     seed_override: list[int],
     max_seeds: int | None,
@@ -479,6 +529,7 @@ def _write_manifest(
         "robot_speed_m_s": robot_speed,
         "policy": policy,
         "model_path": str(model_path) if model_path is not None else None,
+        "training_config": str(training_config) if training_config is not None else None,
         "max_steps_override": max_steps,
         "seed_override": seed_override or None,
         "max_seeds": max_seeds,
@@ -494,7 +545,24 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     configure_logging(verbose=args.verbose)
 
-    scenario_path = args.scenario.resolve()
+    training_config = None
+    env_overrides: Mapping[str, object] = {}
+    env_factory_kwargs: Mapping[str, object] = {}
+    auto_show_grid = False
+    if args.training_config is not None:
+        training_config = load_expert_training_config(args.training_config)
+        env_overrides = training_config.env_overrides
+        env_factory_kwargs = training_config.env_factory_kwargs
+        auto_show_grid = bool(
+            env_overrides.get("use_occupancy_grid")
+            and env_overrides.get("include_grid_in_observation")
+        )
+
+    scenario_path = (
+        args.scenario
+        or (training_config.scenario_config if training_config is not None else None)
+        or Path("configs/scenarios/francis2023.yaml")
+    ).resolve()
     scenarios = load_scenarios(scenario_path)
 
     if args.scenario_id and args.all:
@@ -508,6 +576,11 @@ def main(argv: list[str] | None = None) -> int:
     output_root = _resolve_output_root(scenario_path, args.output, policy=args.policy)
     output_root.mkdir(parents=True, exist_ok=True)
     logger.info("Rendering videos to {}", output_root)
+
+    show_occupancy_grid = (
+        args.show_occupancy_grid if args.show_occupancy_grid is not None else auto_show_grid
+    )
+    show_lidar = args.show_lidar if args.show_lidar is not None else not show_occupancy_grid
 
     policy_model = None
     policy_obs_adapter = None
@@ -546,6 +619,10 @@ def main(argv: list[str] | None = None) -> int:
                 policy_name=args.policy,
                 policy_model=policy_model,
                 policy_obs_adapter=policy_obs_adapter,
+                env_overrides=env_overrides,
+                env_factory_kwargs=env_factory_kwargs,
+                show_occupancy_grid=show_occupancy_grid,
+                show_lidar=show_lidar,
             )
             results.append(result)
 
@@ -556,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
         robot_speed=args.robot_speed,
         policy=args.policy,
         model_path=args.model_path if args.policy == "ppo" else None,
+        training_config=args.training_config,
         max_steps=args.max_steps,
         seed_override=args.seed,
         max_seeds=args.max_seeds,

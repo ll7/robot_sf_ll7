@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
-from robot_sf.training.scenario_loader import apply_single_pedestrian_overrides
+from robot_sf.training.scenario_loader import (
+    _apply_single_pedestrian_overrides,
+    apply_single_pedestrian_overrides,
+)
 
 
 def _build_map_with_pois() -> MapDefinition:
@@ -114,3 +118,24 @@ def test_apply_single_pedestrian_overrides_role_fields():
     assert ped.role == "follow"
     assert ped.role_target_id == "robot:0"
     assert ped.role_offset == (1.0, -0.5)
+
+
+def test_single_pedestrian_overrides_do_not_mutate_shared_map_defs():
+    """Ensure scenario overrides clone map defs to avoid cross-scenario contamination."""
+    map_def = _build_map_with_pois()
+    config = RobotSimulationConfig()
+    config.map_pool = MapDefinitionPool(map_defs={"scenario_map": map_def})
+
+    overrides = [
+        {
+            "id": "ped1",
+            "goal": None,
+            "trajectory": [(1.0, 1.0), (5.0, 5.0)],
+        }
+    ]
+    _apply_single_pedestrian_overrides(config, overrides)
+
+    updated_map = config.map_pool.map_defs["scenario_map"]
+    assert updated_map is not map_def
+    assert map_def.single_pedestrians[0].trajectory is None
+    assert updated_map.single_pedestrians[0].trajectory == [(1.0, 1.0), (5.0, 5.0)]

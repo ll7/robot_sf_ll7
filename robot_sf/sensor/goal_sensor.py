@@ -7,6 +7,8 @@ from gymnasium import spaces
 
 from robot_sf.common.types import PolarVec2D, RobotPose, Vec2D
 
+TARGET_DISTANCE_CAP_M = 50.0
+
 
 def norm_angle(angle: float) -> float:
     """TODO docstring. Document this function.
@@ -85,6 +87,7 @@ def target_sensor_obs(
 
     # Calculate the distance and angle to the current goal
     target_distance, target_angle = rel_pos(robot_pose, goal_pos)
+    target_distance = min(target_distance, TARGET_DISTANCE_CAP_M)
 
     # Calculate the trajectory angle to the next goal, or 0.0 if there is no next goal
     next_target_angle = (
@@ -107,7 +110,7 @@ def target_sensor_space(max_target_dist: float) -> spaces.Box:
     Parameters
     ----------
     max_target_dist : float
-        The maximum possible distance to the target.
+        The maximum possible distance to the target (unused; cap applied globally).
 
     Returns
     -------
@@ -115,7 +118,7 @@ def target_sensor_space(max_target_dist: float) -> spaces.Box:
         The Box space for the target sensor.
     """
     # Define the upper bounds for the distance, target angle, and next target angle
-    high = np.array([max_target_dist, np.pi, np.pi], dtype=np.float32)
+    high = np.array([TARGET_DISTANCE_CAP_M, np.pi, np.pi], dtype=np.float32)
 
     # Define the lower bounds for the distance, target angle, and next target angle
     low = np.array([0.0, -np.pi, -np.pi], dtype=np.float32)

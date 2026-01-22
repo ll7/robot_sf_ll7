@@ -186,6 +186,9 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
         "episode_log_path": _path_to_manifest(artifact.episode_log_path),
         "wall_clock_hours": artifact.wall_clock_hours,
         "status": artifact.status.value,
+        "scenario_coverage": {
+            key: int(value) for key, value in sorted(artifact.scenario_coverage.items())
+        },
         "notes": [str(note) for note in artifact.notes],
     }
 

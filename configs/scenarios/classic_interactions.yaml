@@ -15,8 +15,8 @@ scenarios:
   - name: classic_crossing_low
     map_file: "../../maps/svg_maps/classic_crossing.svg"
     simulation_config:
-      max_episode_steps: 400
-      ped_density: 0.08
+      max_episode_steps: 600
+      ped_density: 0.02
     robot_config: {}
     metadata:
       archetype: crossing
@@ -28,8 +28,8 @@ scenarios:
   - name: classic_crossing_medium
     map_file: "../../maps/svg_maps/classic_crossing.svg"
     simulation_config:
-      max_episode_steps: 400
-      ped_density: 0.08
+      max_episode_steps: 600
+      ped_density: 0.05
     robot_config: {}
     metadata:
       archetype: crossing
@@ -41,7 +41,7 @@ scenarios:
   - name: classic_crossing_high
     map_file: "../../maps/svg_maps/classic_crossing.svg"
     simulation_config:
-      max_episode_steps: 500
+      max_episode_steps: 600
       ped_density: 0.08
     robot_config: {}
     metadata:
@@ -82,7 +82,7 @@ scenarios:
   - name: classic_overtaking_low
     map_file: "../../maps/svg_maps/classic_overtaking.svg"
     simulation_config:
-      max_episode_steps: 500
+      max_episode_steps: 600
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -95,7 +95,7 @@ scenarios:
   - name: classic_overtaking_medium
     map_file: "../../maps/svg_maps/classic_overtaking.svg"
     simulation_config:
-      max_episode_steps: 500
+      max_episode_steps: 600
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -176,7 +176,7 @@ scenarios:
   - name: classic_merging_low
     map_file: "../../maps/svg_maps/classic_merging.svg"
     simulation_config:
-      max_episode_steps: 500
+      max_episode_steps: 600
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -189,7 +189,7 @@ scenarios:
   - name: classic_merging_medium
     map_file: "../../maps/svg_maps/classic_merging.svg"
     simulation_config:
-      max_episode_steps: 500
+      max_episode_steps: 600
       ped_density: 0.05
     robot_config: {}
     metadata:

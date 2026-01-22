@@ -86,6 +86,12 @@ class RenderResult:
     policy: str
     video_path: str
     steps: int
+    max_steps: int
+    terminated: bool
+    truncated: bool
+    success: bool
+    collision: bool
+    stop_reason: str
     status: str
     note: str | None = None
     error: str | None = None
@@ -441,9 +447,12 @@ def _run_steps(
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
     robot_speed: float,
     max_steps: int,
-) -> int:
+) -> tuple[int, bool, bool, dict[str, Any]]:
     """Advance the environment until termination or the step budget."""
     steps = 0
+    last_info: dict[str, Any] = {}
+    terminated = False
+    truncated = False
     for _ in range(max_steps):
         action = _select_action(
             env=env,
@@ -455,7 +464,8 @@ def _run_steps(
             planner_action_adapter=planner_action_adapter,
             robot_speed=robot_speed,
         )
-        obs, _, terminated, truncated, _ = env.step(action)
+        obs, _, terminated, truncated, info = env.step(action)
+        last_info = info
         obs = _adapt_obs_for_policy(
             obs,
             policy_model=policy_model,
@@ -465,7 +475,7 @@ def _run_steps(
         steps += 1
         if terminated or truncated:
             break
-    return steps
+    return steps, terminated, truncated, last_info
 
 
 def _close_env(env) -> None:
@@ -562,6 +572,11 @@ def _run_episode(
             env.sim_ui.grid_alpha = float(getattr(config, "grid_visualization_alpha", 0.5))
 
     steps = 0
+    terminated = False
+    truncated = False
+    success = False
+    collision = False
+    stop_reason = "max_steps"
     status = "success"
     note = None
     error = None
@@ -588,7 +603,7 @@ def _run_episode(
             policy_model=policy_model,
             policy_obs_adapter=policy_obs_adapter,
         )
-        steps = _run_steps(
+        steps, terminated, truncated, last_info = _run_steps(
             env=env,
             obs=obs,
             action_space=action_space,
@@ -600,8 +615,20 @@ def _run_episode(
             robot_speed=robot_speed,
             max_steps=max_steps,
         )
+        success = bool(last_info.get("success") or last_info.get("is_success"))
+        collision = bool(last_info.get("collision"))
+        if terminated:
+            if success:
+                stop_reason = "success"
+            elif collision:
+                stop_reason = "collision"
+            else:
+                stop_reason = "terminated"
+        elif truncated:
+            stop_reason = "truncated"
     except Exception as exc:
         status = "error"
+        stop_reason = "error"
         error = repr(exc)
         logger.exception("Scenario run failed: {} seed={}", scenario_name, seed)
     finally:
@@ -615,6 +642,12 @@ def _run_episode(
         policy=policy_name,
         video_path=str(video_path),
         steps=steps,
+        max_steps=max_steps,
+        terminated=terminated,
+        truncated=truncated,
+        success=success,
+        collision=collision,
+        stop_reason=stop_reason,
         status=status,
         note=note,
         error=error,
@@ -673,6 +706,34 @@ def _write_manifest(
     manifest_path = output_dir / "manifest.json"
     manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return manifest_path
+
+
+def _write_summary(output_dir: Path, results: list[RenderResult]) -> Path:
+    """Write a Markdown summary table for rendered episodes."""
+    header = (
+        "| scenario | seed | policy | steps | max_steps | stop_reason | success | collision | status | video |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+    )
+    rows = []
+    for result in results:
+        rows.append(
+            "| {scenario} | {seed} | {policy} | {steps} | {max_steps} | {stop_reason} | "
+            "{success} | {collision} | {status} | {video} |".format(
+                scenario=result.scenario_id,
+                seed=result.seed,
+                policy=result.policy,
+                steps=result.steps,
+                max_steps=result.max_steps,
+                stop_reason=result.stop_reason,
+                success=str(result.success).lower(),
+                collision=str(result.collision).lower(),
+                status=result.status,
+                video=Path(result.video_path).name,
+            )
+        )
+    summary_path = output_dir / "summary.md"
+    summary_path.write_text(header + "\n".join(rows) + "\n", encoding="utf-8")
+    return summary_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -789,10 +850,12 @@ def main(argv: list[str] | None = None) -> int:
         max_seeds=args.max_seeds,
         results=results,
     )
+    summary_path = _write_summary(output_root, results)
 
     missing = [r for r in results if r.status != "success"]
     logger.info("Rendered {} videos ({} issues).", len(results), len(missing))
     logger.info("Manifest written to {}", manifest_path)
+    logger.info("Summary written to {}", summary_path)
     if missing:
         logger.warning("Some videos were missing or failed; check manifest for details.")
     return 0

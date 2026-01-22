@@ -19,6 +19,10 @@ Usage examples:
     --scenario configs/scenarios/francis2023.yaml \
     --scenario-id francis2023_parallel_traffic
 
+  uv run python scripts/tools/render_scenario_videos.py \
+    --scenario configs/scenarios/francis2023.yaml \
+    --policy socnav_social_force --socnav-use-grid --all
+
 Headless runs:
   SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/render_scenario_videos.py \
     --scenario configs/scenarios/francis2023.yaml --all
@@ -45,6 +49,17 @@ from robot_sf.common.artifact_paths import (
 )
 from robot_sf.common.logging import configure_logging
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.nav.occupancy_grid import GridConfig
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.socnav import (
+    SocNavBenchComplexPolicy,
+    SocNavPlannerConfig,
+    SocNavPlannerPolicy,
+    make_orca_policy,
+    make_sacadrl_policy,
+    make_social_force_policy,
+)
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.training.observation_wrappers import (
     resolve_policy_obs_adapter,
@@ -140,9 +155,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(show_lidar=None)
     parser.add_argument(
         "--policy",
-        choices=["goal", "ppo"],
+        choices=[
+            "goal",
+            "ppo",
+            "socnav_sampling",
+            "socnav_social_force",
+            "socnav_orca",
+            "socnav_sacadrl",
+            "socnav_bench",
+        ],
         default="goal",
-        help="Robot controller policy: 'goal' or PPO model (default: goal).",
+        help="Robot controller policy: goal, ppo, or SocNav planners (default: goal).",
     )
     parser.add_argument(
         "--model-path",
@@ -155,6 +178,39 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Nominal robot linear speed in m/s for the goal-seeking controller.",
+    )
+    parser.add_argument(
+        "--socnav-root",
+        type=Path,
+        help="Optional SocNavBench root for upstream sampling planner integration.",
+    )
+    parser.add_argument(
+        "--socnav-use-grid",
+        action="store_true",
+        help="Enable occupancy grid fields for SocNav planners.",
+    )
+    parser.add_argument(
+        "--socnav-grid-resolution",
+        type=float,
+        default=None,
+        help="Override occupancy grid resolution (meters) for SocNav planners.",
+    )
+    parser.add_argument(
+        "--socnav-grid-width",
+        type=float,
+        default=None,
+        help="Override occupancy grid width (meters) for SocNav planners.",
+    )
+    parser.add_argument(
+        "--socnav-grid-height",
+        type=float,
+        default=None,
+        help="Override occupancy grid height (meters) for SocNav planners.",
+    )
+    parser.add_argument(
+        "--socnav-grid-center-on-robot",
+        action="store_true",
+        help="Center the occupancy grid on the robot for SocNav planners.",
     )
     parser.add_argument(
         "--max-steps",
@@ -286,10 +342,13 @@ def _resolve_goal_action(
     *,
     action_space: Any | None,
     policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
     scenario_name: str,
     seed: int,
 ) -> bool:
     """Determine whether to use the goal-seeking controller."""
+    if socnav_policy is not None:
+        return False
     use_goal_action = policy_model is None
     if use_goal_action:
         if action_space is None or getattr(action_space, "shape", None) != (2,):
@@ -300,13 +359,35 @@ def _resolve_goal_action(
                 use_goal_action = False
     if use_goal_action:
         logger.info("Scenario {} seed {} uses goal-seeking policy.", scenario_name, seed)
-    elif policy_model is None:
+    elif policy_model is None and socnav_policy is None:
         logger.warning(
             "Scenario {} seed {} policy fallback: random actions.",
             scenario_name,
             seed,
         )
     return use_goal_action
+
+
+def _build_socnav_policy(
+    policy_name: str,
+    *,
+    socnav_root: Path | None,
+) -> SocNavPlannerPolicy | None:
+    """Construct the SocNav planner policy for the selected CLI mode."""
+    if policy_name == "socnav_sampling":
+        return SocNavPlannerPolicy()
+    if policy_name == "socnav_social_force":
+        return make_social_force_policy()
+    if policy_name == "socnav_orca":
+        return make_orca_policy()
+    if policy_name == "socnav_sacadrl":
+        return make_sacadrl_policy()
+    if policy_name == "socnav_bench":
+        return SocNavBenchComplexPolicy(
+            socnav_root=socnav_root,
+            adapter_config=SocNavPlannerConfig(),
+        )
+    return None
 
 
 def _adapt_obs_for_policy(
@@ -328,6 +409,8 @@ def _select_action(
     action_space: Any | None,
     use_goal_action: bool,
     policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+    planner_action_adapter: PlannerActionAdapter | None,
     robot_speed: float,
 ) -> np.ndarray:
     """Choose an action based on the selected policy mode."""
@@ -336,6 +419,11 @@ def _select_action(
     if policy_model is not None:
         action, _ = policy_model.predict(obs, deterministic=True)
         return action
+    if socnav_policy is not None:
+        command = socnav_policy.act(obs)
+        if planner_action_adapter is not None:
+            return planner_action_adapter.from_velocity_command(command)
+        return np.array(command, dtype=float)
     if action_space is not None:
         return action_space.sample()
     return np.zeros(2)
@@ -348,6 +436,8 @@ def _run_steps(
     action_space: Any | None,
     use_goal_action: bool,
     policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+    planner_action_adapter: PlannerActionAdapter | None,
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
     robot_speed: float,
     max_steps: int,
@@ -361,6 +451,8 @@ def _run_steps(
             action_space=action_space,
             use_goal_action=use_goal_action,
             policy_model=policy_model,
+            socnav_policy=socnav_policy,
+            planner_action_adapter=planner_action_adapter,
             robot_speed=robot_speed,
         )
         obs, _, terminated, truncated, _ = env.step(action)
@@ -413,6 +505,12 @@ def _run_episode(
     robot_speed: float,
     policy_name: str,
     policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+    socnav_use_grid: bool,
+    socnav_grid_resolution: float | None,
+    socnav_grid_width: float | None,
+    socnav_grid_height: float | None,
+    socnav_grid_center_on_robot: bool,
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
@@ -427,6 +525,21 @@ def _run_episode(
 
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     _apply_env_overrides(config, env_overrides)
+    if socnav_policy is not None:
+        config.observation_mode = ObservationMode.SOCNAV_STRUCT
+        if socnav_use_grid:
+            config.use_occupancy_grid = True
+            config.include_grid_in_observation = True
+            if config.grid_config is None:
+                config.grid_config = GridConfig()
+            if socnav_grid_resolution is not None:
+                config.grid_config.resolution = float(socnav_grid_resolution)
+            if socnav_grid_width is not None:
+                config.grid_config.width = float(socnav_grid_width)
+            if socnav_grid_height is not None:
+                config.grid_config.height = float(socnav_grid_height)
+            if socnav_grid_center_on_robot:
+                config.grid_config.center_on_robot = True
     config.show_occupancy_grid = bool(show_occupancy_grid)
     if policy_name == "ppo":
         policy_stack_steps = resolve_policy_stack_steps(policy_model)
@@ -452,13 +565,21 @@ def _run_episode(
     status = "success"
     note = None
     error = None
+    planner_action_adapter = None
     try:
         sync_policy_spaces(env, policy_model)
         obs, _ = env.reset()
         action_space = getattr(env, "action_space", None)
+        if socnav_policy is not None and getattr(env, "simulator", None) is not None:
+            planner_action_adapter = PlannerActionAdapter(
+                robot=env.simulator.robots[0],
+                action_space=env.action_space,
+                time_step=config.sim_config.time_per_step_in_secs,
+            )
         use_goal_action = _resolve_goal_action(
             action_space=action_space,
             policy_model=policy_model,
+            socnav_policy=socnav_policy,
             scenario_name=scenario_name,
             seed=seed,
         )
@@ -473,6 +594,8 @@ def _run_episode(
             action_space=action_space,
             use_goal_action=use_goal_action,
             policy_model=policy_model,
+            socnav_policy=socnav_policy,
+            planner_action_adapter=planner_action_adapter,
             policy_obs_adapter=policy_obs_adapter,
             robot_speed=robot_speed,
             max_steps=max_steps,
@@ -515,6 +638,12 @@ def _write_manifest(
     policy: str,
     model_path: Path | None,
     training_config: Path | None,
+    socnav_root: Path | None,
+    socnav_use_grid: bool,
+    socnav_grid_resolution: float | None,
+    socnav_grid_width: float | None,
+    socnav_grid_height: float | None,
+    socnav_grid_center_on_robot: bool,
     max_steps: int | None,
     seed_override: list[int],
     max_seeds: int | None,
@@ -530,6 +659,12 @@ def _write_manifest(
         "policy": policy,
         "model_path": str(model_path) if model_path is not None else None,
         "training_config": str(training_config) if training_config is not None else None,
+        "socnav_root": str(socnav_root) if socnav_root is not None else None,
+        "socnav_use_grid": socnav_use_grid,
+        "socnav_grid_resolution": socnav_grid_resolution,
+        "socnav_grid_width": socnav_grid_width,
+        "socnav_grid_height": socnav_grid_height,
+        "socnav_grid_center_on_robot": socnav_grid_center_on_robot,
         "max_steps_override": max_steps,
         "seed_override": seed_override or None,
         "max_seeds": max_seeds,
@@ -557,6 +692,8 @@ def main(argv: list[str] | None = None) -> int:
             env_overrides.get("use_occupancy_grid")
             and env_overrides.get("include_grid_in_observation")
         )
+    if args.socnav_use_grid:
+        auto_show_grid = True
 
     scenario_path = (
         args.scenario
@@ -590,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
             policy_model,
             fallback_adapter=_defensive_obs_adapter,
         )
+    socnav_policy = _build_socnav_policy(args.policy, socnav_root=args.socnav_root)
 
     results: list[RenderResult] = []
     for scenario in scenarios:
@@ -618,6 +756,12 @@ def main(argv: list[str] | None = None) -> int:
                 robot_speed=args.robot_speed,
                 policy_name=args.policy,
                 policy_model=policy_model,
+                socnav_policy=socnav_policy,
+                socnav_use_grid=args.socnav_use_grid,
+                socnav_grid_resolution=args.socnav_grid_resolution,
+                socnav_grid_width=args.socnav_grid_width,
+                socnav_grid_height=args.socnav_grid_height,
+                socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
                 policy_obs_adapter=policy_obs_adapter,
                 env_overrides=env_overrides,
                 env_factory_kwargs=env_factory_kwargs,
@@ -634,6 +778,12 @@ def main(argv: list[str] | None = None) -> int:
         policy=args.policy,
         model_path=args.model_path if args.policy == "ppo" else None,
         training_config=args.training_config,
+        socnav_root=args.socnav_root,
+        socnav_use_grid=args.socnav_use_grid,
+        socnav_grid_resolution=args.socnav_grid_resolution,
+        socnav_grid_width=args.socnav_grid_width,
+        socnav_grid_height=args.socnav_grid_height,
+        socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
         max_steps=args.max_steps,
         seed_override=args.seed,
         max_seeds=args.max_seeds,

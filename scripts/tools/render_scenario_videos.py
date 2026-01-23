@@ -219,6 +219,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Center the occupancy grid on the robot for SocNav planners.",
     )
     parser.add_argument(
+        "--socnav-orca-time-horizon",
+        type=float,
+        default=None,
+        help="Override ORCA time horizon for SocNav ORCA policy.",
+    )
+    parser.add_argument(
+        "--socnav-orca-neighbor-dist",
+        type=float,
+        default=None,
+        help="Override ORCA neighbor distance for SocNav ORCA policy.",
+    )
+    parser.add_argument(
         "--max-steps",
         type=int,
         default=None,
@@ -378,6 +390,8 @@ def _build_socnav_policy(
     policy_name: str,
     *,
     socnav_root: Path | None,
+    orca_time_horizon: float | None = None,
+    orca_neighbor_dist: float | None = None,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
     if policy_name == "socnav_sampling":
@@ -385,7 +399,12 @@ def _build_socnav_policy(
     if policy_name == "socnav_social_force":
         return make_social_force_policy()
     if policy_name == "socnav_orca":
-        return make_orca_policy()
+        policy = make_orca_policy()
+        if orca_time_horizon is not None:
+            policy.adapter.config.orca_time_horizon = float(orca_time_horizon)
+        if orca_neighbor_dist is not None:
+            policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
+        return policy
     if policy_name == "socnav_sacadrl":
         return make_sacadrl_policy()
     if policy_name == "socnav_bench":
@@ -504,6 +523,107 @@ def _validate_video(
     return status, note
 
 
+def _prepare_episode_config(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    policy_name: str,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+    socnav_use_grid: bool,
+    socnav_grid_resolution: float | None,
+    socnav_grid_width: float | None,
+    socnav_grid_height: float | None,
+    socnav_grid_center_on_robot: bool,
+    env_overrides: Mapping[str, object],
+    show_occupancy_grid: bool,
+) -> Any:
+    """Build a per-episode config with overrides applied."""
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    _apply_env_overrides(config, env_overrides)
+    if socnav_policy is not None:
+        config.observation_mode = ObservationMode.SOCNAV_STRUCT
+        if socnav_use_grid:
+            _apply_socnav_grid_overrides(
+                config,
+                resolution=socnav_grid_resolution,
+                width=socnav_grid_width,
+                height=socnav_grid_height,
+                center_on_robot=socnav_grid_center_on_robot,
+            )
+    config.show_occupancy_grid = bool(show_occupancy_grid)
+    if policy_name == "ppo":
+        policy_stack_steps = resolve_policy_stack_steps(policy_model)
+        if policy_stack_steps is not None:
+            config.sim_config.stack_steps = policy_stack_steps
+        elif policy_obs_adapter is not None:
+            config.sim_config.stack_steps = 1
+    return config
+
+
+def _apply_socnav_grid_overrides(
+    config: Any,
+    *,
+    resolution: float | None,
+    width: float | None,
+    height: float | None,
+    center_on_robot: bool,
+) -> None:
+    """Apply occupancy grid overrides for SocNav planners."""
+    config.use_occupancy_grid = True
+    config.include_grid_in_observation = True
+    if config.grid_config is None:
+        config.grid_config = GridConfig()
+    if resolution is not None:
+        config.grid_config.resolution = float(resolution)
+    if width is not None:
+        config.grid_config.width = float(width)
+    if height is not None:
+        config.grid_config.height = float(height)
+    if center_on_robot:
+        config.grid_config.center_on_robot = True
+
+
+def _configure_sim_ui(env, *, show_lidar: bool, show_occupancy_grid: bool, config: Any) -> None:
+    """Adjust sim UI flags when visualization is enabled."""
+    if not env.sim_ui:
+        return
+    env.sim_ui.show_lidar = bool(show_lidar)
+    if show_occupancy_grid:
+        env.sim_ui.grid_alpha = float(getattr(config, "grid_visualization_alpha", 0.5))
+
+
+def _build_planner_action_adapter(env, config: Any) -> PlannerActionAdapter | None:
+    """Create a planner action adapter when the simulator is available."""
+    if getattr(env, "simulator", None) is None:
+        return None
+    return PlannerActionAdapter(
+        robot=env.simulator.robots[0],
+        action_space=env.action_space,
+        time_step=config.sim_config.time_per_step_in_secs,
+    )
+
+
+def _resolve_stop_reason(
+    *,
+    terminated: bool,
+    truncated: bool,
+    success: bool,
+    collision: bool,
+) -> str:
+    """Translate terminal flags into a stop reason label."""
+    if terminated:
+        if success:
+            return "success"
+        if collision:
+            return "collision"
+        return "terminated"
+    if truncated:
+        return "truncated"
+    return "max_steps"
+
+
 def _run_episode(
     scenario: Mapping[str, Any],
     *,
@@ -533,30 +653,21 @@ def _run_episode(
     policy_slug = _slugify(policy_name)
     video_path = output_dir / f"{slug}_seed{seed}_{policy_slug}.mp4"
 
-    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
-    _apply_env_overrides(config, env_overrides)
-    if socnav_policy is not None:
-        config.observation_mode = ObservationMode.SOCNAV_STRUCT
-        if socnav_use_grid:
-            config.use_occupancy_grid = True
-            config.include_grid_in_observation = True
-            if config.grid_config is None:
-                config.grid_config = GridConfig()
-            if socnav_grid_resolution is not None:
-                config.grid_config.resolution = float(socnav_grid_resolution)
-            if socnav_grid_width is not None:
-                config.grid_config.width = float(socnav_grid_width)
-            if socnav_grid_height is not None:
-                config.grid_config.height = float(socnav_grid_height)
-            if socnav_grid_center_on_robot:
-                config.grid_config.center_on_robot = True
-    config.show_occupancy_grid = bool(show_occupancy_grid)
-    if policy_name == "ppo":
-        policy_stack_steps = resolve_policy_stack_steps(policy_model)
-        if policy_stack_steps is not None:
-            config.sim_config.stack_steps = policy_stack_steps
-        elif policy_obs_adapter is not None:
-            config.sim_config.stack_steps = 1
+    config = _prepare_episode_config(
+        scenario,
+        scenario_path=scenario_path,
+        policy_name=policy_name,
+        policy_model=policy_model,
+        policy_obs_adapter=policy_obs_adapter,
+        socnav_policy=socnav_policy,
+        socnav_use_grid=socnav_use_grid,
+        socnav_grid_resolution=socnav_grid_resolution,
+        socnav_grid_width=socnav_grid_width,
+        socnav_grid_height=socnav_grid_height,
+        socnav_grid_center_on_robot=socnav_grid_center_on_robot,
+        env_overrides=env_overrides,
+        show_occupancy_grid=show_occupancy_grid,
+    )
     env = make_robot_env(
         config=config,
         seed=int(seed),
@@ -566,10 +677,12 @@ def _run_episode(
         video_fps=float(fps),
         **env_factory_kwargs,
     )
-    if env.sim_ui:
-        env.sim_ui.show_lidar = bool(show_lidar)
-        if show_occupancy_grid:
-            env.sim_ui.grid_alpha = float(getattr(config, "grid_visualization_alpha", 0.5))
+    _configure_sim_ui(
+        env,
+        show_lidar=show_lidar,
+        show_occupancy_grid=show_occupancy_grid,
+        config=config,
+    )
 
     steps = 0
     terminated = False
@@ -585,12 +698,8 @@ def _run_episode(
         sync_policy_spaces(env, policy_model)
         obs, _ = env.reset()
         action_space = getattr(env, "action_space", None)
-        if socnav_policy is not None and getattr(env, "simulator", None) is not None:
-            planner_action_adapter = PlannerActionAdapter(
-                robot=env.simulator.robots[0],
-                action_space=env.action_space,
-                time_step=config.sim_config.time_per_step_in_secs,
-            )
+        if socnav_policy is not None:
+            planner_action_adapter = _build_planner_action_adapter(env, config)
         use_goal_action = _resolve_goal_action(
             action_space=action_space,
             policy_model=policy_model,
@@ -617,15 +726,12 @@ def _run_episode(
         )
         success = bool(last_info.get("success") or last_info.get("is_success"))
         collision = bool(last_info.get("collision"))
-        if terminated:
-            if success:
-                stop_reason = "success"
-            elif collision:
-                stop_reason = "collision"
-            else:
-                stop_reason = "terminated"
-        elif truncated:
-            stop_reason = "truncated"
+        stop_reason = _resolve_stop_reason(
+            terminated=terminated,
+            truncated=truncated,
+            success=success,
+            collision=collision,
+        )
     except Exception as exc:
         status = "error"
         stop_reason = "error"
@@ -677,6 +783,8 @@ def _write_manifest(
     socnav_grid_width: float | None,
     socnav_grid_height: float | None,
     socnav_grid_center_on_robot: bool,
+    socnav_orca_time_horizon: float | None,
+    socnav_orca_neighbor_dist: float | None,
     max_steps: int | None,
     seed_override: list[int],
     max_seeds: int | None,
@@ -698,6 +806,8 @@ def _write_manifest(
         "socnav_grid_width": socnav_grid_width,
         "socnav_grid_height": socnav_grid_height,
         "socnav_grid_center_on_robot": socnav_grid_center_on_robot,
+        "socnav_orca_time_horizon": socnav_orca_time_horizon,
+        "socnav_orca_neighbor_dist": socnav_orca_neighbor_dist,
         "max_steps_override": max_steps,
         "seed_override": seed_override or None,
         "max_seeds": max_seeds,
@@ -717,19 +827,10 @@ def _write_summary(output_dir: Path, results: list[RenderResult]) -> Path:
     rows = []
     for result in results:
         rows.append(
-            "| {scenario} | {seed} | {policy} | {steps} | {max_steps} | {stop_reason} | "
-            "{success} | {collision} | {status} | {video} |".format(
-                scenario=result.scenario_id,
-                seed=result.seed,
-                policy=result.policy,
-                steps=result.steps,
-                max_steps=result.max_steps,
-                stop_reason=result.stop_reason,
-                success=str(result.success).lower(),
-                collision=str(result.collision).lower(),
-                status=result.status,
-                video=Path(result.video_path).name,
-            )
+            f"| {result.scenario_id} | {result.seed} | {result.policy} | {result.steps} | "
+            f"{result.max_steps} | {result.stop_reason} | {str(result.success).lower()} | "
+            f"{str(result.collision).lower()} | {result.status} | "
+            f"{Path(result.video_path).name} |"
         )
     summary_path = output_dir / "summary.md"
     summary_path.write_text(header + "\n".join(rows) + "\n", encoding="utf-8")
@@ -788,7 +889,12 @@ def main(argv: list[str] | None = None) -> int:
             policy_model,
             fallback_adapter=_defensive_obs_adapter,
         )
-    socnav_policy = _build_socnav_policy(args.policy, socnav_root=args.socnav_root)
+    socnav_policy = _build_socnav_policy(
+        args.policy,
+        socnav_root=args.socnav_root,
+        orca_time_horizon=args.socnav_orca_time_horizon,
+        orca_neighbor_dist=args.socnav_orca_neighbor_dist,
+    )
 
     results: list[RenderResult] = []
     for scenario in scenarios:
@@ -845,6 +951,8 @@ def main(argv: list[str] | None = None) -> int:
         socnav_grid_width=args.socnav_grid_width,
         socnav_grid_height=args.socnav_grid_height,
         socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
+        socnav_orca_time_horizon=args.socnav_orca_time_horizon,
+        socnav_orca_neighbor_dist=args.socnav_orca_neighbor_dist,
         max_steps=args.max_steps,
         seed_override=args.seed,
         max_seeds=args.max_seeds,

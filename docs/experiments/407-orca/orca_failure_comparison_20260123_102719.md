@@ -61,3 +61,7 @@ Source frames: output/recordings/scenario_videos_classic_interactions_francis202
 ## Net read
 
 The new run is materially better overall (notably intersections and high-density crossings now succeed), while failures are concentrated in narrow-passage geometry (doorways, hallways, merging/overtaking) and high crowding density. That points to remaining sensitivity to corridor width + turning radius + crowd compression, not general navigation capability.
+
+## Related follow-ups
+
+* Radius sensitivity check (1.0 -> 0.6): `docs/experiments/407-orca/orca_radius_0_6_comparison_20260123.md`

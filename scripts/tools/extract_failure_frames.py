@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     output_root = args.output or (summary_path.parent / "failure_frames")
     output_root.mkdir(parents=True, exist_ok=True)
 
-    offsets = sorted(set(int(val) for val in args.offset))
+    offsets = sorted({int(val) for val in args.offset})
 
     extracted = 0
     for row in rows:

@@ -39,6 +39,45 @@ def _make_obs(goal=(5.0, 0.0), heading=0.0):
     }
 
 
+def _with_occupancy_grid(
+    obs: dict,
+    *,
+    obstacle_cells: list[tuple[int, int]] | None = None,
+    resolution: float = 1.0,
+    origin: tuple[float, float] = (-2.0, -2.0),
+    size: tuple[float, float] = (4.0, 4.0),
+):
+    """Attach a minimal occupancy grid to the observation."""
+    grid = np.zeros((4, 4, 4), dtype=np.float32)
+    for row, col in obstacle_cells or []:
+        if 0 <= row < grid.shape[1] and 0 <= col < grid.shape[2]:
+            grid[0, row, col] = 1.0  # obstacles channel
+    obs["occupancy_grid"] = grid
+    obs["occupancy_grid_meta_origin"] = np.array(origin, dtype=np.float32)
+    obs["occupancy_grid_meta_resolution"] = np.array([resolution], dtype=np.float32)
+    obs["occupancy_grid_meta_size"] = np.array(size, dtype=np.float32)
+    obs["occupancy_grid_meta_use_ego_frame"] = np.array([1.0], dtype=np.float32)
+    obs["occupancy_grid_meta_channel_indices"] = np.array([0, 1, 2, 3], dtype=np.float32)
+    return obs
+
+
+def _make_obs_with_peds(
+    ped_positions: list[tuple[float, float]],
+    *,
+    goal: tuple[float, float] = (5.0, 0.0),
+    heading: float = 0.0,
+):
+    """Build an observation that includes the requested pedestrians."""
+    obs = _make_obs(goal=goal, heading=heading)
+    max_peds = max(1, len(ped_positions))
+    positions = np.zeros((max_peds, 2), dtype=np.float32)
+    if ped_positions:
+        positions[: len(ped_positions)] = np.array(ped_positions, dtype=np.float32)
+    obs["pedestrians"]["positions"] = positions
+    obs["pedestrians"]["count"] = np.array([float(len(ped_positions))], dtype=np.float32)
+    return obs
+
+
 def test_sampling_adapter_moves_toward_goal():
     """Adapter moves forward when aligned with goal."""
     adapter = SamplingPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, angular_gain=2.0))
@@ -105,6 +144,48 @@ def test_orca_adapter():
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
     assert v >= 0.0
+
+
+def test_orca_slowdown_with_head_on_pedestrian():
+    """ORCA-like heuristic reduces speed for a head-on pedestrian."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig())
+    obs_free = _make_obs(goal=(5.0, 0.0), heading=0.0)
+    v_free, _w_free = adapter.plan(obs_free)
+    obs = _make_obs_with_peds([(2.0, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert v < v_free
+    assert np.isfinite(w)
+
+
+def test_orca_ignores_far_pedestrian():
+    """ORCA-like heuristic keeps heading when pedestrians are outside the avoidance radius."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs_with_peds([(6.0, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert v > 0.0
+    assert abs(w) < 1e-3
+
+
+def test_orca_with_lateral_pedestrian_returns_bounded_action():
+    """ORCA-like heuristic returns bounded action with a lateral pedestrian."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs_with_peds([(0.0, 2.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert v <= adapter.config.max_linear_speed + 1e-6
+    assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+
+
+def test_orca_responds_to_static_obstacle_in_grid():
+    """ORCA should reduce speed or steer when a grid obstacle blocks the path."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(orca_obstacle_range=4.0))
+    obs_free = _with_occupancy_grid(_make_obs(goal=(5.0, 0.0), heading=0.0))
+    v_free, w_free = adapter.plan(obs_free)
+    obs_blocked = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3)],
+    )
+    v_blocked, w_blocked = adapter.plan(obs_blocked)
+    assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
 
 
 def test_sacadrl_adapter():

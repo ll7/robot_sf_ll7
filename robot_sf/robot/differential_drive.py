@@ -19,7 +19,7 @@ class DifferentialDriveSettings:
     characteristics and speed limitations.
     """
 
-    # Radius of the robot (typically used for collision detection)
+    # Robot collision radius used by physics/metrics (not kinematics or grid rasterization)
     radius: float = 1.0
     # Maximum linear velocity the robot can achieve
     max_linear_speed: float = 2.0

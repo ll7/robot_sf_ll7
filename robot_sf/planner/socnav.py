@@ -323,8 +323,8 @@ class SocNavPlannerConfig:
     sacadrl_neighbors: int = 3
     sacadrl_bias_weight: float = 0.6
     orca_avoidance_weight: float = 1.2
-    orca_neighbor_dist: float = 5.0
-    orca_time_horizon: float = 2.0
+    orca_neighbor_dist: float = 10.0
+    orca_time_horizon: float = 6.0
     orca_time_horizon_obst: float = 3.0
     orca_obstacle_threshold: float = 0.5
     orca_obstacle_range: float = 6.0

@@ -47,6 +47,8 @@ class ExpertTrainingConfig:
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     num_envs: int | None = None
     worker_mode: str = "auto"
+    socnav_orca_time_horizon: float | None = None
+    socnav_orca_neighbor_dist: float | None = None
 
     @classmethod
     def from_raw(
@@ -67,6 +69,8 @@ class ExpertTrainingConfig:
         env_factory_kwargs: dict[str, object] | None = None,
         num_envs: int | None = None,
         worker_mode: str = "auto",
+        socnav_orca_time_horizon: float | None = None,
+        socnav_orca_neighbor_dist: float | None = None,
     ) -> ExpertTrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -90,6 +94,8 @@ class ExpertTrainingConfig:
             env_factory_kwargs=dict(env_factory_kwargs or {}),
             num_envs=num_envs,
             worker_mode=str(worker_mode),
+            socnav_orca_time_horizon=socnav_orca_time_horizon,
+            socnav_orca_neighbor_dist=socnav_orca_neighbor_dist,
         )
 
 

@@ -21,3 +21,11 @@
 
 ## Suggested benchmark phrasing
 “ORCA-style reactive baseline (non-holonomic constrained), grid-based static obstacle awareness.”
+
+## Parameter optimization plan (future work)
+- Sweep ORCA parameters on the same scenario suite + seeds used for PPO comparisons.
+- Primary knobs: `orca_time_horizon`, `orca_neighbor_dist`, `orca_time_horizon_obst`,
+  `orca_obstacle_radius_scale`, and `orca_heading_slowdown`.
+- Keep robot model, max speeds, and grid settings fixed; change only ORCA knobs.
+- Rank by success rate, collision rate, and time-to-goal; retain top 3 configs.
+- Re-run failure-frame extraction for the top configs to verify qualitative behavior.

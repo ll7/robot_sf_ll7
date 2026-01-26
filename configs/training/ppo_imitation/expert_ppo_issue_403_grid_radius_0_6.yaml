@@ -20,6 +20,9 @@ feature_extractor_kwargs:
   socnav_hidden_dims: [128, 128]
   dropout_rate: 0.1
 policy_net_arch: [256, 256]
+socnav_orca:
+  time_horizon: 6.0
+  neighbor_dist: 10.0
 env_overrides:
   observation_mode: socnav_struct
   use_occupancy_grid: true

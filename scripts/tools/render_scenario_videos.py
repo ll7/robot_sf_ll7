@@ -889,11 +889,18 @@ def main(argv: list[str] | None = None) -> int:
             policy_model,
             fallback_adapter=_defensive_obs_adapter,
         )
+    orca_time_horizon = args.socnav_orca_time_horizon
+    orca_neighbor_dist = args.socnav_orca_neighbor_dist
+    if training_config is not None:
+        if orca_time_horizon is None:
+            orca_time_horizon = training_config.socnav_orca_time_horizon
+        if orca_neighbor_dist is None:
+            orca_neighbor_dist = training_config.socnav_orca_neighbor_dist
     socnav_policy = _build_socnav_policy(
         args.policy,
         socnav_root=args.socnav_root,
-        orca_time_horizon=args.socnav_orca_time_horizon,
-        orca_neighbor_dist=args.socnav_orca_neighbor_dist,
+        orca_time_horizon=orca_time_horizon,
+        orca_neighbor_dist=orca_neighbor_dist,
     )
 
     results: list[RenderResult] = []
@@ -951,8 +958,8 @@ def main(argv: list[str] | None = None) -> int:
         socnav_grid_width=args.socnav_grid_width,
         socnav_grid_height=args.socnav_grid_height,
         socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
-        socnav_orca_time_horizon=args.socnav_orca_time_horizon,
-        socnav_orca_neighbor_dist=args.socnav_orca_neighbor_dist,
+        socnav_orca_time_horizon=orca_time_horizon,
+        socnav_orca_neighbor_dist=orca_neighbor_dist,
         max_steps=args.max_steps,
         seed_override=args.seed,
         max_seeds=args.max_seeds,

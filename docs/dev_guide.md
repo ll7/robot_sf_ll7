@@ -87,6 +87,19 @@ run it. Highlights include:
 Check the Advanced table in `examples/README.md` for prerequisites, tags, and whether
 a script is enabled for CI smoke execution.
 
+### Model registry
+
+Trained policies are tracked in a local registry to make reuse and automation
+easier:
+
+- Human-readable notes: `model/registry.md`
+- Machine-readable registry: `model/registry.yaml`
+- Helper API: `robot_sf.models.resolve_model_path(...)` for on-demand loading
+  (auto-downloads from W&B when metadata is present).
+
+Use `robot_sf.models.upsert_registry_entry(...)` to auto-populate or update the
+registry from training pipelines.
+
 ### One‑liner quality gates (CLI):
 
 ```bash

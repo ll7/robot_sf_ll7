@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Changed
+- Classic global planner defaults now use 0.5m grid cells (`cells_per_meter=2`) with zero inflation for shortest-path planning, reducing invalid start/goal cell failures.
 - Default global planner selection now prefers the classic Theta* (v2) grid planner, and benchmark shortest-path calculations use the same planner.
 - Occupancy grid rasterization now logs out-of-bounds obstacle segments at DEBUG instead of the custom SPAM level.
 - Benchmark CLI list-algorithms now reports only implemented baseline planners to avoid registry KeyErrors.

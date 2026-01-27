@@ -8,11 +8,20 @@ from typing import Any
 import yaml
 from loguru import logger
 
+try:  # pragma: no cover - optional dependency
+    import wandb  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    wandb = None  # type: ignore[assignment]
+
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
 
 
 def load_registry(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
-    """Load the model registry YAML and return entries indexed by model_id."""
+    """Load the model registry YAML and return entries indexed by model_id.
+
+    Returns:
+        dict[str, dict[str, Any]]: Registry entries keyed by ``model_id``.
+    """
 
     registry_path = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
     if not registry_path.exists():
@@ -39,7 +48,11 @@ def load_registry(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
 
 
 def get_registry_entry(model_id: str, path: str | Path | None = None) -> dict[str, Any]:
-    """Return a single registry entry by model_id."""
+    """Return a single registry entry by model_id.
+
+    Returns:
+        dict[str, Any]: Registry entry for the requested ``model_id``.
+    """
 
     registry = load_registry(path)
     try:
@@ -55,7 +68,11 @@ def resolve_model_path(
     allow_download: bool = True,
     cache_dir: str | Path | None = None,
 ) -> Path:
-    """Resolve a local model path, downloading from W&B if needed."""
+    """Resolve a local model path, downloading from W&B if needed.
+
+    Returns:
+        Path: Local filesystem path to the model artifact.
+    """
 
     entry = get_registry_entry(model_id, registry_path)
     local_path = entry.get("local_path")
@@ -67,20 +84,20 @@ def resolve_model_path(
             return resolved
 
     if not allow_download:
-        raise FileNotFoundError(
-            f"Model '{model_id}' not found locally and downloads are disabled."
-        )
+        raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
     return _download_from_wandb(entry, cache_dir=cache_dir)
 
 
 def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
-    """Download a model artifact from W&B using metadata stored in the registry."""
+    """Download a model artifact from W&B using metadata stored in the registry.
 
-    try:
-        import wandb  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dependency
-        raise RuntimeError("W&B not available; cannot download model artifact.") from exc
+    Returns:
+        Path: Local filesystem path to the downloaded artifact.
+    """
+
+    if wandb is None:  # pragma: no cover - optional dependency
+        raise RuntimeError("W&B not available; cannot download model artifact.")
 
     run_path = entry.get("wandb_run_path")
     if not run_path:

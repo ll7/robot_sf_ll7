@@ -127,8 +127,14 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
     run = api.run(run_path)
     wandb_file = run.file(file_name)
     downloaded_path = wandb_file.download(root=str(cache_root), replace=True)
-
-    return Path(downloaded_path)
+    if isinstance(downloaded_path, (str, Path)):
+        return Path(downloaded_path)
+    file_name = getattr(downloaded_path, "name", None)
+    if isinstance(file_name, str):
+        return Path(file_name)
+    raise TypeError(
+        "W&B download returned unexpected type; expected path-like or file-like with name.",
+    )
 
 
 def upsert_registry_entry(

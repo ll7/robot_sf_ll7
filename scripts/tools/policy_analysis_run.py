@@ -1,0 +1,1076 @@
+#!/usr/bin/env python3
+"""Run a full policy analysis sweep with metrics and optional videos.
+
+This script evaluates a policy across all scenarios in a training config (or a
+scenario YAML), computes benchmark metrics, and emits a digestible report that
+highlights strengths and weaknesses. Video rendering is optional.
+
+Examples:
+  uv run python scripts/tools/policy_analysis_run.py \
+    --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml \
+    --policy fast_pysf
+
+  uv run python scripts/tools/policy_analysis_run.py \
+    --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml \
+    --policy ppo --model-path output/wandb/.../model.zip --videos
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+from loguru import logger
+
+from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
+from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
+from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, compute_episode_id
+from robot_sf.common.artifact_paths import (
+    ensure_canonical_tree,
+    get_artifact_category_path,
+    resolve_artifact_path,
+)
+from robot_sf.common.logging import configure_logging
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.nav.occupancy_grid import GridConfig
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.fast_pysf_planner import FastPysfPlannerPolicy
+from robot_sf.planner.socnav import (
+    SocNavBenchComplexPolicy,
+    SocNavPlannerConfig,
+    SocNavPlannerPolicy,
+    make_orca_policy,
+    make_sacadrl_policy,
+    make_social_force_policy,
+)
+from robot_sf.training.observation_wrappers import resolve_policy_obs_adapter, sync_policy_spaces
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    select_scenario,
+)
+from scripts.tools.render_scenario_videos import _defensive_obs_adapter
+from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping, Sequence
+
+
+_POLICY_CHOICES = (
+    "goal",
+    "ppo",
+    "socnav_sampling",
+    "socnav_social_force",
+    "socnav_orca",
+    "socnav_sacadrl",
+    "socnav_bench",
+    "fast_pysf",
+    "fast_pysf_planner",
+)
+
+
+@dataclass
+class EpisodeArtifacts:
+    """Per-episode artifact outputs."""
+
+    video_path: Path | None = None
+
+
+@dataclass
+class PolicyAdapter:
+    """Adapter that converts policy outputs into environment actions."""
+
+    policy_name: str
+    policy_model: Any | None
+    socnav_policy: SocNavPlannerPolicy | None
+    fast_pysf_policy: FastPysfPlannerPolicy | None
+    planner_action_adapter: PlannerActionAdapter | None
+
+    def action(self, obs: Any, env, *, robot_speed: float) -> np.ndarray:
+        """Return an environment action for the given observation."""
+        if self.policy_name == "goal":
+            return _goal_action(env, speed=robot_speed)
+        if self.policy_model is not None:
+            action, _ = self.policy_model.predict(obs, deterministic=True)
+            return np.asarray(action, dtype=float)
+        if self.socnav_policy is not None:
+            command = self.socnav_policy.act(obs)
+            return self._velocity_command_to_action(command)
+        if self.fast_pysf_policy is not None:
+            command = self.fast_pysf_policy.action()
+            return self._velocity_command_to_action(command)
+        action_space = getattr(env, "action_space", None)
+        if action_space is not None:
+            return action_space.sample()
+        return np.zeros(2, dtype=float)
+
+    def _velocity_command_to_action(self, command: Sequence[float]) -> np.ndarray:
+        """Convert a (v, w) command into the simulator action space."""
+        if self.planner_action_adapter is None:
+            return np.asarray(command, dtype=float)
+        return self.planner_action_adapter.from_velocity_command(command)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--training-config",
+        type=Path,
+        help="Training config providing scenario path and env overrides.",
+    )
+    parser.add_argument(
+        "--scenario",
+        type=Path,
+        help="Scenario YAML when no training config is supplied.",
+    )
+    parser.add_argument(
+        "--scenario-id",
+        type=str,
+        help="Scenario id/name to run (defaults to all scenarios).",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run all scenarios (default when no scenario-id).",
+    )
+    parser.add_argument(
+        "--policy",
+        choices=_POLICY_CHOICES,
+        default="goal",
+        help="Policy name to evaluate.",
+    )
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        default=Path("model/run_023.zip"),
+        help="Model path for PPO policies.",
+    )
+    parser.add_argument(
+        "--robot-speed",
+        type=float,
+        default=1.0,
+        help="Nominal speed for goal policy.",
+    )
+    parser.add_argument(
+        "--videos",
+        action="store_true",
+        help="Enable video rendering for each episode.",
+    )
+    parser.add_argument(
+        "--video-fps",
+        type=int,
+        default=10,
+        help="FPS for recorded videos.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output directory for benchmark artifacts (defaults to timestamped folder).",
+    )
+    parser.add_argument(
+        "--video-output",
+        type=Path,
+        help="Output directory for videos (defaults to output/recordings).",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        help="Override max steps per episode.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Override seed (single seed for all scenarios).",
+    )
+    parser.add_argument(
+        "--max-seeds",
+        type=int,
+        help="Limit number of seeds per scenario.",
+    )
+    parser.add_argument(
+        "--no-record-forces",
+        dest="record_forces",
+        action="store_false",
+        help="Disable pedestrian force logging.",
+    )
+    parser.set_defaults(record_forces=True)
+    parser.add_argument(
+        "--socnav-root",
+        type=Path,
+        help="Optional SocNavBench root for upstream sampling planner.",
+    )
+    parser.add_argument(
+        "--socnav-use-grid",
+        action="store_true",
+        help="Enable occupancy grid fields for SocNav planners.",
+    )
+    parser.add_argument(
+        "--socnav-grid-resolution",
+        type=float,
+        help="Override SocNav occupancy grid resolution.",
+    )
+    parser.add_argument(
+        "--socnav-grid-width",
+        type=float,
+        help="Override SocNav occupancy grid width.",
+    )
+    parser.add_argument(
+        "--socnav-grid-height",
+        type=float,
+        help="Override SocNav occupancy grid height.",
+    )
+    parser.add_argument(
+        "--socnav-grid-center-on-robot",
+        action="store_true",
+        help="Center the SocNav occupancy grid on the robot.",
+    )
+    parser.add_argument(
+        "--socnav-orca-time-horizon",
+        type=float,
+        help="Override ORCA time horizon for SocNav ORCA policy.",
+    )
+    parser.add_argument(
+        "--socnav-orca-neighbor-dist",
+        type=float,
+        help="Override ORCA neighbor distance for SocNav ORCA policy.",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
+    return parser
+
+
+def _resolve_output_root(base: Path | None, *, policy: str) -> Path:
+    """Resolve benchmark output directory."""
+    if base is not None:
+        return resolve_artifact_path(base)
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    return get_artifact_category_path("benchmarks") / f"policy_analysis_{policy}_{ts}"
+
+
+def _resolve_video_root(base: Path | None, *, policy: str) -> Path:
+    """Resolve video output directory."""
+    if base is not None:
+        return resolve_artifact_path(base)
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    return get_artifact_category_path("recordings") / f"policy_analysis_{policy}_{ts}"
+
+
+def _resolve_seeds(
+    scenario: Mapping[str, Any],
+    *,
+    seed_override: int | None,
+    max_seeds: int | None,
+    training_seeds: Sequence[int] | None,
+) -> list[int]:
+    """Resolve per-scenario seeds, honoring overrides and training config defaults."""
+    if seed_override is not None:
+        return [int(seed_override)]
+    seeds: list[int] = []
+    if training_seeds:
+        seeds = [int(s) for s in training_seeds]
+    else:
+        raw = scenario.get("seeds")
+        if isinstance(raw, list) and raw:
+            seeds = [int(s) for s in raw]
+    if not seeds:
+        seeds = [0]
+    if max_seeds is not None and max_seeds > 0:
+        return seeds[: int(max_seeds)]
+    return seeds
+
+
+def _goal_action(env, *, speed: float) -> np.ndarray:
+    """Return a simple goal-seeking action in (v, w) space."""
+    if getattr(env, "simulator", None) is None:
+        return np.zeros(2, dtype=float)
+    (x, y), heading = env.simulator.robot_poses[0]
+    goal = np.asarray(env.simulator.goal_pos[0], dtype=float)
+    vec = goal - np.array([x, y], dtype=float)
+    dist = float(np.linalg.norm(vec))
+    if dist < 1e-6:
+        return np.zeros(2, dtype=float)
+    desired_heading = float(math.atan2(vec[1], vec[0]))
+    heading_error = ((desired_heading - heading + math.pi) % (2 * math.pi)) - math.pi
+    angular = float(np.clip(heading_error, -1.0, 1.0))
+    linear = float(np.clip(dist, 0.0, speed * max(0.0, 1.0 - abs(heading_error) / math.pi)))
+    return np.array([linear, angular], dtype=float)
+
+
+def _build_socnav_policy(
+    policy_name: str,
+    *,
+    socnav_root: Path | None,
+    orca_time_horizon: float | None,
+    orca_neighbor_dist: float | None,
+) -> SocNavPlannerPolicy | None:
+    """Construct the SocNav planner policy for the selected CLI mode."""
+    if policy_name == "socnav_sampling":
+        return SocNavPlannerPolicy()
+    if policy_name == "socnav_social_force":
+        return make_social_force_policy()
+    if policy_name == "socnav_orca":
+        policy = make_orca_policy()
+        if orca_time_horizon is not None:
+            policy.adapter.config.orca_time_horizon = float(orca_time_horizon)
+        if orca_neighbor_dist is not None:
+            policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
+        return policy
+    if policy_name == "socnav_sacadrl":
+        return make_sacadrl_policy()
+    if policy_name == "socnav_bench":
+        return SocNavBenchComplexPolicy(
+            socnav_root=socnav_root,
+            adapter_config=SocNavPlannerConfig(),
+        )
+    return None
+
+
+def _apply_socnav_grid_overrides(
+    config: Any,
+    *,
+    resolution: float | None,
+    width: float | None,
+    height: float | None,
+    center_on_robot: bool,
+) -> None:
+    """Apply occupancy grid overrides for SocNav planners."""
+    config.use_occupancy_grid = True
+    config.include_grid_in_observation = True
+    if config.grid_config is None:
+        config.grid_config = GridConfig()
+    if resolution is not None:
+        config.grid_config.resolution = float(resolution)
+    if width is not None:
+        config.grid_config.width = float(width)
+    if height is not None:
+        config.grid_config.height = float(height)
+    if center_on_robot:
+        config.grid_config.center_on_robot = True
+
+
+def _build_planner_action_adapter(env, config: Any) -> PlannerActionAdapter | None:
+    """Create a planner action adapter when the simulator is available."""
+    if getattr(env, "simulator", None) is None:
+        return None
+    return PlannerActionAdapter(
+        robot=env.simulator.robots[0],
+        action_space=env.action_space,
+        time_step=config.sim_config.time_per_step_in_secs,
+    )
+
+
+def _vel_and_acc(positions: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    """Compute velocities and accelerations from positions."""
+    if positions.shape[0] < 2:
+        return np.zeros_like(positions), np.zeros_like(positions)
+    vel = np.gradient(positions, dt, axis=0)
+    acc = np.gradient(vel, dt, axis=0)
+    return vel, acc
+
+
+def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) -> np.ndarray:
+    """Stack pedestrian trajectories into a padded array."""
+    if not traj:
+        return np.zeros((0, 0, 2), dtype=float)
+    max_k = max(p.shape[0] for p in traj)
+    stacked = np.full((len(traj), max_k, 2), fill_value, dtype=float)
+    for i, arr in enumerate(traj):
+        if arr.size == 0:
+            continue
+        stacked[i, : arr.shape[0]] = arr
+    return stacked
+
+
+def _episode_video_metadata(video_path: Path | None, *, frames: int) -> dict[str, Any] | None:
+    """Build video metadata for the episode record."""
+    if video_path is None or not video_path.exists():
+        return None
+    size = int(video_path.stat().st_size)
+    if size <= 0:
+        return None
+    return {
+        "path": str(video_path),
+        "format": "mp4",
+        "filesize_bytes": size,
+        "frames": int(frames),
+        "renderer": "sim-view",
+    }
+
+
+def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Produce a compact summary payload from episode records."""
+    if not records:
+        return {"episodes": 0, "success_rate": 0.0, "collision_rate": 0.0}
+    successes = sum(1 for r in records if r.get("metrics", {}).get("success"))
+    collisions = sum(1 for r in records if int(r.get("metrics", {}).get("collisions", 0)) > 0)
+    timeouts = sum(1 for r in records if r.get("status") == "failure")
+    return {
+        "episodes": len(records),
+        "success_rate": successes / len(records),
+        "collision_rate": collisions / len(records),
+        "failures": timeouts,
+    }
+
+
+def _rank_scenarios(
+    aggregates: dict[str, dict[str, dict[str, float]]],
+    *,
+    metric: str,
+    reverse: bool,
+    top_n: int = 5,
+) -> list[dict[str, Any]]:
+    """Return top-N scenarios by a metric mean."""
+    rows: list[tuple[str, float]] = []
+    for scenario_id, stats in aggregates.items():
+        if scenario_id == "_meta":
+            continue
+        value = stats.get(metric, {}).get("mean")
+        if value is None or not math.isfinite(value):
+            continue
+        rows.append((scenario_id, float(value)))
+    rows.sort(key=lambda x: x[1], reverse=reverse)
+    return [
+        {"scenario_id": scenario_id, "mean": value} for scenario_id, value in rows[: max(top_n, 0)]
+    ]
+
+
+def _find_problem_episodes(
+    records: list[dict[str, Any]],
+    *,
+    top_n: int = 10,
+) -> list[dict[str, Any]]:
+    """Identify problematic episodes based on collision or comfort exposure."""
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for rec in records:
+        metrics = rec.get("metrics", {})
+        collisions = float(metrics.get("collisions", 0.0) or 0.0)
+        comfort = float(metrics.get("comfort_exposure", 0.0) or 0.0)
+        failure = 1.0 if rec.get("status") == "failure" else 0.0
+        score = collisions * 10.0 + comfort * 2.0 + failure
+        if score <= 0:
+            continue
+        scored.append((score, rec))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    out: list[dict[str, Any]] = []
+    for score, rec in scored[: max(top_n, 0)]:
+        out.append(
+            {
+                "scenario_id": rec.get("scenario_id"),
+                "seed": rec.get("seed"),
+                "score": score,
+                "metrics": rec.get("metrics", {}),
+                "video": rec.get("video"),
+            }
+        )
+    return out
+
+
+def _write_report(
+    out_dir: Path,
+    *,
+    summary: dict[str, Any],
+    aggregates: dict[str, dict[str, dict[str, float]]],
+    problem_episodes: list[dict[str, Any]],
+    policy: str,
+    scenario_path: Path,
+) -> tuple[Path, Path]:
+    """Write markdown + JSON reports."""
+    report_json = {
+        "policy": policy,
+        "scenario_path": str(scenario_path),
+        "summary": summary,
+        "aggregates": aggregates,
+        "problem_episodes": problem_episodes,
+    }
+    report_json_path = out_dir / "report.json"
+    report_json_path.write_text(json.dumps(report_json, indent=2), encoding="utf-8")
+
+    top_collision = _rank_scenarios(aggregates, metric="collisions", reverse=True)
+    top_success = _rank_scenarios(aggregates, metric="success", reverse=True)
+    top_timeout = _rank_scenarios(aggregates, metric="failure_to_progress", reverse=True)
+
+    lines = [
+        "# Policy Analysis Report",
+        "",
+        f"- Policy: `{policy}`",
+        f"- Scenario file: `{scenario_path}`",
+        f"- Episodes: {summary.get('episodes', 0)}",
+        f"- Success rate: {summary.get('success_rate', 0.0):.3f}",
+        f"- Collision rate: {summary.get('collision_rate', 0.0):.3f}",
+        "",
+        "## Strengths (top success rate)",
+    ]
+    for row in top_success:
+        lines.append(f"- {row['scenario_id']}: success_mean={row['mean']:.3f}")
+
+    lines.extend(["", "## Weaknesses (top collision counts)"])
+    for row in top_collision:
+        lines.append(f"- {row['scenario_id']}: collisions_mean={row['mean']:.3f}")
+
+    if top_timeout:
+        lines.extend(["", "## Failure to progress (timeouts)"])
+        for row in top_timeout:
+            lines.append(f"- {row['scenario_id']}: failure_to_progress_mean={row['mean']:.3f}")
+
+    if problem_episodes:
+        lines.extend(["", "## Top problem episodes"])
+        for item in problem_episodes:
+            scen = item.get("scenario_id")
+            seed = item.get("seed")
+            score = item.get("score")
+            video = item.get("video", {}).get("path")
+            lines.append(f"- {scen} seed={seed} score={score:.2f} video={video}")
+
+    report_md_path = out_dir / "report.md"
+    report_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_md_path, report_json_path
+
+
+def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    validate_episode(record, schema)
+    with out_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record) + "\n")
+
+
+@dataclass
+class EpisodeTrajectory:
+    """Container for trajectory samples collected during an episode."""
+
+    robot_positions: list[np.ndarray]
+    ped_positions: list[np.ndarray]
+    ped_forces: list[np.ndarray]
+
+
+def _prepare_episode_config(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    policy_name: str,
+    socnav_policy: SocNavPlannerPolicy | None,
+    socnav_use_grid: bool,
+    socnav_grid_resolution: float | None,
+    socnav_grid_width: float | None,
+    socnav_grid_height: float | None,
+    socnav_grid_center_on_robot: bool,
+    env_overrides: Mapping[str, object],
+    max_steps_override: int | None,
+    videos: bool,
+    video_dir: Path | None,
+    seed: int,
+) -> tuple[Any, int, Path | None]:
+    """Build the env config, max steps, and optional video path for an episode."""
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    _apply_env_overrides(config, env_overrides)
+    if socnav_policy is not None:
+        config.observation_mode = ObservationMode.SOCNAV_STRUCT
+        if socnav_use_grid:
+            _apply_socnav_grid_overrides(
+                config,
+                resolution=socnav_grid_resolution,
+                width=socnav_grid_width,
+                height=socnav_grid_height,
+                center_on_robot=socnav_grid_center_on_robot,
+            )
+
+    max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
+    if max_steps_override is not None:
+        max_steps = max_steps_override
+    if max_steps <= 0:
+        max_steps = 200
+
+    episode_video = None
+    if videos and video_dir is not None:
+        scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
+        slug = scenario_name.replace(" ", "_")
+        episode_video = video_dir / f"{slug}_seed{seed}_{policy_name}.mp4"
+    return config, max_steps, episode_video
+
+
+def _make_env(
+    *,
+    config: Any,
+    seed: int,
+    videos: bool,
+    video_path: Path | None,
+    video_fps: int,
+    env_factory_kwargs: Mapping[str, object],
+) -> Any:
+    """Create the environment for a single episode."""
+    return make_robot_env(
+        config=config,
+        seed=int(seed),
+        debug=bool(videos),
+        record_video=bool(videos),
+        video_path=str(video_path) if video_path is not None else None,
+        video_fps=float(video_fps),
+        **env_factory_kwargs,
+    )
+
+
+def _reset_env(
+    env,
+    *,
+    seed: int,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+) -> Any:
+    """Reset the environment and apply optional observation adapters."""
+    obs, _ = env.reset(seed=int(seed))
+    sync_policy_spaces(env, policy_model)
+    if policy_model is not None and policy_obs_adapter is not None:
+        return policy_obs_adapter(obs)
+    return obs
+
+
+def _build_policy_adapter(
+    env,
+    config: Any,
+    *,
+    policy_name: str,
+    policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+) -> PolicyAdapter:
+    """Instantiate the policy adapter for the current environment."""
+    fast_pysf_policy: FastPysfPlannerPolicy | None = None
+    if policy_name in {"fast_pysf", "fast_pysf_planner"}:
+        if getattr(env, "simulator", None) is None:
+            raise RuntimeError("fast_pysf policy requires env.simulator")
+        fast_pysf_policy = FastPysfPlannerPolicy(env.simulator)
+
+    planner_action_adapter = None
+    if socnav_policy is not None or fast_pysf_policy is not None:
+        planner_action_adapter = _build_planner_action_adapter(env, config)
+    return PolicyAdapter(
+        policy_name=policy_name,
+        policy_model=policy_model,
+        socnav_policy=socnav_policy,
+        fast_pysf_policy=fast_pysf_policy,
+        planner_action_adapter=planner_action_adapter,
+    )
+
+
+def _collect_episode_trajectories(
+    env,
+    obs: Any,
+    *,
+    policy_adapter: PolicyAdapter,
+    policy_model: Any | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    robot_speed: float,
+    record_forces: bool,
+    max_steps: int,
+    videos: bool,
+) -> tuple[EpisodeTrajectory, int | None, float]:
+    """Run the episode loop and return trajectory data."""
+    robot_positions: list[np.ndarray] = []
+    ped_positions: list[np.ndarray] = []
+    ped_forces: list[np.ndarray] = []
+    reached_goal_step: int | None = None
+
+    start_time = time.time()
+    terminated = False
+    truncated = False
+    info: dict[str, Any] = {}
+    for step_idx in range(max_steps):
+        action = policy_adapter.action(obs, env, robot_speed=robot_speed)
+        obs, _reward, terminated, truncated, info = env.step(action)
+        if policy_model is not None and policy_obs_adapter is not None:
+            obs = policy_obs_adapter(obs)
+        if videos:
+            env.render()
+
+        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        if record_forces:
+            forces = getattr(env.simulator, "last_ped_forces", None)
+            if forces is None:
+                forces_arr = np.zeros_like(peds, dtype=float)
+            else:
+                forces_arr = np.asarray(forces, dtype=float)
+                if forces_arr.shape != peds.shape:
+                    forces_arr = np.zeros_like(peds, dtype=float)
+        else:
+            forces_arr = np.zeros_like(peds, dtype=float)
+
+        robot_positions.append(robot_pos)
+        ped_positions.append(peds)
+        ped_forces.append(forces_arr)
+
+        if reached_goal_step is None and bool(info.get("success") or info.get("is_success")):
+            reached_goal_step = step_idx
+        if terminated or truncated:
+            break
+
+    wall_time = float(max(1e-9, time.time() - start_time))
+    return (
+        EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
+        reached_goal_step,
+        wall_time,
+    )
+
+
+def _build_episode_record(
+    scenario: Mapping[str, Any],
+    *,
+    seed: int,
+    policy_name: str,
+    map_def: Any,
+    goal_vec: np.ndarray,
+    trajectory: EpisodeTrajectory,
+    reached_goal_step: int | None,
+    wall_time: float,
+    max_steps: int,
+    dt: float,
+    ts_start: str,
+    video_path: Path | None,
+) -> dict[str, Any]:
+    """Compute metrics and assemble an episode record."""
+    robot_pos_arr = np.asarray(trajectory.robot_positions, dtype=float)
+    robot_vel_arr, robot_acc_arr = _vel_and_acc(robot_pos_arr, dt)
+    ped_pos_arr = _stack_ped_positions(trajectory.ped_positions)
+    ped_forces_arr = _stack_ped_positions(trajectory.ped_forces, fill_value=np.nan)
+
+    obstacles = sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def else None
+    shortest_path = (
+        compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+        if robot_pos_arr.size and map_def is not None
+        else float("nan")
+    )
+
+    if robot_pos_arr.size == 0:
+        metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
+    else:
+        ep = EpisodeData(
+            robot_pos=robot_pos_arr,
+            robot_vel=robot_vel_arr,
+            robot_acc=robot_acc_arr,
+            peds_pos=ped_pos_arr,
+            ped_forces=ped_forces_arr,
+            obstacles=obstacles,
+            goal=goal_vec,
+            dt=float(dt),
+            reached_goal_step=reached_goal_step,
+        )
+        metrics_raw = compute_all_metrics(ep, horizon=max_steps, shortest_path_len=shortest_path)
+
+    metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
+    status = "success" if metrics.get("success") else "failure"
+    if metrics.get("collisions"):
+        status = "collision"
+
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    scenario_params = dict(scenario)
+    scenario_params.setdefault("id", scenario_id)
+    scenario_params.setdefault("algo", policy_name)
+
+    record = {
+        "version": "v1",
+        "episode_id": compute_episode_id(scenario_params, seed),
+        "scenario_id": scenario_id,
+        "seed": int(seed),
+        "scenario_params": scenario_params,
+        "metrics": metrics,
+        "algorithm_metadata": {"algorithm": policy_name},
+        "algo": policy_name,
+        "config_hash": _config_hash(scenario_params),
+        "git_hash": _git_hash_fallback(),
+        "timestamps": {"start": ts_start, "end": datetime.now(UTC).isoformat()},
+        "status": status,
+        "steps": int(robot_pos_arr.shape[0]),
+        "horizon": int(max_steps),
+        "wall_time_sec": wall_time,
+        "timing": {"steps_per_second": float(robot_pos_arr.shape[0]) / wall_time},
+    }
+
+    video_meta = _episode_video_metadata(video_path, frames=int(robot_pos_arr.shape[0]))
+    if video_meta:
+        record["video"] = video_meta
+    return record
+
+
+def _run_episode(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    seed: int,
+    policy_name: str,
+    policy_model: Any | None,
+    socnav_policy: SocNavPlannerPolicy | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    robot_speed: float,
+    env_overrides: Mapping[str, object],
+    env_factory_kwargs: Mapping[str, object],
+    record_forces: bool,
+    max_steps_override: int | None,
+    videos: bool,
+    video_dir: Path | None,
+    video_fps: int,
+    socnav_use_grid: bool,
+    socnav_grid_resolution: float | None,
+    socnav_grid_width: float | None,
+    socnav_grid_height: float | None,
+    socnav_grid_center_on_robot: bool,
+) -> tuple[dict[str, Any], EpisodeArtifacts]:
+    """Run a single episode, compute metrics, and return a record."""
+    config, max_steps, episode_video = _prepare_episode_config(
+        scenario,
+        scenario_path=scenario_path,
+        policy_name=policy_name,
+        socnav_policy=socnav_policy,
+        socnav_use_grid=socnav_use_grid,
+        socnav_grid_resolution=socnav_grid_resolution,
+        socnav_grid_width=socnav_grid_width,
+        socnav_grid_height=socnav_grid_height,
+        socnav_grid_center_on_robot=socnav_grid_center_on_robot,
+        env_overrides=env_overrides,
+        max_steps_override=max_steps_override,
+        videos=videos,
+        video_dir=video_dir,
+        seed=seed,
+    )
+    env = _make_env(
+        config=config,
+        seed=seed,
+        videos=videos,
+        video_path=episode_video,
+        video_fps=video_fps,
+        env_factory_kwargs=env_factory_kwargs,
+    )
+    ts_start = datetime.now(UTC).isoformat()
+    try:
+        obs = _reset_env(
+            env, seed=seed, policy_model=policy_model, policy_obs_adapter=policy_obs_adapter
+        )
+        policy_adapter = _build_policy_adapter(
+            env,
+            config,
+            policy_name=policy_name,
+            policy_model=policy_model,
+            socnav_policy=socnav_policy,
+        )
+        trajectory, reached_goal_step, wall_time = _collect_episode_trajectories(
+            env,
+            obs,
+            policy_adapter=policy_adapter,
+            policy_model=policy_model,
+            policy_obs_adapter=policy_obs_adapter,
+            robot_speed=robot_speed,
+            record_forces=record_forces,
+            max_steps=max_steps,
+            videos=videos,
+        )
+        record = _build_episode_record(
+            scenario,
+            seed=seed,
+            policy_name=policy_name,
+            map_def=env.simulator.map_def,
+            goal_vec=np.asarray(env.simulator.goal_pos[0], dtype=float),
+            trajectory=trajectory,
+            reached_goal_step=reached_goal_step,
+            wall_time=wall_time,
+            max_steps=max_steps,
+            dt=config.sim_config.time_per_step_in_secs,
+            ts_start=ts_start,
+            video_path=episode_video,
+        )
+        return record, EpisodeArtifacts(video_path=episode_video)
+    finally:
+        env.close()
+
+
+@dataclass
+class TrainingContext:
+    """Resolved training context for policy analysis."""
+
+    training_config: Any | None
+    env_overrides: Mapping[str, object]
+    env_factory_kwargs: Mapping[str, object]
+    training_seeds: Sequence[int] | None
+    orca_time_horizon: float | None
+    orca_neighbor_dist: float | None
+
+
+def _load_training_context(args) -> TrainingContext:
+    """Load training config and derived context when provided."""
+    training_config = None
+    env_overrides: Mapping[str, object] = {}
+    env_factory_kwargs: Mapping[str, object] = {}
+    training_seeds: Sequence[int] | None = None
+    orca_time_horizon = args.socnav_orca_time_horizon
+    orca_neighbor_dist = args.socnav_orca_neighbor_dist
+
+    if args.training_config is not None:
+        training_config = load_expert_training_config(args.training_config)
+        env_overrides = training_config.env_overrides
+        env_factory_kwargs = training_config.env_factory_kwargs
+        training_seeds = training_config.seeds
+        if orca_time_horizon is None:
+            orca_time_horizon = training_config.socnav_orca_time_horizon
+        if orca_neighbor_dist is None:
+            orca_neighbor_dist = training_config.socnav_orca_neighbor_dist
+
+    return TrainingContext(
+        training_config=training_config,
+        env_overrides=env_overrides,
+        env_factory_kwargs=env_factory_kwargs,
+        training_seeds=training_seeds,
+        orca_time_horizon=orca_time_horizon,
+        orca_neighbor_dist=orca_neighbor_dist,
+    )
+
+
+def _resolve_scenarios(
+    args,
+    *,
+    training_config: Any | None,
+) -> tuple[Path, list[dict[str, Any]]]:
+    """Resolve scenario path and scenario list."""
+    scenario_path = (
+        args.scenario
+        or (training_config.scenario_config if training_config is not None else None)
+        or Path("configs/scenarios/francis2023.yaml")
+    ).resolve()
+    scenarios = load_scenarios(scenario_path)
+    if args.scenario_id and args.all:
+        raise ValueError("Use --all or --scenario-id, not both.")
+    if args.scenario_id:
+        scenarios = [select_scenario(scenarios, args.scenario_id)]
+    elif not args.all:
+        logger.info("No scenario-id provided; defaulting to --all.")
+    return scenario_path, scenarios
+
+
+def _load_policy_model(args) -> tuple[Any | None, Callable[[Mapping[str, Any]], np.ndarray] | None]:
+    """Load PPO policy and observation adapter when requested."""
+    if args.policy != "ppo":
+        return None, None
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+
+    policy_model = load_trained_policy(str(args.model_path))
+    policy_obs_adapter = resolve_policy_obs_adapter(
+        policy_model,
+        fallback_adapter=_defensive_obs_adapter,
+    )
+    return policy_model, policy_obs_adapter
+
+
+def _resolve_socnav_policy(args, *, ctx: TrainingContext) -> SocNavPlannerPolicy | None:
+    """Resolve SocNav policy if selected."""
+    return _build_socnav_policy(
+        args.policy,
+        socnav_root=args.socnav_root,
+        orca_time_horizon=ctx.orca_time_horizon,
+        orca_neighbor_dist=ctx.orca_neighbor_dist,
+    )
+
+
+def _prepare_outputs(args) -> tuple[Path, Path | None, Path, dict[str, Any]]:
+    """Prepare output directories and schema."""
+    output_root = _resolve_output_root(args.output, policy=args.policy)
+    output_root.mkdir(parents=True, exist_ok=True)
+    video_root = _resolve_video_root(args.video_output, policy=args.policy) if args.videos else None
+    if video_root is not None:
+        video_root.mkdir(parents=True, exist_ok=True)
+    out_jsonl = output_root / "episodes.jsonl"
+    schema = load_schema(Path("robot_sf/benchmark/schemas/episode.schema.v1.json"))
+    return output_root, video_root, out_jsonl, schema
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for policy analysis runs."""
+    args = _build_parser().parse_args(argv)
+    configure_logging(verbose=args.verbose)
+    ensure_canonical_tree()
+
+    ctx = _load_training_context(args)
+    scenario_path, scenarios = _resolve_scenarios(args, training_config=ctx.training_config)
+    policy_model, policy_obs_adapter = _load_policy_model(args)
+    socnav_policy = _resolve_socnav_policy(args, ctx=ctx)
+    output_root, video_root, out_jsonl, schema = _prepare_outputs(args)
+    records: list[dict[str, Any]] = []
+
+    for scenario in scenarios:
+        scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
+        seeds = _resolve_seeds(
+            scenario,
+            seed_override=args.seed,
+            max_seeds=args.max_seeds,
+            training_seeds=ctx.training_seeds,
+        )
+        logger.info("Scenario {} seeds={}", scenario_name, seeds)
+        for seed in seeds:
+            record, _artifacts = _run_episode(
+                scenario,
+                scenario_path=scenario_path,
+                seed=seed,
+                policy_name=args.policy,
+                policy_model=policy_model,
+                socnav_policy=socnav_policy,
+                policy_obs_adapter=policy_obs_adapter,
+                robot_speed=args.robot_speed,
+                env_overrides=ctx.env_overrides,
+                env_factory_kwargs=ctx.env_factory_kwargs,
+                record_forces=args.record_forces,
+                max_steps_override=args.max_steps,
+                videos=args.videos,
+                video_dir=video_root,
+                video_fps=args.video_fps,
+                socnav_use_grid=args.socnav_use_grid,
+                socnav_grid_resolution=args.socnav_grid_resolution,
+                socnav_grid_width=args.socnav_grid_width,
+                socnav_grid_height=args.socnav_grid_height,
+                socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
+            )
+            _write_jsonl(out_jsonl, schema, record)
+            records.append(record)
+
+    records = read_jsonl(out_jsonl)
+    summary = _summarize_records(records)
+    aggregates = compute_aggregates(
+        records, group_by="scenario_id", fallback_group_by="scenario_id"
+    )
+    problem_episodes = _find_problem_episodes(records)
+
+    summary_path = output_root / "summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "summary": summary,
+                "aggregates": aggregates,
+                "problem_episodes": problem_episodes,
+                "scenario_path": str(scenario_path),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report_md, report_json = _write_report(
+        output_root,
+        summary=summary,
+        aggregates=aggregates,
+        problem_episodes=problem_episodes,
+        policy=args.policy,
+        scenario_path=scenario_path,
+    )
+
+    logger.info("Wrote episodes to {}", out_jsonl)
+    logger.info("Wrote summary to {}", summary_path)
+    logger.info("Wrote report to {} and {}", report_md, report_json)
+    if video_root is not None:
+        logger.info("Videos saved under {}", video_root)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

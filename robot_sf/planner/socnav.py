@@ -355,9 +355,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         """Initialize the adapter with optional planner configuration."""
 
         self.config = config or SocNavPlannerConfig()
-        logger.warning(
-            "SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready."
-        )
+        logger.warning("SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready.")
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -473,6 +471,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     """
 
     def __init__(self, config: SocNavPlannerConfig | None = None):
+        """Initialize the social-force adapter with optional configuration."""
         super().__init__(config=config)
         logger.warning(
             "SocialForcePlannerAdapter is a heuristic baseline and is not benchmark-ready."
@@ -1100,6 +1099,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
     """
 
     def __init__(self, config: SocNavPlannerConfig | None = None):
+        """Initialize the SA-CADRL adapter with optional configuration."""
         super().__init__(config=config)
         logger.warning(
             "SACADRLPlannerAdapter is a heuristic baseline and is not a learned SA-CADRL model."

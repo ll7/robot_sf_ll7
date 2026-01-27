@@ -528,7 +528,8 @@ def _write_report(
             scen = item.get("scenario_id")
             seed = item.get("seed")
             score = item.get("score")
-            video = item.get("video", {}).get("path")
+            video_meta = item.get("video") or {}
+            video = video_meta.get("path")
             lines.append(f"- {scen} seed={seed} score={score:.2f} video={video}")
 
     report_md_path = out_dir / "report.md"

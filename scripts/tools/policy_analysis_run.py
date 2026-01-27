@@ -22,9 +22,10 @@ import json
 import math
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from loguru import logger
@@ -78,6 +79,8 @@ _POLICY_CHOICES = (
     "fast_pysf",
     "fast_pysf_planner",
 )
+
+_TIMESTAMP_TZ = ZoneInfo("Europe/Berlin")
 
 
 @dataclass
@@ -253,7 +256,7 @@ def _resolve_output_root(base: Path | None, *, policy: str) -> Path:
     """Resolve benchmark output directory."""
     if base is not None:
         return resolve_artifact_path(base)
-    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("benchmarks") / f"policy_analysis_{policy}_{ts}"
 
 
@@ -261,7 +264,7 @@ def _resolve_video_root(base: Path | None, *, policy: str) -> Path:
     """Resolve video output directory."""
     if base is not None:
         return resolve_artifact_path(base)
-    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("recordings") / f"policy_analysis_{policy}_{ts}"
 
 
@@ -572,6 +575,7 @@ def _prepare_episode_config(
     """Build the env config, max steps, and optional video path for an episode."""
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     _apply_env_overrides(config, env_overrides)
+    config.use_planner = False
     if socnav_policy is not None:
         config.observation_mode = ObservationMode.SOCNAV_STRUCT
         if socnav_use_grid:
@@ -785,7 +789,7 @@ def _build_episode_record(
         "algo": policy_name,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
-        "timestamps": {"start": ts_start, "end": datetime.now(UTC).isoformat()},
+        "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status,
         "steps": int(robot_pos_arr.shape[0]),
         "horizon": int(max_steps),
@@ -847,7 +851,7 @@ def _run_episode(
         video_fps=video_fps,
         env_factory_kwargs=env_factory_kwargs,
     )
-    ts_start = datetime.now(UTC).isoformat()
+    ts_start = datetime.now(_TIMESTAMP_TZ).isoformat()
     try:
         obs = _reset_env(
             env, seed=seed, policy_model=policy_model, policy_obs_adapter=policy_obs_adapter
@@ -886,7 +890,16 @@ def _run_episode(
         )
         return record, EpisodeArtifacts(video_path=episode_video)
     finally:
-        env.close()
+        _close_env(env)
+
+
+def _close_env(env) -> None:
+    """Best-effort shutdown for the environment to flush recordings."""
+    for method in ("exit", "close"):
+        try:
+            getattr(env, method)()
+        except Exception:
+            pass
 
 
 @dataclass

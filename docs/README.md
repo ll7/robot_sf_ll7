@@ -77,6 +77,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+- **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
 - **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 - **[SocNav structured observation example](../examples/advanced/18_socnav_structured_observation.py)** - Run RobotEnv with SocNavBench-style observations and a simple planner adapter.
 - **[SocNav structured observation how-to](./dev/issues/socnav_structured_observation.md)** - Enable `ObservationMode.SOCNAV_STRUCT` and use planner adapters (lightweight + SocNavBench wrapper).

@@ -132,7 +132,10 @@ class GridConfig:
         dtype: NumPy data type for grid values (default: float32)
         max_distance: Max distance for continuous occupancy (default: 0.5m)
         use_ego_frame: Whether to use robot's ego frame (default: False)
-        robot_radius: Radius for rasterizing the robot channel (default: 0.3m)
+        robot_radius: Radius for rasterizing the robot channel (default: 0.3m).
+            This only affects the optional ``robot`` grid channel and does not
+            inflate obstacle cells or change collision checks. If the ``robot``
+            channel is not included in ``channels``, this value is unused.
         center_on_robot: When False (default), world-frame grids start at (0,0); when True,
             grids translate to keep the robot near center without rotating axes.
 

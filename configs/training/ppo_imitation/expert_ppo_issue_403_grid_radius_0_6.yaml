@@ -1,0 +1,79 @@
+# Issue 403: PPO expert training config for grid+SocNav observations.
+# NOTE: Scenario sampling wrapper (Option A) is required to train across all
+# scenarios; this config keeps scenario_id unset to allow sampling at reset.
+policy_id: ppo_expert_grid_socnav_403_r0_6
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+num_envs: auto
+worker_mode: auto
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+# 10M steps per seed (full run). Use 0.5–1M for smoke tests.
+total_timesteps: 10000000
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  socnav_hidden_dims: [128, 128]
+  dropout_rate: 0.1
+policy_net_arch: [256, 256]
+socnav_orca:
+  time_horizon: 6.0
+  neighbor_dist: 10.0
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  robot_config:
+    type: bicycle
+    allow_backwards: true
+    radius: 0.6
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  peds_have_obstacle_forces: true
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+# Evaluation cadence is time-based (0.5M steps until 3M, then every 1M).
+# The current trainer uses evaluation_episodes after training; keep these for manifests.
+evaluation:
+  frequency_episodes: 10
+  evaluation_episodes: 10
+  hold_out_scenarios:
+    # Classic interactions hold-out archetypes
+    - classic_bottleneck_low
+    - classic_bottleneck_medium
+    - classic_bottleneck_high
+    - classic_group_crossing_low
+    - classic_group_crossing_medium
+    # Francis 2023 hold-out scenarios
+    - francis2023_crowd_navigation
+    - francis2023_intersection_wait
+    - francis2023_blind_corner
+    - francis2023_narrow_doorway
+  step_schedule:
+    - until_step: 3000000
+      every_steps: 500000
+    - every_steps: 1000000
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-403-grid
+    job_type: expert-ppo

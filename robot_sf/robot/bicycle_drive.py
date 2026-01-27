@@ -15,7 +15,7 @@ class BicycleDriveSettings:
     A class that defines the settings for a bicycle drive robot.
     """
 
-    radius: float = 1.0  # Collision radius, not relevant for kinematics
+    radius: float = 1.0  # Collision radius for physics/metrics, not used in kinematics
     wheelbase: float = 1.0  # Distance between front and rear wheels
     max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
     max_velocity: float = 3.0  # Maximum forward velocity

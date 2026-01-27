@@ -357,6 +357,15 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
     step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
+    socnav_orca_raw = (
+        data.get("socnav_orca", {}) if isinstance(data.get("socnav_orca"), Mapping) else {}
+    )
+    socnav_orca_time_horizon = data.get("socnav_orca_time_horizon")
+    socnav_orca_neighbor_dist = data.get("socnav_orca_neighbor_dist")
+    if socnav_orca_time_horizon is None:
+        socnav_orca_time_horizon = socnav_orca_raw.get("time_horizon")
+    if socnav_orca_neighbor_dist is None:
+        socnav_orca_neighbor_dist = socnav_orca_raw.get("neighbor_dist")
 
     convergence = ConvergenceCriteria(
         success_rate=float(convergence_raw["success_rate"]),
@@ -386,6 +395,12 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
         num_envs=_parse_num_envs(data.get("num_envs")),
         worker_mode=str(data.get("worker_mode", "auto")),
+        socnav_orca_time_horizon=(
+            float(socnav_orca_time_horizon) if socnav_orca_time_horizon is not None else None
+        ),
+        socnav_orca_neighbor_dist=(
+            float(socnav_orca_neighbor_dist) if socnav_orca_neighbor_dist is not None else None
+        ),
     )
 
 

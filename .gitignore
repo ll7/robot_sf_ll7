@@ -13,6 +13,7 @@ images
 logs
 # model
 SLURM/model
+model/**/model.zip
 profile.json
 profiles
 pysf_tests

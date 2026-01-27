@@ -10,7 +10,7 @@ seeds:
   - 777
   - 992
   - 1337
-# 10M steps per seed (full run). Use 0.5–1M for smoke tests.
+# 15M steps per seed (full run). Use 0.5–1M for smoke tests.
 total_timesteps: 15000000
 feature_extractor: grid_socnav
 feature_extractor_kwargs:

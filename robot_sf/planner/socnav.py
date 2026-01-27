@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
@@ -341,17 +342,22 @@ class SocNavPlannerConfig:
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     """
-    Minimal waypoint-to-velocity adapter inspired by SocNavBench sampling planner.
+    Minimal waypoint-to-velocity adapter inspired by the SocNavBench sampling planner.
 
-    This is a placeholder that consumes structured SocNav observations and returns
-    differential-drive (v, w) commands. It is designed so that the internals can be
-    swapped for the real SocNavBench sampling planner without changing callers.
+    Warning:
+        This adapter is a lightweight heuristic placeholder. It is **not** a
+        benchmark-ready implementation of the SocNavBench sampling planner.
+        Use it only as a simple baseline or fallback when upstream dependencies
+        are unavailable.
     """
 
     def __init__(self, config: SocNavPlannerConfig | None = None):
         """Initialize the adapter with optional planner configuration."""
 
         self.config = config or SocNavPlannerConfig()
+        logger.warning(
+            "SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready."
+        )
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -460,7 +466,17 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
 
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
-    """Heuristic social-force style planner: goal attraction plus pedestrian repulsion."""
+    """Heuristic social-force style planner: goal attraction plus pedestrian repulsion.
+
+    Warning:
+        This is a heuristic baseline and is not benchmark-ready.
+    """
+
+    def __init__(self, config: SocNavPlannerConfig | None = None):
+        super().__init__(config=config)
+        logger.warning(
+            "SocialForcePlannerAdapter is a heuristic baseline and is not benchmark-ready."
+        )
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -1077,7 +1093,17 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
 
 class SACADRLPlannerAdapter(SamplingPlannerAdapter):
-    """Heuristic SA-CADRL-style adapter using nearest pedestrians to bias heading."""
+    """Heuristic SA-CADRL-style adapter using nearest pedestrians to bias heading.
+
+    Warning:
+        This is a heuristic baseline and is not a learned SA-CADRL model.
+    """
+
+    def __init__(self, config: SocNavPlannerConfig | None = None):
+        super().__init__(config=config)
+        logger.warning(
+            "SACADRLPlannerAdapter is a heuristic baseline and is not a learned SA-CADRL model."
+        )
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -1140,6 +1166,9 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
     """
     Convenience constructor for social-force-like planner policy.
 
+    Warning:
+        This is a heuristic baseline and is not benchmark-ready.
+
     Returns:
         SocNavPlannerPolicy: Policy wrapping SocialForcePlannerAdapter.
     """
@@ -1162,6 +1191,9 @@ def make_sacadrl_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlan
     """
     Convenience constructor for SA-CADRL-like planner policy.
 
+    Warning:
+        This is a heuristic baseline and is not a learned SA-CADRL model.
+
     Returns:
         SocNavPlannerPolicy: Policy wrapping SACADRLPlannerAdapter.
     """
@@ -1173,8 +1205,9 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     """
     Adapter that attempts to delegate to the upstream SocNavBench SamplingPlanner.
 
-    If upstream dependencies are unavailable, it falls back to the lightweight
-    SamplingPlannerAdapter behavior.
+    Warning:
+        This adapter falls back to the heuristic SamplingPlannerAdapter when upstream
+        dependencies are missing. In that mode it is **not benchmark-ready**.
     """
 
     def __init__(
@@ -1192,6 +1225,11 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             self._planner = self._safe_call_factory(planner_factory)
         else:
             self._planner = self._load_upstream_planner(socnav_root)
+        if self._planner is None:
+            logger.warning(
+                "SocNavBenchSamplingAdapter is running in fallback heuristic mode and "
+                "is not benchmark-ready."
+            )
 
     @staticmethod
     def _safe_call_factory(factory: Callable[[], Any]) -> Any | None:

@@ -105,7 +105,11 @@ class PlanningFailedError(Exception):
 
 
 class VisibilityPlanner:
-    """Visibility-graph-based path planner for 2D environments."""
+    """Visibility-graph-based path planner for 2D environments.
+
+    Warning:
+        This planner is not benchmark-ready in the current implementation.
+    """
 
     def __init__(self, map_definition: MapDefinition, config: PlannerConfig | None = None) -> None:
         """Initialize planner with map and configuration.
@@ -117,6 +121,7 @@ class VisibilityPlanner:
         self.map_def = map_definition
         self.config = config or PlannerConfig()
         self._graph: VisibilityGraph | None = None
+        logger.warning("VisibilityPlanner is not benchmark-ready in the current implementation.")
 
     def plan(self, start: Vec2D, goal: Vec2D, *, via_pois: list[str] | None = None) -> list[Vec2D]:
         """Compute collision-free path from start to goal.

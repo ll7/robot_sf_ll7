@@ -86,3 +86,47 @@
 - Increase evaluation episodes for more stable metrics.
 - Add scenario diversity (maps, densities, geometry variants) to reduce overfitting.
 - Consider modest hyperparameter tuning only after scenario diversity is addressed.
+
+## Registry usage
+
+This model can be referenced from `model/registry.yaml`. Entries are intended to be
+auto-populated.
+
+Example auto-population snippet:
+
+```python
+from robot_sf.models import upsert_registry_entry
+
+upsert_registry_entry(
+    {
+        "model_id": "ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448",
+        "display_name": "PPO diffdrive reverse no-holdout 15M (2026-01-23)",
+        "local_path": (
+            "model/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip"
+        ),
+        "config_path": (
+            "configs/training/ppo_imitation/"
+            "expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml"
+        ),
+        "commit": "9cce22c89411c0a8ae52051dfa28a0a4055f3f07",
+        "wandb_run_id": "jx7e1sjx",
+        "wandb_run_path": None,
+        "wandb_entity": None,
+        "wandb_project": None,
+        "wandb_file": "model.zip",
+        "tags": ["ppo", "socnav", "diffdrive", "reverse", "no-holdout", "grid-obs"],
+        "notes": ["Fill wandb_run_path or wandb_entity/project for auto-download."],
+    }
+)
+```
+
+Programmatic load (with auto-download if configured):
+
+```python
+from robot_sf.models import resolve_model_path
+
+path = resolve_model_path(
+    "ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448",
+    allow_download=True,
+)
+```

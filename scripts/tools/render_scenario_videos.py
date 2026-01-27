@@ -837,7 +837,7 @@ def _write_summary(output_dir: Path, results: list[RenderResult]) -> Path:
     return summary_path
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """CLI entry point for scenario video rendering."""
     args = _build_parser().parse_args(argv)
     configure_logging(verbose=args.verbose)

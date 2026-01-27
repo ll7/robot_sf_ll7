@@ -357,7 +357,9 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
     step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
-    socnav_orca_raw = data.get("socnav_orca", {}) if isinstance(data.get("socnav_orca"), Mapping) else {}
+    socnav_orca_raw = (
+        data.get("socnav_orca", {}) if isinstance(data.get("socnav_orca"), Mapping) else {}
+    )
     socnav_orca_time_horizon = data.get("socnav_orca_time_horizon")
     socnav_orca_neighbor_dist = data.get("socnav_orca_neighbor_dist")
     if socnav_orca_time_horizon is None:

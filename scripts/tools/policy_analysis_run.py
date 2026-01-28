@@ -1102,7 +1102,8 @@ def _prepare_outputs(
     if video_root is not None:
         video_root.mkdir(parents=True, exist_ok=True)
     out_jsonl = output_root / "episodes.jsonl"
-    schema = load_schema(Path("robot_sf/benchmark/schemas/episode.schema.v1.json"))
+    repo_root = Path(__file__).resolve().parents[2]
+    schema = load_schema(repo_root / "robot_sf/benchmark/schemas/episode.schema.v1.json")
     return output_root, video_root, out_jsonl, schema
 
 

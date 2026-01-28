@@ -34,11 +34,7 @@ def _wrap_angle(angle: float) -> float:
     Returns:
         float: Wrapped angle in radians.
     """
-    while angle > pi:
-        angle -= 2 * pi
-    while angle < -pi:
-        angle += 2 * pi
-    return angle
+    return (angle + pi) % (2 * pi) - pi
 
 
 def holonomic_to_diff_drive_action(

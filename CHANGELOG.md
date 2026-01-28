@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
 - Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
 - Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
 - Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
@@ -95,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Visualization stack ownership clarified: the Full Classic pipeline (`robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts`) is now the canonical path that emits manifest-backed plot/video artifacts; the legacy helper API (`robot_sf.benchmark.visualization.*`) is deprecated for benchmark runs and retained only for ad-hoc JSONL plotting.
 
 ### Fixed
+- Policy analysis reports now include video links for problem episodes when videos are recorded, by attaching metadata after video write.
 - Model registry W&B downloads now handle file-like download responses, avoiding path resolution errors.
 - Policy analysis video sweeps now close environments via `exit()` to flush recordings, preventing empty output folders.
 - OSM map conversion now decomposes obstacle polygons with holes before building `MapDefinition` obstacles, preventing walkable areas from being treated as obstacles during spawning and grid generation.

@@ -109,7 +109,7 @@ Fraction of episodes with `path_efficiency >= 0.999` (values are clipped to 1.0)
 Interpretation: PPO and ORCA are fully saturated at 1.0; fast_pysf is ~98% saturated. This suggests either near-optimal paths or that the shortest-path estimate is systematically >= actual path length (clamping).
 
 ### Check 3: Low-speed curvature/jerk sensitivity
-We flag how often `avg_speed < 0.2` and report curvature/jerk stats there.
+We flag how often `avg_speed < 0.2` and report curvature/jerk stats there. (Future runs add filtered metrics using `avg_speed >= 0.1` to reduce numerical instability from dividing by very small speeds in curvature/jerk calculations.)
 - `fast_pysf_planner`: low_speed_frac=0.149
   - low_speed_curvature mean=279.875 median=49.726 p90=857.732
   - low_speed_jerk mean=0.006 median=0.004 p90=0.008
@@ -123,7 +123,8 @@ We flag how often `avg_speed < 0.2` and report curvature/jerk stats there.
   - low_speed_jerk mean=0.000 median=0.000 p90=0.000
   - corr(avg_speed, curvature_mean)=-0.635 corr(avg_speed, jerk_mean)=-0.353
 
-Interpretation: fast_pysf_planner shows very large curvature when speed is low (heavy-tailed curvature; negative correlation), suggesting curvature is unstable when near-stationary. PPO shows extremely high mean curvature driven by a few outliers (median is small), so consider filtering curvature/jerk when speed < ε in analysis.
+Interpretation: fast_pysf_planner shows very large curvature when speed is low (heavy-tailed curvature; negative correlation), suggesting curvature is unstable when near-stationary. PPO shows extremely high mean curvature driven by a few outliers (median is small).
+Reason for low-speed filter (ε=0.1 m/s): curvature uses |v|^3 in the denominator and jerk relies on finite differences of acceleration. When speed is near zero, small numerical noise produces huge curvature/jerk values that dominate means and obscure behavior at normal speeds. Filtering keeps metrics comparable across planners while tracking low-speed behavior separately via `low_speed_frac`.
 
 ## Frame Snapshots
 

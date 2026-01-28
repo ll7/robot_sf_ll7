@@ -767,6 +767,7 @@ def _build_episode_record(
             reached_goal_step=reached_goal_step,
         )
         metrics_raw = compute_all_metrics(ep, horizon=max_steps, shortest_path_len=shortest_path)
+        metrics_raw["shortest_path_len"] = float(shortest_path)
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     status = "success" if metrics.get("success") else "failure"
@@ -852,6 +853,7 @@ def _run_episode(
         env_factory_kwargs=env_factory_kwargs,
     )
     ts_start = datetime.now(_TIMESTAMP_TZ).isoformat()
+    record: dict[str, Any] | None = None
     try:
         obs = _reset_env(
             env, seed=seed, policy_model=policy_model, policy_obs_adapter=policy_obs_adapter
@@ -891,6 +893,10 @@ def _run_episode(
         return record, EpisodeArtifacts(video_path=episode_video)
     finally:
         _close_env(env)
+        if record is not None and episode_video is not None:
+            video_meta = _episode_video_metadata(episode_video, frames=record.get("steps", 0))
+            if video_meta:
+                record["video"] = video_meta
 
 
 def _close_env(env) -> None:

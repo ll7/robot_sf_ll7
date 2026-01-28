@@ -7,6 +7,17 @@ Comparing policy analysis sweeps on `classic_interactions_francis2023.yaml`.
 - `ppo`: `output/benchmarks/policy_analysis_ppo_20260128_094234`
 - `socnav_orca`: `output/benchmarks/policy_analysis_socnav_orca_20260128_104400`
 
+## Sweep Command (all three policies)
+```bash
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy PYTHONUNBUFFERED=1 \
+uv run python scripts/tools/policy_analysis_run.py \
+  --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml \
+  --policy-sweep \
+  --socnav-use-grid \
+  --model-path output/model_cache/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip \
+  --videos
+```
+
 ## Aggregate Metrics (mean over episodes)
 | Run | Success | Collision | TTG_norm | AvgSpeed | NearMiss | Comfort | PedF95 | Jerk | Energy |
 |---|---|---|---|---|---|---|---|---|---|

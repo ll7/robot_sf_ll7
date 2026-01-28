@@ -72,9 +72,12 @@ def holonomic_to_diff_drive_action(
     )
     slowdown = max(0.0, 1.0 - cfg.heading_slowdown * abs(heading_error) / pi)
     linear = speed * slowdown
-    if not cfg.allow_backwards:
-        linear = max(0.0, linear)
-    linear = float(np.clip(linear, 0.0, max_linear_speed))
+    if cfg.allow_backwards and abs(heading_error) > (pi / 2):
+        linear *= -1.0
+    if cfg.allow_backwards:
+        linear = float(np.clip(linear, -max_linear_speed, max_linear_speed))
+    else:
+        linear = float(np.clip(linear, 0.0, max_linear_speed))
 
     return np.array([linear, angular], dtype=float)
 

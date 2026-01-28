@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
+- Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
+- Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
 - Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
 - Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
 - Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).

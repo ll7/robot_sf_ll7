@@ -154,6 +154,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Policy name to evaluate.",
     )
     parser.add_argument(
+        "--policy-sweep",
+        action="store_true",
+        help="Run a multi-policy sweep (fast_pysf_planner, ppo, socnav_orca) in one invocation.",
+    )
+    parser.add_argument(
+        "--policies",
+        type=str,
+        help="Comma-separated policy list for --policy-sweep overrides.",
+    )
+    parser.add_argument(
         "--model-path",
         type=Path,
         default=Path("model/run_023.zip"),
@@ -252,19 +262,19 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_output_root(base: Path | None, *, policy: str) -> Path:
+def _resolve_output_root(base: Path | None, *, policy: str, stamp: str | None = None) -> Path:
     """Resolve benchmark output directory."""
     if base is not None:
         return resolve_artifact_path(base)
-    ts = datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
+    ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("benchmarks") / f"policy_analysis_{policy}_{ts}"
 
 
-def _resolve_video_root(base: Path | None, *, policy: str) -> Path:
+def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = None) -> Path:
     """Resolve video output directory."""
     if base is not None:
         return resolve_artifact_path(base)
-    ts = datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
+    ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("recordings") / f"policy_analysis_{policy}_{ts}"
 
 
@@ -379,6 +389,56 @@ def _vel_and_acc(positions: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarr
     vel = np.gradient(positions, dt, axis=0)
     acc = np.gradient(vel, dt, axis=0)
     return vel, acc
+
+
+def _filtered_jerk_mean(
+    vel: np.ndarray,
+    acc: np.ndarray,
+    *,
+    speed_eps: float,
+) -> float:
+    """Return mean jerk magnitude for timesteps with speed >= speed_eps."""
+    if acc.shape[0] < 3:
+        return 0.0
+    diffs = acc[1:] - acc[:-1]
+    jerk_vecs = diffs[:-1]
+    norms = np.linalg.norm(jerk_vecs, axis=1)
+    if vel.shape[0] < 3:
+        return 0.0
+    speeds = np.linalg.norm(vel, axis=1)
+    mask = speeds[1:-1] >= float(speed_eps)
+    if not np.any(mask):
+        return 0.0
+    return float(np.mean(norms[mask]))
+
+
+def _filtered_curvature_mean(
+    pos: np.ndarray,
+    dt: float,
+    *,
+    speed_eps: float,
+) -> float:
+    """Return mean curvature for timesteps with speed >= speed_eps."""
+    if pos.shape[0] < 4:
+        return 0.0
+    if not np.isfinite(dt) or dt <= 0.0:
+        return 0.0
+    vel = np.diff(pos, axis=0) / dt
+    acc = np.diff(vel, axis=0) / dt
+    v = vel[1:]
+    a = acc
+    cross = np.abs(v[:, 0] * a[:, 1] - v[:, 1] * a[:, 0])
+    v_mag = np.linalg.norm(v, axis=1)
+    mask = v_mag >= float(speed_eps)
+    if not np.any(mask):
+        return 0.0
+    denom = v_mag**3
+    kappa = np.zeros_like(v_mag)
+    kappa[mask] = cross[mask] / denom[mask]
+    finite = np.isfinite(kappa) & mask
+    if not np.any(finite):
+        return 0.0
+    return float(np.mean(kappa[finite]))
 
 
 def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) -> np.ndarray:
@@ -768,6 +828,18 @@ def _build_episode_record(
         )
         metrics_raw = compute_all_metrics(ep, horizon=max_steps, shortest_path_len=shortest_path)
         metrics_raw["shortest_path_len"] = float(shortest_path)
+        # Filter jerk/curvature at low speeds to avoid numerical blow-ups when |v| ~ 0.
+        speed_eps = 0.1
+        metrics_raw["jerk_mean_eps0p1"] = _filtered_jerk_mean(
+            robot_vel_arr,
+            robot_acc_arr,
+            speed_eps=speed_eps,
+        )
+        metrics_raw["curvature_mean_eps0p1"] = _filtered_curvature_mean(
+            robot_pos_arr,
+            float(dt),
+            speed_eps=speed_eps,
+        )
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     status = "success" if metrics.get("success") else "failure"
@@ -970,13 +1042,17 @@ def _resolve_scenarios(
     return scenario_path, scenarios
 
 
-def _load_policy_model(args) -> tuple[Any | None, Callable[[Mapping[str, Any]], np.ndarray] | None]:
+def _load_policy_model(
+    policy_name: str,
+    *,
+    model_path: Path,
+) -> tuple[Any | None, Callable[[Mapping[str, Any]], np.ndarray] | None]:
     """Load PPO policy and observation adapter when requested."""
-    if args.policy != "ppo":
+    if policy_name != "ppo":
         return None, None
     from robot_sf.benchmark.helper_catalog import load_trained_policy
 
-    policy_model = load_trained_policy(str(args.model_path))
+    policy_model = load_trained_policy(str(model_path))
     policy_obs_adapter = resolve_policy_obs_adapter(
         policy_model,
         fallback_adapter=_defensive_obs_adapter,
@@ -984,21 +1060,45 @@ def _load_policy_model(args) -> tuple[Any | None, Callable[[Mapping[str, Any]], 
     return policy_model, policy_obs_adapter
 
 
-def _resolve_socnav_policy(args, *, ctx: TrainingContext) -> SocNavPlannerPolicy | None:
+def _resolve_socnav_policy(
+    args,
+    *,
+    ctx: TrainingContext,
+    policy_name: str,
+) -> SocNavPlannerPolicy | None:
     """Resolve SocNav policy if selected."""
     return _build_socnav_policy(
-        args.policy,
+        policy_name,
         socnav_root=args.socnav_root,
         orca_time_horizon=ctx.orca_time_horizon,
         orca_neighbor_dist=ctx.orca_neighbor_dist,
     )
 
 
-def _prepare_outputs(args) -> tuple[Path, Path | None, Path, dict[str, Any]]:
+def _prepare_outputs(
+    args,
+    *,
+    policy_name: str,
+    stamp: str | None = None,
+    output_base: Path | None = None,
+    video_base: Path | None = None,
+) -> tuple[Path, Path | None, Path, dict[str, Any]]:
     """Prepare output directories and schema."""
-    output_root = _resolve_output_root(args.output, policy=args.policy)
+    output_root = _resolve_output_root(
+        output_base if output_base is not None else args.output,
+        policy=policy_name,
+        stamp=stamp,
+    )
     output_root.mkdir(parents=True, exist_ok=True)
-    video_root = _resolve_video_root(args.video_output, policy=args.policy) if args.videos else None
+    video_root = (
+        _resolve_video_root(
+            video_base if video_base is not None else args.video_output,
+            policy=policy_name,
+            stamp=stamp,
+        )
+        if args.videos
+        else None
+    )
     if video_root is not None:
         video_root.mkdir(parents=True, exist_ok=True)
     out_jsonl = output_root / "episodes.jsonl"
@@ -1014,81 +1114,111 @@ def main(argv: list[str] | None = None) -> int:
 
     ctx = _load_training_context(args)
     scenario_path, scenarios = _resolve_scenarios(args, training_config=ctx.training_config)
-    policy_model, policy_obs_adapter = _load_policy_model(args)
-    socnav_policy = _resolve_socnav_policy(args, ctx=ctx)
-    output_root, video_root, out_jsonl, schema = _prepare_outputs(args)
-    records: list[dict[str, Any]] = []
+    policies: list[str]
+    if args.policy_sweep:
+        if args.policies:
+            policies = [p.strip() for p in args.policies.split(",") if p.strip()]
+        else:
+            policies = ["fast_pysf_planner", "ppo", "socnav_orca"]
+    else:
+        policies = [args.policy]
 
-    for scenario in scenarios:
-        scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
-        seeds = _resolve_seeds(
-            scenario,
-            seed_override=args.seed,
-            max_seeds=args.max_seeds,
-            training_seeds=ctx.training_seeds,
+    sweep_stamp = (
+        datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S") if args.policy_sweep else None
+    )
+
+    for policy_name in policies:
+        output_base = args.output
+        video_base = args.video_output
+        if args.policy_sweep:
+            if output_base is not None:
+                output_base = Path(output_base) / policy_name
+            if video_base is not None:
+                video_base = Path(video_base) / policy_name
+        policy_model, policy_obs_adapter = _load_policy_model(
+            policy_name,
+            model_path=args.model_path,
         )
-        logger.info("Scenario {} seeds={}", scenario_name, seeds)
-        for seed in seeds:
-            record, _artifacts = _run_episode(
+        socnav_policy = _resolve_socnav_policy(args, ctx=ctx, policy_name=policy_name)
+        output_root, video_root, out_jsonl, schema = _prepare_outputs(
+            args,
+            policy_name=policy_name,
+            stamp=sweep_stamp,
+            output_base=output_base,
+            video_base=video_base,
+        )
+        records: list[dict[str, Any]] = []
+
+        for scenario in scenarios:
+            scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
+            seeds = _resolve_seeds(
                 scenario,
-                scenario_path=scenario_path,
-                seed=seed,
-                policy_name=args.policy,
-                policy_model=policy_model,
-                socnav_policy=socnav_policy,
-                policy_obs_adapter=policy_obs_adapter,
-                robot_speed=args.robot_speed,
-                env_overrides=ctx.env_overrides,
-                env_factory_kwargs=ctx.env_factory_kwargs,
-                record_forces=args.record_forces,
-                max_steps_override=args.max_steps,
-                videos=args.videos,
-                video_dir=video_root,
-                video_fps=args.video_fps,
-                socnav_use_grid=args.socnav_use_grid,
-                socnav_grid_resolution=args.socnav_grid_resolution,
-                socnav_grid_width=args.socnav_grid_width,
-                socnav_grid_height=args.socnav_grid_height,
-                socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
+                seed_override=args.seed,
+                max_seeds=args.max_seeds,
+                training_seeds=ctx.training_seeds,
             )
-            _write_jsonl(out_jsonl, schema, record)
-            records.append(record)
+            logger.info("Scenario {} seeds={}", scenario_name, seeds)
+            for seed in seeds:
+                record, _artifacts = _run_episode(
+                    scenario,
+                    scenario_path=scenario_path,
+                    seed=seed,
+                    policy_name=policy_name,
+                    policy_model=policy_model,
+                    socnav_policy=socnav_policy,
+                    policy_obs_adapter=policy_obs_adapter,
+                    robot_speed=args.robot_speed,
+                    env_overrides=ctx.env_overrides,
+                    env_factory_kwargs=ctx.env_factory_kwargs,
+                    record_forces=args.record_forces,
+                    max_steps_override=args.max_steps,
+                    videos=args.videos,
+                    video_dir=video_root,
+                    video_fps=args.video_fps,
+                    socnav_use_grid=args.socnav_use_grid,
+                    socnav_grid_resolution=args.socnav_grid_resolution,
+                    socnav_grid_width=args.socnav_grid_width,
+                    socnav_grid_height=args.socnav_grid_height,
+                    socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
+                )
+                _write_jsonl(out_jsonl, schema, record)
+                records.append(record)
 
-    records = read_jsonl(out_jsonl)
-    summary = _summarize_records(records)
-    aggregates = compute_aggregates(
-        records, group_by="scenario_id", fallback_group_by="scenario_id"
-    )
-    problem_episodes = _find_problem_episodes(records)
+        records = read_jsonl(out_jsonl)
+        summary = _summarize_records(records)
+        aggregates = compute_aggregates(
+            records, group_by="scenario_id", fallback_group_by="scenario_id"
+        )
+        problem_episodes = _find_problem_episodes(records)
 
-    summary_path = output_root / "summary.json"
-    summary_path.write_text(
-        json.dumps(
-            {
-                "summary": summary,
-                "aggregates": aggregates,
-                "problem_episodes": problem_episodes,
-                "scenario_path": str(scenario_path),
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+        summary_path = output_root / "summary.json"
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "summary": summary,
+                    "aggregates": aggregates,
+                    "problem_episodes": problem_episodes,
+                    "scenario_path": str(scenario_path),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
-    report_md, report_json = _write_report(
-        output_root,
-        summary=summary,
-        aggregates=aggregates,
-        problem_episodes=problem_episodes,
-        policy=args.policy,
-        scenario_path=scenario_path,
-    )
+        report_md, report_json = _write_report(
+            output_root,
+            summary=summary,
+            aggregates=aggregates,
+            problem_episodes=problem_episodes,
+            policy=policy_name,
+            scenario_path=scenario_path,
+        )
 
-    logger.info("Wrote episodes to {}", out_jsonl)
-    logger.info("Wrote summary to {}", summary_path)
-    logger.info("Wrote report to {} and {}", report_md, report_json)
-    if video_root is not None:
-        logger.info("Videos saved under {}", video_root)
+        logger.info("Wrote episodes to {}", out_jsonl)
+        logger.info("Wrote summary to {}", summary_path)
+        logger.info("Wrote report to {} and {}", report_md, report_json)
+        if video_root is not None:
+            logger.info("Videos saved under {}", video_root)
     return 0
 
 

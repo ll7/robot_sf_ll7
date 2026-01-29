@@ -1,0 +1,16 @@
+scenarios:
+- name: francis2023_circular_crossing
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_circular_crossing.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.06
+  robot_config: {}
+  metadata:
+    figure: 7x
+    archetype: circular_crossing
+    flow: circular
+    behavior: traffic
+  seeds:
+  - 270
+  - 271
+  - 272

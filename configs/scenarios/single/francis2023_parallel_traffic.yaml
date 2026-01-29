@@ -1,0 +1,16 @@
+scenarios:
+- name: francis2023_parallel_traffic
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_parallel_traffic.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.04
+  robot_config: {}
+  metadata:
+    figure: 7v
+    archetype: parallel_traffic
+    flow: parallel
+    behavior: traffic
+  seeds:
+  - 264
+  - 265
+  - 266

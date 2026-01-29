@@ -1,0 +1,16 @@
+scenarios:
+- name: francis2023_robot_crowding
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_robot_crowding.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.12
+  robot_config: {}
+  metadata:
+    figure: 7y
+    archetype: robot_crowding
+    flow: crowd
+    behavior: crowding
+  seeds:
+  - 273
+  - 274
+  - 275

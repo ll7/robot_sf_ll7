@@ -1,0 +1,16 @@
+scenarios:
+- name: francis2023_perpendicular_traffic
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.1
+  robot_config: {}
+  metadata:
+    figure: 7w
+    archetype: perpendicular_traffic
+    flow: perpendicular
+    behavior: traffic
+  seeds:
+  - 267
+  - 268
+  - 269

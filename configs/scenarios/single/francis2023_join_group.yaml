@@ -1,0 +1,30 @@
+scenarios:
+- name: francis2023_join_group
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_join_group.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h2
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h3
+    goal: null
+    role: join
+    role_target_id: h1
+    note: join group near h1
+  robot_config: {}
+  metadata:
+    figure: 7p
+    archetype: join_group
+    flow: n/a
+    behavior: join
+  seeds:
+  - 255
+  - 256
+  - 257

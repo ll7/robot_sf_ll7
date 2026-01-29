@@ -1,0 +1,16 @@
+scenarios:
+- name: classic_doorway_low
+  map_file: ../../../maps/svg_maps/classic_doorway.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: low
+    flow: bi
+    groups: 0.0
+  seeds:
+  - 141
+  - 142
+  - 143

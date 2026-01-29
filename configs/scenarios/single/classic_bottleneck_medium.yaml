@@ -1,0 +1,16 @@
+scenarios:
+- name: classic_bottleneck_medium
+  map_file: ../../../maps/svg_maps/classic_bottleneck.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.05
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: medium
+    flow: bi
+    groups: 0.0
+  seeds:
+  - 131
+  - 132
+  - 133

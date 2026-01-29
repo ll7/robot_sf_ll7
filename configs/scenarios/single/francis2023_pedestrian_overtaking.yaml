@@ -1,0 +1,21 @@
+scenarios:
+- name: francis2023_pedestrian_overtaking
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_ped_overtaking.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+    speed_m_s: 0.8
+    note: fast walker (tuning pending)
+  robot_config: {}
+  metadata:
+    figure: 7c
+    archetype: pedestrian_overtaking
+    flow: uni
+    behavior: fast_ped
+  seeds:
+  - 207
+  - 208
+  - 209

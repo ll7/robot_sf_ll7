@@ -1,0 +1,19 @@
+scenarios:
+- name: francis2023_narrow_hallway
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_narrow_hallway.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7j
+    archetype: narrow_hallway
+    flow: bi
+    behavior: none
+  seeds:
+  - 222
+  - 223
+  - 224

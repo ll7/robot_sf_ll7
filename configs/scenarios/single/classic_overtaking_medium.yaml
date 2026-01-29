@@ -1,16 +1,16 @@
 scenarios:
-- name: classic_crossing_medium
-  map_file: ../../../maps/svg_maps/classic_crossing.svg
+- name: classic_overtaking_medium
+  map_file: ../../../maps/svg_maps/classic_overtaking.svg
   simulation_config:
     max_episode_steps: 600
     ped_density: 0.05
   robot_config: {}
   metadata:
-    archetype: crossing
+    archetype: overtaking
     density: medium
-    flow: bi
+    flow: uni
     groups: 0.0
   seeds:
-  - 101
-  - 102
-  - 103
+  - 121
+  - 122
+  - 123

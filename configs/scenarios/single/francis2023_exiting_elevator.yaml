@@ -1,0 +1,19 @@
+scenarios:
+- name: francis2023_exiting_elevator
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_exiting_elevator.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7o
+    archetype: exiting_elevator
+    flow: exit
+    behavior: none
+  seeds:
+  - 237
+  - 238
+  - 239

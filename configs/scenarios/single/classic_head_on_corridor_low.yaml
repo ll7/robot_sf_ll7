@@ -1,0 +1,16 @@
+scenarios:
+- name: classic_head_on_corridor_low
+  map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: head_on_corridor
+    density: low
+    flow: bi
+    groups: 0.0
+  seeds:
+  - 111
+  - 112
+  - 113

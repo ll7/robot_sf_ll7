@@ -5,8 +5,8 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 
 ## Layout
 
-- `classic_interactions.yaml`, `francis2023.yaml`: legacy multi-scenario files.
-- `classic_interactions_francis2023.yaml`: combined legacy matrix.
+- `classic_interactions.yaml`, `francis2023.yaml`: manifest entry points for the two suites.
+- `classic_interactions_francis2023.yaml`: combined manifest for both suites.
 - `single/`: one scenario per file (manual fine-tuning and small edits).
 - `archetypes/`: groups of related scenarios (may contain one or many entries).
 - `sets/`: manifest files that include other scenario files.
@@ -21,7 +21,7 @@ per-scenario and per-archetype YAMLs into a single scenario list.
 includes:
   - ../single/classic_crossing_low.yaml
   - ../single/classic_crossing_medium.yaml
-  - ../archetypes/classic_crossing_high.yaml
+  - ../single/classic_crossing_high.yaml
 ```
 
 The loader expands includes relative to the manifest file and preserves order.

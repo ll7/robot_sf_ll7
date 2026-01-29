@@ -1,13 +1,13 @@
 scenarios:
-- name: classic_crossing_low
+- name: classic_crossing_high
   map_file: ../../../maps/svg_maps/classic_crossing.svg
   simulation_config:
     max_episode_steps: 600
-    ped_density: 0.02
+    ped_density: 0.08
   robot_config: {}
   metadata:
     archetype: crossing
-    density: low
+    density: high
     flow: bi
     groups: 0.0
   seeds:

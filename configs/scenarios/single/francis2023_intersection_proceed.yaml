@@ -1,0 +1,27 @@
+scenarios:
+- name: francis2023_intersection_proceed
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    note: intersection proceed
+  robot_config: {}
+  metadata:
+    figure: 7h
+    archetype: intersection_proceed
+    flow: cross
+    behavior: proceed
+  seeds:
+  - 243
+  - 244
+  - 245

@@ -1,0 +1,25 @@
+scenarios:
+- name: francis2023_leading_human
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_down_path.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    role: follow
+    role_target_id: robot:0
+    role_offset:
+    - -1.5
+    - 0.0
+    note: human follows robot (role follow)
+  robot_config: {}
+  metadata:
+    figure: 7s
+    archetype: leading_human
+    flow: uni
+    behavior: follow
+  seeds:
+  - 249
+  - 250
+  - 251

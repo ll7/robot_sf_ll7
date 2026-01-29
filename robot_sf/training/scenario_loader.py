@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from copy import deepcopy
 from functools import lru_cache
@@ -46,10 +47,16 @@ def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
     """
-    return _load_scenarios_recursive(path, visited=set())
+    resolved = path.resolve()
+    return _load_scenarios_recursive(resolved, visited=set(), root=resolved)
 
 
-def _load_scenarios_recursive(path: Path, *, visited: set[Path]) -> list[Mapping[str, Any]]:
+def _load_scenarios_recursive(
+    path: Path,
+    *,
+    visited: set[Path],
+    root: Path,
+) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
     Returns:
@@ -79,8 +86,8 @@ def _load_scenarios_recursive(path: Path, *, visited: set[Path]) -> list[Mapping
 
         combined: list[Mapping[str, Any]] = []
         for include_path in includes:
-            combined.extend(_load_scenarios_recursive(include_path, visited=visited))
-        combined.extend(_normalize_scenarios(scenarios, source=resolved))
+            combined.extend(_load_scenarios_recursive(include_path, visited=visited, root=root))
+        combined.extend(_normalize_scenarios(scenarios, source=resolved, root=root))
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -123,6 +130,7 @@ def _normalize_scenarios(
     scenarios: list[Any],
     *,
     source: Path,
+    root: Path,
 ) -> list[Mapping[str, Any]]:
     """Filter and validate scenario mappings while preserving order.
 
@@ -135,7 +143,7 @@ def _normalize_scenarios(
             logger.warning("Scenario entry {} in '{}' is not a mapping; skipping.", idx, source)
             continue
         _validate_scenario_entry(scenario, source=source, index=idx)
-        normalized.append(scenario)
+        normalized.append(_rebase_scenario_paths(scenario, source=source, root=root))
     return normalized
 
 
@@ -172,6 +180,30 @@ def _validate_map_file(
         return
     if not isinstance(map_file, str):
         raise ValueError(f"map_file must be a string in '{source}' at index {index}.")
+
+
+def _rebase_scenario_paths(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    root: Path,
+) -> Mapping[str, Any]:
+    """Rewrite relative map paths to be relative to the root scenario file.
+
+    Returns:
+        Mapping[str, Any]: Scenario entry with rebased paths when applicable.
+    """
+    map_file = scenario.get("map_file")
+    if not isinstance(map_file, str):
+        return scenario
+    candidate = Path(map_file)
+    if candidate.is_absolute() or source.parent == root.parent:
+        return scenario
+    abs_target = (source.parent / candidate).resolve()
+    rel = os.path.relpath(abs_target, root.parent)
+    updated = dict(scenario)
+    updated["map_file"] = Path(rel).as_posix()
+    return updated
 
 
 def _validate_optional_mapping(

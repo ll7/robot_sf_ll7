@@ -1,16 +1,16 @@
 scenarios:
-- name: classic_crossing_low
-  map_file: ../../../maps/svg_maps/classic_crossing.svg
+- name: classic_merging_low
+  map_file: ../../../maps/svg_maps/classic_merging.svg
   simulation_config:
     max_episode_steps: 600
     ped_density: 0.02
   robot_config: {}
   metadata:
-    archetype: crossing
+    archetype: merging
     density: low
-    flow: bi
+    flow: converging
     groups: 0.0
   seeds:
-  - 101
-  - 102
-  - 103
+  - 151
+  - 152
+  - 153

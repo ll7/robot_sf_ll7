@@ -1,0 +1,29 @@
+scenarios:
+- name: francis2023_leave_group
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_leave_group.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    role: leave
+    goal_poi: poi_h1_goal
+    note: leave group toward exit
+  - id: h2
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h3
+    goal: null
+    role: wait
+    note: group anchor (static)
+  robot_config: {}
+  metadata:
+    figure: 7q
+    archetype: leave_group
+    flow: n/a
+    behavior: leave
+  seeds:
+  - 258
+  - 259
+  - 260

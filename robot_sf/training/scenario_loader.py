@@ -37,22 +37,168 @@ def _load_yaml_documents(path: Path) -> Any:
 
 
 def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
-    """Load raw scenario definitions from a YAML file.
+    """Load scenario definitions from a YAML file.
+
+    Supports a list of scenarios, a mapping with ``scenarios``, and optional
+    include lists (``includes``, ``include``, or ``scenario_files``) for
+    composing per-scenario and per-archetype files into a single list.
 
     Returns:
-        list[Mapping[str, Any]]: Parsed scenario entries from the file.
+        list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
     """
+    return _load_scenarios_recursive(path, visited=set())
 
-    data = _load_yaml_documents(path)
-    if isinstance(data, dict) and "scenarios" in data:
-        scenarios = data["scenarios"]
-    elif isinstance(data, list):
-        scenarios = data
-    else:  # pragma: no cover - malformed input handled by caller
-        raise ValueError(f"Scenario config must contain a 'scenarios' list: {path}")
-    if not isinstance(scenarios, list) or not scenarios:
-        raise ValueError(f"Scenario config missing scenarios: {path}")
-    return [sc for sc in scenarios if isinstance(sc, Mapping)]
+
+def _load_scenarios_recursive(path: Path, *, visited: set[Path]) -> list[Mapping[str, Any]]:
+    """Load scenarios from path, expanding any include references.
+
+    Returns:
+        list[Mapping[str, Any]]: Combined scenario entries.
+    """
+    resolved = path.resolve()
+    if resolved in visited:
+        raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
+    visited.add(resolved)
+    try:
+        data = _load_yaml_documents(resolved)
+        scenarios: list[Any] = []
+        includes: list[Path] = []
+        if isinstance(data, Mapping):
+            includes = _resolve_includes(data, source=resolved)
+            if "scenarios" in data:
+                scenarios = data["scenarios"]
+            elif not includes:
+                raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
+        elif isinstance(data, list):
+            scenarios = data
+        else:  # pragma: no cover - malformed input handled by caller
+            raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
+
+        if scenarios and not isinstance(scenarios, list):
+            raise ValueError(f"Scenario config 'scenarios' must be a list: {resolved}")
+
+        combined: list[Mapping[str, Any]] = []
+        for include_path in includes:
+            combined.extend(_load_scenarios_recursive(include_path, visited=visited))
+        combined.extend(_normalize_scenarios(scenarios, source=resolved))
+        if not combined:
+            raise ValueError(f"Scenario config missing scenarios: {resolved}")
+        return combined
+    finally:
+        visited.remove(resolved)
+
+
+def _resolve_includes(data: Mapping[str, Any], *, source: Path) -> list[Path]:
+    """Resolve include entries into absolute paths.
+
+    Returns:
+        list[Path]: Absolute include paths.
+    """
+    raw = data.get("includes") or data.get("include") or data.get("scenario_files")
+    if raw is None:
+        return []
+    if isinstance(raw, (str, Path)):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        raise ValueError(f"Include list must be a list or string in '{source}'.")
+    includes: list[Path] = []
+    for entry in entries:
+        if not isinstance(entry, (str, Path)):
+            raise ValueError(f"Include entry '{entry}' must be a string in '{source}'.")
+        candidate = Path(entry)
+        if not candidate.is_absolute():
+            candidate = (source.parent / candidate).resolve()
+        if candidate.is_dir():
+            raise ValueError(
+                f"Include entry '{entry}' resolves to a directory; "
+                f"list scenario files explicitly in '{source}'."
+            )
+        includes.append(candidate)
+    return includes
+
+
+def _normalize_scenarios(
+    scenarios: list[Any],
+    *,
+    source: Path,
+) -> list[Mapping[str, Any]]:
+    """Filter and validate scenario mappings while preserving order.
+
+    Returns:
+        list[Mapping[str, Any]]: Normalized scenario entries.
+    """
+    normalized: list[Mapping[str, Any]] = []
+    for idx, scenario in enumerate(scenarios):
+        if not isinstance(scenario, Mapping):
+            logger.warning("Scenario entry {} in '{}' is not a mapping; skipping.", idx, source)
+            continue
+        _validate_scenario_entry(scenario, source=source, index=idx)
+        normalized.append(scenario)
+    return normalized
+
+
+def _validate_scenario_entry(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    index: int,
+) -> None:
+    """Emit helpful errors/warnings for common schema expectations."""
+    name = scenario.get("name") or scenario.get("scenario_id")
+    if name is None:
+        logger.warning("Scenario entry {} in '{}' is missing a name or scenario_id.", index, source)
+    elif not isinstance(name, str):
+        raise ValueError(f"Scenario name must be a string in '{source}' at index {index}.")
+
+    _validate_map_file(scenario, name=name, source=source, index=index)
+    _validate_optional_mapping(scenario, key="simulation_config", source=source, index=index)
+    _validate_optional_mapping(scenario, key="robot_config", source=source, index=index)
+    _validate_optional_mapping(scenario, key="metadata", source=source, index=index)
+    _validate_seed_list(scenario, source=source, index=index)
+
+
+def _validate_map_file(
+    scenario: Mapping[str, Any],
+    *,
+    name: str | None,
+    source: Path,
+    index: int,
+) -> None:
+    map_file = scenario.get("map_file")
+    if map_file is None:
+        logger.warning("Scenario '{}' in '{}' has no map_file.", name or index, source)
+        return
+    if not isinstance(map_file, str):
+        raise ValueError(f"map_file must be a string in '{source}' at index {index}.")
+
+
+def _validate_optional_mapping(
+    scenario: Mapping[str, Any],
+    *,
+    key: str,
+    source: Path,
+    index: int,
+) -> None:
+    value = scenario.get(key)
+    if value is not None and not isinstance(value, Mapping):
+        raise ValueError(f"{key} must be a mapping in '{source}' at index {index}.")
+
+
+def _validate_seed_list(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    index: int,
+) -> None:
+    seeds = scenario.get("seeds")
+    if seeds is None:
+        return
+    if not isinstance(seeds, list):
+        raise ValueError(f"seeds must be a list in '{source}' at index {index}.")
+    if not all(isinstance(seed, int) for seed in seeds):
+        raise ValueError(f"seeds must contain integers in '{source}' at index {index}.")
 
 
 def select_scenario(

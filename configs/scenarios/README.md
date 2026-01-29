@@ -41,9 +41,7 @@ per-scenario and per-archetype YAMLs into a single scenario list.
 ```yaml
 # configs/scenarios/sets/classic_crossing_subset.yaml
 includes:
-  - ../single/classic_crossing_low.yaml
-  - ../single/classic_crossing_medium.yaml
-  - ../single/classic_crossing_high.yaml
+  - ../archetypes/classic_crossing.yaml
 map_search_paths:
   - ../../../maps/svg_maps
 ```

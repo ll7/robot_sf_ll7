@@ -7,6 +7,7 @@ scenarios:
   robot_config: {}
   metadata:
     archetype: crossing
+    label: cross plaza circulation
     density: low
     flow: bi
     groups: 0.0
@@ -22,7 +23,7 @@ scenarios:
         robot_ped_within_5m_frac: 0.25510204081632654
         ped_force_mean: 0.1292702987830097
         force_q95: 0.43954235832374555
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+      metrics_updated_on: '2026-01-29T14:09:05.219080+01:00'
   seeds:
   - 101
   - 102
@@ -35,6 +36,7 @@ scenarios:
   robot_config: {}
   metadata:
     archetype: crossing
+    label: cross plaza circulation
     density: medium
     flow: bi
     groups: 0.0
@@ -50,7 +52,7 @@ scenarios:
         robot_ped_within_5m_frac: 0.3565217391304348
         ped_force_mean: 0.08985354084658885
         force_q95: 0.25964348565495887
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+      metrics_updated_on: '2026-01-29T14:09:05.219080+01:00'
   seeds:
   - 101
   - 102
@@ -63,6 +65,7 @@ scenarios:
   robot_config: {}
   metadata:
     archetype: crossing
+    label: cross plaza circulation
     density: high
     flow: bi
     groups: 0.0
@@ -78,7 +81,7 @@ scenarios:
         robot_ped_within_5m_frac: 0.19090909090909092
         ped_force_mean: 0.1475821043264511
         force_q95: 0.5812386467828754
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+      metrics_updated_on: '2026-01-29T14:09:05.219080+01:00'
   seeds:
   - 101
   - 102

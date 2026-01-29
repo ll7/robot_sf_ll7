@@ -6,7 +6,7 @@ models:
     config_path: configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml
     commit: 9cce22c89411c0a8ae52051dfa28a0a4055f3f07
     wandb_run_id: jx7e1sjx
-    wandb_run_path:
+    wandb_run_path: ll7/robot_sf/jx7e1sjx
     wandb_entity:
     wandb_project:
     wandb_file: model.zip

@@ -23,6 +23,10 @@ Usage examples:
     --scenario configs/scenarios/francis2023.yaml \
     --policy socnav_social_force --socnav-use-grid --all
 
+  uv run python scripts/tools/render_scenario_videos.py \
+    --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
+    --policy fast_pysf --all
+
 Headless runs:
   SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/render_scenario_videos.py \
     --scenario configs/scenarios/francis2023.yaml --all
@@ -52,6 +56,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.fast_pysf_planner import FastPysfPlannerPolicy
 from robot_sf.planner.socnav import (
     SocNavBenchComplexPolicy,
     SocNavPlannerConfig,
@@ -169,9 +174,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "socnav_orca",
             "socnav_sacadrl",
             "socnav_bench",
+            "fast_pysf",
+            "fast_pysf_planner",
         ],
         default="goal",
-        help="Robot controller policy: goal, ppo, or SocNav planners (default: goal).",
+        help="Robot controller policy: goal, ppo, SocNav planners, or fast_pysf (default: goal).",
     )
     parser.add_argument(
         "--model-path",
@@ -361,11 +368,12 @@ def _resolve_goal_action(
     action_space: Any | None,
     policy_model: Any | None,
     socnav_policy: SocNavPlannerPolicy | None,
+    fast_pysf_policy: FastPysfPlannerPolicy | None,
     scenario_name: str,
     seed: int,
 ) -> bool:
     """Determine whether to use the goal-seeking controller."""
-    if socnav_policy is not None:
+    if socnav_policy is not None or fast_pysf_policy is not None:
         return False
     use_goal_action = policy_model is None
     if use_goal_action:
@@ -435,6 +443,7 @@ def _select_action(
     use_goal_action: bool,
     policy_model: Any | None,
     socnav_policy: SocNavPlannerPolicy | None,
+    fast_pysf_policy: FastPysfPlannerPolicy | None,
     planner_action_adapter: PlannerActionAdapter | None,
     robot_speed: float,
 ) -> np.ndarray:
@@ -446,6 +455,11 @@ def _select_action(
         return action
     if socnav_policy is not None:
         command = socnav_policy.act(obs)
+        if planner_action_adapter is not None:
+            return planner_action_adapter.from_velocity_command(command)
+        return np.array(command, dtype=float)
+    if fast_pysf_policy is not None:
+        command = fast_pysf_policy.action()
         if planner_action_adapter is not None:
             return planner_action_adapter.from_velocity_command(command)
         return np.array(command, dtype=float)
@@ -462,6 +476,7 @@ def _run_steps(
     use_goal_action: bool,
     policy_model: Any | None,
     socnav_policy: SocNavPlannerPolicy | None,
+    fast_pysf_policy: FastPysfPlannerPolicy | None,
     planner_action_adapter: PlannerActionAdapter | None,
     policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
     robot_speed: float,
@@ -480,6 +495,7 @@ def _run_steps(
             use_goal_action=use_goal_action,
             policy_model=policy_model,
             socnav_policy=socnav_policy,
+            fast_pysf_policy=fast_pysf_policy,
             planner_action_adapter=planner_action_adapter,
             robot_speed=robot_speed,
         )
@@ -694,16 +710,22 @@ def _run_episode(
     note = None
     error = None
     planner_action_adapter = None
+    fast_pysf_policy: FastPysfPlannerPolicy | None = None
     try:
         sync_policy_spaces(env, policy_model)
         obs, _ = env.reset()
         action_space = getattr(env, "action_space", None)
-        if socnav_policy is not None:
+        if policy_name in {"fast_pysf", "fast_pysf_planner"}:
+            if getattr(env, "simulator", None) is None:
+                raise RuntimeError("fast_pysf policy requires env.simulator")
+            fast_pysf_policy = FastPysfPlannerPolicy(env.simulator)
+        if socnav_policy is not None or fast_pysf_policy is not None:
             planner_action_adapter = _build_planner_action_adapter(env, config)
         use_goal_action = _resolve_goal_action(
             action_space=action_space,
             policy_model=policy_model,
             socnav_policy=socnav_policy,
+            fast_pysf_policy=fast_pysf_policy,
             scenario_name=scenario_name,
             seed=seed,
         )
@@ -719,6 +741,7 @@ def _run_episode(
             use_goal_action=use_goal_action,
             policy_model=policy_model,
             socnav_policy=socnav_policy,
+            fast_pysf_policy=fast_pysf_policy,
             planner_action_adapter=planner_action_adapter,
             policy_obs_adapter=policy_obs_adapter,
             robot_speed=robot_speed,

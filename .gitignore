@@ -45,3 +45,6 @@ dist/
 .env.*
 !.env.example
 .vscode/mcp.json
+
+.gemini/
+gha-creds-*.json

@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
+- Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
+- Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
 - Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
+- Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
+- Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
 - Benchmark outputs now include wall collision and clearing distance metrics by default.
 - Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
 - Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
@@ -73,6 +78,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Changed
+- Policy analysis timestamps now use CET/CEST (Europe/Berlin) instead of UTC for output folders and episode metadata.
+- Policy analysis runs now force `use_planner=False` in the episode config to avoid attaching global planners during metrics/video sweeps.
+- Classic global planner defaults now use 0.5m grid cells (`cells_per_meter=2`) with zero inflation for shortest-path planning, reducing invalid start/goal cell failures.
 - Default global planner selection now prefers the classic Theta* (v2) grid planner, and benchmark shortest-path calculations use the same planner.
 - Occupancy grid rasterization now logs out-of-bounds obstacle segments at DEBUG instead of the custom SPAM level.
 - Benchmark CLI list-algorithms now reports only implemented baseline planners to avoid registry KeyErrors.
@@ -90,6 +98,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Visualization stack ownership clarified: the Full Classic pipeline (`robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts`) is now the canonical path that emits manifest-backed plot/video artifacts; the legacy helper API (`robot_sf.benchmark.visualization.*`) is deprecated for benchmark runs and retained only for ad-hoc JSONL plotting.
 
 ### Fixed
+- Policy analysis reports now include video links for problem episodes when videos are recorded, by attaching metadata after video write.
+- Model registry W&B downloads now handle file-like download responses, avoiding path resolution errors.
+- Policy analysis video sweeps now close environments via `exit()` to flush recordings, preventing empty output folders.
 - OSM map conversion now decomposes obstacle polygons with holes before building `MapDefinition` obstacles, preventing walkable areas from being treated as obstacles during spawning and grid generation.
 - Resolved OSM dependency pinning by aligning `networkx` with current `osmnx` constraints to avoid unsatisfiable installs.
 - OSM driveable-area fallback now checks obstacle containment safely, preventing `AttributeError` when `allowed_areas` is absent.

@@ -14,7 +14,7 @@ Example:
     >>> from robot_sf.nav.svg_map_parser import convert_map
     >>> from robot_sf.planner.classic_global_planner import ClassicGlobalPlanner
     >>> map_def = convert_map("maps/svg_maps/example.svg")
-    >>> planner = ClassicGlobalPlanner(map_def, cells_per_meter=1.0)
+    >>> planner = ClassicGlobalPlanner(map_def, cells_per_meter=2.0)
     >>> path, info = planner.plan(start=(5.0, 5.0), goal=(45.0, 25.0))
 """
 
@@ -57,8 +57,8 @@ class ClassicPlannerConfig:
         algorithm: Planning algorithm to use ('theta_star', 'a_star', etc.).
     """
 
-    cells_per_meter: float = 1.0
-    inflate_radius_cells: int | None = 2
+    cells_per_meter: float = 2.0
+    inflate_radius_cells: int | None = 0
     add_boundary_obstacles: bool = True
     algorithm: str = "theta_star_v2"
 

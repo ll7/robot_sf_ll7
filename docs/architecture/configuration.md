@@ -157,6 +157,22 @@ robot_config:
 **Loading YAML configs**:
 YAML files are typically loaded by benchmark runners or training scripts and merged with runtime parameters before being passed to factory functions.
 
+**Scenario manifests (includes)**:
+Scenario configuration files can also act as manifests that include other scenario files.
+This enables a mix of per-scenario and per-archetype files while keeping a single entry
+point for training/benchmark runs.
+
+```yaml
+# configs/scenarios/sets/classic_crossing_subset.yaml
+includes:
+  - ../single/classic_crossing_low.yaml
+  - ../single/classic_crossing_medium.yaml
+  - ../archetypes/classic_crossing_high.yaml
+```
+
+Each included file can contain one or many scenarios. The loader expands includes
+relative to the manifest file and preserves ordering.
+
 ### Runtime Parameters
 
 **Location**: Passed to factory functions in scripts or interactive sessions

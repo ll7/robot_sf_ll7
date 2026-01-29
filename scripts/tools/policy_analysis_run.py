@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -656,7 +657,9 @@ def _prepare_episode_config(
     episode_video = None
     if videos and video_dir is not None:
         scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
-        slug = scenario_name.replace(" ", "_")
+        slug = re.sub(r"[^\\w.-]+", "_", scenario_name).strip("._")
+        if not slug or slug in {".", ".."}:
+            slug = "scenario"
         episode_video = video_dir / f"{slug}_seed{seed}_{policy_name}.mp4"
     return config, max_steps, episode_video
 

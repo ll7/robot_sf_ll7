@@ -17,11 +17,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: null
-        mean_distance: null
-        robot_ped_within_5m_frac: null
-        ped_force_mean: null
-        force_q95: null
+        min_distance: 9.342135784790734
+        mean_distance: 12.55526674055105
+        robot_ped_within_5m_frac: 0.0
+        ped_force_mean: 0.4989206329804127
+        force_q95: 2.0299552746691645
+      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
   seeds:
   - 161
   - 162
@@ -44,11 +45,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: null
-        mean_distance: null
-        robot_ped_within_5m_frac: null
-        ped_force_mean: null
-        force_q95: null
+        min_distance: 7.077286828260474
+        mean_distance: 11.45740628594556
+        robot_ped_within_5m_frac: 0.0
+        ped_force_mean: 0.21060639512111437
+        force_q95: 0.686255030574637
+      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
   seeds:
   - 161
   - 162

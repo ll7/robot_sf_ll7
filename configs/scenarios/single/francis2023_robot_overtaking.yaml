@@ -15,6 +15,18 @@ scenarios:
     archetype: robot_overtaking
     flow: uni
     behavior: slow_ped
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
   seeds:
   - 210
   - 211

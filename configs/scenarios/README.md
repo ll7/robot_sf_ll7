@@ -11,6 +11,27 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 - `archetypes/`: groups of related scenarios (may contain one or many entries).
 - `sets/`: manifest files that include other scenario files.
 
+## Plausibility tracking
+
+Scenario metadata includes a `plausibility` block used to record verification
+status and interaction metrics:
+
+```yaml
+metadata:
+  plausibility:
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+```
+
 ## Manifest (include) files
 
 Manifest files use `includes` (or `include` / `scenario_files`) to combine

@@ -24,6 +24,7 @@ metadata:
     verified_by: null
     method: null
     notes: null
+    metrics_updated_on: null
     metrics:
       min_distance: null
       mean_distance: null

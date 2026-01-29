@@ -3,3 +3,5 @@ includes:
   - ../single/classic_crossing_low.yaml
   - ../single/classic_crossing_medium.yaml
   - ../single/classic_crossing_high.yaml
+map_search_paths:
+  - ../../../maps/svg_maps

@@ -96,3 +96,35 @@ scenarios:
 
     with pytest.raises(ValueError, match="seeds must contain integers"):
         load_scenarios(scenario_file)
+
+
+def test_map_search_paths_rebases_map_paths(tmp_path: Path) -> None:
+    """map_search_paths should resolve map_file and rebase to the manifest root."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    map_path = maps_dir / "demo.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+
+    scenario_file = tmp_path / "scenario.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: map_search
+    map_file: demo.svg
+""",
+    )
+
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - scenario.yaml
+map_search_paths:
+  - maps
+""",
+    )
+
+    scenarios = load_scenarios(manifest, base_dir=manifest)
+    assert scenarios[0]["map_file"] == "maps/demo.svg"

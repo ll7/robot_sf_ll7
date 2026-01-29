@@ -22,9 +22,14 @@ includes:
   - ../single/classic_crossing_low.yaml
   - ../single/classic_crossing_medium.yaml
   - ../single/classic_crossing_high.yaml
+map_search_paths:
+  - ../../../maps/svg_maps
 ```
 
 The loader expands includes relative to the manifest file and preserves order.
+If `map_file` paths in included scenarios are not resolvable, you can set
+`map_search_paths` to help locate map files. The loader logs a warning with
+the attempted paths and suggestion.
 
 ## Usage
 

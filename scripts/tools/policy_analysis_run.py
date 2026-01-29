@@ -1036,7 +1036,7 @@ def _resolve_scenarios(
         or (training_config.scenario_config if training_config is not None else None)
         or Path("configs/scenarios/francis2023.yaml")
     ).resolve()
-    scenarios = load_scenarios(scenario_path)
+    scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
     if args.scenario_id and args.all:
         raise ValueError("Use --all or --scenario-id, not both.")
     if args.scenario_id:

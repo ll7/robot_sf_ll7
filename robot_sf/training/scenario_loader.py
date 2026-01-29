@@ -37,7 +37,7 @@ def _load_yaml_documents(path: Path) -> Any:
         return yaml.safe_load(handle)
 
 
-def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
+def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
     Supports a list of scenarios, a mapping with ``scenarios``, and optional
@@ -48,7 +48,13 @@ def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
     """
     resolved = path.resolve()
-    return _load_scenarios_recursive(resolved, visited=set(), root=resolved)
+    if base_dir is None:
+        root = resolved
+    else:
+        root = base_dir.resolve()
+        if not root.exists():
+            raise ValueError(f"Scenario base_dir does not exist: {root}")
+    return _load_scenarios_recursive(resolved, visited=set(), root=root)
 
 
 def _load_scenarios_recursive(
@@ -56,6 +62,7 @@ def _load_scenarios_recursive(
     *,
     visited: set[Path],
     root: Path,
+    map_search_paths: list[Path] | None = None,
 ) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
@@ -70,6 +77,15 @@ def _load_scenarios_recursive(
         data = _load_yaml_documents(resolved)
         scenarios: list[Any] = []
         includes: list[Path] = []
+        local_map_search_paths = (
+            _resolve_map_search_paths(data, root=root) if isinstance(data, Mapping) else []
+        )
+        if local_map_search_paths:
+            logger.info(
+                "Scenario manifest '{}' configured map_search_paths: {}",
+                resolved,
+                ", ".join(str(path) for path in local_map_search_paths),
+            )
         if isinstance(data, Mapping):
             includes = _resolve_includes(data, source=resolved)
             if "scenarios" in data:
@@ -85,9 +101,25 @@ def _load_scenarios_recursive(
             raise ValueError(f"Scenario config 'scenarios' must be a list: {resolved}")
 
         combined: list[Mapping[str, Any]] = []
+        inherited_search_paths = map_search_paths or []
+        effective_search_paths = local_map_search_paths or inherited_search_paths
         for include_path in includes:
-            combined.extend(_load_scenarios_recursive(include_path, visited=visited, root=root))
-        combined.extend(_normalize_scenarios(scenarios, source=resolved, root=root))
+            combined.extend(
+                _load_scenarios_recursive(
+                    include_path,
+                    visited=visited,
+                    root=root,
+                    map_search_paths=effective_search_paths,
+                )
+            )
+        combined.extend(
+            _normalize_scenarios(
+                scenarios,
+                source=resolved,
+                root=root,
+                map_search_paths=effective_search_paths,
+            )
+        )
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -126,11 +158,41 @@ def _resolve_includes(data: Mapping[str, Any], *, source: Path) -> list[Path]:
     return includes
 
 
+def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Path]:
+    """Resolve optional map search paths for the scenario root.
+
+    Returns:
+        list[Path]: Resolved search paths.
+    """
+    raw = data.get("map_search_paths")
+    if raw is None:
+        return []
+    if isinstance(raw, (str, Path)):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        raise ValueError(f"map_search_paths must be a list or string in '{root}'.")
+    resolved: list[Path] = []
+    for entry in entries:
+        if not isinstance(entry, (str, Path)):
+            raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{root}'.")
+        candidate = Path(entry)
+        if not candidate.is_absolute():
+            candidate = (root.parent / candidate).resolve()
+        if not candidate.exists():
+            logger.warning("map_search_paths entry does not exist: {}", candidate)
+            continue
+        resolved.append(candidate)
+    return resolved
+
+
 def _normalize_scenarios(
     scenarios: list[Any],
     *,
     source: Path,
     root: Path,
+    map_search_paths: list[Path],
 ) -> list[Mapping[str, Any]]:
     """Filter and validate scenario mappings while preserving order.
 
@@ -143,7 +205,14 @@ def _normalize_scenarios(
             logger.warning("Scenario entry {} in '{}' is not a mapping; skipping.", idx, source)
             continue
         _validate_scenario_entry(scenario, source=source, index=idx)
-        normalized.append(_rebase_scenario_paths(scenario, source=source, root=root))
+        normalized.append(
+            _rebase_scenario_paths(
+                scenario,
+                source=source,
+                root=root,
+                map_search_paths=map_search_paths,
+            )
+        )
     return normalized
 
 
@@ -187,6 +256,7 @@ def _rebase_scenario_paths(
     *,
     source: Path,
     root: Path,
+    map_search_paths: list[Path],
 ) -> Mapping[str, Any]:
     """Rewrite relative map paths to be relative to the root scenario file.
 
@@ -197,13 +267,80 @@ def _rebase_scenario_paths(
     if not isinstance(map_file, str):
         return scenario
     candidate = Path(map_file)
-    if candidate.is_absolute() or source.parent == root.parent:
+    if candidate.is_absolute():
         return scenario
-    abs_target = (source.parent / candidate).resolve()
-    rel = os.path.relpath(abs_target, root.parent)
+    if candidate.exists():
+        return scenario
+    search_root = root.parent
+    if source.parent != search_root:
+        abs_target = (source.parent / candidate).resolve()
+        if abs_target.exists():
+            rel = os.path.relpath(abs_target, search_root)
+            updated = dict(scenario)
+            updated["map_file"] = Path(rel).as_posix()
+            return updated
+    resolved = _resolve_map_with_search_paths(
+        map_file,
+        map_search_paths=map_search_paths,
+        root=search_root,
+        source=source,
+    )
+    if resolved is None:
+        _emit_map_resolution_error(
+            map_file,
+            map_search_paths=map_search_paths,
+            root=search_root,
+            source=source,
+        )
+        return scenario
+    rel = os.path.relpath(resolved, search_root)
     updated = dict(scenario)
     updated["map_file"] = Path(rel).as_posix()
     return updated
+
+
+def _resolve_map_with_search_paths(
+    map_file: str,
+    *,
+    map_search_paths: list[Path],
+    root: Path,
+    source: Path,
+) -> Path | None:
+    candidate = Path(map_file)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+    probe = (root / candidate).resolve()
+    if probe.exists():
+        return probe
+    for base in map_search_paths:
+        probe = (base / candidate).resolve()
+        if probe.exists():
+            return probe
+    logger.debug(
+        "Map '{}' not resolved relative to '{}' or search paths from '{}'.",
+        map_file,
+        root,
+        source,
+    )
+    return None
+
+
+def _emit_map_resolution_error(
+    map_file: str,
+    *,
+    map_search_paths: list[Path],
+    root: Path,
+    source: Path,
+) -> None:
+    search_desc = ", ".join(str(path) for path in map_search_paths) if map_search_paths else "-"
+    logger.warning(
+        "Could not resolve map_file '{}' from '{}'. Tried root '{}' and map_search_paths [{}]. "
+        "Consider fixing the map_file path or setting map_search_paths in the manifest.",
+        map_file,
+        source,
+        root,
+        search_desc,
+    )
 
 
 def _validate_optional_mapping(
@@ -306,6 +443,13 @@ def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapD
     candidate = Path(map_file)
     if not candidate.is_absolute():
         candidate = (scenario_path.parent / candidate).resolve()
+    if not candidate.exists():
+        logger.error(
+            "Scenario map file '{}' resolved from '{}' does not exist. "
+            "Check map_file or manifest map_search_paths.",
+            map_file,
+            scenario_path,
+        )
     return _load_map_definition(str(candidate))
 
 

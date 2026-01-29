@@ -5,3 +5,5 @@
 includes:
   - classic_interactions.yaml
   - francis2023.yaml
+map_search_paths:
+  - ../../maps/svg_maps

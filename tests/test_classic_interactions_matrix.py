@@ -48,13 +48,13 @@ def test_yaml_exists(path: Path) -> None:
 
 def test_yaml_parses() -> None:
     """TODO docstring. Document this function."""
-    scenarios = load_scenarios(SCENARIO_FILE)
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     assert scenarios, "No scenarios defined"
 
 
 def test_each_scenario_structure_and_files() -> None:
     """TODO docstring. Document this function."""
-    scenarios = load_scenarios(SCENARIO_FILE)
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     for scenario in scenarios:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
         assert not missing, f"Scenario {scenario.get('name')} missing keys: {missing}"
@@ -89,7 +89,7 @@ def test_each_scenario_structure_and_files() -> None:
 
 def test_seed_lists_have_length() -> None:
     """TODO docstring. Document this function."""
-    scenarios = load_scenarios(SCENARIO_FILE)
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     for scenario in scenarios:
         seeds = scenario.get("seeds")
         assert isinstance(seeds, list) and len(seeds) >= 3, (

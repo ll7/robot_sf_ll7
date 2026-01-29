@@ -28,3 +28,5 @@ includes:
   - single/francis2023_perpendicular_traffic.yaml
   - single/francis2023_circular_crossing.yaml
   - single/francis2023_robot_crowding.yaml
+map_search_paths:
+  - ../../maps/svg_maps

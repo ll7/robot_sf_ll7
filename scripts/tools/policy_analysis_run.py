@@ -965,7 +965,8 @@ def _run_episode(
         return record, EpisodeArtifacts(video_path=episode_video)
     finally:
         _close_env(env)
-        if record is not None and episode_video is not None:
+        if record is not None and episode_video is not None and "video" not in record:
+            # Video metadata is only available after the env exits and writes the file.
             video_meta = _episode_video_metadata(episode_video, frames=record.get("steps", 0))
             if video_meta:
                 record["video"] = video_meta
@@ -976,8 +977,8 @@ def _close_env(env) -> None:
     for method in ("exit", "close"):
         try:
             getattr(env, method)()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to call env.{}(): {}", method, exc)
 
 
 @dataclass

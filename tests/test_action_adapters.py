@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.action_adapters import DiffDriveAdapterConfig, holonomic_to_diff_drive_action
 
 
 def test_holonomic_to_diff_drive_forward():
@@ -41,3 +41,25 @@ def test_holonomic_to_diff_drive_clamps_speed():
         max_angular_speed=1.0,
     )
     assert action[0] <= 0.5 + 1e-6
+
+
+def test_holonomic_to_diff_drive_allows_backwards():
+    """Allow backwards motion when heading is opposite to desired velocity."""
+    pose = ((0.0, 0.0), 0.0)
+    action_no_back = holonomic_to_diff_drive_action(
+        np.array([-1.0, 0.0]),
+        pose,
+        max_linear_speed=1.0,
+        max_angular_speed=1.0,
+        config=DiffDriveAdapterConfig(allow_backwards=False),
+    )
+    assert action_no_back[0] >= 0.0
+
+    action_backwards = holonomic_to_diff_drive_action(
+        np.array([-1.0, 0.0]),
+        pose,
+        max_linear_speed=1.0,
+        max_angular_speed=1.0,
+        config=DiffDriveAdapterConfig(allow_backwards=True),
+    )
+    assert action_backwards[0] < 0.0

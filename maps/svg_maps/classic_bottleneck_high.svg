@@ -104,6 +104,57 @@
        id="rect6c" />
   </g>
   <g
+     inkscape:label="single_pedestrians">
+    <circle
+       cx="19"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_start" />
+    <circle
+       cx="19"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_goal" />
+    <circle
+       cx="20"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_start" />
+    <circle
+       cx="20"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_goal" />
+    <circle
+       cx="21"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_start" />
+    <circle
+       cx="21"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_goal" />
+  </g>
+  <g
      id="robot"
      inkscape:label="Robot">
     <rect

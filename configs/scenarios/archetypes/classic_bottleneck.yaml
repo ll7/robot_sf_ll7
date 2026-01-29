@@ -3,7 +3,7 @@ scenarios:
   map_file: ../../../maps/svg_maps/classic_bottleneck.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.02
+    ped_density: 0.0
   robot_config: {}
   metadata:
     archetype: bottleneck
@@ -11,27 +11,27 @@ scenarios:
     flow: bi
     groups: 0.0
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
       method: null
-      notes: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
       metrics:
         min_distance: null
         mean_distance: null
         robot_ped_within_5m_frac: null
         ped_force_mean: null
         force_q95: null
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+      metrics_updated_on: '2026-01-29T14:49:00.222514+01:00'
   seeds:
   - 131
   - 132
   - 133
 - name: classic_bottleneck_medium
-  map_file: ../../../maps/svg_maps/classic_bottleneck.svg
+  map_file: ../../../maps/svg_maps/classic_bottleneck_medium.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.05
+    ped_density: 0.0
   robot_config: {}
   metadata:
     archetype: bottleneck
@@ -39,27 +39,27 @@ scenarios:
     flow: bi
     groups: 0.0
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
       method: null
-      notes: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
       metrics:
-        min_distance: null
-        mean_distance: null
-        robot_ped_within_5m_frac: null
-        ped_force_mean: null
-        force_q95: null
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 1.5750852946989964
+        mean_distance: 7.33669559869212
+        robot_ped_within_5m_frac: 0.3356242454063949
+        ped_force_mean: 0.08599797446460268
+        force_q95: 0.5920811539322131
+      metrics_updated_on: '2026-01-29T14:49:00.222514+01:00'
   seeds:
   - 131
   - 132
   - 133
 - name: classic_bottleneck_high
-  map_file: ../../../maps/svg_maps/classic_bottleneck.svg
+  map_file: ../../../maps/svg_maps/classic_bottleneck_high.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.08
+    ped_density: 0.0
   robot_config: {}
   metadata:
     archetype: bottleneck
@@ -67,18 +67,18 @@ scenarios:
     flow: bi
     groups: 0.0
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
       method: null
-      notes: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
       metrics:
-        min_distance: null
-        mean_distance: null
-        robot_ped_within_5m_frac: null
-        ped_force_mean: null
-        force_q95: null
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 1.7518371310955116
+        mean_distance: 8.467809104575887
+        robot_ped_within_5m_frac: 0.26091368948511806
+        ped_force_mean: 0.07925076288884997
+        force_q95: 0.24615766302818767
+      metrics_updated_on: '2026-01-29T14:49:00.222514+01:00'
   seeds:
   - 131
   - 132

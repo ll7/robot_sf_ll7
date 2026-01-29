@@ -872,7 +872,7 @@ def _prepare_episode_config(
     episode_video = None
     if videos and video_dir is not None:
         scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
-        slug = re.sub(r"[^\\w.-]+", "_", scenario_name).strip("._")
+        slug = re.sub(r"[^\w.-]+", "_", scenario_name).strip("._")
         if not slug or slug in {".", ".."}:
             slug = "scenario"
         episode_video = video_dir / f"{slug}_seed{seed}_{policy_name}.mp4"

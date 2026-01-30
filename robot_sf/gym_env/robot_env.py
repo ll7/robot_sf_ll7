@@ -238,7 +238,7 @@ class RobotEnv(BaseEnv):
         record_video: bool = False,
         video_path: str | None = None,
         video_fps: float | None = None,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
         # New JSONL recording parameters
         use_jsonl_recording: bool = False,
         recording_dir: str = "recordings",

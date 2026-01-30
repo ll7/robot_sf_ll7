@@ -63,7 +63,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,
         recording_enabled: bool = False,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
         **kwargs,
     ):
         """

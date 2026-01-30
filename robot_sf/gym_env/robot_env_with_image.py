@@ -31,7 +31,7 @@ class RobotEnvWithImage(RobotEnv):
         record_video: bool = False,
         video_path: str | None = None,
         video_fps: float | None = None,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
         use_jsonl_recording: bool = False,
         recording_dir: str = "recordings",
         suite_name: str = "robot_sim",

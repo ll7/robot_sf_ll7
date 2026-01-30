@@ -77,7 +77,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     )
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
-    peds_have_obstacle_forces: bool = field(default=False)
+    peds_have_obstacle_forces: bool = field(default=True)
     use_planner: bool = field(default=False)
     planner_clearance_margin: float = field(default=0.3)
 

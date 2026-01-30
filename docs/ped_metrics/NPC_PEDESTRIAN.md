@@ -94,6 +94,13 @@ Pedestrians try to reach a goal in a predefined zone, and when they reach it, th
 
 - sidewalk_width: float = 3.0 -> Determines deviation at spawn
 - initial_speed: float = 0.5, with the max_speed_multiplier it leads to a maximum speed of 0.65 m/s (~2.34 km/h)
+- max_group_members: upper bound for pedestrians spawned per group (scenario override: max_peds_per_group)
+- route_spawn_distribution: "cluster" (default) keeps group spawns near a shared offset, "spread" spaces groups along the route length
+- route_spawn_jitter_frac: fraction of spacing used for random jitter when using "spread"
+- route_spawn_seed: optional RNG seed for deterministic route spawn placement
+
+Route-following pedestrians respawn at their route spawn zone when they reach the destination,
+and respawn sampling avoids obstacles when obstacle polygons are available.
 
 ### References
 

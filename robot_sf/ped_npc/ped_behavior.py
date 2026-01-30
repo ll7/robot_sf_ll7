@@ -7,7 +7,7 @@ ped_behavior.py
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from math import cos, dist, sin
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 
@@ -16,6 +16,9 @@ from robot_sf.nav.map_config import GlobalRoute, SinglePedestrianDefinition
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import sample_zone
+
+if TYPE_CHECKING:
+    from shapely.prepared import PreparedGeometry
 
 
 class PedestrianBehavior(Protocol):
@@ -108,6 +111,8 @@ class FollowRouteBehavior:
         The assignments of groups to routes.
     initial_sections : List[int]
         The initial sections of the routes.
+    obstacle_polygons : List[PreparedGeometry] | None
+        Obstacles to avoid when respawning at the route start.
     goal_proximity_threshold : float
         The distance threshold for proximity to a goal. Default is 1.
     navigators : Dict[int, RouteNavigator]
@@ -128,6 +133,7 @@ class FollowRouteBehavior:
     route_assignments: dict[int, GlobalRoute]
     initial_sections: list[int]
     goal_proximity_threshold: float = 1
+    obstacle_polygons: list["PreparedGeometry"] | None = None
     navigators: dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
@@ -185,8 +191,9 @@ class FollowRouteBehavior:
         """
         Respawn a group at the start of its route.
 
-        The group is repositioned to the spawn zone of its route, and it is redirected
-        to the first waypoint of its route. The waypoint ID of its navigator is reset to 0.
+        The group is repositioned to the spawn zone of its route (avoiding obstacles
+        when provided), and it is redirected to the first waypoint of its route.
+        The waypoint ID of its navigator is reset to 0.
 
         Parameters
         ----------
@@ -196,7 +203,11 @@ class FollowRouteBehavior:
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         spawn_zone = self.route_assignments[gid].spawn_zone
-        spawn_positions = sample_zone(spawn_zone, num_peds)
+        spawn_positions = sample_zone(
+            spawn_zone,
+            num_peds,
+            obstacle_polygons=self.obstacle_polygons,
+        )
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0

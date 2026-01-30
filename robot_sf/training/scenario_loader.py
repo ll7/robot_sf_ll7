@@ -870,7 +870,16 @@ def _apply_simulation_overrides(
             len(config.sim_config.ped_density_by_difficulty) - 1,
         )
         config.sim_config.ped_density_by_difficulty[difficulty] = density
-    for attr in ("peds_speed_mult", "ped_radius", "goal_radius"):
+    if "max_peds_per_group" in overrides:
+        config.sim_config.max_peds_per_group = int(overrides["max_peds_per_group"])
+    for attr in (
+        "peds_speed_mult",
+        "ped_radius",
+        "goal_radius",
+        "route_spawn_distribution",
+        "route_spawn_jitter_frac",
+        "route_spawn_seed",
+    ):
         if attr in overrides:
             setattr(config.sim_config, attr, overrides[attr])
 

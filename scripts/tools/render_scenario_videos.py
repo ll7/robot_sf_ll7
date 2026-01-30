@@ -287,7 +287,7 @@ def _resolve_output_root(
     ensure_canonical_tree(categories=("recordings",))
     base = get_artifact_category_path("recordings")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return base / f"scenario_videos_{scenario_path.stem}_{policy}_{timestamp}"
+    return base / f"{timestamp}_scenario_videos_{scenario_path.stem}_{policy}"
 
 
 def _resolve_scenario_name(scenario: Mapping[str, Any]) -> str:

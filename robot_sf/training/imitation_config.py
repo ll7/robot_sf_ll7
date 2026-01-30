@@ -34,6 +34,7 @@ class ExpertTrainingConfig:
 
     scenario_config: Path
     seeds: tuple[int, ...]
+    randomize_seeds: bool = False
     total_timesteps: int
     policy_id: str
     convergence: ConvergenceCriteria
@@ -56,6 +57,7 @@ class ExpertTrainingConfig:
         *,
         scenario_config: Path,
         seeds: tuple[int, ...] | list[int],
+        randomize_seeds: bool = False,
         total_timesteps: int,
         policy_id: str,
         convergence: ConvergenceCriteria,
@@ -81,6 +83,7 @@ class ExpertTrainingConfig:
         return cls(
             scenario_config=scenario_config,
             seeds=ensure_seed_tuple(seeds),
+            randomize_seeds=bool(randomize_seeds),
             total_timesteps=total_timesteps,
             policy_id=policy_id,
             convergence=convergence,

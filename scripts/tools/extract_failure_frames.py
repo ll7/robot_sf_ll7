@@ -8,7 +8,7 @@ watching full videos.
 
 Example:
   uv run python scripts/tools/extract_failure_frames.py \
-    --summary output/recordings/scenario_videos_francis2023_socnav_social_force_20260122_153356/summary.md
+    --summary output/recordings/20260122_153356_scenario_videos_francis2023_socnav_social_force/summary.md
 """
 
 from __future__ import annotations

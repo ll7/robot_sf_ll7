@@ -383,6 +383,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=common.ensure_seed_tuple(data.get("seeds", [])),
+        randomize_seeds=bool(data.get("randomize_seeds", False)),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
         convergence=convergence,
@@ -405,7 +406,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
 
 
 def _make_training_env(
-    seed: int,
+    seed: int | None,
     *,
     scenario: Mapping[str, Any] | None,
     scenario_definitions: Sequence[Mapping[str, Any]] | None,
@@ -416,7 +417,7 @@ def _make_training_env(
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
 ) -> Callable[[], Any]:
-    """Create a deterministic environment factory for training."""
+    """Create a training environment factory (seeded when provided)."""
 
     def _factory() -> Any:
         def _build_config(scenario_def: Mapping[str, Any]):
@@ -468,6 +469,11 @@ def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
     return policy_kwargs
 
 
+def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
+    """Return True when training/evaluation should avoid deterministic seeding."""
+    return bool(getattr(config, "randomize_seeds", False))
+
+
 def _resolve_tensorboard_logdir(run_id: str) -> Path:
     """Return a canonical TensorBoard log directory for the training run."""
     base = get_imitation_report_dir() / run_id / "tensorboard"
@@ -509,6 +515,7 @@ def _init_wandb(
             "policy_id": config.policy_id,
             "total_timesteps": config.total_timesteps,
             "seeds": list(config.seeds),
+            "randomize_seeds": bool(config.randomize_seeds),
             "scenario_config": str(config.scenario_config),
             "feature_extractor": config.feature_extractor,
             "tensorboard_log": tensorboard_log_str,
@@ -570,7 +577,7 @@ def _resolve_scenario_context(
     sampler = ScenarioSampler(
         scenario_definitions,
         exclude_scenarios=tuple(config.evaluation.hold_out_scenarios),
-        seed=int(config.seeds[0]) if config.seeds else None,
+        seed=None if _randomize_seeds(config) else int(config.seeds[0]) if config.seeds else None,
         strategy="cycle",
     )
     return ScenarioContext(
@@ -769,13 +776,18 @@ def _init_training_model(
 
     If ``resume_from`` is provided, load the checkpoint and continue training.
     """
-    base_seed = int(config.seeds[0]) if config.seeds else 0
+    use_random = _randomize_seeds(config)
+    base_seed = None if use_random else int(config.seeds[0]) if config.seeds else 0
     num_envs = _resolve_num_envs(config)
     worker_mode = _resolve_worker_mode(config, num_envs)
-    env_seeds = [base_seed + idx for idx in range(num_envs)]
+    env_seeds = (
+        [None for _ in range(num_envs)]
+        if use_random
+        else [base_seed + idx for idx in range(num_envs)]
+    )  # type: ignore[operator]
     env_fns = [
         _make_training_env(
-            int(seed),
+            seed if seed is None else int(seed),
             scenario=scenario,
             scenario_definitions=scenario_definitions,
             scenario_path=config.scenario_config,
@@ -898,25 +910,36 @@ def _evaluate_policy(
     }
     episode_records: list[dict[str, object]] = []
 
+    use_random = _randomize_seeds(config)
+    sampler_seed = None if use_random else 0
+    sampler_strategy = "random" if use_random else "cycle"
     if scenario_id:
         sampler = ScenarioSampler(
             scenario_definitions,
             include_scenarios=(scenario_id,),
-            seed=0,
+            seed=sampler_seed,
             strategy="cycle",
         )
     elif hold_out_scenarios:
         sampler = ScenarioSampler(
             scenario_definitions,
             include_scenarios=tuple(hold_out_scenarios),
-            seed=0,
-            strategy="cycle",
+            seed=sampler_seed,
+            strategy=sampler_strategy,
         )
     else:
-        sampler = ScenarioSampler(scenario_definitions, seed=0, strategy="cycle")
+        sampler = ScenarioSampler(
+            scenario_definitions,
+            seed=sampler_seed,
+            strategy=sampler_strategy,
+        )
 
     for episode_idx in range(episodes):
-        seed = int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
+        seed = (
+            None
+            if use_random
+            else int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
+        )
         scenario, scenario_name = sampler.sample()
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
         _apply_env_overrides(env_config, config.env_overrides)
@@ -974,11 +997,16 @@ def _simulate_dry_run_metrics(
         "snqi": [],
     }
     episode_records: list[dict[str, object]] = []
-    rng = np.random.default_rng(123)
+    use_random = _randomize_seeds(config)
+    rng = np.random.default_rng(None if use_random else 123)
 
     for eval_step in eval_steps:
         for idx in range(episodes):
-            seed = int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
+            seed = (
+                None
+                if use_random
+                else int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
+            )
             success = 1.0 if idx % 5 != 0 else 0.0
             collision = 0.0 if idx % 3 else 0.2
             path_eff = max(0.0, 0.85 - 0.05 * idx) + float(rng.uniform(-0.01, 0.01))
@@ -1069,7 +1097,12 @@ def run_expert_training(
     """Execute the expert PPO training workflow and persist manifests."""
 
     _ensure_cuda_determinism_env()
-    if config.seeds:
+    if _randomize_seeds(config):
+        if config.seeds:
+            logger.warning(
+                "randomize_seeds enabled; ignoring provided seeds for training/evaluation."
+            )
+    elif config.seeds:
         common.set_global_seed(int(config.seeds[0]))
 
     scenario_definitions = load_scenarios(config.scenario_config)
@@ -1130,6 +1163,8 @@ def run_expert_training(
         f"Converged at {config.total_timesteps} timesteps",
         f"eval_steps={eval_steps}",
     ]
+    if _randomize_seeds(config):
+        notes.append("randomize_seeds=true")
     if outputs.tensorboard_log is not None:
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     if scenario_coverage:

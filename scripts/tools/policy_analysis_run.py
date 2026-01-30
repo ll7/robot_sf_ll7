@@ -277,7 +277,7 @@ def _resolve_output_root(base: Path | None, *, policy: str, stamp: str | None = 
     if base is not None:
         return resolve_artifact_path(base)
     ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
-    return get_artifact_category_path("benchmarks") / f"policy_analysis_{policy}_{ts}"
+    return get_artifact_category_path("benchmarks") / f"{ts}_policy_analysis_{policy}"
 
 
 def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = None) -> Path:
@@ -285,7 +285,7 @@ def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = N
     if base is not None:
         return resolve_artifact_path(base)
     ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
-    return get_artifact_category_path("recordings") / f"policy_analysis_{policy}_{ts}"
+    return get_artifact_category_path("recordings") / f"{ts}_policy_analysis_{policy}"
 
 
 def _resolve_seeds(

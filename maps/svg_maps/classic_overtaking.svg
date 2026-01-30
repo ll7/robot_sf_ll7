@@ -27,14 +27,14 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="32.621214"
-     inkscape:cx="37.061773"
+     inkscape:cx="24.661866"
      inkscape:cy="11.403622"
-     inkscape:window-width="3440"
+     inkscape:window-width="2560"
      inkscape:window-height="1353"
      inkscape:window-x="0"
-     inkscape:window-y="31"
+     inkscape:window-y="92"
      inkscape:window-maximized="0"
-     inkscape:current-layer="svg9" />
+     inkscape:current-layer="routes" />
   <g
      id="obstacles"
      inkscape:label="Obstacles">
@@ -93,8 +93,8 @@
      id="robot"
      inkscape:label="Robot">
     <rect
-       x="15.13463"
-       y="3.6997775"
+       x="14.398912"
+       y="3.6078129"
        width="4.6199999"
        height="4.6199999"
        fill="#ffd800"
@@ -113,16 +113,16 @@
      id="pedestrians"
      inkscape:label="Pedestrians">
     <rect
-       x="9.8006783"
-       y="3.9530237"
+       x="7.6241803"
+       y="2.5122435"
        width="4.6199999"
        height="4.6199999"
        fill="#23ff00"
        inkscape:label="ped_spawn_zone"
        id="rect7" />
     <rect
-       x="40.286026"
-       y="15.931658"
+       x="46.171768"
+       y="21.234955"
        width="4.6199999"
        height="4.6199999"
        fill="#107400"
@@ -133,20 +133,20 @@
      id="routes"
      inkscape:label="Routes">
     <path
-       d="M 21.695661,12.317255 37.81386,15.781259"
+       d="M 17.005462,9.098491 20.456654,12.5264 39.899761,15.94626 42.62668,19.79705"
        stroke="#0300d5"
        stroke-width="1"
        fill="none"
        inkscape:label="robot_route_0_0"
        id="path8"
-       sodipodi:nodetypes="cc" />
+       sodipodi:nodetypes="cccc" />
     <path
-       d="M 20.745359,11.242341 39.959703,15.227478"
+       d="M 10.997102,8.1461963 15.746408,12.174533 38.819198,16.217471 47.807357,20.285536"
        stroke="#c40202"
        stroke-width="1"
        fill="none"
        inkscape:label="ped_route_0_0"
        id="path9"
-       sodipodi:nodetypes="cc" />
+       sodipodi:nodetypes="cccc" />
   </g>
 </svg>

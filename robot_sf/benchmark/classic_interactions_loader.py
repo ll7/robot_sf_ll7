@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml  # type: ignore
+from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -33,12 +33,10 @@ def load_classic_matrix(path: str) -> list[dict]:
     p = Path(path)
     if not p.exists():  # explicit fast failure
         raise FileNotFoundError(f"Scenario matrix not found: {path}")
-    with p.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    scenarios = data.get("scenarios") if isinstance(data, dict) else None
-    if not isinstance(scenarios, list) or not scenarios:
-        raise ValueError("Scenario matrix missing non-empty 'scenarios' list")
-    return scenarios
+    scenarios = load_scenarios(p, base_dir=p)
+    if not scenarios:
+        raise ValueError("Scenario matrix missing non-empty scenarios list")
+    return list(scenarios)
 
 
 def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:

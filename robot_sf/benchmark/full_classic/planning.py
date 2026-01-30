@@ -10,35 +10,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml  # type: ignore
-
-# ---- Internal helpers (kept simple to keep public function complexity low) ----
-
-
-def _parse_yaml_file(p: Path) -> dict:
-    """Load YAML content into a dict.
-
-    Returns:
-        Parsed YAML payload.
-    """
-    try:
-        with p.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except Exception as exc:
-        raise ValueError(f"Failed to parse YAML: {exc}") from exc
-
-
-def _extract_scenarios(root: dict) -> list[dict]:
-    """Extract the scenarios list from a matrix payload.
-
-    Returns:
-        List of scenario dictionaries.
-    """
-    scenarios = root.get("scenarios") if isinstance(root, dict) else None
-    if not isinstance(scenarios, list) or not scenarios:
-        raise ValueError("Scenario matrix missing non-empty 'scenarios' list")
-    return scenarios
-
+from robot_sf.training.scenario_loader import load_scenarios
 
 _REQUIRED_SC_KEYS = {"name", "map_file", "simulation_config", "metadata"}
 
@@ -101,10 +73,12 @@ def load_scenario_matrix(path: str) -> list[dict]:  # T022
     p = Path(path)
     if not p.exists():  # contract: FileNotFoundError path missing
         raise FileNotFoundError(path)
-    data = _parse_yaml_file(p)
-    scenarios = _extract_scenarios(data)
-    _validate_scenario_dicts(scenarios)
-    return scenarios
+    scenarios = load_scenarios(p, base_dir=p)
+    if not scenarios:
+        raise ValueError("Scenario matrix missing non-empty scenarios list")
+    scenarios_list = list(scenarios)
+    _validate_scenario_dicts(scenarios_list)
+    return scenarios_list
 
 
 def _normalise_raw_scenario(index: int, sc: dict) -> tuple[str, str, str, int, str, dict]:
@@ -239,6 +213,7 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
 
     scenarios: list[ScenarioDescriptor] = []
     seen_ids: set[str] = set()
+    duplicate_counts: dict[str, int] = {}
     for index, sc in enumerate(raw):
         name, archetype, density, max_steps, map_file, params_source = _normalise_raw_scenario(
             index,
@@ -259,7 +234,9 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
         )
         scenario_id = _scenario_id(archetype, density, name)
         if scenario_id in seen_ids:
-            raise ValueError(f"Duplicate scenario id generated: {scenario_id}")
+            duplicate_counts[scenario_id] = duplicate_counts.get(scenario_id, 1) + 1
+            suffix = duplicate_counts[scenario_id]
+            scenario_id = f"{scenario_id}__dup{suffix}"
         seen_ids.add(scenario_id)
 
         scenarios.append(

@@ -66,7 +66,13 @@ def test_each_scenario_structure_and_files() -> None:
         assert isinstance(sim_cfg, dict), "simulation_config must be a mapping"
         density = sim_cfg.get("ped_density")
         if density is not None:
-            assert density > 0, f"ped_density must be positive (got {density})"
+            assert density >= 0, f"ped_density must be non-negative (got {density})"
+            if density == 0:
+                warnings.warn(
+                    f"""Scenario {scenario["name"]} ped_density=0.0 means no pedestrians spawn. This is allowed for certain empty-crowd baselines but should be used intentionally.""",
+                    UserWarning,
+                    stacklevel=2,
+                )
             low, high = RECOMMENDED_RANGE
             if not (low <= density <= high):
                 warnings.warn(

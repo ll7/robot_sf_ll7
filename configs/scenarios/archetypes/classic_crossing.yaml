@@ -18,12 +18,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 1.5038082226149008
-        mean_distance: 4.837551658389521
-        robot_ped_within_5m_frac: 0.6143514468098895
-        ped_force_mean: 0.19858230503498386
-        force_q95: 0.7932805373669755
-      metrics_updated_on: '2026-01-29T16:35:27.389871+01:00'
+        min_distance: 1.4799419279962416
+        mean_distance: 2.6554891502926465
+        robot_ped_within_5m_frac: 1.0
+        ped_force_mean: 0.273002622248722
+        force_q95: 0.9460728924645432
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 101
   - 102
@@ -47,12 +47,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 1.8787397583134198
-        mean_distance: 3.315186080462676
-        robot_ped_within_5m_frac: 0.9045047993019196
-        ped_force_mean: 0.233220156028614
-        force_q95: 0.9530187782031074
-      metrics_updated_on: '2026-01-29T16:35:27.389871+01:00'
+        min_distance: 0.058276832877591465
+        mean_distance: 1.902916589466534
+        robot_ped_within_5m_frac: 1.0
+        ped_force_mean: 0.36967919494957535
+        force_q95: 1.2832029731357877
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 101
   - 102
@@ -76,12 +76,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 2.041250996832936
-        mean_distance: 3.0957286401622004
+        min_distance: 0.40730383038153933
+        mean_distance: 1.6265772966244603
         robot_ped_within_5m_frac: 1.0
-        ped_force_mean: 0.26272504925094964
-        force_q95: 1.0745741384120373
-      metrics_updated_on: '2026-01-29T16:35:27.389871+01:00'
+        ped_force_mean: 0.2962517846478671
+        force_q95: 0.9589707383484916
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 101
   - 102

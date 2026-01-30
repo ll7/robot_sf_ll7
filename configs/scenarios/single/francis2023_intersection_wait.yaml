@@ -37,7 +37,7 @@ scenarios:
         robot_ped_within_5m_frac: 0.34285714285714286
         ped_force_mean: 0.09369421668343393
         force_q95: 0.3419953727571229
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 240
   - 241

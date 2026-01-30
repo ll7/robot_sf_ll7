@@ -18,12 +18,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 7.720974649236953
-        mean_distance: 8.968623335811508
-        robot_ped_within_5m_frac: 0.0
-        ped_force_mean: 0.07319254068220785
-        force_q95: 0.2491729903403675
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 0.18187999926581513
+        mean_distance: 4.1209984784368086
+        robot_ped_within_5m_frac: 0.6083333333333333
+        ped_force_mean: 0.36972986575417627
+        force_q95: 0.7218886404199658
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 171
   - 172
@@ -47,12 +47,41 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 6.349739429273053
-        mean_distance: 7.862708111443856
-        robot_ped_within_5m_frac: 0.0
-        ped_force_mean: 0.1476907011211691
-        force_q95: 0.5293393454232289
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 0.037358269597714516
+        mean_distance: 4.0707874055761835
+        robot_ped_within_5m_frac: 0.6120689655172413
+        ped_force_mean: 0.27021555788497204
+        force_q95: 0.8073974207622258
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+  seeds:
+  - 171
+  - 172
+  - 173
+- name: classic_group_crossing_high
+  map_file: ../../../maps/svg_maps/classic_group_crossing.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.08
+    groups: 0.5
+  robot_config: {}
+  metadata:
+    archetype: group_crossing
+    density: high
+    flow: bi
+    groups: 0.5
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.037358269597714516
+        mean_distance: 4.0707874055761835
+        robot_ped_within_5m_frac: 0.6120689655172413
+        ped_force_mean: 0.27021555788497204
+        force_q95: 0.8073974207622258
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 171
   - 172

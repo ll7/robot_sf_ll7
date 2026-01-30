@@ -4,6 +4,9 @@ scenarios:
   simulation_config:
     max_episode_steps: 500
     ped_density: 0.02
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
   robot_config: {}
   metadata:
     archetype: doorway
@@ -17,12 +20,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 4.8809022605295755
-        mean_distance: 6.894347743498985
-        robot_ped_within_5m_frac: 0.03773584905660377
-        ped_force_mean: 0.04699638592286558
-        force_q95: 0.1493465555897297
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 4.755770385520853
+        mean_distance: 5.554907887449594
+        robot_ped_within_5m_frac: 0.3283582089552239
+        ped_force_mean: 0.38706965523701703
+        force_q95: 2.156095635559882
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 141
   - 142
@@ -32,6 +35,9 @@ scenarios:
   simulation_config:
     max_episode_steps: 500
     ped_density: 0.05
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
   robot_config: {}
   metadata:
     archetype: doorway
@@ -45,12 +51,43 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 5.50241113381485
-        mean_distance: 6.633272956535718
-        robot_ped_within_5m_frac: 0.0
-        ped_force_mean: 0.24687886352322935
-        force_q95: 1.5474817640953644
-      metrics_updated_on: '2026-01-29T14:02:05.787139+01:00'
+        min_distance: 2.2752176250275595
+        mean_distance: 5.315530140948203
+        robot_ped_within_5m_frac: 0.3484848484848485
+        ped_force_mean: 0.11240130598448837
+        force_q95: 0.34472865483878185
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+  seeds:
+  - 141
+  - 142
+  - 143
+- name: classic_doorway_high
+  map_file: ../../../maps/svg_maps/classic_doorway.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.08
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.221994497380348
+        mean_distance: 3.5144533569649155
+        robot_ped_within_5m_frac: 0.8260869565217391
+        ped_force_mean: 0.15766739777604932
+        force_q95: 0.898601129192189
+      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
   seeds:
   - 141
   - 142

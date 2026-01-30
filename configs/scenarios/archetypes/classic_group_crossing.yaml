@@ -3,7 +3,7 @@ scenarios:
   map_file: ../../../maps/svg_maps/classic_group_crossing.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.02
+    ped_density: 0.04
     groups: 0.5
   robot_config: {}
   metadata:
@@ -12,18 +12,18 @@ scenarios:
     flow: bi
     groups: 0.5
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
       method: null
       notes: null
       metrics:
-        min_distance: 0.18187999926581513
-        mean_distance: 4.1209984784368086
-        robot_ped_within_5m_frac: 0.6083333333333333
-        ped_force_mean: 0.36972986575417627
-        force_q95: 0.7218886404199658
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 2.786827502246117
+        mean_distance: 7.229886758663069
+        robot_ped_within_5m_frac: 0.27854876797388683
+        ped_force_mean: 0.20199272314365463
+        force_q95: 0.64291099435539
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 171
   - 172
@@ -32,7 +32,7 @@ scenarios:
   map_file: ../../../maps/svg_maps/classic_group_crossing.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.05
+    ped_density: 0.08
     groups: 0.5
   robot_config: {}
   metadata:
@@ -41,18 +41,18 @@ scenarios:
     flow: bi
     groups: 0.5
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
       method: null
       notes: null
       metrics:
-        min_distance: 0.037358269597714516
-        mean_distance: 4.0707874055761835
-        robot_ped_within_5m_frac: 0.6120689655172413
-        ped_force_mean: 0.27021555788497204
-        force_q95: 0.8073974207622258
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 2.6337745513868533
+        mean_distance: 5.827523727663918
+        robot_ped_within_5m_frac: 0.3938562438705459
+        ped_force_mean: 0.3374180570126427
+        force_q95: 1.150662182566604
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 171
   - 172
@@ -61,7 +61,7 @@ scenarios:
   map_file: ../../../maps/svg_maps/classic_group_crossing.svg
   simulation_config:
     max_episode_steps: 500
-    ped_density: 0.08
+    ped_density: 0.12
     groups: 0.5
   robot_config: {}
   metadata:
@@ -70,18 +70,18 @@ scenarios:
     flow: bi
     groups: 0.5
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
       method: null
       notes: null
       metrics:
-        min_distance: 0.037358269597714516
-        mean_distance: 4.0707874055761835
-        robot_ped_within_5m_frac: 0.6120689655172413
-        ped_force_mean: 0.27021555788497204
-        force_q95: 0.8073974207622258
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 1.2462613789534065
+        mean_distance: 4.577864020111103
+        robot_ped_within_5m_frac: 0.5766262998921123
+        ped_force_mean: 0.35675981000425605
+        force_q95: 1.287504328477061
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 171
   - 172

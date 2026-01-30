@@ -20,12 +20,12 @@ scenarios:
       method: null
       notes: null
       metrics:
-        min_distance: 1.760799884943134
-        mean_distance: 8.672653283001786
-        robot_ped_within_5m_frac: 0.25742574257425743
-        ped_force_mean: 0.46639936834729645
-        force_q95: 1.5343650093951293
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 0.9195934368310343
+        mean_distance: 5.6718576032752415
+        robot_ped_within_5m_frac: 0.533601304024786
+        ped_force_mean: 0.5611255939989312
+        force_q95: 1.51429557399116
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 222
   - 223

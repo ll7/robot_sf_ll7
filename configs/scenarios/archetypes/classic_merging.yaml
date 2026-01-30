@@ -11,18 +11,18 @@ scenarios:
     flow: converging
     groups: 0.0
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
       method: null
       notes: null
       metrics:
-        min_distance: 12.00636995426902
-        mean_distance: 15.375879946952068
-        robot_ped_within_5m_frac: 0.0
-        ped_force_mean: 0.14019089540575433
-        force_q95: 0.49691467478753
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 1.3030618384387023
+        mean_distance: 10.665834093099505
+        robot_ped_within_5m_frac: 0.1888021176190665
+        ped_force_mean: 0.23497834764751574
+        force_q95: 0.8039577090977843
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 151
   - 152
@@ -39,18 +39,18 @@ scenarios:
     flow: converging
     groups: 0.0
     plausibility:
-      status: unverified
-      verified_on: null
-      verified_by: null
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
       method: null
       notes: null
       metrics:
-        min_distance: 12.367592566752736
-        mean_distance: 16.17647678948835
-        robot_ped_within_5m_frac: 0.0
-        ped_force_mean: 0.19439736695134904
-        force_q95: 0.6201993821708197
-      metrics_updated_on: '2026-01-30T10:19:37.701701+01:00'
+        min_distance: 1.1160493103690015
+        mean_distance: 7.980354629530384
+        robot_ped_within_5m_frac: 0.30860057401910634
+        ped_force_mean: 0.2219006248826909
+        force_q95: 0.8116757525826447
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
   seeds:
   - 151
   - 152

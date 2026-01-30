@@ -34,11 +34,11 @@ class ExpertTrainingConfig:
 
     scenario_config: Path
     seeds: tuple[int, ...]
-    randomize_seeds: bool = False
     total_timesteps: int
     policy_id: str
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
+    randomize_seeds: bool = False
     scenario_id: str | None = None
     feature_extractor: str = "default"
     feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)

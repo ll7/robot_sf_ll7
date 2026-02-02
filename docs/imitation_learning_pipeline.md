@@ -177,6 +177,18 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
 - `bc_pretrain.yaml` - Behavioral cloning pre-training configuration
 - `ppo_finetune.yaml` - PPO fine-tuning configuration
 
+### Expert PPO overrides
+
+`train_expert_ppo.py` also supports two optional fields in the expert config:
+
+- `ppo_hyperparams`: Overrides Stable-Baselines3 PPO kwargs (e.g., `learning_rate`,
+  `n_steps`, `batch_size`, `n_epochs`, `ent_coef`, `clip_range`, `target_kl`).
+- `best_checkpoint_metric`: Which eval metric to track for saving the best checkpoint
+  (default: `snqi`; minimize `collision_rate`/`comfort_exposure`, maximize others).
+
+Best checkpoints are written to:
+`output/benchmarks/expert_policies/checkpoints/<policy_id>/<policy_id>_best.zip`
+
 ---
 
 ## Detailed Workflow Documentation

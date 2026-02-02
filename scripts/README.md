@@ -573,6 +573,13 @@ uv run python scripts/evaluate.py
 uv run python scripts/hparam_opt.py
 ```
 
+#### `training/optuna_expert_ppo.py`
+**Purpose**: Optuna sweep for expert PPO training configs  
+**Usage**:
+```bash
+uv run python scripts/training/optuna_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+```
+
 #### `benchmark_repro_check.py`
 **Purpose**: Create minimal test scenario for reproducibility testing  
 **Usage**:

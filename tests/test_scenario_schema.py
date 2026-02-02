@@ -60,3 +60,25 @@ def test_cli_validate_config_with_schema(tmp_path: Path, capsys):
     assert rc != 0
     assert report["num_scenarios"] == 3
     assert any(e.get("error") == "duplicate id" for e in report["errors"])
+    assert report["source"]["format"] == "list"
+    assert report["summary"]["missing"]["metadata"] == 3
+
+
+def test_cli_validate_config_manifest_source(tmp_path: Path, capsys):
+    """Ensure validate-config reports manifest includes in the summary."""
+    include_path = tmp_path / "include.yaml"
+    include_path.write_text(
+        "---\nscenarios:\n  - name: sc_a\n    map_file: map.svg\n    simulation_config:\n      max_episode_steps: 50\n    metadata:\n      archetype: crossing\n      density: low\n",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text("includes:\n  - include.yaml\n", encoding="utf-8")
+
+    rc = cli_main(["validate-config", "--matrix", str(manifest_path)])
+    out = capsys.readouterr().out
+    report = json.loads(out)
+
+    assert rc == 0
+    assert report["num_scenarios"] == 1
+    assert report["source"]["format"] == "manifest"
+    assert "include.yaml" in report["source"]["includes"]

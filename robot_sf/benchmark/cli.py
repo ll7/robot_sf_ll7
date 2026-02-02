@@ -12,7 +12,12 @@ import logging
 import os
 import sys
 import traceback
+from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.ablation import compute_ablation_summary as _abl_summary
 from robot_sf.benchmark.ablation import compute_snqi_ablation as _abl_compute
@@ -642,6 +647,76 @@ def _handle_list_scenarios(args) -> int:
         return 2
 
 
+def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
+    """Describe the scenario matrix source and include structure.
+
+    Returns:
+        dict[str, object]: Source metadata including format and include list.
+    """
+    path = Path(matrix_path)
+    includes: list[str] = []
+    format_hint = "unknown"
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            docs = list(yaml.safe_load_all(handle))
+    except Exception:
+        return {"path": str(path), "format": format_hint, "includes": includes}
+    if len(docs) > 1:
+        format_hint = "stream"
+        return {"path": str(path), "format": format_hint, "includes": includes}
+    if not docs:
+        return {"path": str(path), "format": format_hint, "includes": includes}
+    doc = docs[0]
+    if isinstance(doc, Mapping):
+        raw_includes = doc.get("includes") or doc.get("include") or doc.get("scenario_files")
+        if isinstance(raw_includes, list):
+            includes = [str(entry) for entry in raw_includes]
+        elif isinstance(raw_includes, (str, Path)):
+            includes = [str(raw_includes)]
+        format_hint = "manifest" if includes else "dict"
+        if "scenarios" in doc:
+            format_hint = "manifest" if includes else "list"
+    elif isinstance(doc, list):
+        format_hint = "list"
+    return {"path": str(path), "format": format_hint, "includes": includes}
+
+
+def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
+    """Summarize scenario counts and basic field coverage.
+
+    Returns:
+        dict[str, object]: Summary counts for archetypes/densities/maps and missing fields.
+    """
+
+    def _pick_meta_value(scenario: dict[str, Any], key: str) -> str:
+        meta = scenario.get("metadata")
+        if isinstance(meta, Mapping):
+            value = meta.get(key)
+            if isinstance(value, str) and value:
+                return value
+        fallback = scenario.get(key)
+        if isinstance(fallback, str) and fallback:
+            return fallback
+        return "unknown"
+
+    archetypes = Counter(_pick_meta_value(sc, "archetype") for sc in scenarios)
+    densities = Counter(_pick_meta_value(sc, "density") for sc in scenarios)
+    maps = Counter(str(sc.get("map_file")) for sc in scenarios if sc.get("map_file"))
+    missing_map_file = sum(1 for sc in scenarios if not isinstance(sc.get("map_file"), str))
+    missing_metadata = sum(1 for sc in scenarios if not isinstance(sc.get("metadata"), Mapping))
+    missing_sim = sum(1 for sc in scenarios if not isinstance(sc.get("simulation_config"), Mapping))
+    return {
+        "archetypes": dict(archetypes),
+        "densities": dict(densities),
+        "maps": dict(maps),
+        "missing": {
+            "map_file": missing_map_file,
+            "metadata": missing_metadata,
+            "simulation_config": missing_sim,
+        },
+    }
+
+
 def _handle_validate_config(args) -> int:
     """Validate scenario matrix config against schema rules.
 
@@ -652,10 +727,14 @@ def _handle_validate_config(args) -> int:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
         warnings = []
+        summary = _summarize_scenarios(scenarios)
+        source = _extract_matrix_source(args.matrix)
         report = {
             "num_scenarios": len(scenarios),
             "errors": errors,
             "warnings": warnings,
+            "summary": summary,
+            "source": source,
         }
         print(json.dumps(report))
         return 0 if not errors else 2

@@ -15,10 +15,10 @@ from pathlib import Path
 
 import optuna
 from loguru import logger
+from train_expert_ppo import _resolve_num_envs, load_expert_training_config, run_expert_training
 
 from robot_sf.common import ensure_seed_tuple
 from robot_sf.training.imitation_config import EvaluationSchedule
-from train_expert_ppo import _resolve_num_envs, load_expert_training_config, run_expert_training
 
 
 def _suggest_ppo_hyperparams(trial: optuna.Trial, *, max_batch_size: int) -> dict[str, object]:
@@ -116,9 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     study_name = args.study_name or f"{base_config.policy_id}_optuna_{timestamp}"
     storage = args.storage
     if storage is None:
-        storage_path = (
-            Path("output/benchmarks/ppo_imitation/hparam_opt") / f"{study_name}.db"
-        )
+        storage_path = Path("output/benchmarks/ppo_imitation/hparam_opt") / f"{study_name}.db"
         storage_path.parent.mkdir(parents=True, exist_ok=True)
         storage = f"sqlite:///{storage_path}"
 

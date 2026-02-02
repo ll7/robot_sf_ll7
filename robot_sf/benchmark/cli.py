@@ -717,6 +717,153 @@ def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
     }
 
 
+def _collect_scenario_warnings(
+    scenarios: list[dict[str, Any]],
+    *,
+    matrix_path: str | Path | None,
+) -> list[dict[str, Any]]:
+    """Collect warn-only scenario validation messages.
+
+    Returns:
+        list[dict[str, Any]]: Warning records (non-fatal).
+    """
+
+    def warn(index: int, scenario_id: str, message: str, path: str) -> None:
+        warnings.append(
+            {
+                "index": index,
+                "id": scenario_id,
+                "warning": message,
+                "path": path,
+            }
+        )
+
+    warnings: list[dict[str, Any]] = []
+    base_dir = Path(matrix_path).parent if matrix_path is not None else None
+    for idx, scenario in enumerate(scenarios):
+        scenario_id = str(
+            scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or idx
+        )
+        map_file = scenario.get("map_file")
+        if not isinstance(map_file, str):
+            warn(idx, scenario_id, "map_file missing or not a string", "/map_file")
+        else:
+            map_path = Path(map_file)
+            if not map_path.is_absolute() and base_dir is not None:
+                map_path = (base_dir / map_path).resolve()
+            if not map_path.exists():
+                warn(idx, scenario_id, f"map_file not found at {map_path}", "/map_file")
+            elif map_path.suffix.lower() not in {".svg", ".json"}:
+                warn(
+                    idx,
+                    scenario_id,
+                    f"map_file extension '{map_path.suffix}' not supported",
+                    "/map_file",
+                )
+
+        sim_cfg = scenario.get("simulation_config")
+        if not isinstance(sim_cfg, Mapping):
+            warn(
+                idx, scenario_id, "simulation_config missing or not a mapping", "/simulation_config"
+            )
+            sim_cfg = {}
+        max_steps = sim_cfg.get("max_episode_steps")
+        if max_steps is None:
+            warn(
+                idx,
+                scenario_id,
+                "max_episode_steps missing",
+                "/simulation_config/max_episode_steps",
+            )
+        else:
+            try:
+                if int(max_steps) <= 0:
+                    warn(
+                        idx,
+                        scenario_id,
+                        "max_episode_steps must be > 0",
+                        "/simulation_config/max_episode_steps",
+                    )
+            except (TypeError, ValueError):
+                warn(
+                    idx,
+                    scenario_id,
+                    "max_episode_steps must be an integer",
+                    "/simulation_config/max_episode_steps",
+                )
+
+        density = sim_cfg.get("ped_density")
+        if density is not None:
+            try:
+                density_val = float(density)
+                if density_val < 0:
+                    warn(
+                        idx,
+                        scenario_id,
+                        f"ped_density must be >= 0 (got {density_val})",
+                        "/simulation_config/ped_density",
+                    )
+                if density_val == 0:
+                    warn(
+                        idx,
+                        scenario_id,
+                        "ped_density=0.0 means no pedestrians spawn",
+                        "/simulation_config/ped_density",
+                    )
+                if not 0.02 <= density_val <= 0.08:
+                    warn(
+                        idx,
+                        scenario_id,
+                        (
+                            "ped_density outside recommended [0.02, 0.08]; "
+                            "may reduce benchmark comparability"
+                        ),
+                        "/simulation_config/ped_density",
+                    )
+            except (TypeError, ValueError):
+                warn(
+                    idx,
+                    scenario_id,
+                    "ped_density must be a number",
+                    "/simulation_config/ped_density",
+                )
+
+        metadata = scenario.get("metadata")
+        if not isinstance(metadata, Mapping):
+            warn(idx, scenario_id, "metadata missing or not a mapping", "/metadata")
+            metadata = {}
+        archetype = metadata.get("archetype")
+        density_tag = metadata.get("density")
+        if not isinstance(archetype, str) or not archetype:
+            warn(idx, scenario_id, "metadata.archetype missing", "/metadata/archetype")
+        if not isinstance(density_tag, str) or not density_tag:
+            warn(idx, scenario_id, "metadata.density missing", "/metadata/density")
+
+        groups_val = sim_cfg.get("groups", 0.0)
+        if archetype == "group_crossing" and groups_val != 0.5:
+            warn(
+                idx,
+                scenario_id,
+                f"group_crossing should set groups=0.5 (got {groups_val})",
+                "/simulation_config/groups",
+            )
+        if archetype != "group_crossing" and groups_val not in (0.0, None):
+            warn(
+                idx,
+                scenario_id,
+                f"non-group archetype should not set groups (got {groups_val})",
+                "/simulation_config/groups",
+            )
+
+        seeds = scenario.get("seeds")
+        if not isinstance(seeds, list) or not all(isinstance(seed, int) for seed in seeds):
+            warn(idx, scenario_id, "seeds missing or not a list of ints", "/seeds")
+        elif len(seeds) < 3:
+            warn(idx, scenario_id, "seeds list should contain at least 3 entries", "/seeds")
+
+    return warnings
+
+
 def _handle_validate_config(args) -> int:
     """Validate scenario matrix config against schema rules.
 
@@ -726,7 +873,7 @@ def _handle_validate_config(args) -> int:
     try:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
-        warnings = []
+        warnings = _collect_scenario_warnings(scenarios, matrix_path=args.matrix)
         summary = _summarize_scenarios(scenarios)
         source = _extract_matrix_source(args.matrix)
         report = {
@@ -738,6 +885,30 @@ def _handle_validate_config(args) -> int:
         }
         print(json.dumps(report))
         return 0 if not errors else 2
+    except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_preview_scenarios(args) -> int:
+    """Preview scenario matrix with warn-only checks.
+
+    Returns:
+        Exit code (0 always).
+    """
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+        warnings = _collect_scenario_warnings(scenarios, matrix_path=args.matrix)
+        summary = _summarize_scenarios(scenarios)
+        source = _extract_matrix_source(args.matrix)
+        report = {
+            "num_scenarios": len(scenarios),
+            "warnings": warnings,
+            "summary": summary,
+            "source": source,
+            "policy": "warn-only",
+        }
+        print(json.dumps(report))
+        return 0
     except Exception:  # pragma: no cover - error path
         return 2
 
@@ -895,6 +1066,13 @@ def _add_list_subparser(
     p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
     # optional: later we could add --verbose to print detailed schema errors
     p3.set_defaults(cmd="validate-config")
+
+    p4 = subparsers.add_parser(
+        "preview-scenarios",
+        help="Preview scenarios with warn-only plausibility checks",
+    )
+    p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p4.set_defaults(cmd="preview-scenarios")
 
 
 def _add_summary_subparser(
@@ -1759,6 +1937,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "list-algorithms": _handle_list_algorithms,
         "list-scenarios": _handle_list_scenarios,
         "validate-config": _handle_validate_config,
+        "preview-scenarios": _handle_preview_scenarios,
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,

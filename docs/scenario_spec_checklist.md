@@ -36,6 +36,7 @@ Use this checklist when creating **per-scenario** files, **archetype** bundles, 
 
 ## 7) Validation & Preview
 - [ ] Run `robot_sf_bench validate-config --matrix <manifest>` and review summary counts.
+- [ ] Run `robot_sf_bench preview-scenarios --matrix <manifest>` for warn-only plausibility checks.
 - [ ] Confirm archetype/density coverage matches expected suite.
 
 ## 8) Documentation

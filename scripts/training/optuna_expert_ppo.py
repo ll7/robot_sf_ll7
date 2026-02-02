@@ -143,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         """Single Optuna objective run."""
         config = copy.deepcopy(base_config)
         config.policy_id = f"{base_config.policy_id}_optuna_{trial.number:03d}"
+        config.best_checkpoint_metric = metric_name
         config.total_timesteps = int(args.trial_timesteps)
         config.evaluation = EvaluationSchedule(
             frequency_episodes=config.evaluation.frequency_episodes,

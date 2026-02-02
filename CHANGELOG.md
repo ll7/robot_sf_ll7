@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Linked from `docs/README.md` and `docs/dev_guide.md`
 - Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
+### Fixed
+- Pedestrian route sampling now fails fast when obstacle constraints cannot be satisfied instead of silently ignoring obstacles.
+
 ### Changed
 - Policy analysis timestamps now use CET/CEST (Europe/Berlin) instead of UTC for output folders and episode metadata.
 - Policy analysis runs now force `use_planner=False` in the episode config to avoid attaching global planners during metrics/video sweeps.

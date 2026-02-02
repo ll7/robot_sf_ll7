@@ -125,6 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added cross-links between core guides for improved discoverability
   - Normalized H1 headings and purpose statements across key documentation files
   - Collapsed legacy detailed index into expandable section for backward compatibility
+- Added a benchmark spec doc covering scenario splits, seeds, baseline categories, reproducible commands, and metric caveats.
   
 ### Migration Guide (Version 2.1.0)
 

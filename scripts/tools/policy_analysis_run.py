@@ -13,6 +13,10 @@ Examples:
   uv run python scripts/tools/policy_analysis_run.py \
     --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml \
     --policy ppo --model-path output/wandb/.../model.zip --videos
+
+  uv run python scripts/tools/policy_analysis_run.py \
+    --scenario configs/scenarios/classic_interactions_francis2023.yaml \
+    --policy-sweep --seed-set eval
 """
 
 from __future__ import annotations
@@ -21,6 +25,8 @@ import argparse
 import json
 import math
 import re
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -83,6 +89,30 @@ _POLICY_CHOICES = (
 )
 
 _TIMESTAMP_TZ = ZoneInfo("Europe/Berlin")
+_DEFAULT_SEED_SET_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
+
+_SUMMARY_METRICS = (
+    "path_efficiency",
+    "shortest_path_len",
+    "comfort_exposure",
+    "jerk_mean",
+    "jerk_mean_eps0p1",
+    "curvature_mean",
+    "curvature_mean_eps0p1",
+    "low_speed_frac",
+)
+
+_POLICY_CATEGORIES = {
+    "fast_pysf": "oracle",
+    "fast_pysf_planner": "oracle",
+    "goal": "heuristic",
+    "socnav_sampling": "heuristic",
+    "socnav_social_force": "heuristic",
+    "socnav_orca": "heuristic",
+    "socnav_sacadrl": "heuristic",
+    "socnav_bench": "heuristic",
+    "ppo": "learned",
+}
 
 
 @dataclass
@@ -209,6 +239,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override seed (single seed for all scenarios).",
     )
     parser.add_argument(
+        "--seed-set",
+        choices=["dev", "eval"],
+        help="Use a named deterministic seed set for evaluation (overrides scenario seeds).",
+    )
+    parser.add_argument(
         "--max-seeds",
         type=int,
         help="Limit number of seeds per scenario.",
@@ -218,6 +253,16 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="record_forces",
         action="store_false",
         help="Disable pedestrian force logging.",
+    )
+    parser.add_argument(
+        "--extract-frames",
+        action="store_true",
+        help="Extract frames for top problem episodes (requires ffmpeg/ffprobe).",
+    )
+    parser.add_argument(
+        "--extract-frames-output",
+        type=Path,
+        help="Override output directory for extracted frames (defaults under the run output).",
     )
     parser.set_defaults(record_forces=True)
     parser.add_argument(
@@ -288,18 +333,52 @@ def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = N
     return get_artifact_category_path("recordings") / f"{ts}_policy_analysis_{policy}"
 
 
+def _resolve_sweep_root(base: Path | None, *, stamp: str | None = None) -> Path:
+    """Resolve output root for multi-policy sweeps."""
+    if base is not None:
+        return resolve_artifact_path(base)
+    ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
+    return get_artifact_category_path("benchmarks") / f"{ts}_policy_sweep"
+
+
+def _resolve_sweep_video_root(base: Path | None, *, stamp: str | None = None) -> Path:
+    """Resolve video output root for multi-policy sweeps."""
+    if base is not None:
+        return resolve_artifact_path(base)
+    ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
+    return get_artifact_category_path("recordings") / f"{ts}_policy_sweep"
+
+
+def _load_seed_sets(path: Path) -> dict[str, list[int]]:
+    """Load named seed sets from YAML."""
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Seed set file '{path}' must contain a mapping.")
+    seed_sets: dict[str, list[int]] = {}
+    for key, value in data.items():
+        if not isinstance(value, list):
+            continue
+        seed_sets[str(key)] = [int(s) for s in value]
+    return seed_sets
+
+
 def _resolve_seeds(
     scenario: Mapping[str, Any],
     *,
     seed_override: int | None,
     max_seeds: int | None,
     training_seeds: Sequence[int] | None,
+    seed_set: Sequence[int] | None,
 ) -> list[int]:
     """Resolve per-scenario seeds, honoring overrides and training config defaults."""
     if seed_override is not None:
         return [int(seed_override)]
     seeds: list[int] = []
-    if training_seeds:
+    if seed_set:
+        seeds = [int(s) for s in seed_set]
+    elif training_seeds:
         seeds = [int(s) for s in training_seeds]
     else:
         raw = scenario.get("seeds")
@@ -487,11 +566,27 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     successes = sum(1 for r in records if r.get("metrics", {}).get("success"))
     collisions = sum(1 for r in records if int(r.get("metrics", {}).get("collisions", 0)) > 0)
     timeouts = sum(1 for r in records if r.get("status") == "failure")
+    metric_means: dict[str, float] = {}
+    for metric in _SUMMARY_METRICS:
+        values: list[float] = []
+        for rec in records:
+            raw = rec.get("metrics", {}).get(metric)
+            if raw is None:
+                continue
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(val):
+                values.append(val)
+        if values:
+            metric_means[metric] = float(np.mean(values))
     return {
         "episodes": len(records),
         "success_rate": successes / len(records),
         "collision_rate": collisions / len(records),
         "failures": timeouts,
+        "metric_means": metric_means,
     }
 
 
@@ -606,6 +701,72 @@ def _write_report(
             lines.append(f"- {scen} seed={seed} score={score:.2f} video={video}")
 
     report_md_path = out_dir / "report.md"
+    metric_means = summary.get("metric_means", {})
+    if metric_means:
+        lines.extend(["", "## Key metrics (mean over episodes)"])
+        for key, value in sorted(metric_means.items()):
+            lines.append(f"- {key}: {value:.4f}")
+
+    report_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_md_path, report_json_path
+
+
+def _write_combined_report(
+    out_dir: Path,
+    *,
+    policy_entries: list[dict[str, Any]],
+    scenario_path: Path,
+    seed_set_name: str | None,
+) -> tuple[Path, Path]:
+    """Write a combined report for a multi-policy sweep."""
+    report = {
+        "scenario_path": str(scenario_path),
+        "seed_set": seed_set_name,
+        "policies": policy_entries,
+    }
+    report_json_path = out_dir / "combined_report.json"
+    report_json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    lines = [
+        "# Policy Sweep Report",
+        "",
+        f"- Scenario file: `{scenario_path}`",
+        f"- Seed set: `{seed_set_name or 'scenario/default'}`",
+        "",
+        "## Summary",
+        "",
+        "| Policy | Category | Success rate | Collision rate | Failures |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for entry in policy_entries:
+        summary = entry.get("summary", {})
+        lines.append(
+            "| {policy} | {category} | {success:.3f} | {collision:.3f} | {failures} |".format(
+                policy=entry.get("policy", "-"),
+                category=entry.get("category", "-"),
+                success=summary.get("success_rate", 0.0),
+                collision=summary.get("collision_rate", 0.0),
+                failures=summary.get("failures", 0),
+            )
+        )
+
+    lines.extend(["", "## Key metrics (mean over episodes)", ""])
+    metric_keys = sorted({key for entry in policy_entries for key in entry.get("metric_means", {})})
+    if not metric_keys:
+        lines.append("_No metric means available._")
+    else:
+        header = "| Policy | " + " | ".join(metric_keys) + " |"
+        divider = "| --- | " + " | ".join("---" for _ in metric_keys) + " |"
+        lines.extend([header, divider])
+        for entry in policy_entries:
+            means = entry.get("metric_means", {})
+            row = [entry.get("policy", "-")]
+            for key in metric_keys:
+                value = means.get(key)
+                row.append(f"{value:.4f}" if isinstance(value, (int, float)) else "-")
+            lines.append("| " + " | ".join(row) + " |")
+
+    report_md_path = out_dir / "combined_report.md"
     report_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report_md_path, report_json_path
 
@@ -618,24 +779,24 @@ def _finalize_run(
     policy_name: str,
     video_root: Path | None,
     write_plausibility_metrics: bool,
-) -> None:
+    seed_set_name: str | None,
+) -> dict[str, Any]:
     summary = _summarize_records(records)
     aggregates = compute_aggregates(
         records, group_by="scenario_id", fallback_group_by="scenario_id"
     )
     problem_episodes = _find_problem_episodes(records)
 
+    summary_payload = {
+        "summary": summary,
+        "aggregates": aggregates,
+        "problem_episodes": problem_episodes,
+        "scenario_path": str(scenario_path),
+        "seed_set": seed_set_name,
+    }
     summary_path = output_root / "summary.json"
     summary_path.write_text(
-        json.dumps(
-            {
-                "summary": summary,
-                "aggregates": aggregates,
-                "problem_episodes": problem_episodes,
-                "scenario_path": str(scenario_path),
-            },
-            indent=2,
-        ),
+        json.dumps(summary_payload, indent=2),
         encoding="utf-8",
     )
 
@@ -659,6 +820,14 @@ def _finalize_run(
             records=records,
             policy_name=policy_name,
         )
+    return {
+        "summary": summary,
+        "aggregates": aggregates,
+        "problem_episodes": problem_episodes,
+        "report_md": str(report_md),
+        "report_json": str(report_json),
+        "summary_json": str(summary_path),
+    }
 
 
 def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
@@ -1048,6 +1217,9 @@ def _build_episode_record(
         metrics_raw["shortest_path_len"] = float(shortest_path)
         # Filter jerk/curvature at low speeds to avoid numerical blow-ups when |v| ~ 0.
         speed_eps = 0.1
+        speeds = np.linalg.norm(robot_vel_arr, axis=1)
+        if speeds.size:
+            metrics_raw["low_speed_frac"] = float(np.mean(speeds < speed_eps))
         metrics_raw["jerk_mean_eps0p1"] = _filtered_jerk_mean(
             robot_vel_arr,
             robot_acc_arr,
@@ -1326,92 +1498,288 @@ def _prepare_outputs(
     return output_root, video_root, out_jsonl, schema
 
 
+def _run_frame_extraction(report_json: Path, *, output_root: Path | None) -> None:
+    """Invoke extract_failure_frames.py for a policy analysis report."""
+    if not report_json.exists():
+        logger.warning("Skipping frame extraction; report not found: {}", report_json)
+        return
+    script = Path(__file__).resolve().parent / "extract_failure_frames.py"
+    cmd = [sys.executable, str(script), "--report", str(report_json)]
+    if output_root is not None:
+        cmd.extend(["--output", str(output_root)])
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        msg = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        logger.warning("Frame extraction failed for {}: {}", report_json, msg)
+        return
+    if result.stdout.strip():
+        logger.info("Frame extraction output:\n{}", result.stdout.strip())
+
+
+def _resolve_seed_set(
+    args: argparse.Namespace,
+    *,
+    repo_root: Path,
+) -> tuple[str | None, list[int] | None]:
+    """Resolve the selected seed set, if any.
+
+    Returns:
+        tuple[str | None, list[int] | None]: Seed set name and seed list, if configured.
+    """
+    seed_sets = _load_seed_sets(repo_root / _DEFAULT_SEED_SET_PATH)
+    seed_set_name = args.seed_set
+    if seed_set_name is None:
+        return None, None
+    seed_set = seed_sets.get(seed_set_name)
+    if not seed_set:
+        raise ValueError(f"Seed set '{seed_set_name}' not found in {_DEFAULT_SEED_SET_PATH}.")
+    logger.info("Using seed set '{}' with {} seeds.", seed_set_name, len(seed_set))
+    return seed_set_name, seed_set
+
+
+def _resolve_policies(args: argparse.Namespace) -> list[str]:
+    """Resolve which policies to evaluate.
+
+    Returns:
+        list[str]: Policy identifiers to evaluate.
+    """
+    if not args.policy_sweep:
+        return [args.policy]
+    if args.policies:
+        return [policy.strip() for policy in args.policies.split(",") if policy.strip()]
+    return ["fast_pysf_planner", "ppo", "socnav_orca"]
+
+
+def _prepare_sweep_roots(
+    args: argparse.Namespace,
+    *,
+    sweep_stamp: str | None,
+) -> tuple[Path | None, Path | None]:
+    """Create sweep output roots when running multiple policies.
+
+    Returns:
+        tuple[Path | None, Path | None]: Sweep output and video roots.
+    """
+    if not args.policy_sweep:
+        return None, None
+    sweep_root = _resolve_sweep_root(args.output, stamp=sweep_stamp)
+    sweep_root.mkdir(parents=True, exist_ok=True)
+    sweep_video_root: Path | None = None
+    if args.videos:
+        sweep_video_root = _resolve_sweep_video_root(args.video_output, stamp=sweep_stamp)
+        sweep_video_root.mkdir(parents=True, exist_ok=True)
+    return sweep_root, sweep_video_root
+
+
+def _resolve_frame_root(
+    args: argparse.Namespace,
+    *,
+    policy_name: str,
+    output_root: Path,
+) -> Path:
+    """Resolve the root directory for extracted failure frames.
+
+    Returns:
+        Path: Base directory for extracted frames.
+    """
+    frame_root = args.extract_frames_output
+    if frame_root is not None:
+        frame_root = resolve_artifact_path(frame_root)
+        if args.policy_sweep:
+            frame_root = frame_root / policy_name
+    else:
+        frame_root = output_root / "failure_frames"
+    return frame_root
+
+
+def _maybe_extract_frames(
+    args: argparse.Namespace,
+    *,
+    result: dict[str, Any],
+    policy_name: str,
+    output_root: Path,
+) -> None:
+    """Optionally extract failure frames after a policy run."""
+    if not args.extract_frames:
+        return
+    if not args.videos:
+        logger.warning("Skipping frame extraction; --videos is not set.")
+        return
+    frame_root = _resolve_frame_root(args, policy_name=policy_name, output_root=output_root)
+    _run_frame_extraction(Path(result["report_json"]), output_root=frame_root)
+
+
+def _run_policy_episodes(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    scenario_path: Path,
+    args: argparse.Namespace,
+    ctx: TrainingContext,
+    policy_name: str,
+    policy_model: Any,
+    socnav_policy: SocNavPlannerPolicy | None,
+    policy_obs_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None,
+    out_jsonl: Path,
+    schema: dict[str, Any],
+    video_root: Path | None,
+    seed_set: list[int] | None,
+) -> list[dict[str, Any]]:
+    """Run all scenarios for a single policy and collect records.
+
+    Returns:
+        list[dict[str, Any]]: Episode record dictionaries.
+    """
+    for scenario in scenarios:
+        scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
+        seeds = _resolve_seeds(
+            scenario,
+            seed_override=args.seed,
+            max_seeds=args.max_seeds,
+            training_seeds=ctx.training_seeds,
+            seed_set=seed_set,
+        )
+        logger.info("Scenario {} seeds={}", scenario_name, seeds)
+        for seed in seeds:
+            record, _artifacts = _run_episode(
+                scenario,
+                scenario_path=scenario_path,
+                seed=seed,
+                policy_name=policy_name,
+                policy_model=policy_model,
+                socnav_policy=socnav_policy,
+                policy_obs_adapter=policy_obs_adapter,
+                robot_speed=args.robot_speed,
+                env_overrides=ctx.env_overrides,
+                env_factory_kwargs=ctx.env_factory_kwargs,
+                record_forces=args.record_forces,
+                max_steps_override=args.max_steps,
+                videos=args.videos,
+                video_dir=video_root,
+                video_fps=args.video_fps,
+                socnav_use_grid=args.socnav_use_grid,
+                socnav_grid_resolution=args.socnav_grid_resolution,
+                socnav_grid_width=args.socnav_grid_width,
+                socnav_grid_height=args.socnav_grid_height,
+                socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
+            )
+            _write_jsonl(out_jsonl, schema, record)
+    return read_jsonl(out_jsonl)
+
+
+def _run_policy_analysis_for_policy(
+    policy_name: str,
+    *,
+    args: argparse.Namespace,
+    ctx: TrainingContext,
+    scenario_path: Path,
+    scenarios: list[Mapping[str, Any]],
+    seed_set: list[int] | None,
+    seed_set_name: str | None,
+    sweep_stamp: str | None,
+    sweep_root: Path | None,
+    sweep_video_root: Path | None,
+) -> dict[str, Any]:
+    """Run analysis for a single policy and return its summary entry.
+
+    Returns:
+        dict[str, Any]: Summary metadata for the policy run.
+    """
+    output_base = sweep_root / policy_name if sweep_root is not None else args.output
+    video_base = (
+        sweep_video_root / policy_name if sweep_video_root is not None else args.video_output
+    )
+    policy_model, policy_obs_adapter = _load_policy_model(
+        policy_name,
+        model_path=args.model_path,
+    )
+    socnav_policy = _resolve_socnav_policy(args, ctx=ctx, policy_name=policy_name)
+    output_root, video_root, out_jsonl, schema = _prepare_outputs(
+        args,
+        policy_name=policy_name,
+        stamp=sweep_stamp,
+        output_base=output_base,
+        video_base=video_base,
+    )
+    records = _run_policy_episodes(
+        scenarios,
+        scenario_path=scenario_path,
+        args=args,
+        ctx=ctx,
+        policy_name=policy_name,
+        policy_model=policy_model,
+        socnav_policy=socnav_policy,
+        policy_obs_adapter=policy_obs_adapter,
+        out_jsonl=out_jsonl,
+        schema=schema,
+        video_root=video_root,
+        seed_set=seed_set,
+    )
+    result = _finalize_run(
+        output_root,
+        scenario_path=scenario_path,
+        records=records,
+        policy_name=policy_name,
+        video_root=video_root,
+        write_plausibility_metrics=args.write_plausibility_metrics,
+        seed_set_name=seed_set_name,
+    )
+    _maybe_extract_frames(
+        args,
+        result=result,
+        policy_name=policy_name,
+        output_root=output_root,
+    )
+    return {
+        "policy": policy_name,
+        "category": _POLICY_CATEGORIES.get(policy_name, "unknown"),
+        "summary": result["summary"],
+        "metric_means": result["summary"].get("metric_means", {}),
+        "report_md": result["report_md"],
+        "report_json": result["report_json"],
+        "summary_json": result["summary_json"],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for policy analysis runs."""
     args = _build_parser().parse_args(argv)
     configure_logging(verbose=args.verbose)
     ensure_canonical_tree()
 
+    repo_root = Path(__file__).resolve().parents[2]
+    seed_set_name, seed_set = _resolve_seed_set(args, repo_root=repo_root)
+
     ctx = _load_training_context(args)
     scenario_path, scenarios = _resolve_scenarios(args, training_config=ctx.training_config)
-    policies: list[str]
-    if args.policy_sweep:
-        if args.policies:
-            policies = [p.strip() for p in args.policies.split(",") if p.strip()]
-        else:
-            policies = ["fast_pysf_planner", "ppo", "socnav_orca"]
-    else:
-        policies = [args.policy]
+    policies = _resolve_policies(args)
 
     sweep_stamp = (
         datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S") if args.policy_sweep else None
     )
+    sweep_root, sweep_video_root = _prepare_sweep_roots(args, sweep_stamp=sweep_stamp)
 
+    policy_entries: list[dict[str, Any]] = []
     for policy_name in policies:
-        output_base = args.output
-        video_base = args.video_output
-        if args.policy_sweep:
-            if output_base is not None:
-                output_base = Path(output_base) / policy_name
-            if video_base is not None:
-                video_base = Path(video_base) / policy_name
-        policy_model, policy_obs_adapter = _load_policy_model(
-            policy_name,
-            model_path=args.model_path,
-        )
-        socnav_policy = _resolve_socnav_policy(args, ctx=ctx, policy_name=policy_name)
-        output_root, video_root, out_jsonl, schema = _prepare_outputs(
-            args,
-            policy_name=policy_name,
-            stamp=sweep_stamp,
-            output_base=output_base,
-            video_base=video_base,
-        )
-        records: list[dict[str, Any]] = []
-
-        for scenario in scenarios:
-            scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
-            seeds = _resolve_seeds(
-                scenario,
-                seed_override=args.seed,
-                max_seeds=args.max_seeds,
-                training_seeds=ctx.training_seeds,
+        policy_entries.append(
+            _run_policy_analysis_for_policy(
+                policy_name,
+                args=args,
+                ctx=ctx,
+                scenario_path=scenario_path,
+                scenarios=scenarios,
+                seed_set=seed_set,
+                seed_set_name=seed_set_name,
+                sweep_stamp=sweep_stamp,
+                sweep_root=sweep_root,
+                sweep_video_root=sweep_video_root,
             )
-            logger.info("Scenario {} seeds={}", scenario_name, seeds)
-            for seed in seeds:
-                record, _artifacts = _run_episode(
-                    scenario,
-                    scenario_path=scenario_path,
-                    seed=seed,
-                    policy_name=policy_name,
-                    policy_model=policy_model,
-                    socnav_policy=socnav_policy,
-                    policy_obs_adapter=policy_obs_adapter,
-                    robot_speed=args.robot_speed,
-                    env_overrides=ctx.env_overrides,
-                    env_factory_kwargs=ctx.env_factory_kwargs,
-                    record_forces=args.record_forces,
-                    max_steps_override=args.max_steps,
-                    videos=args.videos,
-                    video_dir=video_root,
-                    video_fps=args.video_fps,
-                    socnav_use_grid=args.socnav_use_grid,
-                    socnav_grid_resolution=args.socnav_grid_resolution,
-                    socnav_grid_width=args.socnav_grid_width,
-                    socnav_grid_height=args.socnav_grid_height,
-                    socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
-                )
-                _write_jsonl(out_jsonl, schema, record)
-                records.append(record)
-
-        records = read_jsonl(out_jsonl)
-        _finalize_run(
-            output_root,
+        )
+    if args.policy_sweep and sweep_root is not None:
+        _write_combined_report(
+            sweep_root,
+            policy_entries=policy_entries,
             scenario_path=scenario_path,
-            records=records,
-            policy_name=policy_name,
-            video_root=video_root,
-            write_plausibility_metrics=args.write_plausibility_metrics,
+            seed_set_name=seed_set_name,
         )
     return 0
 

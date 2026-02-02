@@ -1,0 +1,13 @@
+# Benchmark seed sets for deterministic evaluation.
+#
+# Use random seeds during training; use these fixed seeds for dev/eval runs.
+
+dev:
+  - 101
+  - 102
+  - 103
+
+eval:
+  - 111
+  - 112
+  - 113

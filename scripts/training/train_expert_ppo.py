@@ -99,6 +99,19 @@ _ALLOWED_PPO_HYPERPARAMS = {
     "vf_coef",
     "max_grad_norm",
 }
+_PPO_PARAM_COERCIONS: dict[str, Callable[[object], object]] = {
+    "learning_rate": lambda value: float(value),
+    "batch_size": lambda value: int(value),
+    "n_epochs": lambda value: int(value),
+    "ent_coef": lambda value: float(value),
+    "clip_range": lambda value: float(value),
+    "target_kl": lambda value: None if value is None else float(value),
+    "n_steps": lambda value: int(value),
+    "gamma": lambda value: float(value),
+    "gae_lambda": lambda value: float(value),
+    "vf_coef": lambda value: float(value),
+    "max_grad_norm": lambda value: float(value),
+}
 _SUPPORTED_BEST_METRICS = {
     "success_rate",
     "collision_rate",
@@ -380,6 +393,50 @@ class _BestCheckpointCandidate:
 
 
 @dataclass(slots=True)
+class _BestCheckpointTracker:
+    """Track the best checkpoint across evaluations."""
+
+    metric_name: str
+    higher_is_better: bool
+    convergence: ConvergenceCriteria
+    best_overall: _BestCheckpointCandidate | None = None
+    best_converged: _BestCheckpointCandidate | None = None
+
+    def update(self, summary: dict[str, float], *, eval_step: int) -> None:
+        """Update best checkpoint candidates from an eval summary."""
+        score = summary.get(self.metric_name)
+        if score is None:
+            return
+        meets_convergence = (
+            summary.get("success_rate", 0.0) >= self.convergence.success_rate
+            and summary.get("collision_rate", 1.0) <= self.convergence.collision_rate
+        )
+        candidate = _BestCheckpointCandidate(
+            eval_step=eval_step,
+            score=score,
+            metrics=summary,
+            meets_convergence=meets_convergence,
+        )
+        if self._is_better(candidate, self.best_overall):
+            self.best_overall = candidate
+        if meets_convergence and self._is_better(candidate, self.best_converged):
+            self.best_converged = candidate
+
+    def best(self) -> _BestCheckpointCandidate | None:
+        """Return the preferred best candidate."""
+        return self.best_converged or self.best_overall
+
+    def _is_better(
+        self, candidate: _BestCheckpointCandidate, current: _BestCheckpointCandidate | None
+    ) -> bool:
+        if current is None:
+            return True
+        if self.higher_is_better:
+            return candidate.score > current.score
+        return candidate.score < current.score
+
+
+@dataclass(slots=True)
 class TrainingOutputs:
     """Bundle of outputs from the training/evaluation loop."""
 
@@ -537,30 +594,9 @@ def _resolve_ppo_hyperparams(config: ExpertTrainingConfig) -> dict[str, object]:
             params.pop(key, None)
         else:
             params[key] = value
-    if "learning_rate" in params:
-        params["learning_rate"] = float(params["learning_rate"])
-    if "batch_size" in params:
-        params["batch_size"] = int(params["batch_size"])
-    if "n_epochs" in params:
-        params["n_epochs"] = int(params["n_epochs"])
-    if "ent_coef" in params:
-        params["ent_coef"] = float(params["ent_coef"])
-    if "clip_range" in params:
-        params["clip_range"] = float(params["clip_range"])
-    if "target_kl" in params:
-        params["target_kl"] = (
-            None if params["target_kl"] is None else float(params["target_kl"])
-        )
-    if "n_steps" in params:
-        params["n_steps"] = int(params["n_steps"])
-    if "gamma" in params:
-        params["gamma"] = float(params["gamma"])
-    if "gae_lambda" in params:
-        params["gae_lambda"] = float(params["gae_lambda"])
-    if "vf_coef" in params:
-        params["vf_coef"] = float(params["vf_coef"])
-    if "max_grad_norm" in params:
-        params["max_grad_norm"] = float(params["max_grad_norm"])
+    for key, coerce in _PPO_PARAM_COERCIONS.items():
+        if key in params:
+            params[key] = coerce(params[key])
     return params
 
 
@@ -800,6 +836,36 @@ def _summarize_eval_metrics(metrics: MetricSamples) -> dict[str, float]:
     return summary
 
 
+def _finalize_best_checkpoint(
+    tracker: _BestCheckpointTracker,
+    *,
+    config: ExpertTrainingConfig,
+    checkpoint_dir: Path | None,
+) -> BestCheckpointSummary | None:
+    """Persist the best checkpoint and return its summary."""
+    best_candidate = tracker.best()
+    if best_candidate is None or checkpoint_dir is None:
+        return None
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    best_path = checkpoint_dir / f"{config.policy_id}_best.zip"
+    best_source = checkpoint_dir / f"{config.policy_id}_step{best_candidate.eval_step}.zip"
+    if not best_source.exists():
+        logger.warning(
+            "Best checkpoint source missing at {}; skipping best checkpoint copy.",
+            best_source,
+        )
+        return None
+    shutil.copy2(best_source, best_path)
+    return BestCheckpointSummary(
+        metric=tracker.metric_name,
+        value=best_candidate.score,
+        eval_step=best_candidate.eval_step,
+        checkpoint_path=best_path,
+        metrics=best_candidate.metrics,
+        meets_convergence=best_candidate.meets_convergence,
+    )
+
+
 def _record_eval_metrics(model: PPO, metrics: MetricSamples, *, eval_step: int) -> None:
     """Record evaluation metrics into the SB3 logger for TensorBoard export."""
     for name, values in metrics.items():
@@ -851,11 +917,12 @@ def _train_with_schedule(
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
     cb = CallbackList(callbacks) if callbacks else None
-    metric_name, higher_is_better = _resolve_best_checkpoint_metric(
-        config.best_checkpoint_metric
+    metric_name, higher_is_better = _resolve_best_checkpoint_metric(config.best_checkpoint_metric)
+    tracker = _BestCheckpointTracker(
+        metric_name=metric_name,
+        higher_is_better=higher_is_better,
+        convergence=config.convergence,
     )
-    best_overall: _BestCheckpointCandidate | None = None
-    best_converged: _BestCheckpointCandidate | None = None
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
@@ -880,56 +947,15 @@ def _train_with_schedule(
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
         summary = _summarize_eval_metrics(step_metrics)
-        score = summary.get(metric_name)
-        meets_convergence = (
-            summary.get("success_rate", 0.0) >= config.convergence.success_rate
-            and summary.get("collision_rate", 1.0) <= config.convergence.collision_rate
-        )
-        if score is not None:
-            candidate = _BestCheckpointCandidate(
-                eval_step=eval_step,
-                score=score,
-                metrics=summary,
-                meets_convergence=meets_convergence,
-            )
-            if best_overall is None or (
-                score > best_overall.score if higher_is_better else score < best_overall.score
-            ):
-                best_overall = candidate
-            if meets_convergence and (
-                best_converged is None
-                or (
-                    score > best_converged.score
-                    if higher_is_better
-                    else score < best_converged.score
-                )
-            ):
-                best_converged = candidate
+        tracker.update(summary, eval_step=eval_step)
         episode_records.extend(eval_records)
         timesteps_done = eval_step
 
-    best_candidate = best_converged or best_overall
-    best_summary: BestCheckpointSummary | None = None
-    if best_candidate is not None and checkpoint_dir is not None:
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        best_path = checkpoint_dir / f"{config.policy_id}_best.zip"
-        best_source = checkpoint_dir / f"{config.policy_id}_step{best_candidate.eval_step}.zip"
-        if best_source.exists():
-            shutil.copy2(best_source, best_path)
-            best_summary = BestCheckpointSummary(
-                metric=metric_name,
-                value=best_candidate.score,
-                eval_step=best_candidate.eval_step,
-                checkpoint_path=best_path,
-                metrics=best_candidate.metrics,
-                meets_convergence=best_candidate.meets_convergence,
-            )
-        else:
-            logger.warning(
-                "Best checkpoint source missing at {}; skipping best checkpoint copy.",
-                best_source,
-            )
-
+    best_summary = _finalize_best_checkpoint(
+        tracker,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+    )
     return metrics_raw, episode_records, best_summary
 
 
@@ -1254,6 +1280,113 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
             handle.write("\n")
 
 
+def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
+    """Apply seed configuration and warn when randomization is enabled."""
+    if _randomize_seeds(config):
+        if config.seeds:
+            logger.warning(
+                "randomize_seeds enabled; ignoring provided seeds for training/evaluation."
+            )
+    elif config.seeds:
+        common.set_global_seed(int(config.seeds[0]))
+
+
+def _persist_expert_checkpoint(
+    outputs: TrainingOutputs,
+    *,
+    config: ExpertTrainingConfig,
+    config_path: Path | None,
+    dry_run: bool,
+) -> tuple[Path, Path]:
+    """Persist the expert checkpoint and config manifest, returning their paths."""
+    checkpoint_dir = common.get_expert_policy_dir()
+    checkpoint_path = checkpoint_dir / f"{config.policy_id}.zip"
+    if dry_run:
+        checkpoint_path.write_text("dry-run checkpoint placeholder\n", encoding="utf-8")
+    else:
+        assert outputs.model is not None  # for type-checkers
+        outputs.model.save(str(checkpoint_path))
+        if outputs.vec_env is not None:
+            outputs.vec_env.close()
+
+    config_manifest = checkpoint_dir / f"{config.policy_id}.config.yaml"
+    if config_path is not None and config_path.exists():
+        shutil.copy2(config_path, config_manifest)
+    else:  # pragma: no cover - defensive fallback
+        config_manifest.write_text(f"policy_id: {config.policy_id}\n", encoding="utf-8")
+    return checkpoint_path, config_manifest
+
+
+def _build_training_notes(
+    *,
+    config: ExpertTrainingConfig,
+    scenario_ctx: ScenarioContext,
+    eval_steps: Sequence[int],
+    outputs: TrainingOutputs,
+    scenario_coverage: dict[str, int],
+    dry_run: bool,
+) -> list[str]:
+    """Assemble training run notes for the manifest."""
+    notes: list[str] = [
+        f"dry_run={dry_run}",
+        f"scenario_id={scenario_ctx.scenario_label}",
+        f"total_timesteps={config.total_timesteps}",
+        f"Converged at {config.total_timesteps} timesteps",
+        f"eval_steps={eval_steps}",
+    ]
+    if _randomize_seeds(config):
+        notes.append("randomize_seeds=true")
+    if outputs.tensorboard_log is not None:
+        notes.append(f"tensorboard_log={outputs.tensorboard_log}")
+    if scenario_coverage:
+        notes.append(f"scenario_coverage={scenario_coverage}")
+    if outputs.best_checkpoint is not None:
+        best = outputs.best_checkpoint
+        notes.append(f"best_checkpoint_path={best.checkpoint_path}")
+        notes.append(
+            f"best_checkpoint_metric={best.metric} value={best.value:.4f} "
+            f"step={best.eval_step} meets_convergence={best.meets_convergence}"
+        )
+    return notes
+
+
+def _apply_synthetic_metrics_fallback(
+    aggregates: dict[str, common.MetricAggregate],
+    *,
+    primary_keys: Sequence[str],
+    notes: list[str],
+) -> bool:
+    """Seed synthetic metrics when all primary metrics are zero."""
+    if not all(
+        aggregates.get(key, common.MetricAggregate(0.0, 0.0, 0.0, (0.0, 0.0))).mean == 0.0
+        for key in primary_keys
+    ):
+        return False
+    demo_metrics: dict[str, tuple[float, float]] = {
+        "success_rate": (0.78, 0.82),
+        "collision_rate": (0.14, 0.16),
+        "path_efficiency": (0.75, 0.80),
+        "snqi": (0.65, 0.70),
+        "comfort_exposure": (0.05, 0.08),
+    }
+    rng = np.random.default_rng(123)
+    for key, (low, high) in demo_metrics.items():
+        mean_val = float(rng.uniform(low, high))
+        aggregates[key] = common.MetricAggregate(
+            mean=mean_val,
+            median=mean_val,
+            p95=mean_val,
+            ci95=(mean_val, mean_val),
+        )
+    seeded_keys = ", ".join(demo_metrics.keys())
+    logger.warning(
+        "All primary metrics were zero; seeding synthetic demo metrics for keys: {}",
+        seeded_keys,
+    )
+    notes.append("Synthetic demo metrics used due to zero primary metrics")
+    return True
+
+
 def run_expert_training(
     config: ExpertTrainingConfig,
     *,
@@ -1264,13 +1397,7 @@ def run_expert_training(
     """Execute the expert PPO training workflow and persist manifests."""
 
     _ensure_cuda_determinism_env()
-    if _randomize_seeds(config):
-        if config.seeds:
-            logger.warning(
-                "randomize_seeds enabled; ignoring provided seeds for training/evaluation."
-            )
-    elif config.seeds:
-        common.set_global_seed(int(config.seeds[0]))
+    _prepare_seed_state(config)
 
     scenario_definitions = load_scenarios(config.scenario_config)
     scenario_ctx = _resolve_scenario_context(config, scenario_definitions)
@@ -1293,21 +1420,12 @@ def run_expert_training(
     aggregates = _aggregate_metrics(outputs.metrics_raw)
     scenario_coverage = _collect_scenario_coverage(outputs.vec_env)
 
-    checkpoint_dir = common.get_expert_policy_dir()
-    checkpoint_path = checkpoint_dir / f"{config.policy_id}.zip"
-    if dry_run:
-        checkpoint_path.write_text("dry-run checkpoint placeholder\n", encoding="utf-8")
-    else:
-        assert outputs.model is not None  # for type-checkers
-        outputs.model.save(str(checkpoint_path))
-        if outputs.vec_env is not None:
-            outputs.vec_env.close()
-
-    config_manifest = checkpoint_dir / f"{config.policy_id}.config.yaml"
-    if config_path is not None and config_path.exists():
-        shutil.copy2(config_path, config_manifest)
-    else:  # pragma: no cover - defensive fallback
-        config_manifest.write_text(f"policy_id: {config.policy_id}\n", encoding="utf-8")
+    checkpoint_path, config_manifest = _persist_expert_checkpoint(
+        outputs,
+        config=config,
+        config_path=config_path,
+        dry_run=dry_run,
+    )
 
     # Surface executed timesteps; convergence tracking not implemented here yet.
     conv_timesteps = float(config.total_timesteps)
@@ -1320,62 +1438,20 @@ def run_expert_training(
     # Backward-compat: keep timesteps_to_convergence but note it mirrors executed timesteps.
     aggregates["timesteps_to_convergence"] = aggregates["total_timesteps_executed"]
 
-    # Fallback: if all primary metrics are zero (common in stub/demo runs), seed with
-    # deterministic demo values so downstream reports are populated.
     primary_keys = ("success_rate", "collision_rate", "path_efficiency", "snqi", "comfort_exposure")
-    notes: list[str] = [
-        f"dry_run={dry_run}",
-        f"scenario_id={scenario_ctx.scenario_label}",
-        f"total_timesteps={config.total_timesteps}",
-        f"Converged at {config.total_timesteps} timesteps",
-        f"eval_steps={eval_steps}",
-    ]
-    if _randomize_seeds(config):
-        notes.append("randomize_seeds=true")
-    if outputs.tensorboard_log is not None:
-        notes.append(f"tensorboard_log={outputs.tensorboard_log}")
-    if scenario_coverage:
-        notes.append(f"scenario_coverage={scenario_coverage}")
-    if outputs.best_checkpoint is not None:
-        best = outputs.best_checkpoint
-        notes.append(f"best_checkpoint_path={best.checkpoint_path}")
-        notes.append(
-            "best_checkpoint_metric={metric} value={value:.4f} step={step} "
-            "meets_convergence={meets}".format(
-                metric=best.metric,
-                value=best.value,
-                step=best.eval_step,
-                meets=best.meets_convergence,
-            )
-        )
-    metrics_synthetic = False
-    if all(
-        aggregates.get(key, common.MetricAggregate(0.0, 0.0, 0.0, (0.0, 0.0))).mean == 0.0
-        for key in primary_keys
-    ):
-        demo_metrics: dict[str, tuple[float, float]] = {
-            "success_rate": (0.78, 0.82),
-            "collision_rate": (0.14, 0.16),
-            "path_efficiency": (0.75, 0.80),
-            "snqi": (0.65, 0.70),
-            "comfort_exposure": (0.05, 0.08),
-        }
-        rng = np.random.default_rng(123)
-        for key, (low, high) in demo_metrics.items():
-            mean_val = float(rng.uniform(low, high))
-            aggregates[key] = common.MetricAggregate(
-                mean=mean_val,
-                median=mean_val,
-                p95=mean_val,
-                ci95=(mean_val, mean_val),
-            )
-        metrics_synthetic = True
-        seeded_keys = ", ".join(demo_metrics.keys())
-        logger.warning(
-            "All primary metrics were zero; seeding synthetic demo metrics for keys: {}",
-            seeded_keys,
-        )
-        notes.append("Synthetic demo metrics used due to zero primary metrics")
+    notes = _build_training_notes(
+        config=config,
+        scenario_ctx=scenario_ctx,
+        eval_steps=eval_steps,
+        outputs=outputs,
+        scenario_coverage=scenario_coverage,
+        dry_run=dry_run,
+    )
+    metrics_synthetic = _apply_synthetic_metrics_fallback(
+        aggregates,
+        primary_keys=primary_keys,
+        notes=notes,
+    )
 
     validation_state = (
         common.ExpertValidationState.SYNTHETIC

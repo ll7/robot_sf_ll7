@@ -78,6 +78,35 @@ MetricSamples = dict[str, list[float]]
 
 _ORIGINAL_LOGURU_LEVEL = os.environ.get("LOGURU_LEVEL")
 
+_DEFAULT_PPO_HYPERPARAMS: dict[str, object] = {
+    "learning_rate": 1e-4,
+    "batch_size": 256,
+    "n_epochs": 4,
+    "ent_coef": 0.01,
+    "clip_range": 0.1,
+    "target_kl": 0.02,
+}
+_ALLOWED_PPO_HYPERPARAMS = {
+    "learning_rate",
+    "batch_size",
+    "n_epochs",
+    "ent_coef",
+    "clip_range",
+    "target_kl",
+    "n_steps",
+    "gamma",
+    "gae_lambda",
+    "vf_coef",
+    "max_grad_norm",
+}
+_SUPPORTED_BEST_METRICS = {
+    "success_rate",
+    "collision_rate",
+    "path_efficiency",
+    "comfort_exposure",
+    "snqi",
+}
+
 
 def _preconfigure_loguru_level_from_argv() -> None:
     """Set LOGURU_LEVEL early so import-time logs honor CLI log-level."""
@@ -315,6 +344,7 @@ class ExpertTrainingResult:
     training_run_manifest_path: Path
     checkpoint_path: Path
     metrics: dict[str, common.MetricAggregate]
+    best_checkpoint: BestCheckpointSummary | None
 
 
 @dataclass(slots=True)
@@ -328,6 +358,28 @@ class ScenarioContext:
 
 
 @dataclass(slots=True)
+class BestCheckpointSummary:
+    """Snapshot describing the best checkpoint chosen during training."""
+
+    metric: str
+    value: float
+    eval_step: int
+    checkpoint_path: Path
+    metrics: dict[str, float]
+    meets_convergence: bool
+
+
+@dataclass(slots=True)
+class _BestCheckpointCandidate:
+    """Internal tracker for best checkpoint selection."""
+
+    eval_step: int
+    score: float
+    metrics: dict[str, float]
+    meets_convergence: bool
+
+
+@dataclass(slots=True)
 class TrainingOutputs:
     """Bundle of outputs from the training/evaluation loop."""
 
@@ -336,6 +388,7 @@ class TrainingOutputs:
     model: PPO | None
     vec_env: DummyVecEnv | SubprocVecEnv | None
     tensorboard_log: Path | None
+    best_checkpoint: BestCheckpointSummary | None
 
 
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
@@ -388,6 +441,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         policy_id=str(data["policy_id"]),
         convergence=convergence,
         evaluation=evaluation,
+        ppo_hyperparams=dict(data.get("ppo_hyperparams", {}) or {}),
+        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "snqi")),
         feature_extractor=str(data.get("feature_extractor", "default")),
         feature_extractor_kwargs=dict(data.get("feature_extractor_kwargs", {}) or {}),
         policy_net_arch=tuple(data.get("policy_net_arch", (64, 64))),
@@ -469,6 +524,46 @@ def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
     return policy_kwargs
 
 
+def _resolve_ppo_hyperparams(config: ExpertTrainingConfig) -> dict[str, object]:
+    """Merge default PPO hyperparameters with any overrides from config."""
+    overrides = dict(config.ppo_hyperparams or {})
+    unknown = set(overrides) - _ALLOWED_PPO_HYPERPARAMS
+    if unknown:
+        unknown_list = ", ".join(sorted(unknown))
+        raise ValueError(f"ppo_hyperparams has unsupported keys: {unknown_list}")
+    params = dict(_DEFAULT_PPO_HYPERPARAMS)
+    for key, value in overrides.items():
+        if value is None:
+            params.pop(key, None)
+        else:
+            params[key] = value
+    if "learning_rate" in params:
+        params["learning_rate"] = float(params["learning_rate"])
+    if "batch_size" in params:
+        params["batch_size"] = int(params["batch_size"])
+    if "n_epochs" in params:
+        params["n_epochs"] = int(params["n_epochs"])
+    if "ent_coef" in params:
+        params["ent_coef"] = float(params["ent_coef"])
+    if "clip_range" in params:
+        params["clip_range"] = float(params["clip_range"])
+    if "target_kl" in params:
+        params["target_kl"] = (
+            None if params["target_kl"] is None else float(params["target_kl"])
+        )
+    if "n_steps" in params:
+        params["n_steps"] = int(params["n_steps"])
+    if "gamma" in params:
+        params["gamma"] = float(params["gamma"])
+    if "gae_lambda" in params:
+        params["gae_lambda"] = float(params["gae_lambda"])
+    if "vf_coef" in params:
+        params["vf_coef"] = float(params["vf_coef"])
+    if "max_grad_norm" in params:
+        params["max_grad_norm"] = float(params["max_grad_norm"])
+    return params
+
+
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
     """Return True when training/evaluation should avoid deterministic seeding."""
     return bool(getattr(config, "randomize_seeds", False))
@@ -518,6 +613,8 @@ def _init_wandb(
             "randomize_seeds": bool(config.randomize_seeds),
             "scenario_config": str(config.scenario_config),
             "feature_extractor": config.feature_extractor,
+            "ppo_hyperparams": dict(config.ppo_hyperparams),
+            "best_checkpoint_metric": config.best_checkpoint_metric,
             "tensorboard_log": tensorboard_log_str,
         },
         sync_tensorboard=True,
@@ -614,6 +711,7 @@ def _execute_training(
             model=None,
             vec_env=None,
             tensorboard_log=tensorboard_log,
+            best_checkpoint=None,
         )
 
     model, vec_env, tensorboard_log = _init_training_model(
@@ -641,7 +739,7 @@ def _execute_training(
         eval_schedule = [start_timesteps]
     else:
         eval_schedule = [step for step in eval_steps if step > start_timesteps]
-    metrics_raw, episode_records = _train_with_schedule(
+    metrics_raw, episode_records, best_checkpoint = _train_with_schedule(
         model,
         config=config,
         scenario_definitions=scenario_definitions,
@@ -662,6 +760,7 @@ def _execute_training(
         model=model,
         vec_env=vec_env,
         tensorboard_log=tensorboard_log,
+        best_checkpoint=best_checkpoint,
     )
 
 
@@ -680,6 +779,25 @@ def _collect_scenario_coverage(vec_env: DummyVecEnv | SubprocVecEnv | None) -> d
         for key, value in env_coverage.items():
             coverage[key] = coverage.get(key, 0) + int(value)
     return coverage
+
+
+def _resolve_best_checkpoint_metric(metric: str) -> tuple[str, bool]:
+    """Resolve the metric name and whether higher values are better."""
+    normalized = metric.strip().lower()
+    if normalized not in _SUPPORTED_BEST_METRICS:
+        supported = ", ".join(sorted(_SUPPORTED_BEST_METRICS))
+        raise ValueError(f"best_checkpoint_metric must be one of: {supported}")
+    higher_is_better = normalized not in {"collision_rate", "comfort_exposure"}
+    return normalized, higher_is_better
+
+
+def _summarize_eval_metrics(metrics: MetricSamples) -> dict[str, float]:
+    """Return mean values for each evaluation metric."""
+    summary: dict[str, float] = {}
+    for name, values in metrics.items():
+        if values:
+            summary[name] = float(np.mean(values))
+    return summary
 
 
 def _record_eval_metrics(model: PPO, metrics: MetricSamples, *, eval_step: int) -> None:
@@ -718,7 +836,7 @@ def _train_with_schedule(
     wandb_callback: object | None,
     start_timesteps: int = 0,
     checkpoint_dir: Path | None = None,
-) -> tuple[MetricSamples, list[dict[str, object]]]:
+) -> tuple[MetricSamples, list[dict[str, object]], BestCheckpointSummary | None]:
     """Train PPO in chunks and evaluate at scheduled checkpoints."""
     episode_records: list[dict[str, object]] = []
     metrics_raw: MetricSamples = {
@@ -733,6 +851,11 @@ def _train_with_schedule(
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
     cb = CallbackList(callbacks) if callbacks else None
+    metric_name, higher_is_better = _resolve_best_checkpoint_metric(
+        config.best_checkpoint_metric
+    )
+    best_overall: _BestCheckpointCandidate | None = None
+    best_converged: _BestCheckpointCandidate | None = None
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
@@ -756,10 +879,58 @@ def _train_with_schedule(
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
+        summary = _summarize_eval_metrics(step_metrics)
+        score = summary.get(metric_name)
+        meets_convergence = (
+            summary.get("success_rate", 0.0) >= config.convergence.success_rate
+            and summary.get("collision_rate", 1.0) <= config.convergence.collision_rate
+        )
+        if score is not None:
+            candidate = _BestCheckpointCandidate(
+                eval_step=eval_step,
+                score=score,
+                metrics=summary,
+                meets_convergence=meets_convergence,
+            )
+            if best_overall is None or (
+                score > best_overall.score if higher_is_better else score < best_overall.score
+            ):
+                best_overall = candidate
+            if meets_convergence and (
+                best_converged is None
+                or (
+                    score > best_converged.score
+                    if higher_is_better
+                    else score < best_converged.score
+                )
+            ):
+                best_converged = candidate
         episode_records.extend(eval_records)
         timesteps_done = eval_step
 
-    return metrics_raw, episode_records
+    best_candidate = best_converged or best_overall
+    best_summary: BestCheckpointSummary | None = None
+    if best_candidate is not None and checkpoint_dir is not None:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        best_path = checkpoint_dir / f"{config.policy_id}_best.zip"
+        best_source = checkpoint_dir / f"{config.policy_id}_step{best_candidate.eval_step}.zip"
+        if best_source.exists():
+            shutil.copy2(best_source, best_path)
+            best_summary = BestCheckpointSummary(
+                metric=metric_name,
+                value=best_candidate.score,
+                eval_step=best_candidate.eval_step,
+                checkpoint_path=best_path,
+                metrics=best_candidate.metrics,
+                meets_convergence=best_candidate.meets_convergence,
+            )
+        else:
+            logger.warning(
+                "Best checkpoint source missing at {}; skipping best checkpoint copy.",
+                best_source,
+            )
+
+    return metrics_raw, episode_records, best_summary
 
 
 def _init_training_model(
@@ -813,6 +984,7 @@ def _init_training_model(
         if tensorboard_log is not None:
             model.tensorboard_log = str(tensorboard_log)
     else:
+        ppo_kwargs = _resolve_ppo_hyperparams(config)
         model = PPO(
             "MultiInputPolicy",
             vec_env,
@@ -820,12 +992,7 @@ def _init_training_model(
             seed=base_seed,
             tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
             policy_kwargs=policy_kwargs,
-            learning_rate=1e-4,
-            batch_size=256,
-            n_epochs=4,
-            ent_coef=0.01,
-            clip_range=0.1,
-            target_kl=0.02,
+            **ppo_kwargs,
         )
     logger.info(
         "Training envs initialized num_envs={} worker_mode={} base_seed={}",
@@ -1169,6 +1336,18 @@ def run_expert_training(
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
+    if outputs.best_checkpoint is not None:
+        best = outputs.best_checkpoint
+        notes.append(f"best_checkpoint_path={best.checkpoint_path}")
+        notes.append(
+            "best_checkpoint_metric={metric} value={value:.4f} step={step} "
+            "meets_convergence={meets}".format(
+                metric=best.metric,
+                value=best.value,
+                step=best.eval_step,
+                meets=best.meets_convergence,
+            )
+        )
     metrics_synthetic = False
     if all(
         aggregates.get(key, common.MetricAggregate(0.0, 0.0, 0.0, (0.0, 0.0))).mean == 0.0
@@ -1254,6 +1433,7 @@ def run_expert_training(
         training_run_manifest_path=training_manifest_path,
         checkpoint_path=checkpoint_path,
         metrics=aggregates,
+        best_checkpoint=outputs.best_checkpoint,
     )
 
 

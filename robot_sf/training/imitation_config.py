@@ -38,6 +38,8 @@ class ExpertTrainingConfig:
     policy_id: str
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
+    ppo_hyperparams: dict[str, object] = field(default_factory=dict)
+    best_checkpoint_metric: str = "snqi"
     randomize_seeds: bool = False
     scenario_id: str | None = None
     feature_extractor: str = "default"
@@ -62,6 +64,8 @@ class ExpertTrainingConfig:
         policy_id: str,
         convergence: ConvergenceCriteria,
         evaluation: EvaluationSchedule,
+        ppo_hyperparams: dict[str, object] | None = None,
+        best_checkpoint_metric: str = "snqi",
         scenario_id: str | None = None,
         feature_extractor: str = "default",
         feature_extractor_kwargs: dict[str, object] | None = None,
@@ -88,6 +92,8 @@ class ExpertTrainingConfig:
             policy_id=policy_id,
             convergence=convergence,
             evaluation=evaluation,
+            ppo_hyperparams=dict(ppo_hyperparams or {}),
+            best_checkpoint_metric=str(best_checkpoint_metric),
             scenario_id=scenario_id,
             feature_extractor=str(feature_extractor),
             feature_extractor_kwargs=dict(feature_extractor_kwargs or {}),

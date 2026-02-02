@@ -62,6 +62,7 @@ from robot_sf.benchmark.utils import (
     index_existing,
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
+from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -144,15 +145,16 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     Returns:
         List of scenario dictionaries.
     """
-    with Path(path).open("r", encoding="utf-8") as f:
+    scenario_path = Path(path)
+    with scenario_path.open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
-    # Allow either YAML stream of docs or a single list
-    if len(docs) == 1 and isinstance(docs[0], list):
-        scenarios = docs[0]
-    elif len(docs) == 1 and isinstance(docs[0], dict) and "scenarios" in docs[0]:
-        scenarios = docs[0].get("scenarios", [])
-    else:
-        scenarios = docs
+    if not docs:
+        raise ValueError(f"Scenario matrix '{scenario_path}' is empty.")
+    # Preserve legacy YAML stream behavior (multiple docs) without include expansion.
+    if len(docs) > 1:
+        return [dict(s) for s in docs]
+    # Single-document path: defer to include-aware loader for manifests.
+    scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
     return [dict(s) for s in scenarios]
 
 

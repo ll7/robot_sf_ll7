@@ -51,6 +51,22 @@ If `map_file` paths in included scenarios are not resolvable, you can set
 `map_search_paths` to help locate map files. The loader logs a warning with
 the attempted paths and suggestion.
 
+## Map references
+
+Scenarios can reference maps via either `map_file` (a path) or `map_id` (a
+registry key). `map_id` entries are resolved through `maps/registry.yaml` and
+rebased relative to the manifest root so scenarios stay portable.
+
+```yaml
+scenarios:
+  - name: crossing_demo
+    map_id: classic_crossing
+```
+
+If both `map_id` and `map_file` are provided, `map_id` takes precedence (with a
+warning). To override the registry path, set `ROBOT_SF_MAP_REGISTRY`. You can
+regenerate the registry with `scripts/tools/generate_map_registry.py`.
+
 ## Usage
 
 Point training/analysis configs at a manifest (or a legacy combined file):

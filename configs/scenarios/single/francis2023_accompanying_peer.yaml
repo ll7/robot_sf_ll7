@@ -1,0 +1,38 @@
+scenarios:
+- name: francis2023_accompanying_peer
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_down_path.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    role: accompany
+    role_target_id: robot:0
+    role_offset:
+    - 0.0
+    - 1.0
+    note: side-by-side with robot
+  robot_config: {}
+  metadata:
+    figure: 7t
+    archetype: accompanying_peer
+    flow: uni
+    behavior: accompany
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.7496495549242705
+        mean_distance: 7.936356090967665
+        robot_ped_within_5m_frac: 0.31012135932312673
+        ped_force_mean: 0.12365794520781112
+        force_q95: 0.4240773286941142
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 252
+  - 253
+  - 254

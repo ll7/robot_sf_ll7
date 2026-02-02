@@ -1,0 +1,32 @@
+scenarios:
+- name: francis2023_exiting_room
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_exiting_room.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7m
+    archetype: exiting_room
+    flow: exit
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.5091095140234154
+        mean_distance: 5.040019234532677
+        robot_ped_within_5m_frac: 0.5395195309011214
+        ped_force_mean: 0.18461383289604444
+        force_q95: 0.6888443603726052
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 231
+  - 232
+  - 233

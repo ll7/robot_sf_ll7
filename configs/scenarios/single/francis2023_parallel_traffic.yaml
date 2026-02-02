@@ -1,0 +1,29 @@
+scenarios:
+- name: francis2023_parallel_traffic
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_parallel_traffic.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.04
+  robot_config: {}
+  metadata:
+    figure: 7v
+    archetype: parallel_traffic
+    flow: parallel
+    behavior: traffic
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.2019108544352484
+        mean_distance: 4.386229227686682
+        robot_ped_within_5m_frac: 0.7929880484453392
+        ped_force_mean: 0.328979544233278
+        force_q95: 1.3171325804809033
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 264
+  - 265
+  - 266

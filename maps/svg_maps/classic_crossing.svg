@@ -30,11 +30,9 @@
          inkscape:label="robot_route_0_0" />
    </g>
    <g inkscape:groupmode="layer" id="layer1" inkscape:label="Pedestrian">
-      <rect x="8.60" y="2.25" width="4" height="4" fill="#ffd800" inkscape:label="ped_spawn_zone" id="rect7-5"
-         style="fill:#23ff00;fill-opacity:1" />
-      <rect x="26.49" y="34.13" width="4" height="4" fill="#ffd800" inkscape:label="ped_goal_zone" id="rect7-5-0"
-         style="fill:#107400;fill-opacity:1" />
-      <path style="fill:#c40202;fill-opacity:1;stroke:#c40202;stroke-opacity:1" d="M 10.56,21.94 18.73,30.28"
+      <path style="fill:#c40202;fill-opacity:1;stroke:#c40202;stroke-opacity:1" d="M 10,4 10,18 18,18 18,22 30,36"
          id="path8-2" inkscape:label="ped_route_0_0" />
+      <path style="fill:#c40202;fill-opacity:1;stroke:#c40202;stroke-opacity:1" d="M 30,36 18,22 18,18 10,18 10,4"
+         id="path8-3" inkscape:label="ped_route_1_1" />
    </g>
 </svg>

@@ -1,0 +1,85 @@
+scenarios:
+- name: classic_bottleneck_low
+  map_file: ../../../maps/svg_maps/classic_bottleneck.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: low
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 131
+  - 132
+  - 133
+- name: classic_bottleneck_medium
+  map_file: ../../../maps/svg_maps/classic_bottleneck_medium.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3568504232890768
+        mean_distance: 10.304393328176037
+        robot_ped_within_5m_frac: 0.20673702551886897
+        ped_force_mean: 0.0977117812274009
+        force_q95: 0.36515309739568574
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 131
+  - 132
+  - 133
+- name: classic_bottleneck_high
+  map_file: ../../../maps/svg_maps/classic_bottleneck_high.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3151934686291786
+        mean_distance: 10.098522314775332
+        robot_ped_within_5m_frac: 0.21322846692018266
+        ped_force_mean: 0.08291461806394115
+        force_q95: 0.21743377704570035
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 131
+  - 132
+  - 133

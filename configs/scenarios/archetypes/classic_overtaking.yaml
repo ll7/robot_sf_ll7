@@ -1,0 +1,57 @@
+scenarios:
+- name: classic_overtaking_low
+  map_file: ../../../maps/svg_maps/classic_overtaking.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: overtaking
+    density: low
+    flow: uni
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.4639839015136895
+        mean_distance: 8.10468445891877
+        robot_ped_within_5m_frac: 0.3599502939647695
+        ped_force_mean: 0.2151811883513986
+        force_q95: 0.7436062813070817
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 121
+  - 122
+  - 123
+- name: classic_overtaking_medium
+  map_file: ../../../maps/svg_maps/classic_overtaking.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.05
+  robot_config: {}
+  metadata:
+    archetype: overtaking
+    density: medium
+    flow: uni
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.42723812096239
+        mean_distance: 6.999369170525364
+        robot_ped_within_5m_frac: 0.4533904887383148
+        ped_force_mean: 0.21700768131426967
+        force_q95: 0.8323278797057224
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 121
+  - 122
+  - 123

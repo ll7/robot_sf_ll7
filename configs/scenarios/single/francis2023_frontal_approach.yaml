@@ -1,0 +1,32 @@
+scenarios:
+- name: francis2023_frontal_approach
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_frontal_approach.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7a
+    archetype: frontal_approach
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.2631365695932244
+        mean_distance: 8.475627129761023
+        robot_ped_within_5m_frac: 0.2812465549268845
+        ped_force_mean: 0.10206280703250976
+        force_q95: 0.3405429364463664
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 201
+  - 202
+  - 203

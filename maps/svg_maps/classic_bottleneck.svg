@@ -85,6 +85,23 @@
        fill="#000000"
        inkscape:label="obstacle"
        id="rect6" />
+    <!-- Side walls to prevent bypassing the bottleneck -->
+    <rect
+       x="1"
+       y="1"
+       width="12.785749"
+       height="38"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect6b" />
+    <rect
+       x="26.095201"
+       y="1"
+       width="12.904799"
+       height="38"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect6c" />
   </g>
   <g
      id="robot"

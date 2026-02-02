@@ -1,11 +1,11 @@
 ---
 name: analyze-latest-policy-sweep
-description: Analyze latest policy analysis sweep runs (policy_analysis_*) by comparing episodes/summary metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots.
+description: Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots.
 ---
 
 # Analyze Latest Policy Sweep
 
-Use this skill when asked to compare recent `policy_analysis_*` benchmark runs (fast_pysf_planner, PPO, ORCA, etc.) and produce a summary report with diagnostics and video links.
+Use this skill when asked to compare recent `*_policy_analysis_*` benchmark runs (fast_pysf_planner, PPO, ORCA, etc.) and produce a summary report with diagnostics and video links.
 
 ## Quick start
 1) Confirm run directories exist and contain `episodes.jsonl` + `summary.json`.

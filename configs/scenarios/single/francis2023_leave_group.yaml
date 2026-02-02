@@ -1,0 +1,42 @@
+scenarios:
+- name: francis2023_leave_group
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_leave_group.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    role: leave
+    goal_poi: poi_h1_goal
+    note: leave group toward exit
+  - id: h2
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h3
+    goal: null
+    role: wait
+    note: group anchor (static)
+  robot_config: {}
+  metadata:
+    figure: 7q
+    archetype: leave_group
+    flow: n/a
+    behavior: leave
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.21500843997162228
+        mean_distance: 2.395321032903412
+        robot_ped_within_5m_frac: 0.9954022988505746
+        ped_force_mean: 0.26920531156921945
+        force_q95: 0.8489664264956982
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 258
+  - 259
+  - 260

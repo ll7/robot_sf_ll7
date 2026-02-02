@@ -1,0 +1,32 @@
+scenarios:
+- name: francis2023_blind_corner
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_blind_corner.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7i
+    archetype: blind_corner
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.9603112090680298
+        mean_distance: 5.1063772493202
+        robot_ped_within_5m_frac: 0.7185
+        ped_force_mean: 0.1153471107407407
+        force_q95: 0.45482498070019484
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 219
+  - 220
+  - 221

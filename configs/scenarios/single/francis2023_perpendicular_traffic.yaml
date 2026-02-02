@@ -1,0 +1,29 @@
+scenarios:
+- name: francis2023_perpendicular_traffic
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.1
+  robot_config: {}
+  metadata:
+    figure: 7w
+    archetype: perpendicular_traffic
+    flow: perpendicular
+    behavior: traffic
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.7605811967524287
+        mean_distance: 5.237325595518435
+        robot_ped_within_5m_frac: 0.4749830021908287
+        ped_force_mean: 0.4024648181569157
+        force_q95: 1.4319272820737639
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 267
+  - 268
+  - 269

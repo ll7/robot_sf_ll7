@@ -1,0 +1,88 @@
+scenarios:
+- name: classic_crossing_low
+  map_file: ../../../maps/svg_maps/classic_crossing.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: crossing
+    label: cross plaza circulation
+    density: low
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.8367418245009373
+        mean_distance: 5.9319317460258425
+        robot_ped_within_5m_frac: 0.4599224586174748
+        ped_force_mean: 0.2749112167516942
+        force_q95: 0.9427403086029689
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 101
+  - 102
+  - 103
+- name: classic_crossing_medium
+  map_file: ../../../maps/svg_maps/classic_crossing.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.05
+  robot_config: {}
+  metadata:
+    archetype: crossing
+    label: cross plaza circulation
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 4.789576152795328
+        mean_distance: 10.950417011157608
+        robot_ped_within_5m_frac: 0.06629362880886427
+        ped_force_mean: 0.18424997393839726
+        force_q95: 0.6445198830160026
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 101
+  - 102
+  - 103
+- name: classic_crossing_high
+  map_file: ../../../maps/svg_maps/classic_crossing.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.08
+  robot_config: {}
+  metadata:
+    archetype: crossing
+    label: cross plaza circulation
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.8766785893771702
+        mean_distance: 10.02981557058951
+        robot_ped_within_5m_frac: 0.17466666666666666
+        ped_force_mean: 0.19881092600791625
+        force_q95: 0.739349157779526
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 101
+  - 102
+  - 103

@@ -34,7 +34,7 @@ class BaseEnv(Env):
         record_video: bool = False,
         video_path: str | None = None,
         video_fps: float | None = None,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
         # New JSONL recording parameters
         use_jsonl_recording: bool = False,
         recording_dir: str = "recordings",
@@ -129,9 +129,9 @@ class BaseEnv(Env):
 
         # If in debug mode or video recording is enabled, create simulation view
         if debug or record_video:
-            # Prefer config-driven render scaling when provided; else default to 10.
+            # Prefer config-driven render scaling when provided; else default to 20.
             scaling_value = getattr(env_config, "render_scaling", None)
-            scaling_value = 10 if scaling_value is None else int(scaling_value)
+            scaling_value = 20 if scaling_value is None else int(scaling_value)
             self.sim_ui = SimulationView(
                 scaling=scaling_value,
                 map_def=self.map_def,

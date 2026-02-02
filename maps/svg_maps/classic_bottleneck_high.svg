@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Bottleneck Queue -->
+
+<svg
+   width="40"
+   height="40"
+   viewBox="0 0 40 40"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="classic_bottleneck.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs10" />
+  <sodipodi:namedview
+     id="namedview10"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="25.199508"
+     inkscape:cx="21.865507"
+     inkscape:cy="16.905092"
+     inkscape:window-width="3440"
+     inkscape:window-height="1381"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg10" />
+  <g
+     id="obstacles"
+     inkscape:label="Obstacles">
+    <rect
+       x="0"
+       y="0"
+       width="40"
+       height="1"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect1" />
+    <rect
+       x="0"
+       y="39"
+       width="40"
+       height="1"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect2" />
+    <rect
+       x="0"
+       y="0"
+       width="1"
+       height="40"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect3" />
+    <rect
+       x="39"
+       y="0"
+       width="1"
+       height="40"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect4" />
+    <!-- Funnel walls (scaled) -->
+    <rect
+       x="13.785749"
+       y="12.079367"
+       width="4"
+       height="16"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5" />
+    <rect
+       x="22.095201"
+       y="12.079367"
+       width="4"
+       height="16"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect6" />
+    <!-- Side walls to prevent bypassing the bottleneck -->
+    <rect
+       x="1"
+       y="1"
+       width="12.785749"
+       height="38"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect6b" />
+    <rect
+       x="26.095201"
+       y="1"
+       width="12.904799"
+       height="38"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect6c" />
+  </g>
+  <g
+     inkscape:label="single_pedestrians">
+    <circle
+       cx="19"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_start" />
+    <circle
+       cx="19"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_goal" />
+    <circle
+       cx="20"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_start" />
+    <circle
+       cx="20"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_goal" />
+    <circle
+       cx="21"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_start" />
+    <circle
+       cx="21"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_goal" />
+  </g>
+  <g
+     id="robot"
+     inkscape:label="Robot">
+    <rect
+       x="17.904995"
+       y="29.452839"
+       width="4"
+       height="4"
+       fill="#ffd800"
+       inkscape:label="robot_spawn_zone"
+       id="rect7" />
+    <rect
+       x="18.015638"
+       y="5.8725448"
+       width="4"
+       height="4"
+       fill="#ff7f2a"
+       inkscape:label="robot_goal_zone"
+       id="rect8" />
+    <!-- Added minimal robot route from spawn (index 0) to goal (index 0) -->
+    <path
+       d="M 20.024044,29.206724 19.984361,21.539634 20.015639,10.650377"
+       stroke="#0300d5"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="robot_route_0_0"
+       id="path8"
+       sodipodi:nodetypes="ccc" />
+  </g>
+  <g
+     id="pedestrians"
+     inkscape:label="Pedestrian"
+     transform="translate(0,-4.3651647)">
+    <!-- Add a simple pedestrian spawn/goal and route to satisfy parser -->
+    <rect
+       x="18"
+       y="6"
+       width="4"
+       height="4"
+       fill="#23ff00"
+       inkscape:label="ped_spawn_zone"
+       id="rect9" />
+    <rect
+       x="17.801584"
+       y="38.135078"
+       width="4"
+       height="4"
+       fill="#107400"
+       inkscape:label="ped_goal_zone"
+       id="rect10" />
+    <path
+       d="M 20,13.293715 V 28"
+       stroke="#c40202"
+       stroke-width="0.903889"
+       fill="none"
+      inkscape:label="ped_route_0_0"
+       id="path10" />
+  </g>
+  <g
+     id="pois"
+     inkscape:label="POIs">
+    <circle
+       class="poi"
+       id="poi_entry"
+       cx="10"
+       cy="20"
+       r="0.4"
+       inkscape:label="entry_checkpoint" />
+    <circle
+       class="poi"
+       id="poi_exit"
+       cx="30"
+       cy="20"
+       r="0.4"
+       inkscape:label="exit_checkpoint" />
+  </g>
+</svg>

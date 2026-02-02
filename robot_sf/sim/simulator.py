@@ -243,7 +243,7 @@ def init_simulators(
     map_def: MapDefinition,
     num_robots: int = 1,
     random_start_pos: bool = True,
-    peds_have_obstacle_forces: bool = False,
+    peds_have_obstacle_forces: bool = True,
 ) -> list[Simulator]:
     """Initialize one or more simulator instances for the robot environment.
 
@@ -454,7 +454,7 @@ def init_ped_simulators(
     env_config: PedEnvSettings,
     map_def: MapDefinition,
     random_start_pos: bool = False,
-    peds_have_obstacle_forces: bool = False,
+    peds_have_obstacle_forces: bool = True,
 ) -> list[PedSimulator]:
     """Create a pedestrian-centric simulator instance.
 

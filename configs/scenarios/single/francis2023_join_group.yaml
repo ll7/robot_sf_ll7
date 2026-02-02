@@ -1,0 +1,43 @@
+scenarios:
+- name: francis2023_join_group
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_join_group.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h2
+    goal: null
+    role: wait
+    note: group anchor (static)
+  - id: h3
+    goal: null
+    role: join
+    role_target_id: h1
+    note: join group near h1
+  robot_config: {}
+  metadata:
+    figure: 7p
+    archetype: join_group
+    flow: n/a
+    behavior: join
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.7841007486988372
+        mean_distance: 3.9225446276445384
+        robot_ped_within_5m_frac: 0.823536465611663
+        ped_force_mean: 0.16434165316401098
+        force_q95: 0.5636283965532219
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 255
+  - 256
+  - 257

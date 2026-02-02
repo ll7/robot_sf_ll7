@@ -1,0 +1,5 @@
+# Example manifest combining per-scenario and per-archetype files.
+includes:
+  - ../archetypes/classic_crossing.yaml
+map_search_paths:
+  - ../../../maps/svg_maps

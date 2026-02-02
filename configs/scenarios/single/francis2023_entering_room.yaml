@@ -1,0 +1,32 @@
+scenarios:
+- name: francis2023_entering_room
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_entering_room.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7l
+    archetype: entering_room
+    flow: enter
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 5.224637284588586
+        mean_distance: 12.197621099343227
+        robot_ped_within_5m_frac: 0.0019801980198019802
+        ped_force_mean: 0.13826993362039994
+        force_q95: 0.4375912615159093
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 228
+  - 229
+  - 230

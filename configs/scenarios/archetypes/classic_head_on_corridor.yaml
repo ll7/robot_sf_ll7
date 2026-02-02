@@ -1,0 +1,57 @@
+scenarios:
+- name: classic_head_on_corridor_low
+  map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: head_on_corridor
+    density: low
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.0121961320698123
+        mean_distance: 8.148975829981278
+        robot_ped_within_5m_frac: 0.403654650834825
+        ped_force_mean: 0.13192844736924741
+        force_q95: 0.44534841830005495
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 111
+  - 112
+  - 113
+- name: classic_head_on_corridor_medium
+  map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.05
+  robot_config: {}
+  metadata:
+    archetype: head_on_corridor
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.9419324712080861
+        mean_distance: 5.656425184742342
+        robot_ped_within_5m_frac: 0.48393629580805386
+        ped_force_mean: 0.17172482282263632
+        force_q95: 0.7102478906368666
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 111
+  - 112
+  - 113

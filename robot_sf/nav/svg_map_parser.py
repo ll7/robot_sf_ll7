@@ -336,6 +336,8 @@ class SvgMapConverter:
 
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
         # minimal synthetic zones around first/last waypoint so downstream logic still works.
+        svg_name = Path(self.svg_file_str).name
+
         def _safe_zone(index: int, zones: list[Rect], waypoint, kind: str) -> Rect:
             """Get a zone by index or create a synthetic fallback zone around waypoint.
 
@@ -351,7 +353,8 @@ class SvgMapConverter:
             if zones and 0 <= index < len(zones):
                 return zones[index]
             logger.warning(
-                "SVG route path '{pid}' refers to {k} index {idx} but only {avail} zones available; creating synthetic zone.",
+                "SVG file '{svg}' route path '{pid}' refers to {k} index {idx} but only {avail} zones available; creating synthetic zone.",
+                svg=svg_name,
                 pid=path.id,
                 k=kind,
                 idx=index,

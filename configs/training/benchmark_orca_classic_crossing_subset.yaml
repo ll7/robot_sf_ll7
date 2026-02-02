@@ -1,0 +1,35 @@
+# Benchmark helper config for SocNav ORCA analysis runs.
+# Usage:
+#   uv run python scripts/tools/policy_analysis_run.py \
+#     --training-config configs/training/benchmark_orca_classic_crossing_subset.yaml \
+#     --policy socnav_orca
+policy_id: socnav_orca_classic_crossing_subset
+scenario_config: ../scenarios/sets/classic_crossing_subset.yaml
+num_envs: 1
+worker_mode: auto
+seeds:
+  - 123
+# Required by training config loader but unused for analysis runs.
+total_timesteps: 1
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 10
+evaluation:
+  frequency_episodes: 1
+  evaluation_episodes: 1
+  hold_out_scenarios: []
+# SocNav ORCA optional overrides (kept empty by default).
+# socnav_orca:
+#   time_horizon: 5.0
+#   neighbor_dist: 10.0
+env_overrides:
+  observation_mode: socnav_struct
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  peds_have_obstacle_forces: true
+env_factory_kwargs:
+  peds_have_obstacle_forces: true

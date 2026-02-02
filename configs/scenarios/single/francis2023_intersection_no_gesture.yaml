@@ -1,0 +1,32 @@
+scenarios:
+- name: francis2023_intersection_no_gesture
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7f
+    archetype: intersection_no_gesture
+    flow: perpendicular
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.7288044084615013
+        mean_distance: 6.230072579411624
+        robot_ped_within_5m_frac: 0.3968863713788641
+        ped_force_mean: 0.08248489757447244
+        force_q95: 0.3423159875291397
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 216
+  - 217
+  - 218

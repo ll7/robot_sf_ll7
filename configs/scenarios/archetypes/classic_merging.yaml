@@ -1,0 +1,57 @@
+scenarios:
+- name: classic_merging_low
+  map_file: ../../../maps/svg_maps/classic_merging.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: merging
+    density: low
+    flow: converging
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.3030618384387023
+        mean_distance: 10.665834093099505
+        robot_ped_within_5m_frac: 0.1888021176190665
+        ped_force_mean: 0.23497834764751574
+        force_q95: 0.8039577090977843
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 151
+  - 152
+  - 153
+- name: classic_merging_medium
+  map_file: ../../../maps/svg_maps/classic_merging.svg
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.05
+  robot_config: {}
+  metadata:
+    archetype: merging
+    density: medium
+    flow: converging
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-30'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.1160493103690015
+        mean_distance: 7.980354629530384
+        robot_ped_within_5m_frac: 0.30860057401910634
+        ped_force_mean: 0.2219006248826909
+        force_q95: 0.8116757525826447
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 151
+  - 152
+  - 153

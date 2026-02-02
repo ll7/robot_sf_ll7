@@ -55,7 +55,7 @@ class PedestrianEnv(Env):
         robot_model=None,
         debug: bool = False,
         recording_enabled: bool = False,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
     ):
         """Initialize the pedestrian environment.
 

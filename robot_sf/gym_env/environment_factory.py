@@ -262,7 +262,7 @@ class EnvironmentFactory:
         reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
-        peds_have_obstacle_forces: bool = False,
+        peds_have_obstacle_forces: bool = True,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
 
@@ -437,7 +437,7 @@ def make_robot_env(
     config: RobotSimulationConfig | None = None,
     *,
     seed: int | None = None,
-    peds_have_obstacle_forces: bool = False,
+    peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
@@ -579,7 +579,7 @@ def make_image_robot_env(
     config: ImageRobotConfig | None = None,
     *,
     seed: int | None = None,
-    peds_have_obstacle_forces: bool = False,
+    peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
@@ -663,7 +663,7 @@ def make_pedestrian_env(
     reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
-    peds_have_obstacle_forces: bool = False,
+    peds_have_obstacle_forces: bool = True,
     record_video: bool = False,
     video_path: str | None = None,
     video_fps: float | None = None,

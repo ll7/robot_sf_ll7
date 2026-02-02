@@ -25,12 +25,12 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="19.101833"
-     inkscape:cx="41.933148"
+     inkscape:cx="41.906973"
      inkscape:cy="22.03977"
-     inkscape:window-width="3440"
+     inkscape:window-width="2560"
      inkscape:window-height="1353"
      inkscape:window-x="0"
-     inkscape:window-y="31"
+     inkscape:window-y="92"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg10" />
   <g
@@ -87,28 +87,31 @@
        id="rect5-0" />
     <rect
        x="0.52542931"
-       y="13.880264"
+       y="0.68781304"
        width="43.106194"
-       height="2.4410915"
+       height="15.633543"
        fill="#000000"
        inkscape:label="obstacle"
-       id="rect5-2" />
+       id="rect5-2"
+       style="stroke-width:2.53068" />
     <rect
        x="0.11536412"
        y="21.334471"
        width="19.548244"
-       height="2.0746346"
+       height="18.041689"
        fill="#000000"
        inkscape:label="obstacle"
-       id="rect5-2-8" />
+       id="rect5-2-8"
+       style="stroke-width:2.94895" />
     <rect
        x="25.391193"
        y="21.377119"
        width="18.553576"
-       height="2.0746346"
+       height="18.460497"
        fill="#000000"
        inkscape:label="obstacle"
-       id="rect5-2-8-3" />
+       id="rect5-2-8-3"
+       style="stroke-width:2.98298" />
   </g>
   <g
      id="robot"
@@ -152,7 +155,8 @@
   </g>
   <g
      id="routes"
-     inkscape:label="Routes">
+     inkscape:label="Routes"
+     transform="translate(0.36645698,-0.15705299)">
     <path
        d="M 22.291822,31.068344 22.402615,20.727105 32.701887,18.417848"
        stroke="#0300d5"
@@ -162,7 +166,7 @@
        id="path9"
        sodipodi:nodetypes="ccc" />
     <path
-       d="M 18.627252,18.731954 31.550165,20.755198"
+       d="M 15.067384,19.517219 33.487152,19.498774"
        stroke="#c40202"
        stroke-width="1"
        fill="none"

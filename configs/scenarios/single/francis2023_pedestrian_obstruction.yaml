@@ -1,0 +1,34 @@
+scenarios:
+- name: francis2023_pedestrian_obstruction
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_ped_obstruction.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+    speed_m_s: 0.3
+    note: slow walker (tuning pending)
+  robot_config: {}
+  metadata:
+    figure: 7b
+    archetype: pedestrian_obstruction
+    flow: uni
+    behavior: slow_ped
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.3613699693389782
+        mean_distance: 11.583565806426199
+        robot_ped_within_5m_frac: 0.2814906184134628
+        ped_force_mean: 0.06456635067231996
+        force_q95: 0.37521076423828775
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 204
+  - 205
+  - 206

@@ -1,0 +1,34 @@
+scenarios:
+- name: francis2023_robot_overtaking
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_robot_overtaking.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+    speed_m_s: 0.3
+    note: slow walker (tuning pending)
+  robot_config: {}
+  metadata:
+    figure: 7d
+    archetype: robot_overtaking
+    flow: uni
+    behavior: slow_ped
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.012532959934575
+        mean_distance: 8.430144418850485
+        robot_ped_within_5m_frac: 0.2836315086782376
+        ped_force_mean: 0.15927885772122397
+        force_q95: 0.9233930895649017
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 210
+  - 211
+  - 212

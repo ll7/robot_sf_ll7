@@ -14,7 +14,8 @@ import warnings
 from pathlib import Path
 
 import pytest
-import yaml
+
+from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_FILE = ROOT / "configs" / "scenarios" / "classic_interactions.yaml"
@@ -35,19 +36,6 @@ RECOMMENDED_DENSITIES = {0.02, 0.05, 0.08}
 RECOMMENDED_RANGE = (0.02, 0.08)
 
 
-def load_yaml(path: Path) -> dict:
-    """TODO docstring. Document this function.
-
-    Args:
-        path: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 @pytest.mark.parametrize("path", [SCENARIO_FILE])
 def test_yaml_exists(path: Path) -> None:
     """TODO docstring. Document this function.
@@ -60,15 +48,14 @@ def test_yaml_exists(path: Path) -> None:
 
 def test_yaml_parses() -> None:
     """TODO docstring. Document this function."""
-    data = load_yaml(SCENARIO_FILE)
-    assert "scenarios" in data and isinstance(data["scenarios"], list)
-    assert data["scenarios"], "No scenarios defined"
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
+    assert scenarios, "No scenarios defined"
 
 
 def test_each_scenario_structure_and_files() -> None:
     """TODO docstring. Document this function."""
-    data = load_yaml(SCENARIO_FILE)
-    for scenario in data["scenarios"]:
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
+    for scenario in scenarios:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
         assert not missing, f"Scenario {scenario.get('name')} missing keys: {missing}"
         # Resolve map_file relative to the scenario file's directory
@@ -79,7 +66,13 @@ def test_each_scenario_structure_and_files() -> None:
         assert isinstance(sim_cfg, dict), "simulation_config must be a mapping"
         density = sim_cfg.get("ped_density")
         if density is not None:
-            assert density > 0, f"ped_density must be positive (got {density})"
+            assert density >= 0, f"ped_density must be non-negative (got {density})"
+            if density == 0:
+                warnings.warn(
+                    f"""Scenario {scenario["name"]} ped_density=0.0 means no pedestrians spawn. This is allowed for certain empty-crowd baselines but should be used intentionally.""",
+                    UserWarning,
+                    stacklevel=2,
+                )
             low, high = RECOMMENDED_RANGE
             if not (low <= density <= high):
                 warnings.warn(
@@ -102,8 +95,8 @@ def test_each_scenario_structure_and_files() -> None:
 
 def test_seed_lists_have_length() -> None:
     """TODO docstring. Document this function."""
-    data = load_yaml(SCENARIO_FILE)
-    for scenario in data["scenarios"]:
+    scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
+    for scenario in scenarios:
         seeds = scenario.get("seeds")
         assert isinstance(seeds, list) and len(seeds) >= 3, (
             f"Scenario {scenario.get('name')} should have >=3 seeds"

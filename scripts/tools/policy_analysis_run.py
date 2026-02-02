@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
+import yaml
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
@@ -260,6 +261,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override ORCA neighbor distance for SocNav ORCA policy.",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
+    parser.add_argument(
+        "--write-plausibility-metrics",
+        action="store_true",
+        help=(
+            "Update scenario metadata.plausibility.metrics with aggregated metrics from this run. "
+            "Opt-in only; status remains unchanged."
+        ),
+    )
     return parser
 
 
@@ -268,7 +277,7 @@ def _resolve_output_root(base: Path | None, *, policy: str, stamp: str | None = 
     if base is not None:
         return resolve_artifact_path(base)
     ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
-    return get_artifact_category_path("benchmarks") / f"policy_analysis_{policy}_{ts}"
+    return get_artifact_category_path("benchmarks") / f"{ts}_policy_analysis_{policy}"
 
 
 def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = None) -> Path:
@@ -276,7 +285,7 @@ def _resolve_video_root(base: Path | None, *, policy: str, stamp: str | None = N
     if base is not None:
         return resolve_artifact_path(base)
     ts = stamp or datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S")
-    return get_artifact_category_path("recordings") / f"policy_analysis_{policy}_{ts}"
+    return get_artifact_category_path("recordings") / f"{ts}_policy_analysis_{policy}"
 
 
 def _resolve_seeds(
@@ -601,10 +610,216 @@ def _write_report(
     return report_md_path, report_json_path
 
 
+def _finalize_run(
+    output_root: Path,
+    *,
+    scenario_path: Path,
+    records: list[dict[str, Any]],
+    policy_name: str,
+    video_root: Path | None,
+    write_plausibility_metrics: bool,
+) -> None:
+    summary = _summarize_records(records)
+    aggregates = compute_aggregates(
+        records, group_by="scenario_id", fallback_group_by="scenario_id"
+    )
+    problem_episodes = _find_problem_episodes(records)
+
+    summary_path = output_root / "summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "summary": summary,
+                "aggregates": aggregates,
+                "problem_episodes": problem_episodes,
+                "scenario_path": str(scenario_path),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report_md, report_json = _write_report(
+        output_root,
+        summary=summary,
+        aggregates=aggregates,
+        problem_episodes=problem_episodes,
+        policy=policy_name,
+        scenario_path=scenario_path,
+    )
+
+    logger.info("Wrote episodes to {}", output_root / "episodes.jsonl")
+    logger.info("Wrote summary to {}", summary_path)
+    logger.info("Wrote report to {} and {}", report_md, report_json)
+    if video_root is not None:
+        logger.info("Videos saved under {}", video_root)
+    if write_plausibility_metrics:
+        _update_plausibility_metadata(
+            scenario_path,
+            records=records,
+            policy_name=policy_name,
+        )
+
+
 def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
+
+
+def _collect_scenario_source_files(path: Path) -> list[Path]:
+    """Collect scenario YAML files referenced by a manifest entry point."""
+    resolved = path.resolve()
+    visited: set[Path] = set()
+
+    def _walk(file_path: Path, sources: set[Path]) -> None:
+        candidate = file_path.resolve()
+        if candidate in visited:
+            return
+        visited.add(candidate)
+        data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            sources.add(candidate)
+            return
+        if not isinstance(data, dict):
+            return
+        includes = data.get("includes") or data.get("include") or data.get("scenario_files")
+        if includes:
+            entries = [includes] if isinstance(includes, (str, Path)) else includes
+            for entry in entries:
+                entry_path = Path(entry)
+                if not entry_path.is_absolute():
+                    entry_path = (candidate.parent / entry_path).resolve()
+                _walk(entry_path, sources)
+        if "scenarios" in data:
+            sources.add(candidate)
+
+    sources: set[Path] = set()
+    _walk(resolved, sources)
+    return sorted(sources)
+
+
+def _aggregate_plausibility_metrics(
+    records: list[dict[str, Any]],
+) -> dict[str, dict[str, float]]:
+    """Aggregate plausibility metrics per scenario from episode records."""
+    metrics_keys = (
+        "min_distance",
+        "mean_distance",
+        "robot_ped_within_5m_frac",
+        "ped_force_mean",
+        "force_q95",
+    )
+    collected: dict[str, dict[str, list[float]]] = {}
+    for rec in records:
+        scenario_id = str(rec.get("scenario_id") or "")
+        if not scenario_id:
+            continue
+        metrics = rec.get("metrics", {})
+        bucket = collected.setdefault(scenario_id, {key: [] for key in metrics_keys})
+        for key in metrics_keys:
+            if key == "force_q95":
+                fq = metrics.get("force_quantiles") or {}
+                val = fq.get("q95")
+            else:
+                val = metrics.get(key)
+            if isinstance(val, (int, float)) and math.isfinite(val):
+                bucket[key].append(float(val))
+
+    aggregated: dict[str, dict[str, float]] = {}
+    for scenario_id, values in collected.items():
+        aggregated[scenario_id] = {}
+        for key, samples in values.items():
+            if samples:
+                aggregated[scenario_id][key] = float(sum(samples) / len(samples))
+    return aggregated
+
+
+def _extract_scenarios_from_yaml(data: Any) -> list[dict[str, Any]] | None:
+    """Return scenario list from YAML data or None if not applicable."""
+    if isinstance(data, list):
+        return [sc for sc in data if isinstance(sc, dict)]
+    if isinstance(data, dict) and isinstance(data.get("scenarios"), list):
+        return [sc for sc in data["scenarios"] if isinstance(sc, dict)]
+    return None
+
+
+def _apply_plausibility_update(
+    scenarios: list[dict[str, Any]],
+    *,
+    metrics_by_scenario: dict[str, dict[str, float]],
+    timestamp: str,
+) -> int:
+    """Update scenarios in-place with plausibility metrics and return count updated."""
+    updated = 0
+    for scenario in scenarios:
+        scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or "")
+        if not scenario_id or scenario_id not in metrics_by_scenario:
+            continue
+        metadata = scenario.setdefault("metadata", {})
+        plausibility = metadata.setdefault("plausibility", {})
+        plausibility.setdefault("status", "unverified")
+        plausibility.setdefault("verified_on", None)
+        plausibility.setdefault("verified_by", None)
+        plausibility.setdefault("method", None)
+        plausibility.setdefault("notes", None)
+        plausibility["metrics_updated_on"] = timestamp
+        plausibility_metrics = plausibility.setdefault("metrics", {})
+        for key, value in metrics_by_scenario[scenario_id].items():
+            plausibility_metrics[key] = value
+        updated += 1
+    return updated
+
+
+def _update_plausibility_metadata(
+    scenario_path: Path,
+    *,
+    records: list[dict[str, Any]],
+    policy_name: str,
+) -> None:
+    """Update scenario files with plausibility metrics from the current run."""
+    metrics_by_scenario = _aggregate_plausibility_metrics(records)
+    if not metrics_by_scenario:
+        logger.warning("No metrics available to update plausibility metadata.")
+        return
+    timestamp = datetime.now(_TIMESTAMP_TZ).isoformat()
+    sources = _collect_scenario_source_files(scenario_path)
+    if not sources:
+        logger.warning("No scenario source files found for plausibility update.")
+        return
+
+    updated_scenarios = 0
+    updated_files = 0
+    for path in sources:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        scenarios = _extract_scenarios_from_yaml(data)
+        if scenarios is None:
+            continue
+        updated = _apply_plausibility_update(
+            scenarios,
+            metrics_by_scenario=metrics_by_scenario,
+            timestamp=timestamp,
+        )
+        if updated:
+            updated_scenarios += updated
+            if isinstance(data, list):
+                out = data
+            else:
+                out = dict(data)
+                out["scenarios"] = scenarios
+            path.write_text(
+                yaml.safe_dump(out, sort_keys=False, width=100),
+                encoding="utf-8",
+            )
+            updated_files += 1
+
+    logger.info(
+        "Updated plausibility metrics for {} scenarios across {} files (policy={}, timestamp={}).",
+        updated_scenarios,
+        updated_files,
+        policy_name,
+        timestamp,
+    )
 
 
 @dataclass
@@ -657,7 +872,7 @@ def _prepare_episode_config(
     episode_video = None
     if videos and video_dir is not None:
         scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
-        slug = re.sub(r"[^\\w.-]+", "_", scenario_name).strip("._")
+        slug = re.sub(r"[^\w.-]+", "_", scenario_name).strip("._")
         if not slug or slug in {".", ".."}:
             slug = "scenario"
         episode_video = video_dir / f"{slug}_seed{seed}_{policy_name}.mp4"
@@ -1036,7 +1251,7 @@ def _resolve_scenarios(
         or (training_config.scenario_config if training_config is not None else None)
         or Path("configs/scenarios/francis2023.yaml")
     ).resolve()
-    scenarios = load_scenarios(scenario_path)
+    scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
     if args.scenario_id and args.all:
         raise ValueError("Use --all or --scenario-id, not both.")
     if args.scenario_id:
@@ -1190,40 +1405,14 @@ def main(argv: list[str] | None = None) -> int:
                 records.append(record)
 
         records = read_jsonl(out_jsonl)
-        summary = _summarize_records(records)
-        aggregates = compute_aggregates(
-            records, group_by="scenario_id", fallback_group_by="scenario_id"
-        )
-        problem_episodes = _find_problem_episodes(records)
-
-        summary_path = output_root / "summary.json"
-        summary_path.write_text(
-            json.dumps(
-                {
-                    "summary": summary,
-                    "aggregates": aggregates,
-                    "problem_episodes": problem_episodes,
-                    "scenario_path": str(scenario_path),
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
-        report_md, report_json = _write_report(
+        _finalize_run(
             output_root,
-            summary=summary,
-            aggregates=aggregates,
-            problem_episodes=problem_episodes,
-            policy=policy_name,
             scenario_path=scenario_path,
+            records=records,
+            policy_name=policy_name,
+            video_root=video_root,
+            write_plausibility_metrics=args.write_plausibility_metrics,
         )
-
-        logger.info("Wrote episodes to {}", out_jsonl)
-        logger.info("Wrote summary to {}", summary_path)
-        logger.info("Wrote report to {} and {}", report_md, report_json)
-        if video_root is not None:
-            logger.info("Videos saved under {}", video_root)
     return 0
 
 

@@ -49,6 +49,61 @@ from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons, sample_zone
 
 
+def _route_point_at_offset(route: GlobalRoute, offset: float) -> tuple[Vec2D, int]:
+    """Return a point and section index along a route for a given offset."""
+    if not route.sections:
+        raise ValueError("Route must contain at least two waypoints to sample along its length.")
+    remaining = float(np.clip(offset, 0.0, route.total_length))
+    for idx, (start, end) in enumerate(route.sections):
+        segment_length = dist(start, end)
+        if remaining <= segment_length or idx == len(route.sections) - 1:
+            if segment_length > 0:
+                ratio = remaining / segment_length
+                point = (
+                    start[0] + ratio * (end[0] - start[0]),
+                    start[1] + ratio * (end[1] - start[1]),
+                )
+            else:
+                point = start
+            return point, idx
+        remaining -= segment_length
+    return route.sections[-1][1], len(route.sections) - 1
+
+
+def _sample_points_near_anchor(
+    anchor: Vec2D,
+    num_samples: int,
+    sidewalk_width: float,
+    rng_local,
+    prepared_obstacles: list[PreparedGeometry],
+) -> list[Vec2D]:
+    """Sample points near an anchor while avoiding obstacles.
+
+    Returns:
+        list[Vec2D]: Sampled points near the anchor.
+    """
+    samples: list[Vec2D] = []
+    attempts = 0
+    max_attempts = num_samples * 50
+
+    def clip_spread(v):
+        return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
+
+    while len(samples) < num_samples and attempts < max_attempts:
+        progress = attempts / max_attempts if max_attempts else 0.0
+        scale = max(0.2, 1.0 - progress)
+        std_dev = (sidewalk_width / 4) * scale
+        x_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
+        y_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
+        pt = (anchor[0] + x_offset, anchor[1] + y_offset)
+        attempts += 1
+        if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
+            continue
+        samples.append(pt)
+
+    return samples
+
+
 @dataclass
 class PedSpawnConfig:
     """Configuration for pedestrian spawning in a simulation environment.
@@ -109,6 +164,7 @@ def sample_route(
 ) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
+    Offsets anchor the sample along the route length before lateral spread is applied.
 
     Args:
         route: A `GlobalRoute` object representing the route to sample from.
@@ -121,7 +177,7 @@ def sample_route(
     Returns:
         A tuple containing:
             - A list of `Vec2D` objects representing the sampled points.
-            - The section index of the route where sampling starts (sec_id).
+            - The section index of the route containing the sampled offset (sec_id).
 
     Raises:
         ValueError: If `num_samples` is not positive.
@@ -138,75 +194,38 @@ def sample_route(
     else:
         sampled_offset = float(np.clip(offset, 0.0, route.total_length))
 
-    # Find the section index that corresponds to the sampled offset
-    sec_id = next(
-        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]),
-        -1,
-    )
-
-    # Get start and end points of the chosen section
-    start, end = route.sections[sec_id]
-
-    # Define helper functions for vector operations
-    def add_vecs(v1, v2):
-        """Add two 2D vectors component-wise.
-
-        Args:
-            v1: First vector as a tuple ``(x, y)``.
-            v2: Second vector as a tuple ``(x, y)``.
-
-        Returns:
-            tuple[float, float]: The component-wise sum ``(v1.x + v2.x, v1.y + v2.y)``.
-        """
-        return (v1[0] + v2[0], v1[1] + v2[1])
-
-    def sub_vecs(v1, v2):
-        """Subtract two 2D vectors component-wise.
-
-        Args:
-            v1: Minuend vector as a tuple ``(x, y)``.
-            v2: Subtrahend vector as a tuple ``(x, y)``.
-
-        Returns:
-            tuple[float, float]: The component-wise difference ``(v1.x - v2.x, v1.y - v2.y)``.
-        """
-        return (v1[0] - v2[0], v1[1] - v2[1])
-
-    # Clip function to constrain random spread to the sidewalk width
-    def clip_spread(v):
-        """Clip values to remain within the sidewalk half-width.
-
-        Args:
-            v: Scalar or array-like values to clip.
-
-        Returns:
-            numpy.ndarray: Values clipped to ``[-sidewalk_width/2, sidewalk_width/2]``.
-        """
-        return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
-
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
+    anchor_attempts = 0
+    max_anchor_attempts = 5
+    base_point, sec_id = _route_point_at_offset(route, sampled_offset)
 
-    samples: list[Vec2D] = []
-    attempts = 0
-    max_attempts = num_samples * 50
-
-    while len(samples) < num_samples and attempts < max_attempts:
-        midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
-        std_dev = sidewalk_width / 4
-        x_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
-        y_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
-        pt = (midpoint[0] + x_offset, midpoint[1] + y_offset)
-        attempts += 1
-        if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
+    while anchor_attempts < max_anchor_attempts:
+        if prepared_obstacles and _point_in_any_obstacle(base_point, prepared_obstacles):
+            sampled_offset = float(rng_local.uniform(0, route.total_length))
+            base_point, sec_id = _route_point_at_offset(route, sampled_offset)
+            anchor_attempts += 1
             continue
-        samples.append(pt)
 
-    if len(samples) < num_samples:
-        raise RuntimeError(
-            f"Failed to sample {num_samples} route points without obstacle overlap after {attempts} attempts."
+        samples = _sample_points_near_anchor(
+            base_point,
+            num_samples,
+            sidewalk_width,
+            rng_local,
+            prepared_obstacles,
         )
+        if len(samples) == num_samples:
+            return samples, sec_id
 
-    return samples, sec_id
+        sampled_offset = float(rng_local.uniform(0, route.total_length))
+        base_point, sec_id = _route_point_at_offset(route, sampled_offset)
+        anchor_attempts += 1
+
+    raise RuntimeError(
+        f"Failed to sample {num_samples} route points after {max_anchor_attempts} anchor tries "
+        f"(sampled_offset={sampled_offset:.3f}, sec_id={sec_id}) without violating obstacle "
+        "constraints. Check _route_point_at_offset, _sample_points_near_anchor, and "
+        "_point_in_any_obstacle for route geometry and obstacle filtering."
+    )
 
 
 def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> bool:
@@ -677,15 +696,17 @@ def populate_simulation(
         ... )
         >>> # Use pysf_state and behaviors in physics simulation
     """
+    prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
+
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,
         ped_crowded_zones,
-        obstacle_polygons=obstacle_polygons,
+        obstacle_polygons=prepared_obstacles,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
         spawn_config,
         ped_routes,
-        obstacle_polygons=obstacle_polygons,
+        obstacle_polygons=prepared_obstacles,
     )
 
     # Populate single pedestrians if provided
@@ -729,7 +750,12 @@ def populate_simulation(
         route_groupings.new_group(ped_ids)
 
     crowd_behavior = CrowdedZoneBehavior(crowd_groupings, zone_assignments, ped_crowded_zones)
-    route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
+    route_behavior = FollowRouteBehavior(
+        route_groupings,
+        route_assignments,
+        initial_sections,
+        obstacle_polygons=prepared_obstacles,
+    )
     ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
 
     if single_pedestrians:

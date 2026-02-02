@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
+- Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
+- Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
 - Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
 - Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
 - Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
@@ -113,6 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expert PPO evaluation now applies the same environment overrides as training, preventing observation-space mismatches during evaluation.
 - fast-pysf group gaze force now guards against zero-distance divisions to prevent training crashes.
 - Expert PPO CLI now supports `--log-file` to tee stdout/stderr into a log file.
+- Scenario loader map resolution now anchors relative paths to `base_dir` directories instead of CWD, preventing off-by-one directory lookups and unintended map matches.
+- Pedestrian route sampling now raises a descriptive error instead of dropping obstacle checks after repeated anchor failures.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

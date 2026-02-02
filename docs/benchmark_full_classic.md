@@ -66,6 +66,12 @@ Each iteration performs:
 
 Episodes are added via `adaptive_sampling_iteration` in batches (default 1) until criteria met.
 
+### Force metrics note
+Pedestrian force metrics (`force_q*`, `ped_force_*`, `force_exceed_events`, `ped_force_mean`)
+use the simulator's **total pedestrian force vector**. This is the sum of all
+active force components (desired, social, obstacle, group, and robot interaction
+when enabled). The values are **not** decomposed by source.
+
 ## Output Schema Highlights
 `episodes/episodes.jsonl` (one JSON line per episode):
 ```json

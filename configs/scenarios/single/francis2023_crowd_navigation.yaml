@@ -1,0 +1,29 @@
+scenarios:
+- name: francis2023_crowd_navigation
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_crowd_navigation.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.08
+  robot_config: {}
+  metadata:
+    figure: 7u
+    archetype: crowd_navigation
+    flow: crowd
+    behavior: crowd
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.2872769612936248
+        mean_distance: 4.139879364452325
+        robot_ped_within_5m_frac: 0.7455471256563805
+        ped_force_mean: 1.7455711558688223
+        force_q95: 6.855429594992161
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 261
+  - 262
+  - 263

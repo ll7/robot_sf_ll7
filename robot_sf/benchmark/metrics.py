@@ -64,7 +64,10 @@ class EpisodeData:
     robot_vel : (T,2) array
     robot_acc : (T,2) array
     peds_pos : (T,K,2) array
-    ped_forces : (T,K,2) array (social-force magnitudes per ped)
+    ped_forces : (T,K,2) array
+        Total force vectors applied to each pedestrian. This is the sum of all
+        active force components (desired, social, obstacle, group, and optional
+        robot interaction when enabled). The data is not decomposed by source.
     goal : (2,) array robot target position
     dt : float timestep
     reached_goal_step : int | None (first step index reaching goal)  # optional helper
@@ -273,6 +276,43 @@ def mean_distance(data: EpisodeData) -> float:
     dists = np.linalg.norm(diffs, axis=2)  # (T,K)
     min_per_t = dists.min(axis=1)  # (T,)
     return float(np.mean(min_per_t))
+
+
+def robot_ped_within_distance_frac(data: EpisodeData, *, threshold: float) -> float:
+    """Fraction of timesteps where min robot-ped distance is below a threshold.
+
+    Returns:
+        float: Fraction of timesteps within the threshold, or NaN if no pedestrians.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    dists = _compute_distance_matrix(data)
+    min_dists = dists.min(axis=1)
+    violations = np.count_nonzero(min_dists < threshold)
+    return float(violations / data.robot_pos.shape[0])
+
+
+def robot_ped_within_5m_frac(data: EpisodeData) -> float:
+    """Fraction of timesteps where min robot-ped distance is below 5 meters.
+
+    Returns:
+        float: Fraction of timesteps within 5 meters, or NaN if no pedestrians.
+    """
+    return robot_ped_within_distance_frac(data, threshold=5.0)
+
+
+def ped_force_mean(data: EpisodeData) -> float:
+    """Mean magnitude of pedestrian force vectors.
+
+    Returns:
+        float: Mean force magnitude, or NaN when force data is unavailable.
+    """
+    if not has_force_data(data):
+        return float("nan")
+    mags = np.linalg.norm(data.ped_forces, axis=2)
+    if not np.isfinite(mags).any():
+        return float("nan")
+    return float(np.nanmean(mags))
 
 
 def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
@@ -1724,6 +1764,7 @@ METRIC_NAMES: list[str] = [
     "near_misses",
     "min_distance",
     "mean_distance",
+    "robot_ped_within_5m_frac",
     "path_efficiency",
     "avg_speed",
     "force_q50",
@@ -1732,6 +1773,7 @@ METRIC_NAMES: list[str] = [
     "ped_force_q50",
     "ped_force_q90",
     "ped_force_q95",
+    "ped_force_mean",
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
@@ -1781,9 +1823,11 @@ def compute_all_metrics(
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
     values["mean_distance"] = mean_distance(data)
+    values["robot_ped_within_5m_frac"] = robot_ped_within_5m_frac(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values.update(force_quantiles(data))
     values.update(per_ped_force_quantiles(data))
+    values["ped_force_mean"] = ped_force_mean(data)
     values["force_exceed_events"] = force_exceed_events(data)
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)
@@ -1883,7 +1927,10 @@ __all__ = [
     "near_misses",
     "path_efficiency",
     "path_length",
+    "ped_force_mean",
     "post_process_metrics",
+    "robot_ped_within_5m_frac",
+    "robot_ped_within_distance_frac",
     "snqi",
     "space_compliance",
     "stalled_time",

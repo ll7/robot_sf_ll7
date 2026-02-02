@@ -220,18 +220,12 @@ def sample_route(
         base_point, sec_id = _route_point_at_offset(route, sampled_offset)
         anchor_attempts += 1
 
-    samples = _sample_points_near_anchor(
-        base_point,
-        num_samples,
-        sidewalk_width,
-        rng_local,
-        [],
+    raise RuntimeError(
+        f"Failed to sample {num_samples} route points after {max_anchor_attempts} anchor tries "
+        f"(sampled_offset={sampled_offset:.3f}, sec_id={sec_id}) without violating obstacle "
+        "constraints. Check _route_point_at_offset, _sample_points_near_anchor, and "
+        "_point_in_any_obstacle for route geometry and obstacle filtering."
     )
-    if len(samples) < num_samples:
-        raise RuntimeError(
-            f"Failed to sample {num_samples} route points after {max_anchor_attempts} anchor tries."
-        )
-    return samples, sec_id
 
 
 def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> bool:

@@ -128,3 +128,43 @@ map_search_paths:
 
     scenarios = load_scenarios(manifest, base_dir=manifest)
     assert scenarios[0]["map_file"] == "maps/demo.svg"
+
+
+def test_map_search_paths_use_base_dir_and_ignore_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure base_dir directories anchor map resolution instead of CWD."""
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    maps_dir = base_dir / "maps"
+    maps_dir.mkdir()
+    (maps_dir / "map.svg").write_text("<svg></svg>", encoding="utf-8")
+
+    scenario_file = base_dir / "scenario.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: map_search
+    map_file: map.svg
+""",
+    )
+
+    manifest = base_dir / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - scenario.yaml
+map_search_paths:
+  - maps
+""",
+    )
+
+    cwd_dir = tmp_path / "cwd"
+    cwd_dir.mkdir()
+    (cwd_dir / "map.svg").write_text("<svg></svg>", encoding="utf-8")
+    monkeypatch.chdir(cwd_dir)
+
+    scenarios = load_scenarios(manifest, base_dir=base_dir)
+    assert scenarios[0]["map_file"] == "maps/map.svg"

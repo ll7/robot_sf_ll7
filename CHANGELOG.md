@@ -116,6 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expert PPO evaluation now applies the same environment overrides as training, preventing observation-space mismatches during evaluation.
 - fast-pysf group gaze force now guards against zero-distance divisions to prevent training crashes.
 - Expert PPO CLI now supports `--log-file` to tee stdout/stderr into a log file.
+- Scenario loader map resolution now anchors relative paths to `base_dir` directories instead of CWD, preventing off-by-one directory lookups and unintended map matches.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

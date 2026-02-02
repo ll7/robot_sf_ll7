@@ -174,12 +174,13 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
     else:
         raise ValueError(f"map_search_paths must be a list or string in '{root}'.")
     resolved: list[Path] = []
+    base_root = root if root.is_dir() else root.parent
     for entry in entries:
         if not isinstance(entry, (str, Path)):
             raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{root}'.")
         candidate = Path(entry)
         if not candidate.is_absolute():
-            candidate = (root.parent / candidate).resolve()
+            candidate = (base_root / candidate).resolve()
         if not candidate.exists():
             logger.warning("map_search_paths entry does not exist: {}", candidate)
             continue
@@ -269,9 +270,10 @@ def _rebase_scenario_paths(
     candidate = Path(map_file)
     if candidate.is_absolute():
         return scenario
-    if candidate.exists():
+    search_root = root if root.is_dir() else root.parent
+    probe = (search_root / candidate).resolve()
+    if probe.exists():
         return scenario
-    search_root = root.parent
     if source.parent != search_root:
         abs_target = (source.parent / candidate).resolve()
         if abs_target.exists():

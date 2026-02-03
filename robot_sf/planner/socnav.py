@@ -1228,6 +1228,35 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         in fallback mode it is **not benchmark-ready**.
     """
 
+    class _GoalDistanceObjective:
+        """Minimal goal-distance objective for the upstream sampling planner."""
+
+        def __init__(self, goal_pos: np.ndarray | None = None) -> None:
+            self._goal_pos = (
+                np.zeros(2, dtype=float) if goal_pos is None else np.asarray(goal_pos, dtype=float)
+            )
+
+        def set_goal(self, goal_pos: np.ndarray) -> None:
+            """Update the target goal position used for distance costs."""
+            self._goal_pos = np.asarray(goal_pos, dtype=float)
+
+        def evaluate_function(
+            self, trajectory: Any, sim_state_hist: Any | None = None
+        ) -> np.ndarray:
+            """Return per-trajectory goal distance costs (lower is better)."""
+            positions = trajectory.position_nk2()
+            if positions.size == 0:
+                return np.array([])
+            valid_horizons = getattr(trajectory, "valid_horizons_n1", None)
+            if valid_horizons is None:
+                final_pos = positions[:, -1, :]
+            else:
+                idx = np.asarray(valid_horizons, dtype=int).reshape(-1) - 1
+                idx = np.clip(idx, 0, positions.shape[1] - 1)
+                final_pos = positions[np.arange(positions.shape[0]), idx, :]
+            goal = self._goal_pos.reshape(1, 2)
+            return np.linalg.norm(final_pos - goal, axis=1)
+
     def __init__(
         self,
         config: SocNavPlannerConfig | None = None,
@@ -1240,6 +1269,7 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
 
         super().__init__(config=config)
         self._planner = None
+        self._goal_objective: SocNavBenchSamplingAdapter._GoalDistanceObjective | None = None
         self._allow_fallback = bool(allow_fallback)
         # Allow passing an already-initialized planner for advanced use.
         if planner_factory is not None:
@@ -1266,11 +1296,32 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         """
         try:
             return factory()
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            if self._allow_fallback:
-                logger.warning("SocNavBench planner factory failed: {}", exc)
-                return None
-            raise RuntimeError("SocNavBench planner factory failed.") from exc
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"SocNavBench planner factory failed: {exc}", exc=exc
+            )
+
+    def _handle_socnav_failure(
+        self, message: str, *, exc: Exception | None = None, not_found: bool = False
+    ) -> Any | None:
+        """
+        Handle SocNavBench initialization failures with optional fallback.
+
+        Returns:
+            None when fallback is allowed; otherwise raises a descriptive error.
+        """
+        if self._allow_fallback:
+            logger.warning("{}", message)
+            return None
+        if not_found:
+            raise FileNotFoundError(message) from exc
+        raise RuntimeError(message) from exc
 
     @staticmethod
     def _resolve_socnav_root(socnav_root: Path | None) -> Path:
@@ -1303,6 +1354,79 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
                 missing.append(candidate)
         return missing
 
+    def _import_socnav_modules(self, root: Path) -> tuple[Any, Any, Any] | None:
+        """
+        Import upstream SocNavBench modules from the provided root.
+
+        Returns:
+            tuple: (central_params, sampling_planner module, DotMap) or None on failure.
+        """
+        root_str = str(root)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        try:
+            import params.central_params as central  # type: ignore  # noqa: PLC0415
+            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
+            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
+        except (
+            AttributeError,
+            ImportError,
+            ModuleNotFoundError,
+            OSError,
+            RuntimeError,
+            SyntaxError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - optional dependency path
+            return self._handle_socnav_failure(
+                f"Failed to import SocNavBench modules from '{root}': {exc}", exc=exc
+            )
+        return central, sp, DotMap
+
+    def _build_sampling_params(self, central: Any, sp: Any, DotMap: Any) -> Any | None:
+        """
+        Build parameters for the upstream sampling planner.
+
+        Returns:
+            DotMap parameter bundle or None on failure.
+        """
+        params = DotMap()
+        params.planner = sp.SamplingPlanner
+        try:
+            params.control_pipeline_params = central.create_control_pipeline_params()
+        except SystemExit as exc:
+            return self._handle_socnav_failure(
+                "SocNavBench control pipeline parameters failed to load. "
+                "Ensure the SocNavBench data directories exist.",
+                exc=exc,
+            )
+        return params
+
+    @staticmethod
+    def _resolve_robot_dt(robot_params: Any) -> float:
+        """Resolve the robot dynamics timestep from SocNavBench params.
+
+        Returns:
+            float: Timestep for the system dynamics.
+        """
+        dt = getattr(robot_params, "delta_theta", None)
+        if dt is None and hasattr(robot_params, "physical_params"):
+            dt = getattr(robot_params.physical_params, "delta_theta", None)
+        return float(dt) if dt is not None else 0.1
+
+    @staticmethod
+    def _resolve_camera_dt(socnav_params: Any) -> float:
+        """Resolve the camera timestep from SocNavBench params.
+
+        Returns:
+            float: Camera timestep for sampling planner defaults.
+        """
+        camera_params = getattr(socnav_params, "camera_params", None)
+        if camera_params is None:
+            return 0.1
+        dt = getattr(camera_params, "dt", None)
+        return float(dt) if dt is not None else 0.1
+
     def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
         """
         Best-effort import of SocNavBench SamplingPlanner with defaults.
@@ -1316,10 +1440,7 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
                 "SocNavBench root not found at "
                 f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
             )
-            if self._allow_fallback:
-                logger.warning("{}", message)
-                return None
-            raise FileNotFoundError(message)
+            return self._handle_socnav_failure(message, not_found=True)
 
         missing = self._validate_socnav_root(root)
         if missing:
@@ -1328,52 +1449,29 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
                 "SocNavBench root is missing required modules: "
                 f"{missing_str}. Ensure the SocNavBench repo is complete."
             )
-            if self._allow_fallback:
-                logger.warning("{}", message)
-                return None
-            raise FileNotFoundError(message)
+            return self._handle_socnav_failure(message, not_found=True)
 
-        root_str = str(root)
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
+        modules = self._import_socnav_modules(root)
+        if modules is None:
+            return None
+        central, sp, DotMap = modules
+        params = self._build_sampling_params(central, sp, DotMap)
+        if params is None:
+            return None
         try:
-            import control_pipelines.control_pipeline_v0 as cp  # type: ignore  # noqa: PLC0415
-            import objectives.goal_distance as gd  # type: ignore  # noqa: PLC0415
-            import params.central_params as central  # type: ignore  # noqa: PLC0415
-            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
-            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
-        except Exception as exc:  # pragma: no cover - optional dependency path
-            message = f"Failed to import SocNavBench modules from '{root}': {exc}"
-            if self._allow_fallback:
-                logger.warning("{}", message)
-                return None
-            raise RuntimeError(message) from exc
-
-        try:
-            socnav_params = central.create_socnav_params()
-            robot_params = central.create_robot_params()
-
-            # Minimal parameter DotMap inspired by upstream defaults
-            p = DotMap()
-            p.planner = DotMap()
-            p.control_pipeline_params = DotMap()
-            p.control_pipeline_params.pipeline = cp.ControlPipelineV0
-            p.control_pipeline_params.system_dynamics_params = DotMap(
-                system="dubins", dt=robot_params.delta_theta
+            obj_fn = self._GoalDistanceObjective()
+            self._goal_objective = obj_fn
+            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
             )
-            p.control_pipeline_params.planning_horizon = 1.0
-            p.dt = (
-                socnav_params.camera_params.dt if hasattr(socnav_params, "camera_params") else 0.1
-            )
-            p.planning_horizon = 1
-            obj_fn = gd.GoalDistance(p=None)
-            return sp.SamplingPlanner(obj_fn=obj_fn, params=p)
-        except Exception as exc:  # pragma: no cover - optional dependency path
-            message = f"Failed to initialize SocNavBench SamplingPlanner: {exc}"
-            if self._allow_fallback:
-                logger.warning("{}", message)
-                return None
-            raise RuntimeError(message) from exc
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -1390,6 +1488,8 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             pos = robot_state["position"]
             robot_pos = np.asarray(pos, dtype=float)
             heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+            if self._goal_objective is not None:
+                self._goal_objective.set_goal(goal_state["current"])
             start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
             goal = goal_state["current"]
             goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])

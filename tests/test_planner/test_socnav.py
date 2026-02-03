@@ -1,9 +1,19 @@
 """Unit tests for SocNav planner adapters and occupancy helpers."""
 # ruff: noqa: D103
 
+import configparser
+import importlib
+import sys
+import types
+from pathlib import Path
+
 import numpy as np
 
-from robot_sf.planner.socnav import SamplingPlannerAdapter, SocNavPlannerConfig
+from robot_sf.planner.socnav import (
+    SamplingPlannerAdapter,
+    SocNavBenchSamplingAdapter,
+    SocNavPlannerConfig,
+)
 
 
 def _base_observation() -> dict:
@@ -121,6 +131,65 @@ def test_sampling_planner_respects_goal_tolerance_and_occupancy():
     v_blocked, _ = adapter.plan(_with_grid(far_obs, obstacle_grid))
 
     assert v_blocked < v_clear
+
+
+def test_socnavbench_root_validation():
+    """Validate that the vendored SocNavBench root has required modules."""
+    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    missing = SocNavBenchSamplingAdapter._validate_socnav_root(root)
+    assert not missing
+
+
+def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
+    """Ensure the adapter can load the vendored planner without generating pipelines."""
+    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    monkeypatch.setattr(
+        configparser,
+        "SafeConfigParser",
+        configparser.ConfigParser,
+        raising=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "skfmm",
+        types.SimpleNamespace(distance=lambda phi, dx: np.zeros_like(phi, dtype=float)),
+    )
+    monkeypatch.syspath_prepend(str(root))
+    monkeypatch.chdir(root)
+
+    central = importlib.import_module("params.central_params")
+    monkeypatch.setattr(central, "base_data_dir", lambda: str(root))
+    monkeypatch.setattr(central, "get_sbpd_data_dir", lambda: str(root))
+    monkeypatch.setattr(central, "get_traversible_dir", lambda: str(root))
+    monkeypatch.setattr(central, "get_surreal_mesh_dir", lambda: str(root))
+    monkeypatch.setattr(central, "get_surreal_texture_dir", lambda: str(root))
+
+    cp = importlib.import_module("control_pipelines.control_pipeline_v0")
+
+    class FakePipeline:
+        def __init__(self, params):
+            self.params = params
+
+        def does_pipeline_exist(self):
+            return True
+
+        def load_control_pipeline(self):
+            return None
+
+        def generate_control_pipeline(self):
+            raise AssertionError("Pipeline generation should be skipped in smoke tests.")
+
+    monkeypatch.setattr(
+        cp.ControlPipelineV0,
+        "get_pipeline",
+        classmethod(lambda cls, params: FakePipeline(params)),
+    )
+
+    adapter = SocNavBenchSamplingAdapter(socnav_root=root, allow_fallback=False)
+    obs = _base_observation()
+    v, w = adapter.plan(obs)
+    assert np.isfinite(v)
+    assert np.isfinite(w)
 
 
 def test_socnav_fields_supports_flattened_observation():

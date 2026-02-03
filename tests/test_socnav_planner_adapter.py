@@ -1,6 +1,9 @@
 """Tests for SocNavBench-inspired planner adapters."""
 
+from pathlib import Path
+
 import numpy as np
+import pytest
 
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
@@ -116,7 +119,11 @@ def test_policy_wrapper_calls_adapter():
 
 def test_socnavbench_adapter_fallbacks():
     """SocNavBench adapter should fall back gracefully when upstream is unavailable."""
-    adapter = SocNavBenchSamplingAdapter(SocNavPlannerConfig(max_linear_speed=0.5))
+    adapter = SocNavBenchSamplingAdapter(
+        SocNavPlannerConfig(max_linear_speed=0.5),
+        socnav_root=Path("does_not_exist"),
+        allow_fallback=True,
+    )
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
     assert v >= 0.0
@@ -124,10 +131,19 @@ def test_socnavbench_adapter_fallbacks():
 
 def test_socnavbench_complex_policy_fallback():
     """Complex policy should still return an action even without upstream deps."""
-    policy = SocNavBenchComplexPolicy()
+    policy = SocNavBenchComplexPolicy(
+        socnav_root=Path("does_not_exist"),
+        allow_fallback=True,
+    )
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
     v, _w = policy.act(obs)
     assert v >= 0.0
+
+
+def test_socnavbench_adapter_requires_upstream():
+    """Adapter should raise when upstream planner is required but missing."""
+    with pytest.raises(FileNotFoundError):
+        SocNavBenchSamplingAdapter(socnav_root=Path("does_not_exist"))
 
 
 def test_social_force_adapter():

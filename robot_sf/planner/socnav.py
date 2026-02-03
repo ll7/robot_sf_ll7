@@ -7,6 +7,7 @@ full SocNavBench planners are integrated. They operate on the SocNav structured
 observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 """
 
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,6 +20,15 @@ from loguru import logger
 
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+
+_SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
+_SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "output" / "SocNavBench"
+_SOCNAV_REQUIRED_MODULES = (
+    "control_pipelines.control_pipeline_v0",
+    "objectives.goal_distance",
+    "params.central_params",
+    "planners.sampling_planner",
+)
 
 
 class OccupancyAwarePlannerMixin:
@@ -449,17 +459,24 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
     """
     Policy that prefers the upstream SocNavBench SamplingPlanner when available.
 
-    Falls back to the lightweight adapter when upstream dependencies are missing.
+    By default this policy requires the upstream SocNavBench planner. Set
+    ``allow_fallback=True`` to use the lightweight adapter when dependencies are missing.
     """
 
     def __init__(
         self,
         socnav_root: Path | None = None,
         adapter_config: SocNavPlannerConfig | None = None,
+        *,
+        allow_fallback: bool = False,
     ):
         """Initialize the policy, preferring the upstream SocNavBench planner when present."""
 
-        adapter = SocNavBenchSamplingAdapter(config=adapter_config, socnav_root=socnav_root)
+        adapter = SocNavBenchSamplingAdapter(
+            config=adapter_config,
+            socnav_root=socnav_root,
+            allow_fallback=allow_fallback,
+        )
         super().__init__(adapter=adapter)
 
 
@@ -1206,8 +1223,9 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     Adapter that attempts to delegate to the upstream SocNavBench SamplingPlanner.
 
     Warning:
-        This adapter falls back to the heuristic SamplingPlannerAdapter when upstream
-        dependencies are missing. In that mode it is **not benchmark-ready**.
+        This adapter requires the upstream SocNavBench planner by default. Set
+        ``allow_fallback=True`` to fall back to the heuristic SamplingPlannerAdapter;
+        in fallback mode it is **not benchmark-ready**.
     """
 
     def __init__(
@@ -1215,24 +1233,31 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         config: SocNavPlannerConfig | None = None,
         socnav_root: Path | None = None,
         planner_factory: Callable[[], Any] | None = None,
+        *,
+        allow_fallback: bool = False,
     ):
         """Initialize the adapter and optionally load the upstream planner."""
 
         super().__init__(config=config)
         self._planner = None
+        self._allow_fallback = bool(allow_fallback)
         # Allow passing an already-initialized planner for advanced use.
         if planner_factory is not None:
             self._planner = self._safe_call_factory(planner_factory)
         else:
             self._planner = self._load_upstream_planner(socnav_root)
-        if self._planner is None:
+        if self._planner is None and self._allow_fallback:
             logger.warning(
                 "SocNavBenchSamplingAdapter is running in fallback heuristic mode and "
                 "is not benchmark-ready."
             )
+        if self._planner is None and not self._allow_fallback:
+            raise RuntimeError(
+                "SocNavBenchSamplingAdapter could not load the upstream planner. "
+                "Set allow_fallback=True to use the heuristic fallback."
+            )
 
-    @staticmethod
-    def _safe_call_factory(factory: Callable[[], Any]) -> Any | None:
+    def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
         """
         Invoke a user-provided factory defensively.
 
@@ -1241,8 +1266,42 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         """
         try:
             return factory()
-        except Exception:  # pragma: no cover - defensive fallback  # noqa: BLE001
-            return None
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            if self._allow_fallback:
+                logger.warning("SocNavBench planner factory failed: {}", exc)
+                return None
+            raise RuntimeError("SocNavBench planner factory failed.") from exc
+
+    @staticmethod
+    def _resolve_socnav_root(socnav_root: Path | None) -> Path:
+        """
+        Resolve the SocNavBench root directory.
+
+        Returns:
+            Path: Resolved SocNavBench root path.
+        """
+        if socnav_root is not None:
+            return Path(socnav_root).expanduser()
+        env_root = os.getenv(_SOCNAV_ROOT_ENV)
+        if env_root:
+            return Path(env_root).expanduser()
+        return _SOCNAV_DEFAULT_ROOT
+
+    @staticmethod
+    def _validate_socnav_root(root: Path) -> list[Path]:
+        """
+        Validate that the SocNavBench root contains expected modules.
+
+        Returns:
+            list[Path]: Missing module paths (empty when valid).
+        """
+        missing: list[Path] = []
+        for module in _SOCNAV_REQUIRED_MODULES:
+            module_path = Path(*module.split(".")).with_suffix(".py")
+            candidate = root / module_path
+            if not candidate.exists():
+                missing.append(candidate)
+        return missing
 
     def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
         """
@@ -1251,8 +1310,30 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         Returns:
             SamplingPlanner | None: Upstream planner when dependencies resolve; otherwise ``None``.
         """
-        root = socnav_root or Path(__file__).resolve().parents[2] / "output" / "SocNavBench"
-        root_str = str(Path(root).resolve())
+        root = self._resolve_socnav_root(socnav_root).resolve()
+        if not root.exists():
+            message = (
+                "SocNavBench root not found at "
+                f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
+            )
+            if self._allow_fallback:
+                logger.warning("{}", message)
+                return None
+            raise FileNotFoundError(message)
+
+        missing = self._validate_socnav_root(root)
+        if missing:
+            missing_str = ", ".join(str(path) for path in missing)
+            message = (
+                "SocNavBench root is missing required modules: "
+                f"{missing_str}. Ensure the SocNavBench repo is complete."
+            )
+            if self._allow_fallback:
+                logger.warning("{}", message)
+                return None
+            raise FileNotFoundError(message)
+
+        root_str = str(root)
         if root_str not in sys.path:
             sys.path.insert(0, root_str)
         try:
@@ -1261,8 +1342,12 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             import params.central_params as central  # type: ignore  # noqa: PLC0415
             import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
             from dotmap import DotMap  # type: ignore  # noqa: PLC0415
-        except Exception:  # pragma: no cover - optional dependency path  # noqa: BLE001
-            return None
+        except Exception as exc:  # pragma: no cover - optional dependency path
+            message = f"Failed to import SocNavBench modules from '{root}': {exc}"
+            if self._allow_fallback:
+                logger.warning("{}", message)
+                return None
+            raise RuntimeError(message) from exc
 
         try:
             socnav_params = central.create_socnav_params()
@@ -1283,8 +1368,12 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             p.planning_horizon = 1
             obj_fn = gd.GoalDistance(p=None)
             return sp.SamplingPlanner(obj_fn=obj_fn, params=p)
-        except Exception:  # pragma: no cover - optional dependency path  # noqa: BLE001
-            return None
+        except Exception as exc:  # pragma: no cover - optional dependency path
+            message = f"Failed to initialize SocNavBench SamplingPlanner: {exc}"
+            if self._allow_fallback:
+                logger.warning("{}", message)
+                return None
+            raise RuntimeError(message) from exc
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """

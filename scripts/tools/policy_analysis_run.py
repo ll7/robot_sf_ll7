@@ -550,8 +550,12 @@ def _episode_video_metadata(video_path: Path | None, *, frames: int) -> dict[str
     size = int(video_path.stat().st_size)
     if size <= 0:
         return None
+    try:
+        path_str = str(video_path.relative_to(Path.cwd()))
+    except ValueError:
+        path_str = str(video_path)
     return {
-        "path": str(video_path),
+        "path": path_str,
         "format": "mp4",
         "filesize_bytes": size,
         "frames": int(frames),

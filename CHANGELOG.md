@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.
+- SocialForcePlannerAdapter now uses fast-pysf social-force interactions (goal, pedestrian, obstacle forces) instead of the heuristic placeholder.
 
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)

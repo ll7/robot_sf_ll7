@@ -28,6 +28,11 @@ try:  # pragma: no cover - optional dependency
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
     rvo2 = None  # type: ignore[assignment]
 
+try:  # pragma: no cover - optional dependency
+    from pysocialforce import forces as sf_forces  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    sf_forces = None  # type: ignore[assignment]
+
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
@@ -364,6 +369,20 @@ class SocNavPlannerConfig:
     orca_obstacle_radius_scale: float = 1.0
     orca_heading_slowdown: float = 0.2
     social_force_repulsion_weight: float = 0.8
+    social_force_desired_speed: float = 1.0
+    social_force_tau: float = 0.5
+    social_force_factor: float = 5.1
+    social_force_lambda_importance: float = 2.0
+    social_force_gamma: float = 0.35
+    social_force_n: int = 2
+    social_force_n_prime: int = 3
+    social_force_obstacle_factor: float = 10.0
+    social_force_obstacle_threshold: float = 0.5
+    social_force_obstacle_range: float = 6.0
+    social_force_obstacle_max_points: int = 80
+    social_force_obstacle_radius_scale: float = 1.0
+    social_force_clip_force: bool = True
+    social_force_max_force: float = 100.0
     occupancy_lookahead: float = 2.5
     occupancy_heading_sweep: float = pi * 2 / 3
     occupancy_candidates: int = 7
@@ -810,50 +829,67 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
 
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
-    """Heuristic social-force style planner: goal attraction plus pedestrian repulsion.
+    """Social-force planner adapter using fast-pysf interaction forces."""
 
-    Warning:
-        This is a heuristic baseline and is not benchmark-ready.
-    """
+    _EPS = 1e-6
 
-    def __init__(self, config: SocNavPlannerConfig | None = None):
+    def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
         """Initialize the social-force adapter with optional configuration."""
-        super().__init__(config=config)
-        logger.warning(
-            "SocialForcePlannerAdapter is a heuristic baseline and is not benchmark-ready."
-        )
+        self.config = config or SocNavPlannerConfig()
+        if sf_forces is None:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "pysocialforce is required for SocialForcePlannerAdapter. "
+                "Install the fast-pysf dependency."
+            )
 
     def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute (v, w) using goal attraction and inverse-square pedestrian repulsion.
+        """Compute (v, w) using social-force goal + interaction forces.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
-        robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
-        goal = np.asarray(goal_state["current"], dtype=float)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        robot_speed = self._as_1d_float(robot_state.get("speed", [0.0, 0.0]), pad=2)
+        linear_speed = float(robot_speed[0])
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        robot_vel = np.array([linear_speed * cos_h, linear_speed * sin_h], dtype=float)
 
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
         to_goal = goal - robot_pos
-        goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
+        goal_dist = float(np.linalg.norm(to_goal))
+        if goal_dist < self.config.goal_tolerance:
+            return 0.0, 0.0
 
-        ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
-        ped_positions = ped_positions[:ped_count]
-        repulse = np.zeros(2, dtype=float)
-        for ped in ped_positions:
-            delta = robot_pos - ped
-            dist = np.linalg.norm(delta) + 1e-6
-            repulse += delta / dist**2
+        dt = self._resolve_dt(observation)
+        desired_speed = min(self.config.social_force_desired_speed, self.config.max_linear_speed)
+        desired_speed = min(desired_speed, goal_dist / max(dt, self._EPS))
+        goal_dir = to_goal / (goal_dist + self._EPS)
+        desired_vel = goal_dir * desired_speed
+        desired_force = (desired_vel - robot_vel) / max(self.config.social_force_tau, self._EPS)
 
-        combined = goal_vec + self.config.social_force_repulsion_weight * repulse
-        if np.linalg.norm(combined) > 1e-6:
-            combined = combined / np.linalg.norm(combined)
+        social_force = self._compute_social_force(robot_pos, robot_vel, ped_state, robot_heading)
+        obstacle_force = self._compute_obstacle_force(
+            observation, robot_pos, robot_heading, robot_vel, robot_state
+        )
+        interaction_force = self.config.social_force_repulsion_weight * (
+            social_force + obstacle_force
+        )
 
-        combined, occ_penalty = self._get_safe_heading(robot_pos, combined, observation)
+        total_force = desired_force + interaction_force
+        total_force = self._clip_force(total_force)
 
-        desired_heading = atan2(combined[1], combined[0])
+        desired_vel = robot_vel + total_force * dt
+        speed = float(np.linalg.norm(desired_vel))
+        if speed < self._EPS:
+            return 0.0, 0.0
+        if speed > self.config.max_linear_speed:
+            desired_vel = desired_vel / (speed + self._EPS) * self.config.max_linear_speed
+            speed = self.config.max_linear_speed
+
+        desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
         angular = float(
             np.clip(
@@ -864,14 +900,238 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         )
         linear = float(
             np.clip(
-                np.linalg.norm(to_goal),
+                speed * max(0.0, 1.0 - abs(heading_error) / pi),
                 0.0,
-                self.config.max_linear_speed
-                * max(0.0, 1.0 - abs(heading_error) / pi)
-                * max(0.0, 1.0 - occ_penalty),
+                self.config.max_linear_speed,
             ),
         )
         return linear, angular
+
+    def _resolve_dt(self, observation: dict) -> float:
+        """Return the simulation timestep (fallback to config defaults)."""
+        sim = observation.get("sim", {})
+        timestep = self._as_1d_float(sim.get("timestep", [0.0]), pad=1)[0]
+        if timestep <= 0.0:
+            return float(self.config.social_force_tau)
+        return float(timestep)
+
+    @staticmethod
+    def _rotate_velocities_to_world(velocities: np.ndarray, heading: float) -> np.ndarray:
+        """Rotate ego-frame velocities into world coordinates.
+
+        Returns:
+            np.ndarray: Rotated velocity vectors in world coordinates.
+        """
+        if velocities.size == 0:
+            return velocities
+        cos_h = float(np.cos(heading))
+        sin_h = float(np.sin(heading))
+        vx = cos_h * velocities[:, 0] - sin_h * velocities[:, 1]
+        vy = sin_h * velocities[:, 0] + cos_h * velocities[:, 1]
+        return np.stack([vx, vy], axis=1)
+
+    def _compute_social_force(
+        self,
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        ped_state: dict,
+        robot_heading: float,
+    ) -> np.ndarray:
+        """Compute social-force repulsion from pedestrians.
+
+        Returns:
+            np.ndarray: Combined social-force vector.
+        """
+        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+        if ped_positions.ndim == 1:
+            ped_positions = ped_positions.reshape(-1, 2)
+        ped_count = int(self._as_1d_float(ped_state.get("count", [0]), pad=1)[0])
+        ped_positions = ped_positions[:ped_count]
+        if ped_positions.size == 0:
+            return np.zeros(2, dtype=float)
+
+        ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
+        if ped_velocities.size == 0:
+            ped_velocities = np.zeros_like(ped_positions, dtype=float)
+        elif ped_velocities.ndim == 1:
+            ped_velocities = ped_velocities.reshape(-1, 2)
+        ped_velocities = ped_velocities[:ped_count]
+        ped_vel_world = self._rotate_velocities_to_world(ped_velocities, robot_heading)
+
+        total = np.zeros(2, dtype=float)
+        for ped_pos, ped_vel in zip(ped_positions, ped_vel_world, strict=False):
+            pos_diff = (robot_pos - ped_pos).astype(float)
+            vel_diff = (robot_vel - ped_vel).astype(float)
+            try:
+                fx, fy = sf_forces.social_force_ped_ped(
+                    pos_diff,
+                    vel_diff,
+                    int(self.config.social_force_n),
+                    int(self.config.social_force_n_prime),
+                    float(self.config.social_force_lambda_importance),
+                    float(self.config.social_force_gamma),
+                )
+                total += np.array([fx, fy], dtype=float)
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                continue
+        return total * float(self.config.social_force_factor)
+
+    def _compute_obstacle_force(
+        self,
+        observation: dict,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        robot_vel: np.ndarray,
+        robot_state: dict,
+    ) -> np.ndarray:
+        """Compute obstacle repulsion using occupancy-grid obstacle points.
+
+        Returns:
+            np.ndarray: Combined obstacle repulsion vector.
+        """
+        centers, radii = self._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
+        if centers.size == 0:
+            return np.zeros(2, dtype=float)
+
+        if np.linalg.norm(robot_vel) > self._EPS:
+            ortho = np.array([-robot_vel[1], robot_vel[0]], dtype=float)
+        else:
+            ortho = np.array([-np.sin(robot_heading), np.cos(robot_heading)], dtype=float)
+
+        robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+        total = np.zeros(2, dtype=float)
+        for center, radius in zip(centers, radii, strict=False):
+            line = (float(center[0]), float(center[1]), float(center[0]), float(center[1]))
+            try:
+                fx, fy = sf_forces.obstacle_force(line, ortho, robot_pos, robot_radius + radius)
+                total += np.array([fx, fy], dtype=float)
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                continue
+        return total * float(self.config.social_force_obstacle_factor)
+
+    @staticmethod
+    def _grid_cell_centers(
+        indices: np.ndarray, origin: np.ndarray, resolution: float
+    ) -> np.ndarray:
+        """Convert grid indices to grid-frame centers.
+
+        Returns:
+            np.ndarray: Grid-frame centers for the provided indices.
+        """
+        rows = indices[:, 0].astype(float)
+        cols = indices[:, 1].astype(float)
+        x = origin[0] + (cols + 0.5) * resolution
+        y = origin[1] + (rows + 0.5) * resolution
+        return np.stack([x, y], axis=1)
+
+    @staticmethod
+    def _ego_centers_to_world(
+        centers: np.ndarray, robot_pos: np.ndarray, robot_heading: float
+    ) -> np.ndarray:
+        """Rotate/translate ego-frame centers into world coordinates.
+
+        Returns:
+            np.ndarray: World-space centers.
+        """
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        x_world = cos_h * centers[:, 0] - sin_h * centers[:, 1]
+        y_world = sin_h * centers[:, 0] + cos_h * centers[:, 1]
+        return np.stack([x_world, y_world], axis=1) + np.asarray(robot_pos, dtype=float)
+
+    @staticmethod
+    def _select_nearby_points(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        max_range: float,
+        max_points: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Filter centers by range and cap to the closest points.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Filtered centers and squared distances.
+        """
+        offsets = centers - np.asarray(robot_pos, dtype=float)
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        keep = dist_sq <= max_range**2
+        if not np.any(keep):
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        centers = centers[keep]
+        dist_sq = dist_sq[keep]
+        if max_points > 0 and centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            centers = centers[order]
+            dist_sq = dist_sq[order]
+        return centers, dist_sq
+
+    def _extract_obstacles_from_grid(
+        self, observation: dict, robot_pos: np.ndarray, robot_heading: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract nearby obstacle centers from the occupancy grid.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        grid, meta = payload
+        if grid.ndim < 3:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        channel_idx = self._grid_channel_index(meta, "obstacles")
+        if channel_idx < 0:
+            channel_idx = self._grid_channel_index(meta, "combined")
+        if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        resolution = float(resolution_arr[0])
+        if resolution <= 0.0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        obstacle_mask = grid[channel_idx] >= float(self.config.social_force_obstacle_threshold)
+        if not np.any(obstacle_mask):
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        indices = np.argwhere(obstacle_mask)
+        if indices.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        centers = self._grid_cell_centers(indices, origin, resolution)
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        if use_ego:
+            centers = self._ego_centers_to_world(centers, robot_pos, robot_heading)
+
+        centers, _dist_sq = self._select_nearby_points(
+            centers,
+            robot_pos,
+            float(self.config.social_force_obstacle_range),
+            max(int(self.config.social_force_obstacle_max_points), 0),
+        )
+        if centers.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        base_radius = (
+            0.5 * np.sqrt(2.0) * resolution * float(self.config.social_force_obstacle_radius_scale)
+        )
+        radii = np.full((centers.shape[0],), base_radius, dtype=float)
+        return centers, radii
+
+    def _clip_force(self, force: np.ndarray) -> np.ndarray:
+        """Clip total force magnitude to avoid numerical spikes.
+
+        Returns:
+            np.ndarray: Clipped force vector.
+        """
+        if not self.config.social_force_clip_force:
+            return force
+        norm = float(np.linalg.norm(force))
+        if norm < self._EPS or norm <= self.config.social_force_max_force:
+            return force
+        return force / (norm + self._EPS) * float(self.config.social_force_max_force)
 
 
 class ORCAPlannerAdapter(SamplingPlannerAdapter):
@@ -2021,9 +2281,6 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
     """
     Convenience constructor for social-force-like planner policy.
-
-    Warning:
-        This is a heuristic baseline and is not benchmark-ready.
 
     Returns:
         SocNavPlannerPolicy: Policy wrapping SocialForcePlannerAdapter.

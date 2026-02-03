@@ -74,9 +74,11 @@ def _make_obs_with_peds(
     obs = _make_obs(goal=goal, heading=heading)
     max_peds = max(1, len(ped_positions))
     positions = np.zeros((max_peds, 2), dtype=np.float32)
+    velocities = np.zeros((max_peds, 2), dtype=np.float32)
     if ped_positions:
         positions[: len(ped_positions)] = np.array(ped_positions, dtype=np.float32)
     obs["pedestrians"]["positions"] = positions
+    obs["pedestrians"]["velocities"] = velocities
     obs["pedestrians"]["count"] = np.array([float(len(ped_positions))], dtype=np.float32)
     return obs
 
@@ -162,6 +164,31 @@ def test_social_force_adapter():
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
     assert v >= 0.0
+
+
+def test_social_force_adapter_responds_to_pedestrian():
+    """Social-force adapter slows or turns when pedestrians are in the path."""
+    cfg = SocNavPlannerConfig(social_force_repulsion_weight=2.0)
+    adapter = SocialForcePlannerAdapter(cfg)
+    obs_free = _make_obs(goal=(5.0, 0.0), heading=0.0)
+    v_free, w_free = adapter.plan(obs_free)
+    obs_ped = _make_obs_with_peds([(1.0, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v_ped, w_ped = adapter.plan(obs_ped)
+    assert v_ped < v_free or abs(w_ped) > abs(w_free) + 1e-3
+
+
+def test_social_force_adapter_responds_to_obstacle_in_grid():
+    """Social-force adapter reacts to nearby occupancy-grid obstacles."""
+    cfg = SocNavPlannerConfig(social_force_obstacle_range=4.0)
+    adapter = SocialForcePlannerAdapter(cfg)
+    obs_free = _with_occupancy_grid(_make_obs(goal=(5.0, 0.0), heading=0.0))
+    v_free, w_free = adapter.plan(obs_free)
+    obs_blocked = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3)],
+    )
+    v_blocked, w_blocked = adapter.plan(obs_blocked)
+    assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
 
 
 def test_orca_adapter(monkeypatch):

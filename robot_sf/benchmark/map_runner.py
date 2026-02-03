@@ -104,7 +104,8 @@ def _build_policy(  # noqa: C901
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
     elif algo_key in {"orca"}:
-        adapter = ORCAPlannerAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

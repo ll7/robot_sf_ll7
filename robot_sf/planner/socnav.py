@@ -23,6 +23,11 @@ try:  # pragma: no cover - optional dependency
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
     tf = None  # type: ignore[assignment]
 
+try:  # pragma: no cover - optional dependency
+    import rvo2  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    rvo2 = None  # type: ignore[assignment]
+
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
@@ -350,6 +355,7 @@ class SocNavPlannerConfig:
     sacadrl_bias_weight: float = 0.6
     orca_avoidance_weight: float = 1.2
     orca_neighbor_dist: float = 10.0
+    orca_max_neighbors: int = 10
     orca_time_horizon: float = 6.0
     orca_time_horizon_obst: float = 3.0
     orca_obstacle_threshold: float = 0.5
@@ -566,7 +572,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
 
 class ORCAPlannerAdapter(SamplingPlannerAdapter):
-    """Simplified ORCA-inspired adapter using reciprocal-style avoidance."""
+    """ORCA planner adapter using rvo2 when available.
+
+    Set ``allow_fallback=True`` to use the heuristic implementation when rvo2 is unavailable.
+    """
 
     @dataclass
     class _OrcaLine:
@@ -576,6 +585,33 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         direction: np.ndarray
 
     _EPS = 1e-6
+
+    def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
+        """Initialize the ORCA adapter with optional rvo2 fallback."""
+        self.config = config or SocNavPlannerConfig()
+        self._allow_fallback = allow_fallback
+        self._fallback_warned = False
+
+    def _ensure_rvo2(self) -> bool:
+        """Return True when rvo2 is available, else handle fallback/error behavior.
+
+        Returns:
+            bool: True when rvo2 is available, False when falling back.
+        """
+        if rvo2 is not None:
+            return True
+        if self._allow_fallback:
+            if not self._fallback_warned:
+                logger.warning(
+                    "rvo2 not available; falling back to heuristic ORCA behavior. "
+                    "Install the 'orca' extra for the benchmark-ready implementation.",
+                )
+                self._fallback_warned = True
+            return False
+        raise RuntimeError(
+            "rvo2 is required for the benchmark-ready ORCA planner. "
+            "Install via `uv sync --extra orca` or set allow_fallback=True."
+        )
 
     @staticmethod
     def _det(a: np.ndarray, b: np.ndarray) -> float:
@@ -752,6 +788,17 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         cos_h = np.cos(heading)
         sin_h = np.sin(heading)
         return np.array([cos_h * vec[0] - sin_h * vec[1], sin_h * vec[0] + cos_h * vec[1]])
+
+    @staticmethod
+    def _world_to_ego_vec(vec: np.ndarray, heading: float) -> np.ndarray:
+        """Rotate a world-frame vector into ego coordinates.
+
+        Returns:
+            np.ndarray: Vector expressed in ego coordinates.
+        """
+        cos_h = np.cos(heading)
+        sin_h = np.sin(heading)
+        return np.array([cos_h * vec[0] + sin_h * vec[1], -sin_h * vec[0] + cos_h * vec[1]])
 
     @classmethod
     def _preferred_velocity(
@@ -1064,8 +1111,137 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         return linear, angular
 
     def plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using rvo2 ORCA or a heuristic fallback.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
         """
-        Compute (v, w) using goal direction plus reciprocal-style avoidance.
+        if not self._ensure_rvo2():
+            return self._heuristic_plan(observation)
+        return self._rvo2_plan(observation)
+
+    def _rvo2_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using the rvo2 ORCA solver.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        preferred_velocity_ego = self._preferred_velocity(
+            goal, robot_pos, robot_heading, self.config.max_linear_speed
+        )
+        if np.linalg.norm(preferred_velocity_ego) < self._EPS:
+            return 0.0, 0.0
+
+        preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
+
+        time_step = float(
+            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
+        )
+        if time_step <= self._EPS:
+            logger.warning(
+                "Invalid timestep ({}) for ORCA planner; defaulting to 0.1s.",
+                time_step,
+            )
+            time_step = 0.1
+
+        robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
+        robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        robot_velocity_world = np.array(
+            [robot_speed * cos_h, robot_speed * sin_h],
+            dtype=float,
+        )
+
+        ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        if ped_count > 0:
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+            ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+        else:
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+
+        max_neighbors = int(self.config.orca_max_neighbors)
+        if max_neighbors <= 0:
+            max_neighbors = max(1, ped_count)
+
+        neighbor_dist = float(self.config.orca_neighbor_dist)
+        time_horizon = float(self.config.orca_time_horizon)
+        time_horizon_obst = float(self.config.orca_time_horizon_obst)
+        max_speed = float(self.config.max_linear_speed)
+
+        sim = rvo2.PyRVOSimulator(
+            time_step,
+            neighbor_dist,
+            max_neighbors,
+            time_horizon,
+            time_horizon_obst,
+            robot_radius,
+            max_speed,
+        )
+        robot_id = sim.addAgent(
+            tuple(robot_pos),
+            neighbor_dist,
+            max_neighbors,
+            time_horizon,
+            time_horizon_obst,
+            robot_radius,
+            max_speed,
+            tuple(robot_velocity_world),
+        )
+
+        ped_ids: list[int] = []
+        for idx in range(ped_count):
+            ped_speed = float(np.linalg.norm(ped_vel_world[idx]))
+            ped_max_speed = max(ped_speed, max_speed)
+            ped_id = sim.addAgent(
+                tuple(ped_positions[idx]),
+                neighbor_dist,
+                max_neighbors,
+                time_horizon,
+                time_horizon_obst,
+                ped_radius,
+                ped_max_speed,
+                tuple(ped_vel_world[idx]),
+            )
+            ped_ids.append(ped_id)
+
+        obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
+            observation, robot_pos, robot_heading
+        )
+        if obstacle_positions.size:
+            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False):
+                half = float(radius)
+                vertices = [
+                    (float(center[0] - half), float(center[1] - half)),
+                    (float(center[0] + half), float(center[1] - half)),
+                    (float(center[0] + half), float(center[1] + half)),
+                    (float(center[0] - half), float(center[1] + half)),
+                ]
+                sim.addObstacle(vertices)
+            sim.processObstacles()
+
+        sim.setAgentPrefVelocity(robot_id, tuple(preferred_velocity_world))
+        for ped_id, vel in zip(ped_ids, ped_vel_world, strict=False):
+            sim.setAgentPrefVelocity(ped_id, tuple(vel))
+
+        sim.doStep()
+        new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)
+        new_velocity_ego = self._world_to_ego_vec(new_velocity_world, robot_heading)
+        return self._velocity_to_command(
+            velocity=new_velocity_ego,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            observation=observation,
+        )
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using the legacy ORCA-inspired heuristic.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -1553,7 +1729,9 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
     return SocNavPlannerPolicy(adapter=SocialForcePlannerAdapter(config=config))
 
 
-def make_orca_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+def make_orca_policy(
+    config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False
+) -> SocNavPlannerPolicy:
     """
     Convenience constructor for ORCA-like planner policy.
 
@@ -1561,7 +1739,9 @@ def make_orca_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlanner
         SocNavPlannerPolicy: Policy wrapping ORCAPlannerAdapter.
     """
 
-    return SocNavPlannerPolicy(adapter=ORCAPlannerAdapter(config=config))
+    return SocNavPlannerPolicy(
+        adapter=ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    )
 
 
 def make_sacadrl_policy(

@@ -93,12 +93,14 @@ build-backend = "hatchling.build"
 packages = [
     { include = "robot_sf" },
     { include = "examples" },
+    { include = "thrid_party" },
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = [
     "robot_sf",
     "examples",
+    "thrid_party",
 ]
 include = ["examples/**"]
 
@@ -109,6 +111,7 @@ include = ["examples/**"]
 include = [
     "/robot_sf",
     "/examples",
+    "/thrid_party",
     "/README.md",
     "/LICENSE",
 ]
@@ -168,6 +171,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "thrid_party",
 ]
 
 # Same as Black.

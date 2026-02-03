@@ -193,7 +193,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--socnav-root",
         type=Path,
-        help="Optional SocNavBench root for upstream sampling planner integration.",
+        help=(
+            "Optional SocNavBench root for upstream sampling planner integration. "
+            "Set ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT=1 to allow roots outside the repo."
+        ),
     )
     parser.add_argument(
         "--socnav-allow-fallback",

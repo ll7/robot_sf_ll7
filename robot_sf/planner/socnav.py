@@ -38,6 +38,7 @@ from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
+_SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
 _SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
 _SOCNAV_REQUIRED_MODULES = (
     "control_pipelines.control_pipeline_v0",
@@ -640,6 +641,22 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         return _SOCNAV_DEFAULT_ROOT
 
     @staticmethod
+    def _allow_untrusted_socnav_root() -> bool:
+        """Return True when the environment explicitly allows untrusted roots."""
+        value = os.getenv(_SOCNAV_ALLOW_UNTRUSTED_ENV, "")
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    @staticmethod
+    def _is_trusted_socnav_root(root: Path) -> bool:
+        """Check whether the SocNavBench root lives inside the repository."""
+        repo_root = Path(__file__).resolve().parents[2]
+        try:
+            root.resolve().relative_to(repo_root)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
     def _validate_socnav_root(root: Path) -> list[Path]:
         """Validate that the SocNavBench root contains expected modules.
 
@@ -736,6 +753,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             Planner instance or ``None`` on failure.
         """
+        env_root = os.getenv(_SOCNAV_ROOT_ENV)
+        root_source = "argument" if socnav_root is not None else ("env" if env_root else "default")
         root = self._resolve_socnav_root(socnav_root).resolve()
         if not root.exists():
             message = (
@@ -743,6 +762,19 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
             )
             return self._handle_socnav_failure(message, not_found=True)
+
+        if root_source != "default" and not self._is_trusted_socnav_root(root):
+            if not self._allow_untrusted_socnav_root():
+                message = (
+                    "SocNavBench root is outside the repository root. "
+                    f"Refusing to load from '{root}'. Set {_SOCNAV_ALLOW_UNTRUSTED_ENV}=1 "
+                    "to explicitly allow untrusted SocNavBench roots."
+                )
+                return self._handle_socnav_failure(message)
+            logger.warning(
+                "Using SocNavBench root outside the repository: '{}'. Ensure this path is trusted.",
+                root,
+            )
 
         missing = self._validate_socnav_root(root)
         if missing:

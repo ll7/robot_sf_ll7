@@ -118,7 +118,7 @@ class Trajectory:
             self._angular_speed_nk1,
             self._angular_acceleration_nk1,
         ]
-        return np.sum([var_name.numpy().nbytes for var_name in var_names])
+        return sum(var_name.nbytes for var_name in var_names)
 
     @classmethod
     def init_from_numpy_repr(
@@ -489,7 +489,7 @@ class Trajectory:
         angular_acceleration_nk1 = np.concatenate(
             [x.angular_acceleration_nk1() for x in trajectories], axis=1
         )
-        valid_horizons_n1 = np.reduce_sum(
+        valid_horizons_n1 = np.sum(
             [x.valid_horizons_n1 for x in trajectories], axis=0
         )
         return cls(

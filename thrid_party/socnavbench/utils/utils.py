@@ -204,7 +204,7 @@ def check_dotmap_equality(d1: DotMap, d2: DotMap) -> bool:
 
 
 def configure_plotting() -> None:
-    pyplot.plot.style.use("ggplot")
+    pyplot.style.use("ggplot")
 
 
 def subplot2(

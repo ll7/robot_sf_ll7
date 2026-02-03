@@ -60,8 +60,7 @@ class ControlPipelineV0Helper:
                               track_trajectory_acceleration=False):
         """Load control pipeline data from a pickle file and process it so that it can be used by the pipeline."""
         if not os.path.exists(filename):
-            # create the 'incorrectly_binned.pkl' if not there
-            os.mknod(filename)
+            raise FileNotFoundError(f"Pipeline data file not found: {filename}")
         with open(filename, 'rb') as f:
             data = pickle.load(f)
 

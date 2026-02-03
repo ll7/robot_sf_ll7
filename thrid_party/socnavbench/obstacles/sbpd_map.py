@@ -110,7 +110,7 @@ class SBPDMap(ObstacleMap):
 
         if 'occupancy_grid' in self.p.renderer_params.camera_params.modalities:
             occupancy_grid_world_1mk12 = kwargs['occupancy_grid_positions_ego_1mk12']
-            _, m, k, _, _ = [x.value for x in occupancy_grid_world_1mk12.shape]
+            _, m, k, _, _ = occupancy_grid_world_1mk12.shape
             occupancy_grid_nk2 = np.reshape(
                 occupancy_grid_world_1mk12, (1, -1, 2))
 
@@ -118,7 +118,7 @@ class SBPDMap(ObstacleMap):
             n = pos_n3.shape[0]
             if n != 1:
                 occupancy_grid_nk2 = np.broadcast_to(occupancy_grid_nk2, (n,
-                                                                          occupancy_grid_nk2.shape[1].value,
+                                                                          occupancy_grid_nk2.shape[1],
                                                                           2))
             occupancy_grid_world_nk2 = DubinsCar.convert_position_and_heading_to_world_coordinates(pos_n3[:, None, :],
                                                                                                    occupancy_grid_nk2)

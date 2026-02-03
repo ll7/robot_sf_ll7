@@ -25,10 +25,41 @@ def asym_gauss_from_vel(
 
     can calculate sig_theta = max(2*velocity, 0.5) [Rachel Kirby thesis 2005?]
     """
-    speed = np.sqrt(x ** 2 + y ** 2)
+    speed = np.sqrt(velx ** 2 + vely ** 2)
     theta = np.arctan2(vely, velx)
     sig_theta = vel2sig(speed)
     return asym_gauss(x, y, theta, sig_theta, xc=xc, yc=yc)
+
+
+def _coerce_traj_with_heading(trajectory: Trajectory | np.ndarray) -> np.ndarray:
+    if isinstance(trajectory, Trajectory):
+        traj = trajectory.position_and_heading_nk3()
+        if traj.ndim == 3:
+            if traj.shape[0] != 1:
+                raise ValueError("path metrics expect a single-trajectory batch.")
+            traj = traj[0]
+        return traj
+    traj = np.asarray(trajectory)
+    if traj.ndim == 1:
+        traj = traj.reshape(1, -1)
+    if traj.ndim == 3:
+        if traj.shape[0] != 1:
+            raise ValueError("path metrics expect a single-trajectory batch.")
+        traj = traj[0]
+    if traj.shape[-1] == 2:
+        if traj.shape[0] < 2:
+            headings = np.zeros((traj.shape[0],), dtype=float)
+        else:
+            diffs = traj[1:] - traj[:-1]
+            headings = np.arctan2(diffs[:, 1], diffs[:, 0])
+            headings = np.concatenate([headings, headings[-1:]], axis=0)
+        traj = np.column_stack([traj, headings])
+    return traj
+
+
+def _coerce_traj_xy(trajectory: Trajectory | np.ndarray) -> np.ndarray:
+    traj = _coerce_traj_with_heading(trajectory)
+    return traj[:, :2]
 
 
 def asym_gauss(
@@ -73,16 +104,15 @@ def asym_gauss(
     return agxy
 
 
-def path_length(trajectory: Trajectory) -> float:
-    if trajectory.shape[-1] == 3:
-        trajectory = trajectory[:, :-1]
-    distance_sq = np.sum(np.power(np.diff(trajectory, axis=0), 2), axis=1)
+def path_length(trajectory: Trajectory | np.ndarray) -> float:
+    traj_xy = _coerce_traj_xy(trajectory)
+    distance_sq = np.sum(np.power(np.diff(traj_xy, axis=0), 2), axis=1)
     distance = np.sum(np.sqrt(distance_sq))
     return distance
 
 
 def path_length_ratio(
-    trajectory: Trajectory, goal_config: SystemConfig | None = None
+    trajectory: Trajectory | np.ndarray, goal_config: SystemConfig | np.ndarray | None = None
 ) -> float:
     """
     Returns displacement/distance -- displacement may be zero
@@ -91,22 +121,24 @@ def path_length_ratio(
     """
     # TODO: make this run in batch mode
 
-    if trajectory.shape[-1] == 3:
-        trajectory = trajectory[:, :-1]
+    traj_xy = _coerce_traj_xy(trajectory)
 
     # for incomplete trajectories you want to pass in the aspirational goal
     if goal_config is None:
-        goal_config = trajectory[-1, :]
+        goal_xy = traj_xy[-1, :]
+    else:
+        goal_arr = _coerce_traj_xy(goal_config)
+        goal_xy = goal_arr[-1, :]
 
-    start_config = trajectory[0, :]
+    start_config = traj_xy[0, :]
     epsilon = 0.00001  # for numerical stability
-    distance = path_length(trajectory) + epsilon
-    displacement = np.linalg.norm(goal_config - start_config)
+    distance = path_length(traj_xy) + epsilon
+    displacement = np.linalg.norm(goal_xy - start_config)
     return distance / displacement
 
 
 def path_irregularity(
-    trajectory: Trajectory, goal_config: SystemConfig | None = None
+    trajectory: Trajectory | np.ndarray, goal_config: SystemConfig | np.ndarray | None = None
 ) -> float:
     """
     defined as the amount of unnecessary turning per unit path length performed by a robot,
@@ -116,19 +148,20 @@ def path_irregularity(
     with the most direct path. Path irregularity is measured in rad/m
     :return:
     """
+    traj = _coerce_traj_with_heading(trajectory)
     if goal_config is None:
-        goal_config = trajectory[-1, :]
-    assert trajectory.shape[-1] == 3 and goal_config.shape[-1] == 3
+        goal_arr = traj[-1, :]
+    else:
+        goal_arr = _coerce_traj_with_heading(goal_config)[-1, :]
+    assert traj.shape[-1] == 3 and goal_arr.shape[-1] == 3
 
     # To compute the per step angle away from straight line to goal
     # compute the ray to goal from each traj step
-    traj_xy = trajectory[:, :-1]
-    point_to_goal_traj = np.squeeze(goal_config)[:-1] - traj_xy
-    # cos inv of dot product of vectors
-    cos_theta = np.sum(point_to_goal_traj * traj_xy, axis=1) / (
-        np.linalg.norm(point_to_goal_traj, axis=1) * np.linalg.norm(traj_xy, axis=1)
-        + (1 / 1e10)
-    )
+    traj_xy = traj[:, :-1]
+    heading_vectors = np.column_stack([np.cos(traj[:, 2]), np.sin(traj[:, 2])])
+    point_to_goal_traj = np.squeeze(goal_arr)[:-1] - traj_xy
+    denom = np.linalg.norm(point_to_goal_traj, axis=1) + 1e-10
+    cos_theta = np.sum(point_to_goal_traj * heading_vectors, axis=1) / denom
     theta_to_goal_traj = np.arccos(cos_theta)
     path_irr = np.sum(np.abs(theta_to_goal_traj)) / len(theta_to_goal_traj)
 

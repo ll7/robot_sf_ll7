@@ -1,8 +1,10 @@
 import json
 import os
 import socket
+import stat
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 from dotmap import DotMap
@@ -71,8 +73,16 @@ def establish_joystick_receiver_connection(
     except OSError:
         # clear sockets to be used
         if os.path.exists(sock_id):
-            os.remove(sock_id)
-            sock.bind(sock_id)
+            sock_path = Path(sock_id)
+            try:
+                mode = sock_path.lstat().st_mode
+            except OSError as exc:
+                raise OSError(f"Unable to inspect socket path: {sock_id}") from exc
+            if stat.S_ISSOCK(mode):
+                sock_path.unlink()
+                sock.bind(sock_id)
+            else:
+                raise OSError(f"Refusing to remove non-socket path: {sock_id}")
     # wait for a connection
     sock.listen(1)
     print("Waiting for Joystick connection...")

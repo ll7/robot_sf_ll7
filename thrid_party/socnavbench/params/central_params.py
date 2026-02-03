@@ -62,8 +62,8 @@ def create_socnav_params() -> DotMap:
             mode=surr_p["mode"],
             data_dir=get_surreal_mesh_dir(),
             texture_dir=get_surreal_texture_dir(),
-            body_shapes_train=eval(surr_p.get("body_shapes_train")),
-            body_shapes_test=eval(surr_p.get("body_shapes_test")),
+            body_shapes_train=literal_eval(surr_p.get("body_shapes_train")),
+            body_shapes_test=literal_eval(surr_p.get("body_shapes_test")),
             compute_human_traversible=surr_p.getboolean("compute_human_traversible"),
             render_humans_in_gray_only=surr_p.getboolean("render_humans_in_gray_only"),
         )

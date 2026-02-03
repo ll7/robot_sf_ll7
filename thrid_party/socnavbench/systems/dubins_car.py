@@ -128,14 +128,15 @@ class DubinsCar(Dynamics):
         """ Converts LQR Feedback matrix K_egocentric_nkfd (n=batch size, k=time, f=action size, d=state size) 
         to the world coordinate frame assuming ref_config is the origin of the egocentric coordinate frame
         in the world coordinate frame. If mode is assign the result is assigned to
-        K_world_nkfd, else a new tensor is created."""
+        K_egocentric_nkfd, else a new tensor is created."""
         theta_n11 = -ref_config.heading_nk1()
         n, k, f, d = [x for x in K_egocentric_nkfd.shape]
         rot_matrix_nkdd = padded_rotation_matrix(
             theta_n11, shape=(n, k, d), lower_identity=True)
         if mode == 'assign':
-            np.concatenate(K_world_nkfd, np.matmul(
-                K_egocentric_nkfd, rot_matrix_nkdd))
+            if K_world_nkfd is None:
+                raise ValueError("K_world_nkfd must be provided when mode='assign'.")
+            K_world_nkfd[:] = np.matmul(K_egocentric_nkfd, rot_matrix_nkdd)
         else:
             K_world_nkfd = np.matmul(K_egocentric_nkfd, rot_matrix_nkdd)
         return K_world_nkfd
@@ -147,15 +148,16 @@ class DubinsCar(Dynamics):
         in the world coordinate frame. If mode is assign the result is assigned to
         K_world_nkfd, else a new tensor is created."""
         theta_n11 = ref_config.heading_nk1()
-        n, k, f, d = [x.value for x in K_world_nkfd.shape]
+        n, k, f, d = K_world_nkfd.shape
         rot_matrix_nkdd = padded_rotation_matrix(
             theta_n11, shape=(n, k, d), lower_identity=True)
         if mode == 'assign':
-            np.concatenate(K_world_nkfd, np.matmul(
-                K_world_nkfd, rot_matrix_nkdd))
-        else:
-            K_world_nkfd = np.matmul(K_world_nkfd, rot_matrix_nkdd)
-        return K_world_nkfd
+            if K_egocentric_nkfd is None:
+                raise ValueError("K_egocentric_nkfd must be provided when mode='assign'.")
+            K_egocentric_nkfd[:] = np.matmul(K_world_nkfd, rot_matrix_nkdd)
+            return K_egocentric_nkfd
+        K_egocentric_nkfd = np.matmul(K_world_nkfd, rot_matrix_nkdd)
+        return K_egocentric_nkfd
 
     @staticmethod
     def convert_position_and_heading_to_ego_coordinates(ref_position_and_heading_n13,

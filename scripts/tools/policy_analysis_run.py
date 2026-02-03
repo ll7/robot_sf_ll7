@@ -87,6 +87,7 @@ _POLICY_CHOICES = (
     "fast_pysf",
     "fast_pysf_planner",
 )
+_SUPPORTED_POLICIES = frozenset(_POLICY_CHOICES)
 
 _TIMESTAMP_TZ = ZoneInfo("Europe/Berlin")
 _DEFAULT_SEED_SET_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
@@ -1511,7 +1512,26 @@ def _run_frame_extraction(report_json: Path, *, output_root: Path | None) -> Non
     cmd = [sys.executable, str(script), "--report", str(report_json)]
     if output_root is not None:
         cmd.extend(["--output", str(output_root)])
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    timeout_sec = 60
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        extra = "\n".join(val for val in (stderr, stdout) if val)
+        message = (
+            f"Frame extraction timed out after {timeout_sec}s for {report_json}."
+            if not extra
+            else f"Frame extraction timed out after {timeout_sec}s for {report_json}:\n{extra}"
+        )
+        logger.warning("{}", message)
+        return
     if result.returncode != 0:
         msg = result.stderr.strip() or result.stdout.strip() or "unknown error"
         logger.warning("Frame extraction failed for {}: {}", report_json, msg)
@@ -1550,7 +1570,14 @@ def _resolve_policies(args: argparse.Namespace) -> list[str]:
     if not args.policy_sweep:
         return [args.policy]
     if args.policies:
-        return [policy.strip() for policy in args.policies.split(",") if policy.strip()]
+        items = [policy.strip() for policy in args.policies.split(",") if policy.strip()]
+        invalid = [policy for policy in items if policy not in _SUPPORTED_POLICIES]
+        if invalid:
+            allowed = ", ".join(sorted(_SUPPORTED_POLICIES))
+            raise ValueError(
+                f"Invalid policies in --policies: {', '.join(invalid)}. Allowed: {allowed}."
+            )
+        return items
     return ["fast_pysf_planner", "ppo", "socnav_orca"]
 
 

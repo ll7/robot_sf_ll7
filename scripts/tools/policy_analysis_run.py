@@ -110,7 +110,7 @@ _POLICY_CATEGORIES = {
     "socnav_sampling": "heuristic",
     "socnav_social_force": "heuristic",
     "socnav_orca": "heuristic",
-    "socnav_sacadrl": "heuristic",
+    "socnav_sacadrl": "learned",
     "socnav_bench": "heuristic",
     "ppo": "learned",
 }

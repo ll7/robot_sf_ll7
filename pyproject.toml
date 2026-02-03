@@ -84,6 +84,9 @@ viz = [
     "matplotlib>=3.9.2",
     "seaborn>=0.13.2",
 ]
+sacadrl = [
+    "tensorflow>=2.15.0",
+]
 
 [build-system]
 requires = ["hatchling"]

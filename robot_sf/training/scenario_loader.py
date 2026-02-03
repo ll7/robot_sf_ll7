@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +22,9 @@ from robot_sf.nav.map_config import (
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
+
+_MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
+_MAP_REGISTRY_PATH = Path("maps/registry.yaml")
 
 
 def _load_yaml_documents(path: Path) -> Any:
@@ -188,6 +191,138 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
     return resolved
 
 
+def _resolve_map_registry_path() -> Path | None:
+    """Resolve the map registry path from the environment or repo default.
+
+    Returns:
+        Path | None: Path to the registry file, or None if unavailable.
+    """
+    override = os.getenv(_MAP_REGISTRY_ENV)
+    if override:
+        return Path(override).expanduser()
+    repo_root = Path(__file__).resolve().parents[2]
+    return repo_root / _MAP_REGISTRY_PATH
+
+
+def _iter_registry_mapping(entries: Mapping[str, Any]) -> Iterable[tuple[str, str]]:
+    """Yield map_id/path pairs from a mapping-form registry.
+
+    Yields:
+        tuple[str, str]: Map id and path entries.
+    """
+    for map_id, map_path in entries.items():
+        if map_id == "version":
+            continue
+        if not isinstance(map_path, str):
+            logger.warning("Skipping map registry entry '{}' with non-string path.", map_id)
+            continue
+        yield str(map_id), map_path
+
+
+def _iter_registry_list(entries: list[Any]) -> Iterable[tuple[str, str]]:
+    """Yield map_id/path pairs from a list-form registry.
+
+    Yields:
+        tuple[str, str]: Map id and path entries.
+    """
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            logger.warning("Skipping non-mapping map registry entry: {}", entry)
+            continue
+        map_id = entry.get("map_id") or entry.get("id")
+        map_path = entry.get("path") or entry.get("map_file")
+        if not isinstance(map_id, str) or not isinstance(map_path, str):
+            logger.warning("Skipping invalid map registry entry: {}", entry)
+            continue
+        yield map_id, map_path
+
+
+def _iter_map_registry_entries(
+    data: Mapping[str, Any],
+    *,
+    registry_path: Path,
+) -> Iterable[tuple[str, str]]:
+    """Yield map registry entries from the loaded registry data.
+
+    Yields:
+        tuple[str, str]: Map id and path entries.
+    """
+    entries = data.get("maps", data if "maps" not in data else None)
+    if isinstance(entries, Mapping):
+        yield from _iter_registry_mapping(entries)
+        return
+    if isinstance(entries, list):
+        yield from _iter_registry_list(entries)
+        return
+    raise ValueError(f"Map registry '{registry_path}' has invalid format.")
+
+
+def _register_map_entry(
+    registry: dict[str, Path],
+    *,
+    map_id: str,
+    map_path: str,
+    registry_path: Path,
+) -> None:
+    """Insert a map registry entry, resolving relative paths."""
+    key = map_id.strip()
+    if not key:
+        raise ValueError(f"Map registry entry in '{registry_path}' has empty map_id.")
+    if key in registry:
+        raise ValueError(f"Duplicate map_id '{key}' in map registry '{registry_path}'.")
+    candidate = Path(map_path)
+    if not candidate.is_absolute():
+        candidate = (registry_path.parent / candidate).resolve()
+    registry[key] = candidate
+
+
+@lru_cache(maxsize=4)
+def _load_map_registry(path: Path | None = None) -> dict[str, Path]:
+    """Load map registry entries, returning map_id -> absolute path.
+
+    Returns:
+        dict[str, Path]: Map registry map_id to absolute map file path.
+    """
+    registry_path = path or _resolve_map_registry_path()
+    if registry_path is None or not registry_path.exists():
+        return {}
+    data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, Mapping):
+        raise ValueError(f"Map registry '{registry_path}' must contain a mapping.")
+    registry: dict[str, Path] = {}
+    for map_id, map_path in _iter_map_registry_entries(data, registry_path=registry_path):
+        _register_map_entry(
+            registry,
+            map_id=map_id,
+            map_path=map_path,
+            registry_path=registry_path,
+        )
+    return registry
+
+
+def _resolve_map_id(
+    map_id: str,
+    *,
+    map_registry: Mapping[str, Path],
+    source: Path,
+) -> Path:
+    """Resolve a map_id to a filesystem path using the registry.
+
+    Returns:
+        Path: Absolute path to the map file.
+    """
+    if not map_registry:
+        raise ValueError(
+            f"Scenario in '{source}' references map_id '{map_id}', but the map registry is empty."
+        )
+    if map_id not in map_registry:
+        raise ValueError(f"Unknown map_id '{map_id}' in '{source}'.")
+    resolved = map_registry[map_id]
+    if not resolved.exists():
+        raise ValueError(f"Map registry entry '{map_id}' points to missing file: {resolved}")
+    return resolved
+
+
 def _normalize_scenarios(
     scenarios: list[Any],
     *,
@@ -200,6 +335,9 @@ def _normalize_scenarios(
     Returns:
         list[Mapping[str, Any]]: Normalized scenario entries.
     """
+    map_registry: dict[str, Path] = {}
+    if any(isinstance(entry, Mapping) and entry.get("map_id") for entry in scenarios):
+        map_registry = _load_map_registry()
     normalized: list[Mapping[str, Any]] = []
     for idx, scenario in enumerate(scenarios):
         if not isinstance(scenario, Mapping):
@@ -212,6 +350,7 @@ def _normalize_scenarios(
                 source=source,
                 root=root,
                 map_search_paths=map_search_paths,
+                map_registry=map_registry,
             )
         )
     return normalized
@@ -230,26 +369,36 @@ def _validate_scenario_entry(
     elif not isinstance(name, str):
         raise ValueError(f"Scenario name must be a string in '{source}' at index {index}.")
 
-    _validate_map_file(scenario, name=name, source=source, index=index)
+    _validate_map_reference(scenario, name=name, source=source, index=index)
     _validate_optional_mapping(scenario, key="simulation_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="robot_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="metadata", source=source, index=index)
     _validate_seed_list(scenario, source=source, index=index)
 
 
-def _validate_map_file(
+def _validate_map_reference(
     scenario: Mapping[str, Any],
     *,
     name: str | None,
     source: Path,
     index: int,
 ) -> None:
+    map_id = scenario.get("map_id")
     map_file = scenario.get("map_file")
-    if map_file is None:
-        logger.warning("Scenario '{}' in '{}' has no map_file.", name or index, source)
+    if map_id is None and map_file is None:
+        logger.warning("Scenario '{}' in '{}' has no map_file or map_id.", name or index, source)
         return
-    if not isinstance(map_file, str):
+    if map_id is not None:
+        if not isinstance(map_id, str) or not map_id.strip():
+            raise ValueError(f"map_id must be a non-empty string in '{source}' at index {index}.")
+    if map_file is not None and not isinstance(map_file, str):
         raise ValueError(f"map_file must be a string in '{source}' at index {index}.")
+    if map_id is not None and map_file is not None:
+        logger.warning(
+            "Scenario '{}' in '{}' defines both map_id and map_file; map_id will be used.",
+            name or index,
+            source,
+        )
 
 
 def _rebase_scenario_paths(
@@ -258,19 +407,28 @@ def _rebase_scenario_paths(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    map_registry: Mapping[str, Path],
 ) -> Mapping[str, Any]:
     """Rewrite relative map paths to be relative to the root scenario file.
 
     Returns:
         Mapping[str, Any]: Scenario entry with rebased paths when applicable.
     """
+    search_root = root if root.is_dir() else root.parent
+    map_id = scenario.get("map_id")
+    if isinstance(map_id, str) and map_id.strip():
+        resolved = _resolve_map_id(map_id, map_registry=map_registry, source=source)
+        rel = os.path.relpath(resolved, search_root)
+        updated = dict(scenario)
+        updated["map_file"] = Path(rel).as_posix()
+        return updated
+
     map_file = scenario.get("map_file")
     if not isinstance(map_file, str):
         return scenario
     candidate = Path(map_file)
     if candidate.is_absolute():
         return scenario
-    search_root = root if root.is_dir() else root.parent
     probe = (search_root / candidate).resolve()
     if probe.exists():
         return scenario
@@ -429,7 +587,7 @@ def build_robot_config_from_scenario(
 
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
-    _apply_map_pool(config, scenario.get("map_file"), scenario_path)
+    _apply_map_pool(config, scenario, scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
     return config
 
@@ -888,14 +1046,18 @@ def _apply_simulation_overrides(
 
 def _apply_map_pool(
     config: RobotSimulationConfig,
-    map_file: str | None,
+    scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> None:
     """Load a scenario map file into the config map pool."""
+    map_file = scenario.get("map_file")
     map_def = resolve_map_definition(map_file, scenario_path=scenario_path)
     if map_def is None:
         return
-    map_name = Path(map_file).stem if map_file else "scenario_map"
+    map_id = scenario.get("map_id")
+    map_name = str(map_id) if isinstance(map_id, str) and map_id.strip() else None
+    if not map_name:
+        map_name = Path(map_file).stem if map_file else "scenario_map"
     config.map_pool = MapDefinitionPool(map_defs={map_name: map_def})
 
 

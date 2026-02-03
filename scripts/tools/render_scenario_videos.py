@@ -37,10 +37,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -77,9 +78,6 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 
 
 @dataclass
@@ -354,13 +352,30 @@ def _goal_action(env, *, speed: float) -> np.ndarray:
 
 def _defensive_obs_adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
     """Adapt observations for the defensive PPO policy."""
-    drive_state = orig_obs[OBS_DRIVE_STATE]
-    ray_state = orig_obs[OBS_RAYS]
-    drive_state = drive_state[:, :-1]
-    drive_state[:, 2] *= 10
-    drive_state = np.squeeze(drive_state)
-    ray_state = np.squeeze(ray_state)
-    return np.concatenate((ray_state, drive_state), axis=0)
+    if OBS_DRIVE_STATE in orig_obs and OBS_RAYS in orig_obs:
+        drive_state = np.asarray(orig_obs[OBS_DRIVE_STATE])
+        ray_state = np.asarray(orig_obs[OBS_RAYS])
+        if drive_state.ndim > 1:
+            drive_state = drive_state[-1]
+        if ray_state.ndim > 1:
+            ray_state = ray_state[-1]
+        drive_state = np.asarray(drive_state)[..., :-1]
+        drive_state = np.array(drive_state, dtype=float, copy=True)
+        if drive_state.size >= 3:
+            drive_state[2] *= 10
+        drive_state = np.ravel(drive_state)
+        ray_state = np.ravel(ray_state)
+        return np.concatenate((ray_state, drive_state), axis=0)
+
+    # Fallback: flatten available observation components deterministically.
+    if isinstance(orig_obs, Mapping):
+        parts: list[np.ndarray] = []
+        for key in sorted(orig_obs.keys()):
+            parts.append(np.asarray(orig_obs[key]).ravel())
+        if parts:
+            return np.concatenate(parts, axis=0)
+
+    return np.asarray(orig_obs).ravel()
 
 
 def _resolve_goal_action(

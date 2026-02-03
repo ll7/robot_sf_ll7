@@ -762,6 +762,18 @@ def test_socnavbench_path_irregularity_matches_reference():
     assert np.isclose(result, expected)
 
 
+def test_socnavbench_path_irregularity_nonzero_for_turn():
+    """SocNavBench path_irregularity is positive for a turning trajectory."""
+    from robot_sf.benchmark.metrics import socnavbench_path_irregularity
+
+    ep = _make_episode(T=3, K=0)
+    ep.robot_pos = np.array([[1.0, 0.0], [1.0, 1.0], [2.0, 1.0]])
+    ep.goal = np.array([2.0, 1.0])
+
+    result = socnavbench_path_irregularity(ep)
+    assert result > 0.0
+
+
 def test_success_path_length():
     """Test success_path_length (SPL) metric."""
     from robot_sf.benchmark.metrics import success_path_length

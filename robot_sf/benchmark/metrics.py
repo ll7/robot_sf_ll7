@@ -1147,7 +1147,7 @@ def path_length(data: EpisodeData) -> float:
 def socnavbench_path_length(data: EpisodeData) -> float:
     """SocNavBench path length metric (distance traveled).
 
-    This mirrors ``thrid_party/socnavbench/metrics/cost_functions.py::path_length``.
+    This mirrors ``third_party/socnavbench/metrics/cost_functions.py::path_length``.
 
     Returns:
         float: Total path length in meters.

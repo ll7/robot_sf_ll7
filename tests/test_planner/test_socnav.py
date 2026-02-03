@@ -136,14 +136,14 @@ def test_sampling_planner_respects_goal_tolerance_and_occupancy():
 
 def test_socnavbench_root_validation():
     """Validate that the vendored SocNavBench root has required modules."""
-    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    root = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
     missing = SocNavBenchSamplingAdapter._validate_socnav_root(root)
     assert not missing
 
 
 def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
     """Ensure the adapter can load the vendored planner without generating pipelines."""
-    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    root = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
     monkeypatch.setattr(
         configparser,
         "SafeConfigParser",
@@ -195,7 +195,7 @@ def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
 
 def test_socnavbench_upstream_end_to_end_when_data_present(monkeypatch):
     """End-to-end SocNavBench planner load if full datasets are available."""
-    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    root = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
     required = [
         root / "wayptnav_data",
         root / "sd3dis" / "stanford_building_parser_dataset",

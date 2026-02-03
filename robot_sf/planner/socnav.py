@@ -39,7 +39,7 @@ from robot_sf.nav.occupancy_grid_utils import world_to_ego
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
-_SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+_SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
 _SOCNAV_REQUIRED_MODULES = (
     "control_pipelines.control_pipeline_v0",
     "objectives.goal_distance",

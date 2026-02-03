@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SocNavBench path irregularity now uses heading vectors instead of origin-dependent position vectors.
 - SocNavBench upstream planner loader rejects untrusted roots unless explicitly allowed via `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT`.
 - Vendored SocNavBench helpers now guard missing data files, fix numpy API mismatches, and correct plotting/trajectory utilities.
+- Renamed `thrid_party` to `third_party` to fix the vendor directory typo.
 - SocialForcePlannerAdapter now uses fast-pysf social-force interactions (goal, pedestrian, obstacle forces) instead of the heuristic placeholder.
 
 ### Added

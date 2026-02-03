@@ -751,14 +751,13 @@ def test_socnavbench_path_irregularity_matches_reference():
 
     trajectory = np.column_stack([ep.robot_pos, np.array([0.0, 0.0, 0.0])])
     goal_config = np.array([ep.goal[0], ep.goal[1], 0.0])
-    traj_xy = trajectory[:, :-1]
-    point_to_goal_traj = goal_config[:-1] - traj_xy
-    denom = np.linalg.norm(point_to_goal_traj, axis=1) * np.linalg.norm(traj_xy, axis=1) + (
-        1 / 1e10
-    )
-    cos_theta = np.sum(point_to_goal_traj * traj_xy, axis=1) / denom
+    traj_xy = trajectory[:, :2]
+    heading_vectors = np.column_stack([np.cos(trajectory[:, 2]), np.sin(trajectory[:, 2])])
+    point_to_goal_traj = goal_config[:2] - traj_xy
+    denom = np.linalg.norm(point_to_goal_traj, axis=1) + 1e-10
+    cos_theta = np.sum(point_to_goal_traj * heading_vectors, axis=1) / denom
     cos_theta = np.clip(cos_theta, -1.0, 1.0)
-    expected = float(np.sum(np.abs(np.arccos(cos_theta))) / len(cos_theta))
+    expected = float(np.mean(np.abs(np.arccos(cos_theta))))
     assert np.isclose(result, expected)
 
 

@@ -1206,15 +1206,15 @@ def socnavbench_path_irregularity(data: EpisodeData) -> float:
     goal_heading = float(trajectory[-1, 2]) if trajectory.shape[1] >= 3 else 0.0
     goal_config = np.array([data.goal[0], data.goal[1], goal_heading], dtype=float)
 
-    traj_xy = trajectory[:, :-1]
-    point_to_goal_traj = np.squeeze(goal_config)[:-1] - traj_xy
-    denom = np.linalg.norm(point_to_goal_traj, axis=1) * np.linalg.norm(traj_xy, axis=1) + (
-        1 / 1e10
-    )
-    cos_theta = np.sum(point_to_goal_traj * traj_xy, axis=1) / denom
+    traj_xy = trajectory[:, :2]
+    headings = trajectory[:, 2] if trajectory.shape[1] >= 3 else np.zeros((trajectory.shape[0],))
+    heading_vectors = np.column_stack([np.cos(headings), np.sin(headings)])
+    point_to_goal_traj = np.squeeze(goal_config)[:2] - traj_xy
+    denom = np.linalg.norm(point_to_goal_traj, axis=1) + 1e-10
+    cos_theta = np.sum(point_to_goal_traj * heading_vectors, axis=1) / denom
     cos_theta = np.clip(cos_theta, -1.0, 1.0)
     theta_to_goal_traj = np.arccos(cos_theta)
-    return float(np.sum(np.abs(theta_to_goal_traj)) / len(theta_to_goal_traj))
+    return float(np.mean(np.abs(theta_to_goal_traj)))
 
 
 def success_path_length(

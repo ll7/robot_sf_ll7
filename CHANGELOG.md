@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
 - Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
 - ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
+- Added SocNavBench subset metrics (`socnavbench_path_length`, `socnavbench_path_length_ratio`, `socnavbench_path_irregularity`).
 - Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
 - Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
 - Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).

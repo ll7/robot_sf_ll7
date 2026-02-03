@@ -727,6 +727,41 @@ def test_path_length():
     assert path_length(ep_short) == 0.0
 
 
+def test_socnavbench_path_length_ratio():
+    """Verify SocNavBench path_length_ratio matches distance/displacement formula."""
+    from robot_sf.benchmark.metrics import socnavbench_path_length_ratio
+
+    ep = _make_episode(T=11, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 10, 11)
+    ep.goal = np.array([10.0, 0.0])
+    result = socnavbench_path_length_ratio(ep)
+    expected = (10.0 + 1e-5) / 10.0
+    assert np.isclose(result, expected, atol=1e-6)
+
+
+def test_socnavbench_path_irregularity_matches_reference():
+    """Match SocNavBench path_irregularity reference computation for a simple path."""
+    from robot_sf.benchmark.metrics import socnavbench_path_irregularity
+
+    ep = _make_episode(T=3, K=0)
+    ep.robot_pos = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
+    ep.goal = np.array([2.0, 0.0])
+
+    result = socnavbench_path_irregularity(ep)
+
+    trajectory = np.column_stack([ep.robot_pos, np.array([0.0, 0.0, 0.0])])
+    goal_config = np.array([ep.goal[0], ep.goal[1], 0.0])
+    traj_xy = trajectory[:, :-1]
+    point_to_goal_traj = goal_config[:-1] - traj_xy
+    denom = np.linalg.norm(point_to_goal_traj, axis=1) * np.linalg.norm(traj_xy, axis=1) + (
+        1 / 1e10
+    )
+    cos_theta = np.sum(point_to_goal_traj * traj_xy, axis=1) / denom
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+    expected = float(np.sum(np.abs(np.arccos(cos_theta))) / len(cos_theta))
+    assert np.isclose(result, expected)
+
+
 def test_success_path_length():
     """Test success_path_length (SPL) metric."""
     from robot_sf.benchmark.metrics import success_path_length

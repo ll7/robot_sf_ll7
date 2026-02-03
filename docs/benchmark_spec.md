@@ -93,6 +93,10 @@ Full details live in
 **Smoothness**
 * `jerk_mean`,  `curvature_mean`,  `energy`
 
+**SocNavBench subset (vendored)**
+* `socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`
+  (subset of upstream SocNavBench metrics).
+
 **SNQI (composite)**
 * Weighted combination of normalized metrics using baseline statistics (median/p95).
 * Weights and normalization stats can be supplied via `--snqi-weights` / `--snqi-baseline`.

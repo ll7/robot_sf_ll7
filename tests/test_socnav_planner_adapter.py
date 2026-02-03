@@ -204,18 +204,38 @@ def test_orca_responds_to_static_obstacle_in_grid():
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
 
 
-def test_sacadrl_adapter():
-    """SA-CADRL-like heuristic returns finite action."""
-    adapter = SACADRLPlannerAdapter(SocNavPlannerConfig())
+def test_sacadrl_adapter(monkeypatch):
+    """SA-CADRL adapter can fall back when the model is unavailable (guards tests without TF)."""
+
+    def _boom(self):
+        raise RuntimeError("missing model")
+
+    monkeypatch.setattr(SACADRLPlannerAdapter, "_build_model", _boom)
+    adapter = SACADRLPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
     assert v >= 0.0
 
 
+def test_sacadrl_adapter_requires_model_when_fallback_disabled(monkeypatch):
+    """SA-CADRL adapter fails fast without fallback to prevent silent heuristic use."""
+    adapter = SACADRLPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+
+    def _boom(self):
+        raise RuntimeError("missing model")
+
+    monkeypatch.setattr(SACADRLPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    with pytest.raises(RuntimeError, match="missing model"):
+        adapter.plan(obs)
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
-    for factory in (make_social_force_policy, make_orca_policy, make_sacadrl_policy):
+    for factory in (make_social_force_policy, make_orca_policy):
         policy = factory()
         v, _w = policy.act(obs)
         assert v >= 0.0
+    sacadrl_policy = make_sacadrl_policy(allow_fallback=True)
+    assert isinstance(sacadrl_policy.adapter, SACADRLPlannerAdapter)

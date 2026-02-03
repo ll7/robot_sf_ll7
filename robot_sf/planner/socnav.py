@@ -381,24 +381,92 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     Minimal waypoint-to-velocity adapter inspired by the SocNavBench sampling planner.
 
     Warning:
-        This adapter is a lightweight heuristic placeholder. It is **not** a
-        benchmark-ready implementation of the SocNavBench sampling planner.
-        Use it only as a simple baseline or fallback when upstream dependencies
-        are unavailable.
+        By default this adapter uses a lightweight heuristic placeholder. Set
+        ``use_upstream=True`` to delegate to the upstream SocNavBench sampling planner
+        (benchmark-ready), and optionally allow fallback when dependencies are missing.
     """
 
-    def __init__(self, config: SocNavPlannerConfig | None = None):
+    class _GoalDistanceObjective:
+        """Minimal goal-distance objective for the upstream sampling planner."""
+
+        def __init__(self, goal_pos: np.ndarray | None = None) -> None:
+            self._goal_pos = (
+                np.zeros(2, dtype=float) if goal_pos is None else np.asarray(goal_pos, dtype=float)
+            )
+
+        def set_goal(self, goal_pos: np.ndarray) -> None:
+            """Update the target goal position used for distance costs."""
+            self._goal_pos = np.asarray(goal_pos, dtype=float)
+
+        def evaluate_function(
+            self, trajectory: Any, sim_state_hist: Any | None = None
+        ) -> np.ndarray:
+            """Return per-trajectory goal distance costs (lower is better)."""
+            positions = trajectory.position_nk2()
+            if positions.size == 0:
+                return np.array([])
+            valid_horizons = getattr(trajectory, "valid_horizons_n1", None)
+            if valid_horizons is None:
+                final_pos = positions[:, -1, :]
+            else:
+                idx = np.asarray(valid_horizons, dtype=int).reshape(-1) - 1
+                idx = np.clip(idx, 0, positions.shape[1] - 1)
+                final_pos = positions[np.arange(positions.shape[0]), idx, :]
+            goal = self._goal_pos.reshape(1, 2)
+            return np.linalg.norm(final_pos - goal, axis=1)
+
+    def __init__(
+        self,
+        config: SocNavPlannerConfig | None = None,
+        socnav_root: Path | None = None,
+        planner_factory: Callable[[], Any] | None = None,
+        *,
+        use_upstream: bool = False,
+        allow_fallback: bool = True,
+    ):
         """Initialize the adapter with optional planner configuration."""
 
         self.config = config or SocNavPlannerConfig()
-        logger.warning("SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready.")
+        self._planner = None
+        self._goal_objective: SamplingPlannerAdapter._GoalDistanceObjective | None = None
+        self._use_upstream = bool(use_upstream)
+        self._allow_fallback = bool(allow_fallback)
+
+        if self._use_upstream:
+            if planner_factory is not None:
+                self._planner = self._safe_call_factory(planner_factory)
+            else:
+                self._planner = self._load_upstream_planner(socnav_root)
+            if self._planner is None and self._allow_fallback:
+                logger.warning(
+                    "SamplingPlannerAdapter is running in fallback heuristic mode and "
+                    "is not benchmark-ready."
+                )
+            if self._planner is None and not self._allow_fallback:
+                raise RuntimeError(
+                    "SamplingPlannerAdapter could not load the upstream planner. "
+                    "Set allow_fallback=True to use the heuristic fallback."
+                )
+        else:
+            logger.warning(
+                "SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready."
+            )
 
     def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute a (v, w) command from the structured observation.
+        """Compute a (v, w) command from the structured observation.
 
         Args:
             observation: SocNav structured observation Dict (robot, goal, pedestrians, map, sim).
+
+        Returns:
+            tuple: (linear_velocity, angular_velocity)
+        """
+        if self._planner is not None:
+            return self._plan_upstream(observation)
+        return self._heuristic_plan(observation)
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute a heuristic (v, w) command from the structured observation.
 
         Returns:
             tuple: (linear_velocity, angular_velocity)
@@ -452,6 +520,241 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             np.clip(distance * linear_scale, 0.0, self.config.max_linear_speed),
         )
         return linear, angular
+
+    def _plan_upstream(self, observation: dict) -> tuple[float, float]:
+        """Compute a (v, w) command using the upstream SocNavBench planner.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        if self._planner is None:
+            return self._heuristic_plan(observation)
+
+        try:
+            robot_state, goal_state, _ = self._socnav_fields(observation)
+            pos = robot_state["position"]
+            robot_pos = np.asarray(pos, dtype=float)
+            heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+            if self._goal_objective is not None:
+                self._goal_objective.set_goal(goal_state["current"])
+            start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
+            goal = goal_state["current"]
+            goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])
+            data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
+            traj = data.get("trajectory")
+            if traj is None:
+                return self._heuristic_plan(observation)
+            # NOTE: upstream returns a trajectory and controller matrices; for now we
+            # consume only the immediate waypoint to preserve the (v, w) interface and
+            # avoid binding to controller specifics. This keeps the adapter lightweight
+            # while still aligning heading toward the planned path.
+            next_pos = traj.position_nk2()[0, 0]
+            to_next = next_pos - pos
+            direction = to_next / (np.linalg.norm(to_next) + 1e-9)
+            direction, occ_penalty = self._get_safe_heading(robot_pos, direction, observation)
+            desired_heading = atan2(direction[1], direction[0])
+            heading_error = self._wrap_angle(desired_heading - heading)
+            angular = float(
+                np.clip(
+                    self.config.angular_gain * heading_error,
+                    -self.config.max_angular_speed,
+                    self.config.max_angular_speed,
+                ),
+            )
+            linear = float(
+                np.clip(
+                    np.linalg.norm(to_next),
+                    0.0,
+                    self.config.max_linear_speed * max(0.0, 1.0 - occ_penalty),
+                ),
+            )
+            return linear, angular
+        except Exception:  # pragma: no cover - safety net  # noqa: BLE001
+            return self._heuristic_plan(observation)
+
+    def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
+        """Invoke a user-provided factory defensively.
+
+        Returns:
+            Planner instance from the factory or ``None`` on failure.
+        """
+        try:
+            return factory()
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"SocNavBench planner factory failed: {exc}", exc=exc
+            )
+
+    def _handle_socnav_failure(
+        self, message: str, *, exc: Exception | None = None, not_found: bool = False
+    ) -> Any | None:
+        """Handle SocNavBench initialization failures with optional fallback.
+
+        Returns:
+            None when fallback is allowed; otherwise raises a descriptive error.
+        """
+        if self._allow_fallback:
+            logger.warning("{}", message)
+            return None
+        if not_found:
+            raise FileNotFoundError(message) from exc
+        raise RuntimeError(message) from exc
+
+    @staticmethod
+    def _resolve_socnav_root(socnav_root: Path | None) -> Path:
+        """Resolve the SocNavBench root directory.
+
+        Returns:
+            Path: Resolved SocNavBench root path.
+        """
+        if socnav_root is not None:
+            return Path(socnav_root).expanduser()
+        env_root = os.getenv(_SOCNAV_ROOT_ENV)
+        if env_root:
+            return Path(env_root).expanduser()
+        return _SOCNAV_DEFAULT_ROOT
+
+    @staticmethod
+    def _validate_socnav_root(root: Path) -> list[Path]:
+        """Validate that the SocNavBench root contains expected modules.
+
+        Returns:
+            list[Path]: Missing module paths.
+        """
+        missing: list[Path] = []
+        for module in _SOCNAV_REQUIRED_MODULES:
+            rel_path = Path(*module.split(".")).with_suffix(".py")
+            if not (root / rel_path).exists():
+                missing.append(root / rel_path)
+        return missing
+
+    @staticmethod
+    def _import_socnav_modules(root: Path) -> tuple[Any, Any, Any] | None:
+        """Import upstream SocNavBench modules from the provided root.
+
+        Returns:
+            tuple[Any, Any, Any] | None: (central_params, sampling_planner, DotMap)
+            modules or ``None`` on failure.
+        """
+        root_str = str(root)
+        sys_path_inserted = False
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+            sys_path_inserted = True
+        try:
+            import params.central_params as central  # type: ignore  # noqa: PLC0415
+            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
+            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
+
+            return central, sp, DotMap
+        except (
+            AttributeError,
+            ImportError,
+            ModuleNotFoundError,
+            OSError,
+            RuntimeError,
+            SyntaxError,
+            TypeError,
+            ValueError,
+        ):  # pragma: no cover
+            return None
+        finally:
+            if sys_path_inserted:
+                try:
+                    sys.path.remove(root_str)
+                except ValueError:
+                    pass
+
+    def _resolve_robot_dt(self, socnav_params: Any) -> float:
+        """Resolve the robot dynamics timestep from SocNavBench params.
+
+        Returns:
+            float: Robot timestep.
+        """
+        dyn_params = getattr(socnav_params, "robot_dynamics_params", None)
+        if dyn_params is None:
+            return 0.1
+        return float(getattr(dyn_params, "dt", 0.1))
+
+    def _resolve_camera_dt(self, socnav_params: Any) -> float:
+        """Resolve the camera timestep from SocNavBench params.
+
+        Returns:
+            float: Camera timestep.
+        """
+        camera_params = getattr(socnav_params, "camera_params", None)
+        if camera_params is None:
+            return 0.1
+        return float(getattr(camera_params, "dt", 0.1))
+
+    def _build_sampling_params(self, central: Any, sp: Any, DotMap: Any) -> Any | None:
+        """Build sampling planner parameters for the upstream planner.
+
+        Returns:
+            Params object or ``None`` on failure.
+        """
+        params = DotMap()
+        params.planner = sp.SamplingPlanner
+        try:
+            params.control_pipeline_params = central.create_control_pipeline_params()
+        except SystemExit as exc:
+            return self._handle_socnav_failure(
+                "SocNavBench control pipeline parameters failed to load. "
+                "Ensure the SocNavBench data directories exist.",
+                exc=exc,
+            )
+        return params
+
+    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
+        """Best-effort import of SocNavBench SamplingPlanner with defaults.
+
+        Returns:
+            Planner instance or ``None`` on failure.
+        """
+        root = self._resolve_socnav_root(socnav_root).resolve()
+        if not root.exists():
+            message = (
+                "SocNavBench root not found at "
+                f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
+            )
+            return self._handle_socnav_failure(message, not_found=True)
+
+        missing = self._validate_socnav_root(root)
+        if missing:
+            missing_str = ", ".join(str(path) for path in missing)
+            message = (
+                "SocNavBench root is missing required modules: "
+                f"{missing_str}. Ensure the SocNavBench repo is complete."
+            )
+            return self._handle_socnav_failure(message, not_found=True)
+
+        modules = self._import_socnav_modules(root)
+        if modules is None:
+            return None
+        central, sp, DotMap = modules
+        params = self._build_sampling_params(central, sp, DotMap)
+        if params is None:
+            return None
+        try:
+            obj_fn = self._GoalDistanceObjective()
+            self._goal_objective = obj_fn
+            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
+            )
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:
@@ -1772,35 +2075,6 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         in fallback mode it is **not benchmark-ready**.
     """
 
-    class _GoalDistanceObjective:
-        """Minimal goal-distance objective for the upstream sampling planner."""
-
-        def __init__(self, goal_pos: np.ndarray | None = None) -> None:
-            self._goal_pos = (
-                np.zeros(2, dtype=float) if goal_pos is None else np.asarray(goal_pos, dtype=float)
-            )
-
-        def set_goal(self, goal_pos: np.ndarray) -> None:
-            """Update the target goal position used for distance costs."""
-            self._goal_pos = np.asarray(goal_pos, dtype=float)
-
-        def evaluate_function(
-            self, trajectory: Any, sim_state_hist: Any | None = None
-        ) -> np.ndarray:
-            """Return per-trajectory goal distance costs (lower is better)."""
-            positions = trajectory.position_nk2()
-            if positions.size == 0:
-                return np.array([])
-            valid_horizons = getattr(trajectory, "valid_horizons_n1", None)
-            if valid_horizons is None:
-                final_pos = positions[:, -1, :]
-            else:
-                idx = np.asarray(valid_horizons, dtype=int).reshape(-1) - 1
-                idx = np.clip(idx, 0, positions.shape[1] - 1)
-                final_pos = positions[np.arange(positions.shape[0]), idx, :]
-            goal = self._goal_pos.reshape(1, 2)
-            return np.linalg.norm(final_pos - goal, axis=1)
-
     def __init__(
         self,
         config: SocNavPlannerConfig | None = None,
@@ -1808,263 +2082,13 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         planner_factory: Callable[[], Any] | None = None,
         *,
         allow_fallback: bool = False,
-    ):
-        """Initialize the adapter and optionally load the upstream planner."""
+    ) -> None:
+        """Initialize the adapter with upstream delegation enabled."""
 
-        super().__init__(config=config)
-        self._planner = None
-        self._goal_objective: SocNavBenchSamplingAdapter._GoalDistanceObjective | None = None
-        self._allow_fallback = bool(allow_fallback)
-        # Allow passing an already-initialized planner for advanced use.
-        if planner_factory is not None:
-            self._planner = self._safe_call_factory(planner_factory)
-        else:
-            self._planner = self._load_upstream_planner(socnav_root)
-        if self._planner is None and self._allow_fallback:
-            logger.warning(
-                "SocNavBenchSamplingAdapter is running in fallback heuristic mode and "
-                "is not benchmark-ready."
-            )
-        if self._planner is None and not self._allow_fallback:
-            raise RuntimeError(
-                "SocNavBenchSamplingAdapter could not load the upstream planner. "
-                "Set allow_fallback=True to use the heuristic fallback."
-            )
-
-    def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
-        """
-        Invoke a user-provided factory defensively.
-
-        Returns:
-            Planner instance from the factory or ``None`` on failure.
-        """
-        try:
-            return factory()
-        except (
-            AttributeError,
-            OSError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover
-            return self._handle_socnav_failure(
-                f"SocNavBench planner factory failed: {exc}", exc=exc
-            )
-
-    def _handle_socnav_failure(
-        self, message: str, *, exc: Exception | None = None, not_found: bool = False
-    ) -> Any | None:
-        """
-        Handle SocNavBench initialization failures with optional fallback.
-
-        Returns:
-            None when fallback is allowed; otherwise raises a descriptive error.
-        """
-        if self._allow_fallback:
-            logger.warning("{}", message)
-            return None
-        if not_found:
-            raise FileNotFoundError(message) from exc
-        raise RuntimeError(message) from exc
-
-    @staticmethod
-    def _resolve_socnav_root(socnav_root: Path | None) -> Path:
-        """
-        Resolve the SocNavBench root directory.
-
-        Returns:
-            Path: Resolved SocNavBench root path.
-        """
-        if socnav_root is not None:
-            return Path(socnav_root).expanduser()
-        env_root = os.getenv(_SOCNAV_ROOT_ENV)
-        if env_root:
-            return Path(env_root).expanduser()
-        return _SOCNAV_DEFAULT_ROOT
-
-    @staticmethod
-    def _validate_socnav_root(root: Path) -> list[Path]:
-        """
-        Validate that the SocNavBench root contains expected modules.
-
-        Returns:
-            list[Path]: Missing module paths (empty when valid).
-        """
-        missing: list[Path] = []
-        for module in _SOCNAV_REQUIRED_MODULES:
-            module_path = Path(*module.split(".")).with_suffix(".py")
-            candidate = root / module_path
-            if not candidate.exists():
-                missing.append(candidate)
-        return missing
-
-    def _import_socnav_modules(self, root: Path) -> tuple[Any, Any, Any] | None:
-        """
-        Import upstream SocNavBench modules from the provided root.
-
-        Returns:
-            tuple: (central_params, sampling_planner module, DotMap) or None on failure.
-        """
-        root_str = str(root)
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
-        try:
-            import params.central_params as central  # type: ignore  # noqa: PLC0415
-            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
-            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
-        except (
-            AttributeError,
-            ImportError,
-            ModuleNotFoundError,
-            OSError,
-            RuntimeError,
-            SyntaxError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover - optional dependency path
-            return self._handle_socnav_failure(
-                f"Failed to import SocNavBench modules from '{root}': {exc}", exc=exc
-            )
-        return central, sp, DotMap
-
-    def _build_sampling_params(self, central: Any, sp: Any, DotMap: Any) -> Any | None:
-        """
-        Build parameters for the upstream sampling planner.
-
-        Returns:
-            DotMap parameter bundle or None on failure.
-        """
-        params = DotMap()
-        params.planner = sp.SamplingPlanner
-        try:
-            params.control_pipeline_params = central.create_control_pipeline_params()
-        except SystemExit as exc:
-            return self._handle_socnav_failure(
-                "SocNavBench control pipeline parameters failed to load. "
-                "Ensure the SocNavBench data directories exist.",
-                exc=exc,
-            )
-        return params
-
-    @staticmethod
-    def _resolve_robot_dt(robot_params: Any) -> float:
-        """Resolve the robot dynamics timestep from SocNavBench params.
-
-        Returns:
-            float: Timestep for the system dynamics.
-        """
-        dt = getattr(robot_params, "delta_theta", None)
-        if dt is None and hasattr(robot_params, "physical_params"):
-            dt = getattr(robot_params.physical_params, "delta_theta", None)
-        return float(dt) if dt is not None else 0.1
-
-    @staticmethod
-    def _resolve_camera_dt(socnav_params: Any) -> float:
-        """Resolve the camera timestep from SocNavBench params.
-
-        Returns:
-            float: Camera timestep for sampling planner defaults.
-        """
-        camera_params = getattr(socnav_params, "camera_params", None)
-        if camera_params is None:
-            return 0.1
-        dt = getattr(camera_params, "dt", None)
-        return float(dt) if dt is not None else 0.1
-
-    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
-        """
-        Best-effort import of SocNavBench SamplingPlanner with defaults.
-
-        Returns:
-            SamplingPlanner | None: Upstream planner when dependencies resolve; otherwise ``None``.
-        """
-        root = self._resolve_socnav_root(socnav_root).resolve()
-        if not root.exists():
-            message = (
-                "SocNavBench root not found at "
-                f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
-            )
-            return self._handle_socnav_failure(message, not_found=True)
-
-        missing = self._validate_socnav_root(root)
-        if missing:
-            missing_str = ", ".join(str(path) for path in missing)
-            message = (
-                "SocNavBench root is missing required modules: "
-                f"{missing_str}. Ensure the SocNavBench repo is complete."
-            )
-            return self._handle_socnav_failure(message, not_found=True)
-
-        modules = self._import_socnav_modules(root)
-        if modules is None:
-            return None
-        central, sp, DotMap = modules
-        params = self._build_sampling_params(central, sp, DotMap)
-        if params is None:
-            return None
-        try:
-            obj_fn = self._GoalDistanceObjective()
-            self._goal_objective = obj_fn
-            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
-        except (
-            AttributeError,
-            OSError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover
-            return self._handle_socnav_failure(
-                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
-            )
-
-    def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute a (v, w) command, preferring the upstream SocNavBench planner when available.
-
-        Returns:
-            tuple[float, float]: Linear and angular velocity command.
-        """
-        if self._planner is None:
-            return super().plan(observation)
-
-        try:
-            robot_state, goal_state, _ = self._socnav_fields(observation)
-            pos = robot_state["position"]
-            robot_pos = np.asarray(pos, dtype=float)
-            heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
-            if self._goal_objective is not None:
-                self._goal_objective.set_goal(goal_state["current"])
-            start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
-            goal = goal_state["current"]
-            goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])
-            data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
-            traj = data.get("trajectory")
-            if traj is None:
-                return super().plan(observation)
-            # NOTE: upstream returns a trajectory and controller matrices; for now we
-            # consume only the immediate waypoint to preserve the (v, w) interface and
-            # avoid binding to controller specifics. This keeps the adapter lightweight
-            # while still aligning heading toward the planned path.
-            next_pos = traj.position_nk2()[0, 0]
-            to_next = next_pos - pos
-            direction = to_next / (np.linalg.norm(to_next) + 1e-9)
-            direction, occ_penalty = self._get_safe_heading(robot_pos, direction, observation)
-            desired_heading = atan2(direction[1], direction[0])
-            heading_error = self._wrap_angle(desired_heading - heading)
-            angular = float(
-                np.clip(
-                    self.config.angular_gain * heading_error,
-                    -self.config.max_angular_speed,
-                    self.config.max_angular_speed,
-                ),
-            )
-            linear = float(
-                np.clip(
-                    np.linalg.norm(to_next),
-                    0.0,
-                    self.config.max_linear_speed * max(0.0, 1.0 - occ_penalty),
-                ),
-            )
-            return linear, angular
-        except Exception:  # pragma: no cover - safety net  # noqa: BLE001
-            return super().plan(observation)
+        super().__init__(
+            config=config,
+            socnav_root=socnav_root,
+            planner_factory=planner_factory,
+            use_upstream=True,
+            allow_fallback=allow_fallback,
+        )

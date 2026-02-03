@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
 
+### Fixed
+- SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.
+
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)
   - Single-command map validation tool (`scripts/validation/verify_maps.py`) for SVG map quality checks

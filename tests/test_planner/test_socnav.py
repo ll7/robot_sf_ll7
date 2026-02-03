@@ -8,6 +8,7 @@ import types
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.socnav import (
     SamplingPlannerAdapter,
@@ -185,6 +186,26 @@ def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
         classmethod(lambda cls, params: FakePipeline(params)),
     )
 
+    adapter = SocNavBenchSamplingAdapter(socnav_root=root, allow_fallback=False)
+    obs = _base_observation()
+    v, w = adapter.plan(obs)
+    assert np.isfinite(v)
+    assert np.isfinite(w)
+
+
+def test_socnavbench_upstream_end_to_end_when_data_present(monkeypatch):
+    """End-to-end SocNavBench planner load if full datasets are available."""
+    root = Path(__file__).resolve().parents[2] / "thrid_party" / "socnavbench"
+    required = [
+        root / "wayptnav_data",
+        root / "sd3dis" / "stanford_building_parser_dataset",
+        root / "surreal" / "code" / "human_meshes",
+        root / "surreal" / "code" / "human_textures",
+    ]
+    if not all(path.exists() for path in required):
+        pytest.skip("SocNavBench datasets not available for end-to-end planner test.")
+
+    monkeypatch.chdir(root)
     adapter = SocNavBenchSamplingAdapter(socnav_root=root, allow_fallback=False)
     obs = _base_observation()
     v, w = adapter.plan(obs)

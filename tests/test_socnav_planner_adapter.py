@@ -252,6 +252,20 @@ def test_orca_adapter_requires_rvo2_when_fallback_disabled(monkeypatch):
         adapter.plan(obs)
 
 
+def test_orca_adapter_uses_rvo2_when_available():
+    """ORCA adapter should execute the rvo2 path when the dependency is installed."""
+    from robot_sf.planner import socnav
+
+    if socnav.rvo2 is None:
+        pytest.skip("rvo2 not installed; skipping real ORCA path check.")
+
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    obs = _make_obs_with_peds([(2.0, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
+    assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+
+
 def test_sacadrl_adapter(monkeypatch):
     """SA-CADRL adapter can fall back when the model is unavailable (guards tests without TF)."""
 
@@ -276,6 +290,20 @@ def test_sacadrl_adapter_requires_model_when_fallback_disabled(monkeypatch):
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     with pytest.raises(RuntimeError, match="missing model"):
         adapter.plan(obs)
+
+
+def test_sacadrl_adapter_runs_model_when_available():
+    """SA-CADRL adapter should run inference when TensorFlow and checkpoint are available."""
+    from robot_sf.planner import socnav
+
+    if socnav.tf is None:
+        pytest.skip("TensorFlow not installed; skipping SA-CADRL inference check.")
+
+    adapter = SACADRLPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    obs = _make_obs_with_peds([(1.5, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert np.isfinite(v)
+    assert np.isfinite(w)
 
 
 def test_policy_constructors():

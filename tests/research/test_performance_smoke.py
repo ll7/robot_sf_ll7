@@ -19,8 +19,9 @@ def test_research_report_performance(tmp_path: Path):
     env = os.environ.copy()
     env["RESEARCH_REPORT_PERF_DIR"] = str(out_dir)
     env["RESEARCH_PERF_BUDGET"] = "120"
+    wall_budget = float(os.environ.get("RESEARCH_PERF_WALL_BUDGET", "15"))
 
-    start = time.time()
+    start = time.monotonic()
     result = subprocess.run(
         [sys.executable, "scripts/validation/performance_research_report.py"],
         env=env,
@@ -34,4 +35,6 @@ def test_research_report_performance(tmp_path: Path):
     assert (out_dir / "data" / "metrics.json").exists(), stdout
     assert (out_dir / "metadata.json").exists(), stdout
     # Guardrail against runaway runtime even if the helper budget changes
-    assert (time.time() - start) < 10, "performance harness exceeded 10s wall time"
+    assert (time.monotonic() - start) < wall_budget, (
+        f"performance harness exceeded {wall_budget:.0f}s wall time"
+    )

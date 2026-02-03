@@ -272,6 +272,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional SocNavBench root for upstream sampling planner.",
     )
     parser.add_argument(
+        "--socnav-allow-fallback",
+        action="store_true",
+        help="Allow heuristic fallback when SocNavBench dependencies are unavailable.",
+    )
+    parser.add_argument(
         "--socnav-use-grid",
         action="store_true",
         help="Enable occupancy grid fields for SocNav planners.",
@@ -415,10 +420,15 @@ def _build_socnav_policy(
     socnav_root: Path | None,
     orca_time_horizon: float | None,
     orca_neighbor_dist: float | None,
+    socnav_allow_fallback: bool,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
     if policy_name == "socnav_sampling":
-        return SocNavPlannerPolicy()
+        return SocNavBenchComplexPolicy(
+            socnav_root=socnav_root,
+            adapter_config=SocNavPlannerConfig(),
+            allow_fallback=socnav_allow_fallback,
+        )
     if policy_name == "socnav_social_force":
         return make_social_force_policy()
     if policy_name == "socnav_orca":
@@ -434,6 +444,7 @@ def _build_socnav_policy(
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),
+            allow_fallback=socnav_allow_fallback,
         )
     return None
 
@@ -1468,6 +1479,7 @@ def _resolve_socnav_policy(
         socnav_root=args.socnav_root,
         orca_time_horizon=ctx.orca_time_horizon,
         orca_neighbor_dist=ctx.orca_neighbor_dist,
+        socnav_allow_fallback=args.socnav_allow_fallback,
     )
 
 

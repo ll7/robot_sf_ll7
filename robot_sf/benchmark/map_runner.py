@@ -99,7 +99,8 @@ def _build_policy(  # noqa: C901
     socnav_cfg = _build_socnav_config(algo_config)
 
     if algo_key in {"socnav_sampling", "sampling"}:
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
     elif algo_key in {"orca"}:

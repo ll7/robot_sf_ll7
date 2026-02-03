@@ -1,15 +1,16 @@
-from sbpd import sbpd
-from mp_env.render import swiftshader_renderer as sr
-from mp_env import map_utils as mu
-from utils import depth_utils as du
-import numpy as np
-import sys
 import os
-from utils import utils
 import pickle
+import sys
+
+import numpy as np
+from mp_env import map_utils as mu
+from mp_env.render import swiftshader_renderer as sr
+from sbpd import sbpd
+from utils import depth_utils as du
+from utils import utils
 
 
-class SBPDRenderer():
+class SBPDRenderer:
     """
     An image renderer to render images from the
     SBPD dataset.

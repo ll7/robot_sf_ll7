@@ -1,13 +1,10 @@
-from typing import Dict, List
 
 import numpy as np
-from simulators.sim_state import AgentState
 from dotmap import DotMap
 from metrics.cost_functions import *
-from simulators.sim_state import SimState
-from trajectory.trajectory import Trajectory
-
 from objectives.objective_function import Objective
+from simulators.sim_state import AgentState, SimState
+from trajectory.trajectory import Trajectory
 
 
 class PersonalSpaceCost(Objective):
@@ -20,7 +17,7 @@ class PersonalSpaceCost(Objective):
         self.tag: str = "personal_space_cost_per_nonego_agent"
 
     def evaluate_objective(
-        self, trajectory: Trajectory, sim_state_hist: List[SimState]
+        self, trajectory: Trajectory, sim_state_hist: list[SimState]
     ) -> np.ndarray:
         # get ego agent trajectory
         ego_traj = trajectory.position_and_heading_nk3()
@@ -37,7 +34,7 @@ class PersonalSpaceCost(Objective):
             ego_pos3 = ego_traj[0, i]  # (x,y,th)_self latest timestep
 
             # iterate through every non ego agent
-            agents: Dict[str, AgentState] = sim_state.get_all_agents()
+            agents: dict[str, AgentState] = sim_state.get_all_agents()
 
             for _, agent_vals in agents.items():
                 agent_pos3 = agent_vals.get_pos3()  # (x,y,th)

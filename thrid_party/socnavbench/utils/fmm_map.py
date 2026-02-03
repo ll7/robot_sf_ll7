@@ -1,13 +1,15 @@
+import sys
+
 import numpy as np
 import skfmm
-import sys
+
 if sys.version[0] == '2':
     from voxel_map_utils import VoxelMap
 else:  # python3
     from utils.voxel_map_utils import VoxelMap
 
 
-class FmmMap(object):
+class FmmMap:
     """
     Maintain a FMM distance and angle map corresponding to a given goal and occupancy grid.
     """

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class VoxelMap(object):
+class VoxelMap:
     """
     A voxel map object that allows to compute the function value at any arbitrary point in the voxel grid.
     """

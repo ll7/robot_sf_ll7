@@ -1,12 +1,13 @@
-from utils import utils
+import copy
 import os
 import sys
-import copy
+
 import numpy as np
-from optCtrl.lqr import LQRSolver
-from trajectory.trajectory import Trajectory, SystemConfig
 from control_pipelines.base import ControlPipelineBase
 from control_pipelines.control_pipeline_v0_helper import ControlPipelineV0Helper
+from optCtrl.lqr import LQRSolver
+from trajectory.trajectory import SystemConfig, Trajectory
+from utils import utils
 
 
 class ControlPipelineV0(ControlPipelineBase):
@@ -22,7 +23,7 @@ class ControlPipelineV0(ControlPipelineBase):
                                             params.binning_parameters.num_bins)
         self.helper = ControlPipelineV0Helper()
         self.instance_variables_loaded = False
-        super(ControlPipelineV0, self).__init__(params)
+        super().__init__(params)
 
     @classmethod
     def get_pipeline(cls, params):
@@ -132,7 +133,7 @@ class ControlPipelineV0(ControlPipelineBase):
         if not self._incorrectly_binned_data_exists():
             for v0 in self.start_velocities:
                 if p.verbose:
-                    print('Initial Bin: v0={:.3f}'.format(v0))
+                    print(f'Initial Bin: v0={v0:.3f}')
                 start_config = \
                     self.system_dynamics.init_egocentric_robot_config(dt=p.system_dynamics_params.dt,
                                                                       n=self.waypoint_grid.n, v=v0)
@@ -249,8 +250,7 @@ class ControlPipelineV0(ControlPipelineBase):
         if self.params.verbose:
             N = self.params.waypoint_params.n
             for v0, start_config in zip(self.start_velocities, self.start_configs):
-                print('Velocity: {:.3f}, {:.3f}% of goals kept({:d}).'.format(v0, 100. * start_config.n / N,
-                                                                              start_config.n))
+                print(f'Velocity: {v0:.3f}, {100. * start_config.n / N:.3f}% of goals kept({start_config.n:d}).')
 
     def _ensure_world_coordinate_tensors_exist(self, goal_config=None):
         """
@@ -323,8 +323,7 @@ class ControlPipelineV0(ControlPipelineBase):
                 percent_incorrect = 100. * \
                     np.sum(lqr_bins != i) / len(lqr_bins)
                 max_bin_error = np.max(np.abs(lqr_bins - i))
-                print('{:.3f}% Correct Bin, {:.3f}% Incorrect Bin, Max {:d} bin(s) error'.format(
-                    percent_correct, percent_incorrect, max_bin_error))
+                print(f'{percent_correct:.3f}% Correct Bin, {percent_incorrect:.3f}% Incorrect Bin, Max {max_bin_error:d} bin(s) error')
             self.helper.append_data_bin_to_pipeline_data(
                 pipeline_data, data_bin)
 
@@ -377,13 +376,12 @@ class ControlPipelineV0(ControlPipelineBase):
 
         p = self.params
         base_dir = os.path.join(p.dir, 'control_pipeline_v0')
-        base_dir = os.path.join(base_dir, 'planning_horizon_{:d}_dt_{:.2f}'.format(
-            p.planning_horizon, p.system_dynamics_params.dt))
+        base_dir = os.path.join(base_dir, f'planning_horizon_{p.planning_horizon:d}_dt_{p.system_dynamics_params.dt:.2f}')
 
         base_dir = os.path.join(base_dir, self.system_dynamics.name)
         base_dir = os.path.join(base_dir, self.waypoint_grid.descriptor_string)
         base_dir = os.path.join(base_dir,
-                                '{:d}_velocity_bins'.format(p.binning_parameters.num_bins))
+                                f'{p.binning_parameters.num_bins:d}_velocity_bins')
 
         # If using python 2.7 on the real robot the control pipeline will need to be converted to a python 2.7
         # friendly pickle format and will be stored in the subfolder py27.
@@ -393,9 +391,9 @@ class ControlPipelineV0(ControlPipelineBase):
         utils.mkdir_if_missing(base_dir)
 
         if v0 is not None:
-            filename = 'velocity_{:.3f}{:s}'.format(v0, file_format)
+            filename = f'velocity_{v0:.3f}{file_format:s}'
         elif incorrectly_binned:
-            filename = 'incorrectly_binned{:s}'.format(file_format)
+            filename = f'incorrectly_binned{file_format:s}'
         else:
             assert(False)
         filename = os.path.join(base_dir, filename)

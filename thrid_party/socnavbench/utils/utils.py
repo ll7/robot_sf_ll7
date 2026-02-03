@@ -1,18 +1,16 @@
-import copy
-import json
 import os
 import random
 import shutil
 import string
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from dotmap import DotMap
 from matplotlib import figure, pyplot
 from trajectory.trajectory import SystemConfig
 
-color_text: Dict[str, str] = {
+color_text: dict[str, str] = {
     "orange": "\033[33m",
     "green": "\033[32m",
     "red": "\033[31m",
@@ -39,7 +37,7 @@ def get_time_str() -> str:
 
 
 def to_json_type(
-    elem: Any, json_args: Optional[Dict[str, Any]] = {}
+    elem: Any, json_args: dict[str, Any] | None = {}
 ) -> str or int or float or list or dict:
     """ Converts an element to a json serializable type. """
     if isinstance(elem, (int, str, bool, float)):
@@ -56,7 +54,7 @@ def to_json_type(
     elif isinstance(elem, list):
         # recursive for lists within lists
         return list_to_json(elem, json_args)
-    elif hasattr(elem, "to_json_type") and callable(getattr(elem, "to_json_type")):
+    elif hasattr(elem, "to_json_type") and callable(elem.to_json_type):
         return elem.to_json_type(**json_args)
     elif type(elem) is type:  # elem is a class
         return str(elem)
@@ -73,10 +71,10 @@ def to_json_type(
 
 
 def dict_to_json(
-    param_dict: Dict[str, Any], json_args: Optional[Dict[str, Any]] = {}
-) -> Dict[str, str or int or float]:
+    param_dict: dict[str, Any], json_args: dict[str, Any] | None = {}
+) -> dict[str, str or int or float]:
     """ Converts params_dict to a json serializable dict."""
-    json_dict: Dict[str, str or int or float] = {}
+    json_dict: dict[str, str or int or float] = {}
     for key in param_dict.keys():
         # possibly recursive for dicts in dicts
         json_dict[key] = to_json_type(param_dict[key], json_args)
@@ -84,16 +82,16 @@ def dict_to_json(
 
 
 def list_to_json(
-    param_list: List[Any], json_args: Optional[Dict[str, Any]] = {}
-) -> List[str or int or float or bool]:
+    param_list: list[Any], json_args: dict[str, Any] | None = {}
+) -> list[str or int or float or bool]:
     """ Converts params_list to a json serializable list."""
-    json_list: List[str or int or float or bool] = [
+    json_list: list[str or int or float or bool] = [
         to_json_type(elem, json_args) for elem in param_list
     ]
     return json_list
 
 
-def euclidean_dist2(p1: List[float], p2: List[float]) -> float:
+def euclidean_dist2(p1: list[float], p2: list[float]) -> float:
     """Compute the 2D euclidean distance from p1 to p2.
 
     Args:
@@ -126,7 +124,7 @@ def touch(path: str) -> None:
         os.utime(path, None)
 
 
-def natural_sort(l: List[float or int]) -> List[str or int]:
+def natural_sort(l: list[float or int]) -> list[str or int]:
     """Sorts a list of items naturally.
 
     Args:
@@ -140,7 +138,7 @@ def natural_sort(l: List[float or int]) -> List[str or int]:
     def convert(text: str) -> int or str:
         return int(text) if text.isdigit() else text.lower()
 
-    def alphanum_key(key: str) -> List[int or str]:
+    def alphanum_key(key: str) -> list[int or str]:
         return [convert(c) for c in re.split("([0-9]+)", key)]
 
     return sorted(l, key=alphanum_key)
@@ -160,7 +158,7 @@ def generate_name(max_chars: int) -> str:
     )
 
 
-def conn_recv(connection, buffr_amnt: int = 1024) -> Tuple[bytes, int]:
+def conn_recv(connection, buffr_amnt: int = 1024) -> tuple[bytes, int]:
     """Makes sure all the data from a socket connection is correctly received
 
     Args:
@@ -171,7 +169,7 @@ def conn_recv(connection, buffr_amnt: int = 1024) -> Tuple[bytes, int]:
         data (bytes): The data received from the socket.
         response_len (int): The number of bytes that were transferred
     """
-    chunks: List[bytes] = []
+    chunks: list[bytes] = []
     response_len: int = 0
     while True:
         chunk = connection.recv(buffr_amnt)
@@ -196,7 +194,7 @@ def delete_if_exists(dirname: str) -> None:
 def check_dotmap_equality(d1: DotMap, d2: DotMap) -> bool:
     """Check equality on nested map objects that all keys and values match."""
     assert len(set(d1.keys()).difference(set(d2.keys()))) == 0
-    equality: List[bool] = [True] * len(d1.keys())
+    equality: list[bool] = [True] * len(d1.keys())
     for i, key in enumerate(d1.keys()):
         d1_attr = getattr(d1, key)
         d2_attr = getattr(d2, key)
@@ -211,11 +209,11 @@ def configure_plotting() -> None:
 
 def subplot2(
     plt: pyplot.plot,
-    Y_X: Tuple[int, int],
-    sz_y_sz_x: Optional[Tuple[int, int]] = (10, 10),
-    space_y_x: Optional[Tuple[int, int]] = (0.1, 0.1),
-    T: Optional[bool] = False,
-) -> Tuple[figure.Figure, pyplot.axes, List[pyplot.axes]]:
+    Y_X: tuple[int, int],
+    sz_y_sz_x: tuple[int, int] | None = (10, 10),
+    space_y_x: tuple[int, int] | None = (0.1, 0.1),
+    T: bool | None = False,
+) -> tuple[figure.Figure, pyplot.axes, list[pyplot.axes]]:
     Y, X = Y_X
     sz_y, sz_x = sz_y_sz_x
     hspace, wspace = space_y_x
@@ -229,8 +227,8 @@ def subplot2(
     return fig, axes, axes_list
 
 
-def termination_cause_to_color(cause: str) -> Optional[str]:
-    cause_colour_mappings: Dict[str, str] = {
+def termination_cause_to_color(cause: str) -> str | None:
+    cause_colour_mappings: dict[str, str] = {
         "Success": "green",
         "Pedestrian Collision": "red",
         "Obstacle Collision": "orange",
@@ -241,9 +239,9 @@ def termination_cause_to_color(cause: str) -> Optional[str]:
     return None
 
 
-def iter_print(l: List or Dict) -> str:
+def iter_print(l: list or dict) -> str:
     if isinstance(l[0], float):
-        return ",".join(["{0: 0.2f}".format(i) for i in l])
+        return ",".join([f"{i: 0.2f}" for i in l])
     # return string
     return ",".join([str(i) for i in l])
 
@@ -252,16 +250,16 @@ def iter_print(l: List or Dict) -> str:
 
 
 def generate_random_config(
-    environment: Dict[str, int or float or np.ndarray],
-    dt: Optional[float] = 0.1,
-    max_vel: Optional[float] = 0.6,
+    environment: dict[str, int or float or np.ndarray],
+    dt: float | None = 0.1,
+    max_vel: float | None = 0.6,
 ) -> SystemConfig:
     pos_3: np.ndarray = generate_random_pos_in_environment(environment)
     return SystemConfig.from_pos3(pos_3, dt=dt, v=max_vel)
 
 
 def generate_random_pos_3(
-    center: np.ndarray, xdiff: Optional[float] = 3.0, ydiff: Optional[float] = 3.0
+    center: np.ndarray, xdiff: float | None = 3.0, ydiff: float | None = 3.0
 ) -> np.ndarray:
     """
     Generates a random position near the center within an elliptical radius of xdiff and ydiff
@@ -276,7 +274,7 @@ def within_traversible(
     new_pos: np.ndarray,
     traversible: np.ndarray,
     map_scale: float,
-    stroked_radius: Optional[bool] = False,
+    stroked_radius: bool | None = False,
 ) -> bool:
     """
     Returns whether or not the position is in a valid spot in the
@@ -297,8 +295,8 @@ def within_traversible_with_radius(
     new_pos: np.ndarray,
     traversible: np.ndarray,
     map_scale: float,
-    radius: Optional[int] = 1,
-    stroked_radius: Optional[bool] = False,
+    radius: int | None = 1,
+    stroked_radius: bool | None = False,
 ) -> bool:
     """
     Returns whether or not the position is in a valid spot in the
@@ -309,7 +307,7 @@ def within_traversible_with_radius(
     for i in range(2 * radius):
         for j in range(2 * radius):
             if stroked_radius:
-                if not ((i == 0 or i == radius - 1 or j == 0 or j == radius - 1)):
+                if not (i == 0 or i == radius - 1 or j == 0 or j == radius - 1):
                     continue
             pos_x = int(new_pos[0] / map_scale) - radius + i
             pos_y = int(new_pos[1] / map_scale) - radius + j
@@ -320,7 +318,7 @@ def within_traversible_with_radius(
 
 
 def generate_random_pos_in_environment(
-    environment: Dict[str, int or float or np.ndarray]
+    environment: dict[str, int or float or np.ndarray]
 ) -> np.ndarray:
     """
     Generate a random position (x : meters, y : meters, theta : radians)

@@ -1,7 +1,7 @@
-from systems.dynamics import Dynamics
-from trajectory.trajectory import Trajectory, SystemConfig
-from utils.angle_utils import angle_normalize, rotate_pos_nk2, padded_rotation_matrix
 import numpy as np
+from systems.dynamics import Dynamics
+from trajectory.trajectory import SystemConfig, Trajectory
+from utils.angle_utils import angle_normalize, padded_rotation_matrix, rotate_pos_nk2
 
 
 class DubinsCar(Dynamics):

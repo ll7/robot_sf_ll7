@@ -1,9 +1,9 @@
 from random import randint
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from numpy.random import RandomState
 from agents.agent import Agent
 from dotmap import DotMap
+from numpy.random import RandomState
 from trajectory.trajectory import SystemConfig
 from utils.utils import generate_name, generate_random_config
 
@@ -17,11 +17,11 @@ class HumanAppearance:
     dataset = None
 
     def __init__(
-        self, gender: str, texture: List[str], shape: int, mesh_rng: RandomState
+        self, gender: str, texture: list[str], shape: int, mesh_rng: RandomState
     ):
         self.gender: str = gender
         self.shape: int = shape
-        self.texture: List[str] = texture
+        self.texture: list[str] = texture
         self.mesh_rng: RandomState = mesh_rng
 
     # Getters for the HumanAppearance class
@@ -31,7 +31,7 @@ class HumanAppearance:
     def get_gender(self) -> str:
         return self.gender
 
-    def get_texture(self) -> List[str]:
+    def get_texture(self) -> list[str]:
         return self.texture
 
     def get_mesh_rng(self) -> RandomState:
@@ -52,7 +52,7 @@ class HumanAppearance:
         return cls(gender, texture, shape, mesh_rng)
 
     @staticmethod
-    def random_human_identity_from_dataset() -> Tuple[str, List[str], int]:
+    def random_human_identity_from_dataset() -> tuple[str, list[str], int]:
         """
         Sample a new human identity, but don't load it into
         memory
@@ -95,14 +95,14 @@ class Human(Agent):
     @classmethod
     def generate_human(
         cls,
-        start_config: Optional[SystemConfig] = None,
-        goal_config: Optional[SystemConfig] = None,
-        environment: Optional[Dict[str, Any]] = None,
-        appearance: Optional[HumanAppearance] = None,
-        generate_appearance: Optional[bool] = False,
-        name: Optional[str] = None,
-        max_chars: Optional[int] = 20,
-        verbose: Optional[bool] = False,
+        start_config: SystemConfig | None = None,
+        goal_config: SystemConfig | None = None,
+        environment: dict[str, Any] | None = None,
+        appearance: HumanAppearance | None = None,
+        generate_appearance: bool | None = False,
+        name: str | None = None,
+        max_chars: int | None = 20,
+        verbose: bool | None = False,
     ) -> Agent:  # technically a Human
         """
         Sample a new random human from all required features
@@ -125,23 +125,21 @@ class Human(Agent):
             pos_2 = list(start_config.position_nk2()[0][0])
             goal_2 = list(goal_config.position_nk2()[0][0])
             print(
-                "Generated human {} starting at {} with goal {}".format(
-                    human_name, pos_2, goal_2
-                )
+                f"Generated human {human_name} starting at {pos_2} with goal {goal_2}"
             )
         return cls(human_name, appearance, start_config, goal_config)
 
     @staticmethod
     def generate_humans(
-        p: DotMap, starts: List[List[float]], goals: List[List[float]]
-    ) -> List[Agent]:
+        p: DotMap, starts: list[list[float]], goals: list[list[float]]
+    ) -> list[Agent]:
         """
         Generate and add num_humans number of randomly generated humans to the simulator
         """
         num_gen_humans: int = min(len(starts), len(goals))
-        print("Generating {} autonomous human agents".format(num_gen_humans))
+        print(f"Generating {num_gen_humans} autonomous human agents")
 
-        generated_humans: List[Agent] = []
+        generated_humans: list[Agent] = []
         for i in range(num_gen_humans):
             start_config = SystemConfig.from_pos3(starts[i])
             goal_config = SystemConfig.from_pos3(goals[i])

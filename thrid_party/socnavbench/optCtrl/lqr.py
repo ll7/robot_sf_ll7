@@ -1,5 +1,6 @@
 import numpy as np
 from utils.angle_utils import angle_normalize
+
 # Algorithms from Somil Init trajectory optimizer, variant of the classic LQR
 #######################################################################################################################
 # Steps for solving Trajectory Optimizer
@@ -51,7 +52,6 @@ class LQRSolver:
 
         # Whether to take the full inverse or use SVD during the Bellman backup
         self.inv = True
-        return
 
     def evaluate_trajectory_cost(self, trajectory):
         """

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class ObstacleMap(object):
+class ObstacleMap:
     name = 'ObstacleMapBase'
 
     @staticmethod

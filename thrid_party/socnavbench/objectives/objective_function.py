@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 import numpy as np
 from dotmap import DotMap
@@ -10,19 +9,19 @@ class SimState:
     pass
 
 
-class Objective(object):
+class Objective:
     def evaluate_objective(self, trajectory: Trajectory) -> np.ndarray:
         raise NotImplementedError
 
 
-class ObjectiveFunction(object):
+class ObjectiveFunction:
     """
     Define an objective function.
     """
 
     def __init__(self, params: DotMap):
         self.params: DotMap = params
-        self.objectives: List[Objective] = []
+        self.objectives: list[Objective] = []
 
     def add_objective(self, objective: Objective) -> None:
         """
@@ -32,14 +31,14 @@ class ObjectiveFunction(object):
         self.objectives.append(objective)
 
     def evaluate_function_by_objective(
-        self, trajectory, sim_state_hist: Optional[List[SimState]] = None
-    ) -> List[List[str and np.ndarray]]:
+        self, trajectory, sim_state_hist: list[SimState] | None = None
+    ) -> list[list[str and np.ndarray]]:
         """
         Evaluate each objective corresponding to a system trajectory or sim_state
         sim_states are only relevant for personal_space cost functions
         """
 
-        objective_values_by_tag: List[List[str and np.ndarray]] = []
+        objective_values_by_tag: list[list[str and np.ndarray]] = []
         # import here to avoid circular dep error
         from objectives.personal_space_cost import PersonalSpaceCost
 
@@ -52,7 +51,7 @@ class ObjectiveFunction(object):
         return objective_values_by_tag
 
     def evaluate_function(
-        self, trajectory: Trajectory, sim_state_hist: Optional[List[SimState]] = None
+        self, trajectory: Trajectory, sim_state_hist: list[SimState] | None = None
     ) -> float:
         """
         Evaluate the entire objective function corresponding to a system trajectory or traj+sim_state.

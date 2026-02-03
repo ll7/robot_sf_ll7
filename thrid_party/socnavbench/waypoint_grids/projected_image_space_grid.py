@@ -9,7 +9,7 @@ class ProjectedImageSpaceGrid(UniformSamplingGrid):
     def __init__(self, params):
         # Compute the image size bounds based on the focal length and the field of view
         params = self.compute_image_bounds(params)
-        super(ProjectedImageSpaceGrid, self).__init__(params)
+        super().__init__(params)
 
         # Compute the rotation and translation vectors from the world frame to the optical frame and vice-versa
         self.compute_rotation_and_translation_transformations()
@@ -193,8 +193,8 @@ class ProjectedImageSpaceGrid(UniformSamplingGrid):
         this waypoint grid."""
         p = self.params
         name = 'image_plane_projected_grid_'
-        name += 'n_{:d}'.format(p.n)
-        name += '_theta_bins_{:d}'.format(p.num_theta_bins)
+        name += f'n_{p.n:d}'
+        name += f'_theta_bins_{p.num_theta_bins:d}'
         name += '_bound_min_{:.2f}_{:.2f}_{:.2f}'.format(*p.bound_min)
         name += '_bound_max_{:.2f}_{:.2f}_{:.2f}'.format(*p.bound_max)
         return name

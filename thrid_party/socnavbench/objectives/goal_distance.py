@@ -1,9 +1,8 @@
 import numpy as np
 from dotmap import DotMap
+from objectives.objective_function import Objective
 from trajectory.trajectory import Trajectory
 from utils.fmm_map import FmmMap
-
-from objectives.objective_function import Objective
 
 
 class GoalDistance(Objective):

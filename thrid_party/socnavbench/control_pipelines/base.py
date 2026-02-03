@@ -1,9 +1,10 @@
 import os
 import pickle
+
 import numpy as np
 
 
-class ControlPipelineBase(object):
+class ControlPipelineBase:
     """A parent class representing an abstract control pipeline. It defines the basic functions that a control pipeline
     should expose. A control pipeline is used for planning trajectories between start and waypoint/goal configs.
     """

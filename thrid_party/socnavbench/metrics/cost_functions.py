@@ -1,7 +1,7 @@
-from typing import Optional
-from trajectory.trajectory import SystemConfig, Trajectory
+
 import numpy as np
 from metrics.cost_utils import *
+from trajectory.trajectory import SystemConfig, Trajectory
 
 
 def asym_gauss_from_vel(
@@ -9,8 +9,8 @@ def asym_gauss_from_vel(
     y: float,
     velx: float,
     vely: float,
-    xc: Optional[float] = 0,
-    yc: Optional[float] = 0,
+    xc: float | None = 0,
+    yc: float | None = 0,
 ) -> np.ndarray:
     """
     computation of the value of an arbitrarily rotated (by theta)
@@ -34,10 +34,10 @@ def asym_gauss_from_vel(
 def asym_gauss(
     x: float,
     y: float,
-    theta: Optional[float] = 0,
-    sig_theta: Optional[float] = 2,
-    xc: Optional[float] = 0,
-    yc: Optional[float] = 0,
+    theta: float | None = 0,
+    sig_theta: float | None = 2,
+    xc: float | None = 0,
+    yc: float | None = 0,
 ) -> np.ndarray:
     """
     computation of the value of an arbitrarily rotated (by theta)
@@ -82,7 +82,7 @@ def path_length(trajectory: Trajectory) -> float:
 
 
 def path_length_ratio(
-    trajectory: Trajectory, goal_config: Optional[SystemConfig] = None
+    trajectory: Trajectory, goal_config: SystemConfig | None = None
 ) -> float:
     """
     Returns displacement/distance -- displacement may be zero
@@ -106,7 +106,7 @@ def path_length_ratio(
 
 
 def path_irregularity(
-    trajectory: Trajectory, goal_config: Optional[SystemConfig] = None
+    trajectory: Trajectory, goal_config: SystemConfig | None = None
 ) -> float:
     """
     defined as the amount of unnecessary turning per unit path length performed by a robot,

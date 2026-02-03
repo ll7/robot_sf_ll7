@@ -1,6 +1,6 @@
+
 import numpy as np
-from trajectory.trajectory import Trajectory, SystemConfig
-from typing import Optional
+from trajectory.trajectory import SystemConfig, Trajectory
 
 
 class Spline(Trajectory):
@@ -8,15 +8,15 @@ class Spline(Trajectory):
         self,
         start_config: SystemConfig,
         goal_config: SystemConfig,
-        final_times_n1: Optional[np.ndarray] = None,
-        factors: Optional[np.ndarray] = None,
+        final_times_n1: np.ndarray | None = None,
+        factors: np.ndarray | None = None,
     ) -> None:
         """ Fit spline coefficients based on start_config
         and goal_config (SystemConfig objects). The spline is fitted from time 0 to final time."""
         raise NotImplementedError
 
     def eval_spline(
-        self, ts_nk: np.ndarray, calculate_speeds: Optional[bool] = True
+        self, ts_nk: np.ndarray, calculate_speeds: bool | None = True
     ) -> None:
         """ Evaluates the spline on points in ts_nk
         where ts_nk is in unnormalized time"""
@@ -31,7 +31,7 @@ class Spline(Trajectory):
         )
 
     def _eval_spline(
-        self, ts_nk: np.ndarray, calculate_speeds: Optional[bool] = True
+        self, ts_nk: np.ndarray, calculate_speeds: bool | None = True
     ) -> None:
         """ Evaluates the spline on points in ts_nk
         Assumes ts_nk is normalized to be in [0, 1.]

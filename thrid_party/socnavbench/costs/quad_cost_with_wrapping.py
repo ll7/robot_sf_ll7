@@ -1,6 +1,6 @@
+import numpy as np
 from costs.cost import DiscreteCost
 from utils.angle_utils import angle_normalize
-import numpy as np
 
 
 class QuadraticRegulatorRef(DiscreteCost):
@@ -26,7 +26,7 @@ class QuadraticRegulatorRef(DiscreteCost):
 
         self.trajectory_ref = trajectory_ref
         self.update_shape()
-        super(QuadraticRegulatorRef, self).__init__(
+        super().__init__(
             x_dim=self._x_dim, u_dim=self._u_dim)
 
         self.isTimevarying = True
@@ -42,8 +42,8 @@ class QuadraticRegulatorRef(DiscreteCost):
         C_gg = np.diag(p.quad_coeffs)
         c_g = np.array(p.linear_coeffs, dtype=np.float32)
         # Check dimensions
-        assert ((np.all(
-            np.equal(C_gg[:x_dim, x_dim:], np.transpose(C_gg[x_dim:, :x_dim])))))
+        assert (np.all(
+            np.equal(C_gg[:x_dim, x_dim:], np.transpose(C_gg[x_dim:, :x_dim]))))
         assert ((x_dim + u_dim) ==
                 C_gg.shape[0] == C_gg.shape[1] == c_g.shape[0])
 

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class Dynamics(object):
+class Dynamics:
 
     def __init__(self, dt, x_dim, u_dim, ctrlBounds=None):
         self._dt = dt

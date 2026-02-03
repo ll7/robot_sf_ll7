@@ -1,4 +1,3 @@
-from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +8,7 @@ from trajectory.trajectory import SystemConfig
 
 class Spline3rdOrder(Spline):
     def __init__(self, dt: float, n: int, k: int, params: DotMap):
-        super(Spline3rdOrder, self).__init__(dt=dt, n=n, k=k)
+        super().__init__(dt=dt, n=n, k=k)
         self.params: DotMap = params
 
     """ A class representing a 3rd order spline for a mobile ground robot
@@ -22,8 +21,8 @@ class Spline3rdOrder(Spline):
         self,
         start_config: SystemConfig,
         goal_config: SystemConfig,
-        final_times_n1: Optional[np.ndarray] = None,
-        factors: Optional[np.ndarray] = None,
+        final_times_n1: np.ndarray | None = None,
+        factors: np.ndarray | None = None,
     ) -> None:
         """Fit a 3rd order spline between start config and goal config.
         Factors_n2 represent 2 degrees of freedom in fitting the spline.
@@ -93,7 +92,7 @@ class Spline3rdOrder(Spline):
         self.n = start_config.n
 
     def _eval_spline(
-        self, ts_nk: np.ndarray, calculate_speeds: Optional[bool] = True
+        self, ts_nk: np.ndarray, calculate_speeds: bool | None = True
     ) -> None:
         """ Evaluates the spline on points in ts_nk
         Assumes ts is normalized to be in [0, 1.]
@@ -210,7 +209,7 @@ class Spline3rdOrder(Spline):
         self,
         speed_max_system: float,
         angular_speed_max_system: float,
-        minimum_horizon: Optional[float] = 0.0,
+        minimum_horizon: float | None = 0.0,
     ) -> None:
         """
         Rescale the spline horizon to a new horizon without recomputing the spline coefficients.
@@ -249,7 +248,7 @@ class Spline3rdOrder(Spline):
         goal_y_nk1: np.ndarray,
         goal_theta_nk1: np.ndarray,
         epsilon: float,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """ Perturbs goal_x and goal_y by epsilon if needed ensuring that a unique spline exists.
         Assumes that all goal angles are within [-pi/2., pi/2]."""
         assert (goal_theta_nk1 >= -np.pi / 2.0).all() and (
@@ -267,12 +266,12 @@ class Spline3rdOrder(Spline):
 
     def render(
         self,
-        axs: List[plt.axes],
-        batch_idx: Optional[int] = 0,
-        freq: Optional[int] = 4,
-        plot_heading: Optional[bool] = False,
-        plot_velocity: Optional[bool] = False,
-        label_start_and_end: Optional[bool] = True,
+        axs: list[plt.axes],
+        batch_idx: int | None = 0,
+        freq: int | None = 4,
+        plot_heading: bool | None = False,
+        plot_velocity: bool | None = False,
+        label_start_and_end: bool | None = True,
     ):
         super().render(
             axs,

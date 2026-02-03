@@ -1,6 +1,6 @@
-from trajectory.trajectory import Trajectory
-from systems.dubins_car import DubinsCar
 import numpy as np
+from systems.dubins_car import DubinsCar
+from trajectory.trajectory import Trajectory
 
 
 class Dubins3D(DubinsCar):
@@ -13,7 +13,7 @@ class Dubins3D(DubinsCar):
     """
 
     def __init__(self, dt, simulation_params=None):
-        super(Dubins3D, self).__init__(dt, x_dim=3, u_dim=2)
+        super().__init__(dt, x_dim=3, u_dim=2)
         self._angle_dims = 2
         self.simulation_params = simulation_params
         if self.simulation_params.noise_params.is_noisy:

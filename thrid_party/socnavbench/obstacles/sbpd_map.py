@@ -1,7 +1,7 @@
-from obstacles.obstacle_map import ObstacleMap
 import numpy as np
-from utils.fmm_map import FmmMap
+from obstacles.obstacle_map import ObstacleMap
 from systems.dubins_car import DubinsCar
+from utils.fmm_map import FmmMap
 
 
 class SBPDMap(ObstacleMap):
@@ -166,7 +166,7 @@ class SBPDMap(ObstacleMap):
         self._render_margin(ax, margin=margin1, alpha=.35)
 
         if start_config is not None:
-            if(zoom is not 0):
+            if(zoom != 0):
                 # Render map around the start by a certain amount
                 start_2 = start_config.position_nk2()[0, 0]
                 delta = p.plotting_grid_steps * p.dx * 2

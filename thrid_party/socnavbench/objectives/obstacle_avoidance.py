@@ -1,9 +1,8 @@
 import numpy as np
 from dotmap import DotMap
+from objectives.objective_function import Objective
 from obstacles.sbpd_map import SBPDMap
 from trajectory.trajectory import Trajectory
-
-from objectives.objective_function import Objective
 
 
 class ObstacleAvoidance(Objective):

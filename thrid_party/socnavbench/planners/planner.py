@@ -1,11 +1,13 @@
-import numpy as np
-from trajectory.trajectory import Trajectory, SystemConfig
 import threading
+
+import numpy as np
+from trajectory.trajectory import SystemConfig, Trajectory
+
 # used for when there is a single control pipeline
 lock = threading.Lock()
 
 
-class Planner(object):
+class Planner:
     """Plans optimal trajectories (by minimizing an objective function)
     through an environment. """
 

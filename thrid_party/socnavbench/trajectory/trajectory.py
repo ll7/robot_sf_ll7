@@ -1,10 +1,10 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-class Trajectory(object):
+class Trajectory:
     """
     The base class for the trajectory of a ground vehicle.
     n is the batch size and k is the # of time steps in the trajectory.
@@ -15,17 +15,17 @@ class Trajectory(object):
         dt: float,
         n: int,
         k: int,
-        position_nk2: Optional[np.ndarray] = None,
-        speed_nk1: Optional[np.ndarray] = None,
-        acceleration_nk1: Optional[np.ndarray] = None,
-        heading_nk1: Optional[np.ndarray] = None,
-        angular_speed_nk1: Optional[np.ndarray] = None,
-        angular_acceleration_nk1: Optional[np.ndarray] = None,
-        dtype: Optional[type] = np.float32,
-        direct_init: Optional[bool] = False,
-        valid_horizons_n1: Optional[np.ndarray] = None,
-        track_trajectory_acceleration: Optional[bool] = True,
-        check_dimens: Optional[bool] = True,
+        position_nk2: np.ndarray | None = None,
+        speed_nk1: np.ndarray | None = None,
+        acceleration_nk1: np.ndarray | None = None,
+        heading_nk1: np.ndarray | None = None,
+        angular_speed_nk1: np.ndarray | None = None,
+        angular_acceleration_nk1: np.ndarray | None = None,
+        dtype: type | None = np.float32,
+        direct_init: bool | None = False,
+        valid_horizons_n1: np.ndarray | None = None,
+        track_trajectory_acceleration: bool | None = True,
+        check_dimens: bool | None = True,
     ):
 
         # Check dimensions now to make your life easier later
@@ -133,7 +133,7 @@ class Trajectory(object):
         angular_speed_nk1: np.ndarray,
         angular_acceleration_nk1: np.ndarray,
         valid_horizons_n1: np.ndarray,
-        track_trajectory_acceleration: Optional[bool] = True,
+        track_trajectory_acceleration: bool | None = True,
     ):
         """Utility function to initialize a trajectory object from its numpy
         representation. Useful for loading pickled trajectories"""
@@ -153,7 +153,7 @@ class Trajectory(object):
         )
 
     @classmethod
-    def from_pos3_array(cls, pos3_nk3: np.ndarray, dt: Optional[float] = 0.05):
+    def from_pos3_array(cls, pos3_nk3: np.ndarray, dt: float | None = 0.05):
         """ Construct a Trajectory from an (n x 3) pos3 array of (x, y, theta) """
         if not isinstance(pos3_nk3, np.ndarray):
             pos3_nk3 = np.array(pos3_nk3)
@@ -193,7 +193,7 @@ class Trajectory(object):
         )
 
     @classmethod
-    def empty(cls, dt: Optional[float] = 0.05):
+    def empty(cls, dt: float | None = 0.05):
         return cls(
             dt=dt,
             n=0,
@@ -253,7 +253,7 @@ class Trajectory(object):
         self._angular_acceleration_nk1 = angular_acceleration_nk1
         self.valid_horizons_n1 = valid_horizons_n1
 
-    def gather_across_batch_dim(self, idxs: List[int] or np.ndarray):
+    def gather_across_batch_dim(self, idxs: list[int] or np.ndarray):
         """Given a list of indexes to gather in the batch dimension,
         update this trajectories instance variables and shape."""
         self.n = idxs.size
@@ -267,10 +267,10 @@ class Trajectory(object):
         self.valid_horizons_n1 = self.valid_horizons_n1[idxs]
         return self
 
-    def to_numpy_repr(self) -> Dict[str, np.ndarray and int and float]:
+    def to_numpy_repr(self) -> dict[str, np.ndarray and int and float]:
         """Utility function to return a representation of the trajectory using
         numpy arrays. Useful for pickling trajectories."""
-        numpy_dict: Dict[str, np.ndarray and int and float] = {
+        numpy_dict: dict[str, np.ndarray and int and float] = {
             "dt": self.dt,
             "n": self.n,
             "k": self.k,
@@ -285,7 +285,7 @@ class Trajectory(object):
         return numpy_dict
 
     @classmethod
-    def concat_across_batch_dim(cls, trajs: List):
+    def concat_across_batch_dim(cls, trajs: list):
         """Concatenates a list of trajectory objects
         across the batch dimension, returning a new
         trajectory object."""
@@ -321,7 +321,7 @@ class Trajectory(object):
         )
 
     @classmethod
-    def gather_across_batch_dim_and_create(cls, traj, idxs: List[int] or np.ndarray):
+    def gather_across_batch_dim_and_create(cls, traj, idxs: list[int] or np.ndarray):
         """Given a list of indexes to gather in the batch dimension,
         gather traj's instance variables across the batch dimension
         creating a new trajectory object."""
@@ -356,7 +356,7 @@ class Trajectory(object):
 
     @property
     def shape(self) -> str:
-        return "({:d}, {:d})".format(self.n, self.k)
+        return f"({self.n:d}, {self.k:d})"
 
     def position_nk2(self) -> np.ndarray:
         return self._position_nk2
@@ -376,7 +376,7 @@ class Trajectory(object):
     def angular_acceleration_nk1(self) -> np.ndarray:
         return self._angular_acceleration_nk1
 
-    def position_and_heading_nk3(self, squeeze: Optional[bool] = False) -> np.ndarray:
+    def position_and_heading_nk3(self, squeeze: bool | None = False) -> np.ndarray:
         p_nk2 = self.position_nk2()
         h_nk1 = self.heading_nk1()
         if len(p_nk2) == 0 and len(h_nk1) == 0:
@@ -401,7 +401,7 @@ class Trajectory(object):
         return np.concatenate([ph_nk3, sa_nk2], axis=2)
 
     def append_along_time_axis(
-        self, trajectory, track_trajectory_acceleration: Optional[bool] = True
+        self, trajectory, track_trajectory_acceleration: bool | None = True
     ) -> None:
         """ Utility function to concatenate trajectory
         over time. Useful for assembling an entire
@@ -464,7 +464,7 @@ class Trajectory(object):
         self.valid_horizons_n1 = np.clip(self.valid_horizons_n1, horizon, -1)
 
     @classmethod
-    def concat_along_time_axis(cls, trajectories: List):
+    def concat_along_time_axis(cls, trajectories: list):
         """ Concatenates a list of trajectory objects
         along the time axis. Useful for assembling an entire
         trajectory from multiple sub-trajectories. """
@@ -507,7 +507,7 @@ class Trajectory(object):
         )
 
     @classmethod
-    def copy(cls, traj, check_dimens: Optional[bool] = True):
+    def copy(cls, traj, check_dimens: bool | None = True):
         return cls(
             dt=traj.dt,
             n=traj.n,
@@ -528,7 +528,7 @@ class Trajectory(object):
         cls,
         trajectory,
         horizon: int,
-        repeat_second_to_last_speed: Optional[bool] = False,
+        repeat_second_to_last_speed: bool | None = False,
     ):
         """
         Utility function for clipping a trajectory along
@@ -592,12 +592,12 @@ class Trajectory(object):
         self,
         axs: plt.axes,
         batch_idx: int = 0,
-        freq: Optional[int] = 4,
-        plot_quiver: Optional[bool] = True,
-        plot_heading: Optional[bool] = False,
-        plot_velocity: Optional[bool] = False,
-        clip: Optional[int] = 0,
-        mpl_kwargs: Dict[str, Any] = {},
+        freq: int | None = 4,
+        plot_quiver: bool | None = True,
+        plot_heading: bool | None = False,
+        plot_velocity: bool | None = False,
+        clip: int | None = 0,
+        mpl_kwargs: dict[str, Any] = {},
     ) -> None:
         # use clip to only render the *last* "clip" numpoints of the trajectory
         xs = self._position_nk2[batch_idx, -1 : -1 * clip : -1, 0]
@@ -636,20 +636,20 @@ class SystemConfig(Trajectory):
 
     def __init__(
         self,
-        dt: Optional[float] = 0.05,
-        n: Optional[int] = 1,
-        k: Optional[int] = 1,
-        position_nk2: Optional[np.ndarray] = None,
-        speed_nk1: Optional[np.ndarray] = None,
-        acceleration_nk1: Optional[np.ndarray] = None,
-        heading_nk1: Optional[np.ndarray] = None,
-        angular_speed_nk1: Optional[np.ndarray] = None,
-        angular_acceleration_nk1: Optional[np.ndarray] = None,
-        dtype: Optional[type] = np.float32,
-        direct_init: Optional[bool] = False,
-        valid_horizons_n1: Optional[np.ndarray] = None,
-        track_trajectory_acceleration: Optional[bool] = True,
-        check_dimens: Optional[bool] = True,
+        dt: float | None = 0.05,
+        n: int | None = 1,
+        k: int | None = 1,
+        position_nk2: np.ndarray | None = None,
+        speed_nk1: np.ndarray | None = None,
+        acceleration_nk1: np.ndarray | None = None,
+        heading_nk1: np.ndarray | None = None,
+        angular_speed_nk1: np.ndarray | None = None,
+        angular_acceleration_nk1: np.ndarray | None = None,
+        dtype: type | None = np.float32,
+        direct_init: bool | None = False,
+        valid_horizons_n1: np.ndarray | None = None,
+        track_trajectory_acceleration: bool | None = True,
+        check_dimens: bool | None = True,
     ):
         assert k == 1
         # Don't pass on valid_horizons_n1 as a SystemConfig has no horizon
@@ -688,10 +688,10 @@ class SystemConfig(Trajectory):
     @classmethod
     def from_pos3(
         cls,
-        pos3: np.ndarray or List[float] or Tuple[float],
-        dt: Optional[float] = 0.05,
-        v: Optional[float] = 0,
-        w: Optional[float] = 0,
+        pos3: np.ndarray or list[float] or tuple[float],
+        dt: float | None = 0.05,
+        v: float | None = 0,
+        w: float | None = 0,
     ):
         """ Construct a SystemConfig from a list/tuple/np of (x, y, theta) 
         with optional velocity and angular velocity """
@@ -751,7 +751,7 @@ class SystemConfig(Trajectory):
         )
 
     def assign_from_config_batch_idx(self, config, batch_idx: int) -> None:
-        super(SystemConfig, self).assign_from_trajectory_batch_idx(config, batch_idx)
+        super().assign_from_trajectory_batch_idx(config, batch_idx)
 
     def assign_config_from_tensors(
         self,

@@ -1,14 +1,14 @@
 import json
 import os
 from glob import glob
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from agents.agent import Agent
 from agents.humans.human import Human, HumanAppearance
 from agents.robot_agent import RobotAgent
 from dotmap import DotMap
-from matplotlib import pyplot, lines
+from matplotlib import lines, pyplot
 from params.central_params import get_path_to_socnav
 from trajectory.trajectory import SystemConfig, Trajectory
 from utils.utils import (
@@ -32,12 +32,12 @@ class AgentState:
         goal_config: SystemConfig,
         start_config: SystemConfig,
         current_config: SystemConfig,
-        trajectory: Optional[Trajectory] = None,
-        appearance: Optional[HumanAppearance] = None,
+        trajectory: Trajectory | None = None,
+        appearance: HumanAppearance | None = None,
         collided: bool = False,
         end_acting: bool = False,
         collision_cooldown: int = -1,
-        last_collision_t: Optional[float] = None,
+        last_collision_t: float | None = None,
         radius: int = 0,
         color: str = None,
     ):
@@ -87,7 +87,7 @@ class AgentState:
     def get_goal_config(self) -> SystemConfig:
         return self.goal_config
 
-    def get_trajectory(self) -> Optional[Trajectory]:
+    def get_trajectory(self) -> Trajectory | None:
         return self.trajectory
 
     def get_appearance(self) -> HumanAppearance:
@@ -110,7 +110,7 @@ class AgentState:
 
     def render(self, ax: pyplot.Axes, p: DotMap) -> None:
         x, y, th = self.current_config.position_and_heading_nk3(squeeze=True)
-        traj_mpl_kwargs: Dict[str, Any] = p.traj_mpl_kwargs
+        traj_mpl_kwargs: dict[str, Any] = p.traj_mpl_kwargs
         if traj_mpl_kwargs["color"] is None:
             # overwrite the colour with the agent's colour. Does not affect p.traj_mpl_kwargs
             traj_mpl_kwargs = dict(traj_mpl_kwargs, **{"color": self.color})
@@ -180,9 +180,9 @@ class AgentState:
                 plot_quiver(goal_x, goal_y, goal_th)
 
     def to_json_type(
-        self, omit_fields: Optional[List[str]] = ["trajectory",],
-    ) -> Dict[str, str]:
-        json_dict: Dict[str, str] = {}
+        self, omit_fields: list[str] | None = ["trajectory"],
+    ) -> dict[str, str]:
+        json_dict: dict[str, str] = {}
         json_dict["name"] = self.name  # always keep name
 
         def to_json_if_not_omitted(key: str, field: Any) -> None:
@@ -211,7 +211,7 @@ class AgentState:
         return json_dict
 
     @classmethod
-    def from_json(cls, json_dict: Dict[str, str]):
+    def from_json(cls, json_dict: dict[str, str]):
         assert "name" in json_dict
         name: str = json_dict["name"]
         start_config = (
@@ -262,22 +262,22 @@ class AgentState:
 class SimState:
     def __init__(
         self,
-        environment: Optional[Dict[str, float or int or np.ndarray]] = None,
-        pedestrians: Optional[Dict[str, Agent]] = None,
-        robots: Optional[Dict[str, RobotAgent]] = None,
-        sim_t: Optional[float] = None,
-        wall_t: Optional[float] = None,
-        delta_t: Optional[float] = None,
-        robot_on: Optional[bool] = True,
-        episode_name: Optional[str] = None,
-        max_time: Optional[float] = None,
-        ped_collider: Optional[str] = "",
+        environment: dict[str, float or int or np.ndarray] | None = None,
+        pedestrians: dict[str, Agent] | None = None,
+        robots: dict[str, RobotAgent] | None = None,
+        sim_t: float | None = None,
+        wall_t: float | None = None,
+        delta_t: float | None = None,
+        robot_on: bool | None = True,
+        episode_name: str | None = None,
+        max_time: float | None = None,
+        ped_collider: str | None = "",
     ):
-        self.environment: Dict[str, float or int or np.ndarray] = environment
+        self.environment: dict[str, float or int or np.ndarray] = environment
         # no distinction between prerecorded and auto agents
         # new dict that the joystick will be sent
-        self.pedestrians: Dict[str, AgentState] = pedestrians
-        self.robots: Dict[str, AgentState] = robots
+        self.pedestrians: dict[str, AgentState] = pedestrians
+        self.robots: dict[str, AgentState] = robots
         self.sim_t: float = sim_t
         self.wall_t: float = wall_t
         self.delta_t: float = delta_t
@@ -286,20 +286,20 @@ class SimState:
         self.episode_max_time: float = max_time
         self.ped_collider: str = ped_collider
 
-    def get_environment(self) -> Dict[str, float or int or np.ndarray]:
+    def get_environment(self) -> dict[str, float or int or np.ndarray]:
         return self.environment
 
     def get_map(self) -> np.ndarray:
         return self.environment["map_traversible"]
 
-    def get_pedestrians(self) -> Dict[str, Agent]:
+    def get_pedestrians(self) -> dict[str, Agent]:
         return self.pedestrians
 
-    def get_robots(self) -> Dict[str, RobotAgent]:
+    def get_robots(self) -> dict[str, RobotAgent]:
         return self.robots
 
     def get_robot(
-        self, index: Optional[int] = 0, name: Optional[str] = None
+        self, index: int | None = 0, name: str | None = None
     ) -> RobotAgent:
         if name:  # index robot by name
             return self.robots[name]
@@ -327,8 +327,8 @@ class SimState:
         return self.ped_collider
 
     def get_all_agents(
-        self, include_robot: Optional[bool] = False
-    ) -> Dict[str, Agent or RobotAgent]:
+        self, include_robot: bool | None = False
+    ) -> dict[str, Agent or RobotAgent]:
         all_agents = {}
         all_agents.update(self.get_pedestrians())
         if include_robot:
@@ -337,12 +337,12 @@ class SimState:
 
     def to_json(
         self,
-        robot_on: Optional[bool] = True,
-        send_metadata: Optional[bool] = False,
-        termination_cause: Optional[str] = None,
-        full_export: Optional[bool] = False,
+        robot_on: bool | None = True,
+        send_metadata: bool | None = False,
+        termination_cause: str | None = None,
+        full_export: bool | None = False,
     ) -> str:
-        json_dict: Dict[str, float or int or np.ndarray] = {}
+        json_dict: dict[str, float or int or np.ndarray] = {}
         json_dict["robot_on"] = to_json_type(robot_on)
         if robot_on:  # only send the world if the robot is ON
             json_args = {"omit_fields": ["trajectory"]}  # don't save trajectory
@@ -369,7 +369,7 @@ class SimState:
         return json.dumps(json_dict)
 
     def export_to_file(
-        self, out_dir: Optional[str] = None, export_metadata: Optional[bool] = False
+        self, out_dir: str | None = None, export_metadata: bool | None = False
     ) -> None:
         json_repr: str = self.to_json(
             robot_on=True,
@@ -381,13 +381,13 @@ class SimState:
         if out_dir is not None:
             mkdir_if_missing(out_dir)
             filename = os.path.join(out_dir, filename)
-        out_filename: str = "{}_{:.4f}.json".format(filename, self.sim_t)
+        out_filename: str = f"{filename}_{self.sim_t:.4f}.json"
         with open(out_filename, "w") as out_file:
             out_file.write(json_repr)
 
     @classmethod
-    def from_json(cls, json_str: Dict[str, str or int or float]):
-        def try_loading(key: str) -> Optional[str or int or float]:
+    def from_json(cls, json_str: dict[str, str or int or float]):
+        def try_loading(key: str) -> (str or int or float) | None:
             if key in json_str:
                 return json_str[key]
             return None
@@ -407,9 +407,9 @@ class SimState:
 
     @staticmethod
     def init_agent_dict(
-        json_str_dict: Dict[str, Dict[str, str or float or int or dict]]
-    ) -> Dict[str, Dict[str, AgentState]]:
-        agent_dict: Dict[str, AgentState] = {}
+        json_str_dict: dict[str, dict[str, str or float or int or dict]]
+    ) -> dict[str, dict[str, AgentState]]:
+        agent_dict: dict[str, AgentState] = {}
         for agent_name in json_str_dict.keys():
             agent_dict[agent_name] = AgentState.from_json(json_str_dict[agent_name])
         return agent_dict
@@ -494,7 +494,7 @@ class SimState:
     def draw_legend(self, ax: pyplot.Axes, p: DotMap) -> None:
         # ensure no duplicate labels occur
         handles, labels = ax.get_legend_handles_labels()
-        legend_keys: Dict[str, pyplot.Line2D] = {}
+        legend_keys: dict[str, pyplot.Line2D] = {}
         assert len(handles) == len(labels)
         for i in range(len(handles)):
             label: str = labels[i]
@@ -508,11 +508,11 @@ class SimState:
                     **p.robot_render_params.collision_mini_dot_mpl_kwargs,
                 )
                 mark_of_shame.set_linestyle("")
-                handle: Tuple[pyplot.Line2D] = (handle, mark_of_shame)  # mark in legend
+                handle: tuple[pyplot.Line2D] = (handle, mark_of_shame)  # mark in legend
             legend_keys[label] = handle
         if len(legend_keys) == 0:
             return  # do nothing, no label to print
-        legend_order: Dict[str, int] = {
+        legend_order: dict[str, int] = {
             "Pedestrian": 0,
             "Robot Start": 1,
             "Robot Goal": 2,
@@ -533,10 +533,10 @@ class SimState:
         )
 
     @staticmethod
-    def get_common_env(p: DotMap) -> Dict[str, int]:
+    def get_common_env(p: DotMap) -> dict[str, int]:
         assert p.draw_parallel_robots is True
         socnav_dir: str = os.path.join(get_path_to_socnav(), "tests", "socnav")
-        common_env: Dict[str, Any] = None
+        common_env: dict[str, Any] = None
         for algo in list(p.draw_parallel_robots_params_by_algo.keys()):
             new_dir = os.path.join(socnav_dir, f"test_{algo}", f"{p.test_name}")
             if not os.path.exists(new_dir):
@@ -552,16 +552,15 @@ class SimState:
                         .replace("sim_state_", "")  # no prefix
                         .replace(".json", "")  # no suffix
                     )
-                except Exception as e:
-                    with open(sim_file, "r") as f:
+                except Exception:
+                    with open(sim_file) as f:
                         sim_state = SimState.from_json(json.load(f))
                         sim_t = sim_state.sim_t
-                if sim_t < min_sim_t:
-                    min_sim_t = sim_t
+                min_sim_t = min(min_sim_t, sim_t)
             first_sim_state_path = os.path.join(
-                new_file, "sim_state_{:.4f}.json".format(min_sim_t)
+                new_file, f"sim_state_{min_sim_t:.4f}.json"
             )
-            with open(first_sim_state_path, "r") as f:
+            with open(first_sim_state_path) as f:
                 sim_state = SimState.from_json(json.load(f))
                 common_env = sim_state.environment
             if common_env is not None:  # only need to parse once
@@ -569,9 +568,9 @@ class SimState:
         return common_env
 
     @staticmethod
-    def get_max_parallel_sim_states(p: DotMap) -> Dict[str, int]:
+    def get_max_parallel_sim_states(p: DotMap) -> dict[str, int]:
         assert p.draw_parallel_robots is True
-        max_states_per_algo: Dict[str, int] = {}
+        max_states_per_algo: dict[str, int] = {}
         socnav_dir: str = os.path.join(get_path_to_socnav(), "tests", "socnav")
         for algo in list(p.draw_parallel_robots_params_by_algo.keys()):
             new_dir = os.path.join(socnav_dir, f"test_{algo}", f"{p.test_name}")
@@ -588,12 +587,11 @@ class SimState:
                         .replace("sim_state_", "")  # no prefix
                         .replace(".json", "")  # no suffix
                     )
-                except Exception as e:
-                    with open(sim_file, "r") as f:
+                except Exception:
+                    with open(sim_file) as f:
                         sim_state = SimState.from_json(json.load(f))
                         sim_t = sim_state.sim_t
-                if sim_t > max_sim_t:
-                    max_sim_t = sim_t
+                max_sim_t = max(max_sim_t, sim_t)
             max_states_per_algo[algo] = max_sim_t
         return max_states_per_algo
 
@@ -612,10 +610,10 @@ class SimState:
 
     @staticmethod
     def draw_variants(
-        env: Dict[str, Any],
+        env: dict[str, Any],
         sim_t: float,
         ax: pyplot.Axes,
-        max_algo_times: Dict[str, float],
+        max_algo_times: dict[str, float],
         p: DotMap,
     ) -> None:
         out_dir: str = p.output_directory
@@ -634,7 +632,7 @@ class SimState:
                 else:
                     continue  # just skip alltogether, file does not exist
 
-            with open(exp_sim_state_file, "r") as f:
+            with open(exp_sim_state_file) as f:
                 sim_state = SimState.from_json(json.load(f))
                 if algo == max(max_algo_times, key=max_algo_times.get):
                     sim_state.environment = env
@@ -661,17 +659,17 @@ class SimState:
 
     @staticmethod
     def render_multi_robot(
-        env: Dict[str, Any],
+        env: dict[str, Any],
         sim_t: float,
         p: DotMap,
-        max_algo_times: Dict[str, float],
+        max_algo_times: dict[str, float],
         filename: str,
     ) -> None:
         if sim_t == 0:
             return  # bug where the first frame is not exported, just skip
         img_size: float = 10 * p.render_params.img_scale
         fig, ax = pyplot.subplots(1, 1, figsize=(1 * img_size, img_size))
-        ax.set_title("Multi-robot Schematic View. t={:.3f}".format(sim_t), fontsize=14)
+        ax.set_title(f"Multi-robot Schematic View. t={sim_t:.3f}", fontsize=14)
         ax.set_aspect("equal")
         # draw the SimStates
         SimState.draw_variants(env, sim_t, ax, max_algo_times, p.render_params)
@@ -688,8 +686,8 @@ class SimState:
 
 
 def get_all_agents(
-    sim_state: Dict[float, SimState], include_robot: Optional[bool] = False
-) -> Dict[str, Agent or RobotAgent]:
+    sim_state: dict[float, SimState], include_robot: bool | None = False
+) -> dict[str, Agent or RobotAgent]:
     all_agents = {}
     all_agents.update(get_agents_from_type(sim_state, "pedestrians"))
     if include_robot:
@@ -697,7 +695,7 @@ def get_all_agents(
     return all_agents
 
 
-def get_agents_from_type(sim_state: SimState, agent_type: str) -> Dict[str, Agent]:
+def get_agents_from_type(sim_state: SimState, agent_type: str) -> dict[str, Agent]:
     if callable(getattr(sim_state, "get_" + agent_type, None)):
         getter_agent_type = getattr(sim_state, "get_" + agent_type, None)
         return getter_agent_type()
@@ -717,8 +715,8 @@ def compute_next_vel(
 
 
 def compute_agent_state_velocity(
-    sim_states: List[SimState], agent_name: str
-) -> List[float]:
+    sim_states: list[SimState], agent_name: str
+) -> list[float]:
     if len(sim_states) > 1:  # need at least two to compute differences in positions
         if agent_name in get_all_agents(sim_states[-1]):
             agent_velocities = []
@@ -742,10 +740,10 @@ def compute_agent_state_velocity(
 
 
 def compute_agent_state_acceleration(
-    sim_states: List[SimState],
+    sim_states: list[SimState],
     agent_name: str,
-    velocities: Optional[List[float]] = None,
-) -> List[float]:
+    velocities: list[float] | None = None,
+) -> list[float]:
     if len(sim_states) > 1:  # need at least two to compute differences in velocities
         # optionally compute velocities as well
         if velocities is None:
@@ -777,7 +775,7 @@ def compute_agent_state_acceleration(
         return []
 
 
-def compute_all_velocities(sim_states: List[SimState]) -> Dict[str, float]:
+def compute_all_velocities(sim_states: list[SimState]) -> dict[str, float]:
     all_velocities = {}
     for agent_name in get_all_agents(sim_states[-1]).keys():
         assert isinstance(agent_name, str)  # keyed by name
@@ -787,7 +785,7 @@ def compute_all_velocities(sim_states: List[SimState]) -> Dict[str, float]:
     return all_velocities
 
 
-def compute_all_accelerations(sim_states: List[SimState]) -> Dict[str, float]:
+def compute_all_accelerations(sim_states: list[SimState]) -> dict[str, float]:
     all_accels = {}
     # TODO: add option of providing precomputed velocities list
     for agent_name in get_all_agents(sim_states[-1]).keys():

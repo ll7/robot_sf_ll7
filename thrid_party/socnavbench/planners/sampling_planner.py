@@ -1,6 +1,6 @@
 import numpy as np
 from planners.planner import Planner
-from trajectory.trajectory import Trajectory, SystemConfig
+from trajectory.trajectory import SystemConfig, Trajectory
 
 
 class SamplingPlanner(Planner):

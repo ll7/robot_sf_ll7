@@ -1,4 +1,3 @@
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -31,8 +30,8 @@ def rotate_pos_nk2(pos_nk2: np.ndarray, theta_n11: np.ndarray) -> np.ndarray:
 
 def padded_rotation_matrix(
     theta_n11: np.ndarray,
-    shape: Tuple[float, float, float],
-    lower_identity: Optional[bool] = False,
+    shape: tuple[float, float, float],
+    lower_identity: bool | None = False,
 ) -> np.ndarray:
     """ Returns a rotation matrix of shape (n, k, d, d)
     where the first (n, k, 2, 2) elements correspond to

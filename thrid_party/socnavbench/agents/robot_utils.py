@@ -3,7 +3,6 @@ import os
 import socket
 import threading
 import time
-from typing import List, Optional, Tuple
 
 import numpy as np
 from dotmap import DotMap
@@ -12,7 +11,7 @@ from utils.utils import color_text, euclidean_dist2, iter_print
 lock = threading.Lock()  # for asynchronous data sending
 
 
-def clip_vel(vel: float, bounds: Tuple[float, float]) -> float:
+def clip_vel(vel: float, bounds: tuple[float, float]) -> float:
     vel = round(float(vel), 3)
     assert bounds[0] < bounds[1]
     if bounds[0] <= vel <= bounds[1]:
@@ -27,11 +26,11 @@ def clip_vel(vel: float, bounds: Tuple[float, float]) -> float:
 
 def clip_posn(
     sim_dt: float,
-    old_pos3: List[float],
-    new_pos3: List[float],
-    v_bounds: Tuple[float, float],
-    epsilon: Optional[float] = 0.01,
-) -> List[float]:
+    old_pos3: list[float],
+    new_pos3: list[float],
+    v_bounds: tuple[float, float],
+    epsilon: float | None = 0.01,
+) -> list[float]:
     # margin of error for the velocity bounds
     assert sim_dt > 0
     dist_to_new = euclidean_dist2(old_pos3, new_pos3)
@@ -64,7 +63,7 @@ def clip_posn(
 
 def establish_joystick_receiver_connection(
     sock_id: str,
-) -> Tuple[socket.socket, socket.socket, str]:
+) -> tuple[socket.socket, socket.socket, str]:
     """Connect to server (robot)"""
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -105,7 +104,7 @@ def establish_joystick_sender_connection(sock_id: str) -> socket.socket:
     return sock
 
 
-def close_sockets(socks: List[socket.socket]) -> None:
+def close_sockets(socks: list[socket.socket]) -> None:
     for sock in socks:
         sock.close()
 
@@ -118,7 +117,7 @@ def force_connect(robot_receiver_id: str) -> None:
 
 def establish_handshake(
     p: DotMap, sender_id: str, receiver_id: str,
-) -> Tuple[socket.socket, socket.socket]:
+) -> tuple[socket.socket, socket.socket]:
     # NOTE: this is from the robot's POV
     if p.episode_params.without_robot:
         # lite-mode episode does not include a robot or joystick

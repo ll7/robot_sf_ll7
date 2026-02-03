@@ -1,7 +1,8 @@
 import copy
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
+from agents.agent_base import AgentBase
 from dotmap import DotMap
 from objectives.angle_distance import AngleDistance
 from objectives.goal_distance import GoalDistance
@@ -14,8 +15,6 @@ from systems.dynamics import Dynamics
 from trajectory.trajectory import SystemConfig, Trajectory
 from utils.fmm_map import FmmMap
 
-from agents.agent_base import AgentBase
-
 
 class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
     sim_t: float = None  # global simulator time that all agents know
@@ -26,8 +25,8 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         self.fmm_map: FmmMap = None
         self.path_step: int = 0
         # NOTE: JSON serialization is done within sim_state.py
-        self.velocities: Dict[float, float] = {}
-        self.accelerations: Dict[float, float] = {}
+        self.velocities: dict[float, float] = {}
+        self.accelerations: dict[float, float] = {}
         # every *planning* agent gets their own copy of 'sim state' history
         self.world_state = None
         super().__init__(start, goal, name)
@@ -35,10 +34,10 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
     def simulation_init(
         self,
         sim_map: SBPDMap,
-        with_planner: Optional[bool] = True,
-        with_system_dynamics: Optional[bool] = True,
-        with_objectives: Optional[bool] = True,
-        keep_episode_running: Optional[bool] = False,
+        with_planner: bool | None = True,
+        with_system_dynamics: bool | None = True,
+        with_objectives: bool | None = True,
+        keep_episode_running: bool | None = False,
     ) -> None:
         """ Initializes important fields for the Simulator"""
         if self.params is None:
@@ -98,7 +97,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         self.plan()
         self.act()
 
-    def sense(self, sim_state, dt: Optional[float] = 0.05) -> None:
+    def sense(self, sim_state, dt: float | None = 0.05) -> None:
         # TODO: sim_state is a SimState, but importing it yields a circular dep error
         self.update_world(sim_state)
 
@@ -116,7 +115,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         if self.end_acting:
             return
 
-        self.planner_data: Dict[str, Any] = self.planner.optimize(
+        self.planner_data: dict[str, Any] = self.planner.optimize(
             self.planned_next_config, self.goal_config
         )
         traj_segment = Trajectory.new_traj_clip_along_time_axis(
@@ -174,7 +173,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
 
     """BEGIN HELPER FUNCTIONS"""
 
-    def process_planner_data(self) -> Tuple[Trajectory, Dict[str, Any]]:
+    def process_planner_data(self) -> tuple[Trajectory, dict[str, Any]]:
         """
         Process the planners current plan. This could mean applying
         open loop control or LQR feedback control on a system.
@@ -189,27 +188,26 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
                 sim_mode=self.system_dynamics.simulation_params.simulation_mode,
             )
         # The 'plan' is LQR feedback control
+        # If we are using ideal system dynamics the planned trajectory
+        # is already dynamically feasible. Clip it to the control horizon
+        elif self.system_dynamics.simulation_params.simulation_mode == "ideal":
+            trajectory = Trajectory.new_traj_clip_along_time_axis(
+                self.planner_data["trajectory"],
+                self.params.control_horizon,
+                repeat_second_to_last_speed=True,
+            )
+        elif self.system_dynamics.simulation_params.simulation_mode == "realistic":
+            trajectory, _ = Agent.apply_control_closed_loop(
+                self,
+                self.current_config,
+                self.planner_data["spline_trajectory"],
+                self.planner_data["k_nkf1"],
+                self.planner_data["K_nkfd"],
+                T=self.params.control_horizon - 1,
+                sim_mode="realistic",
+            )
         else:
-            # If we are using ideal system dynamics the planned trajectory
-            # is already dynamically feasible. Clip it to the control horizon
-            if self.system_dynamics.simulation_params.simulation_mode == "ideal":
-                trajectory = Trajectory.new_traj_clip_along_time_axis(
-                    self.planner_data["trajectory"],
-                    self.params.control_horizon,
-                    repeat_second_to_last_speed=True,
-                )
-            elif self.system_dynamics.simulation_params.simulation_mode == "realistic":
-                trajectory, _ = Agent.apply_control_closed_loop(
-                    self,
-                    self.current_config,
-                    self.planner_data["spline_trajectory"],
-                    self.planner_data["k_nkf1"],
-                    self.planner_data["K_nkfd"],
-                    T=self.params.control_horizon - 1,
-                    sim_mode="realistic",
-                )
-            else:
-                assert False
+            assert False
         # NOTE: can also obtain velocity commands (linear & angular) with the following:
         # commanded_actions_nkf = self.system_dynamics.parse_trajectory(trajectory)
         self.planner.clip_data_along_time_axis(
@@ -220,7 +218,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
     """BEGIN STATIC HELPER FUNCTIONS"""
 
     @staticmethod
-    def _init_obj_fn(self, params: Optional[DotMap] = None) -> ObjectiveFunction:
+    def _init_obj_fn(self, params: DotMap | None = None) -> ObjectiveFunction:
         """
         Initialize the objective function given sim params
         """
@@ -264,7 +262,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
                 pass  # TODO: raise error on unsupported obj fns
 
     @staticmethod
-    def _init_planner(self, params: Optional[DotMap] = None) -> Planner:
+    def _init_planner(self, params: DotMap | None = None) -> Planner:
         if params is None:
             params = self.params
         return params.planner_params.planner(
@@ -273,7 +271,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
 
     @staticmethod
     def _init_fmm_map(
-        self, goal_pos_n2: Optional[np.ndarray] = None, params: Optional[DotMap] = None
+        self, goal_pos_n2: np.ndarray | None = None, params: DotMap | None = None
     ) -> None:
         if params is None:
             params = self.params
@@ -291,7 +289,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         Agent._update_fmm_map(self)
 
     @staticmethod
-    def _init_system_dynamics(self, params: Optional[DotMap] = None) -> Dynamics:
+    def _init_system_dynamics(self, params: DotMap | None = None) -> Dynamics:
         """
         If there is a control pipeline (i.e. model based method)
         return its system_dynamics. Else create a new system_dynamics
@@ -307,7 +305,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             return p.system(dt=p.dt, params=p)
 
     @staticmethod
-    def _update_fmm_map(self, params: Optional[DotMap] = None) -> None:
+    def _update_fmm_map(self, params: DotMap | None = None) -> None:
         """
         For SBPD the obstacle map does not change,
         so just update the goal position.
@@ -327,8 +325,8 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         start_config: SystemConfig,
         control_nk2: np.ndarray,
         T: int,
-        sim_mode: Optional[str] = "ideal",
-    ) -> Tuple[Trajectory, np.ndarray]:
+        sim_mode: str | None = "ideal",
+    ) -> tuple[Trajectory, np.ndarray]:
         return super().apply_control_open_loop(
             self, start_config, control_nk2, T, sim_mode
         )
@@ -341,8 +339,8 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         k_array_nTf1: np.ndarray,
         K_array_nTfd: np.ndarray,
         T: int,
-        sim_mode: Optional[str] = "ideal",
-    ) -> Tuple[Trajectory, np.ndarray]:
+        sim_mode: str | None = "ideal",
+    ) -> tuple[Trajectory, np.ndarray]:
         return super().apply_control_closed_loop(
             self,
             start_config,

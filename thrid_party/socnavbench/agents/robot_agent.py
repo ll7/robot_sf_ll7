@@ -1,15 +1,8 @@
 import json
 import socket
 import time
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from dotmap import DotMap
-from obstacles.sbpd_map import SBPDMap
-from params.central_params import create_robot_params
-from trajectory.trajectory import SystemConfig
-from utils.utils import conn_recv, generate_random_config
-
 from agents.agent import Agent
 from agents.robot_utils import (
     clip_posn,
@@ -19,6 +12,11 @@ from agents.robot_utils import (
     force_connect,
     lock,
 )
+from dotmap import DotMap
+from obstacles.sbpd_map import SBPDMap
+from params.central_params import create_robot_params
+from trajectory.trajectory import SystemConfig
+from utils.utils import conn_recv, generate_random_config
 
 
 class RobotAgent(Agent):
@@ -35,8 +33,8 @@ class RobotAgent(Agent):
         super().__init__(start_config, goal_config, name)
         # positional inputs are tuples of (x, y, theta, velocity)
         # acceleration inputs are tuples of (linear velocity, angular velocity)
-        self.joystick_inputs: List[
-            Tuple[float, float, float, float] or Tuple[float, float]
+        self.joystick_inputs: list[
+            tuple[float, float, float, float] or tuple[float, float]
         ] = []
         # josystick is ready once it has been sent an environment
         self.joystick_ready: bool = False
@@ -55,8 +53,8 @@ class RobotAgent(Agent):
     def simulation_init(
         self,
         sim_map: SBPDMap,
-        with_planner: Optional[bool] = False,
-        keep_episode_running: Optional[bool] = False,
+        with_planner: bool | None = False,
+        keep_episode_running: bool | None = False,
     ) -> None:
         # first initialize all the agent fields such as basic self.params
         super().simulation_init(
@@ -71,8 +69,8 @@ class RobotAgent(Agent):
         # NOTE: robot radius is not the same as regular Agents
         self.radius: float = self.params.robot_params.physical_params.radius
         # velocity bounds when teleporting to positions (if not using sys dynamics)
-        self.v_bounds: Tuple[float, float] = self.params.system_dynamics_params.v_bounds
-        self.w_bounds: Tuple[float, float] = self.params.system_dynamics_params.w_bounds
+        self.v_bounds: tuple[float, float] = self.params.system_dynamics_params.v_bounds
+        self.w_bounds: tuple[float, float] = self.params.system_dynamics_params.w_bounds
         # simulation update init
         self.num_executed: int = 0  # keeps track of the latest command that is to be executed
         # number of commands the joystick sends at once
@@ -88,7 +86,7 @@ class RobotAgent(Agent):
 
     @classmethod
     def generate_robot(
-        cls, start_goal: List[List[float]], verbose: Optional[bool] = False
+        cls, start_goal: list[list[float]], verbose: bool | None = False
     ):
         """
         Sample a new random robot agent from all required features
@@ -104,13 +102,13 @@ class RobotAgent(Agent):
 
     @classmethod
     def random_from_environment(
-        cls, environment: Dict[str, float or int or np.ndarray]
+        cls, environment: dict[str, float or int or np.ndarray]
     ):
         """
         Sample a new robot without knowing any configs or appearance fields
         NOTE: needs environment to produce valid configs
         """
-        start_goal: Tuple[SystemConfig, SystemConfig] = [
+        start_goal: tuple[SystemConfig, SystemConfig] = [
             generate_random_config(environment).position_and_heading_nk3(squeeze=True),
             generate_random_config(environment).position_and_heading_nk3(squeeze=True),
         ]
@@ -297,7 +295,7 @@ class RobotAgent(Agent):
         data_b, response_len = conn_recv(connection, buffr_amnt=128)
         # close connection to be reaccepted when the joystick sends data
         connection.close()
-        if data_b is not b"" and response_len > 0:
+        if data_b != b"" and response_len > 0:
             data_str = data_b.decode("utf-8")  # bytes to str
             if self.get_end_acting():
                 self.joystick_requests_world = 0

@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from dotmap import DotMap
@@ -14,12 +14,12 @@ from utils.fmm_map import FmmMap
 from utils.utils import euclidean_dist2, generate_name
 
 
-class AgentBase(object):
+class AgentBase:
     color_indx: int = 0
-    possible_colors: List[str] = ["b", "g", "r", "c", "m", "y"]
+    possible_colors: list[str] = ["b", "g", "r", "c", "m", "y"]
 
     def __init__(
-        self, start: SystemConfig, goal: SystemConfig, name: Optional[str] = None
+        self, start: SystemConfig, goal: SystemConfig, name: str | None = None
     ):
         self.name: str = name if name else generate_name(20)
         self.start_config: SystemConfig = start
@@ -53,8 +53,8 @@ class AgentBase(object):
         self.fmm_map: FmmMap = None
         self.system_dynamics: Dynamics = None
         self.planner: Planner = None
-        self.planner_data: Dict[str, Any] = None
-        self.vehicle_data: Dict = None
+        self.planner_data: dict[str, Any] = None
+        self.vehicle_data: dict = None
 
     # Getters for the Agent class
     def get_name(self) -> str:
@@ -65,25 +65,25 @@ class AgentBase(object):
             return SystemConfig.copy(config)
         return config
 
-    def get_start_config(self, deepcpy: Optional[bool] = False) -> SystemConfig:
+    def get_start_config(self, deepcpy: bool | None = False) -> SystemConfig:
         return self.get_config(self.start_config, deepcpy)
 
     def set_start_config(self, start: SystemConfig) -> None:
         self.start_config = start
 
-    def get_goal_config(self, deepcpy: Optional[bool] = False) -> SystemConfig:
+    def get_goal_config(self, deepcpy: bool | None = False) -> SystemConfig:
         return self.get_config(self.goal_config, deepcpy)
 
     def set_goal_config(self, goal: SystemConfig) -> None:
         self.goal_config = goal
 
-    def get_current_config(self, deepcpy: Optional[bool] = False) -> SystemConfig:
+    def get_current_config(self, deepcpy: bool | None = False) -> SystemConfig:
         return self.get_config(self.current_config, deepcpy)
 
     def set_current_config(self, current: SystemConfig) -> None:
         self.current_config = current
 
-    def get_trajectory(self, deepcpy: Optional[bool] = False) -> Trajectory:
+    def get_trajectory(self, deepcpy: bool | None = False) -> Trajectory:
         if deepcpy:
             return Trajectory.copy(self.trajectory, check_dimens=False)
         return self.trajectory
@@ -131,7 +131,7 @@ class AgentBase(object):
 
     """AGENT UTILS"""
 
-    def _collision_in_group(self, own_pos: np.ndarray, group: List) -> bool:
+    def _collision_in_group(self, own_pos: np.ndarray, group: list) -> bool:
         for a in group:
             othr_pos = a.get_current_config().position_and_heading_nk3(squeeze=True)
             is_same_agent: bool = a.get_name() is self.get_name()
@@ -159,8 +159,8 @@ class AgentBase(object):
     def check_collisions(
         self,
         world_state,
-        include_agents: Optional[bool] = True,
-        include_robots: Optional[bool] = True,
+        include_agents: bool | None = True,
+        include_robots: bool | None = True,
     ) -> bool:
         # TODO: world_state is a SimState, but including it yields a circular dependency error
         if self.collision_cooldown > 0:
@@ -183,7 +183,7 @@ class AgentBase(object):
         assert self.obj_fn is not None  # to calculate objective values
         assert self.obstacle_map is not None  # to check obstacle collisions
         p = self.params
-        time_idxs: List[np.ndarray] = []
+        time_idxs: list[np.ndarray] = []
         for condition in p.episode_termination_reasons:
             time_idxs.append(
                 self._compute_time_idx_for_termination_condition(condition)
@@ -270,7 +270,7 @@ class AgentBase(object):
         return time_idx
 
     def _compute_time_idx_for_collision(
-        self, use_current_config: Optional[bool] = None
+        self, use_current_config: bool | None = None
     ) -> np.ndarray:
         """
         Compute and return the earliest time index of collision in vehicle
@@ -318,15 +318,15 @@ class AgentBase(object):
         start_config: SystemConfig,
         control_nk2: np.ndarray,
         T: int,
-        sim_mode: Optional[str] = "ideal",
-    ) -> Tuple[Trajectory, np.ndarray]:
+        sim_mode: str | None = "ideal",
+    ) -> tuple[Trajectory, np.ndarray]:
         """
         Apply control commands in control_nk2 in an open loop
         fashion to the system starting from start_config.
         """
         x0_n1d, _ = self.system_dynamics.parse_trajectory(start_config)
-        applied_actions: List[np.ndarray] = []
-        states: List[float] = [x0_n1d * 1.0]
+        applied_actions: list[np.ndarray] = []
+        states: list[float] = [x0_n1d * 1.0]
         x_next_n1d = x0_n1d * 1.0
         for t in range(T):
             u_n1f = control_nk2[:, t : t + 1]
@@ -364,8 +364,8 @@ class AgentBase(object):
         k_array_nTf1: np.ndarray,
         K_array_nTfd: np.ndarray,
         T: int,
-        sim_mode: Optional[str] = "ideal",
-    ) -> Tuple[Trajectory, np.ndarray]:
+        sim_mode: str | None = "ideal",
+    ) -> tuple[Trajectory, np.ndarray]:
         """
         Apply LQR feedback control to the system to track trajectory_ref
         Here k_array_nTf1 and K_array_nTfd are tensors of dimension

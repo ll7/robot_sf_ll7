@@ -1,10 +1,9 @@
 import numpy as np
 from dotmap import DotMap
+from objectives.objective_function import Objective
 from trajectory.trajectory import Trajectory
 from utils.angle_utils import angle_normalize
 from utils.fmm_map import FmmMap
-
-from objectives.objective_function import Objective
 
 
 class AngleDistance(Objective):

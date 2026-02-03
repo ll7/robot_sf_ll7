@@ -1,7 +1,8 @@
-import pickle
-from trajectory.trajectory import Trajectory, SystemConfig
-import numpy as np
 import os
+import pickle
+
+import numpy as np
+from trajectory.trajectory import SystemConfig, Trajectory
 from utils.angle_utils import angle_normalize
 
 

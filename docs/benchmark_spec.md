@@ -51,6 +51,8 @@ Notes:
 * `random`/`ppo` are exposed via the baseline registry for non-map scenario matrices; map-based
   suites should use policy analysis for learned/GT comparisons. `random` is not currently wired
   into `policy_analysis_run.py`.
+* ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
+  in the algo config to use the heuristic fallback.
 
 ## Reproducible Command (One-Liner)
 

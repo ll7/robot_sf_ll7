@@ -87,6 +87,13 @@ viz = [
 sacadrl = [
     "tensorflow>=2.15.0",
 ]
+orca = [
+    "pyrvo2 @ git+https://github.com/mit-acl/Python-RVO2.git",
+    "Cython>=3.0.0",
+]
+
+[tool.uv.extra-build-dependencies]
+pyrvo2 = ["Cython>=3.0.0"]
 
 [build-system]
 requires = ["hatchling"]

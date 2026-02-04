@@ -109,6 +109,7 @@ def _example_env(repo_root_path: Path) -> dict[str, str]:
     return env
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("example", _CI_EXAMPLES, ids=_id)
 def test_example_runs_without_error(
     example: ExampleScript,

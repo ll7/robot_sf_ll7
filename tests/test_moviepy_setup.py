@@ -36,8 +36,7 @@ def test_moviepy_ffmpeg_setup():
         # Verify video
         video = VideoFileClip(str(test_video))
         logger.info(f"Video duration: {video.duration}")
-        assert video.duration in (1.0, 1.1)
-        # TODO: On some systems, the video duration is 1.1 instead of 1.0
+        assert video.duration == pytest.approx(1.0, abs=0.2)
         video.close()
 
     finally:

@@ -221,6 +221,7 @@ class TestFeatureExtractorConfig:
         assert config2.params["embed_dim"] == 32
 
 
+@pytest.mark.slow
 class TestIntegrationWithStableBaselines3:
     """Integration tests with StableBaselines3 and robot environment."""
 

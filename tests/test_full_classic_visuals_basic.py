@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
@@ -55,6 +57,7 @@ def _read_json(path: Path):
         return json.load(f)
 
 
+@pytest.mark.slow
 def test_visuals_manifest_videos_disabled(tmp_path):
     """TODO docstring. Document this function.
 
@@ -74,6 +77,7 @@ def test_visuals_manifest_videos_disabled(tmp_path):
         assert any("disabled" in (a.get("note") or "") for a in data)
 
 
+@pytest.mark.slow
 def test_visuals_manifest_smoke_mode(tmp_path):
     """TODO docstring. Document this function.
 

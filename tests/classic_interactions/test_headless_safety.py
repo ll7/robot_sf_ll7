@@ -9,7 +9,10 @@ from __future__ import annotations
 import importlib
 import os
 
+import pytest
 
+
+@pytest.mark.slow
 def test_headless_dummy_driver_runs():
     """TODO docstring. Document this function."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")

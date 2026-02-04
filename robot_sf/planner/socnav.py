@@ -642,13 +642,21 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
 
     @staticmethod
     def _allow_untrusted_socnav_root() -> bool:
-        """Return True when the environment explicitly allows untrusted roots."""
+        """Return True when the environment explicitly allows untrusted roots.
+
+        Returns:
+            bool: True when the environment variable enables untrusted roots.
+        """
         value = os.getenv(_SOCNAV_ALLOW_UNTRUSTED_ENV, "")
         return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
     @staticmethod
     def _is_trusted_socnav_root(root: Path) -> bool:
-        """Check whether the SocNavBench root lives inside the repository."""
+        """Check whether the SocNavBench root lives inside the repository.
+
+        Returns:
+            bool: True when the root resolves under the repository directory.
+        """
         repo_root = Path(__file__).resolve().parents[2]
         try:
             root.resolve().relative_to(repo_root)

@@ -134,7 +134,7 @@ class AgentBase:
     def _collision_in_group(self, own_pos: np.ndarray, group: list) -> bool:
         for a in group:
             othr_pos = a.get_current_config().position_and_heading_nk3(squeeze=True)
-            is_same_agent: bool = a.get_name() is self.get_name()
+            is_same_agent: bool = a is self
             if (
                 not is_same_agent
                 and a.get_collision_cooldown() == 0

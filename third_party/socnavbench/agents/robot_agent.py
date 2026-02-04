@@ -154,8 +154,8 @@ class RobotAgent(Agent):
             # NOTE: the format for the acceleration commands to the open loop for the robot is:
             # np.array([[[L, A]]], dtype=np.float32) where L is linear, A is angular
             command = np.array([[[v, w]]], dtype=np.float32)
-            t_seg, _ = Agent.apply_control_open_loop(
-                self, current_config, command, 1, sim_mode="ideal"
+            t_seg, _ = self.apply_control_open_loop(
+                current_config, command, 1, sim_mode="ideal"
             )
             self.trajectory.append_along_time_axis(
                 t_seg, track_trajectory_acceleration=True
@@ -248,7 +248,8 @@ class RobotAgent(Agent):
                 robot_on=False, termination_cause=self.termination_cause
             )
             self.send_to_joystick(quit_message)
-        except:
+        except Exception as exc:
+            print("Failed to send power-off message:", exc)
             return
 
     def listen_to_joystick(self) -> None:
@@ -350,4 +351,3 @@ class RobotAgent(Agent):
         close_sockets(
             [RobotAgent.robot_receiver_socket, RobotAgent.robot_sender_socket]
         )
-

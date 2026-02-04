@@ -45,16 +45,16 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         self.obstacle_map = sim_map
         if with_objectives:
             # Initialize Fast-Marching-Method map for agent's pathfinding
-            self.obj_fn = Agent._init_obj_fn(self)
-            Agent._init_fmm_map(self)
+            self.obj_fn = self._init_obj_fn()
+            self._init_fmm_map()
         if with_planner:
             # Initialize planner and vehicle data
             self.planned_next_config = copy.deepcopy(self.current_config)
-            self.planner = Agent._init_planner(self)
+            self.planner = self._init_planner()
             self.vehicle_data = self.planner.empty_data_dict()
         if with_system_dynamics:
             # Initialize system dynamics and planner fields
-            self.system_dynamics = Agent._init_system_dynamics(self)
+            self.system_dynamics = self._init_system_dynamics()
         # the point in the trajectory where the agent collided
         self.collision_point_k: float = np.inf
         # whether or not to end the episode upon robot collision or continue
@@ -180,8 +180,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         """
         # The 'plan' is open loop control
         if "trajectory" not in self.planner_data:
-            trajectory, _ = Agent.apply_control_open_loop(
-                self,
+            trajectory, _ = self.apply_control_open_loop(
                 self.current_config,
                 self.planner_data["optimal_control_nk2"],
                 T=self.params.control_horizon - 1,
@@ -197,8 +196,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
                 repeat_second_to_last_speed=True,
             )
         elif self.system_dynamics.simulation_params.simulation_mode == "realistic":
-            trajectory, _ = Agent.apply_control_closed_loop(
-                self,
+            trajectory, _ = self.apply_control_closed_loop(
                 self.current_config,
                 self.planner_data["spline_trajectory"],
                 self.planner_data["k_nkf1"],
@@ -217,7 +215,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
 
     """BEGIN STATIC HELPER FUNCTIONS"""
 
-    @staticmethod
     def _init_obj_fn(self, params: DotMap | None = None) -> ObjectiveFunction:
         """
         Initialize the objective function given sim params
@@ -246,7 +243,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             )
         return obj_fn
 
-    @staticmethod
     def _update_obj_fn(self) -> None:
         """ 
         Update the objective function to use a new obstacle_map and fmm map
@@ -261,7 +257,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             else:
                 pass  # TODO: raise error on unsupported obj fns
 
-    @staticmethod
     def _init_planner(self, params: DotMap | None = None) -> Planner:
         if params is None:
             params = self.params
@@ -269,7 +264,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             obj_fn=self.obj_fn, params=params.planner_params
         )
 
-    @staticmethod
     def _init_fmm_map(
         self, goal_pos_n2: np.ndarray | None = None, params: DotMap | None = None
     ) -> None:
@@ -286,9 +280,8 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             map_origin_2=self.obstacle_map.get_map_origin_2(),
             mask_grid_mn=obstacle_occupancy_grid,
         )
-        Agent._update_fmm_map(self)
+        self._update_fmm_map()
 
-    @staticmethod
     def _init_system_dynamics(self, params: DotMap | None = None) -> Dynamics:
         """
         If there is a control pipeline (i.e. model based method)
@@ -304,7 +297,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             p = params.system_dynamics_params
             return p.system(dt=p.dt, params=p)
 
-    @staticmethod
     def _update_fmm_map(self, params: DotMap | None = None) -> None:
         """
         For SBPD the obstacle map does not change,
@@ -315,11 +307,10 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         if self.fmm_map is not None:
             self.fmm_map.change_goal(goal_pos_n2)
         else:
-            self.fmm_map = Agent._init_fmm_map(self, params=params)
-        Agent._update_obj_fn(self)
+            self.fmm_map = self._init_fmm_map(params=params)
+        self._update_obj_fn()
 
     # wrapper functions for the helper base class
-    @staticmethod
     def apply_control_open_loop(
         self,
         start_config: SystemConfig,
@@ -327,11 +318,8 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         T: int,
         sim_mode: str | None = "ideal",
     ) -> tuple[Trajectory, np.ndarray]:
-        return super().apply_control_open_loop(
-            self, start_config, control_nk2, T, sim_mode
-        )
+        return super().apply_control_open_loop(start_config, control_nk2, T, sim_mode)
 
-    @staticmethod
     def apply_control_closed_loop(
         self,
         start_config: SystemConfig,
@@ -342,7 +330,6 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         sim_mode: str | None = "ideal",
     ) -> tuple[Trajectory, np.ndarray]:
         return super().apply_control_closed_loop(
-            self,
             start_config,
             trajectory_ref,
             k_array_nTf1,
@@ -350,4 +337,3 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
             T,
             sim_mode=sim_mode,
         )
-

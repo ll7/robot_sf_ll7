@@ -37,7 +37,8 @@ def clip_posn(
     assert sim_dt > 0
     dist_to_new = euclidean_dist2(old_pos3, new_pos3)
     req_vel = abs(dist_to_new / sim_dt)
-    if req_vel <= v_bounds[1] + epsilon:
+    margin = 0.0 if epsilon is None else float(epsilon)
+    if req_vel <= v_bounds[1] + margin:
         return new_pos3
     # calculate theta of vector
     valid_theta = np.arctan2(new_pos3[1] - old_pos3[1], new_pos3[0] - old_pos3[0])
@@ -105,7 +106,7 @@ def establish_joystick_sender_connection(sock_id: str) -> socket.socket:
             % (color_text["red"], color_text["reset"], e)
         )
         print("Make sure you have a joystick instance running")
-        exit(1)
+        raise ConnectionError(f"Unable to connect to joystick at {sock_id}") from e
     assert sock is not None
     print(
         "%sRobot --> Joystick (sender) connection established%s"
@@ -121,13 +122,16 @@ def close_sockets(socks: list[socket.socket]) -> None:
 
 def force_connect(robot_receiver_id: str) -> None:
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    # connect to the socket to break the accept() wait
-    s.connect(robot_receiver_id)
+    try:
+        # connect to the socket to break the accept() wait
+        s.connect(robot_receiver_id)
+    finally:
+        s.close()
 
 
 def establish_handshake(
     p: DotMap, sender_id: str, receiver_id: str,
-) -> tuple[socket.socket, socket.socket]:
+) -> tuple[socket.socket, socket.socket] | None:
     # NOTE: this is from the robot's POV
     if p.episode_params.without_robot:
         # lite-mode episode does not include a robot or joystick

@@ -55,8 +55,9 @@ class ControlPipelineBase:
         if self.does_pipeline_exist():
             self._load_control_pipeline(params=params)
         else:
-            print('Control pipeline does not exist! Generate the pipeline first.')
-            exit(1)
+            raise FileNotFoundError(
+                "Control pipeline does not exist. Generate the pipeline first."
+            )
 
     def _load_control_pipeline(self, params=None):
         """

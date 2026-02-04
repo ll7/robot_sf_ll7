@@ -159,7 +159,9 @@ def raycast_pedestrians(
     """
 
     # Check if pedestrian positions array is empty or not 2D
-    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
+    if len(ped_positions.shape) != 2:
+        return
+    if ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
         return
 
     # Convert scanner position to numpy array

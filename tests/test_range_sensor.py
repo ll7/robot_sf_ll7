@@ -76,26 +76,25 @@ def test_non_integer_distance():
 
 
 ################################################################################
-# Raycasting pedestrians tests
-# def test_no_pedestrians():
-#     out_ranges = np.array([10.0, 10.0])
-#     scanner_pos = (0.0, 0.0)
-#     max_scan_range = 10.0
-#     ped_positions = np.array([], dtype=np.float64)
-#     ped_radius = 1.0
-#     ray_angles = np.array([0.0, np.pi / 2])
+def test_no_pedestrians():
+    """TODO docstring. Document this function."""
+    out_ranges = np.array([10.0, 10.0])
+    scanner_pos = (0.0, 0.0)
+    max_scan_range = 10.0
+    ped_positions = np.empty((0, 2), dtype=np.float64)
+    ped_radius = 1.0
+    ray_angles = np.array([0.0, np.pi / 2])
 
-#     raycast_pedestrians(
-#         out_ranges,
-#         scanner_pos,
-#         max_scan_range,
-#         ped_positions,
-#         ped_radius,
-#         ray_angles
-#         )
+    raycast_pedestrians(
+        out_ranges,
+        scanner_pos,
+        max_scan_range,
+        ped_positions,
+        ped_radius,
+        ray_angles,
+    )
 
-#     assert np.all(out_ranges == 10.0)
-# TODO testing with no pedestrians did not work
+    assert np.all(out_ranges == 10.0)
 
 
 def test_pedestrian_in_range():

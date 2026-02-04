@@ -325,7 +325,11 @@ namespace RVO {
 	 */
 	inline Vector2 normalize(const Vector2 &vector)
 	{
-		return vector / abs(vector);
+		const float len = abs(vector);
+		if (len > 0.0f) {
+			return vector / len;
+		}
+		return Vector2();
 	}
 }
 

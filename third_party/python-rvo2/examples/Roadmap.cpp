@@ -49,6 +49,7 @@
 #include <cstdlib>
 #include <map>
 #include <vector>
+#include <random>
 
 #if RVO_OUTPUT_TIME_AND_POSITIONS
 #include <iostream>
@@ -314,8 +315,19 @@ void setPreferredVelocities(RVO::RVOSimulator *sim)
 		/*
 		 * Perturb a little to avoid deadlocks due to perfect symmetry.
 		 */
-		float angle = std::rand() * 2.0f * M_PI / RAND_MAX;
-		float dist = std::rand() * 0.0001f / RAND_MAX;
+	#ifdef _OPENMP
+		static thread_local std::mt19937 rng(
+			static_cast<unsigned int>(std::time(nullptr)) +
+			static_cast<unsigned int>(omp_get_thread_num()));
+	#else
+		static thread_local std::mt19937 rng(
+			static_cast<unsigned int>(std::time(nullptr)));
+	#endif
+		std::uniform_real_distribution<float> angle_dist(
+			0.0f, 2.0f * static_cast<float>(M_PI));
+		std::uniform_real_distribution<float> dist_dist(0.0f, 0.0001f);
+		float angle = angle_dist(rng);
+		float dist = dist_dist(rng);
 
 		sim->setAgentPrefVelocity(i, sim->getAgentPrefVelocity(i) +
 		                          dist * RVO::Vector2(std::cos(angle), std::sin(angle)));

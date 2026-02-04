@@ -351,20 +351,21 @@ namespace RVO {
 		float getAgentTimeHorizonObst(size_t agentNo) const;
 
 		/**
+		 * \brief      Returns the collaboration coefficient of an agent
+		 * \param      agentNo         The number of the agent whose
+		 *                             collaboration coefficient is to be
+		 *                             retrieved.
+		 * \return     The present collaboration coefficient of the agent.
+		 */
+		float getAgentCollabCoeff(size_t agentNo) const;
+
+		/**
 		 * \brief      Returns the two-dimensional linear velocity of a
 		 *             specified agent.
 		 * \param      agentNo         The number of the agent whose
 		 *                             two-dimensional linear velocity is to be
 		 *                             retrieved.
 		 * \return     The present two-dimensional linear velocity of the agent.
-		 */
-		float getAgentCollabCoeff(size_t agentNo) const;
-		/**
-		 * \brief      Returns the collaboration coefficient of an agent
-		 * \param      agentNo         The number of the agent whose
-		 *                             collaboration coefficient is to be
-		 *                             retrieved.
-		 * \return     The present collaboration coefficient of the agent.
 		 */
 		const Vector2 &getAgentVelocity(size_t agentNo) const;
 
@@ -566,6 +567,16 @@ namespace RVO {
 		void setAgentTimeHorizonObst(size_t agentNo, float timeHorizonObst);
 
 		/**
+		 * \brief      Sets the collaboration coefficient of a specified
+		 *             agent.
+		 * \param      agentNo         The number of the agent whose
+		 *                             collaboration coefficient is to be
+		 *                             modified.
+		 * \param      collabCoeff        The replacement collaboration coefficient.
+		 */
+		void setAgentCollabCoeff(size_t agentNo, float collabCoeff);
+
+		/**
 		 * \brief      Sets the two-dimensional linear velocity of a specified
 		 *             agent.
 		 * \param      agentNo         The number of the agent whose
@@ -573,16 +584,6 @@ namespace RVO {
 		 *                             modified.
 		 * \param      velocity        The replacement two-dimensional linear
 		 *                             velocity.
-		 */
-		void setAgentCollabCoeff(size_t agentNo, float collabCoeff);
-
-		/**
-		 * \brief      Sets the collaboration coefficient of a specified
-		 *             agent.
-		 * \param      agentNo         The number of the agent whose
-		 *                             collaboration coefficient is to be
-		 *                             modified.
-		 * \param      collabCoeff        The replacement collaboration coefficient.
 		 */
 		void setAgentVelocity(size_t agentNo, const Vector2 &velocity);
 

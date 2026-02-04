@@ -68,7 +68,11 @@ namespace RVO {
 	inline float distSqPointLineSegment(const Vector2 &a, const Vector2 &b,
 										const Vector2 &c)
 	{
-		const float r = ((c - a) * (b - a)) / absSq(b - a);
+		const float segLenSq = absSq(b - a);
+		if (segLenSq < RVO_EPSILON) {
+			return absSq(c - a);
+		}
+		const float r = ((c - a) * (b - a)) / segLenSq;
 
 		if (r < 0.0f) {
 			return absSq(c - a);

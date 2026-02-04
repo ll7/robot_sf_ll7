@@ -372,7 +372,7 @@ namespace RVO {
             }
             else{
                 float minDistSq = std::numeric_limits<float>::infinity();
-                size_t closestAgentIndex;
+                size_t closestAgentIndex = 0;
                 for (size_t i = 0; i < agentNeighbors_.size(); ++i) {
                     const Agent *const other = agentNeighbors_[i].second;
                     float distSq = absSq(other->position_ - position_);
@@ -398,18 +398,28 @@ namespace RVO {
                 const float distSq = absSq(relativePosition);
                 const float combinedRadius = radius_ + other->radius_;
                 const float combinedRadiusSq = sqr(combinedRadius);
-                const float leg = std::sqrt(distSq - combinedRadiusSq);
+                const Vector2 direction = distSq > 0.0f ? normalize(relativePosition) : Vector2(1.0f, 0.0f);
                 Line line;
-                /* left leg. */
-                line.direction = -Vector2(relativePosition.x() * leg - relativePosition.y() * combinedRadius, relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
-                line.point = other->velocity_ + relativePosition;
-                orcaLines_.push_back(line);
-                /* right leg. */
-                line.direction = Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
-                line.point = other->velocity_ + relativePosition;
-                orcaLines_.push_back(line);
+                if (distSq <= combinedRadiusSq) {
+                    line.direction = Vector2(-direction.y(), direction.x());
+                    line.point = other->velocity_ + relativePosition;
+                    orcaLines_.push_back(line);
+                    line.direction = -line.direction;
+                    orcaLines_.push_back(line);
+                }
+                else {
+                    const float leg = std::sqrt(distSq - combinedRadiusSq);
+                    /* left leg. */
+                    line.direction = -Vector2(relativePosition.x() * leg - relativePosition.y() * combinedRadius, relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+                    line.point = other->velocity_ + relativePosition;
+                    orcaLines_.push_back(line);
+                    /* right leg. */
+                    line.direction = Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+                    line.point = other->velocity_ + relativePosition;
+                    orcaLines_.push_back(line);
+                }
 
-                prefVelocity_ = other->velocity_ + (-collabCoeff_)*normalize(relativePosition);
+                prefVelocity_ = other->velocity_ + (-collabCoeff_) * direction;
 
             }
         }

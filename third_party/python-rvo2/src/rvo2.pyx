@@ -89,6 +89,11 @@ cdef class PyRVOSimulator:
                                         timeHorizon, timeHorizonObst, radius,
                                         maxSpeed, c_velocity)
 
+    def __dealloc__(self):
+        if self.thisptr != NULL:
+            del self.thisptr
+            self.thisptr = NULL
+
     def addAgent(self, tuple pos, neighborDist=None,
                  maxNeighbors=None, timeHorizon=None,
                  timeHorizonObst=None, radius=None, maxSpeed=None,
@@ -205,8 +210,6 @@ cdef class PyRVOSimulator:
         self.thisptr.setAgentMaxNeighbors(agent_no, max_neighbors)
     def setAgentMaxSpeed(self, size_t agent_no, float max_speed):
         self.thisptr.setAgentMaxSpeed(agent_no, max_speed)
-    def setAgentNeighborDist(self, size_t agent_no, float neighbor_dist):
-        self.thisptr.setAgentNeighborDist(agent_no, neighbor_dist)
     def setAgentNeighborDist(self, size_t agent_no, float neighbor_dist):
         self.thisptr.setAgentNeighborDist(agent_no, neighbor_dist)
     def setAgentPosition(self, size_t agent_no, tuple position):

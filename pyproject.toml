@@ -88,6 +88,8 @@ sacadrl = [
     "tensorflow>=2.15.0",
 ]
 orca = [
+    # Use MIT-ACL fork for ORCA: it adds a collabCoeff extension to model cooperative/adversarial behavior.
+    # See https://github.com/mit-acl/Python-RVO2 for details; upstream is https://github.com/sybrenstuvel/Python-RVO2.
     "pyrvo2 @ git+https://github.com/mit-acl/Python-RVO2.git",
     "Cython>=3.0.0",
 ]

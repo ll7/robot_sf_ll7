@@ -589,8 +589,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 ),
             )
             return linear, angular
-        except Exception:  # pragma: no cover - safety net  # noqa: BLE001
-            return self._heuristic_plan(observation)
+        except Exception as exc:  # pragma: no cover - safety net
+            if self._allow_fallback:
+                return self._heuristic_plan(observation)
+            raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
 
     def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
         """Invoke a user-provided factory defensively.
@@ -642,7 +644,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
 
     @staticmethod
     def _allow_untrusted_socnav_root() -> bool:
-        """Return True when the environment explicitly allows untrusted roots.
+        """Determine whether the environment explicitly allows untrusted roots.
 
         Returns:
             bool: True when the environment variable enables untrusted roots.

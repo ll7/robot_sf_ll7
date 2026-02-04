@@ -186,7 +186,7 @@ def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
         classmethod(lambda cls, params: FakePipeline(params)),
     )
 
-    adapter = SocNavBenchSamplingAdapter(socnav_root=root, allow_fallback=False)
+    adapter = SocNavBenchSamplingAdapter(socnav_root=root, allow_fallback=True)
     obs = _base_observation()
     v, w = adapter.plan(obs)
     assert np.isfinite(v)

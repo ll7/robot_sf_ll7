@@ -90,7 +90,7 @@ sacadrl = [
 orca = [
     # Use MIT-ACL fork for ORCA: it adds a collabCoeff extension to model cooperative/adversarial behavior.
     # See https://github.com/mit-acl/Python-RVO2 for details; upstream is https://github.com/sybrenstuvel/Python-RVO2.
-    "pyrvo2 @ git+https://github.com/mit-acl/Python-RVO2.git",
+    "pyrvo2",
     "Cython>=3.0.0",
 ]
 
@@ -470,6 +470,7 @@ robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+pyrvo2 = { path = "third_party/python-rvo2" }
 
 [tool.ty.src]
 exclude = [

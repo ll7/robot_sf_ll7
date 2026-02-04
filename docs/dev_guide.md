@@ -275,6 +275,12 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
 
+### Test style conventions
+
+- Default to pytest-style tests in `tests/` (functions + pytest fixtures).
+- Using `unittest.mock` for mocks/stubs is fine, but avoid adding new `unittest.TestCase` suites.
+- Legacy `fast-pysf/tests/unittest` remains unittest-based for upstream compatibility; new fast-pysf tests should still prefer pytest.
+
 ### Artifact policy & tooling
 
 - Canonical outputs live under `output/` with stable subdirectories: `output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, and `output/tmp/`.

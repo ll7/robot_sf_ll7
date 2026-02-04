@@ -90,6 +90,7 @@ sacadrl = [
 orca = [
     # Use MIT-ACL fork for ORCA: it adds a collabCoeff extension to model cooperative/adversarial behavior.
     # See https://github.com/mit-acl/Python-RVO2 for details; upstream is https://github.com/sybrenstuvel/Python-RVO2.
+    # The fork is vendored under third_party/python-rvo2 to patch CMake compatibility.
     "pyrvo2",
     "Cython>=3.0.0",
 ]

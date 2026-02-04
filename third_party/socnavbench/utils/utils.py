@@ -37,9 +37,10 @@ def get_time_str() -> str:
 
 
 def to_json_type(
-    elem: Any, json_args: dict[str, Any] | None = {}
+    elem: Any, json_args: dict[str, Any] | None = None
 ) -> str or int or float or list or dict:
     """ Converts an element to a json serializable type. """
+    json_args = json_args or {}
     if isinstance(elem, (int, str, bool, float)):
         return elem  # nothing to do. Primitive already
     if isinstance(elem, (np.int64, np.int32)):
@@ -71,9 +72,10 @@ def to_json_type(
 
 
 def dict_to_json(
-    param_dict: dict[str, Any], json_args: dict[str, Any] | None = {}
+    param_dict: dict[str, Any], json_args: dict[str, Any] | None = None
 ) -> dict[str, str or int or float]:
     """ Converts params_dict to a json serializable dict."""
+    json_args = json_args or {}
     json_dict: dict[str, str or int or float] = {}
     for key in param_dict.keys():
         # possibly recursive for dicts in dicts
@@ -82,9 +84,10 @@ def dict_to_json(
 
 
 def list_to_json(
-    param_list: list[Any], json_args: dict[str, Any] | None = {}
+    param_list: list[Any], json_args: dict[str, Any] | None = None
 ) -> list[str or int or float or bool]:
     """ Converts params_list to a json serializable list."""
+    json_args = json_args or {}
     json_list: list[str or int or float or bool] = [
         to_json_type(elem, json_args) for elem in param_list
     ]
@@ -200,6 +203,10 @@ def check_dotmap_equality(d1: DotMap, d2: DotMap) -> bool:
         d2_attr = getattr(d2, key)
         if type(d1_attr) is DotMap:
             equality[i] = check_dotmap_equality(d1_attr, d2_attr)
+        elif isinstance(d1_attr, np.ndarray) or isinstance(d2_attr, np.ndarray):
+            equality[i] = np.array_equal(d1_attr, d2_attr)
+        else:
+            equality[i] = d1_attr == d2_attr
     return np.array(equality).all()
 
 

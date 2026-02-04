@@ -13,7 +13,11 @@ class ObstacleAvoidance(Objective):
     """
 
     def __init__(self, params: DotMap, obstacle_map: SBPDMap):
-        assert params.obstacle_margin0 <= params.obstacle_margin1
+        if params.obstacle_margin1 <= params.obstacle_margin0:
+            raise ValueError(
+                "obstacle_margin1 must be greater than obstacle_margin0 to avoid "
+                "division by zero in obstacle_avoidance."
+            )
         self.factor: float = params.obstacle_margin1 - params.obstacle_margin0
         self.p: DotMap = params
         self.obstacle_map: SBPDMap = obstacle_map

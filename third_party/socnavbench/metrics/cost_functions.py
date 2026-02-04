@@ -134,7 +134,7 @@ def path_length_ratio(
     epsilon = 0.00001  # for numerical stability
     distance = path_length(traj_xy) + epsilon
     displacement = np.linalg.norm(goal_xy - start_config)
-    return distance / displacement
+    return displacement / distance
 
 
 def path_irregularity(
@@ -162,8 +162,10 @@ def path_irregularity(
     point_to_goal_traj = np.squeeze(goal_arr)[:-1] - traj_xy
     denom = np.linalg.norm(point_to_goal_traj, axis=1) + 1e-10
     cos_theta = np.sum(point_to_goal_traj * heading_vectors, axis=1) / denom
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
     theta_to_goal_traj = np.arccos(cos_theta)
-    path_irr = np.sum(np.abs(theta_to_goal_traj)) / len(theta_to_goal_traj)
+    path_length_m = path_length(traj_xy) + 1e-10
+    path_irr = np.sum(np.abs(theta_to_goal_traj)) / path_length_m
 
     return path_irr
 

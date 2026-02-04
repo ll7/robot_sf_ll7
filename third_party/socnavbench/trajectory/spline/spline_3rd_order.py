@@ -178,7 +178,7 @@ class Spline3rdOrder(Spline):
         )
 
         # Compute the valid splines
-        valid_idxs_n = np.where(required_horizon_n1 <= horizon_s)[:, 0]
+        valid_idxs_n = np.where(required_horizon_n1 <= horizon_s)[0]
         return valid_idxs_n.astype(np.int32)
 
     def compute_dynamically_feasible_horizon(
@@ -282,4 +282,3 @@ class Spline3rdOrder(Spline):
             label_start_and_end=label_start_and_end,
             name="Spline",
         )
-

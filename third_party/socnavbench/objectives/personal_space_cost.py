@@ -17,14 +17,14 @@ class PersonalSpaceCost(Objective):
         self.tag: str = "personal_space_cost_per_nonego_agent"
 
     def evaluate_objective(
-        self, trajectory: Trajectory, sim_state_hist: list[SimState]
+        self, trajectory: Trajectory, sim_state_hist: dict[int, SimState]
     ) -> np.ndarray:
         # get ego agent trajectory
         ego_traj = trajectory.position_and_heading_nk3()
 
         # get the last sim_state if it exists
         if len(sim_state_hist) == 0:
-            return 0
+            return np.zeros((1, ego_traj.shape[1]))
         sim_state: SimState = sim_state_hist[max(sim_state_hist.keys())]
         assert isinstance(sim_state, SimState)
         # loop through each trajectory point

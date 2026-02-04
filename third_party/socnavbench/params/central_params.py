@@ -119,7 +119,7 @@ def create_dataset(dataset_name: str) -> DotMap:
     p.fps = dataset_p.getint("fps")
     # (starts and range of the dataset are located in episode_params)
     p.spawn_delay_s = dataset_p.getfloat("spawn_delay_s")
-    p.offset = eval(dataset_p.get("offset"))
+    p.offset = literal_eval(dataset_p.get("offset"))
     p.swapxy = dataset_p.getboolean("swapxy")
     p.flipxn = dataset_p.getboolean("flipxn")
     p.flipyn = dataset_p.getboolean("flipyn")
@@ -140,13 +140,13 @@ def create_test_params(test: str) -> DotMap:
     p.name = test
     p.map_name = test_p.get("map_name")
     p.pedestrian_datasets = create_datasets_params(
-        eval(test_p.get("pedestrian_datasets"))
+        literal_eval(test_p.get("pedestrian_datasets"))
     )
-    p.datasets_start_t = eval(test_p.get("datasets_start_t"))
-    p.ped_ranges = eval(test_p.get("ped_ranges"))
-    p.agents_start = eval(test_p.get("agents_start"))
-    p.agents_end = eval(test_p.get("agents_end"))
-    p.robot_start_goal = eval(test_p.get("robot_start_goal"))
+    p.datasets_start_t = literal_eval(test_p.get("datasets_start_t"))
+    p.ped_ranges = literal_eval(test_p.get("ped_ranges"))
+    p.agents_start = literal_eval(test_p.get("agents_start"))
+    p.agents_end = literal_eval(test_p.get("agents_end"))
+    p.robot_start_goal = literal_eval(test_p.get("robot_start_goal"))
     p.max_time = test_p.getfloat("max_time")
     p.write_episode_log = test_p.getboolean("write_episode_log")
     return p
@@ -158,7 +158,7 @@ def create_episodes_params() -> DotMap:
     epi_p = episodes_config["episodes_params"]
     p.without_robot = epi_p.getboolean("without_robot")
     # NOTE: uses a dictionary of DotMaps to use string notation
-    tests = eval(epi_p.get("tests"))
+    tests = literal_eval(epi_p.get("tests"))
     if len(tests) == 0:
         tests = episodes_config.sections()[1:]
     test_dict = {}
@@ -189,8 +189,8 @@ def create_waypoint_params() -> DotMap:
     p.num_waypoints = wayp_p.getint("num_waypoints")
     p.num_theta_bins = wayp_p.getint("num_theta_bins")
 
-    p.bound_min = eval(wayp_p.get("bound_min"))
-    p.bound_max = eval(wayp_p.get("bound_max"))
+    p.bound_min = literal_eval(wayp_p.get("bound_min"))
+    p.bound_max = literal_eval(wayp_p.get("bound_max"))
 
     camera_params: DotMap = create_camera_params()
     robot_params: DotMap = create_robot_params().physical_params
@@ -227,9 +227,9 @@ def create_system_dynamics_params() -> DotMap:
 
     p.dt = user_config["simulator_params"].getfloat("dt")
 
-    p.v_bounds = eval(dyn_p.get("v_bounds"))
+    p.v_bounds = literal_eval(dyn_p.get("v_bounds"))
     assert p.v_bounds[1] > p.v_bounds[0]
-    p.w_bounds = eval(dyn_p.get("w_bounds"))
+    p.w_bounds = literal_eval(dyn_p.get("w_bounds"))
     assert p.w_bounds[1] > p.w_bounds[0]
 
     p.linear_acc_max = dyn_p2.getfloat("linear_acc_max")
@@ -240,10 +240,10 @@ def create_system_dynamics_params() -> DotMap:
         noise_params=DotMap(
             is_noisy=dyn_p2.getboolean("is_noisy"),
             noise_type=dyn_p2.get("noise_type"),
-            noise_lb=eval(dyn_p2.get("noise_lb")),
-            noise_ub=eval(dyn_p2.get("noise_ub")),
-            noise_mean=eval(dyn_p2.get("noise_mean")),
-            noise_std=eval(dyn_p2.get("noise_std")),
+            noise_lb=literal_eval(dyn_p2.get("noise_lb")),
+            noise_ub=literal_eval(dyn_p2.get("noise_ub")),
+            noise_mean=literal_eval(dyn_p2.get("noise_mean")),
+            noise_std=literal_eval(dyn_p2.get("noise_std")),
         ),
     )
     return p
@@ -276,8 +276,8 @@ def create_control_pipeline_params() -> DotMap:
     p.minimum_spline_horizon = cp_p.getfloat("minimum_spline_horizon")
 
     # LQR setting parameters
-    q_coeffs = eval(cp_p2.get("quad_coeffs"))
-    l_coeffs = eval(cp_p2.get("linear_coeffs"))
+    q_coeffs = literal_eval(cp_p2.get("quad_coeffs"))
+    l_coeffs = literal_eval(cp_p2.get("linear_coeffs"))
     p.lqr_params = DotMap(
         cost_fn=QuadraticRegulatorRef,
         quad_coeffs=np.array(q_coeffs, dtype=np.float32),
@@ -484,13 +484,13 @@ def create_obstacle_map_params() -> DotMap:
 
     # Size of map
     # Same as for SocNav FMM Map of Area3
-    p.map_size_2 = np.array(eval(obst_p.get("map_size_2")))
+    p.map_size_2 = np.array(literal_eval(obst_p.get("map_size_2")))
 
     # Convert the grid spacing to units of meters. Should be 5cm for the S3DIS data
     p.dx = obst_p.getfloat("dx")
 
     # Origin is always 0,0 for SBPD
-    p.map_origin_2 = eval(obst_p.get("map_origin_2"))
+    p.map_origin_2 = literal_eval(obst_p.get("map_origin_2"))
 
     # Threshold distance from the obstacles to sample the start and the goal positions.
     p.sampling_thres = obst_p.getint("sampling_thres")
@@ -542,7 +542,7 @@ def create_building_params(full_render: Optional[bool] = False) -> DotMap:
 def create_camera_params() -> DotMap:
     p = DotMap()
     camera_p = user_config["camera_params"]
-    p.modalities = eval(camera_p.get("modalities"))
+    p.modalities = literal_eval(camera_p.get("modalities"))
     p.width = camera_p.getfloat("width")
     p.height = camera_p.getfloat("height")
     p.z_near = camera_p.getfloat("z_near")

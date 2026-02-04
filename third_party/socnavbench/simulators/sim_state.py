@@ -221,7 +221,7 @@ class AgentState:
         )
         goal_config = (
             SystemConfig.from_pos3(json_dict["goal_config"])
-            if "start_config" in json_dict
+            if "goal_config" in json_dict
             else None
         )
         current_config = (

@@ -137,6 +137,17 @@ class Planner:
         data_last['k_nkf1'] = data['k_nkf1'][last_data_idx]
         data_last['img_nmkd'] = []
 
+        def _concat_and_mask(values, mask):
+            if isinstance(values, list):
+                if len(values) == 0:
+                    return None
+                concat = np.concatenate(values, axis=0)
+            else:
+                concat = np.asarray(values)
+            if concat.shape[0] == len(mask):
+                return concat[mask]
+            return concat
+
         # Get the main planner data
         if (isinstance(data['system_config'], SystemConfig)):
             data['system_config'] = SystemConfig.concat_across_batch_dim(
@@ -149,10 +160,8 @@ class Planner:
                 np.array([data['spline_trajectory']]))
             data['planning_horizon_n1'] = data[
                 'planning_horizon']  # [valid_mask][:, None]
-            data['K_nkfd'] = np.ma.masked_array(np.concatenate(data['K_nkfd'], axis=0),
-                                                valid_mask)
-            data['k_nkf1'] = np.ma.masked_array(np.concatenate(data['k_nkf1'], axis=0),
-                                                valid_mask)
+            data['K_nkfd'] = _concat_and_mask(data['K_nkfd'], valid_mask)
+            data['k_nkf1'] = _concat_and_mask(data['k_nkf1'], valid_mask)
             data['img_nmkd'] = []
         else:
             data['system_config'] = SystemConfig.concat_across_batch_dim(
@@ -165,10 +174,8 @@ class Planner:
                 np.array(data['spline_trajectory'])[valid_mask])
             data['planning_horizon_n1'] = np.array(
                 data['planning_horizon'])[valid_mask][:, None]
-            data['K_nkfd'] = np.ma.masked_array(np.concatenate(data['K_nkfd'], axis=0),
-                                                valid_mask)
-            data['k_nkf1'] = np.ma.masked_array(np.concatenate(data['k_nkf1'], axis=0),
-                                                valid_mask)
+            data['K_nkfd'] = _concat_and_mask(data['K_nkfd'], valid_mask)
+            data['k_nkf1'] = _concat_and_mask(data['k_nkf1'], valid_mask)
             data['img_nmkd'] = [
             ]  # np.array(np.concatenate(data['img_nmkd'], axis=0))[valid_mask] # Dont think we need for our purposes
         return data, data_last, last_data_valid
@@ -188,7 +195,7 @@ class Planner:
         data_numpy['spline_trajectory'] = data[
             'spline_trajectory'].to_numpy_repr()
         data_numpy['planning_horizon_n1'] = data['planning_horizon_n1']
-        data_numpy['K_nkfd'] = data['K_nkfd'].numpy()
-        data_numpy['k_nkf1'] = data['k_nkf1'].numpy()
+        data_numpy['K_nkfd'] = np.asarray(data['K_nkfd'])
+        data_numpy['k_nkf1'] = np.asarray(data['k_nkf1'])
         data_numpy['img_nmkd'] = data['img_nmkd']
         return data_numpy

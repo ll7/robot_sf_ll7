@@ -33,13 +33,15 @@ class Trajectory:
             assert n == position_nk2.shape[0]
             try:
                 assert k == position_nk2.shape[1]
-            except:
+            except Exception:
                 try:
                     # tuple with implied 1 as dimen 1
                     assert position_nk2.shape[0] == position_nk2.size
-                except:
-                    print("ERROR, dimens mismatch:", k, position_nk2.shape[1])
-                    exit(1)
+                except Exception as exc:
+                    raise ValueError(
+                        f"Trajectory dimension mismatch: expected k={k}, "
+                        f"got shape={position_nk2.shape}."
+                    ) from exc
 
         # Discretization step
         self.dt: float = dt
@@ -163,18 +165,36 @@ class Trajectory:
             return Trajectory.empty(dt)
         position_nk2 = pos3_nk3[:, :, :2].reshape(n, k, 2)
         heading_nk1 = pos3_nk3[:, :, 2].reshape(n, k, 1)
-        speed_nk1 = (
-            np.sqrt(np.sum(np.diff(position_nk2, axis=1) ** 2, axis=2)) / dt
-        ).reshape(n, k - 1, 1)
-        acceleration_nk1 = (
-            np.sqrt(np.sum(np.diff(speed_nk1, axis=1) ** 2, axis=2)) / dt
-        ).reshape(n, k - 2, 1)
-        angular_speed_nk1 = (
-            np.sqrt(np.sum(np.diff(heading_nk1, axis=1) ** 2, axis=2)) / dt
-        ).reshape(n, k - 1, 1)
-        angular_acceleration_nk1 = (
-            np.sqrt(np.sum(np.diff(angular_speed_nk1, axis=1) ** 2, axis=2)) / dt
-        ).reshape(n, k - 2, 1)
+        speed_nk1 = np.zeros((n, k, 1), dtype=np.float32)
+        angular_speed_nk1 = np.zeros((n, k, 1), dtype=np.float32)
+        acceleration_nk1 = np.zeros((n, k, 1), dtype=np.float32)
+        angular_acceleration_nk1 = np.zeros((n, k, 1), dtype=np.float32)
+
+        if k > 1:
+            speed_step_nk1 = (
+                np.sqrt(np.sum(np.diff(position_nk2, axis=1) ** 2, axis=2)) / dt
+            ).reshape(n, k - 1, 1)
+            speed_nk1[:, :-1] = speed_step_nk1
+            speed_nk1[:, -1] = speed_step_nk1[:, -1]
+
+            angular_step_nk1 = (
+                np.sqrt(np.sum(np.diff(heading_nk1, axis=1) ** 2, axis=2)) / dt
+            ).reshape(n, k - 1, 1)
+            angular_speed_nk1[:, :-1] = angular_step_nk1
+            angular_speed_nk1[:, -1] = angular_step_nk1[:, -1]
+
+        if k > 2:
+            accel_step_nk1 = (
+                np.abs(np.diff(speed_nk1[:, :, 0], axis=1)) / dt
+            ).reshape(n, k - 1, 1)
+            acceleration_nk1[:, :-1] = accel_step_nk1
+            acceleration_nk1[:, -1] = accel_step_nk1[:, -1]
+
+            angular_accel_step_nk1 = (
+                np.abs(np.diff(angular_speed_nk1[:, :, 0], axis=1)) / dt
+            ).reshape(n, k - 1, 1)
+            angular_acceleration_nk1[:, :-1] = angular_accel_step_nk1
+            angular_acceleration_nk1[:, -1] = angular_accel_step_nk1[:, -1]
         return cls(
             dt=dt,
             n=n,
@@ -461,7 +481,7 @@ class Trajectory:
         self._angular_speed_nk1 = self._angular_speed_nk1[:, horizon:]
         self._angular_acceleration_nk1 = self._angular_acceleration_nk1[:, horizon:]
         self.k = self.k - horizon
-        self.valid_horizons_n1 = np.clip(self.valid_horizons_n1, horizon, -1)
+        self.valid_horizons_n1 = np.clip(self.valid_horizons_n1 - horizon, 0, self.k)
 
     @classmethod
     def concat_along_time_axis(cls, trajectories: list):

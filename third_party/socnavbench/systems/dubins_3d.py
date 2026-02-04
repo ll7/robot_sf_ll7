@@ -95,8 +95,11 @@ class Dubins3D(DubinsCar):
         Compute a noise component for the Dubins car.
         """
         if self.simulation_params.noise_params.noise_type == 'uniform':
-            return np.random.uniform(required_shape, self.simulation_params.noise_params.noise_lb,
-                                     self.simulation_params.noise_params.noise_ub).astype(data_type)
+            return np.random.uniform(
+                self.simulation_params.noise_params.noise_lb,
+                self.simulation_params.noise_params.noise_ub,
+                size=required_shape,
+            ).astype(data_type)
         elif self.simulation_params.noise_params.noise_type == 'gaussian':
             return np.random.normal(size=required_shape, loc=self.simulation_params.noise_params.noise_mean,
                                     scale=self.simulation_params.noise_params.noise_std).astype(data_type)

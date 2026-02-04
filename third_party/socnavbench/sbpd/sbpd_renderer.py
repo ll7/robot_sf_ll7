@@ -46,8 +46,14 @@ class SBPDRenderer:
         """
         r = cls.renderer
         if r is not None:
-            dn, bn, f, c = r.p.dataset_name, r.p.building_name, r.p.flip, r.p.modalities
-            if dn == params.dataset_name and bn == params.building_name and f == params.flip and c == params.modalities:
+            dn, bn, f = r.p.dataset_name, r.p.building_name, r.p.flip
+            c = r.p.camera_params.modalities
+            if (
+                dn == params.dataset_name
+                and bn == params.building_name
+                and f == params.flip
+                and c == params.camera_params.modalities
+            ):
                 return r
             else:
                 assert False, "Renderer settings are different than previously instantiated renderer"

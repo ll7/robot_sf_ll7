@@ -15,14 +15,10 @@ def rotate_pos_nk2(pos_nk2: np.ndarray, theta_n11: np.ndarray) -> np.ndarray:
     # Broadcast theta_n11 to size nk1. broadcast_to does not track gradients so addition is used
     # here instead
     # theta_nk1 = theta_n11 + 0. * pos_nk2[:, :, 0:1]
-    t_0 = theta_n11[0][0]  # since theta_n11 is nx1x1 matrix
-    # (element wise vector multiplication)
-    theta_nk1 = np.ones_like(pos_nk2) * t_0
-    # theta_nk1 = theta_n11 + 0. * pos_nk2[:, :, 0:1]
-    if type(theta_nk1) is np.ndarray:
-        n, k, _ = [x for x in theta_nk1.shape]
+    if type(pos_nk2) is np.ndarray:
+        n, k, _ = [x for x in pos_nk2.shape]
     else:
-        n, k, _ = [x.value for x in theta_nk1.shape]
+        n, k, _ = [x.value for x in pos_nk2.shape]
     rot_matrix_nk22 = padded_rotation_matrix(theta_n11, shape=(n, k, 2))
     pos_rot_nk2 = np.matmul(rot_matrix_nk22, pos_nk2[:, :, :, None])[:, :, :, 0]
     return pos_rot_nk2
@@ -43,9 +39,7 @@ def padded_rotation_matrix(
     e = d - 2
     assert d >= 2
     dtype = theta_n11.dtype
-    t_0 = theta_n11[0][0]
-    # theta_nk11 = np.broadcast_to(theta_n11[:, None], (n, k, 1, 1))
-    theta_nk11 = np.ones(shape=(n, k, 1, 1), dtype=dtype) * t_0
+    theta_nk11 = np.broadcast_to(theta_n11, (n, k, 1, 1)).astype(dtype, copy=False)
 
     first_row_nkd1 = np.concatenate(
         [
@@ -67,12 +61,9 @@ def padded_rotation_matrix(
     # If lower_identity is true, make the lower right
     # e x e matrix the identity matrix
     if lower_identity:
-        # identity_block_nkee = np.eye(e, dtype=dtype).reshape(n, k)
-        identity_block_nkee = []
-        identity_block_nkee.append([])
-        for _ in range(k):
-            identity_block_nkee[0].append([[1]])
-        identity_block_nkee = np.array(identity_block_nkee, dtype=dtype)
+        identity_block_nkee = np.broadcast_to(
+            np.eye(e, dtype=dtype), (n, k, e, e)
+        )
         remaining_rows_nkde = np.concatenate(
             [np.zeros((n, k, 2, e), dtype=dtype), identity_block_nkee], axis=2
         )

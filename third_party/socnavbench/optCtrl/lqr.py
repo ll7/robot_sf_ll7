@@ -249,6 +249,10 @@ class LQRSolver:
         to ensure its positive-definite properties
         """
         if self.inv:
-            return np.linalg.inv(mat)
-        else:
-            raise NotImplementedError
+            eye = np.eye(mat.shape[-1], dtype=mat.dtype)
+            return np.linalg.inv(mat + reg * eye)
+
+        u, s, vt = np.linalg.svd(mat, full_matrices=False)
+        s_reg = s / (s ** 2 + reg)
+        v = np.swapaxes(vt, -2, -1)
+        return (v * s_reg[..., None, :]) @ np.swapaxes(u, -2, -1)

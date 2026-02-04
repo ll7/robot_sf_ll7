@@ -28,7 +28,7 @@ The remainder of this document details evidence and a structured gap analysis, t
 ### 3) Baselines and local policy adapters
 
 - Bench baseline registry in `robot_sf/baselines/` exposes `social_force`, `ppo`, and `random` baselines (plus simple policy inside the runner).
-- `robot_sf/planner/socnav.py` includes lightweight SocNav-style adapters (Sampling, Social Force, ORCA-like, SA-CADRL-like) and a fallback adapter that uses upstream SocNavBench if `output/SocNavBench` is available.
+- `robot_sf/planner/socnav.py` includes lightweight SocNav-style adapters (Sampling, Social Force, ORCA-like, SA-CADRL-like) and a fallback adapter that uses upstream SocNavBench if `third_party/socnavbench` is available.
 - These SocNav adapters are used in demo scripts (`examples/advanced/18_socnav_structured_observation.py`, `examples/advanced/19_planner_visual_comparison.py`, `examples/advanced/31_classic_planner_orca_demo.py`) but are not wired into `robot_sf_bench` or the full-classic benchmark pipeline.
 - The ORCA baseline decision is explicitly deferred (`docs/dev/issues/social-navigation-benchmark/adding_orca.md`).
 
@@ -45,7 +45,7 @@ The remainder of this document details evidence and a structured gap analysis, t
 
 ### 6) Reference projects checked locally
 
-- `output/SocNavBench` clone includes a joystick API, synchronous/asynchronous simulator interface, and metrics utilities. The upstream sampling planner can be used via `SocNavBenchSamplingAdapter`.
+- `third_party/socnavbench` includes a vendored subset of the upstream repository (planner + dependencies). The upstream sampling planner can be used via `SocNavBenchSamplingAdapter`.
 - `output/arena-rosnav` clone includes the task generator and scenario task definitions; the benchmark mode config and task generator illustrate how ROS-based local planners are benchmarked in a standardized pipeline.
 
 ## External reference benchmarks (web sources)
@@ -439,5 +439,5 @@ Risks:
 - SocNav adapters: `robot_sf/planner/socnav.py`
 - Scenario packs: `configs/scenarios/classic_interactions.yaml`, `configs/scenarios/francis2023.yaml`
 - Maps: `maps/svg_maps/`, `maps/svg_maps/francis2023/`
-- SocNavBench clone: `output/SocNavBench/`
+- SocNavBench vendored subset: `third_party/socnavbench/`
 - Arena-Rosnav clone: `output/arena-rosnav/`

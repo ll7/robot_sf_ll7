@@ -84,6 +84,16 @@ viz = [
     "matplotlib>=3.9.2",
     "seaborn>=0.13.2",
 ]
+sacadrl = [
+    "tensorflow>=2.15.0",
+]
+orca = [
+    # Use MIT-ACL fork for ORCA: it adds a collabCoeff extension to model cooperative/adversarial behavior.
+    # See https://github.com/mit-acl/Python-RVO2 for details; upstream is https://github.com/sybrenstuvel/Python-RVO2.
+    # The fork is vendored under third_party/python-rvo2 to patch CMake compatibility.
+    "pyrvo2",
+    "Cython>=3.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -93,12 +103,14 @@ build-backend = "hatchling.build"
 packages = [
     { include = "robot_sf" },
     { include = "examples" },
+    { include = "third_party" },
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = [
     "robot_sf",
     "examples",
+    "third_party",
 ]
 include = ["examples/**"]
 
@@ -109,6 +121,7 @@ include = ["examples/**"]
 include = [
     "/robot_sf",
     "/examples",
+    "/third_party",
     "/README.md",
     "/LICENSE",
 ]
@@ -168,6 +181,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "third_party",
 ]
 
 # Same as Black.
@@ -453,6 +467,7 @@ robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+pyrvo2 = { path = "third_party/python-rvo2" }
 
 [tool.ty.src]
 exclude = [

@@ -7,6 +7,7 @@ full SocNavBench planners are integrated. They operate on the SocNav structured
 observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 """
 
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,8 +18,43 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+try:  # pragma: no cover - optional dependency
+    import tensorflow.compat.v1 as tf  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    tf = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
+    import rvo2  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    rvo2 = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
+    from pysocialforce import forces as sf_forces  # type: ignore
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    sf_forces = None  # type: ignore[assignment]
+
+from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+
+_SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
+_SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
+_SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
+_SOCNAV_REQUIRED_MODULES = (
+    "control_pipelines.control_pipeline_v0",
+    "objectives.goal_distance",
+    "params.central_params",
+    "planners.sampling_planner",
+)
+_SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
+_SACADRL_STATE_ORDER = (
+    "num_other_agents",
+    "dist_to_goal",
+    "heading_ego_frame",
+    "pref_speed",
+    "radius",
+    "other_agents_states",
+)
 
 
 class OccupancyAwarePlannerMixin:
@@ -325,6 +361,7 @@ class SocNavPlannerConfig:
     sacadrl_bias_weight: float = 0.6
     orca_avoidance_weight: float = 1.2
     orca_neighbor_dist: float = 10.0
+    orca_max_neighbors: int = 10
     orca_time_horizon: float = 6.0
     orca_time_horizon_obst: float = 3.0
     orca_obstacle_threshold: float = 0.5
@@ -333,11 +370,30 @@ class SocNavPlannerConfig:
     orca_obstacle_radius_scale: float = 1.0
     orca_heading_slowdown: float = 0.2
     social_force_repulsion_weight: float = 0.8
+    social_force_desired_speed: float = 1.0
+    social_force_tau: float = 0.5
+    social_force_factor: float = 5.1
+    social_force_lambda_importance: float = 2.0
+    social_force_gamma: float = 0.35
+    social_force_n: int = 2
+    social_force_n_prime: int = 3
+    social_force_obstacle_factor: float = 10.0
+    social_force_obstacle_threshold: float = 0.5
+    social_force_obstacle_range: float = 6.0
+    social_force_obstacle_max_points: int = 80
+    social_force_obstacle_radius_scale: float = 1.0
+    social_force_clip_force: bool = True
+    social_force_max_force: float = 100.0
     occupancy_lookahead: float = 2.5
     occupancy_heading_sweep: float = pi * 2 / 3
     occupancy_candidates: int = 7
     occupancy_weight: float = 2.0
     occupancy_angle_weight: float = 0.3
+    sacadrl_model_id: str = _SACADRL_MODEL_ID
+    sacadrl_checkpoint_path: str | None = None
+    sacadrl_pref_speed: float = 1.0
+    sacadrl_max_other_agents: int = 3
+    sacadrl_sorting_method: str = "closest_first"
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -345,24 +401,92 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     Minimal waypoint-to-velocity adapter inspired by the SocNavBench sampling planner.
 
     Warning:
-        This adapter is a lightweight heuristic placeholder. It is **not** a
-        benchmark-ready implementation of the SocNavBench sampling planner.
-        Use it only as a simple baseline or fallback when upstream dependencies
-        are unavailable.
+        By default this adapter uses a lightweight heuristic placeholder. Set
+        ``use_upstream=True`` to delegate to the upstream SocNavBench sampling planner
+        (benchmark-ready), and optionally allow fallback when dependencies are missing.
     """
 
-    def __init__(self, config: SocNavPlannerConfig | None = None):
+    class _GoalDistanceObjective:
+        """Minimal goal-distance objective for the upstream sampling planner."""
+
+        def __init__(self, goal_pos: np.ndarray | None = None) -> None:
+            self._goal_pos = (
+                np.zeros(2, dtype=float) if goal_pos is None else np.asarray(goal_pos, dtype=float)
+            )
+
+        def set_goal(self, goal_pos: np.ndarray) -> None:
+            """Update the target goal position used for distance costs."""
+            self._goal_pos = np.asarray(goal_pos, dtype=float)
+
+        def evaluate_function(
+            self, trajectory: Any, sim_state_hist: Any | None = None
+        ) -> np.ndarray:
+            """Return per-trajectory goal distance costs (lower is better)."""
+            positions = trajectory.position_nk2()
+            if positions.size == 0:
+                return np.array([])
+            valid_horizons = getattr(trajectory, "valid_horizons_n1", None)
+            if valid_horizons is None:
+                final_pos = positions[:, -1, :]
+            else:
+                idx = np.asarray(valid_horizons, dtype=int).reshape(-1) - 1
+                idx = np.clip(idx, 0, positions.shape[1] - 1)
+                final_pos = positions[np.arange(positions.shape[0]), idx, :]
+            goal = self._goal_pos.reshape(1, 2)
+            return np.linalg.norm(final_pos - goal, axis=1)
+
+    def __init__(
+        self,
+        config: SocNavPlannerConfig | None = None,
+        socnav_root: Path | None = None,
+        planner_factory: Callable[[], Any] | None = None,
+        *,
+        use_upstream: bool = False,
+        allow_fallback: bool = True,
+    ):
         """Initialize the adapter with optional planner configuration."""
 
         self.config = config or SocNavPlannerConfig()
-        logger.warning("SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready.")
+        self._planner = None
+        self._goal_objective: SamplingPlannerAdapter._GoalDistanceObjective | None = None
+        self._use_upstream = bool(use_upstream)
+        self._allow_fallback = bool(allow_fallback)
+
+        if self._use_upstream:
+            if planner_factory is not None:
+                self._planner = self._safe_call_factory(planner_factory)
+            else:
+                self._planner = self._load_upstream_planner(socnav_root)
+            if self._planner is None and self._allow_fallback:
+                logger.warning(
+                    "SamplingPlannerAdapter is running in fallback heuristic mode and "
+                    "is not benchmark-ready."
+                )
+            if self._planner is None and not self._allow_fallback:
+                raise RuntimeError(
+                    "SamplingPlannerAdapter could not load the upstream planner. "
+                    "Set allow_fallback=True to use the heuristic fallback."
+                )
+        else:
+            logger.warning(
+                "SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready."
+            )
 
     def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute a (v, w) command from the structured observation.
+        """Compute a (v, w) command from the structured observation.
 
         Args:
             observation: SocNav structured observation Dict (robot, goal, pedestrians, map, sim).
+
+        Returns:
+            tuple: (linear_velocity, angular_velocity)
+        """
+        if self._planner is not None:
+            return self._plan_upstream(observation)
+        return self._heuristic_plan(observation)
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute a heuristic (v, w) command from the structured observation.
 
         Returns:
             tuple: (linear_velocity, angular_velocity)
@@ -417,6 +541,282 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return linear, angular
 
+    def _plan_upstream(self, observation: dict) -> tuple[float, float]:
+        """Compute a (v, w) command using the upstream SocNavBench planner.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        if self._planner is None:
+            return self._heuristic_plan(observation)
+
+        try:
+            robot_state, goal_state, _ = self._socnav_fields(observation)
+            pos = robot_state["position"]
+            robot_pos = np.asarray(pos, dtype=float)
+            heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+            if self._goal_objective is not None:
+                self._goal_objective.set_goal(goal_state["current"])
+            start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
+            goal = goal_state["current"]
+            goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])
+            data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
+            traj = data.get("trajectory")
+            if traj is None:
+                return self._heuristic_plan(observation)
+            # NOTE: upstream returns a trajectory and controller matrices; for now we
+            # consume only the immediate waypoint to preserve the (v, w) interface and
+            # avoid binding to controller specifics. This keeps the adapter lightweight
+            # while still aligning heading toward the planned path.
+            next_pos = traj.position_nk2()[0, 0]
+            to_next = next_pos - pos
+            direction = to_next / (np.linalg.norm(to_next) + 1e-9)
+            direction, occ_penalty = self._get_safe_heading(robot_pos, direction, observation)
+            desired_heading = atan2(direction[1], direction[0])
+            heading_error = self._wrap_angle(desired_heading - heading)
+            angular = float(
+                np.clip(
+                    self.config.angular_gain * heading_error,
+                    -self.config.max_angular_speed,
+                    self.config.max_angular_speed,
+                ),
+            )
+            linear = float(
+                np.clip(
+                    np.linalg.norm(to_next),
+                    0.0,
+                    self.config.max_linear_speed * max(0.0, 1.0 - occ_penalty),
+                ),
+            )
+            return linear, angular
+        except Exception as exc:  # pragma: no cover - safety net
+            if self._allow_fallback:
+                return self._heuristic_plan(observation)
+            raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
+
+    def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
+        """Invoke a user-provided factory defensively.
+
+        Returns:
+            Planner instance from the factory or ``None`` on failure.
+        """
+        try:
+            return factory()
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"SocNavBench planner factory failed: {exc}", exc=exc
+            )
+
+    def _handle_socnav_failure(
+        self, message: str, *, exc: Exception | None = None, not_found: bool = False
+    ) -> Any | None:
+        """Handle SocNavBench initialization failures with optional fallback.
+
+        Returns:
+            None when fallback is allowed; otherwise raises a descriptive error.
+        """
+        if self._allow_fallback:
+            logger.warning("{}", message)
+            return None
+        if not_found:
+            raise FileNotFoundError(message) from exc
+        raise RuntimeError(message) from exc
+
+    @staticmethod
+    def _resolve_socnav_root(socnav_root: Path | None) -> Path:
+        """Resolve the SocNavBench root directory.
+
+        Returns:
+            Path: Resolved SocNavBench root path.
+        """
+        if socnav_root is not None:
+            return Path(socnav_root).expanduser()
+        env_root = os.getenv(_SOCNAV_ROOT_ENV)
+        if env_root:
+            return Path(env_root).expanduser()
+        return _SOCNAV_DEFAULT_ROOT
+
+    @staticmethod
+    def _allow_untrusted_socnav_root() -> bool:
+        """Determine whether the environment explicitly allows untrusted roots.
+
+        Returns:
+            bool: True when the environment variable enables untrusted roots.
+        """
+        value = os.getenv(_SOCNAV_ALLOW_UNTRUSTED_ENV, "")
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    @staticmethod
+    def _is_trusted_socnav_root(root: Path) -> bool:
+        """Check whether the SocNavBench root lives inside the repository.
+
+        Returns:
+            bool: True when the root resolves under the repository directory.
+        """
+        repo_root = Path(__file__).resolve().parents[2]
+        try:
+            root.resolve().relative_to(repo_root)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _validate_socnav_root(root: Path) -> list[Path]:
+        """Validate that the SocNavBench root contains expected modules.
+
+        Returns:
+            list[Path]: Missing module paths.
+        """
+        missing: list[Path] = []
+        for module in _SOCNAV_REQUIRED_MODULES:
+            rel_path = Path(*module.split(".")).with_suffix(".py")
+            if not (root / rel_path).exists():
+                missing.append(root / rel_path)
+        return missing
+
+    @staticmethod
+    def _import_socnav_modules(root: Path) -> tuple[Any, Any, Any] | None:
+        """Import upstream SocNavBench modules from the provided root.
+
+        Returns:
+            tuple[Any, Any, Any] | None: (central_params, sampling_planner, DotMap)
+            modules or ``None`` on failure.
+        """
+        root_str = str(root)
+        sys_path_inserted = False
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+            sys_path_inserted = True
+        try:
+            import params.central_params as central  # type: ignore  # noqa: PLC0415
+            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
+            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
+
+            return central, sp, DotMap
+        except (
+            AttributeError,
+            ImportError,
+            ModuleNotFoundError,
+            OSError,
+            RuntimeError,
+            SyntaxError,
+            TypeError,
+            ValueError,
+        ):  # pragma: no cover
+            return None
+        finally:
+            if sys_path_inserted:
+                try:
+                    sys.path.remove(root_str)
+                except ValueError:
+                    pass
+
+    def _resolve_robot_dt(self, socnav_params: Any) -> float:
+        """Resolve the robot dynamics timestep from SocNavBench params.
+
+        Returns:
+            float: Robot timestep.
+        """
+        dyn_params = getattr(socnav_params, "robot_dynamics_params", None)
+        if dyn_params is None:
+            return 0.1
+        return float(getattr(dyn_params, "dt", 0.1))
+
+    def _resolve_camera_dt(self, socnav_params: Any) -> float:
+        """Resolve the camera timestep from SocNavBench params.
+
+        Returns:
+            float: Camera timestep.
+        """
+        camera_params = getattr(socnav_params, "camera_params", None)
+        if camera_params is None:
+            return 0.1
+        return float(getattr(camera_params, "dt", 0.1))
+
+    def _build_sampling_params(self, central: Any, sp: Any, DotMap: Any) -> Any | None:
+        """Build sampling planner parameters for the upstream planner.
+
+        Returns:
+            Params object or ``None`` on failure.
+        """
+        params = DotMap()
+        params.planner = sp.SamplingPlanner
+        try:
+            params.control_pipeline_params = central.create_control_pipeline_params()
+        except SystemExit as exc:
+            return self._handle_socnav_failure(
+                "SocNavBench control pipeline parameters failed to load. "
+                "Ensure the SocNavBench data directories exist.",
+                exc=exc,
+            )
+        return params
+
+    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
+        """Best-effort import of SocNavBench SamplingPlanner with defaults.
+
+        Returns:
+            Planner instance or ``None`` on failure.
+        """
+        env_root = os.getenv(_SOCNAV_ROOT_ENV)
+        root_source = "argument" if socnav_root is not None else ("env" if env_root else "default")
+        root = self._resolve_socnav_root(socnav_root).resolve()
+        if not root.exists():
+            message = (
+                "SocNavBench root not found at "
+                f"'{root}'. Set {_SOCNAV_ROOT_ENV} or pass socnav_root."
+            )
+            return self._handle_socnav_failure(message, not_found=True)
+
+        if root_source != "default" and not self._is_trusted_socnav_root(root):
+            if not self._allow_untrusted_socnav_root():
+                message = (
+                    "SocNavBench root is outside the repository root. "
+                    f"Refusing to load from '{root}'. Set {_SOCNAV_ALLOW_UNTRUSTED_ENV}=1 "
+                    "to explicitly allow untrusted SocNavBench roots."
+                )
+                return self._handle_socnav_failure(message)
+            logger.warning(
+                "Using SocNavBench root outside the repository: '{}'. Ensure this path is trusted.",
+                root,
+            )
+
+        missing = self._validate_socnav_root(root)
+        if missing:
+            missing_str = ", ".join(str(path) for path in missing)
+            message = (
+                "SocNavBench root is missing required modules: "
+                f"{missing_str}. Ensure the SocNavBench repo is complete."
+            )
+            return self._handle_socnav_failure(message, not_found=True)
+
+        modules = self._import_socnav_modules(root)
+        if modules is None:
+            return None
+        central, sp, DotMap = modules
+        params = self._build_sampling_params(central, sp, DotMap)
+        if params is None:
+            return None
+        try:
+            obj_fn = self._GoalDistanceObjective()
+            self._goal_objective = obj_fn
+            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+        except (
+            AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover
+            return self._handle_socnav_failure(
+                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
+            )
+
     @staticmethod
     def _wrap_angle(angle: float) -> float:
         """
@@ -449,65 +849,89 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
     """
     Policy that prefers the upstream SocNavBench SamplingPlanner when available.
 
-    Falls back to the lightweight adapter when upstream dependencies are missing.
+    By default this policy requires the upstream SocNavBench planner. Set
+    ``allow_fallback=True`` to use the lightweight adapter when dependencies are missing.
     """
 
     def __init__(
         self,
         socnav_root: Path | None = None,
         adapter_config: SocNavPlannerConfig | None = None,
+        *,
+        allow_fallback: bool = False,
     ):
         """Initialize the policy, preferring the upstream SocNavBench planner when present."""
 
-        adapter = SocNavBenchSamplingAdapter(config=adapter_config, socnav_root=socnav_root)
+        adapter = SocNavBenchSamplingAdapter(
+            config=adapter_config,
+            socnav_root=socnav_root,
+            allow_fallback=allow_fallback,
+        )
         super().__init__(adapter=adapter)
 
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
-    """Heuristic social-force style planner: goal attraction plus pedestrian repulsion.
+    """Social-force planner adapter using fast-pysf interaction forces."""
 
-    Warning:
-        This is a heuristic baseline and is not benchmark-ready.
-    """
+    _EPS = 1e-6
 
-    def __init__(self, config: SocNavPlannerConfig | None = None):
+    def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
         """Initialize the social-force adapter with optional configuration."""
-        super().__init__(config=config)
-        logger.warning(
-            "SocialForcePlannerAdapter is a heuristic baseline and is not benchmark-ready."
-        )
+        self.config = config or SocNavPlannerConfig()
+        if sf_forces is None:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "pysocialforce is required for SocialForcePlannerAdapter. "
+                "Install the fast-pysf dependency."
+            )
 
     def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute (v, w) using goal attraction and inverse-square pedestrian repulsion.
+        """Compute (v, w) using social-force goal + interaction forces.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
-        robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
-        goal = np.asarray(goal_state["current"], dtype=float)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        robot_speed = self._as_1d_float(robot_state.get("speed", [0.0, 0.0]), pad=2)
+        linear_speed = float(robot_speed[0])
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        robot_vel = np.array([linear_speed * cos_h, linear_speed * sin_h], dtype=float)
 
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
         to_goal = goal - robot_pos
-        goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
+        goal_dist = float(np.linalg.norm(to_goal))
+        if goal_dist < self.config.goal_tolerance:
+            return 0.0, 0.0
 
-        ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
-        ped_positions = ped_positions[:ped_count]
-        repulse = np.zeros(2, dtype=float)
-        for ped in ped_positions:
-            delta = robot_pos - ped
-            dist = np.linalg.norm(delta) + 1e-6
-            repulse += delta / dist**2
+        dt = self._resolve_dt(observation)
+        desired_speed = min(self.config.social_force_desired_speed, self.config.max_linear_speed)
+        desired_speed = min(desired_speed, goal_dist / max(dt, self._EPS))
+        goal_dir = to_goal / (goal_dist + self._EPS)
+        desired_vel = goal_dir * desired_speed
+        desired_force = (desired_vel - robot_vel) / max(self.config.social_force_tau, self._EPS)
 
-        combined = goal_vec + self.config.social_force_repulsion_weight * repulse
-        if np.linalg.norm(combined) > 1e-6:
-            combined = combined / np.linalg.norm(combined)
+        social_force = self._compute_social_force(robot_pos, robot_vel, ped_state, robot_heading)
+        obstacle_force = self._compute_obstacle_force(
+            observation, robot_pos, robot_heading, robot_vel, robot_state
+        )
+        interaction_force = self.config.social_force_repulsion_weight * (
+            social_force + obstacle_force
+        )
 
-        combined, occ_penalty = self._get_safe_heading(robot_pos, combined, observation)
+        total_force = desired_force + interaction_force
+        total_force = self._clip_force(total_force)
 
-        desired_heading = atan2(combined[1], combined[0])
+        desired_vel = robot_vel + total_force * dt
+        speed = float(np.linalg.norm(desired_vel))
+        if speed < self._EPS:
+            return 0.0, 0.0
+        if speed > self.config.max_linear_speed:
+            desired_vel = desired_vel / (speed + self._EPS) * self.config.max_linear_speed
+            speed = self.config.max_linear_speed
+
+        desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
         angular = float(
             np.clip(
@@ -518,18 +942,245 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         )
         linear = float(
             np.clip(
-                np.linalg.norm(to_goal),
+                speed * max(0.0, 1.0 - abs(heading_error) / pi),
                 0.0,
-                self.config.max_linear_speed
-                * max(0.0, 1.0 - abs(heading_error) / pi)
-                * max(0.0, 1.0 - occ_penalty),
+                self.config.max_linear_speed,
             ),
         )
         return linear, angular
 
+    def _resolve_dt(self, observation: dict) -> float:
+        """Return the simulation timestep (fallback to config defaults)."""
+        sim = observation.get("sim", {})
+        timestep = self._as_1d_float(sim.get("timestep", [0.0]), pad=1)[0]
+        if timestep <= 0.0:
+            return float(self.config.social_force_tau)
+        return float(timestep)
+
+    @staticmethod
+    def _rotate_velocities_to_world(velocities: np.ndarray, heading: float) -> np.ndarray:
+        """Rotate ego-frame velocities into world coordinates.
+
+        Returns:
+            np.ndarray: Rotated velocity vectors in world coordinates.
+        """
+        if velocities.size == 0:
+            return velocities
+        cos_h = float(np.cos(heading))
+        sin_h = float(np.sin(heading))
+        vx = cos_h * velocities[:, 0] - sin_h * velocities[:, 1]
+        vy = sin_h * velocities[:, 0] + cos_h * velocities[:, 1]
+        return np.stack([vx, vy], axis=1)
+
+    def _compute_social_force(
+        self,
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        ped_state: dict,
+        robot_heading: float,
+    ) -> np.ndarray:
+        """Compute social-force repulsion from pedestrians.
+
+        Returns:
+            np.ndarray: Combined social-force vector.
+        """
+        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+        if ped_positions.ndim == 1:
+            ped_positions = ped_positions.reshape(-1, 2)
+        ped_count = int(self._as_1d_float(ped_state.get("count", [0]), pad=1)[0])
+        ped_positions = ped_positions[:ped_count]
+        if ped_positions.size == 0:
+            return np.zeros(2, dtype=float)
+
+        ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
+        if ped_velocities.size == 0:
+            ped_velocities = np.zeros_like(ped_positions, dtype=float)
+        elif ped_velocities.ndim == 1:
+            ped_velocities = ped_velocities.reshape(-1, 2)
+        ped_velocities = ped_velocities[:ped_count]
+        ped_vel_world = self._rotate_velocities_to_world(ped_velocities, robot_heading)
+
+        total = np.zeros(2, dtype=float)
+        for ped_pos, ped_vel in zip(ped_positions, ped_vel_world, strict=False):
+            pos_diff = (robot_pos - ped_pos).astype(float)
+            vel_diff = (robot_vel - ped_vel).astype(float)
+            try:
+                fx, fy = sf_forces.social_force_ped_ped(
+                    pos_diff,
+                    vel_diff,
+                    int(self.config.social_force_n),
+                    int(self.config.social_force_n_prime),
+                    float(self.config.social_force_lambda_importance),
+                    float(self.config.social_force_gamma),
+                )
+                total += np.array([fx, fy], dtype=float)
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                continue
+        return total * float(self.config.social_force_factor)
+
+    def _compute_obstacle_force(
+        self,
+        observation: dict,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        robot_vel: np.ndarray,
+        robot_state: dict,
+    ) -> np.ndarray:
+        """Compute obstacle repulsion using occupancy-grid obstacle points.
+
+        Returns:
+            np.ndarray: Combined obstacle repulsion vector.
+        """
+        centers, radii = self._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
+        if centers.size == 0:
+            return np.zeros(2, dtype=float)
+
+        if np.linalg.norm(robot_vel) > self._EPS:
+            ortho = np.array([-robot_vel[1], robot_vel[0]], dtype=float)
+        else:
+            ortho = np.array([-np.sin(robot_heading), np.cos(robot_heading)], dtype=float)
+
+        robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+        total = np.zeros(2, dtype=float)
+        for center, radius in zip(centers, radii, strict=False):
+            line = (float(center[0]), float(center[1]), float(center[0]), float(center[1]))
+            try:
+                fx, fy = sf_forces.obstacle_force(line, ortho, robot_pos, robot_radius + radius)
+                total += np.array([fx, fy], dtype=float)
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                continue
+        return total * float(self.config.social_force_obstacle_factor)
+
+    @staticmethod
+    def _grid_cell_centers(
+        indices: np.ndarray, origin: np.ndarray, resolution: float
+    ) -> np.ndarray:
+        """Convert grid indices to grid-frame centers.
+
+        Returns:
+            np.ndarray: Grid-frame centers for the provided indices.
+        """
+        rows = indices[:, 0].astype(float)
+        cols = indices[:, 1].astype(float)
+        x = origin[0] + (cols + 0.5) * resolution
+        y = origin[1] + (rows + 0.5) * resolution
+        return np.stack([x, y], axis=1)
+
+    @staticmethod
+    def _ego_centers_to_world(
+        centers: np.ndarray, robot_pos: np.ndarray, robot_heading: float
+    ) -> np.ndarray:
+        """Rotate/translate ego-frame centers into world coordinates.
+
+        Returns:
+            np.ndarray: World-space centers.
+        """
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        x_world = cos_h * centers[:, 0] - sin_h * centers[:, 1]
+        y_world = sin_h * centers[:, 0] + cos_h * centers[:, 1]
+        return np.stack([x_world, y_world], axis=1) + np.asarray(robot_pos, dtype=float)
+
+    @staticmethod
+    def _select_nearby_points(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        max_range: float,
+        max_points: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Filter centers by range and cap to the closest points.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Filtered centers and squared distances.
+        """
+        offsets = centers - np.asarray(robot_pos, dtype=float)
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        keep = dist_sq <= max_range**2
+        if not np.any(keep):
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        centers = centers[keep]
+        dist_sq = dist_sq[keep]
+        if max_points > 0 and centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            centers = centers[order]
+            dist_sq = dist_sq[order]
+        return centers, dist_sq
+
+    def _extract_obstacles_from_grid(
+        self, observation: dict, robot_pos: np.ndarray, robot_heading: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract nearby obstacle centers from the occupancy grid.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        grid, meta = payload
+        if grid.ndim < 3:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        channel_idx = self._grid_channel_index(meta, "obstacles")
+        if channel_idx < 0:
+            channel_idx = self._grid_channel_index(meta, "combined")
+        if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        resolution = float(resolution_arr[0])
+        if resolution <= 0.0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        obstacle_mask = grid[channel_idx] >= float(self.config.social_force_obstacle_threshold)
+        if not np.any(obstacle_mask):
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        indices = np.argwhere(obstacle_mask)
+        if indices.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        centers = self._grid_cell_centers(indices, origin, resolution)
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        if use_ego:
+            centers = self._ego_centers_to_world(centers, robot_pos, robot_heading)
+
+        centers, _dist_sq = self._select_nearby_points(
+            centers,
+            robot_pos,
+            float(self.config.social_force_obstacle_range),
+            max(int(self.config.social_force_obstacle_max_points), 0),
+        )
+        if centers.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        base_radius = (
+            0.5 * np.sqrt(2.0) * resolution * float(self.config.social_force_obstacle_radius_scale)
+        )
+        radii = np.full((centers.shape[0],), base_radius, dtype=float)
+        return centers, radii
+
+    def _clip_force(self, force: np.ndarray) -> np.ndarray:
+        """Clip total force magnitude to avoid numerical spikes.
+
+        Returns:
+            np.ndarray: Clipped force vector.
+        """
+        if not self.config.social_force_clip_force:
+            return force
+        norm = float(np.linalg.norm(force))
+        if norm < self._EPS or norm <= self.config.social_force_max_force:
+            return force
+        return force / (norm + self._EPS) * float(self.config.social_force_max_force)
+
 
 class ORCAPlannerAdapter(SamplingPlannerAdapter):
-    """Simplified ORCA-inspired adapter using reciprocal-style avoidance."""
+    """ORCA planner adapter using rvo2 when available.
+
+    Set ``allow_fallback=True`` to use the heuristic implementation when rvo2 is unavailable.
+    """
 
     @dataclass
     class _OrcaLine:
@@ -539,6 +1190,33 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         direction: np.ndarray
 
     _EPS = 1e-6
+
+    def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
+        """Initialize the ORCA adapter with optional rvo2 fallback."""
+        self.config = config or SocNavPlannerConfig()
+        self._allow_fallback = allow_fallback
+        self._fallback_warned = False
+
+    def _ensure_rvo2(self) -> bool:
+        """Return True when rvo2 is available, else handle fallback/error behavior.
+
+        Returns:
+            bool: True when rvo2 is available, False when falling back.
+        """
+        if rvo2 is not None:
+            return True
+        if self._allow_fallback:
+            if not self._fallback_warned:
+                logger.warning(
+                    "rvo2 not available; falling back to heuristic ORCA behavior. "
+                    "Install the 'orca' extra for the benchmark-ready implementation.",
+                )
+                self._fallback_warned = True
+            return False
+        raise RuntimeError(
+            "rvo2 is required for the benchmark-ready ORCA planner. "
+            "Install via `uv sync --extra orca` or set allow_fallback=True."
+        )
 
     @staticmethod
     def _det(a: np.ndarray, b: np.ndarray) -> float:
@@ -715,6 +1393,17 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         cos_h = np.cos(heading)
         sin_h = np.sin(heading)
         return np.array([cos_h * vec[0] - sin_h * vec[1], sin_h * vec[0] + cos_h * vec[1]])
+
+    @staticmethod
+    def _world_to_ego_vec(vec: np.ndarray, heading: float) -> np.ndarray:
+        """Rotate a world-frame vector into ego coordinates.
+
+        Returns:
+            np.ndarray: Vector expressed in ego coordinates.
+        """
+        cos_h = np.cos(heading)
+        sin_h = np.sin(heading)
+        return np.array([cos_h * vec[0] + sin_h * vec[1], -sin_h * vec[0] + cos_h * vec[1]])
 
     @classmethod
     def _preferred_velocity(
@@ -1027,8 +1716,137 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         return linear, angular
 
     def plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using rvo2 ORCA or a heuristic fallback.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
         """
-        Compute (v, w) using goal direction plus reciprocal-style avoidance.
+        if not self._ensure_rvo2():
+            return self._heuristic_plan(observation)
+        return self._rvo2_plan(observation)
+
+    def _rvo2_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using the rvo2 ORCA solver.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        preferred_velocity_ego = self._preferred_velocity(
+            goal, robot_pos, robot_heading, self.config.max_linear_speed
+        )
+        if np.linalg.norm(preferred_velocity_ego) < self._EPS:
+            return 0.0, 0.0
+
+        preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
+
+        time_step = float(
+            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
+        )
+        if time_step <= self._EPS:
+            logger.warning(
+                "Invalid timestep ({}) for ORCA planner; defaulting to 0.1s.",
+                time_step,
+            )
+            time_step = 0.1
+
+        robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
+        robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        robot_velocity_world = np.array(
+            [robot_speed * cos_h, robot_speed * sin_h],
+            dtype=float,
+        )
+
+        ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        if ped_count > 0:
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+            ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+        else:
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+
+        max_neighbors = int(self.config.orca_max_neighbors)
+        if max_neighbors <= 0:
+            max_neighbors = max(1, ped_count)
+
+        neighbor_dist = float(self.config.orca_neighbor_dist)
+        time_horizon = float(self.config.orca_time_horizon)
+        time_horizon_obst = float(self.config.orca_time_horizon_obst)
+        max_speed = float(self.config.max_linear_speed)
+
+        sim = rvo2.PyRVOSimulator(
+            time_step,
+            neighbor_dist,
+            max_neighbors,
+            time_horizon,
+            time_horizon_obst,
+            robot_radius,
+            max_speed,
+        )
+        robot_id = sim.addAgent(
+            tuple(robot_pos),
+            neighbor_dist,
+            max_neighbors,
+            time_horizon,
+            time_horizon_obst,
+            robot_radius,
+            max_speed,
+            tuple(robot_velocity_world),
+        )
+
+        ped_ids: list[int] = []
+        for idx in range(ped_count):
+            ped_speed = float(np.linalg.norm(ped_vel_world[idx]))
+            ped_max_speed = max(ped_speed, max_speed)
+            ped_id = sim.addAgent(
+                tuple(ped_positions[idx]),
+                neighbor_dist,
+                max_neighbors,
+                time_horizon,
+                time_horizon_obst,
+                ped_radius,
+                ped_max_speed,
+                tuple(ped_vel_world[idx]),
+            )
+            ped_ids.append(ped_id)
+
+        obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
+            observation, robot_pos, robot_heading
+        )
+        if obstacle_positions.size:
+            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False):
+                half = float(radius)
+                vertices = [
+                    (float(center[0] - half), float(center[1] - half)),
+                    (float(center[0] + half), float(center[1] - half)),
+                    (float(center[0] + half), float(center[1] + half)),
+                    (float(center[0] - half), float(center[1] + half)),
+                ]
+                sim.addObstacle(vertices)
+            sim.processObstacles()
+
+        sim.setAgentPrefVelocity(robot_id, tuple(preferred_velocity_world))
+        for ped_id, vel in zip(ped_ids, ped_vel_world, strict=False):
+            sim.setAgentPrefVelocity(ped_id, tuple(vel))
+
+        sim.doStep()
+        new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)
+        new_velocity_ego = self._world_to_ego_vec(new_velocity_world, robot_heading)
+        return self._velocity_to_command(
+            velocity=new_velocity_ego,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            observation=observation,
+        )
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using the legacy ORCA-inspired heuristic.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -1091,23 +1909,363 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
 
 
-class SACADRLPlannerAdapter(SamplingPlannerAdapter):
-    """Heuristic SA-CADRL-style adapter using nearest pedestrians to bias heading.
+def _sacadrl_actions() -> np.ndarray:
+    """Return the discrete GA3C-CADRL action set (speed scale, delta heading)."""
+    actions = np.mgrid[1.0:1.1:0.5, -np.pi / 6 : np.pi / 6 + 0.01 : np.pi / 12].reshape(2, -1).T
+    actions = np.vstack(
+        [
+            actions,
+            np.mgrid[0.5:0.6:0.5, -np.pi / 6 : np.pi / 6 + 0.01 : np.pi / 6].reshape(2, -1).T,
+        ]
+    )
+    actions = np.vstack(
+        [
+            actions,
+            np.mgrid[0.0:0.1:0.5, -np.pi / 6 : np.pi / 6 + 0.01 : np.pi / 6].reshape(2, -1).T,
+        ]
+    )
+    return actions
 
-    Warning:
-        This is a heuristic baseline and is not a learned SA-CADRL model.
+
+class _SACADRLModel:
+    """Tensorflow checkpoint wrapper for GA3C-CADRL policy inference."""
+
+    def __init__(self, checkpoint_prefix: Path, *, device: str = "/cpu:0"):
+        """Load the GA3C-CADRL model from the provided checkpoint prefix."""
+        if tf is None:  # pragma: no cover - optional dependency
+            raise RuntimeError("TensorFlow is required to run the GA3C-CADRL (SA-CADRL) baseline.")
+
+        self._tf = tf
+        self._actions = _sacadrl_actions()
+        self._graph = self._tf.Graph()
+        with self._graph.as_default():
+            with self._tf.device(device):
+                self._sess = self._tf.Session(
+                    graph=self._graph,
+                    config=self._tf.ConfigProto(
+                        allow_soft_placement=True,
+                        log_device_placement=False,
+                        gpu_options=self._tf.GPUOptions(allow_growth=True),
+                    ),
+                )
+                saver = self._tf.train.import_meta_graph(
+                    f"{checkpoint_prefix}.meta", clear_devices=True
+                )
+                self._sess.run(self._tf.global_variables_initializer())
+                saver.restore(self._sess, str(checkpoint_prefix))
+                self._softmax = self._graph.get_tensor_by_name("Softmax:0")
+                self._x = self._graph.get_tensor_by_name("X:0")
+        self._input_dim = int(self._x.shape[-1])
+
+    @property
+    def actions(self) -> np.ndarray:
+        """Discrete action table of [speed_scale, delta_heading]."""
+        return self._actions
+
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        """Return softmax action probabilities for the provided observations."""
+        obs = self._crop(obs)
+        return self._sess.run(self._softmax, feed_dict={self._x: obs})
+
+    def _crop(self, obs: np.ndarray) -> np.ndarray:
+        """Pad or crop observations to match the expected input dimension.
+
+        Returns:
+            np.ndarray: Observation array sized to the network input dimension.
+        """
+        if obs.shape[-1] > self._input_dim:
+            return obs[:, : self._input_dim]
+        if obs.shape[-1] < self._input_dim:
+            padded = np.zeros((obs.shape[0], self._input_dim), dtype=obs.dtype)
+            padded[:, : obs.shape[1]] = obs
+            return padded
+        return obs
+
+
+class SACADRLPlannerAdapter(SamplingPlannerAdapter):
+    """GA3C-CADRL (SA-CADRL) planner adapter backed by a TensorFlow checkpoint.
+
+    Set ``allow_fallback=True`` to permit heuristic behavior when the checkpoint
+    or TensorFlow dependency is unavailable.
     """
 
-    def __init__(self, config: SocNavPlannerConfig | None = None):
-        """Initialize the SA-CADRL adapter with optional configuration."""
-        super().__init__(config=config)
-        logger.warning(
-            "SACADRLPlannerAdapter is a heuristic baseline and is not a learned SA-CADRL model."
-        )
+    def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
+        """Initialize the adapter and configure optional heuristic fallback."""
+        self.config = config or SocNavPlannerConfig()
+        self._allow_fallback = allow_fallback
+        self._model: _SACADRLModel | None = None
+        self._load_error: Exception | None = None
+        self._fallback_warned = False
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
-        Compute (v, w) using nearest pedestrian bias similar to SA-CADRL heuristics.
+        Compute (v, w) using the GA3C-CADRL model (or fallback heuristics).
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        model = self._ensure_model()
+        if model is None:
+            return self._heuristic_plan(observation)
+
+        obs_vec, pref_speed, dist_to_goal = self._build_network_input(observation)
+        if dist_to_goal <= self.config.goal_tolerance:
+            return 0.0, 0.0
+
+        predictions = model.predict(obs_vec)[0]
+        action_idx = int(np.argmax(predictions))
+        raw_action = model.actions[action_idx]
+        linear = float(pref_speed * raw_action[0])
+        delta_heading = float(raw_action[1])
+
+        time_step = float(
+            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
+        )
+        if time_step <= 1e-6:
+            logger.warning(
+                "Invalid timestep ({}) for SACADRLPlannerAdapter; defaulting to 0.1s.",
+                time_step,
+            )
+            time_step = 0.1
+
+        angular = float(delta_heading / time_step)
+        linear = float(np.clip(linear, 0.0, self.config.max_linear_speed))
+        angular = float(
+            np.clip(angular, -self.config.max_angular_speed, self.config.max_angular_speed)
+        )
+        return linear, angular
+
+    def _ensure_model(self) -> _SACADRLModel | None:
+        """Load the model checkpoint on demand and honor fallback settings.
+
+        Returns:
+            _SACADRLModel | None: Loaded model instance or ``None`` when falling back.
+        """
+        if self._model is not None:
+            return self._model
+        if self._load_error is not None:
+            return None if self._allow_fallback else self._raise_cached_error()
+        try:
+            self._model = self._build_model()
+        except Exception as exc:
+            if self._allow_fallback:
+                self._load_error = exc
+                if not self._fallback_warned:
+                    logger.warning(
+                        "Falling back to heuristic SACADRL behavior: {}. "
+                        "Set allow_fallback=False to fail fast.",
+                        exc,
+                    )
+                    self._fallback_warned = True
+                return None
+            raise
+        return self._model
+
+    def _raise_cached_error(self) -> None:
+        """Re-raise cached initialization error when fallback is disabled."""
+        assert self._load_error is not None
+        raise self._load_error
+
+    def _build_model(self) -> _SACADRLModel:
+        """Resolve the GA3C-CADRL checkpoint and construct the TF model wrapper.
+
+        Returns:
+            _SACADRLModel: Loaded GA3C-CADRL model wrapper.
+        """
+        checkpoint_prefix = self._resolve_checkpoint_prefix()
+        return _SACADRLModel(checkpoint_prefix, device="/cpu:0")
+
+    def _resolve_checkpoint_prefix(self) -> Path:
+        """Resolve the model checkpoint prefix for the GA3C-CADRL checkpoint.
+
+        Returns:
+            Path: Checkpoint prefix path without file extensions.
+        """
+        if self.config.sacadrl_checkpoint_path:
+            checkpoint_path = Path(self.config.sacadrl_checkpoint_path).expanduser()
+        else:
+            checkpoint_path = resolve_model_path(self.config.sacadrl_model_id)
+
+        if checkpoint_path.suffix == ".meta":
+            prefix = checkpoint_path.with_suffix("")
+        else:
+            prefix = checkpoint_path
+
+        meta_path = prefix.with_suffix(".meta")
+        if not meta_path.exists():
+            raise FileNotFoundError(f"GA3C-CADRL checkpoint meta file not found: {meta_path}")
+        index_path = prefix.with_suffix(".index")
+        if not index_path.exists():
+            raise FileNotFoundError(f"GA3C-CADRL checkpoint index file not found: {index_path}")
+        data_files = list(prefix.parent.glob(f"{prefix.name}.data*"))
+        if not data_files:
+            raise FileNotFoundError(
+                f"GA3C-CADRL checkpoint data file not found for prefix: {prefix}"
+            )
+        return prefix
+
+    def _compute_goal_frame(
+        self, robot_pos: np.ndarray, robot_heading: float, goal: np.ndarray
+    ) -> tuple[float, np.ndarray, np.ndarray, float]:
+        """Compute the goal-aligned frame and heading in ego coordinates.
+
+        Returns:
+            tuple[float, np.ndarray, np.ndarray, float]: Distance to goal, parallel unit
+            vector, orthogonal unit vector, and heading in ego frame.
+        """
+        to_goal = goal - robot_pos
+        dist_to_goal = float(np.linalg.norm(to_goal))
+        if dist_to_goal > 1e-8:
+            ref_prll = to_goal / dist_to_goal
+        else:
+            ref_prll = np.array([1.0, 0.0], dtype=float)
+        ref_orth = np.array([-ref_prll[1], ref_prll[0]], dtype=float)
+        ref_angle = atan2(ref_prll[1], ref_prll[0])
+        heading_ego_frame = self._wrap_angle(robot_heading - ref_angle)
+        return dist_to_goal, ref_prll, ref_orth, heading_ego_frame
+
+    def _normalize_pedestrians(self, ped_state: dict) -> tuple[np.ndarray, np.ndarray, float]:
+        """Normalize pedestrian positions/velocities and radius from observation.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray, float]: Positions array, velocities array,
+            and shared pedestrian radius.
+        """
+        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+        if ped_positions.ndim != 2 or ped_positions.shape[1] != 2:
+            ped_positions = np.zeros((0, 2), dtype=float)
+        ped_count = int(
+            np.asarray(ped_state.get("count", [ped_positions.shape[0]]), dtype=float)[0]
+        )
+        ped_positions = ped_positions[:ped_count]
+        ped_velocities = ped_state.get("velocities")
+        if ped_velocities is None:
+            ped_velocities = np.zeros_like(ped_positions, dtype=float)
+        ped_velocities = np.asarray(ped_velocities, dtype=float)
+        if ped_velocities.ndim != 2 or ped_velocities.shape[1] != 2:
+            ped_velocities = np.zeros_like(ped_positions, dtype=float)
+        ped_velocities = ped_velocities[:ped_count]
+        ped_radius = float(np.asarray(ped_state.get("radius", [0.3]), dtype=float)[0])
+        return ped_positions, ped_velocities, ped_radius
+
+    def _ego_to_global_velocities(
+        self, robot_heading: float, ped_velocities: np.ndarray
+    ) -> np.ndarray:
+        """Convert ego-frame pedestrian velocities to global-frame velocities.
+
+        Returns:
+            np.ndarray: Global-frame velocities with the same shape as input.
+        """
+        cos_h = np.cos(robot_heading)
+        sin_h = np.sin(robot_heading)
+        v_global = np.zeros_like(ped_velocities, dtype=float)
+        if ped_velocities.size:
+            v_global[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            v_global[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+        return v_global
+
+    def _build_other_agents_states(
+        self,
+        ped_positions: np.ndarray,
+        ped_velocities: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_radius: float,
+        ped_radius: float,
+        ref_prll: np.ndarray,
+        ref_orth: np.ndarray,
+    ) -> tuple[np.ndarray, float]:
+        """Build the ordered other-agent state tensor for the GA3C-CADRL input.
+
+        Returns:
+            tuple[np.ndarray, float]: Other-agent state matrix and count.
+        """
+        max_other = max(0, int(self.config.sacadrl_max_other_agents))
+        other_states = np.zeros((max_other, 7), dtype=float)
+        sorting = []
+        for idx in range(ped_positions.shape[0]):
+            rel = ped_positions[idx] - robot_pos
+            dist_center = float(np.linalg.norm(rel))
+            dist_2_other = dist_center - robot_radius - ped_radius
+            p_orth = float(np.dot(rel, ref_orth))
+            sorting.append((idx, dist_2_other, p_orth))
+
+        if sorting:
+            if self.config.sacadrl_sorting_method == "closest_last":
+                sorted_ids = sorted(sorting, key=lambda x: (-x[1], x[2]))
+            else:
+                sorted_ids = sorted(sorting, key=lambda x: (x[1], x[2]))
+            selected = [idx for idx, _dist, _orth in sorted_ids[:max_other]]
+        else:
+            selected = []
+
+        for slot, idx in enumerate(selected):
+            rel = ped_positions[idx] - robot_pos
+            p_parallel = float(np.dot(rel, ref_prll))
+            p_orth = float(np.dot(rel, ref_orth))
+            v_parallel = float(np.dot(ped_velocities[idx], ref_prll))
+            v_orth = float(np.dot(ped_velocities[idx], ref_orth))
+            dist_2_other = float(np.linalg.norm(rel) - robot_radius - ped_radius)
+            combined_radius = robot_radius + ped_radius
+            other_states[slot] = np.array(
+                [
+                    p_parallel,
+                    p_orth,
+                    v_parallel,
+                    v_orth,
+                    ped_radius,
+                    combined_radius,
+                    dist_2_other,
+                ],
+                dtype=float,
+            )
+        return other_states, float(len(selected))
+
+    def _build_network_input(self, observation: dict) -> tuple[np.ndarray, float, float]:
+        """Convert a SocNav observation into the GA3C-CADRL network input vector.
+
+        Returns:
+            tuple[np.ndarray, float, float]: Batched observation vector, preferred speed,
+            and distance to goal.
+        """
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
+
+        goal = np.asarray(goal_state["current"], dtype=float)
+        dist_to_goal, ref_prll, ref_orth, heading_ego_frame = self._compute_goal_frame(
+            robot_pos, robot_heading, goal
+        )
+
+        ped_positions, ped_velocities, ped_radius = self._normalize_pedestrians(ped_state)
+        v_global = self._ego_to_global_velocities(robot_heading, ped_velocities)
+        other_states, num_other_agents = self._build_other_agents_states(
+            ped_positions,
+            v_global,
+            robot_pos,
+            robot_radius,
+            ped_radius,
+            ref_prll,
+            ref_orth,
+        )
+        pref_speed = float(self.config.sacadrl_pref_speed)
+
+        obs_dict = {
+            "num_other_agents": np.array([num_other_agents], dtype=np.float32),
+            "dist_to_goal": np.array([dist_to_goal], dtype=np.float32),
+            "heading_ego_frame": np.array([heading_ego_frame], dtype=np.float32),
+            "pref_speed": np.array([pref_speed], dtype=np.float32),
+            "radius": np.array([robot_radius], dtype=np.float32),
+            "other_agents_states": other_states.astype(np.float32),
+        }
+        vec_obs = np.array([], dtype=np.float32)
+        for state in _SACADRL_STATE_ORDER:
+            vec_obs = np.hstack([vec_obs, obs_dict[state].flatten()])
+        vec_obs = np.expand_dims(vec_obs, axis=0)
+        return vec_obs, pref_speed, dist_to_goal
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Fallback heuristic that biases toward the goal while repulsing pedestrians.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -1166,9 +2324,6 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
     """
     Convenience constructor for social-force-like planner policy.
 
-    Warning:
-        This is a heuristic baseline and is not benchmark-ready.
-
     Returns:
         SocNavPlannerPolicy: Policy wrapping SocialForcePlannerAdapter.
     """
@@ -1176,7 +2331,9 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
     return SocNavPlannerPolicy(adapter=SocialForcePlannerAdapter(config=config))
 
 
-def make_orca_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+def make_orca_policy(
+    config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False
+) -> SocNavPlannerPolicy:
     """
     Convenience constructor for ORCA-like planner policy.
 
@@ -1184,21 +2341,27 @@ def make_orca_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlanner
         SocNavPlannerPolicy: Policy wrapping ORCAPlannerAdapter.
     """
 
-    return SocNavPlannerPolicy(adapter=ORCAPlannerAdapter(config=config))
+    return SocNavPlannerPolicy(
+        adapter=ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    )
 
 
-def make_sacadrl_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+def make_sacadrl_policy(
+    config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False
+) -> SocNavPlannerPolicy:
     """
-    Convenience constructor for SA-CADRL-like planner policy.
+    Convenience constructor for GA3C-CADRL (SA-CADRL) planner policy.
 
-    Warning:
-        This is a heuristic baseline and is not a learned SA-CADRL model.
+    Set ``allow_fallback=True`` to use heuristic behavior when the checkpoint
+    cannot be loaded (e.g., missing TensorFlow dependency).
 
     Returns:
         SocNavPlannerPolicy: Policy wrapping SACADRLPlannerAdapter.
     """
 
-    return SocNavPlannerPolicy(adapter=SACADRLPlannerAdapter(config=config))
+    return SocNavPlannerPolicy(
+        adapter=SACADRLPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    )
 
 
 class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
@@ -1206,8 +2369,9 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     Adapter that attempts to delegate to the upstream SocNavBench SamplingPlanner.
 
     Warning:
-        This adapter falls back to the heuristic SamplingPlannerAdapter when upstream
-        dependencies are missing. In that mode it is **not benchmark-ready**.
+        This adapter requires the upstream SocNavBench planner by default. Set
+        ``allow_fallback=True`` to fall back to the heuristic SamplingPlannerAdapter;
+        in fallback mode it is **not benchmark-ready**.
     """
 
     def __init__(
@@ -1215,123 +2379,15 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
         config: SocNavPlannerConfig | None = None,
         socnav_root: Path | None = None,
         planner_factory: Callable[[], Any] | None = None,
-    ):
-        """Initialize the adapter and optionally load the upstream planner."""
+        *,
+        allow_fallback: bool = False,
+    ) -> None:
+        """Initialize the adapter with upstream delegation enabled."""
 
-        super().__init__(config=config)
-        self._planner = None
-        # Allow passing an already-initialized planner for advanced use.
-        if planner_factory is not None:
-            self._planner = self._safe_call_factory(planner_factory)
-        else:
-            self._planner = self._load_upstream_planner(socnav_root)
-        if self._planner is None:
-            logger.warning(
-                "SocNavBenchSamplingAdapter is running in fallback heuristic mode and "
-                "is not benchmark-ready."
-            )
-
-    @staticmethod
-    def _safe_call_factory(factory: Callable[[], Any]) -> Any | None:
-        """
-        Invoke a user-provided factory defensively.
-
-        Returns:
-            Planner instance from the factory or ``None`` on failure.
-        """
-        try:
-            return factory()
-        except Exception:  # pragma: no cover - defensive fallback  # noqa: BLE001
-            return None
-
-    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
-        """
-        Best-effort import of SocNavBench SamplingPlanner with defaults.
-
-        Returns:
-            SamplingPlanner | None: Upstream planner when dependencies resolve; otherwise ``None``.
-        """
-        root = socnav_root or Path(__file__).resolve().parents[2] / "output" / "SocNavBench"
-        root_str = str(Path(root).resolve())
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
-        try:
-            import control_pipelines.control_pipeline_v0 as cp  # type: ignore  # noqa: PLC0415
-            import objectives.goal_distance as gd  # type: ignore  # noqa: PLC0415
-            import params.central_params as central  # type: ignore  # noqa: PLC0415
-            import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
-            from dotmap import DotMap  # type: ignore  # noqa: PLC0415
-        except Exception:  # pragma: no cover - optional dependency path  # noqa: BLE001
-            return None
-
-        try:
-            socnav_params = central.create_socnav_params()
-            robot_params = central.create_robot_params()
-
-            # Minimal parameter DotMap inspired by upstream defaults
-            p = DotMap()
-            p.planner = DotMap()
-            p.control_pipeline_params = DotMap()
-            p.control_pipeline_params.pipeline = cp.ControlPipelineV0
-            p.control_pipeline_params.system_dynamics_params = DotMap(
-                system="dubins", dt=robot_params.delta_theta
-            )
-            p.control_pipeline_params.planning_horizon = 1.0
-            p.dt = (
-                socnav_params.camera_params.dt if hasattr(socnav_params, "camera_params") else 0.1
-            )
-            p.planning_horizon = 1
-            obj_fn = gd.GoalDistance(p=None)
-            return sp.SamplingPlanner(obj_fn=obj_fn, params=p)
-        except Exception:  # pragma: no cover - optional dependency path  # noqa: BLE001
-            return None
-
-    def plan(self, observation: dict) -> tuple[float, float]:
-        """
-        Compute a (v, w) command, preferring the upstream SocNavBench planner when available.
-
-        Returns:
-            tuple[float, float]: Linear and angular velocity command.
-        """
-        if self._planner is None:
-            return super().plan(observation)
-
-        try:
-            robot_state, goal_state, _ = self._socnav_fields(observation)
-            pos = robot_state["position"]
-            robot_pos = np.asarray(pos, dtype=float)
-            heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
-            start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
-            goal = goal_state["current"]
-            goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])
-            data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
-            traj = data.get("trajectory")
-            if traj is None:
-                return super().plan(observation)
-            # NOTE: upstream returns a trajectory and controller matrices; for now we
-            # consume only the immediate waypoint to preserve the (v, w) interface and
-            # avoid binding to controller specifics. This keeps the adapter lightweight
-            # while still aligning heading toward the planned path.
-            next_pos = traj.position_nk2()[0, 0]
-            to_next = next_pos - pos
-            direction = to_next / (np.linalg.norm(to_next) + 1e-9)
-            direction, occ_penalty = self._get_safe_heading(robot_pos, direction, observation)
-            desired_heading = atan2(direction[1], direction[0])
-            heading_error = self._wrap_angle(desired_heading - heading)
-            angular = float(
-                np.clip(
-                    self.config.angular_gain * heading_error,
-                    -self.config.max_angular_speed,
-                    self.config.max_angular_speed,
-                ),
-            )
-            linear = float(
-                np.clip(
-                    np.linalg.norm(to_next),
-                    0.0,
-                    self.config.max_linear_speed * max(0.0, 1.0 - occ_penalty),
-                ),
-            )
-            return linear, angular
-        except Exception:  # pragma: no cover - safety net  # noqa: BLE001
-            return super().plan(observation)
+        super().__init__(
+            config=config,
+            socnav_root=socnav_root,
+            planner_factory=planner_factory,
+            use_upstream=True,
+            allow_fallback=allow_fallback,
+        )

@@ -11,7 +11,8 @@ Guidance for enabling SocNavBench-style structured observations and planner adap
 
 ## Use planner adapters
 - Lightweight adapter: `SamplingPlannerAdapter` consumes the structured observation and emits `(v, w)` directly.
-- SocNavBench wrapper: `SocNavBenchSamplingAdapter` tries to import upstream SocNavBench sampling planner from `output/SocNavBench` and falls back to the lightweight adapter if dependencies are missing.
+- SocNavBench wrapper: `SocNavBenchSamplingAdapter` resolves the upstream SocNavBench sampling planner (default root `third_party/socnavbench`, override with `ROBOT_SF_SOCNAV_ROOT` or `socnav_root`). By default it requires upstream dependencies; set `allow_fallback=True` to use the lightweight adapter when missing.
+- External SocNavBench roots outside the repository require `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT=1` to opt in.
 - Policy wrapper: `SocNavPlannerPolicy(adapter)` provides an `.act(obs)` helper for Gym loops.
 
 ### Minimal code snippet
@@ -34,5 +35,6 @@ obs, reward, terminated, truncated, info = env.step(action)
 - See `examples/advanced/18_socnav_structured_observation.py` for a runnable demo that loops until termination using the planner policy.
 
 ## Notes
-- Upstream planner integration is best-effort; ensure `output/SocNavBench` is present if you need the original sampling planner. Otherwise, the fallback adapter is used.
+- Upstream planner integration is explicit; ensure `third_party/socnavbench` (or `ROBOT_SF_SOCNAV_ROOT`) is present if you need the original sampling planner. Use `allow_fallback=True` only for non-benchmark fallback behavior.
+- If you use a SocNavBench checkout outside this repository, set `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT=1` to acknowledge the trust boundary.
 - Default mode remains `DEFAULT_GYM`; enabling SocNav mode is opt-in to avoid breaking existing agents.

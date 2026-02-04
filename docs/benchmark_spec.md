@@ -51,6 +51,8 @@ Notes:
 * `random`/`ppo` are exposed via the baseline registry for non-map scenario matrices; map-based
   suites should use policy analysis for learned/GT comparisons. `random` is not currently wired
   into `policy_analysis_run.py`.
+* ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
+  in the algo config to use the heuristic fallback.
 
 ## Reproducible Command (One-Liner)
 
@@ -90,6 +92,10 @@ Full details live in
 
 **Smoothness**
 * `jerk_mean`,  `curvature_mean`,  `energy`
+
+**SocNavBench subset (vendored)**
+* `socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`
+  (subset of upstream SocNavBench metrics).
 
 **SNQI (composite)**
 * Weighted combination of normalized metrics using baseline statistics (median/p95).

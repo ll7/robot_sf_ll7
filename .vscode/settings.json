@@ -1,7 +1,6 @@
 {
     "githubIssues.issueBranchTitle": "${issueNumber}-${sanitizedIssueTitle}",
     "githubIssues.queries": [
-    
         {
             "label": "My Issues",
             "query": "default"
@@ -38,7 +37,7 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "githubPullRequests.ignoreSubmodules": false,
-        "chat.promptFilesRecommendations": {
+    "chat.promptFilesRecommendations": {
         "speckit.constitution": true,
         "speckit.specify": true,
         "speckit.plan": true,
@@ -52,25 +51,5 @@
     "[markdown]": {
         "editor.formatOnSave": true,
         "editor.formatOnPaste": true
-    },
-    "peacock.color": "#42b883",
-    "workbench.colorCustomizations": {
-        "activityBar.activeBackground": "#3333ff",
-        "activityBar.background": "#3333ff",
-        "activityBar.foreground": "#e7e7e7",
-        "activityBar.inactiveForeground": "#e7e7e799",
-        "activityBarBadge.background": "#600000",
-        "activityBarBadge.foreground": "#e7e7e7",
-        "commandCenter.border": "#e7e7e799",
-        "sash.hoverBorder": "#3333ff",
-        "statusBar.background": "#0000ff",
-        "statusBar.foreground": "#e7e7e7",
-        "statusBarItem.hoverBackground": "#3333ff",
-        "statusBarItem.remoteBackground": "#0000ff",
-        "statusBarItem.remoteForeground": "#e7e7e7",
-        "titleBar.activeBackground": "#0000ff",
-        "titleBar.activeForeground": "#e7e7e7",
-        "titleBar.inactiveBackground": "#0000ff99",
-        "titleBar.inactiveForeground": "#e7e7e799"
     },
 }

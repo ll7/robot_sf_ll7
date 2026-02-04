@@ -48,6 +48,7 @@ Normalization: $\text{norm}_x = \frac{x - b_{\text{med}}}{b_{p95} - b_{\text{med
 
 ## Coverage Status (as of 2025-10-24)
 - Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, mean_distance, path_efficiency, force_quantiles (q50/q90/q95), per_ped_force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, curvature_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
+- SocNavBench subset (vendored): socnavbench_path_length, socnavbench_path_length_ratio, socnavbench_path_irregularity. Note: this is a subset of upstream metrics, not the full SocNavBench suite.
 - Documented but partially specified/optional: mean interpersonal distance (pending), force field divergence (pending).
 
 ### Missing data handling (runtime semantics)

@@ -20,6 +20,8 @@ Implemented categories:
   velocity_* / acceleration_* / jerk_* extrema, clearing_distance_*,
   space_compliance, distance_to_human_min, time_to_collision_min,
   aggregated_time.
+- SocNavBench subset: socnavbench_path_length, socnavbench_path_length_ratio,
+  socnavbench_path_irregularity.
 
 Missing/optional data handling:
 - Empty pedestrian sets (K=0) return 0.0 for collision counts and ``NaN`` for distances where
@@ -1142,6 +1144,79 @@ def path_length(data: EpisodeData) -> float:
     return float(seg_lengths.sum())
 
 
+def socnavbench_path_length(data: EpisodeData) -> float:
+    """SocNavBench path length metric (distance traveled).
+
+    This mirrors ``third_party/socnavbench/metrics/cost_functions.py::path_length``.
+
+    Returns:
+        float: Total path length in meters.
+    """
+    return path_length(data)
+
+
+def socnavbench_path_length_ratio(data: EpisodeData) -> float:
+    """SocNavBench path length ratio (distance / displacement).
+
+    Mirrors ``cost_functions.path_length_ratio`` using the episode trajectory
+    and the goal as the reference end configuration.
+
+    Returns:
+        float: Path length ratio (>= 1.0 when goal displacement > 0).
+    """
+    if data.robot_pos.shape[0] == 0:
+        return float("nan")
+    epsilon = 1e-5
+    distance = socnavbench_path_length(data) + epsilon
+    displacement = float(np.linalg.norm(data.goal - data.robot_pos[0]))
+    if displacement <= 0.0:
+        return float("inf")
+    return float(distance / displacement)
+
+
+def _socnavbench_trajectory_with_heading(data: EpisodeData) -> np.ndarray:
+    """Construct a SocNavBench-style trajectory array including heading.
+
+    Returns:
+        np.ndarray: (T, 3) array of [x, y, heading] entries.
+    """
+    positions = np.asarray(data.robot_pos, dtype=float)
+    if positions.shape[0] == 0:
+        return np.zeros((0, 3), dtype=float)
+    if positions.shape[0] < 2:
+        headings = np.zeros((positions.shape[0],), dtype=float)
+    else:
+        diffs = positions[1:] - positions[:-1]
+        headings = np.arctan2(diffs[:, 1], diffs[:, 0])
+        headings = np.concatenate([headings, headings[-1:]], axis=0)
+    return np.column_stack([positions, headings])
+
+
+def socnavbench_path_irregularity(data: EpisodeData) -> float:
+    """SocNavBench path irregularity metric (unnecessary turning per unit length).
+
+    Mirrors ``cost_functions.path_irregularity`` with goal taken from the episode.
+
+    Returns:
+        float: Path irregularity value (rad/m).
+    """
+    trajectory = _socnavbench_trajectory_with_heading(data)
+    if trajectory.shape[0] == 0:
+        return float("nan")
+    goal_heading = float(trajectory[-1, 2]) if trajectory.shape[1] >= 3 else 0.0
+    goal_config = np.array([data.goal[0], data.goal[1], goal_heading], dtype=float)
+
+    traj_xy = trajectory[:, :2]
+    headings = trajectory[:, 2] if trajectory.shape[1] >= 3 else np.zeros((trajectory.shape[0],))
+    heading_vectors = np.column_stack([np.cos(headings), np.sin(headings)])
+    point_to_goal_traj = np.squeeze(goal_config)[:2] - traj_xy
+    denom = np.linalg.norm(point_to_goal_traj, axis=1) + 1e-10
+    cos_theta = np.sum(point_to_goal_traj * heading_vectors, axis=1) / denom
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+    theta_to_goal_traj = np.arccos(cos_theta)
+    return float(np.mean(np.abs(theta_to_goal_traj)))
+
+
 def success_path_length(
     data: EpisodeData,
     *,
@@ -1766,6 +1841,9 @@ METRIC_NAMES: list[str] = [
     "mean_distance",
     "robot_ped_within_5m_frac",
     "path_efficiency",
+    "socnavbench_path_length",
+    "socnavbench_path_length_ratio",
+    "socnavbench_path_irregularity",
     "avg_speed",
     "force_q50",
     "force_q90",
@@ -1825,6 +1903,9 @@ def compute_all_metrics(
     values["mean_distance"] = mean_distance(data)
     values["robot_ped_within_5m_frac"] = robot_ped_within_5m_frac(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
+    values["socnavbench_path_length"] = socnavbench_path_length(data)
+    values["socnavbench_path_length_ratio"] = socnavbench_path_length_ratio(data)
+    values["socnavbench_path_irregularity"] = socnavbench_path_irregularity(data)
     values.update(force_quantiles(data))
     values.update(per_ped_force_quantiles(data))
     values["ped_force_mean"] = ped_force_mean(data)
@@ -1932,6 +2013,9 @@ __all__ = [
     "robot_ped_within_5m_frac",
     "robot_ped_within_distance_frac",
     "snqi",
+    "socnavbench_path_irregularity",
+    "socnavbench_path_length",
+    "socnavbench_path_length_ratio",
     "space_compliance",
     "stalled_time",
     "success",

@@ -1,0 +1,155 @@
+import json
+import os
+import socket
+import stat
+import threading
+import time
+from pathlib import Path
+
+import numpy as np
+from dotmap import DotMap
+from utils.utils import color_text, euclidean_dist2, iter_print
+
+lock = threading.Lock()  # for asynchronous data sending
+
+
+def clip_vel(vel: float, bounds: tuple[float, float]) -> float:
+    vel = round(float(vel), 3)
+    assert bounds[0] < bounds[1]
+    if bounds[0] <= vel <= bounds[1]:
+        return vel
+    clipped = min(max(bounds[0], vel), bounds[1])
+    print(
+        "%svelocity %s out of bounds, clipped to %s%s"
+        % (color_text["red"], vel, clipped, color_text["reset"])
+    )
+    return clipped
+
+
+def clip_posn(
+    sim_dt: float,
+    old_pos3: list[float],
+    new_pos3: list[float],
+    v_bounds: tuple[float, float],
+    epsilon: float | None = 0.01,
+) -> list[float]:
+    # margin of error for the velocity bounds
+    assert sim_dt > 0
+    dist_to_new = euclidean_dist2(old_pos3, new_pos3)
+    req_vel = abs(dist_to_new / sim_dt)
+    margin = 0.0 if epsilon is None else float(epsilon)
+    if req_vel <= v_bounds[1] + margin:
+        return new_pos3
+    # calculate theta of vector
+    valid_theta = np.arctan2(new_pos3[1] - old_pos3[1], new_pos3[0] - old_pos3[0])
+    # create new position scaled off the invalid one
+    max_vel = sim_dt * v_bounds[1]
+    valid_x = max_vel * np.cos(valid_theta) + old_pos3[0]
+    valid_y = max_vel * np.sin(valid_theta) + old_pos3[1]
+    reachable_pos3 = [valid_x, valid_y, valid_theta]
+    print(
+        "%sposn [%s] is unreachable, clipped to [%s] (%.3fm/s > %.3fm/s)%s"
+        % (
+            color_text["red"],
+            iter_print(new_pos3),
+            iter_print(reachable_pos3),
+            req_vel,
+            v_bounds[1],
+            color_text["reset"],
+        )
+    )
+    return reachable_pos3
+
+
+"""MORE socket utils"""
+
+
+def establish_joystick_receiver_connection(
+    sock_id: str,
+) -> tuple[socket.socket, socket.socket, str]:
+    """Connect to server (robot)"""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.bind(sock_id)
+    except OSError:
+        # clear sockets to be used
+        if os.path.exists(sock_id):
+            sock_path = Path(sock_id)
+            try:
+                mode = sock_path.lstat().st_mode
+            except OSError as exc:
+                raise OSError(f"Unable to inspect socket path: {sock_id}") from exc
+            if stat.S_ISSOCK(mode):
+                sock_path.unlink()
+                sock.bind(sock_id)
+            else:
+                raise OSError(f"Refusing to remove non-socket path: {sock_id}")
+    # wait for a connection
+    sock.listen(1)
+    print("Waiting for Joystick connection...")
+    connection, client = sock.accept()
+    print(
+        "%sRobot <-- Joystick (receiver) connection established%s"
+        % (color_text["green"], color_text["reset"])
+    )
+    return sock, connection, client
+
+
+def establish_joystick_sender_connection(sock_id: str) -> socket.socket:
+    """Connect to client (joystick)"""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.connect(sock_id)
+    except Exception as e:
+        print(
+            "%sUnable to connect to joystick%s. Reason: %s"
+            % (color_text["red"], color_text["reset"], e)
+        )
+        print("Make sure you have a joystick instance running")
+        raise ConnectionError(f"Unable to connect to joystick at {sock_id}") from e
+    assert sock is not None
+    print(
+        "%sRobot --> Joystick (sender) connection established%s"
+        % (color_text["green"], color_text["reset"])
+    )
+    return sock
+
+
+def close_sockets(socks: list[socket.socket]) -> None:
+    for sock in socks:
+        sock.close()
+
+
+def force_connect(robot_receiver_id: str) -> None:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        # connect to the socket to break the accept() wait
+        s.connect(robot_receiver_id)
+    finally:
+        s.close()
+
+
+def establish_handshake(
+    p: DotMap, sender_id: str, receiver_id: str,
+) -> tuple[socket.socket, socket.socket] | None:
+    # NOTE: this is from the robot's POV
+    if p.episode_params.without_robot:
+        # lite-mode episode does not include a robot or joystick
+        return
+    receiver_sock, _, _ = establish_joystick_receiver_connection(receiver_id)
+    time.sleep(0.01)
+    sender_sock = establish_joystick_sender_connection(sender_id)
+    # send the preliminary episodes that the socnav is going to run
+    json_dict = {}
+    json_dict["episodes"] = list(p.episode_params.tests.keys())
+    episodes = json.dumps(json_dict)
+    # Create a TCP/IP socket
+    send_episodes_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    # Connect the socket to the port where the server is listening
+    send_episodes_socket.connect(sender_id)
+    send_episodes_socket.sendall(bytes(episodes, "utf-8"))
+    send_episodes_socket.close()
+    return (receiver_sock, sender_sock)
+
+
+""" END socket utils """

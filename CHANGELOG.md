@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
 - Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
 - Benchmark outputs now include wall collision and clearing distance metrics by default.
+- Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
+- Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
+- ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
+- Added SocNavBench subset metrics (`socnavbench_path_length`, `socnavbench_path_length_ratio`, `socnavbench_path_irregularity`).
 - Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
 - Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
 - Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
@@ -31,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
 - Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
+
+### Fixed
+- SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.
+- SocNavBench path irregularity now uses heading vectors instead of origin-dependent position vectors.
+- SocNavBench upstream planner loader rejects untrusted roots unless explicitly allowed via `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT`.
+- Vendored SocNavBench helpers now guard missing data files, fix numpy API mismatches, and correct plotting/trajectory utilities.
+- Renamed `thrid_party` to `third_party` to fix the vendor directory typo.
+- Vendored the MIT-ACL Python-RVO2 fork to keep ORCA builds compatible with newer CMake versions.
+- SocialForcePlannerAdapter now uses fast-pysf social-force interactions (goal, pedestrian, obstacle forces) instead of the heuristic placeholder.
 
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)

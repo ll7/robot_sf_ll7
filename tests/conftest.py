@@ -207,6 +207,63 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
 _SLOW_SAMPLES: list[tuple[str, float]] = []
 
 
+_FAST_PATH_FRAGMENTS = (
+    "tests/common/",
+    "tests/contract/",
+    "tests/factories/",
+    "tests/guard/",
+    "tests/sensor/",
+    "tests/sim/",
+    "tests/unit/",
+)
+_FAST_FILE_PREFIXES = (
+    "test_action_adapters",
+    "test_config_validation",
+    "test_environment_factory_signatures",
+    "test_error_policy",
+    "test_planner",
+    "test_range_sensor",
+    "test_seed_utils",
+    "test_types",
+)
+_FAST_FILES = {
+    "map_test.py",
+    "navigation_test.py",
+    "ped_grouping_test.py",
+    "sim_config_test.py",
+    "unicycle_drive_test.py",
+    "zone_sampling_test.py",
+}
+_SLOW_FILE_OVERRIDES = {
+    "test_edge_cases_recording.py",
+    "test_runner_video.py",
+}
+
+
+def _should_auto_mark_slow(path_str: str) -> bool:
+    """Return True when a test path should be auto-marked as slow."""
+    normalized = path_str.replace("\\", "/")
+    filename = Path(normalized).name
+    if filename in _SLOW_FILE_OVERRIDES:
+        return True
+    if filename in _FAST_FILES:
+        return False
+    if any(fragment in normalized for fragment in _FAST_PATH_FRAGMENTS):
+        return False
+    if any(filename.startswith(prefix) for prefix in _FAST_FILE_PREFIXES):
+        return False
+    return True
+
+
+def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
+    """Auto-mark non-core tests as slow to keep fast unit runs small."""
+    del config
+    for item in items:
+        path_str = str(item.fspath)
+        if _should_auto_mark_slow(path_str):
+            item.add_marker(pytest.mark.slow)
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
     """TODO docstring. Document this function.

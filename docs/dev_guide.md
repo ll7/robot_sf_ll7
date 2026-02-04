@@ -300,6 +300,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 # Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
 uv run pytest -n auto  # Number of test is steadily increasing, ca. 1200
 
+# Run fast unit tests only (excludes slow/integration)
+uv run pytest -m "not slow" tests
+  # Note: integration/perf-heavy directories are auto-marked as slow in tests/conftest.py.
+
 # Run only robot_sf tests
 uv run pytest tests
 
@@ -315,6 +319,9 @@ uv run pytest -n auto
 ```bash
 # 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
 uv run pytest -n auto tests  # → 881 tests
+
+# Fast unit test pass (skip slow/integration)
+uv run pytest -m "not slow" tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame

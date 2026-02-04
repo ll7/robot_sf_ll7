@@ -16,7 +16,7 @@
 				"isDefault": true
 			}
 		},
-			{
+		{
 			"label": "Run Tests in parallel",
 			"type": "shell",
 			"command": "uv run pytest -n auto",
@@ -24,6 +24,12 @@
 				"kind": "test",
 				"isDefault": true
 			}
+		},
+		{
+			"label": "Run Tests (fast)",
+			"type": "shell",
+			"command": "uv run pytest -m \"not slow\" tests",
+			"group": "test"
 		},
 		{
 			"label": "Run Tests (GUI)",

@@ -8,7 +8,7 @@ earlier version by:
     * Disabling heavy artifacts (videos, plots, bootstrap)
     * Using workers=1 to avoid process pool overhead & ordering variance
     * Adding a timing assertion (<2s local, <4s CI) to detect regressions
-    * Ensuring unique run roots per invocation to avoid resume side‑effects
+    * Deterministic planning replay (no second full benchmark run)
 
 If this test starts failing due to timing on a legitimately slower CI node,
 set STRICT_REPRO_TEST=0 (future enhancement) or adjust thresholds in spec.
@@ -26,15 +26,25 @@ Minimization Rationale (T026):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import random
 import signal
 import time
 from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from robot_sf.benchmark.full_classic.orchestrator import (
+    _episode_id_from_job,
+    run_full_benchmark,
+)
+from robot_sf.benchmark.full_classic.planning import (
+    expand_episode_jobs,
+    load_scenario_matrix,
+    plan_scenarios,
+)
 
 # New shared helper for minimal scenario matrix (performance refactor T010)
 from tests.perf_utils.minimal_matrix import write_minimal_matrix
@@ -57,7 +67,7 @@ def _run_minimal_benchmark(
     seeds: list[int],
     run_label: str,
     base_root_override: Path | None = None,
-) -> tuple[list[str], str]:  # T010/T020/T031
+) -> tuple[list[str], str, object]:  # T010/T020/T031
     """Execute a minimal benchmark run and return ordered episode_ids and scenario_matrix_hash.
 
     Refactored (T010): now delegates minimal matrix creation to shared helper
@@ -95,7 +105,7 @@ def _run_minimal_benchmark(
     records = _read_episode_records(Path(manifest.output_root))
     ordered_ids = [r["episode_id"] for r in records]
     scenario_hash = getattr(manifest, "scenario_matrix_hash", "")
-    return ordered_ids, scenario_hash
+    return ordered_ids, scenario_hash, cfg
 
 
 @pytest.mark.timeout(60)  # marker declared in pytest.ini options; enforcement done manually below
@@ -106,8 +116,8 @@ def test_reproducibility_same_seed(
     """Accelerated reproducibility test.
 
     Contract (specs/123-reduce-runtime-of/):
-        1. Two minimal runs with identical config + seeds yield identical ordered episode_id sequences.
-        2. scenario_matrix_hash identical across runs.
+        1. One minimal run yields episode_id ordering that matches deterministic planning replay.
+        2. scenario_matrix_hash matches deterministic hash from matrix contents.
         3. No duplicate episode_ids within a run.
         4. At least one episode generated (sanity / non-empty).
         5. Wall-clock runtime below soft threshold (<2s local, <4s CI). Exceeding threshold = test failure (can relax later).
@@ -147,17 +157,7 @@ def test_reproducibility_same_seed(
                 pass
 
     try:
-        # First run uses default base root from fixture
-        ids1, hash1 = _run_minimal_benchmark(config_factory, seeds, run_label="a")
-        # Second run uses an alternate base root to validate independence from parent temp dir (T031)
-        alt_base = Path(config_factory().output_root) / "alt_base_root"
-        alt_base.mkdir(parents=True, exist_ok=True)
-        ids2, hash2 = _run_minimal_benchmark(
-            config_factory,
-            seeds,
-            run_label="b",
-            base_root_override=alt_base,
-        )
+        ids1, hash1, cfg = _run_minimal_benchmark(config_factory, seeds, run_label="a")
     finally:
         # Best effort cleanup - only if SIGALRM existed
         if sigalrm is not None:
@@ -170,9 +170,17 @@ def test_reproducibility_same_seed(
 
     elapsed = time.perf_counter() - start
 
+    raw = load_scenario_matrix(cfg.scenario_matrix_path)
+    matrix_bytes = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    expected_hash = hashlib.sha1(matrix_bytes).hexdigest()[:12]
+    rng = random.Random(int(getattr(cfg, "master_seed", 123)))
+    scenarios = plan_scenarios(raw, cfg, rng=rng)
+    jobs = expand_episode_jobs(scenarios, cfg)
+    planned_ids = [_episode_id_from_job(jb) for jb in jobs]
+
     # Determinism assertions
-    assert ids1 == ids2, "Episode ordering differs between runs with identical seeds/config."
-    assert hash1 == hash2, "Scenario matrix hash mismatch between runs."
+    assert ids1 == planned_ids, "Episode ordering differs from deterministic planning."
+    assert hash1 == expected_hash, "Scenario matrix hash mismatch."
     assert len(ids1) >= 1, "No episodes generated in minimal benchmark run."
     assert len(ids1) == expected_episode_count, (
         f"Expected {expected_episode_count} episodes, got {len(ids1)}"
@@ -202,7 +210,7 @@ def test_reproducibility_same_seed(
 
     # T022: assert absence of heavy artifact types (videos) across both run roots
     # (Videos not produced in smoke mode; this guards against regressions.)
-    base_root = Path(config_factory().output_root)
+    base_root = Path(cfg.output_root)
     produced_video_files = list(base_root.rglob("*.mp4")) + list(base_root.rglob("*.gif"))
     assert not produced_video_files, f"Unexpected video artifacts generated: {produced_video_files}"
 

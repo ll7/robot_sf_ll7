@@ -4041,7 +4041,7 @@ wheels = [
 [[package]]
 name = "pyrvo2"
 version = "0.0.0"
-source = { git = "https://github.com/mit-acl/Python-RVO2.git#56b245132ea104ee8a621ddf65b8a3dd85028ed2" }
+source = { directory = "third_party/python-rvo2" }
 
 [[package]]
 name = "pysocialforce"
@@ -4506,7 +4506,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=6.1.0" },
     { name = "pygame", specifier = ">=2.6.1" },
     { name = "pyproj", specifier = ">=3.6" },
-    { name = "pyrvo2", marker = "extra == 'orca'", git = "https://github.com/mit-acl/Python-RVO2.git" },
+    { name = "pyrvo2", marker = "extra == 'orca'", directory = "third_party/python-rvo2" },
     { name = "pysocialforce", editable = "fast-pysf" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-cov", specifier = ">=6.0.0" },

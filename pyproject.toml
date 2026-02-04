@@ -94,8 +94,9 @@ orca = [
     "Cython>=3.0.0",
 ]
 
-[tool.uv.extra-build-dependencies]
-pyrvo2 = ["Cython>=3.0.0"]
+[tool.uv]
+# Disable build isolation so the orca extra can supply Cython for pyrvo2 builds.
+no-build-isolation-package = ["pyrvo2"]
 
 [build-system]
 requires = ["hatchling"]

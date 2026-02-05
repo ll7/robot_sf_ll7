@@ -529,6 +529,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 - **Verify test value before investing fix effort** (see Test Significance Verification in Testing Strategy section).
+- Math vs numpy: use `math` for scalar ops/constants, `numpy` for vectorized/array ops, and avoid mixing within a single expression.
 
 ### Design decisions
 

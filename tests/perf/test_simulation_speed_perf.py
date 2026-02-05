@@ -35,10 +35,10 @@ def _make_minimal_map() -> MapDefinition:
     spawn_zone: Rect = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
     goal_zone: Rect = ((8.0, 8.0), (9.0, 8.0), (8.0, 9.0))
     bounds: list[Line2D] = [
-        (0.0, width, 0.0, 0.0),
-        (width, width, 0.0, height),
-        (width, 0.0, height, height),
-        (0.0, 0.0, height, 0.0),
+        ((0.0, 0.0), (width, 0.0)),
+        ((width, 0.0), (width, height)),
+        ((width, height), (0.0, height)),
+        ((0.0, height), (0.0, 0.0)),
     ]
     route = GlobalRoute(
         spawn_id=0,

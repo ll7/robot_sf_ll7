@@ -35,7 +35,7 @@ def test_can_return_valid_observation():
 
 @pytest.mark.slow
 def test_can_simulate_with_pedestrians():
-    """TODO docstring. Document this function."""
+    """Step a robot environment with pedestrians for a short rollout."""
     total_steps = 100
     env = RobotEnv()
     env.reset()
@@ -49,7 +49,7 @@ def test_can_simulate_with_pedestrians():
 
 @pytest.mark.slow
 def test_ego_ped_env():
-    """TODO docstring. Document this function."""
+    """Ensure the ego pedestrian env can step with a loaded robot model."""
     total_steps = 100
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)

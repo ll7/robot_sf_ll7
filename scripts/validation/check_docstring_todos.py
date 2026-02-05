@@ -209,7 +209,7 @@ def main() -> int:
                 warnings.append(f"{rel_path}:{info.lineno} {info.name} has TODO docstring")
 
     if warnings:
-        print("Docstring TODO warnings (touched definitions):")
+        print("Docstring TODO warnings (touched definitions), please update the docstrings:")
         for line in warnings:
             print(f"- {line}")
         if args.fail_on_warning:

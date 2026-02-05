@@ -14,7 +14,7 @@ import pytest
 
 @pytest.mark.slow
 def test_headless_dummy_driver_runs():
-    """TODO docstring. Document this function."""
+    """Run the classic interactions demo in headless mode without crashing."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     mod = importlib.import_module("examples.classic_interactions_pygame")
     if hasattr(mod, "DRY_RUN"):

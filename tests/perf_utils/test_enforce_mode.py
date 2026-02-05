@@ -22,8 +22,8 @@ import pytest
 
 @pytest.mark.timeout(10)
 def test_enforce_mode_escalates():
+    """Verify enforce mode converts soft breaches into failures."""
     # Create a small test file under repo root so root conftest is loaded.
-    """TODO docstring. Document this function."""
     repo_root = Path(__file__).resolve().parents[2]
     target_dir = repo_root / "output" / "tmp" / "enforce_tmp"
     target_dir.mkdir(parents=True, exist_ok=True)

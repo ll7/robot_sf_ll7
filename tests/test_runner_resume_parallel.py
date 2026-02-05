@@ -13,11 +13,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Resume parallel batch runs without duplicating existing episodes."""
     scenarios = [
         {
             "id": "resume-parallel-uni-low-open",

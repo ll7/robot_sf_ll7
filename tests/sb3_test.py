@@ -10,7 +10,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def test_can_load_model_snapshot():
-    """TODO docstring. Document this function."""
+    """Train, save, and reload a PPO model snapshot to ensure compatibility."""
     MODEL_PATH = "./temp/ppo_model"
     MODEL_FILE = f"{MODEL_PATH}.zip"
 

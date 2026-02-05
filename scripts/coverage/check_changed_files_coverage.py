@@ -235,7 +235,7 @@ def _ensure_coverage_path(coverage_path: Path) -> bool:
 
 def _log_header(args: argparse.Namespace) -> None:
     print(
-        "Changed files coverage check "
+        "Changed files test coverage check "
         f"(base={args.base}, min={args.min:.1f}%, goal={args.goal:.1f}%)"
     )
 

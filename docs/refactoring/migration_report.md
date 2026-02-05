@@ -59,7 +59,7 @@ Analyzed 57 Python files
 - Old config usage: ['EnvSettings(']
 - Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
 
-### tests/env_test.py
+### tests/test_env.py
 - Old imports: ['from robot_sf.gym_env.robot_env import RobotEnv', 'from robot_sf.gym_env.pedestrian_env import PedestrianEnv']
 - Old environment creation: ['RobotEnv(', 'RobotEnv(', 'RobotEnv(', 'PedestrianEnv(']
 - Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace PedestrianEnv() with make_pedestrian_env()

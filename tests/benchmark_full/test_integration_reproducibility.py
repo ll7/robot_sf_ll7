@@ -2,7 +2,7 @@
 
 This keeps the benchmark workload minimal (2 episodes) while asserting
 deterministic ordering, scenario matrix hashing, and a tight runtime budget
-(<10s local, <16s CI). If legitimate CI slowness occurs, adjust the thresholds
+(<10s local, <20s CI). If legitimate CI slowness occurs, adjust the thresholds
 in the performance spec rather than expanding this test's workload.
 """
 

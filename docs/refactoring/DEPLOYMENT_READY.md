@@ -73,7 +73,7 @@ python3 utilities/migrate_environments.py --migrate examples/demo_defensive.py
 python3 utilities/migrate_environments.py --migrate examples/demo_offensive.py
 
 # Update key test files  
-python3 utilities/migrate_environments.py --migrate tests/env_test.py
+python3 utilities/migrate_environments.py --migrate tests/test_env.py
 python3 utilities/migrate_environments.py --migrate tests/test_robot_env_with_image_integration.py
 ```
 

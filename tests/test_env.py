@@ -49,7 +49,6 @@ def test_can_simulate_with_pedestrians():
 @pytest.mark.slow
 def test_ego_ped_env():
     """Ensure the ego pedestrian env can step with a loaded robot model."""
-    pytest.importorskip("stable_baselines3", reason="StableBaselines3 not installed")
     from stable_baselines3 import PPO
 
     total_steps = 100

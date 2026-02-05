@@ -21,8 +21,8 @@ from robot_sf.nav.obstacle import Obstacle
 def _map_def() -> MapDefinition:
     width = 6.0
     height = 4.0
-    spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (0.5, 1.0))
-    goal_zone: Rect = ((5.0, 3.0), (5.5, 3.0), (5.0, 3.5))
+    spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))
+    goal_zone: Rect = ((5.0, 3.0), (5.5, 3.0), (5.5, 3.5))
     bounds = [
         ((0.0, 0.0), (width, 0.0)),
         ((width, 0.0), (width, height)),

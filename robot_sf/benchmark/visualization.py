@@ -377,7 +377,7 @@ def _should_use_plot_subprocess(
     has_filters = bool(scenario_filter or baseline_filter)
     if is_small and has_filters:
         return False
-    return not is_small
+    return True
 
 
 def _plot_subprocess_worker(

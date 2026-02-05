@@ -103,7 +103,7 @@
 
 2. **Update Test Files**:
    ```python
-   # tests/env_test.py
+   # tests/test_env.py
    from robot_sf.gym_env.environment_factory import make_robot_env
    
    def test_can_create_env():

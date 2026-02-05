@@ -17,7 +17,7 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.runner import run_batch
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 DEFAULT_METRICS: list[str] = [
     "time_to_goal_norm",
@@ -89,7 +89,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
     algo_config_path: str | None = None,
     workers: int = 1,
     resume: bool = True,
-    progress_cb=None,
+    progress_cb: Callable | None = None,
 ) -> dict[str, dict[str, float]]:
     # Optionally run batch to collect JSONL
     """Run episodes as needed and write baseline stats to JSON.

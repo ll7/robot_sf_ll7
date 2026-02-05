@@ -57,7 +57,15 @@ ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
 
 
 def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force]:
-    """Initialize forces required for simulation."""
+    """Initialize forces required for simulation.
+
+    Args:
+        sim: Simulation context providing entities.
+        config: Simulator configuration.
+
+    Returns:
+        list[forces.Force]: Force instances for the simulator.
+    """
     enable_group = config.scene_config.enable_group
     force_list = [
         forces.DesiredForce(config.desired_force_config, sim.peds),
@@ -211,7 +219,11 @@ class Simulator:
         self.t = 0
 
     def compute_forces(self):
-        """compute forces"""
+        """Compute the combined force for the current simulation state.
+
+        Returns:
+            np.ndarray: Combined force array for all pedestrians.
+        """
         return sum(force() for force in self.forces)
 
     @property
@@ -225,7 +237,11 @@ class Simulator:
         return self.peds.state, self.peds.groups
 
     def get_states(self):
-        """TODO docstring. Document this function."""
+        """Return the current pedestrian states.
+
+        Returns:
+            tuple[np.ndarray, list[list[int]]]: Raw states and groupings.
+        """
         warn(
             "For performance reasons This function does not retrieve the whole \
               state history (it used to facilitate video recordings). \
@@ -236,7 +252,11 @@ class Simulator:
         return self.peds.get_states()
 
     def get_length(self):
-        """Get simulation length"""
+        """Get the number of recorded states.
+
+        Returns:
+            int: Number of recorded state entries.
+        """
         return len(self.get_states()[0])
 
     def get_obstacles(self) -> list[np.ndarray]:

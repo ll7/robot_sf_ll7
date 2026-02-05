@@ -99,27 +99,26 @@ class DebuggableForce:
 
 
 class DesiredForce:
-    """Calculates the force between this agent and the next assigned waypoint.
-    If the waypoint has been reached, the next waypoint in the list will be
-    selected.
-    :return: the calculated force
+    """Compute the force that moves a pedestrian toward the next waypoint.
+
+    If the current waypoint is reached, the next waypoint is selected.
     """
 
     def __init__(self, config: DesiredForceConfig, peds: PedState):
-        """TODO docstring. Document this function.
+        """Initialize the desired-force calculator.
 
         Args:
-            config: TODO docstring.
-            peds: TODO docstring.
+            config: Desired force configuration parameters.
+            peds: Pedestrian state accessors.
         """
         self.config = config
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
-        """
-        Calculate and return the desired force for each pedestrian.
+        """Calculate the desired force for each pedestrian.
 
-        :return: A numpy array containing the forces for all pedestrians.
+        Returns:
+            np.ndarray: Force vectors with shape (num_peds, 2).
         """
         # Relaxation time determines how quickly a pedestrian adapts their velocity
         relexation_time: float = self.config.relaxation_time
@@ -366,17 +365,14 @@ def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
 
 
 class ObstacleForce:
-    """Calculates the force between this agent and the nearest obstacle in this
-    scene.
-    :return:  the calculated force
-    """
+    """Calculate repulsive forces between pedestrians and nearby obstacles."""
 
     def __init__(self, config: ObstacleForceConfig, sim: SimEntitiesProvider):
-        """TODO docstring. Document this function.
+        """Initialize obstacle force computation.
 
         Args:
-            config: TODO docstring.
-            sim: TODO docstring.
+            config: Obstacle force configuration parameters.
+            sim: Simulation entity provider with obstacle and pedestrian access.
         """
         self.config = config
         self.get_obstacles = sim.get_raw_obstacles
@@ -384,8 +380,11 @@ class ObstacleForce:
         self.get_agent_radius = lambda: sim.peds.agent_radius
 
     def __call__(self) -> np.ndarray:
-        """Computes the obstacle forces per pedestrian,
-        output shape (num_peds, 2), forces in x/y direction"""
+        """Compute obstacle forces for each pedestrian.
+
+        Returns:
+            np.ndarray: Force vectors with shape (num_peds, 2).
+        """
 
         ped_positions = self.get_peds()
         forces = np.zeros((ped_positions.shape[0], 2))
@@ -714,12 +713,10 @@ class GroupGazeForceAlt:
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
-        """
-        Calculates and returns the group gaze forces for all pedestrian groups.
-        This method allows an instance of the class to be called as a function.
+        """Calculate group gaze forces for all pedestrian groups.
 
-        :return: A numpy array containing the forces applied to each pedestrian
-            due to group gaze.
+        Returns:
+            np.ndarray: Force vectors with shape (num_peds, 2).
         """
         # Initialize a zero matrix for the forces with dimensions equal to the
         # number of pedestrians by 2 (for x and y components).
@@ -826,9 +823,13 @@ def vec_len_2d(vec_x: float, vec_y: float) -> float:
 
 @njit
 def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Normalize nx2 array along the second axis
-    input: [n,2] ndarray
-    output: (normalized vectors, norm factors)
+    """Normalize an (n, 2) array of vectors.
+
+    Args:
+        vecs: Array of vectors with shape (n, 2).
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Unit vectors and their lengths.
     """
     num_vecs = vecs.shape[0]
     vec_lengths = np.zeros(num_vecs)
@@ -845,7 +846,14 @@ def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 @njit
 def desired_directions(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Given the current state and destination, compute desired direction."""
+    """Compute desired directions and distances for each pedestrian.
+
+    Args:
+        state: Pedestrian state array.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Unit direction vectors and distances to goals.
+    """
     destination_vectors = state[:, 4:6] - state[:, 0:2]
     directions, dist = normalize(destination_vectors)
     return directions, dist
@@ -853,17 +861,27 @@ def desired_directions(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 @njit
 def vec_diff(vecs: np.ndarray) -> np.ndarray:
-    """r_ab
-    r_ab := r_a − r_b.
+    """Compute pairwise vector differences r_ab = r_a - r_b.
+
+    Args:
+        vecs: Array of vectors with shape (n, 2).
+
+    Returns:
+        np.ndarray: Pairwise difference array with shape (n, n, 2).
     """
     diff = np.expand_dims(vecs, 1) - np.expand_dims(vecs, 0)
     return diff
 
 
 def each_diff(vecs: np.ndarray, keepdims=False) -> np.ndarray:
-    """
-    :param vecs: nx2 array
-    :return: diff with diagonal elements removed
+    """Compute pairwise differences and drop diagonal elements.
+
+    Args:
+        vecs: Array of vectors with shape (n, 2).
+        keepdims: Whether to reshape to (n, n-1, 2).
+
+    Returns:
+        np.ndarray: Pairwise differences with diagonal removed.
     """
     diff = vec_diff(vecs)
     diff = diff[~np.eye(diff.shape[0], dtype=bool), :]

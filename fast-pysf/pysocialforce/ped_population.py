@@ -71,37 +71,49 @@ def sample_group_spawn_on_route(
     start, end = route.sections[sec_id]
 
     def add_vecs(v1, v2):
-        """TODO docstring. Document this function.
+        """Add two 2D vectors.
 
         Args:
-            v1: TODO docstring.
-            v2: TODO docstring.
+            v1: First 2D vector.
+            v2: Second 2D vector.
+
+        Returns:
+            Vec2D: Summed vector.
         """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
-        """TODO docstring. Document this function.
+        """Subtract two 2D vectors.
 
         Args:
-            v1: TODO docstring.
-            v2: TODO docstring.
+            v1: First 2D vector.
+            v2: Second 2D vector.
+
+        Returns:
+            Vec2D: Difference vector (v1 - v2).
         """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     def scale_vec(v, f):
-        """TODO docstring. Document this function.
+        """Scale a 2D vector by a scalar.
 
         Args:
-            v: TODO docstring.
-            f: TODO docstring.
+            v: 2D vector to scale.
+            f: Scalar factor.
+
+        Returns:
+            Vec2D: Scaled vector.
         """
         return (v[0] * f, v[1] * f)
 
     def clip_spread(v):
-        """TODO docstring. Document this function.
+        """Clip offsets to the sidewalk width.
 
         Args:
-            v: TODO docstring.
+            v: Offset array to clip.
+
+        Returns:
+            np.ndarray: Clipped offsets.
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 

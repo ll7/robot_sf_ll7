@@ -152,7 +152,15 @@ class PedState:
 
     @staticmethod
     def capped_velocity(desired_velocity, max_velocity):
-        """Scale down a desired velocity to its capped speed."""
+        """Scale down desired velocities to their capped speeds.
+
+        Args:
+            desired_velocity: Array of desired velocity vectors.
+            max_velocity: Maximum allowed speed per pedestrian.
+
+        Returns:
+            np.ndarray: Capped velocity vectors.
+        """
         desired_speeds = np.linalg.norm(desired_velocity, axis=-1)
         factor = np.minimum(1.0, max_velocity / desired_speeds)
         factor[desired_speeds == 0] = 0.0
@@ -190,7 +198,14 @@ class PedState:
         return self.groups is not None
 
     def which_group(self, index: int) -> int:
-        """find group index from ped index"""
+        """Return the group index for a pedestrian id.
+
+        Args:
+            index: Pedestrian index.
+
+        Returns:
+            int: Group index, or -1 if not found.
+        """
         for i, group in enumerate(self.groups):
             if index in group:
                 return i
@@ -260,30 +275,36 @@ class EnvState:
         return obstacles
 
     def _update_obstacles_raw(self, obs_lines: list[Line2D]) -> np.ndarray:
-        """TODO docstring. Document this function.
+        """Convert obstacle line segments into the raw obstacle array.
 
         Args:
-            obs_lines: TODO docstring.
+            obs_lines: Line segments describing obstacles.
 
         Returns:
-            TODO docstring.
+            np.ndarray: Array of line segments with orthogonal unit vectors.
         """
 
         def orient(line):
-            """TODO docstring. Document this function.
+            """Compute the orientation of a line segment.
 
             Args:
-                line: TODO docstring.
+                line: Line segment as (start_x, end_x, start_y, end_y).
+
+            Returns:
+                float: Orientation angle in radians.
             """
             start_x, end_x, start_y, end_y = line
             vec_x, vec_y = end_x - start_x, end_y - start_y
             return (atan2(vec_y, vec_x) + 2 * pi) % (2 * pi)
 
         def unit_vec(orient):
-            """TODO docstring. Document this function.
+            """Convert an orientation angle to a unit vector.
 
             Args:
-                orient: TODO docstring.
+                orient: Orientation angle in radians.
+
+            Returns:
+                tuple[float, float]: Unit vector components.
             """
             return cos(orient), sin(orient)
 

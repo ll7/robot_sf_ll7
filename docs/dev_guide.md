@@ -598,6 +598,7 @@ Examples (copy‑ready):
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
+  - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
 - Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
 - Diagrams: VS Code task “Generate UML”
 
@@ -722,6 +723,7 @@ All figures must be **reproducible from code** and directly **integratable into 
   - VS Code task "Run Tests" (default suite)
   - "Run Tests (Show All Warnings)" for diagnostics
   - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
+  - VS Code task "PR Ready Check" runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
 - Code quality checks: VS Code task "Check Code Quality" (Ruff + ty errors‑only)
 - Diagrams: VS Code task "Generate UML"
 

@@ -6,7 +6,7 @@ Welcome to the Robot SF Development Guide! This document serves as the central r
 <!--
 This document should be kept as short as possible to maintain clarity and ease of navigation.
 Whenever possible, link out to more detailed documents or external resources.
-Refacotr this document regularly to be as concise as possible.
+Refactor this document regularly to be as concise as possible.
 LLM Constitution and guides can be found here:
 - `.specify/memory/constitution.md`
 - `.github/copilot-instructions.md`
@@ -485,7 +485,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - [ ] Add programmatic benchmark examples and extend baseline coverage.
 - [ ] Update or add docs under `docs/` for new components; include diagrams when useful.
 - [ ] Add performance smoke (steps/sec) when touching hot paths.
-- [ ] Add proper docstrings to comply with pydoclint and and pydocstyle
+- [ ] Add proper docstrings to comply with pydoclint and pydocstyle
 
 ### Quick links
 
@@ -564,7 +564,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Follow the pydocstyle convention specified in `pyproject.toml`.
 
 ### Clarify questions (with options)
--In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
+- In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
 - Add arguments to the options for easy decision-making.
@@ -589,7 +589,7 @@ Examples (copy‑ready):
   - Run: `uv run <cmd>` for any Python command
   - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
 - Lint/format: Ruff
-  - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean; document exceptions with comments)
+  - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean with the expanded rule set; document exceptions with comments)
 - Type checking: ty
   - VS Code task "Type Check" (uvx ty check . --exit-zero; runs type checking with exit-zero for current compatibility)
   - **All type errors must be addressed before merging PRs**
@@ -672,9 +672,10 @@ Documentation should include:
 - Write for future developers who may be unfamiliar with the context
 - Keep documentation up-to-date as code evolves
 - Use consistent formatting and follow markdown linting standards
+- Prefer GitHub-flavored Markdown (GFM) conventions so docs render correctly on GitHub
 - Avoid duplications. Link to existing documentation when relevant.
 - Always provide README.md files in new documentation folders for overview and reference.
-- When the document is longer htan 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.
+- When the document is longer than 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.
 
 #### Visualizations and Reports
 
@@ -711,24 +712,6 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Figures go into `docs/figures/` (tracked).
   - Data exports (if used) into `output/figures/`.
 
-
-## Tooling and tasks (uv, Ruff, pytest, VS Code)
-- Dependencies/runtime: uv
-  - Install/resolve: VS Code task "Install Dependencies" (uv sync)
-  - Run: `uv run <cmd>` for any Python command
-  - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
-- Lint/format: Ruff
-  - VS Code task "Ruff: Format and Fix" (keeps repo ruff‑clean with expanded rule set including bug catchers, modernization, and performance checks; document exceptions with comments)
-- Tests: pytest
-  - VS Code task "Run Tests" (default suite)
-  - "Run Tests (Show All Warnings)" for diagnostics
-  - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
-  - VS Code task "PR Ready Check" runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
-- Code quality checks: VS Code task "Check Code Quality" (Ruff + ty errors‑only)
-- Diagrams: VS Code task "Generate UML"
-
-Quality gates to run locally before pushing:
-1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Run Tests
 
 ## CI/CD expectations
 - Tests: `uv run pytest tests`

@@ -34,7 +34,13 @@
 		{
 			"label": "PR Ready Check",
 			"type": "shell",
-			"command": "uv run ruff check --fix . --output-format concise && uv run ruff format . && uv run ruff check . --statistics && uv run pytest -n auto && uv run python scripts/coverage/check_changed_files_coverage.py --base origin/main --min 80 --goal 100",
+			"command": "uv run ruff check --fix . --output-format concise && uv run ruff format . && uv run ruff check . --statistics && uv run pytest -n auto && uv run python scripts/coverage/check_changed_files_coverage.py --base origin/main --min 80 --goal 100 && uv run python scripts/validation/check_docstring_todos.py --base origin/main",
+			"group": "test"
+		},
+		{
+			"label": "Docstring TODO Check (diff)",
+			"type": "shell",
+			"command": "uv run python scripts/validation/check_docstring_todos.py --base origin/main",
 			"group": "test"
 		},
 		{

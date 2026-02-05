@@ -62,7 +62,7 @@ Feature-focused demos for developers exploring capabilities.
 | [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
 | [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |
 | [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | _None_ | analysis, fast-pysf | ✅ |
-| [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model_ped/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ⚠️ Depends on external models (model/run_043, model_ped/ppo_ped_02.zip). |
+| [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model/pedestrian/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ⚠️ Depends on external models (model/run_043, model/pedestrian/ppo_ped_02.zip). |
 | [07 Single Pedestrian](./advanced/07_single_pedestrian.py) | Spawn and simulate single pedestrians with custom maps. | _None_ | pedestrian | ✅ |
 | [08 Multi-Pedestrian](./advanced/08_multi_pedestrian.py) | Build a multi-pedestrian scenario using map definitions. | _None_ | pedestrian | ✅ |
 | [09 Defensive Policy](./advanced/09_defensive_policy.py) | Replay defensive PPO policy with observation adapters. | model/run_023 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_023). |

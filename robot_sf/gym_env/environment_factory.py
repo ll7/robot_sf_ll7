@@ -162,7 +162,7 @@ class EnvironmentFactory:
     """Internal helpers to construct concrete environments (not exported)."""
 
     @staticmethod
-    def create_robot_env(
+    def create_robot_env(  # noqa: PLR0913
         config: RobotSimulationConfig | None = None,
         *,
         use_image_obs: bool,
@@ -433,7 +433,7 @@ def _normalize_factory_inputs(
     return render_options, recording_options, eff_record, eff_path, eff_fps
 
 
-def make_robot_env(
+def make_robot_env(  # noqa: PLR0913
     config: RobotSimulationConfig | None = None,
     *,
     seed: int | None = None,
@@ -575,7 +575,7 @@ def make_robot_env(
     return env
 
 
-def make_image_robot_env(
+def make_image_robot_env(  # noqa: PLR0913
     config: ImageRobotConfig | None = None,
     *,
     seed: int | None = None,
@@ -655,7 +655,7 @@ def make_image_robot_env(
     return env
 
 
-def make_pedestrian_env(
+def make_pedestrian_env(  # noqa: PLR0913
     config: PedestrianSimulationConfig | None = None,
     *,
     seed: int | None = None,

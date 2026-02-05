@@ -13,7 +13,7 @@ Guidance for enabling SocNavBench-style structured observations and planner adap
 - Lightweight adapter: `SamplingPlannerAdapter` consumes the structured observation and emits `(v, w)` directly.
 - SocNavBench wrapper: `SocNavBenchSamplingAdapter` resolves the upstream SocNavBench sampling planner (default root `third_party/socnavbench`, override with `ROBOT_SF_SOCNAV_ROOT` or `socnav_root`). By default it requires upstream dependencies; set `allow_fallback=True` to use the lightweight adapter when missing.
 - External SocNavBench roots outside the repository require `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT=1` to opt in.
-- Policy wrapper: `SocNavPlannerPolicy(adapter)` provides an `.act(obs)` helper for Gym loops.
+- Policy wrapper: `SocNavPlannerPolicy(adapter)` provides an `.act(obs)` helper for Gymnasium loops.
 
 ### Minimal code snippet
 ```python

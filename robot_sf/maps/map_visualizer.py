@@ -136,7 +136,7 @@ def create_map_figure(map_def: MapDefinition) -> tuple[plt.Figure, Axes]:
     return plt.subplots(figsize=figsize)
 
 
-def render_map_definition(
+def render_map_definition(  # noqa: PLR0913
     map_def: MapDefinition,
     ax: Axes,
     *,

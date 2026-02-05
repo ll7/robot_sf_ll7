@@ -1019,7 +1019,7 @@ class EpisodeTrajectory:
     ped_forces: list[np.ndarray]
 
 
-def _prepare_episode_config(
+def _prepare_episode_config(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -1130,7 +1130,7 @@ def _build_policy_adapter(
     )
 
 
-def _collect_episode_trajectories(
+def _collect_episode_trajectories(  # noqa: PLR0913
     env,
     obs: Any,
     *,
@@ -1190,7 +1190,7 @@ def _collect_episode_trajectories(
     )
 
 
-def _build_episode_record(
+def _build_episode_record(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     seed: int,
@@ -1285,7 +1285,7 @@ def _build_episode_record(
     return record
 
 
-def _run_episode(
+def _run_episode(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -1655,7 +1655,7 @@ def _maybe_extract_frames(
     _run_frame_extraction(Path(result["report_json"]), output_root=frame_root)
 
 
-def _run_policy_episodes(
+def _run_policy_episodes(  # noqa: PLR0913
     scenarios: list[Mapping[str, Any]],
     *,
     scenario_path: Path,
@@ -1712,7 +1712,7 @@ def _run_policy_episodes(
     return read_jsonl(out_jsonl)
 
 
-def _run_policy_analysis_for_policy(
+def _run_policy_analysis_for_policy(  # noqa: PLR0913
     policy_name: str,
     *,
     args: argparse.Namespace,

@@ -132,7 +132,7 @@ examples:
     category_slug: _archived
     prerequisites:
       - maps/svg_maps/debug_06.svg
-      - model_ped/ppo_ped_02.zip
+      - model/pedestrian/ppo_ped_02.zip
       - model/run_043
     ci_enabled: false
     ci_reason: "Manual pygame demo with external models."
@@ -144,10 +144,10 @@ examples:
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/debug_06.svg
-      - model_ped/ppo_ped_02.zip
+      - model/pedestrian/ppo_ped_02.zip
       - model/run_043
     ci_enabled: false
-    ci_reason: "Depends on external models (model/run_043, model_ped/ppo_ped_02.zip)."
+    ci_reason: "Depends on external models (model/run_043, model/pedestrian/ppo_ped_02.zip)."
     doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, factory]
   - path: quickstart/01_basic_robot.py

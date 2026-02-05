@@ -144,3 +144,23 @@ def test_proximity_point():
     distance = np.linalg.norm(np.array(fixed_point) - np.array(new_point))
     assert lower_bound <= distance <= upper_bound
     # TODO: Add test to check with obstacle
+
+
+def test_simulator_obstacle_lines_helpers():
+    """Validate simulator obstacle helpers return stable shapes and types."""
+    env_config = PedEnvSettings()
+    map_def = convert_map("maps/svg_maps/debug_06.svg")
+    sim = init_ped_simulators(env_config, map_def)[0]
+
+    lines = sim.get_obstacle_lines()
+    assert lines.ndim == 2
+    assert lines.shape[1] == 4
+
+    segments = sim.iter_obstacle_segments()
+    assert len(segments) == lines.shape[0]
+    for segment in segments:
+        assert isinstance(segment, tuple)
+        assert len(segment) == 2
+        for point in segment:
+            assert isinstance(point, tuple)
+            assert len(point) == 2

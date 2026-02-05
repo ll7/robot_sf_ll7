@@ -432,7 +432,7 @@ def _attach_ci_for_group(
         dst_group[metric_name]["p95_ci"] = [float(lo_hi_p95[0]), float(lo_hi_p95[1])]
 
 
-def compute_aggregates_with_ci(
+def compute_aggregates_with_ci(  # noqa: PLR0913
     records: list[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",

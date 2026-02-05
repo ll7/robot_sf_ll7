@@ -4,7 +4,6 @@ from typing import cast
 
 import pytest
 from gymnasium import spaces
-from stable_baselines3 import PPO
 
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.gym_env.robot_env import RobotEnv
@@ -50,6 +49,8 @@ def test_can_simulate_with_pedestrians():
 @pytest.mark.slow
 def test_ego_ped_env():
     """Ensure the ego pedestrian env can step with a loaded robot model."""
+    from stable_baselines3 import PPO
+
     total_steps = 100
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)

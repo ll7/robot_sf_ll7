@@ -1446,7 +1446,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         ped_radius = float(ped_radius_arr[0] if ped_radius_arr.ndim > 0 else ped_radius_arr)
         return ped_positions, ped_velocities, ped_count, ped_radius
 
-    def _build_orca_lines(
+    def _build_orca_lines(  # noqa: PLR0913
         self,
         *,
         robot_pos: np.ndarray,

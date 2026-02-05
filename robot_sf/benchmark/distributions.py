@@ -153,7 +153,7 @@ def _compute_hist_ci(
     return centers, low, high
 
 
-def _render_metric(
+def _render_metric(  # noqa: PLR0913
     ax,
     grouped: dict[str, dict[str, list[float]]],
     *,
@@ -216,7 +216,7 @@ def _metrics_in_grouped(grouped: dict[str, dict[str, list[float]]]) -> list[str]
     return sorted({m for gv in grouped.values() for m in gv})
 
 
-def _save_one_metric(
+def _save_one_metric(  # noqa: PLR0913
     out_dir: str,
     metric: str,
     grouped: dict[str, dict[str, list[float]]],
@@ -284,7 +284,7 @@ def _save_one_metric(
     return png_path, pdf_path
 
 
-def save_distributions(
+def save_distributions(  # noqa: PLR0913
     grouped: dict[str, dict[str, list[float]]],
     out_dir: str | Path,
     *,

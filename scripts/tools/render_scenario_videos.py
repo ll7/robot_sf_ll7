@@ -464,7 +464,7 @@ def _adapt_obs_for_policy(
     return obs
 
 
-def _select_action(
+def _select_action(  # noqa: PLR0913
     *,
     env,
     obs: Any,
@@ -497,7 +497,7 @@ def _select_action(
     return np.zeros(2)
 
 
-def _run_steps(
+def _run_steps(  # noqa: PLR0913
     *,
     env,
     obs: Any,
@@ -568,7 +568,7 @@ def _validate_video(
     return status, note
 
 
-def _prepare_episode_config(
+def _prepare_episode_config(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -669,7 +669,7 @@ def _resolve_stop_reason(
     return "max_steps"
 
 
-def _run_episode(
+def _run_episode(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -820,7 +820,7 @@ def _scenario_max_steps(scenario: Mapping[str, Any], override: int | None) -> in
     return max(1, int(sim_cfg.get("max_episode_steps", 400)))
 
 
-def _write_manifest(
+def _write_manifest(  # noqa: PLR0913
     output_dir: Path,
     *,
     scenario_path: Path,

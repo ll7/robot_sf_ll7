@@ -221,7 +221,7 @@ def _stack_or_zero(
         return np.empty(empty_shape)
 
 
-def _build_episode_data(
+def _build_episode_data(  # noqa: PLR0913
     robot_pos_traj: list[np.ndarray],
     robot_vel_traj: list[np.ndarray],
     robot_acc_traj: list[np.ndarray],
@@ -858,7 +858,7 @@ def _build_episode_record(
     return record
 
 
-def run_episode(
+def run_episode(  # noqa: PLR0913
     scenario_params: dict[str, Any],
     seed: int,
     *,
@@ -1166,7 +1166,7 @@ def _prepare_batch_setup(
     return scenarios, out_path, schema
 
 
-def _setup_fixed_params(
+def _setup_fixed_params(  # noqa: PLR0913
     out_path: Path,
     horizon: int,
     dt: float,
@@ -1335,7 +1335,7 @@ def _finalize_batch(
     }
 
 
-def run_batch(
+def run_batch(  # noqa: PLR0913
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,

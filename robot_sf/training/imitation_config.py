@@ -54,7 +54,7 @@ class ExpertTrainingConfig:
     socnav_orca_neighbor_dist: float | None = None
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         *,
         scenario_config: Path,

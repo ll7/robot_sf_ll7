@@ -147,7 +147,7 @@ def measure_environment_creation(config: RobotSimulationConfig | None = None) ->
     return creation_time
 
 
-def run_performance_smoke_test(
+def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
     scenario: str | None = None,
@@ -159,21 +159,21 @@ def run_performance_smoke_test(
     enforce: bool | None = None,
     on_ci: bool | None = None,
 ) -> SmokeTestResult:
-    """TODO docstring. Document this function.
+    """Run creation/reset performance checks and return a structured result.
 
     Args:
-        num_resets: TODO docstring.
-        scenario: TODO docstring.
-        include_recommendations: TODO docstring.
-        creation_soft: TODO docstring.
-        creation_hard: TODO docstring.
-        reset_soft: TODO docstring.
-        reset_hard: TODO docstring.
-        enforce: TODO docstring.
-        on_ci: TODO docstring.
+        num_resets: Number of resets to run for throughput measurement.
+        scenario: Optional scenario config path used to load a custom config.
+        include_recommendations: Include guidance strings in the result payload.
+        creation_soft: Soft threshold (seconds) for environment creation time.
+        creation_hard: Hard threshold (seconds) for environment creation time.
+        reset_soft: Soft threshold (resets/sec) for environment reset throughput.
+        reset_hard: Hard threshold (resets/sec) for environment reset throughput.
+        enforce: When True, treat soft breaches as failures.
+        on_ci: Override CI detection (defaults to GITHUB_ACTIONS env var).
 
     Returns:
-        TODO docstring.
+        SmokeTestResult containing metrics, status labels, and recommendations.
     """
     creation_soft = (
         creation_soft

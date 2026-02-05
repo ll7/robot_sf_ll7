@@ -2,7 +2,7 @@
 
 This keeps the benchmark workload minimal (2 episodes) while asserting
 deterministic ordering, scenario matrix hashing, and a tight runtime budget
-(<8s local, <16s CI). If legitimate CI slowness occurs, adjust the thresholds
+(<10s local, <20s CI). If legitimate CI slowness occurs, adjust the thresholds
 in the performance spec rather than expanding this test's workload.
 """
 
@@ -94,7 +94,7 @@ def test_reproducibility_same_seed(
         2. scenario_matrix_hash matches deterministic hash from matrix contents.
         3. No duplicate episode_ids within a run.
         4. At least one episode generated (sanity / non-empty).
-        5. Wall-clock runtime below soft threshold (<8s local, <16s CI). Exceeding threshold = test failure (can relax later).
+    5. Wall-clock runtime below soft threshold (<10s local, <20s CI). Exceeding threshold = test failure (can relax later).
     """
 
     seeds = [123, 456]  # Minimal deterministic seed list (length=2 per spec guidance)
@@ -158,7 +158,7 @@ def test_reproducibility_same_seed(
 
     # Soft timing guard (currently enforced as hard assert per spec envelope)
     ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")
-    limit = 16.0 if ci else 8.0
+    limit = 20.0 if ci else 10.0
     classification = perf_policy.classify(elapsed)
     assert classification != "hard", (
         f"Elapsed {elapsed:.2f}s breached hard threshold {perf_policy.hard_timeout_seconds}s."

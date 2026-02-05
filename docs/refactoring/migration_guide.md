@@ -188,7 +188,7 @@ def test_factory_consistency():
 - 🔄 All example files - Update to new interface
 
 ### 5. Test Files (Update)
-- 🔄 `tests/env_test.py` - Use factory pattern
+- 🔄 `tests/test_env.py` - Use factory pattern
 - 🔄 `tests/test_robot_env_with_image_integration.py` - Update imports
 - 🔄 All test files - Update to new interface
 

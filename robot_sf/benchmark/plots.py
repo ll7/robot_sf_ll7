@@ -167,7 +167,7 @@ def pareto_front_indices(
     return idxs
 
 
-def save_pareto_png(
+def save_pareto_png(  # noqa: PLR0913
     records: Iterable[Record],
     out_path: str,
     x_metric: str,

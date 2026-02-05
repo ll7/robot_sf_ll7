@@ -5,7 +5,7 @@ Usage:
 
 Prerequisites:
     - maps/svg_maps/debug_06.svg
-    - model_ped/ppo_ped_02.zip
+    - model/pedestrian/ppo_ped_02.zip
     - model/run_043
 
 Expected Output:
@@ -83,7 +83,7 @@ def run(filename: str, map_name: str, robot_model: str):
 
 if __name__ == "__main__":
     SVG_MAP = "maps/svg_maps/debug_06.svg"
-    PED_MODEL = "./model_ped/ppo_ped_02.zip"
+    PED_MODEL = "./model/pedestrian/ppo_ped_02.zip"
     ROBOT_MODEL = "./model/run_043"
 
     run(PED_MODEL, SVG_MAP, ROBOT_MODEL)

@@ -25,7 +25,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 
-def main() -> None:  # noqa: C901
+def main() -> None:  # noqa: C901,PLR0912,PLR0915
     """Run planner test on bottleneck map."""
 
     # Ensure output directory

@@ -22,7 +22,7 @@ class RobotEnvWithImage(RobotEnv):
     and includes it in the observation space for reinforcement learning.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         env_config: RobotEnvSettings = RobotEnvSettings(),
         reward_func: Callable[[dict], float] = simple_reward,

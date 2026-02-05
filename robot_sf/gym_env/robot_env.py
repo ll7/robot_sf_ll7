@@ -229,7 +229,7 @@ class RobotEnv(BaseEnv):
     with reinforcement learning.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         env_config: EnvSettings = EnvSettings(),
         reward_func: Callable[[dict], float] | None = None,

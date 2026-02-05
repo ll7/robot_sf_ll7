@@ -2,6 +2,10 @@
 
 import os
 
+import pytest
+
+pytest.importorskip("stable_baselines3", reason="StableBaselines3 not installed")
+
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.ppo.ppo import PPO
 

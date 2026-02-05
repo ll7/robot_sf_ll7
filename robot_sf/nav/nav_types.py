@@ -45,8 +45,8 @@ class SvgRectangle:
 
         Returns:
             Zone: Three corner points defining the rectangular zone boundaries.
+                The order is top-left, top-right, bottom-right (axis-aligned).
         """
-        # TODO: Is this a correct zone definition?
         return (
             (self.x, self.y),
             (self.x + self.width, self.y),

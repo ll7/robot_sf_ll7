@@ -15,7 +15,6 @@ dependencies = [
     # Core dependencies
     "numpy>=1.26.4",
     "gymnasium>=0.29,<1.0",
-    "gym>=0.26.2",
     "numba>=0.60.0",
     "pygame>=2.6.1",
     # Machine Learning
@@ -162,6 +161,7 @@ exclude = [
     ".git-rewrite",
     ".hg",
     ".ipynb_checkpoints",
+    "**/*.ipynb",
     ".mypy_cache",
     ".nox",
     ".pants.d",
@@ -257,9 +257,6 @@ unfixable = []
 ignore = [
     # Research/scientific computing patterns that are acceptable
     "PLR0911",  # Too many return statements
-    "PLR0912",  # Too many branches
-    "PLR0913",  # Too many arguments
-    "PLR0915",  # Too many statements
     "PLR2004",  # Magic value comparison
     "S",        # Bandit security issues (too noisy for research code)
     "PGH003",   # Use specific rule codes when ignoring instead of categories
@@ -299,6 +296,11 @@ ignore = [
     "RUF043",   # while this is harmless to fix, it creates noise for every new assertion
 ]
 
+[tool.ruff.lint.pylint]
+max-args = 8
+max-branches = 15
+max-statements = 60
+
 [tool.ruff.lint.per-file-ignores]
 # Tests: allow asserts, prints, magic values, and lazy imports for optional deps
 "tests/**/*.py" = [
@@ -309,6 +311,8 @@ ignore = [
     "PLC0415",
     "TC001",
     "TC002",
+    "D417",
+    "DOC201",
 ]
 "test_pygame/**/*.py" = [
     "S101",
@@ -317,13 +321,21 @@ ignore = [
     "PLC0415",
     "TC001",
     "TC002",
+    "D417",
+    "DOC201",
 ]
 # One-off scripts / notebooks exports: allow prints and local imports for heavy deps
-"scripts/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"scripts/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
 # Examples, docs, and specs: similar leniencies for tutorial-style code
-"examples/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
-"docs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
-"specs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"examples/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
+"docs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
+"specs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
+# Misc tooling directories: ignore docstring return/arg rules
+"SLURM/**/*.py" = ["D417", "DOC201"]
+"hooks/**/*.py" = ["D417", "DOC201"]
+"utilities/**/*.py" = ["D417", "DOC201"]
+"svg_conv/**/*.py" = ["D417", "DOC201"]
+"setup.py" = ["D417", "DOC201"]
 # CLI tools: allow prints to stdout
 "robot_sf/benchmark/cli.py" = ["T201"]
 "robot_sf/benchmark/**/*" = ["BLE001"]
@@ -333,19 +345,11 @@ ignore = [
 # fast-pysf subtree: gradual adoption - complexity rules relaxed, allow prints in examples/benchmarks
 "fast-pysf/**/*.py" = [
     "C901",    # Complex function (relax initially for existing code)
-    "PLR0912", # Too many branches
-    "PLR0913", # Too many arguments
-    "PLR0915", # Too many statements
 ]
-"fast-pysf/examples/**/*.py" = ["T201"]  # Allow prints in examples
-"fast-pysf/benchmarks/**/*.py" = ["T201"]  # Allow prints in benchmarks
-"fast-pysf/tests/**/*.py" = ["S101", "T201"]  # Allow asserts and prints in tests
+"fast-pysf/benchmarks/**/*.py" = ["T201", "D417", "DOC201"]  # Allow prints in benchmarks
+"fast-pysf/tests/**/*.py" = ["S101", "T201", "D417", "DOC201"]  # Allow asserts and prints in tests
+"fast-pysf/examples/**/*.py" = ["T201", "D417", "DOC201"]  # Allow prints in examples
 "fast-pysf/pysocialforce/__init__.py" = ["F401"]  # Public API re-exports
-# Enforce Docstring rules in robot-sf
-"!robot_sf/**/*.py" = [
-    "D417",
-    "DOC201",
-]
 
 
 # Allow unused variables when underscore-prefixed.

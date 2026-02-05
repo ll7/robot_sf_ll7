@@ -139,14 +139,6 @@
 ./specs/120-social-navigation-benchmark-plan/quickstart.md:71:env = make_robot_env(debug=True)
 ./tests/test_reward_default_fallback.py:7:from robot_sf.gym_env.environment_factory import make_robot_env
 ./tests/test_reward_default_fallback.py:11:    env = make_robot_env(reward_func=None)
-./tests/env_test_updated.py:15:    make_image_robot_env,
-./tests/env_test_updated.py:16:    make_robot_env,
-./tests/env_test_updated.py:40:    env = make_robot_env()
-./tests/env_test_updated.py:64:    env = make_robot_env()
-./tests/env_test_updated.py:93:    env = make_robot_env()
-./tests/env_test_updated.py:105:    env = make_image_robot_env(debug=False)
-./tests/env_test_updated.py:139:        ("Robot", make_robot_env(debug=False)),
-./tests/env_test_updated.py:140:        ("Image Robot", make_image_robot_env(debug=False)),
 ./tests/test_render_error_message.py:10:from robot_sf.gym_env.environment_factory import make_robot_env
 ./tests/test_render_error_message.py:14:    env = make_robot_env(debug=False)
 ./tests/test_render_error_message.py:22:    assert "make_robot_env" in msg

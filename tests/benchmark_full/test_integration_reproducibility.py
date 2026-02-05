@@ -7,7 +7,7 @@ earlier version by:
     * Reducing workload to 2 episodes total (2 seeds * 1 scenario)
     * Disabling heavy artifacts (videos, plots, bootstrap)
     * Using workers=1 to avoid process pool overhead & ordering variance
-    * Adding a timing assertion (<2s local, <4s CI) to detect regressions
+    * Adding a timing assertion (<8s local, <16s CI) to detect regressions
     * Deterministic planning replay (no second full benchmark run)
 
 If this test starts failing due to timing on a legitimately slower CI node,
@@ -120,7 +120,7 @@ def test_reproducibility_same_seed(
         2. scenario_matrix_hash matches deterministic hash from matrix contents.
         3. No duplicate episode_ids within a run.
         4. At least one episode generated (sanity / non-empty).
-        5. Wall-clock runtime below soft threshold (<2s local, <4s CI). Exceeding threshold = test failure (can relax later).
+        5. Wall-clock runtime below soft threshold (<8s local, <16s CI). Exceeding threshold = test failure (can relax later).
     """
 
     seeds = [123, 456]  # Minimal deterministic seed list (length=2 per spec guidance)

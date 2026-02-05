@@ -89,13 +89,15 @@ def _matches_any(path_str: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch(path_str, pattern) for pattern in patterns)
 
 
-def _read_defs(path: Path) -> list[DefInfo]:
+def _parse_source(source: str, path: Path) -> ast.AST | None:
     try:
-        source = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return []
-    tree = ast.parse(source)
+        return ast.parse(source)
+    except SyntaxError as exc:
+        print(f"Skipping {path} due to SyntaxError: {exc}", file=sys.stderr)
+        return None
 
+
+def _collect_defs(tree: ast.AST) -> list[DefInfo]:
     defs: list[DefInfo] = []
 
     class Visitor(ast.NodeVisitor):
@@ -148,6 +150,17 @@ def _read_defs(path: Path) -> list[DefInfo]:
 
     Visitor().visit(tree)
     return defs
+
+
+def _read_defs(path: Path) -> list[DefInfo]:
+    try:
+        source = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    tree = _parse_source(source, path)
+    if tree is None:
+        return []
+    return _collect_defs(tree)
 
 
 def _overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:

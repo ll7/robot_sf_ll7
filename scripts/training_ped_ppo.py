@@ -61,7 +61,7 @@ def training(svg_map_path: str):
     model.learn(total_timesteps=10_000_000, progress_bar=True, callback=combined_callback)
     now = datetime.datetime.now()
     filename = now.strftime("%Y-%m-%d_%H-%M-%S")
-    model.save(f"./model_ped/ppo_{filename}")
+    model.save(f"./model/pedestrian/ppo_{filename}")
     logger.info(f"Model saved as ppo_{filename}")
 
 

@@ -5,7 +5,7 @@ Usage:
 
 Prerequisites:
     - maps/svg_maps/debug_06.svg
-    - model_ped/ppo_ped_02.zip (required)
+    - model/pedestrian/ppo_ped_02.zip (required)
     - model/run_043.zip (optional; falls back to StubRobotModel if missing)
 
 Expected Output:
@@ -126,7 +126,7 @@ def run(filename: str, map_name: str, robot_model: str, use_new_pattern: bool = 
 
 if __name__ == "__main__":
     SVG_MAP = "maps/svg_maps/debug_06.svg"
-    PED_MODEL = "./model_ped/ppo_ped_02.zip"
+    PED_MODEL = "./model/pedestrian/ppo_ped_02.zip"
     ROBOT_MODEL = "./model/run_043.zip"
 
     # Demonstrate both new and old patterns work

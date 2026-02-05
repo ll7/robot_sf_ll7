@@ -38,17 +38,17 @@ def get_file():
     """Get the latest model file."""
 
     filename = max(
-        os.listdir("model_ped"),
-        key=lambda x: os.path.getctime(os.path.join("model_ped", x)),
+        os.listdir("model/pedestrian"),
+        key=lambda x: os.path.getctime(os.path.join("model/pedestrian", x)),
     )
-    return Path("model_ped", filename)
+    return Path("model/pedestrian", filename)
 
 
 def run():
     """TODO docstring. Document this function."""
     env = make_env()
     filename = get_file()
-    # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
+    # filename = "./model/pedestrian/ppo_2024-09-06_23-52-17.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)

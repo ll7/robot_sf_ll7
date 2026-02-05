@@ -288,6 +288,11 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Purely mechanical edits (formatting, imports, lint fixes) do not require docstring updates.
 - Avoid mass docstring sweeps; improve documentation incrementally as code changes.
 
+### Map Bounds Format
+
+- `MapDefinition.bounds` accepts either flat tuples `(x_start, x_end, y_start, y_end)` or pair-of-points `((x1, y1), (x2, y2))`.
+- At runtime, bounds are normalized to the flat tuple format because the fast-pysf backend and legacy utilities expect it.
+
 ### Artifact policy & tooling
 
 - Canonical outputs live under `output/` with stable subdirectories: `output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, and `output/tmp/`.

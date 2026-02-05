@@ -17,6 +17,12 @@ from robot_sf.sensor.range_sensor import (
     raycast_pedestrians,
 )
 
+
+def _py_func(func):
+    """Return the pure-Python implementation when numba jit is present."""
+    return getattr(func, "py_func", func)
+
+
 # Circle-line intersection tests
 
 
@@ -25,7 +31,7 @@ def test_intersection_at_origin():
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (0.0, 0.0)  # Ray starts at origin
     ray_vec = (1.0, 0.0)  # Ray points along the x-axis
-    assert circle_line_intersection_distance(circle, origin, ray_vec) == 1.0
+    assert _py_func(circle_line_intersection_distance)(circle, origin, ray_vec) == 1.0
 
 
 def test_no_intersection():
@@ -33,7 +39,7 @@ def test_no_intersection():
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (2.0, 2.0)  # Ray starts outside the circle
     ray_vec = (1.0, 0.0)  # Ray points along the x-axis
-    assert circle_line_intersection_distance(circle, origin, ray_vec) == float("inf")
+    assert _py_func(circle_line_intersection_distance)(circle, origin, ray_vec) == float("inf")
 
 
 def test_intersection_at_circle_perimeter():
@@ -41,7 +47,7 @@ def test_intersection_at_circle_perimeter():
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (0.0, 0.0)  # Ray starts at origin
     ray_vec = (1.0, 1.0)  # Ray points diagonally
-    assert circle_line_intersection_distance(circle, origin, ray_vec) == 1.0
+    assert _py_func(circle_line_intersection_distance)(circle, origin, ray_vec) == 1.0
 
 
 def test_negative_ray_direction():
@@ -49,7 +55,7 @@ def test_negative_ray_direction():
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (1.0, 0.0)  # Ray starts at x=1
     ray_vec = (-1.0, 0.0)  # Ray points along the negative x-axis
-    assert circle_line_intersection_distance(circle, origin, ray_vec) == 0.0
+    assert _py_func(circle_line_intersection_distance)(circle, origin, ray_vec) == 0.0
 
 
 def test_lineseg_line_intersection_distance_hit():
@@ -57,7 +63,7 @@ def test_lineseg_line_intersection_distance_hit():
     segment = ((1.0, -1.0), (1.0, 1.0))
     sensor_pos = (0.0, 0.0)
     ray_vec = (1.0, 0.0)
-    assert lineseg_line_intersection_distance(segment, sensor_pos, ray_vec) == 1.0
+    assert _py_func(lineseg_line_intersection_distance)(segment, sensor_pos, ray_vec) == 1.0
 
 
 def test_lineseg_line_intersection_distance_parallel():
@@ -65,7 +71,9 @@ def test_lineseg_line_intersection_distance_parallel():
     segment = ((0.0, 1.0), (1.0, 1.0))
     sensor_pos = (0.0, 0.0)
     ray_vec = (1.0, 0.0)
-    assert lineseg_line_intersection_distance(segment, sensor_pos, ray_vec) == float("inf")
+    assert _py_func(lineseg_line_intersection_distance)(segment, sensor_pos, ray_vec) == float(
+        "inf"
+    )
 
 
 ################################################################################
@@ -110,7 +118,7 @@ def test_no_pedestrians():
     ped_radius = 1.0
     ray_angles = np.array([0.0, np.pi / 2])
 
-    raycast_pedestrians(
+    _py_func(raycast_pedestrians)(
         out_ranges,
         scanner_pos,
         max_scan_range,
@@ -131,7 +139,7 @@ def test_pedestrian_in_range():
     ped_radius = 1.0
     ray_angles = np.array([0.0, np.pi / 2])
 
-    raycast_pedestrians(
+    _py_func(raycast_pedestrians)(
         out_ranges,
         scanner_pos,
         max_scan_range,
@@ -153,7 +161,7 @@ def test_pedestrian_out_of_range():
     ped_radius = 1.0
     ray_angles = np.array([0.0, np.pi / 2])
 
-    raycast_pedestrians(
+    _py_func(raycast_pedestrians)(
         out_ranges,
         scanner_pos,
         max_scan_range,
@@ -172,7 +180,7 @@ def test_raycast_obstacles_hits():
     obstacles = np.array([[5.0, -1.0, 5.0, 1.0]])
     ray_angles = np.array([0.0])
 
-    raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
+    _py_func(raycast_obstacles)(out_ranges, scanner_pos, obstacles, ray_angles)
 
     assert out_ranges[0] == 5.0
 
@@ -188,7 +196,7 @@ def test_raycast_with_enemy_pos():
     enemy_pos = np.array([[2.0, 0.0]])
     enemy_radius = 0.5
 
-    out_ranges = raycast(
+    out_ranges = _py_func(raycast)(
         scanner_pos,
         obstacles,
         max_scan_range,
@@ -205,21 +213,21 @@ def test_raycast_with_enemy_pos():
 def test_range_postprocessing_clamps_to_max():
     """Postprocessing clamps distances above max to max."""
     out_ranges = np.array([5.0, 12.0])
-    range_postprocessing(out_ranges, np.array([0.0, 0.0]), 10.0)
+    _py_func(range_postprocessing)(out_ranges, np.array([0.0, 0.0]), 10.0)
     assert np.allclose(out_ranges, [5.0, 10.0])
 
 
 def test_range_postprocessing_loss_sets_max():
     """Scan loss sets ranges to max distance."""
     out_ranges = np.array([3.0, 7.0])
-    range_postprocessing(out_ranges, np.array([1.0, 0.0]), 10.0)
+    _py_func(range_postprocessing)(out_ranges, np.array([1.0, 0.0]), 10.0)
     assert np.allclose(out_ranges, [10.0, 10.0])
 
 
 def test_range_postprocessing_corruption_scales_down():
     """Scan corruption keeps values within [0, max]."""
     out_ranges = np.array([4.0, 8.0])
-    range_postprocessing(out_ranges, np.array([0.0, 1.0]), 10.0)
+    _py_func(range_postprocessing)(out_ranges, np.array([0.0, 1.0]), 10.0)
     assert np.all(out_ranges >= 0.0)
     assert np.all(out_ranges <= 10.0)
 

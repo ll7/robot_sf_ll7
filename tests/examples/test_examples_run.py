@@ -162,5 +162,5 @@ def test_example_runs_without_error(
 
 @pytest.mark.skipif(len(_CI_EXAMPLES) == 0, reason="No CI-enabled examples declared in manifest")
 def test_manifest_has_ci_enabled_entries() -> None:
-    """TODO docstring. Document this function."""
+    """Test that the manifest contains at least one CI-enabled example, ensuring this smoke test is meaningful and not a false positive due to misconfiguration."""
     assert _CI_EXAMPLES, "Expected at least one CI-enabled example in manifest"

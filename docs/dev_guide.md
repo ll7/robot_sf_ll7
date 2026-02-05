@@ -281,6 +281,13 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Using `unittest.mock` for mocks/stubs is fine, but avoid adding new `unittest.TestCase` suites.
 - Legacy `fast-pysf/tests/unittest` remains unittest-based for upstream compatibility; new fast-pysf tests should still prefer pytest.
 
+### Docstring-on-touch
+
+- If you change a function/class body or signature, replace any `TODO docstring` placeholder in that scope with a real docstring.
+- Keep it brief and accurate (one or two sentences is enough); focus on intent and non-obvious behavior.
+- Purely mechanical edits (formatting, imports, lint fixes) do not require docstring updates.
+- Avoid mass docstring sweeps; improve documentation incrementally as code changes.
+
 ### Artifact policy & tooling
 
 - Canonical outputs live under `output/` with stable subdirectories: `output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, and `output/tmp/`.

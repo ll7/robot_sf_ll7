@@ -32,6 +32,12 @@
 			"group": "test"
 		},
 		{
+			"label": "PR Ready Check",
+			"type": "shell",
+			"command": "uv run ruff check --fix . --output-format concise && uv run ruff format . && uv run ruff check . --statistics && uv run pytest -n auto && uv run python scripts/coverage/check_changed_files_coverage.py --base origin/main --min 80 --goal 100",
+			"group": "test"
+		},
+		{
 			"label": "Run Tests (GUI)",
 			"type": "shell",
 			"command": "SDL_VIDEODRIVER= uv run pytest test_pygame",

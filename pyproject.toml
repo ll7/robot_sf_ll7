@@ -15,7 +15,6 @@ dependencies = [
     # Core dependencies
     "numpy>=1.26.4",
     "gymnasium>=0.29,<1.0",
-    "gym>=0.26.2",
     "numba>=0.60.0",
     "pygame>=2.6.1",
     # Machine Learning

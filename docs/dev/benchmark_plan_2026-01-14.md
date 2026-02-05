@@ -4,7 +4,7 @@ Purpose: Provide a grounded, evidence-backed issue description of what is missin
 
 ## Executive summary
 
-We already have a strong foundation: a benchmark CLI with JSONL outputs, a rich metrics implementation, map-based scenarios, and baseline planners. However, the current system is split across two pipelines (synthetic FastPysf-only vs. Gym environment + map scenarios) and does not yet provide a unified, reproducible benchmark for comparing local navigation policies. The key missing pieces are: (1) a single canonical scenario schema and runner that executes map-based scenarios with real local planners, (2) a finalized baseline algorithm set (beyond Social Force / PPO / Random), (3) data plumbing for obstacle-aware metrics and shortest-path efficiency, and (4) a reproducible evaluation protocol (seeds, sample size, CI targets, and SNQI baseline stats).
+We already have a strong foundation: a benchmark CLI with JSONL outputs, a rich metrics implementation, map-based scenarios, and baseline planners. However, the current system is split across two pipelines (synthetic FastPysf-only vs. Gymnasium environment + map scenarios) and does not yet provide a unified, reproducible benchmark for comparing local navigation policies. The key missing pieces are: (1) a single canonical scenario schema and runner that executes map-based scenarios with real local planners, (2) a finalized baseline algorithm set (beyond Social Force / PPO / Random), (3) data plumbing for obstacle-aware metrics and shortest-path efficiency, and (4) a reproducible evaluation protocol (seeds, sample size, CI targets, and SNQI baseline stats).
 
 The remainder of this document details evidence and a structured gap analysis, then proposes a phased approach with explicit decisions to unblock implementation.
 
@@ -12,8 +12,8 @@ The remainder of this document details evidence and a structured gap analysis, t
 
 ### 1) Benchmark runners and schemas
 
-- `robot_sf/benchmark/runner.py` runs a synthetic benchmark using `robot_sf/benchmark/scenario_generator.py` and `FastPysfWrapper`. It outputs per-episode JSON records with `scenario_params`, `algorithm_metadata`, and metrics. This path does not use map-based Gym environments or the SVG scenario packs.
-- `robot_sf/benchmark/full_classic/` and `scripts/classic_benchmark_full.py` run the map-based "classic interactions" suite with the Gym environment. The orchestrator currently uses a simple goal-seeking policy for rollouts, not a baseline/planner integration.
+- `robot_sf/benchmark/runner.py` runs a synthetic benchmark using `robot_sf/benchmark/scenario_generator.py` and `FastPysfWrapper`. It outputs per-episode JSON records with `scenario_params`, `algorithm_metadata`, and metrics. This path does not use map-based Gymnasium environments or the SVG scenario packs.
+- `robot_sf/benchmark/full_classic/` and `scripts/classic_benchmark_full.py` run the map-based "classic interactions" suite with the Gymnasium environment. The orchestrator currently uses a simple goal-seeking policy for rollouts, not a baseline/planner integration.
 - Canonical schema under `robot_sf/benchmark/schemas/episode.schema.v1.json` is smaller than the schema in `docs/dev/issues/social-navigation-benchmark/episode_schema.json`; the runner emits keys (`scenario_params`, `algorithm_metadata`, `timestamps`, `config_hash`) that are only defined in the docs-side schema.
 - Scenario schema under `robot_sf/benchmark/schema/scenarios.schema.json` covers the synthetic parameterized scenario generator (density, flow, obstacle) and does not validate the map-based scenario YAMLs in `configs/scenarios/`.
 
@@ -84,12 +84,12 @@ We are benchmarking local planner with fixed global routes. The global planner i
 
 We will try to use a merged set of scenarios. More scenarios mean a broader test of the capabilities. However, we currently don't know if all scenarios are completely suitable for our benchmark.
 
-### B) Pipeline mismatch: synthetic runner vs. map-based Gym environment
+### B) Pipeline mismatch: synthetic runner vs. map-based Gymnasium environment
 
 Evidence:
 
 - `robot_sf/benchmark/runner.py` uses `generate_scenario` (synthetic) and does not load SVG maps.
-- `robot_sf/benchmark/full_classic/orchestrator.py` uses map-based Gym env but only a simple goal policy.
+- `robot_sf/benchmark/full_classic/orchestrator.py` uses map-based Gymnasium env but only a simple goal policy.
 
 Why it matters:
 
@@ -102,7 +102,7 @@ Missing work:
 
 #### Decision on the environment pipeline
 
-We want to use a runner that uses map-based gym environments with a combination of yaml scenario descriptions similar to `scripts/tools/render_scenario_videos.py`. Overall this file is already very good by using scenario descriptions. However, we are currently not evaluating any metrics and we should also be able to compare different local planner or RL policies.
+We want to use a runner that uses map-based Gymnasium environments with a combination of yaml scenario descriptions similar to `scripts/tools/render_scenario_videos.py`. Overall this file is already very good by using scenario descriptions. However, we are currently not evaluating any metrics and we should also be able to compare different local planner or RL policies.
 
 ### C) Scenario schema and validation do not cover map-based scenario YAMLs
 
@@ -343,7 +343,7 @@ To be included in the v1 benchmark, a baseline must:
 ## Open questions (decisions needed before implementation)
 
 Resolved (2026-01-14 decisions):
-1) Pipeline authority: map-based Gym runner with YAML scenarios (merged set).
+1) Pipeline authority: map-based Gymnasium runner with YAML scenarios (merged set).
 2) Local policy definition: local planner only, fixed global routes.
 3) Observation/action contract: SocNav structured + occupancy grid, unicycle actions.
 4) Metrics optionality: force-gradient optional; obstacle/path metrics required once inputs exist.

@@ -108,7 +108,7 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 
 ### Environment factory pattern (CRITICAL)
 
-**Always use factory functions** — never instantiate gym environments directly:
+**Always use factory functions** — never instantiate gymnasium environments directly:
 
 ```python
 from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
@@ -268,7 +268,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ### One-liner architecture summary
 
-- Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
+- Architecture in one line: Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
 - Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
 - Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
@@ -499,7 +499,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 
 ### Executive summary
 
-- **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
+- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
@@ -986,7 +986,7 @@ Set `--log-level DEBUG` if you need the full resolved-config dumps from the fact
 ### Runtime issues
 - Import errors → ensure venv is activated: `source .venv/bin/activate`
 - Display errors → run headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`
-- Model loading warnings → StableBaselines3 warnings about Gym are normal
+- Model loading warnings → StableBaselines3 warnings about legacy Gym-trained models are expected (re-save models to clear them)
 - Model compatibility → use newest models for best compatibility (e.g., `ppo_model_retrained_10m_2025-02-01.zip`)
 
 ## Migration notes

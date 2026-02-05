@@ -9,7 +9,7 @@
 This project provides a training environment for the simulation of a robot moving
 in a pedestrian-filled space.
 
-The project interfaces with Faram Foundations "Gymnasium" (former OpenAI Gym)
+The project interfaces with Faram Foundations "Gymnasium" (successor to OpenAI Gym)
 to facilitate trainings with various
 SOTA reinforcement learning algorithms like e.g. StableBaselines3.
 For simulating the pedestrians, the SocialForce model is used via a dependency

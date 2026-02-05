@@ -7,7 +7,7 @@ This document describes the resolution of a data integrity issue where pedestria
 ## Problem Description
 
 ### Root Cause
-The issue originated in the gym environment files where `VisualizableSimState` objects were created. Pedestrian velocity vectors were being multiplied by 2:
+The issue originated in the Gymnasium environment files where `VisualizableSimState` objects were created. Pedestrian velocity vectors were being multiplied by 2:
 
 ```python
 # Problematic code

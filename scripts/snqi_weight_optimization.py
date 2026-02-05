@@ -791,13 +791,13 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
 
 # ----------------------------- Main runner --------------------------- #
 def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
-    """TODO docstring. Document this function.
+    """Optimize SNQI weights and emit a summary of recommended values.
 
     Args:
-        args: TODO docstring.
+        args: Parsed CLI arguments controlling optimization settings and outputs.
 
     Returns:
-        TODO docstring.
+        Exit code (0 on success; non-zero on input/processing errors).
     """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()

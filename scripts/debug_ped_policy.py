@@ -45,7 +45,7 @@ def get_file():
 
 
 def run():
-    """TODO docstring. Document this function."""
+    """Run an interactive debug loop for the latest pedestrian PPO policy."""
     env = make_env()
     filename = get_file()
     # filename = "./model/pedestrian/ppo_2024-09-06_23-52-17.zip"

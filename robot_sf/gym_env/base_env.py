@@ -43,22 +43,22 @@ class BaseEnv(Env):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize shared environment state, simulator backend, and recording hooks.
 
         Args:
-            env_config: TODO docstring.
-            debug: TODO docstring.
-            recording_enabled: TODO docstring.
-            record_video: TODO docstring.
-            video_path: TODO docstring.
-            video_fps: TODO docstring.
-            peds_have_obstacle_forces: TODO docstring.
-            use_jsonl_recording: TODO docstring.
-            recording_dir: TODO docstring.
-            suite_name: TODO docstring.
-            scenario_name: TODO docstring.
-            algorithm_name: TODO docstring.
-            recording_seed: TODO docstring.
+            env_config: Environment configuration (maps, sensors, simulator settings).
+            debug: Enable SimulationView rendering and debug overlays.
+            recording_enabled: Capture VisualizableSimState snapshots per step.
+            record_video: Record frames via SimulationView (requires debug or video flags).
+            video_path: Output path for recorded video when enabled.
+            video_fps: Frames-per-second override for recorded video (defaults to sim timestep).
+            peds_have_obstacle_forces: Toggle obstacle forces for pedestrians in the simulator.
+            use_jsonl_recording: Enable JSONL episode recording to artifact directory.
+            recording_dir: Base directory for recording outputs (resolved via artifact policy).
+            suite_name: Recording suite label for JSONL exports.
+            scenario_name: Scenario label for JSONL exports.
+            algorithm_name: Algorithm label for JSONL exports.
+            recording_seed: Optional seed override used by JSONL recorder metadata.
         """
         super().__init__()
 

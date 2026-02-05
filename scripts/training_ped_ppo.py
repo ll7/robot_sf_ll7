@@ -21,10 +21,10 @@ logger = loguru.logger
 
 
 def training(svg_map_path: str):
-    """TODO docstring. Document this function.
+    """Train a pedestrian PPO policy on the specified SVG map.
 
     Args:
-        svg_map_path: TODO docstring.
+        svg_map_path: Path to the SVG map used for environment setup.
     """
     n_envs = 20
     ped_densities = [0.01, 0.02, 0.04, 0.08]

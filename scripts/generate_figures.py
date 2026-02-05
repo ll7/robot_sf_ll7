@@ -209,11 +209,10 @@ def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | Non
 
 
 def main() -> int:  # noqa: PLR0915
-    """TODO docstring. Document this function.
-
+    """CLI entry point to generate benchmark figures and optional thumbnails.
 
     Returns:
-        TODO docstring.
+        Exit code (0 on success, non-zero on failure).
     """
     ap = argparse.ArgumentParser(
         description="Generate benchmark figures from episodes JSONL (and optional thumbnails)",

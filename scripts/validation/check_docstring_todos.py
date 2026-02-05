@@ -196,7 +196,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Run the diff-only TODO docstring warning check."""
+    """Run the diff-only TODO-docstring warning check."""
     args = _parse_args()
     repo_root = _repo_root()
 

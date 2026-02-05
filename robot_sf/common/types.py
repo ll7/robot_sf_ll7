@@ -31,12 +31,17 @@ Type alias for the bounds of a map represented as a tuple of two ranges (x and y
 
 Rect = tuple[Vec2D, Vec2D, Vec2D]
 """
-# TODO(#257): Is there a difference between a Rect and a Zone?
-# See: https://github.com/ll7/robot_sf_ll7/issues/257
-# rect ABC with sides |A B|, |B C| and diagonal |A C|
+Type alias for an axis-aligned rectangle encoded by three corners.
+
+The points are expected to be ordered as:
+    A = top-left, B = top-right, C = bottom-right
+
+The fourth corner (bottom-left) is implied by A + (C - B). This representation
+is used for spawn/goal/crowded zones in map definitions.
 """
 
-Zone = tuple[Vec2D, Vec2D, Vec2D]
+Zone = Rect
+"""Semantic alias for Rect used when the intent is a "zone" (spawn/goal/crowded)."""
 PolarVec2D = tuple[float, float]
 Range = tuple[float, float]
 """Type alias for a range represented as a tuple of two floats"""

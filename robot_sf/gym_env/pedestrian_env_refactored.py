@@ -1,23 +1,30 @@
-"""
-Refactored Pedestrian Environment
+"""Refactored pedestrian environment implementation.
 
-This demonstrates how to migrate PedestrianEnv to use the new abstract base classes
-and unified configuration system.
+This module provides the canonical PedestrianEnv implementation backed by the
+new abstract environment base classes and unified configuration system. The
+legacy import path (robot_sf.gym_env.pedestrian_env) re-exports this class for
+backward compatibility.
 """
 
+import datetime
+import pickle
 from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
 import loguru
 
+from robot_sf.common.artifact_paths import get_artifact_category_path, resolve_artifact_path
+from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.abstract_envs import SingleAgentEnv
+from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
     init_ped_collision_and_sensors,
     init_ped_spaces,
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.robot_env import _build_step_info
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
@@ -58,7 +65,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
     def __init__(
         self,
-        config: PedestrianSimulationConfig | None = None,
+        env_config: PedestrianSimulationConfig | PedEnvSettings | None = None,
         robot_model=None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,
@@ -70,34 +77,43 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         Initialize the Pedestrian Environment.
 
         Args:
-            config: Pedestrian simulation configuration
-            robot_model: Pre-trained robot model for adversarial interaction
-            reward_func: Reward function for pedestrian training
-            debug: Enable debug mode with visualization
-            recording_enabled: Enable state recording
-            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces
+            env_config: Pedestrian simulation configuration (unified or legacy).
+            robot_model: Pre-trained robot model for adversarial interaction.
+            reward_func: Reward function for pedestrian training.
+            debug: Enable debug mode with visualization.
+            recording_enabled: Enable state recording.
+            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces.
             **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
-        if config is None:
-            config = PedestrianSimulationConfig()
+        if env_config is None:
+            env_config = PedestrianSimulationConfig()
+
+        # Ensure pedestrian obstacle forces are configured consistently.
+        env_config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
         # Store robot model
         if robot_model is None:
-            raise ValueError("Robot model is required for pedestrian environment!")
+            robot_model = StubRobotModel()
         self.robot_model = robot_model
 
         # Store reward function
-        if reward_func is None:
-            logger.warning("No reward function provided, using default simple_ped_reward.")
-            self.reward_func = simple_ped_reward
-        else:
-            self.reward_func = reward_func
-
-        # Update config
-        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        self.reward_func = reward_func or simple_ped_reward
 
         # Initialize base class
-        super().__init__(config=config, debug=debug, recording_enabled=recording_enabled, **kwargs)
+        super().__init__(
+            config=env_config,
+            debug=debug,
+            recording_enabled=recording_enabled,
+            **kwargs,
+        )
+
+        # Recording directory mirrors legacy behavior (canonical artifact category).
+        self._recording_dir = get_artifact_category_path("recordings")
+
+        # Track last actions/observations
+        self.last_obs_robot = None
+        self.last_action_robot = None
+        self.last_action_ped = None
 
     def _setup_environment(self) -> None:
         """Initialize environment-specific components."""
@@ -170,8 +186,10 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
     def _setup_visualization(self) -> None:
         """Setup visualization for debug mode."""
+        scaling_value = getattr(self.config, "render_scaling", None)
+        scaling_value = 10 if scaling_value is None else int(scaling_value)
         self.sim_ui = SimulationView(
-            scaling=10,
+            scaling=scaling_value,
             map_def=self.map_def,
             obstacles=self.map_def.obstacles,
             robot_radius=self.config.robot_config.radius,
@@ -213,7 +231,8 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         if self.recording_enabled:
             self.record()
 
-        return obs_ped, reward, terminated, False, {"step": meta["step"], "meta": meta}
+        info = _build_step_info(meta)
+        return obs_ped, reward, terminated, False, info
 
     def reset(self, seed=None, options=None):
         """Reset the environment.
@@ -221,7 +240,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         Returns:
             Tuple of (observation, info) after environment reset.
         """
-        super().reset(seed=seed)
+        super().reset(seed=seed, options=options)
 
         # Reset simulator
         self.simulator.reset_state()
@@ -234,7 +253,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         self.last_action_robot = None
         self.last_action_ped = None
 
-        return obs_ped, {}
+        if self.recording_enabled:
+            self.save_recording()
+
+        # Preserve legacy info payload shape.
+        return obs_ped, {"info": "test"}
 
     def render(self, **kwargs):
         """Render the environment."""
@@ -313,6 +336,31 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         """Record current state for later playback."""
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
+
+    def save_recording(self, filename: str | None = None):
+        """Save recorded states to a pickle file.
+
+        Args:
+            filename: Optional target filename ending with ``.pkl``. When omitted,
+                a timestamped file is created under the recordings directory.
+        """
+        if filename is None:
+            now = datetime.datetime.now()
+            target_path = self._recording_dir / f"{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+        else:
+            target_path = resolve_artifact_path(filename)
+
+        if len(self.recorded_states) == 0:
+            logger.warning("No states recorded, skipping save")
+            return
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with target_path.open("wb") as f:  # write binary
+            pickle.dump((self.recorded_states, self.map_def), f)
+            logger.info(f"Recording saved to {target_path}")
+            logger.info("Reset state list")
+            self.recorded_states = []
 
 
 # Create alias for backward compatibility

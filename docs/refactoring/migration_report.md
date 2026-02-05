@@ -64,10 +64,9 @@ Analyzed 57 Python files
 - Old environment creation: ['RobotEnv(', 'RobotEnv(', 'RobotEnv(', 'PedestrianEnv(']
 - Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace PedestrianEnv() with make_pedestrian_env()
 
-### tests/env_test_updated.py
-- Old imports: ['from robot_sf.gym_env.robot_env import RobotEnv', 'from robot_sf.gym_env.pedestrian_env import PedestrianEnv']
-- Old environment creation: ['RobotEnv(', 'RobotEnv(', 'RobotEnv(', 'PedestrianEnv(']
-- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace PedestrianEnv() with make_pedestrian_env()
+### tests/test_pedestrian_env_compat.py
+- Notes: Compatibility coverage for `PedestrianEnv` now lives here and uses the factory
+  APIs directly; no legacy migration required.
 
 ### tests/test_env_config_with_image.py
 - Old imports: ['RobotEnvSettings']

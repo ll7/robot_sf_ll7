@@ -205,7 +205,7 @@ env = make_robot_env(config=config, debug=True)
 
 ### Example Files
 - `examples/demo_refactored_environments.py` - Working demonstration
-- `tests/env_test_updated.py` - Test patterns
+- `tests/test_pedestrian_env_compat.py` - Pedestrian env compatibility tests
 - `examples/demo_pedestrian_updated.py` - Migration example
 
 ### Migration Report

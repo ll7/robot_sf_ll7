@@ -92,9 +92,14 @@ class BaseSimulationEnv(Env, ABC):
         simulator-specific resets.
 
         Returns:
-            tuple[Any, dict[str, Any]]: Initial observation and info dictionary.
+            tuple[Any, dict[str, Any]]: Output from Gymnasium reset if provided; otherwise
+            ``(None, {})`` as a placeholder for abstract base usage.
         """
-        obs, info = super().reset(seed=seed, options=options)
+        result = super().reset(seed=seed, options=options)
+        if result is None:
+            obs, info = None, {}
+        else:
+            obs, info = result
         if seed is not None:
             self.applied_seed = seed
         return obs, info

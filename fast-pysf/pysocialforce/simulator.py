@@ -189,7 +189,7 @@ class Simulator_v2:
 
 
 class Simulator:
-    """TODO docstring. Document this class."""
+    """Lightweight simulator wrapper for stepping pedestrian dynamics."""
 
     def __init__(
         self,
@@ -200,15 +200,15 @@ class Simulator:
         make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the simulator with an initial state.
 
         Args:
-            state: TODO docstring.
-            groups: TODO docstring.
-            obstacles: TODO docstring.
-            config: TODO docstring.
-            make_forces: TODO docstring.
-            on_step: TODO docstring.
+            state: Raw pedestrian state array.
+            groups: Optional group membership lists.
+            obstacles: Optional list of obstacle line segments.
+            config: Simulator configuration.
+            make_forces: Factory to build force components.
+            on_step: Optional callback executed after each step.
         """
         self.config = config
         self.on_step = on_step
@@ -228,11 +228,10 @@ class Simulator:
 
     @property
     def current_state(self) -> SimState:
-        """TODO docstring. Document this function.
-
+        """Return the current state and groupings.
 
         Returns:
-            TODO docstring.
+            SimState: Tuple of raw pedestrian state and group lists.
         """
         return self.peds.state, self.peds.groups
 
@@ -260,20 +259,18 @@ class Simulator:
         return len(self.get_states()[0])
 
     def get_obstacles(self) -> list[np.ndarray]:
-        """TODO docstring. Document this function.
-
+        """Return obstacle line segments as numpy arrays.
 
         Returns:
-            TODO docstring.
+            list[np.ndarray]: Obstacle line segments.
         """
         return self.env.obstacles
 
     def get_raw_obstacles(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
+        """Return the raw obstacle array with orthogonal vectors.
 
         Returns:
-            TODO docstring.
+            np.ndarray: Obstacle array of shape (n, 6).
         """
         return self.env.obstacles_raw
 

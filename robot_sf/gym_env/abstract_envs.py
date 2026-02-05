@@ -80,9 +80,24 @@ class BaseSimulationEnv(Env, ABC):
         pass
 
     @abstractmethod
-    def reset(self, **kwargs) -> tuple[Any, dict[str, Any]]:
-        """Reset the environment."""
-        pass
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[Any, dict[str, Any]]:
+        """Reset the environment and initialize Gymnasium RNG.
+
+        Subclasses should call ``super().reset`` to apply seeding before performing
+        simulator-specific resets.
+
+        Returns:
+            tuple[Any, dict[str, Any]]: Initial observation and info dictionary.
+        """
+        obs, info = super().reset(seed=seed, options=options)
+        if seed is not None:
+            self.applied_seed = seed
+        return obs, info
 
     @abstractmethod
     def render(self, **kwargs) -> None:

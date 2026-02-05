@@ -401,7 +401,7 @@ class OccupancyGrid:
 
         return float(x), float(y), float(theta)
 
-    def generate(  # noqa: C901
+    def generate(  # noqa: C901,PLR0912,PLR0915
         self,
         obstacles: list[Line2D],
         pedestrians: list[Circle2D],
@@ -577,7 +577,7 @@ class OccupancyGrid:
 
         return self._grid_data
 
-    def query(self, query: POIQuery) -> POIResult:  # noqa: C901
+    def query(self, query: POIQuery) -> POIResult:  # noqa: C901,PLR0912,PLR0915
         """Query occupancy at point(s) of interest.
 
         Args:

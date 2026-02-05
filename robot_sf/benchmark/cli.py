@@ -717,7 +717,7 @@ def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
     }
 
 
-def _collect_scenario_warnings(
+def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
     scenarios: list[dict[str, Any]],
     *,
     matrix_path: str | Path | None,
@@ -1488,7 +1488,7 @@ def configure_logging(quiet: bool, level: str) -> None:
     _configure_logging(quiet, level)
 
 
-def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
+def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: PLR0915
     """Attach core benchmark CLI subcommands."""
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)

@@ -367,7 +367,7 @@ def visualize_grid(
     vis.close()
 
 
-def visualize_path(
+def visualize_path(  # noqa: PLR0913
     grid: Grid,  # type: ignore[name-defined]
     path: list[tuple[int, int]],
     output_path: Path | str | None = None,

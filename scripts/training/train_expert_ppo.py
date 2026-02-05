@@ -517,7 +517,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     )
 
 
-def _make_training_env(
+def _make_training_env(  # noqa: PLR0913
     seed: int | None,
     *,
     scenario: Mapping[str, Any] | None,
@@ -890,7 +890,7 @@ def _log_eval_to_wandb(
         wandb_run.log(payload, step=eval_step)
 
 
-def _train_with_schedule(
+def _train_with_schedule(  # noqa: PLR0913
     model: PPO,
     *,
     config: ExpertTrainingConfig,

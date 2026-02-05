@@ -62,7 +62,7 @@ def _assert_ready() -> None:
         )
 
 
-def generate_frames(
+def generate_frames(  # noqa: PLR0912
     episode: ReplayEpisode,
     *,
     fps: int = 10,

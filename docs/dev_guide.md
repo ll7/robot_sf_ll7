@@ -262,6 +262,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Whenever possible, add a demo or example to illustrate new functionality.
 - Avoid disabling linters, type checks, or tests unless absolutely necessary.
   - Whenever you have the chance, refactor to fix issues rather than suppressing them. Especially `# noqa: C901` (complexity) and `# type: ignore` (type hints).
+- Prefer refactoring over adding `# noqa` suppressions; only use `# noqa` as a short-lived exception with a clear plan to remove it.
 - Always document the purpose of documents at the top of the file. (e.g., Python files, README.md, design docs, issue folders)
 - Use American English.
 

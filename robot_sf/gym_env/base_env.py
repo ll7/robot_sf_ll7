@@ -26,7 +26,7 @@ from robot_sf.sim.simulator import init_simulators
 class BaseEnv(Env):
     """Base environment class that handles common functionality."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         env_config: EnvSettings = EnvSettings(),
         debug: bool = False,

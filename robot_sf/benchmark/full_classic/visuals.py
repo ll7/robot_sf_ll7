@@ -432,7 +432,7 @@ def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: lis
 # ---------------------------------------------------------------------------
 
 
-def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
+def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa: PLR0915
     """Generate plots/videos plus manifests and performance metadata.
 
     Returns:

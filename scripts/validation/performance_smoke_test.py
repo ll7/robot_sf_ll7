@@ -147,7 +147,7 @@ def measure_environment_creation(config: RobotSimulationConfig | None = None) ->
     return creation_time
 
 
-def run_performance_smoke_test(
+def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
     scenario: str | None = None,

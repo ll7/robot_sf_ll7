@@ -73,7 +73,7 @@ def compute_baseline_stats_from_records(
     return stats
 
 
-def run_and_compute_baseline(
+def run_and_compute_baseline(  # noqa: PLR0913
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     *,
     out_json: str | Path,

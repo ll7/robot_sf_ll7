@@ -94,7 +94,7 @@ class ReplayCapture:
     dt: float | None = None
     _steps: list[ReplayStep] = field(default_factory=list)
 
-    def record(
+    def record(  # noqa: PLR0913
         self,
         t: float,
         x: float,
@@ -160,7 +160,7 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
     return True
 
 
-def build_replay_episode(
+def build_replay_episode(  # noqa: PLR0913
     episode_id: str,
     scenario_id: str,
     seq: Sequence[tuple[float, float, float, float]],

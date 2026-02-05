@@ -451,7 +451,7 @@ class ReportOrchestrator:
     # ------------------------------------------------------------------
     # Report generation
     # ------------------------------------------------------------------
-    def generate_report(
+    def generate_report(  # noqa: PLR0913
         self,
         *,
         experiment_name: str,

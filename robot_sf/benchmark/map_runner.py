@@ -228,7 +228,7 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
     return stacked
 
 
-def _run_map_episode(  # noqa: C901
+def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
     *,
@@ -390,7 +390,7 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
     )
 
 
-def run_map_batch(  # noqa: C901
+def run_map_batch(  # noqa: C901,PLR0912,PLR0913
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,

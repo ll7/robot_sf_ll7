@@ -208,7 +208,7 @@ def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | Non
             continue
 
 
-def main() -> int:
+def main() -> int:  # noqa: PLR0915
     """TODO docstring. Document this function.
 
 

@@ -790,7 +790,7 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
 
 
 # ----------------------------- Main runner --------------------------- #
-def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decomposition
+def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     """TODO docstring. Document this function.
 
     Args:

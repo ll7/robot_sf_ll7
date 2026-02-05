@@ -634,7 +634,6 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 - dev_guide.md — Primary development reference (setup, workflow, testing, CI).
 - `ENVIRONMENT.md` — Environment overview and usage.
 - `SIM_VIEW.md` — Simulation view/UI notes.
-- `GPU_SETUP.md` — GPU/NVIDIA Docker setup.
 - `UV_MIGRATION.md` — Migration notes to uv.
 - Topic-specific guides:
   - `DATA_ANALYSIS.md`, `trajectory_visualization.md`, `SVG_MAP_EDITOR.md`, `fast_pysf_wrapper.md`, `pyreverse.md`, `curvature_metric.md`, `snqi_weight_cli_updates.md`.
@@ -974,7 +973,6 @@ Set `--log-level DEBUG` if you need the full resolved-config dumps from the fact
 ### Docker training (advanced)
 ```bash
 # Build and run GPU training (requires NVIDIA Docker)
-docker compose build && docker compose run robotsf-cuda python ./scripts/training_ppo.py
 # NOTE: May fail in CI environments due to network restrictions
 ```
 
@@ -990,12 +988,6 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 - Display errors → run headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`
 - Model loading warnings → StableBaselines3 warnings about Gym are normal
 - Model compatibility → use newest models for best compatibility (e.g., `ppo_model_retrained_10m_2025-02-01.zip`)
-
-### Docker issues
-- Docker build fails → often network related in CI; usually fine locally
-- GPU support → see `docs/GPU_SETUP.md` for NVIDIA Docker setup
-
----
 
 ## Migration notes
 - The project uses uv for env/runner and a factory pattern for environment creation.

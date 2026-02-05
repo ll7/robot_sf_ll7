@@ -26,7 +26,6 @@ The migration has been successfully completed! Here's what was accomplished:
 - `fast-pysf/pyproject.toml` - Modernized subproject configuration
 - `uv.toml` - Workspace-level uv configuration  
 - `README.md` - Updated installation and development instructions
-- `.devcontainer/Dockerfile` - Updated to use uv
 - `.github/workflows/ci.yml` - Updated CI to use uv
 - `fast-pysf/.github/workflows/ci.yml` - Updated subproject CI
 - `.vscode/tasks.json` - Updated VS Code tasks
@@ -153,7 +152,6 @@ uv run pylint robot_sf
 - `README.md` - Updated installation instructions
 - `.github/workflows/ci.yml` - Updated CI to use uv
 - `.vscode/tasks.json` - Updated tasks to use uv
-- `.devcontainer/postCreate.sh` - Updated devcontainer setup
 
 ### Legacy Files (can be removed after migration)
 - `requirements.txt` - Dependencies now in pyproject.toml

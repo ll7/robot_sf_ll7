@@ -138,7 +138,6 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
 
 ### Hardware & Environment
-- **[GPU Setup](./GPU_SETUP.md)** - GPU configuration for accelerated training
 - **[Environment Configuration](./ENVIRONMENT.md)** - Detailed environment setup and usage
 
 ---
@@ -294,7 +293,6 @@ A performance budget for tests helps prevent runtime regressions:
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 
 ### ⚙️ Setup & Configuration
-- [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
 - [**Subtree Migration**](./SUBTREE_MIGRATION.md) - Git subtree integration for fast-pysf (migration from submodule)
 

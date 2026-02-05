@@ -30,17 +30,14 @@ map data from OpenStreetMap.
   - [Artifact Outputs](#artifact-outputs)
   - [Alternative Installation Methods](#alternative-installation-methods)
     - [Manual dependency installation](#manual-dependency-installation)
-    - [Docker Installation (Advanced)](#docker-installation-advanced)
   - [System Dependencies](#system-dependencies)
   - [Tests](#tests)
     - [Unified Test Suite](#unified-test-suite)
     - [Run Linter / Tests](#run-linter--tests)
     - [GUI Tests](#gui-tests)
   - [5. Run Visual Debugging of Pre-Trained Demo Models](#5-run-visual-debugging-of-pre-trained-demo-models)
-  - [6. Run StableBaselines Training (Docker)](#6-run-stablebaselines-training-docker)
-  - [7. Edit Maps](#7-edit-maps)
-  - [8. Optimize Training Hyperparams (Docker)](#8-optimize-training-hyperparams-docker)
-  - [9. Extension: Pedestrian as Adversarial-Agent](#9-extension-pedestrian-as-adversarial-agent)
+  - [6. Edit Maps](#6-edit-maps)
+  - [7. Extension: Pedestrian as Adversarial-Agent](#7-extension-pedestrian-as-adversarial-agent)
 - [📚 Documentation](#-documentation)
   - [Core Documentation](#core-documentation)
   - [Environment Architecture (New!)](#environment-architecture-new)
@@ -139,17 +136,6 @@ uv sync
 uv sync --group=dev
 ```
 
-#### Docker Installation (Advanced)
-
-For containerized environments:
-
-```sh
-docker compose build && docker compose run \
-    robotsf-cuda python ./scripts/training_ppo.py
-```
-
-*Note: See [GPU setup documentation](./docs/GPU_SETUP.md) for Docker with GPU support.*
-
 ### System Dependencies
 
 **FFMPEG** (required for video recording):
@@ -221,29 +207,11 @@ uv run python examples/_archived/classic_interactions_pygame.py
 
 [Visualization](./docs/SIM_VIEW.md)
 
-### 6. Run StableBaselines Training (Docker)
-
-```sh
-docker compose build && docker compose run \
-    robotsf-cuda python ./scripts/training_ppo.py
-```
-
-*Note: See [this setup](./docs/GPU_SETUP.md) to install Docker with GPU support.*
-
-> Older versions use `docker-compose` instead of `docker compose`.
-
-### 7. Edit Maps
+### 6. Edit Maps
 
 The preferred way to create maps: [SVG Editor](./docs/SVG_MAP_EDITOR.md)
 
-### 8. Optimize Training Hyperparams (Docker)
-
-```sh
-docker-compose build && docker-compose run \
-    robotsf-cuda python ./scripts/hparam_opt.py
-```
-
-### 9. Extension: Pedestrian as Adversarial-Agent
+### 7. Extension: Pedestrian as Adversarial-Agent
 
 The pedestrian is an adversarial agent who tries to find weak points in the vehicle's policy.
 
@@ -268,7 +236,6 @@ For detailed guides on setup, development, benchmarking, and architecture, visit
 ### Core Documentation
 - [Environment Refactoring](./docs/refactoring/) - **NEW**: Comprehensive guide to the refactored environment architecture
 - [Data Analysis](./docs/DATA_ANALYSIS.md) - Analysis tools and utilities
-- [GPU Setup](./docs/GPU_SETUP.md) - GPU configuration for training
 - [Map Editor Usage](./docs/MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 - [SVG Map Editor](./docs/SVG_MAP_EDITOR.md) - SVG-based map creation
 - [Simulation View](./docs/SIM_VIEW.md) - Visualization and rendering

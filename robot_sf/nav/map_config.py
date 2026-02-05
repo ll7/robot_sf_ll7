@@ -277,6 +277,11 @@ class MapDefinition:
     """The robot goal zones. Mustn't be empty."""
 
     bounds: list[Line2D]
+    """Map boundary segments in either flat (x_start, x_end, y_start, y_end) or pair-of-points form.
+
+    Runtime normalization converts pair-of-points bounds into the flat tuple format
+    expected by the fast-pysf backend and legacy map utilities.
+    """
     robot_routes: list[GlobalRoute]
     ped_goal_zones: list[Rect]
     ped_crowded_zones: list[Rect]
@@ -307,6 +312,7 @@ class MapDefinition:
         if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
+        self.bounds = _normalize_bounds(self.bounds)
         obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
@@ -924,6 +930,29 @@ def _build_map_bounds(width: float, height: float) -> list[Line2D]:
         (0, 0, 0, height),  # left
         (width, width, 0, height),  # right
     ]
+
+
+def _normalize_bounds(bounds: list[Line2D]) -> list[Line2D]:
+    """Normalize bounds into the flat (x_start, x_end, y_start, y_end) format.
+
+    Accepts either flat 4-tuples or pair-of-point Line2D entries and returns
+    the flat representation used by the fast-pysf backend and map utilities.
+
+    Returns:
+        list[Line2D]: Bounds normalized into flat tuple format.
+    """
+    normalized: list[Line2D] = []
+    for bound in bounds:
+        if isinstance(bound, (tuple, list)) and len(bound) == 2:
+            try:
+                (x1, y1), (x2, y2) = bound  # type: ignore[misc]
+                normalized.append((float(x1), float(x2), float(y1), float(y2)))
+                continue
+            except (TypeError, ValueError):
+                # Fall back to raw bound when unpacking fails.
+                pass
+        normalized.append(bound)
+    return normalized
 
 
 def serialize_map(map_structure: dict) -> MapDefinition:

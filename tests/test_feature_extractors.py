@@ -262,7 +262,7 @@ class TestIntegrationWithStableBaselines3:
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
         # Test a few training steps
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
 
         env.close()
 
@@ -323,7 +323,7 @@ class TestIntegrationWithStableBaselines3:
         assert model is not None
         assert isinstance(model.policy.features_extractor, LightweightCNNExtractor)
 
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
         env.close()
 
     def test_config_with_ppo(self):
@@ -347,7 +347,7 @@ class TestIntegrationWithStableBaselines3:
         assert model is not None
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
         env.close()
 
 

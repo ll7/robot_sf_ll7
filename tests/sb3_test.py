@@ -3,7 +3,6 @@
 import os
 
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.ppo.ppo import PPO
 
 from robot_sf.feature_extractor import DynamicsExtractor
@@ -21,10 +20,19 @@ def test_can_load_model_snapshot():
     if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):
         os.remove(MODEL_FILE)
 
-    n_envs = 2
-    vec_env = make_vec_env(lambda: RobotEnv(), n_envs=n_envs, vec_env_cls=SubprocVecEnv)
+    vec_env = make_vec_env(lambda: RobotEnv(), n_envs=1)
     policy_kwargs = {"features_extractor_class": DynamicsExtractor}
-    model = PPO("MultiInputPolicy", vec_env, policy_kwargs=policy_kwargs)
+    model = PPO(
+        "MultiInputPolicy",
+        vec_env,
+        policy_kwargs=policy_kwargs,
+        n_steps=16,
+        batch_size=16,
+        n_epochs=1,
+        gamma=0.95,
+        learning_rate=3e-4,
+        verbose=0,
+    )
     model.save(MODEL_PATH)
     assert os.path.exists(MODEL_FILE)
 

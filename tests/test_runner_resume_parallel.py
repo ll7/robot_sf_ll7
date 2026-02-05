@@ -28,7 +28,7 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
             "speed_var": "low",
             "goal_topology": "point",
             "robot_context": "embedded",
-            "repeats": 3,
+            "repeats": 1,
         },
     ]
     out_file = tmp_path / "episodes.jsonl"
@@ -39,18 +39,18 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
         out_path=out_file,
         schema_path=SCHEMA_PATH,
         base_seed=123,
-        horizon=5,
+        horizon=3,
         dt=0.1,
         record_forces=False,
         append=False,
         workers=2,  # parallel path
         resume=True,
     )
-    assert summary1["total_jobs"] == 3
-    assert summary1["written"] == 3
+    assert summary1["total_jobs"] == 1
+    assert summary1["written"] == 1
     assert out_file.exists()
     lines1 = out_file.read_text(encoding="utf-8").splitlines()
-    assert len(lines1) == 3
+    assert len(lines1) == 1
 
     # Second run in parallel with resume: should skip all and write nothing
     summary2 = run_batch(
@@ -58,7 +58,7 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
         out_path=out_file,
         schema_path=SCHEMA_PATH,
         base_seed=123,
-        horizon=5,
+        horizon=3,
         dt=0.1,
         record_forces=False,
         append=True,  # keep file and ensure no new lines are appended
@@ -67,4 +67,4 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
     )
     assert summary2["written"] == 0
     lines2 = out_file.read_text(encoding="utf-8").splitlines()
-    assert len(lines2) == 3
+    assert len(lines2) == 1

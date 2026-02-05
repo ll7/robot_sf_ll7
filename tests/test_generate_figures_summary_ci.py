@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -40,11 +40,9 @@ def test_generate_table_from_summary_with_ci(tmp_path: Path):
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
 
     out_dir = tmp_path / "figs"
-    cmd = [
-        "uv",
-        "run",
-        "python",
-        "scripts/generate_figures.py",
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    argv = [
+        "generate_figures.py",
         "--episodes",
         str(episodes),
         "--out-dir",
@@ -61,7 +59,14 @@ def test_generate_table_from_summary_with_ci(tmp_path: Path):
         "--table-include-ci",
         "--table-tex",
     ]
-    subprocess.check_call(cmd, env={**os.environ, "MPLBACKEND": "Agg"})
+    from scripts import generate_figures
+
+    original_argv = sys.argv
+    try:
+        sys.argv = argv
+        assert generate_figures.main() == 0
+    finally:
+        sys.argv = original_argv
 
     md = (out_dir / "baseline_table.md").read_text(encoding="utf-8")
     tex = (out_dir / "baseline_table.tex").read_text(encoding="utf-8")

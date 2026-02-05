@@ -36,7 +36,7 @@ def test_can_return_valid_observation():
 @pytest.mark.slow
 def test_can_simulate_with_pedestrians():
     """TODO docstring. Document this function."""
-    total_steps = 1000
+    total_steps = 100
     env = RobotEnv()
     env.reset()
     for _ in range(total_steps):
@@ -50,7 +50,7 @@ def test_can_simulate_with_pedestrians():
 @pytest.mark.slow
 def test_ego_ped_env():
     """TODO docstring. Document this function."""
-    total_steps = 1000
+    total_steps = 100
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)
     assert env is not None

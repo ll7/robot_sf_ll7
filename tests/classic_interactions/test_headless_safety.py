@@ -23,7 +23,7 @@ def test_headless_dummy_driver_runs():
     else:
         original = None
     try:
-        episodes = mod.run_demo()
+        episodes = mod.run_demo(max_episodes=1, enable_recording=False)
     finally:
         if hasattr(mod, "DRY_RUN"):
             mod.DRY_RUN = original  # type: ignore

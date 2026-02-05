@@ -70,6 +70,22 @@ def test_scenario_sampler_cycles_and_filters() -> None:
     assert first != second
 
 
+def test_scenario_sampler_rejects_bad_weights() -> None:
+    """Weights should be non-negative and include at least one positive entry."""
+    scenarios = [{"name": "A"}, {"name": "B"}]
+    with pytest.raises(ValueError):
+        ScenarioSampler(scenarios, weights={"A": -1.0})
+    with pytest.raises(ValueError):
+        ScenarioSampler(scenarios, weights={"A": 0.0, "B": 0.0})
+
+
+def test_scenario_sampler_invalid_filters_raise() -> None:
+    """Unknown include/exclude filters should raise a validation error."""
+    scenarios = [{"name": "A"}]
+    with pytest.raises(ValueError):
+        ScenarioSampler(scenarios, include_scenarios=("missing",))
+
+
 def test_scenario_switching_env_handles_bounds_mismatch() -> None:
     """Switching env should allow bounds mismatches but reject shape changes."""
     scenarios = [
@@ -103,3 +119,19 @@ def test_scenario_switching_env_handles_bounds_mismatch() -> None:
     bad_env.reset()
     with pytest.raises(ValueError):
         bad_env.reset()
+
+
+def test_scenario_switching_env_step_requires_active_env() -> None:
+    """Step should raise when the active environment is missing."""
+    scenarios = [{"name": "A", "low": [0.0, 0.0], "high": [1.0, 1.0]}]
+    sampler = ScenarioSampler(scenarios, strategy="cycle")
+    env = ScenarioSwitchingEnv(
+        scenario_sampler=sampler,
+        scenario_path="dummy",
+        env_factory=_env_factory,
+        config_builder=lambda scenario: scenario,
+        switch_per_reset=False,
+    )
+    env.close()
+    with pytest.raises(RuntimeError):
+        env.step(np.array([0.0, 0.0], dtype=np.float32))

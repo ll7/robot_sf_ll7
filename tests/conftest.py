@@ -142,16 +142,18 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
         tmp_path_factory: Pytest factory used to create a persistent temp directory.
     """
     original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
+    if original:
+        ensure_canonical_tree(original)
+        yield
+        return
+
     override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
     os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
     ensure_canonical_tree(override_dir)
     try:
         yield
     finally:
-        if original is None:
-            os.environ.pop("ROBOT_SF_ARTIFACT_ROOT", None)
-        else:
-            os.environ["ROBOT_SF_ARTIFACT_ROOT"] = original
+        os.environ.pop("ROBOT_SF_ARTIFACT_ROOT", None)
 
 
 @pytest.fixture(scope="session", autouse=True)

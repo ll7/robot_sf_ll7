@@ -11,6 +11,7 @@ import pytest
 from robot_sf.benchmark.visualization import generate_benchmark_plots, generate_benchmark_videos
 
 
+@pytest.mark.slow
 class TestVisualizationPerformance:
     """Test performance constraints for visualization generation."""
 

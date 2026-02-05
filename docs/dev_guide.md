@@ -275,6 +275,24 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
 
+### Test style conventions
+
+- Default to pytest-style tests in `tests/` (functions + pytest fixtures).
+- Using `unittest.mock` for mocks/stubs is fine, but avoid adding new `unittest.TestCase` suites.
+- Legacy `fast-pysf/tests/unittest` remains unittest-based for upstream compatibility; new fast-pysf tests should still prefer pytest.
+
+### Docstring-on-touch
+
+- If you change a function/class body or signature, replace any `TODO docstring` placeholder in that scope with a real docstring.
+- Keep it brief and accurate (one or two sentences is enough); focus on intent and non-obvious behavior.
+- Purely mechanical edits (formatting, imports, lint fixes) do not require docstring updates.
+- Avoid mass docstring sweeps; improve documentation incrementally as code changes.
+
+### Map Bounds Format
+
+- `MapDefinition.bounds` accepts either flat tuples `(x_start, x_end, y_start, y_end)` or pair-of-points `((x1, y1), (x2, y2))`.
+- At runtime, bounds are normalized to the flat tuple format because the fast-pysf backend and legacy utilities expect it.
+
 ### Artifact policy & tooling
 
 - Canonical outputs live under `output/` with stable subdirectories: `output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, and `output/tmp/`.
@@ -294,6 +312,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 # Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
 uv run pytest -n auto  # Number of test is steadily increasing, ca. 1200
 
+# Run fast unit tests only (excludes slow/integration)
+uv run pytest -m "not slow" tests
+  # Note: integration/perf-heavy directories are auto-marked as slow in tests/conftest.py.
+
 # Run only robot_sf tests
 uv run pytest tests
 
@@ -309,6 +331,9 @@ uv run pytest -n auto
 ```bash
 # 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
 uv run pytest -n auto tests  # → 881 tests
+
+# Fast unit test pass (skip slow/integration)
+uv run pytest -m "not slow" tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
@@ -573,6 +598,7 @@ Examples (copy‑ready):
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
+  - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
 - Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
 - Diagrams: VS Code task “Generate UML”
 
@@ -697,6 +723,7 @@ All figures must be **reproducible from code** and directly **integratable into 
   - VS Code task "Run Tests" (default suite)
   - "Run Tests (Show All Warnings)" for diagnostics
   - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
+  - VS Code task "PR Ready Check" runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
 - Code quality checks: VS Code task "Check Code Quality" (Ruff + ty errors‑only)
 - Diagrams: VS Code task "Generate UML"
 

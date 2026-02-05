@@ -22,10 +22,10 @@ import pytest
 
 @pytest.mark.timeout(10)
 def test_enforce_mode_escalates():
-    # Create a small test file under repo tests/ so root conftest is loaded.
-    """TODO docstring. Document this function."""
+    """Verify enforce mode converts soft breaches into failures."""
+    # Create a small test file under repo root so root conftest is loaded.
     repo_root = Path(__file__).resolve().parents[2]
-    target_dir = repo_root / "tests" / "perf_utils" / "_enforce_tmp"
+    target_dir = repo_root / "output" / "tmp" / "enforce_tmp"
     target_dir.mkdir(parents=True, exist_ok=True)
     test_file = target_dir / "test_sleep_enforce.py"
     test_file.write_text(
@@ -33,7 +33,7 @@ def test_enforce_mode_escalates():
             """
         import time
         def test_sleep_short():
-            time.sleep(0.05)
+            time.sleep(0.02)
         """,
         ),
         encoding="utf-8",
@@ -45,10 +45,20 @@ def test_enforce_mode_escalates():
     env["ROBOT_SF_PERF_HARD"] = "0.015"  # treat >15ms as hard breach to exercise path
     # Ensure relax not set
     env.pop("ROBOT_SF_PERF_RELAX", None)
+    env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     # Run pytest from repository root so root-level conftest performance hooks are active.
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pytest", str(test_file.resolve())],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cov",
+                "--disable-warnings",
+                str(test_file.resolve()),
+            ],
             cwd=str(repo_root),
             env=env,
             check=False,

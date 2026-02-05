@@ -435,7 +435,9 @@ addopts = [
 testpaths = ["tests", "fast-pysf/tests"]
 filterwarnings = [
     # Suppress external library warnings
+    "ignore::UserWarning:pygame.*",
     "ignore::DeprecationWarning:pygame.*",
+    "ignore::DeprecationWarning:pkg_resources.*",
     "ignore::DeprecationWarning:stable_baselines3.*",
     "ignore::UserWarning:stable_baselines3.*",
     "ignore::UserWarning:gymnasium.*",

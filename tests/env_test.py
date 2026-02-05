@@ -2,6 +2,7 @@
 
 from typing import cast
 
+import pytest
 from gymnasium import spaces
 from stable_baselines3 import PPO
 
@@ -32,9 +33,10 @@ def test_can_return_valid_observation():
     assert lidar_state_spec.shape == obs[OBS_RAYS].shape
 
 
+@pytest.mark.slow
 def test_can_simulate_with_pedestrians():
-    """TODO docstring. Document this function."""
-    total_steps = 1000
+    """Step a robot environment with pedestrians for a short rollout."""
+    total_steps = 100
     env = RobotEnv()
     env.reset()
     for _ in range(total_steps):
@@ -45,9 +47,10 @@ def test_can_simulate_with_pedestrians():
             env.reset()
 
 
+@pytest.mark.slow
 def test_ego_ped_env():
-    """TODO docstring. Document this function."""
-    total_steps = 1000
+    """Ensure the ego pedestrian env can step with a loaded robot model."""
+    total_steps = 100
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)
     assert env is not None

@@ -237,6 +237,26 @@ class Simulator:
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
 
+    def get_obstacle_lines(self) -> np.ndarray:
+        """Return obstacle line segments for collision/occupancy queries.
+
+        Returns:
+            np.ndarray: Array of shape (N, 4) with columns
+                [start_x, start_y, end_x, end_y] for each obstacle segment.
+        """
+        return self.pysf_sim.env.obstacles_raw[:, :4]
+
+    def iter_obstacle_segments(self) -> list[Line2D]:
+        """Return obstacle line segments as typed Line2D tuples.
+
+        Returns:
+            list[Line2D]: List of ((x1, y1), (x2, y2)) tuples for each segment.
+        """
+        return [
+            ((float(sx), float(sy)), (float(ex), float(ey)))
+            for sx, sy, ex, ey in self.get_obstacle_lines()
+        ]
+
 
 def init_simulators(
     env_config: EnvSettings | RobotSimulationConfig,
@@ -448,26 +468,6 @@ class PedSimulator(Simulator):
             if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
                 return True
         return False
-
-    def get_obstacle_lines(self) -> np.ndarray:
-        """Return obstacle line segments for collision/occupancy queries.
-
-        Returns:
-            np.ndarray: Array of shape (N, 4) with columns
-                [start_x, start_y, end_x, end_y] for each obstacle segment.
-        """
-        return self.pysf_sim.env.obstacles_raw[:, :4]
-
-    def iter_obstacle_segments(self) -> list[Line2D]:
-        """Return obstacle line segments as typed Line2D tuples.
-
-        Returns:
-            list[Line2D]: List of ((x1, y1), (x2, y2)) tuples for each segment.
-        """
-        return [
-            ((float(sx), float(sy)), (float(ex), float(ey)))
-            for sx, sy, ex, ey in self.get_obstacle_lines()
-        ]
 
 
 def init_ped_simulators(

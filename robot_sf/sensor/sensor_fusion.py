@@ -29,9 +29,8 @@ def fused_sensor_space(
     Parameters
     ----------
     timesteps : int
-        The number of **stacked** timesteps in the observation.
-        # TODO(#256): check if this interpretation is correct
-        # See: https://github.com/ll7/robot_sf_ll7/issues/256
+        The number of **stacked** timesteps in the observation (history length).
+        This should align with ``SimulationSettings.stack_steps``.
     robot_obs : spaces.Box
         The observation space for the robot.
     target_obs : spaces.Box

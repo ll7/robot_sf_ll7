@@ -42,7 +42,8 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 # All fields use code defaults
 config = RobotSimulationConfig()
 # sim_config.sim_time_in_secs = 200.0 (default)
-# peds_have_obstacle_forces = False (default)
+# peds_have_static_obstacle_forces = True (default)
+# peds_have_obstacle_forces = True (deprecated alias)
 ```
 
 **When to use**: For sensible defaults that work in most scenarios. These values should represent the "standard" configuration.
@@ -77,12 +78,14 @@ from robot_sf.sim.sim_config import SimulationSettings
 # Runtime config overrides everything
 runtime_config = RobotSimulationConfig(
     sim_config=SimulationSettings(sim_time_in_secs=100.0),
-    peds_have_obstacle_forces=True
+    peds_have_static_obstacle_forces=True,
+    peds_have_robot_repulsion=True,
 )
 
 env = make_robot_env(config=runtime_config)
 # sim_time_in_secs = 100.0 (runtime override)
-# peds_have_obstacle_forces = True (runtime override)
+# peds_have_static_obstacle_forces = True (runtime override)
+# peds_have_robot_repulsion = True (runtime override)
 ```
 
 **When to use**: For one-off experiments, debugging, parameter sweeps, or ad-hoc overrides during development.
@@ -124,7 +127,9 @@ class RobotSimulationConfig(BaseSimulationConfig):
         default_factory=DifferentialDriveSettings
     )
     use_image_obs: bool = field(default=False)
-    peds_have_obstacle_forces: bool = field(default=False)
+    peds_have_static_obstacle_forces: bool = field(default=True)
+    peds_have_robot_repulsion: bool | None = field(default=None)
+    peds_have_obstacle_forces: bool | None = field(default=None)  # deprecated alias
 ```
 
 ### YAML Configuration Files
@@ -186,7 +191,8 @@ relative to the manifest file and preserves ordering.
 ```python
 # Pattern 1: Override specific fields
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True  # Enable physics interaction
+config.peds_have_static_obstacle_forces = True  # Enable static obstacle forces
+config.peds_have_robot_repulsion = True  # Enable pedestrian-robot repulsion
 env = make_robot_env(config=config)
 
 # Pattern 2: Create from scratch
@@ -250,6 +256,7 @@ env = make_robot_env(config=config)
 **Key Fields**:
 - `sim_config`: `SimulationSettings` - Simulation time, difficulty, pedestrian density
 - `map_pool`: `MapDefinitionPool` - Available maps for environment
+- `map_id`: `str | None` - Optional deterministic map selection from the pool
 - `lidar_config`: `LidarScannerSettings` - LiDAR sensor configuration
 - `render_scaling`: `int | None` - Optional UI/render scaling factor
 - `backend`: `str` - Simulation backend selector (default: "fast-pysf")
@@ -272,7 +279,9 @@ config = BaseSimulationConfig()
 **Additional Fields**:
 - `robot_config`: `DifferentialDriveSettings | BicycleDriveSettings` - Robot kinematics
 - `use_image_obs`: `bool` - Enable/disable image observations (default: False)
-- `peds_have_obstacle_forces`: `bool` - Enable pedestrian-robot physics interaction (default: False)
+- `peds_have_static_obstacle_forces`: `bool` - Enable pedestrian-obstacle forces (default: True)
+- `peds_have_robot_repulsion`: `bool | None` - Enable pedestrian-robot repulsion (defaults to sim_config)
+- `peds_have_obstacle_forces`: `bool | None` - Deprecated alias for static obstacle forces
 
 **Usage**:
 ```python
@@ -280,7 +289,8 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.gym_env.environment_factory import make_robot_env
 
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True  # Enable ped-robot physics
+config.peds_have_static_obstacle_forces = True  # Enable ped-obstacle physics
+config.peds_have_robot_repulsion = True  # Enable ped-robot repulsion
 
 env = make_robot_env(config=config)
 ```
@@ -349,6 +359,7 @@ sim_config:  # SimulationSettings
 
 map_pool:  # MapDefinitionPool
   map_name: "corridor"
+map_id: "corridor"  # Optional deterministic selection from map_pool
 
 lidar_config:  # LidarScannerSettings
   num_rays: 20
@@ -358,7 +369,8 @@ robot_config:  # DifferentialDriveSettings
   max_lin_vel: 1.5
   max_ang_vel: 1.0
 
-peds_have_obstacle_forces: true
+peds_have_static_obstacle_forces: true
+peds_have_robot_repulsion: true
 ```
 
 ### Loading YAML Configs
@@ -454,13 +466,13 @@ env = make_robot_env(config=config)
 ```python
 config = RobotSimulationConfig()
 env = make_robot_env(config=config)
-config.peds_have_obstacle_forces = True  # Too late! Env already created
+config.peds_have_static_obstacle_forces = True  # Too late! Env already created
 ```
 
 ✅ **Do**: Create config, set all parameters, then create env
 ```python
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True  # Before env creation
+config.peds_have_static_obstacle_forces = True  # Before env creation
 env = make_robot_env(config=config)  # Config is frozen into env
 ```
 

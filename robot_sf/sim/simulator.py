@@ -39,7 +39,7 @@ from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationS
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
-from robot_sf.nav.occupancy import is_circle_line_intersection
+from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
@@ -464,10 +464,7 @@ class PedSimulator(Simulator):
 
         collision_distance = self.ego_ped.config.radius
         circle_agent = ((x, y), collision_distance)
-        for s_x, s_y, e_x, e_y in self.get_obstacle_lines():
-            if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
-                return True
-        return False
+        return circle_collides_any_lines(circle_agent, self.get_obstacle_lines())
 
 
 def init_ped_simulators(

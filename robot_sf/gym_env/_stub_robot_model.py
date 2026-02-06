@@ -37,6 +37,26 @@ class StubRobotModel:  # pragma: no cover - trivial
     (e.g., Stable Baselines returning (action, state)).
     """
 
+    def __init__(
+        self, action_space: Any | None = None, action_shape: tuple[int, ...] | None = None
+    ):
+        self._action_shape: tuple[int, ...] | None = None
+        if action_space is not None and hasattr(action_space, "shape"):
+            try:
+                self._action_shape = tuple(action_space.shape)
+            except (TypeError, ValueError):
+                self._action_shape = None
+        elif action_shape is not None:
+            self._action_shape = tuple(action_shape)
+
+    def set_action_space(self, action_space: Any) -> None:
+        """Set the action space used for zero-action sizing."""
+        if hasattr(action_space, "shape"):
+            try:
+                self._action_shape = tuple(action_space.shape)
+            except (TypeError, ValueError):
+                self._action_shape = None
+
     def predict(self, _obs: Any, **_ignored: Any) -> tuple[object, None]:
         """Return a zero action mimicking RL model predict signatures.
 
@@ -48,4 +68,5 @@ class StubRobotModel:  # pragma: no cover - trivial
             tuple[object, None]: Zero action array and None state (matches SB3 signature).
         """
         np = _get_numpy()
-        return np.zeros(2, dtype=float), None
+        shape = self._action_shape or (2,)
+        return np.zeros(shape, dtype=float), None

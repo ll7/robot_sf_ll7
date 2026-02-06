@@ -77,6 +77,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+- **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
+- **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
+- **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 - **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
 - **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 - **[SocNav structured observation example](../examples/advanced/18_socnav_structured_observation.py)** - Run RobotEnv with SocNavBench-style observations and a simple planner adapter.

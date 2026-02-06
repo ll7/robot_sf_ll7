@@ -245,6 +245,9 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "planner_backend",
         "planner_clearance_margin",
         "peds_have_obstacle_forces",
+        "peds_have_static_obstacle_forces",
+        "peds_have_robot_repulsion",
+        "map_id",
     ):
         if key in overrides:
             setattr(env_config, key, overrides[key])

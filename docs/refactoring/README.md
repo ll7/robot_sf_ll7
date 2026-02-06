@@ -95,7 +95,8 @@ from robot_sf.gym_env.unified_config import (
 )
 
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True
+config.peds_have_static_obstacle_forces = True
+config.peds_have_robot_repulsion = True
 env = make_robot_env(config=config)
 ```
 

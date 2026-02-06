@@ -1,10 +1,8 @@
 """Headless telemetry smoke: run without rendering and emit telemetry artifacts.
 
-TODO: It is unclear whether this example currently runs correctly.
-
 Usage:
     DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
-    uv run python examples/advanced/23_telemetry_headless_smoke.py
+    uv run python examples/advanced/25_telemetry_headless_smoke.py
 
 Prerequisites:
     - None

@@ -43,6 +43,11 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_pr
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.termination_reason import (
+    TERMINATION_REASONS,
+    resolve_termination_reason,
+    status_from_termination_reason,
+)
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, compute_episode_id
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
@@ -102,6 +107,8 @@ _SUMMARY_METRICS = (
     "curvature_mean_eps0p1",
     "low_speed_frac",
 )
+
+_TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
 
 _POLICY_CATEGORIES = {
     "fast_pysf": "oracle",
@@ -248,6 +255,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-seeds",
         type=int,
         help="Limit number of seeds per scenario.",
+    )
+    parser.add_argument(
+        "--termination-reason",
+        choices=_TERMINATION_REASON_CHOICES,
+        action="append",
+        default=[],
+        help=("Include only episodes with these termination reasons. Repeat for multiple values."),
+    )
+    parser.add_argument(
+        "--exclude-termination-reason",
+        choices=_TERMINATION_REASON_CHOICES,
+        action="append",
+        default=[],
+        help=("Exclude episodes with these termination reasons. Repeat for multiple values."),
     )
     parser.add_argument(
         "--no-record-forces",
@@ -581,10 +602,22 @@ def _episode_video_metadata(video_path: Path | None, *, frames: int) -> dict[str
 def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Produce a compact summary payload from episode records."""
     if not records:
-        return {"episodes": 0, "success_rate": 0.0, "collision_rate": 0.0}
+        return {
+            "episodes": 0,
+            "success_rate": 0.0,
+            "collision_rate": 0.0,
+            "termination_reason_counts": {},
+            "termination_reason_rates": {},
+        }
     successes = sum(1 for r in records if r.get("metrics", {}).get("success"))
     collisions = sum(1 for r in records if int(r.get("metrics", {}).get("collisions", 0)) > 0)
     timeouts = sum(1 for r in records if r.get("status") == "failure")
+    reason_counts = dict.fromkeys(_TERMINATION_REASON_CHOICES, 0)
+    for rec in records:
+        reason = str(rec.get("termination_reason", "")).strip()
+        if reason in reason_counts:
+            reason_counts[reason] += 1
+    reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
     metric_means: dict[str, float] = {}
     for metric in _SUMMARY_METRICS:
         values: list[float] = []
@@ -605,6 +638,8 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "success_rate": successes / len(records),
         "collision_rate": collisions / len(records),
         "failures": timeouts,
+        "termination_reason_counts": reason_counts,
+        "termination_reason_rates": reason_rates,
         "metric_means": metric_means,
     }
 
@@ -655,6 +690,7 @@ def _find_problem_episodes(
                 "scenario_id": rec.get("scenario_id"),
                 "seed": rec.get("seed"),
                 "score": score,
+                "termination_reason": rec.get("termination_reason"),
                 "metrics": rec.get("metrics", {}),
                 "video": rec.get("video"),
             }
@@ -662,7 +698,7 @@ def _find_problem_episodes(
     return out
 
 
-def _write_report(
+def _write_report(  # noqa: C901
     out_dir: Path,
     *,
     summary: dict[str, Any],
@@ -695,8 +731,24 @@ def _write_report(
         f"- Success rate: {summary.get('success_rate', 0.0):.3f}",
         f"- Collision rate: {summary.get('collision_rate', 0.0):.3f}",
         "",
-        "## Strengths (top success rate)",
+        "## Termination reasons",
     ]
+    reason_counts = summary.get("termination_reason_counts", {}) or {}
+    reason_rates = summary.get("termination_reason_rates", {}) or {}
+    if reason_counts:
+        for reason in _TERMINATION_REASON_CHOICES:
+            count = int(reason_counts.get(reason, 0) or 0)
+            rate = float(reason_rates.get(reason, 0.0) or 0.0)
+            lines.append(f"- {reason}: count={count}, rate={rate:.3f}")
+    else:
+        lines.append("- none")
+
+    lines.extend(
+        [
+            "",
+            "## Strengths (top success rate)",
+        ]
+    )
     for row in top_success:
         lines.append(f"- {row['scenario_id']}: success_mean={row['mean']:.3f}")
 
@@ -715,9 +767,10 @@ def _write_report(
             scen = item.get("scenario_id")
             seed = item.get("seed")
             score = item.get("score")
+            reason = item.get("termination_reason")
             video_meta = item.get("video") or {}
             video = video_meta.get("path")
-            lines.append(f"- {scen} seed={seed} score={score:.2f} video={video}")
+            lines.append(f"- {scen} seed={seed} score={score:.2f} reason={reason} video={video}")
 
     report_md_path = out_dir / "report.md"
     metric_means = summary.get("metric_means", {})
@@ -1019,6 +1072,19 @@ class EpisodeTrajectory:
     ped_forces: list[np.ndarray]
 
 
+@dataclass
+class EpisodeRuntimeOutcome:
+    """Runtime outcome data captured during a single episode rollout."""
+
+    trajectory: EpisodeTrajectory
+    reached_goal_step: int | None
+    wall_time: float
+    terminated: bool
+    truncated: bool
+    last_info: dict[str, Any]
+    reached_max_steps: bool
+
+
 def _prepare_episode_config(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
@@ -1141,8 +1207,8 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     record_forces: bool,
     max_steps: int,
     videos: bool,
-) -> tuple[EpisodeTrajectory, int | None, float]:
-    """Run the episode loop and return trajectory data."""
+) -> EpisodeRuntimeOutcome:
+    """Run the episode loop and return trajectory plus termination details."""
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
@@ -1183,10 +1249,15 @@ def _collect_episode_trajectories(  # noqa: PLR0913
             break
 
     wall_time = float(max(1e-9, time.time() - start_time))
-    return (
-        EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
-        reached_goal_step,
-        wall_time,
+    reached_max_steps = not terminated and not truncated and bool(robot_positions)
+    return EpisodeRuntimeOutcome(
+        trajectory=EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
+        reached_goal_step=reached_goal_step,
+        wall_time=wall_time,
+        terminated=terminated,
+        truncated=truncated,
+        last_info=info,
+        reached_max_steps=reached_max_steps,
     )
 
 
@@ -1204,6 +1275,10 @@ def _build_episode_record(  # noqa: PLR0913
     dt: float,
     ts_start: str,
     video_path: Path | None,
+    terminated: bool,
+    truncated: bool,
+    last_info: Mapping[str, Any],
+    reached_max_steps: bool,
 ) -> dict[str, Any]:
     """Compute metrics and assemble an episode record."""
     robot_pos_arr = np.asarray(trajectory.robot_positions, dtype=float)
@@ -1251,9 +1326,18 @@ def _build_episode_record(  # noqa: PLR0913
         )
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
-    status = "success" if metrics.get("success") else "failure"
-    if metrics.get("collisions"):
-        status = "collision"
+    success = bool(
+        last_info.get("success") or last_info.get("is_success") or metrics.get("success")
+    )
+    collision = bool(last_info.get("collision") or metrics.get("collisions"))
+    termination_reason = resolve_termination_reason(
+        terminated=terminated,
+        truncated=truncated,
+        success=success,
+        collision=collision,
+        reached_max_steps=reached_max_steps,
+    )
+    status = status_from_termination_reason(termination_reason)
 
     scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
     scenario_params = dict(scenario)
@@ -1273,6 +1357,14 @@ def _build_episode_record(  # noqa: PLR0913
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status,
+        "termination_reason": termination_reason,
+        "termination_flags": {
+            "terminated": bool(terminated),
+            "truncated": bool(truncated),
+            "success": success,
+            "collision": collision,
+            "max_steps": bool(reached_max_steps),
+        },
         "steps": int(robot_pos_arr.shape[0]),
         "horizon": int(max_steps),
         "wall_time_sec": wall_time,
@@ -1281,8 +1373,59 @@ def _build_episode_record(  # noqa: PLR0913
 
     video_meta = _episode_video_metadata(video_path, frames=int(robot_pos_arr.shape[0]))
     if video_meta:
+        video_meta["termination_reason"] = termination_reason
         record["video"] = video_meta
     return record
+
+
+def _build_error_episode_record(
+    scenario: Mapping[str, Any],
+    *,
+    seed: int,
+    policy_name: str,
+    max_steps: int,
+    ts_start: str,
+    error: Exception,
+) -> dict[str, Any]:
+    """Build a schema-compliant fallback record for a failed episode run."""
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    scenario_params = dict(scenario)
+    scenario_params.setdefault("id", scenario_id)
+    scenario_params.setdefault("algo", policy_name)
+    termination_reason = resolve_termination_reason(
+        terminated=False,
+        truncated=False,
+        success=False,
+        collision=False,
+        had_error=True,
+    )
+    return {
+        "version": "v1",
+        "episode_id": compute_episode_id(scenario_params, seed),
+        "scenario_id": scenario_id,
+        "seed": int(seed),
+        "scenario_params": scenario_params,
+        "metrics": {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0},
+        "algorithm_metadata": {"algorithm": policy_name, "status": "error"},
+        "algo": policy_name,
+        "config_hash": _config_hash(scenario_params),
+        "git_hash": _git_hash_fallback(),
+        "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
+        "status": status_from_termination_reason(termination_reason),
+        "termination_reason": termination_reason,
+        "termination_flags": {
+            "terminated": False,
+            "truncated": False,
+            "success": False,
+            "collision": False,
+            "max_steps": False,
+        },
+        "steps": 0,
+        "horizon": int(max_steps),
+        "wall_time_sec": 0.0,
+        "timing": {"steps_per_second": 0.0},
+        "notes": f"Episode failed with {type(error).__name__}: {error}",
+    }
 
 
 def _run_episode(  # noqa: PLR0913
@@ -1346,7 +1489,7 @@ def _run_episode(  # noqa: PLR0913
             policy_model=policy_model,
             socnav_policy=socnav_policy,
         )
-        trajectory, reached_goal_step, wall_time = _collect_episode_trajectories(
+        runtime = _collect_episode_trajectories(
             env,
             obs,
             policy_adapter=policy_adapter,
@@ -1363,13 +1506,34 @@ def _run_episode(  # noqa: PLR0913
             policy_name=policy_name,
             map_def=env.simulator.map_def,
             goal_vec=np.asarray(env.simulator.goal_pos[0], dtype=float),
-            trajectory=trajectory,
-            reached_goal_step=reached_goal_step,
-            wall_time=wall_time,
+            trajectory=runtime.trajectory,
+            reached_goal_step=runtime.reached_goal_step,
+            wall_time=runtime.wall_time,
             max_steps=max_steps,
             dt=config.sim_config.time_per_step_in_secs,
             ts_start=ts_start,
             video_path=episode_video,
+            terminated=runtime.terminated,
+            truncated=runtime.truncated,
+            last_info=runtime.last_info,
+            reached_max_steps=runtime.reached_max_steps,
+        )
+        return record, EpisodeArtifacts(video_path=episode_video)
+    except Exception as exc:
+        logger.exception(
+            "Policy analysis episode failed for scenario={} seed={} policy={}: {}",
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
+            seed,
+            policy_name,
+            exc,
+        )
+        record = _build_error_episode_record(
+            scenario,
+            seed=seed,
+            policy_name=policy_name,
+            max_steps=max_steps,
+            ts_start=ts_start,
+            error=exc,
         )
         return record, EpisodeArtifacts(video_path=episode_video)
     finally:
@@ -1378,6 +1542,7 @@ def _run_episode(  # noqa: PLR0913
             # Video metadata is only available after the env exits and writes the file.
             video_meta = _episode_video_metadata(episode_video, frames=record.get("steps", 0))
             if video_meta:
+                video_meta["termination_reason"] = record.get("termination_reason")
                 record["video"] = video_meta
 
 
@@ -1596,6 +1761,38 @@ def _resolve_policies(args: argparse.Namespace) -> list[str]:
     return ["fast_pysf_planner", "ppo", "socnav_orca"]
 
 
+def _resolve_termination_reason_filters(args: argparse.Namespace) -> tuple[set[str], set[str]]:
+    """Resolve include/exclude termination-reason filters."""
+    include = {reason.strip() for reason in (args.termination_reason or []) if reason.strip()}
+    exclude = {
+        reason.strip() for reason in (args.exclude_termination_reason or []) if reason.strip()
+    }
+    overlap = include & exclude
+    if overlap:
+        overlap_list = ", ".join(sorted(overlap))
+        raise ValueError(
+            f"Termination reason is present in both include and exclude filters: {overlap_list}."
+        )
+    return include, exclude
+
+
+def _record_matches_termination_reason_filter(
+    record: Mapping[str, Any],
+    *,
+    include: set[str],
+    exclude: set[str],
+) -> bool:
+    """Return whether an episode record passes termination reason filters."""
+    reason = str(record.get("termination_reason", "")).strip()
+    if not reason:
+        return False
+    if include and reason not in include:
+        return False
+    if reason in exclude:
+        return False
+    return True
+
+
 def _prepare_sweep_roots(
     args: argparse.Namespace,
     *,
@@ -1669,12 +1866,15 @@ def _run_policy_episodes(  # noqa: PLR0913
     schema: dict[str, Any],
     video_root: Path | None,
     seed_set: list[int] | None,
+    include_termination_reasons: set[str],
+    exclude_termination_reasons: set[str],
 ) -> list[dict[str, Any]]:
     """Run all scenarios for a single policy and collect records.
 
     Returns:
         list[dict[str, Any]]: Episode record dictionaries.
     """
+    skipped_by_filter = 0
     for scenario in scenarios:
         scenario_name = str(scenario.get("name") or scenario.get("scenario_id") or "scenario")
         seeds = _resolve_seeds(
@@ -1708,8 +1908,22 @@ def _run_policy_episodes(  # noqa: PLR0913
                 socnav_grid_height=args.socnav_grid_height,
                 socnav_grid_center_on_robot=args.socnav_grid_center_on_robot,
             )
+            if not _record_matches_termination_reason_filter(
+                record,
+                include=include_termination_reasons,
+                exclude=exclude_termination_reasons,
+            ):
+                skipped_by_filter += 1
+                continue
             _write_jsonl(out_jsonl, schema, record)
-    return read_jsonl(out_jsonl)
+    records = read_jsonl(out_jsonl)
+    if include_termination_reasons or exclude_termination_reasons:
+        logger.info(
+            "Termination reason filtering kept {} episodes and skipped {}.",
+            len(records),
+            skipped_by_filter,
+        )
+    return records
 
 
 def _run_policy_analysis_for_policy(  # noqa: PLR0913
@@ -1724,6 +1938,8 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
     sweep_stamp: str | None,
     sweep_root: Path | None,
     sweep_video_root: Path | None,
+    include_termination_reasons: set[str],
+    exclude_termination_reasons: set[str],
 ) -> dict[str, Any]:
     """Run analysis for a single policy and return its summary entry.
 
@@ -1759,6 +1975,8 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
         schema=schema,
         video_root=video_root,
         seed_set=seed_set,
+        include_termination_reasons=include_termination_reasons,
+        exclude_termination_reasons=exclude_termination_reasons,
     )
     result = _finalize_run(
         output_root,
@@ -1798,6 +2016,9 @@ def main(argv: list[str] | None = None) -> int:
     ctx = _load_training_context(args)
     scenario_path, scenarios = _resolve_scenarios(args, training_config=ctx.training_config)
     policies = _resolve_policies(args)
+    include_termination_reasons, exclude_termination_reasons = _resolve_termination_reason_filters(
+        args
+    )
 
     sweep_stamp = (
         datetime.now(_TIMESTAMP_TZ).strftime("%Y%m%d_%H%M%S") if args.policy_sweep else None
@@ -1818,6 +2039,8 @@ def main(argv: list[str] | None = None) -> int:
                 sweep_stamp=sweep_stamp,
                 sweep_root=sweep_root,
                 sweep_video_root=sweep_video_root,
+                include_termination_reasons=include_termination_reasons,
+                exclude_termination_reasons=exclude_termination_reasons,
             )
         )
     if args.policy_sweep and sweep_root is not None:

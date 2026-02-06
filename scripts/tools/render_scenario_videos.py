@@ -47,6 +47,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import load_trained_policy
+from robot_sf.benchmark.termination_reason import resolve_termination_reason
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -658,15 +659,13 @@ def _resolve_stop_reason(
     collision: bool,
 ) -> str:
     """Translate terminal flags into a stop reason label."""
-    if terminated:
-        if success:
-            return "success"
-        if collision:
-            return "collision"
-        return "terminated"
-    if truncated:
-        return "truncated"
-    return "max_steps"
+    return resolve_termination_reason(
+        terminated=terminated,
+        truncated=truncated,
+        success=success,
+        collision=collision,
+        reached_max_steps=not terminated and not truncated,
+    )
 
 
 def _run_episode(  # noqa: PLR0913

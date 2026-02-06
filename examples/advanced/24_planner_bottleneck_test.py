@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Test global planner with POI routing on a simple bottleneck map.
 
-TODO: It is unclear whether this example currently runs correctly.
-
 This script tests the global planner's ability to route through a narrow
 bottleneck while maintaining clearance constraints. It's designed to help
 debug planner behavior and visualize path solutions.

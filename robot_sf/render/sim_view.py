@@ -1362,6 +1362,10 @@ class SimulationView:
         """Render the docked telemetry panel if enabled."""
         if not self.show_telemetry_panel or self.telemetry_session is None:
             return
+        # Pygame may already be shut down (e.g. after exit handling in tests or teardown).
+        # In that state blitting to a stale display surface raises `pygame.error`.
+        if not pygame.get_init():
+            return
         surface = None
         try:
             surface = self.telemetry_session.render_surface()
@@ -1374,7 +1378,10 @@ class SimulationView:
             dest = (TELEMETRY_PANE_PADDING, self.height - pane_h - TELEMETRY_PANE_PADDING)
         else:
             dest = (self.width - pane_w - TELEMETRY_PANE_PADDING, TELEMETRY_PANE_PADDING)
-        self.screen.blit(surface, dest)
+        try:
+            self.screen.blit(surface, dest)
+        except pygame.error:
+            return
 
     def toggle_grid_channel_visibility(self, channel_idx: int) -> None:
         """

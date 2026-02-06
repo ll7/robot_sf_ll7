@@ -311,6 +311,9 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             ego_ped_radius=self.config.ego_ped_config.radius,
             ped_radius=self.config.sim_config.ped_radius,
             goal_radius=self.config.sim_config.goal_radius,
+            record_video=self.record_video,
+            video_path=self.video_path,
+            video_fps=self.video_fps if self.video_fps is not None else 10.0,
         )
 
     def step(self, action):

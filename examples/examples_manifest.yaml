@@ -416,6 +416,26 @@ examples:
     ci_reason: "pyvisgraph numerical instability on default maps; use in interactive testing only."
     doc_reference: specs/342-svg-global-planner/quickstart.md
     tags: [planning, routing, poi, sampling]
+  - path: advanced/24_planner_bottleneck_test.py
+    name: "24 Planner Bottleneck Test"
+    summary: "Analyze planner clearance behavior on a bottleneck corridor map."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/planner_test_corridor.svg
+    ci_enabled: false
+    ci_reason: "Diagnostic plotting workflow intended for manual planner debugging."
+    doc_reference: specs/342-svg-global-planner/quickstart.md
+    tags: [planning, diagnostics, clearance]
+  - path: advanced/25_planner_diagnostic.py
+    name: "25 Planner Diagnostic"
+    summary: "Visualize inflation and visibility-graph internals for planner debugging."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/planner_test_corridor.svg
+    ci_enabled: false
+    ci_reason: "Produces large diagnostic plots and is intended for manual analysis."
+    doc_reference: specs/342-svg-global-planner/quickstart.md
+    tags: [planning, diagnostics, visualization]
   - path: advanced/24_telemetry_pane.py
     name: "24 Telemetry Pane"
     summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."

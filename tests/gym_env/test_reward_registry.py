@@ -27,6 +27,19 @@ def test_snqi_step_reward_penalizes_collision():
     assert reward_collision < reward_clean
 
 
+def test_snqi_step_reward_collision_overrides_success_signal():
+    """Collision should force success=0 in step-level SNQI projection."""
+    reward_collision_success = snqi_step_reward(
+        _meta(collision=True, success=True),
+        terminal_bonus=5.0,
+    )
+    reward_collision_failure = snqi_step_reward(
+        _meta(collision=True, success=False),
+        terminal_bonus=5.0,
+    )
+    assert math.isclose(reward_collision_success, reward_collision_failure)
+
+
 def test_build_reward_function_supports_snqi_step_name():
     """Named reward lookup should return a callable SNQI reward."""
     reward_fn = build_reward_function("snqi_step", reward_kwargs={"terminal_bonus": 0.5})

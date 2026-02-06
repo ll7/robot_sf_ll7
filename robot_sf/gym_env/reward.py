@@ -210,7 +210,9 @@ def snqi_step_reward(
         or bool(meta.get("is_obstacle_collision"))
         else 0.0
     )
-    success = 1.0 if bool(meta.get("is_route_complete") or meta.get("is_robot_at_goal")) else 0.0
+    goal_reached = bool(meta.get("is_route_complete") or meta.get("is_robot_at_goal"))
+    # Mirror benchmark semantics: collisions invalidate success.
+    success = 1.0 if goal_reached and collision == 0.0 else 0.0
     time_to_goal_norm = min(1.0, max(0.0, step / max_steps))
     metric_values = {
         "success": success,

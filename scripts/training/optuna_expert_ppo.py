@@ -19,6 +19,12 @@ from train_expert_ppo import _resolve_num_envs, load_expert_training_config, run
 
 from robot_sf.common import ensure_seed_tuple
 from robot_sf.training.imitation_config import EvaluationSchedule
+from robot_sf.training.optuna_objective import (
+    OBJECTIVE_MODES,
+    eval_metric_series,
+    load_episode_records,
+    objective_from_series,
+)
 
 
 def _suggest_ppo_hyperparams(trial: optuna.Trial, *, max_batch_size: int) -> dict[str, object]:
@@ -54,8 +60,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trials", type=int, default=10, help="Number of Optuna trials.")
     parser.add_argument(
         "--metric",
-        default="snqi",
-        help="Metric to optimize (e.g., snqi, success_rate, collision_rate).",
+        default="eval_episode_return",
+        help="Metric to optimize (e.g., eval_episode_return, snqi, success_rate, collision_rate).",
+    )
+    parser.add_argument(
+        "--objective-mode",
+        default="last_n_mean",
+        choices=OBJECTIVE_MODES,
+        help=(
+            "How to reduce evaluation history to a scalar objective: "
+            "best_checkpoint|final_eval|last_n_mean|auc."
+        ),
+    )
+    parser.add_argument(
+        "--objective-window",
+        type=int,
+        default=3,
+        help="Window size for --objective-mode=last_n_mean.",
     )
     parser.add_argument(
         "--trial-timesteps",
@@ -104,6 +125,91 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_trial_config(
+    trial: optuna.Trial,
+    *,
+    base_config,
+    metric_name: str,
+    args: argparse.Namespace,
+):
+    """Create one trial-specific training configuration."""
+    config = copy.deepcopy(base_config)
+    config.policy_id = f"{base_config.policy_id}_optuna_{trial.number:03d}"
+    config.best_checkpoint_metric = metric_name
+    config.total_timesteps = int(args.trial_timesteps)
+    config.evaluation = EvaluationSchedule(
+        frequency_episodes=config.evaluation.frequency_episodes,
+        evaluation_episodes=int(args.eval_episodes),
+        hold_out_scenarios=config.evaluation.hold_out_scenarios,
+        step_schedule=((None, int(args.eval_every)),),
+    )
+    if args.deterministic:
+        config.randomize_seeds = False
+        if not config.seeds:
+            config.seeds = ensure_seed_tuple([0, 1, 2])
+    if args.disable_wandb:
+        wandb_cfg = config.tracking.get("wandb", {})
+        if isinstance(wandb_cfg, dict):
+            wandb_cfg["enabled"] = False
+            config.tracking["wandb"] = wandb_cfg
+    num_envs = _resolve_num_envs(config)
+    max_batch = max(1, num_envs * 512)
+    config.ppo_hyperparams = _suggest_ppo_hyperparams(trial, max_batch_size=max_batch)
+    return config
+
+
+def _resolve_trial_metric(
+    *,
+    result,
+    metric_name: str,
+    objective_mode: str,
+    objective_window: int,
+) -> tuple[float | None, list[tuple[int, float]]]:
+    """Resolve the optimization scalar from training outputs."""
+    best = result.best_checkpoint
+    metric_value: float | None = None
+    if objective_mode == "best_checkpoint":
+        metric_value = best.metrics.get(metric_name) if best is not None else None
+
+    episode_records = load_episode_records(result.training_run_artifact.episode_log_path)
+    series = eval_metric_series(episode_records, metric_name=metric_name)
+    derived_metric = objective_from_series(
+        series,
+        mode=objective_mode,
+        window=objective_window,
+    )
+    if derived_metric is not None:
+        metric_value = float(derived_metric)
+
+    if metric_value is None:
+        aggregate = result.metrics.get(metric_name)
+        metric_value = aggregate.mean if aggregate is not None else None
+    return metric_value, series
+
+
+def _register_trial_metadata(
+    trial: optuna.Trial,
+    *,
+    config,
+    result,
+    metric_name: str,
+    objective_mode: str,
+    objective_window: int,
+    series: list[tuple[int, float]],
+) -> None:
+    """Persist useful metadata on the trial for downstream analysis."""
+    best = result.best_checkpoint
+    trial.set_user_attr("policy_id", config.policy_id)
+    trial.set_user_attr("objective_mode", objective_mode)
+    trial.set_user_attr("objective_window", objective_window)
+    trial.set_user_attr("objective_metric", metric_name)
+    if series:
+        trial.set_user_attr("objective_eval_points", len(series))
+        trial.set_user_attr("objective_eval_last_step", int(series[-1][0]))
+    best_path = best.checkpoint_path if best is not None else result.expert_artifact.checkpoint_path
+    trial.set_user_attr("best_checkpoint", str(best_path))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the Optuna sweep."""
     parser = build_arg_parser()
@@ -112,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     config_path = Path(args.config).resolve()
     base_config = load_expert_training_config(config_path)
     metric_name, direction = _resolve_metric_direction(args.metric)
+    objective_mode = str(args.objective_mode)
+    objective_window = max(1, int(args.objective_window))
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     study_name = args.study_name or f"{base_config.policy_id}_optuna_{timestamp}"
     storage = args.storage
@@ -121,10 +229,11 @@ def main(argv: list[str] | None = None) -> int:
         storage = f"sqlite:///{storage_path}"
 
     logger.info(
-        "Starting Optuna study '{}' direction={} metric={} storage={}",
+        "Starting Optuna study '{}' direction={} metric={} objective_mode={} storage={}",
         study_name,
         direction,
         metric_name,
+        objective_mode,
         storage,
     )
 
@@ -139,43 +248,31 @@ def main(argv: list[str] | None = None) -> int:
 
     def objective(trial: optuna.Trial) -> float:
         """Single Optuna objective run."""
-        config = copy.deepcopy(base_config)
-        config.policy_id = f"{base_config.policy_id}_optuna_{trial.number:03d}"
-        config.best_checkpoint_metric = metric_name
-        config.total_timesteps = int(args.trial_timesteps)
-        config.evaluation = EvaluationSchedule(
-            frequency_episodes=config.evaluation.frequency_episodes,
-            evaluation_episodes=int(args.eval_episodes),
-            hold_out_scenarios=config.evaluation.hold_out_scenarios,
-            step_schedule=((None, int(args.eval_every)),),
+        config = _build_trial_config(
+            trial,
+            base_config=base_config,
+            metric_name=metric_name,
+            args=args,
         )
-        if args.deterministic:
-            config.randomize_seeds = False
-            if not config.seeds:
-                config.seeds = ensure_seed_tuple([0, 1, 2])
-        if args.disable_wandb:
-            wandb_cfg = config.tracking.get("wandb", {})
-            if isinstance(wandb_cfg, dict):
-                wandb_cfg["enabled"] = False
-                config.tracking["wandb"] = wandb_cfg
-
-        num_envs = _resolve_num_envs(config)
-        max_batch = max(1, num_envs * 512)
-        config.ppo_hyperparams = _suggest_ppo_hyperparams(trial, max_batch_size=max_batch)
 
         result = run_expert_training(config, config_path=config_path, dry_run=False)
-        best = result.best_checkpoint
-        metric_value = best.metrics.get(metric_name) if best is not None else None
-        if metric_value is None:
-            aggregate = result.metrics.get(metric_name)
-            metric_value = aggregate.mean if aggregate is not None else None
+        metric_value, series = _resolve_trial_metric(
+            result=result,
+            metric_name=metric_name,
+            objective_mode=objective_mode,
+            objective_window=objective_window,
+        )
         if metric_value is None:
             raise ValueError(f"Metric '{metric_name}' not found in training output.")
-        trial.set_user_attr("policy_id", config.policy_id)
-        best_path = (
-            best.checkpoint_path if best is not None else result.expert_artifact.checkpoint_path
+        _register_trial_metadata(
+            trial,
+            config=config,
+            result=result,
+            metric_name=metric_name,
+            objective_mode=objective_mode,
+            objective_window=objective_window,
+            series=series,
         )
-        trial.set_user_attr("best_checkpoint", str(best_path))
         return float(metric_value)
 
     study.optimize(objective, n_trials=int(args.trials))

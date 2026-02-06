@@ -271,6 +271,75 @@ def test_lidar_ray_scan_enemy_branch():
     assert np.any(np.isclose(ranges, 0.5))
 
 
+def test_lidar_ray_scan_detects_other_robots_when_enabled():
+    """LiDAR scan should include dynamic robot circles when enabled."""
+    obstacle_coords = np.empty((0, 4), dtype=np.float64)
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+        get_dynamic_objects=lambda: [((2.0, 1.0), 0.5)],
+    )
+    settings = LidarScannerSettings(
+        max_scan_dist=10.0,
+        num_rays=2,
+        scan_noise=[0.0, 0.0],
+        detect_other_robots=True,
+    )
+    ranges, _ray_angles = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+    assert np.any(ranges < settings.max_scan_dist)
+
+
+def test_lidar_ray_scan_ignores_other_robots_when_disabled():
+    """LiDAR scan should ignore dynamic robots when detection is disabled."""
+    obstacle_coords = np.empty((0, 4), dtype=np.float64)
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+        get_dynamic_objects=lambda: [((2.0, 1.0), 0.5)],
+    )
+    settings = LidarScannerSettings(
+        max_scan_dist=10.0,
+        num_rays=2,
+        scan_noise=[0.0, 0.0],
+        detect_other_robots=False,
+    )
+    ranges, _ray_angles = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+    assert np.allclose(ranges, settings.max_scan_dist)
+
+
+def test_lidar_ray_scan_no_false_self_hit_when_dynamic_list_excludes_self():
+    """LiDAR should report no dynamic hit when the dynamic callback excludes self robot."""
+    obstacle_coords = np.empty((0, 4), dtype=np.float64)
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+        get_dynamic_objects=lambda: [],
+    )
+    settings = LidarScannerSettings(
+        max_scan_dist=10.0,
+        num_rays=2,
+        scan_noise=[0.0, 0.0],
+        detect_other_robots=True,
+    )
+    ranges, _ray_angles = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+    assert np.allclose(ranges, settings.max_scan_dist)
+
+
 def test_lidar_sensor_space_bounds():
     """Sensor space bounds match expected shape and limits."""
     space = lidar_sensor_space(3, 7.0)

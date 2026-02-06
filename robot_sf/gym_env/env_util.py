@@ -133,6 +133,15 @@ def init_collision_and_sensors(
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
 
+    def dynamic_robot_circles(robot_idx: int) -> list[tuple[tuple[float, float], float]]:
+        """Return circles for all robots except the requested index."""
+        circles: list[tuple[tuple[float, float], float]] = []
+        for idx, pos in enumerate(sim.robot_pos):
+            if idx == robot_idx:
+                continue
+            circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
+        return circles
+
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [
         ContinuousOccupancy(
@@ -142,6 +151,7 @@ def init_collision_and_sensors(
             get_goal_coords=(lambda idx=i: sim.goal_pos[idx]),
             get_obstacle_coords=lambda: sim.get_obstacle_lines(),
             get_pedestrian_coords=lambda: sim.ped_pos,
+            get_dynamic_objects=(lambda idx=i: dynamic_robot_circles(idx)),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,
@@ -649,6 +659,15 @@ def init_collision_and_sensors_with_image(
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
 
+    def dynamic_robot_circles(robot_idx: int) -> list[tuple[tuple[float, float], float]]:
+        """Return circles for all robots except the requested index."""
+        circles: list[tuple[tuple[float, float], float]] = []
+        for idx, pos in enumerate(sim.robot_pos):
+            if idx == robot_idx:
+                continue
+            circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
+        return circles
+
     # Check if image observations are enabled
     use_image_obs = getattr(env_config, "use_image_obs", False)
 
@@ -661,6 +680,7 @@ def init_collision_and_sensors_with_image(
             get_goal_coords=lambda i=i: sim.goal_pos[i],
             get_obstacle_coords=lambda: sim.get_obstacle_lines(),
             get_pedestrian_coords=lambda: sim.ped_pos,
+            get_dynamic_objects=(lambda i=i: dynamic_robot_circles(i)),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,

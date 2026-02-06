@@ -111,12 +111,11 @@ class RobotState:
         Returns:
             object: The next observation produced by the sensor fusion after advancing one step.
         """
-        # TODO(#253): add check for robot-robot collisions as well
-        # See: https://github.com/ll7/robot_sf_ll7/issues/253
         self.timestep += 1
         self.sim_time_elapsed += self.d_t
         self.is_collision_with_ped = self.occupancy.is_pedestrian_collision
         self.is_collision_with_obst = self.occupancy.is_obstacle_collision
+        self.is_collision_with_robot = self.occupancy.is_dynamic_collision
         self.is_at_goal = self.occupancy.is_robot_at_goal
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
         return self.sensors.next_obs()

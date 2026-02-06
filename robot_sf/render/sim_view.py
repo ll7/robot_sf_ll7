@@ -61,6 +61,10 @@ TELEMETRY_PANE_PADDING = 10
 GRID_OBSTACLE_COLOR = (255, 255, 0)  # Yellow for obstacles
 GRID_PEDESTRIAN_COLOR = (255, 0, 0)  # Red for pedestrians
 GRID_FREE_ALPHA = 0  # Transparent for free cells (no rendering)
+_DEFAULT_SPRITE_DIR = os.path.join(os.path.dirname(__file__), "assets")
+_DEFAULT_ROBOT_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "robot.png")
+_DEFAULT_PED_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "pedestrian.png")
+_DEFAULT_EGO_PED_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "ego_pedestrian.png")
 
 
 def _empty_map_definition() -> MapDefinition:
@@ -240,6 +244,16 @@ class SimulationView:
     )
     grid_alpha: float = field(default=0.5)  # Alpha blending for grid overlay
     show_lidar: bool = field(default=True)  # Toggle lidar ray visualization
+    robot_render_mode: str = field(default="circle")  # circle|sprite
+    ped_render_mode: str = field(default="circle")  # circle|sprite
+    ego_ped_render_mode: str = field(default="circle")  # circle|sprite
+    robot_sprite_path: str | None = field(default=None)
+    ped_sprite_path: str | None = field(default=None)
+    ego_ped_sprite_path: str | None = field(default=None)
+    _sprite_cache: dict[str, pygame.surface.Surface | None] = field(
+        init=False, default_factory=dict
+    )
+    _sprite_warning_once: set[str] = field(init=False, default_factory=set)
     # Telemetry pane state
     show_telemetry_panel: bool = field(default=False)
     telemetry_session: object | None = field(default=None)
@@ -303,6 +317,20 @@ class SimulationView:
             )
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
+        self._validate_render_modes()
+
+    def _validate_render_modes(self) -> None:
+        """Validate configured render modes and coerce invalid values to circle."""
+        valid_modes = {"circle", "sprite"}
+        for attr_name in ("robot_render_mode", "ped_render_mode", "ego_ped_render_mode"):
+            mode = getattr(self, attr_name)
+            if mode not in valid_modes:
+                logger.warning(
+                    "Invalid %s '%s'; falling back to 'circle'.",
+                    attr_name,
+                    mode,
+                )
+                setattr(self, attr_name, "circle")
 
     def _is_headless_environment(self) -> bool:
         """Return True if the runtime should be treated as headless.
@@ -673,11 +701,84 @@ class SimulationView:
             self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
 
+    def _sprite_path_for_entity(self, entity: str) -> str:
+        """Resolve sprite path for an entity.
+
+        Returns:
+            str: Absolute or relative filesystem path to the sprite asset.
+        """
+        if entity == "robot":
+            return self.robot_sprite_path or _DEFAULT_ROBOT_SPRITE
+        if entity == "ped":
+            return self.ped_sprite_path or _DEFAULT_PED_SPRITE
+        if entity == "ego_ped":
+            return self.ego_ped_sprite_path or _DEFAULT_EGO_PED_SPRITE
+        raise ValueError(f"Unknown sprite entity '{entity}'")
+
+    def _get_entity_sprite(self, entity: str) -> pygame.surface.Surface | None:
+        """Return a cached sprite surface, or None when unavailable."""
+        sprite_path = self._sprite_path_for_entity(entity)
+        cache_key = f"{entity}:{sprite_path}"
+        if cache_key in self._sprite_cache:
+            return self._sprite_cache[cache_key]
+
+        if not os.path.exists(sprite_path):
+            warning_key = f"{entity}:missing:{sprite_path}"
+            if warning_key not in self._sprite_warning_once:
+                logger.warning(
+                    "Sprite for %s not found at '%s'; using circle fallback.",
+                    entity,
+                    sprite_path,
+                )
+                self._sprite_warning_once.add(warning_key)
+            self._sprite_cache[cache_key] = None
+            return None
+
+        try:
+            sprite_surface = pygame.image.load(sprite_path)
+        except (pygame.error, OSError) as exc:
+            warning_key = f"{entity}:load:{sprite_path}"
+            if warning_key not in self._sprite_warning_once:
+                logger.warning(
+                    "Failed loading sprite for %s from '%s' (%s); using circle fallback.",
+                    entity,
+                    sprite_path,
+                    exc,
+                )
+                self._sprite_warning_once.add(warning_key)
+            self._sprite_cache[cache_key] = None
+            return None
+
+        self._sprite_cache[cache_key] = sprite_surface
+        return sprite_surface
+
+    def _draw_sprite(
+        self,
+        sprite: pygame.surface.Surface,
+        center: tuple[float, float],
+        radius_px: float,
+        theta: float | None = None,
+    ) -> None:
+        """Draw a sprite centered at a world-space position."""
+        diameter = max(1, round(radius_px * 2))
+        scaled = pygame.transform.smoothscale(sprite, (diameter, diameter))
+        if theta is not None:
+            scaled = pygame.transform.rotate(scaled, -float(np.degrees(theta)))
+        rect = scaled.get_rect(center=center)
+        self.screen.blit(scaled, rect)
+
     def _draw_robot(self, pose: RobotPose):
         """Draw the robot as a scaled circle with a heading indicator."""
         position, theta = pose
         center = self._scale_tuple(position)
         radius_px = self.robot_radius * self.scaling
+
+        if self.robot_render_mode == "sprite":
+            sprite = self._get_entity_sprite("robot")
+            if sprite is not None:
+                self._draw_sprite(sprite, center, radius_px, theta=theta)
+                return
+
         pygame.draw.circle(self.screen, ROBOT_COLOR, center, radius_px)
 
         # Draw heading arrow to indicate facing direction
@@ -693,18 +794,24 @@ class SimulationView:
         )
 
     def _draw_ego_ped(self, pose: PedPose):
-        # TODO(#252): display ego ped with an image instead of a circle
-        # See: https://github.com/ll7/robot_sf_ll7/issues/252
-        """TODO docstring. Document this function.
+        """Draw the ego pedestrian using sprite or circle rendering.
 
         Args:
-            pose: TODO docstring.
+            pose: Ego pedestrian pose ``((x, y), theta)`` in world coordinates.
         """
+        center = self._scale_tuple(pose[0])
+        radius_px = self.ego_ped_radius * self.scaling
+        if self.ego_ped_render_mode == "sprite":
+            sprite = self._get_entity_sprite("ego_ped")
+            if sprite is not None:
+                self._draw_sprite(sprite, center, radius_px, theta=pose[1])
+                return
+
         pygame.draw.circle(
             self.screen,
             EGO_PED_COLOR,
-            self._scale_tuple(pose[0]),
-            self.ego_ped_radius * self.scaling,
+            center,
+            radius_px,
         )
 
     def _draw_pedestrians(self, ped_pos: np.ndarray, ped_actions: np.ndarray | None = None):
@@ -715,9 +822,13 @@ class SimulationView:
                 action_map[tuple(start)] = tuple(end)
 
         radius_px = self.ped_radius * self.scaling
+        ped_sprite = self._get_entity_sprite("ped") if self.ped_render_mode == "sprite" else None
         for ped_x, ped_y in ped_pos:
             center = self._scale_tuple((ped_x, ped_y))
-            pygame.draw.circle(self.screen, PED_COLOR, center, radius_px)
+            if ped_sprite is not None:
+                self._draw_sprite(ped_sprite, center, radius_px)
+            else:
+                pygame.draw.circle(self.screen, PED_COLOR, center, radius_px)
 
             # If we have an action for this ped, draw a direction line
             if action_map:

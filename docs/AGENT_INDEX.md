@@ -24,6 +24,10 @@ entry points, contracts, and where to change behavior.
 - `ObservationMode.SOCNAV_STRUCT` - structured SocNav observations (flattened for SB3).
 - Reference: `docs/dev/observation_contract.md`.
 
+## Multi-Robot LiDAR
+- Toggle robot-in-robot ray detection with `LidarScannerSettings.detect_other_robots`.
+- Detection is enabled by default and affects LiDAR ranges only (no schema key changes).
+
 ## Grid & Observation Configuration
 - Grid config: `RobotSimulationConfig.grid_config` and `use_occupancy_grid`.
 - Include grid in observations: `include_grid_in_observation`.
@@ -38,6 +42,13 @@ entry points, contracts, and where to change behavior.
 ## Map Selection
 - Deterministic choice: set `config.map_id` to a key in `config.map_pool`.
 - Random choice: leave `map_id=None`.
+
+## Render Representation
+- `SimulationView` supports per-entity render mode toggles:
+- `robot_render_mode`, `ped_render_mode`, `ego_ped_render_mode` (`circle` or `sprite`).
+- Optional sprite paths:
+- `robot_sprite_path`, `ped_sprite_path`, `ego_ped_sprite_path`.
+- Default fallback remains circle rendering when sprite loading fails.
 
 ## Scenario Splits
 - Helper: `robot_sf/training/scenario_split.py` (`split_scenarios`).

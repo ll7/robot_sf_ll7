@@ -1109,3 +1109,31 @@ When relaxing:
 Use `ROBOT_SF_PERF_RELAX=1` temporarily only for known CI variance; file a follow-up issue if sustained.
 
 Hard timeout breaches should be rare; investigate infinite loops or large scenario expansions if encountered.
+
+## Multi-robot LiDAR and sprite rendering
+
+### LiDAR robot detection toggle
+- `LidarScannerSettings.detect_other_robots` controls whether LiDAR rays include other robots.
+- Default is `True`.
+- This modifies ray distances only and keeps observation keys unchanged (`drive_state`, `rays`).
+
+### SimulationView representation modes
+- `SimulationView` supports per-entity render mode fields:
+- `robot_render_mode`, `ped_render_mode`, `ego_ped_render_mode` with values `circle` or `sprite`.
+- Optional sprite paths:
+- `robot_sprite_path`, `ped_sprite_path`, `ego_ped_sprite_path`.
+- If sprite loading fails, rendering falls back to circles and emits a warning.
+
+### Example
+```python
+from robot_sf.render.sim_view import SimulationView
+from robot_sf.sensor.range_sensor import LidarScannerSettings
+
+lidar_cfg = LidarScannerSettings(detect_other_robots=True)
+
+view = SimulationView(
+    robot_render_mode="sprite",
+    ped_render_mode="sprite",
+    ego_ped_render_mode="sprite",
+)
+```

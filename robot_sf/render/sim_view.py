@@ -794,10 +794,10 @@ class SimulationView:
         )
 
     def _draw_ego_ped(self, pose: PedPose):
-        """TODO docstring. Document this function.
+        """Draw the ego pedestrian using sprite or circle rendering.
 
         Args:
-            pose: TODO docstring.
+            pose: Ego pedestrian pose ``((x, y), theta)`` in world coordinates.
         """
         center = self._scale_tuple(pose[0])
         radius_px = self.ego_ped_radius * self.scaling

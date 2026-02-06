@@ -19,3 +19,11 @@ evaluation:
   hold_out_scenarios:
     - classic_crossing_medium
     - classic_bottleneck_high
+# Optional canonical SNQI inputs used for eval metric logging.
+# snqi_weights: ../../model/snqi_canonical_weights_v1.json
+# snqi_baseline: ../../output/benchmarks/classic_social_navigation/baseline_stats.json
+# Optional reward override passed through make_robot_env.
+# env_factory_kwargs:
+#   reward_name: snqi_step
+#   reward_kwargs:
+#     terminal_bonus: 0.5

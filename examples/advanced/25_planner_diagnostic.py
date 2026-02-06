@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Diagnose global planner inflation and visibility graph construction.
 
-TODO: It is unclear whether this example currently runs correctly.
-
 This script visualizes the intermediate steps of path planning to identify
 why paths violate clearance constraints.
 

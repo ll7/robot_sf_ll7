@@ -1,12 +1,10 @@
 """Global planner demo: show integration with environment factory.
 
-TODO: this example is not working correctly
-
 The global planner provides deterministic waypoint generation for robot navigation.
 This demo shows how to enable and use the planner in a simulation environment.
 
 Note: Detailed planner API usage can be found in the test suite
-(tests/test_planner/) and in the robot_sf.planner module docstrings.
+(`tests/test_planner/`) and in the `robot_sf.planner` module docstrings.
 """
 
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -28,15 +26,16 @@ def main() -> None:
     config.use_planner = True
 
     # Create environment - planner is integrated internally
+    env = None
     try:
         env = make_robot_env(config=config, debug=False)
         _, _ = env.reset()
 
         print("✓ Environment created successfully")
-        print(f"  Map size: {env.map_definition.width} x {env.map_definition.height}")
-        print(f"  Obstacles: {len(env.map_definition.obstacles)}")
-        print(f"  Robot spawn zones: {len(env.map_definition.robot_spawn_zones)}")
-        print(f"  POI positions: {len(env.map_definition.poi_positions)}")
+        print(f"  Map size: {env.map_def.width} x {env.map_def.height}")
+        print(f"  Obstacles: {len(env.map_def.obstacles)}")
+        print(f"  Robot spawn zones: {len(env.map_def.robot_spawn_zones)}")
+        print(f"  POI positions: {len(env.map_def.poi_positions)}")
 
         # Run simulation with planner
         print("\nRunning 10 simulation steps with planner...")
@@ -59,6 +58,9 @@ def main() -> None:
     except Exception as e:
         print(f"\n✗ Error during demo: {type(e).__name__}: {e}")
         raise
+    finally:
+        if env is not None:
+            env.close()
 
 
 if __name__ == "__main__":

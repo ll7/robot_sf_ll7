@@ -30,7 +30,10 @@ def load_episode_records(path: Path) -> list[dict[str, object]]:
             raw = line.strip()
             if not raw:
                 continue
-            payload = json.loads(raw)
+            try:
+                payload = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                continue
             if isinstance(payload, dict):
                 records.append(payload)
     return records
@@ -103,7 +106,8 @@ def objective_from_series(
         span = float(x[-1] - x[0])
         if span <= 0:
             return float(np.mean(y))
-        area = float(np.trapezoid(y, x))
+        trapz_compat = getattr(np, "trapezoid", np.trapz)
+        area = float(trapz_compat(y, x))
         return area / span
     if mode == "best_checkpoint":
         return None

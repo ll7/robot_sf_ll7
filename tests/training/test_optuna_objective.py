@@ -53,3 +53,26 @@ def test_load_episode_records_reads_jsonl(tmp_path: Path):
 
     loaded = load_episode_records(path)
     assert loaded == payloads
+
+
+def test_load_episode_records_skips_malformed_and_non_object_lines(tmp_path: Path):
+    """Malformed JSONL rows should be ignored instead of crashing loading."""
+    path = tmp_path / "episodes.jsonl"
+    payloads = [
+        {"eval_step": 100, "metrics": {"snqi": 0.2}},
+        {"eval_step": 200, "metrics": {"snqi": 0.4}},
+    ]
+    path.write_text(
+        "\n".join(
+            [
+                json.dumps(payloads[0]),
+                "{bad json",
+                json.dumps(["not", "a", "record"]),
+                json.dumps(payloads[1]),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_episode_records(path)
+    assert loaded == payloads

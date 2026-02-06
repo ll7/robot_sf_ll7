@@ -11,6 +11,7 @@ segments/pedestrians. It works for small numbers of obstacles/agents, but is not
 large maps or dense crowds.
 """
 
+import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -23,6 +24,8 @@ from robot_sf.common.types import Circle2D, Line2D, Vec2D
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
+
+logger = logging.getLogger(__name__)
 
 
 @numba.njit(fastmath=True)
@@ -132,13 +135,14 @@ def circle_collides_any_lines(circle: Circle2D, segments: Iterable[Line2D] | np.
                 return True
         return False
 
-    for seg in segments:
+    for idx, seg in enumerate(segments):
         try:
             (s_x, s_y), (e_x, e_y) = seg
         except (TypeError, ValueError):
             try:
                 s_x, s_y, e_x, e_y = seg  # type: ignore[misc]
             except (TypeError, ValueError):
+                logger.debug("Skipping unparseable segment at index %s: %r", idx, seg)
                 continue
         if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
             return True

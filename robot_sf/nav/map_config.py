@@ -697,6 +697,27 @@ class MapDefinitionPool:
 
         return random.choice(list(self.map_defs.values()))
 
+    def get_map(self, map_id: str) -> MapDefinition:
+        """Return a map definition by id.
+
+        Args:
+            map_id: Key in the map_defs dictionary.
+
+        Returns:
+            MapDefinition: The requested map definition.
+
+        Raises:
+            KeyError: If map_id is not present in the pool.
+        """
+        key = map_id.strip()
+        if not key:
+            raise KeyError("map_id must be a non-empty string")
+        try:
+            return self.map_defs[key]
+        except KeyError as exc:
+            known = ", ".join(sorted(self.map_defs.keys())) or "<none>"
+            raise KeyError(f"Unknown map_id '{key}'. Known: {known}") from exc
+
 
 def _normalize_position(pos: Vec2D, *, min_x: float, min_y: float) -> Vec2D:
     """Normalize a position against map margins.

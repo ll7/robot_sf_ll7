@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Unified configs now support `map_id` for deterministic map selection when building environments.
+- Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
+- Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
+- New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
 - Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
 - Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
 - Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
@@ -37,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
 
 ### Fixed
+- Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
+- SVG map parsing now honors indexed spawn/goal labels to keep route ordering stable.
+- Pedestrian env now validates robot action-space compatibility and falls back to null actions on mismatch.
 - SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.
 - SocNavBench path irregularity now uses heading vectors instead of origin-dependent position vectors.
 - SocNavBench upstream planner loader rejects untrusted roots unless explicitly allowed via `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT`.

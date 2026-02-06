@@ -195,7 +195,7 @@ class EnvironmentFactory:
         Args:
             config: RobotSimulationConfig instance defining physics, maps, and sensors.
             use_image_obs: If True, select image-capable environment; else standard lidar-only.
-            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
+            peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
             reward_func: Custom reward function; falls back to internal default if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for video/JSONL recording even if options request it.
@@ -224,7 +224,16 @@ class EnvironmentFactory:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
-        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        if peds_have_obstacle_forces is not True:
+            logger.warning(
+                "peds_have_obstacle_forces is deprecated; use "
+                "peds_have_static_obstacle_forces on the config instead.",
+            )
+        if hasattr(config, "peds_have_static_obstacle_forces"):
+            config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        else:
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
         config.enable_telemetry_panel = enable_telemetry_panel
         config.telemetry_record = telemetry_record
         config.telemetry_refresh_hz = telemetry_refresh_hz
@@ -276,7 +285,7 @@ class EnvironmentFactory:
                 simple_ped_reward if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for video recording.
-            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
+            peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
 
         Returns:
             SingleAgentEnv: Initialized pedestrian environment for training/evaluation.
@@ -289,6 +298,17 @@ class EnvironmentFactory:
         # fall back to the canonical internal simple_ped_reward.
         if reward_func is None:
             reward_func = simple_ped_reward
+
+        if peds_have_obstacle_forces is not True:
+            logger.warning(
+                "peds_have_obstacle_forces is deprecated; use "
+                "peds_have_static_obstacle_forces on the config instead.",
+            )
+        if hasattr(config, "peds_have_static_obstacle_forces"):
+            config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        else:
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
         return PedestrianEnv(
             env_config=config,  # type: ignore[arg-type]
@@ -470,8 +490,9 @@ def make_robot_env(  # noqa: PLR0913
         config: Optional pre-constructed config; a default instance is created if None.
         seed: Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
             the returned env as ``applied_seed``.
-        peds_have_obstacle_forces: Whether pedestrians perceive the robot as an obstacle
-            (interaction forces enabled).
+        peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
+            Use ``config.peds_have_static_obstacle_forces`` (obstacle forces) and
+            ``config.peds_have_robot_repulsion`` (robot repulsion) going forward.
         reward_func: Optional custom reward function; falls back to internal simple reward
             with warning.
         debug: Enable debug/visual features (may trigger view creation when recording).
@@ -685,7 +706,7 @@ def make_pedestrian_env(  # noqa: PLR0913
         Trained policy / model providing robot actions. A lightweight stub is injected if
         absent so tests and simple demos can still run.
     peds_have_obstacle_forces : bool
-        Interaction force toggle for pedestrian physics.
+        Deprecated. Controls static obstacle forces for pedestrians (not robot repulsion).
 
     Returns:
         Initialized SingleAgentEnv for adversarial pedestrian training.

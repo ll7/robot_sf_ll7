@@ -1059,6 +1059,7 @@ def _apply_map_pool(
     if not map_name:
         map_name = Path(map_file).stem if map_file else "scenario_map"
     config.map_pool = MapDefinitionPool(map_defs={map_name: map_def})
+    config.map_id = map_name
 
 
 __all__ = [

@@ -9,6 +9,8 @@ import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
@@ -39,6 +41,8 @@ class BaseSimulationConfig(TelemetryConfigMixin):
 
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
+    # Optional map id to select deterministically from map_pool. When None, selection is random.
+    map_id: str | None = None
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
     render_scaling: int | None = None
@@ -77,7 +81,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
     )
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
-    peds_have_obstacle_forces: bool = field(default=True)
+    # Explicit force flags (new API).
+    peds_have_static_obstacle_forces: bool = field(default=True)
+    peds_have_robot_repulsion: bool | None = field(default=None)
+    # Deprecated alias (obstacle forces only). Kept for backwards compatibility.
+    peds_have_obstacle_forces: bool | None = field(default=None)
     use_planner: bool = field(default=False)
     planner_clearance_margin: float = field(default=0.3)
 
@@ -108,6 +116,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
 
+        self._sync_force_flags()
         self._init_grid_config()
         self._validate_grid_observation()
         self._validate_grid_visualization()
@@ -164,6 +173,24 @@ class RobotSimulationConfig(BaseSimulationConfig):
             raise ValueError("planner_clearance_margin cannot be negative")
         if self.planner_backend not in {"visibility", "classic"}:
             raise ValueError("planner_backend must be one of {'visibility', 'classic'}")
+
+    def _sync_force_flags(self) -> None:
+        """Sync deprecated force flags and prf_config for backwards compatibility."""
+        if self.peds_have_obstacle_forces is not None:
+            if self.peds_have_obstacle_forces != self.peds_have_static_obstacle_forces:
+                logger.warning(
+                    "peds_have_obstacle_forces is deprecated; use "
+                    "peds_have_static_obstacle_forces instead.",
+                )
+            self.peds_have_static_obstacle_forces = bool(self.peds_have_obstacle_forces)
+
+        if self.peds_have_robot_repulsion is not None:
+            self.sim_config.prf_config.is_active = bool(self.peds_have_robot_repulsion)
+        else:
+            self.peds_have_robot_repulsion = bool(self.sim_config.prf_config.is_active)
+
+        # Keep deprecated alias in sync for external consumers.
+        self.peds_have_obstacle_forces = self.peds_have_static_obstacle_forces
 
     def _validate_global_sampling(self) -> None:
         """Ensure global sampling is only enabled when planner-based routing is active."""

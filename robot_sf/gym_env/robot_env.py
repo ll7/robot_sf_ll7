@@ -257,7 +257,7 @@ class RobotEnv(BaseEnv):
             record_video: Save simulator frames as a video via ``SimulationView``.
             video_path: Output path for the recorded video (when ``record_video`` is enabled).
             video_fps: Override frames-per-second for recorded videos.
-            peds_have_obstacle_forces: Whether ped forces interact with obstacles.
+            peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             use_jsonl_recording: Enable structured JSONL recording instead of pickles.
             recording_dir: Directory for recordings.
             suite_name: Logical suite name stored in recording metadata.

@@ -157,7 +157,8 @@ Use unified config classes from `robot_sf.gym_env.unified_config`:
 from robot_sf.gym_env.unified_config import RobotSimulationConfig, ImageRobotConfig
 
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True  # Enable ped-robot physics interaction
+config.peds_have_static_obstacle_forces = True  # Enable pedestrian-obstacle forces
+config.peds_have_robot_repulsion = True  # Enable pedestrian-robot repulsion
 env = make_robot_env(config=config)
 ```
 

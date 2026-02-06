@@ -119,6 +119,7 @@ class LidarScannerSettings:
     visual_angle_portion: float = 1.0
     num_rays: int = 272
     scan_noise: list[float] = field(default_factory=lambda: [0.005, 0.002])
+    detect_other_robots: bool = True
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
@@ -158,46 +159,47 @@ def raycast_pedestrians(
         ``out_ranges`` is modified in place and no value is returned.
     """
 
-    # Check if pedestrian positions array is empty or not 2D
-    if len(ped_positions.shape) != 2:
-        return
-    if ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
+    if len(ped_positions.shape) != 2 or ped_positions.shape[1] != 2:
         return
 
-    # Convert scanner position to numpy array
+    circles = np.empty((ped_positions.shape[0], 3), dtype=np.float64)
+    circles[:, :2] = ped_positions
+    circles[:, 2] = ped_radius
+    raycast_circles(out_ranges, scanner_pos, max_scan_range, circles, ray_angles)
+
+
+@numba.njit(fastmath=True)
+def raycast_circles(
+    out_ranges: np.ndarray,
+    scanner_pos: Vec2D,
+    max_scan_range: float,
+    circles: np.ndarray,
+    ray_angles: np.ndarray,
+):
+    """Perform raycasts to detect generic circular obstacles."""
+    if len(circles.shape) != 2 or circles.shape[0] == 0 or circles.shape[1] != 3:
+        return
+
     scanner_pos_np = np.array([scanner_pos[0], scanner_pos[1]])
-
-    # Calculate square of maximum scan range
     threshold_sq = max_scan_range**2
-
-    # Calculate relative positions of pedestrians and their squared distances
-    relative_ped_pos = ped_positions - scanner_pos_np
-    dist_sq = np.sum(relative_ped_pos**2, axis=1)
-
-    # Find pedestrians within scanner's range
-    ped_dist_mask = np.where(dist_sq <= threshold_sq)[0]
-    close_ped_pos = relative_ped_pos[ped_dist_mask]
-
-    # If no pedestrians are within range, return
-    if len(ped_dist_mask) == 0:
+    relative_circle_pos = circles[:, :2] - scanner_pos_np
+    circle_radii = circles[:, 2]
+    dist_sq = np.sum(relative_circle_pos**2, axis=1)
+    near_mask = np.where(dist_sq <= threshold_sq)[0]
+    if len(near_mask) == 0:
         return
+    close_circle_pos = relative_circle_pos[near_mask]
+    close_circle_radii = circle_radii[near_mask]
 
-    # For each ray angle, calculate cosine similarities and find pedestrians
-    # in the direction of the ray
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
-        cos_sims = close_ped_pos[:, 0] * unit_vec[0] + close_ped_pos[:, 1] * unit_vec[1]
-
-        # Find pedestrians in the direction of the ray
-        ped_dir_mask = np.where(cos_sims >= 0)[0]
-        joined_mask = ped_dist_mask[ped_dir_mask]
-        relevant_ped_pos = relative_ped_pos[joined_mask]
-
-        # For each pedestrian in the direction of the ray, calculate the
-        # distance to the pedestrian's edge and update the output range
-        for pos in relevant_ped_pos:
-            ped_circle = ((pos[0], pos[1]), ped_radius)
-            coll_dist = circle_line_intersection_distance(ped_circle, (0.0, 0.0), unit_vec)
+        cos_sims = close_circle_pos[:, 0] * unit_vec[0] + close_circle_pos[:, 1] * unit_vec[1]
+        circle_dir_mask = np.where(cos_sims >= 0)[0]
+        for idx in circle_dir_mask:
+            pos = close_circle_pos[idx]
+            radius = close_circle_radii[idx]
+            circle = ((pos[0], pos[1]), radius)
+            coll_dist = circle_line_intersection_distance(circle, (0.0, 0.0), unit_vec)
             out_ranges[i] = min(coll_dist, out_ranges[i])
 
 
@@ -228,7 +230,7 @@ def raycast_obstacles(
 
 
 @numba.njit()
-def raycast(
+def raycast(  # noqa: PLR0913
     scanner_pos: Vec2D,
     obstacles: np.ndarray,
     max_scan_range: float,
@@ -237,6 +239,7 @@ def raycast(
     ray_angles: np.ndarray,
     enemy_pos: np.ndarray | None = None,
     enemy_radius: float = 0.0,
+    other_robot_circles: np.ndarray | None = None,
 ) -> np.ndarray:
     """Cast rays to compute minimal collision distances along given angles.
 
@@ -261,9 +264,43 @@ def raycast(
             enemy_radius,
             ray_angles,
         )
-    # TODO(#251): add raycast for other robots
-    # See: https://github.com/ll7/robot_sf_ll7/issues/251
+    if other_robot_circles is not None:
+        raycast_circles(
+            out_ranges,
+            scanner_pos,
+            max_scan_range,
+            other_robot_circles,
+            ray_angles,
+        )
     return out_ranges
+
+
+def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | None:
+    """Convert occupancy dynamic objects into an ``(N, 3)`` raycast circle array.
+
+    Returns:
+        np.ndarray | None: Array columns are ``x``, ``y``, ``radius``.
+        Returns ``None`` when no usable dynamic circles are available.
+    """
+    get_dynamic_objects = getattr(occ, "get_dynamic_objects", None)
+    if get_dynamic_objects is None:
+        return None
+
+    objects = get_dynamic_objects()
+    if not objects:
+        return None
+
+    rows: list[tuple[float, float, float]] = []
+    for circle in objects:
+        try:
+            (x, y), radius = circle
+        except (TypeError, ValueError):
+            continue
+        rows.append((float(x), float(y), float(radius)))
+
+    if not rows:
+        return None
+    return np.array(rows, dtype=np.float64)
 
 
 @numba.njit(fastmath=True)
@@ -299,6 +336,9 @@ def lidar_ray_scan(
 
     ped_pos = occ.pedestrian_coords
     obstacles = occ.obstacle_coords
+    dynamic_robot_circles = (
+        _dynamic_objects_to_circle_array(occ) if settings.detect_other_robots else None
+    )
 
     lower = robot_orient + settings.angle_opening[0]
     upper = robot_orient + settings.angle_opening[1]
@@ -316,9 +356,18 @@ def lidar_ray_scan(
             ray_angles,
             enemy_pos=enemy_pos,
             enemy_radius=occ.enemy_radius,
+            other_robot_circles=dynamic_robot_circles,
         )
     else:
-        ranges = raycast((pos_x, pos_y), obstacles, scan_dist, ped_pos, occ.ped_radius, ray_angles)
+        ranges = raycast(
+            (pos_x, pos_y),
+            obstacles,
+            scan_dist,
+            ped_pos,
+            occ.ped_radius,
+            ray_angles,
+            other_robot_circles=dynamic_robot_circles,
+        )
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges, ray_angles
 

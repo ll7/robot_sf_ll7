@@ -51,17 +51,20 @@ class MultiRobotEnv(MultiAgentEnv):
         video_path: str | None = None,
         video_fps: float | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize a multi-robot environment and per-robot runtime state.
 
         Args:
-            env_config: TODO docstring.
-            reward_func: TODO docstring.
-            debug: TODO docstring.
-            num_robots: TODO docstring.
-            recording_enabled: TODO docstring.
-            record_video: TODO docstring.
-            video_path: TODO docstring.
-            video_fps: TODO docstring.
+            env_config: Environment configuration with simulator and map settings.
+            reward_func: Reward function applied per robot metadata on each step.
+            debug: Enables interactive rendering when true.
+            num_robots: Number of robots when using legacy `EnvSettings`.
+            recording_enabled: Enables recording infrastructure for generated artifacts.
+            record_video: Enables video recording for each robot view.
+            video_path: Base output path for recorded video(s).
+            video_fps: Output frame rate for rendered recordings.
+
+        Raises:
+            ValueError: If `num_robots` conflicts with `MultiRobotConfig.num_robots`.
         """
         if isinstance(env_config, MultiRobotConfig):
             resolved_num_robots = env_config.num_robots
@@ -212,10 +215,10 @@ class MultiRobotEnv(MultiAgentEnv):
             sim_view.render(state)
 
     def close_extras(self, **kwargs):
-        """TODO docstring. Document this function.
+        """Close worker pools and render views with best-effort error handling.
 
         Args:
-            kwargs: TODO docstring.
+            kwargs: Extra close arguments accepted for interface compatibility.
         """
         if getattr(self, "sim_worker_pool", None) is not None:
             try:

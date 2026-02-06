@@ -23,26 +23,31 @@ def resolve_termination_reason(
 ) -> str:
     """Resolve a normalized termination reason from step outcomes.
 
+    Precedence is: ``error`` > terminal/truncation signals > info flags.
+    When both ``success`` and ``collision`` are true, ``collision`` wins to
+    match collision-aware success semantics in benchmark metrics.
+    If no signal is present at all, the resolver defaults to ``"max_steps"``.
+
     Returns:
         str: One of ``TERMINATION_REASONS``.
     """
     if had_error:
         return "error"
     if terminated:
-        if success:
-            return "success"
         if collision:
             return "collision"
+        if success:
+            return "success"
         return "terminated"
     if truncated:
         return "truncated"
     if reached_max_steps:
         return "max_steps"
     # Defensive fallback for callers that only provide info flags.
-    if success:
-        return "success"
     if collision:
         return "collision"
+    if success:
+        return "success"
     return "max_steps"
 
 

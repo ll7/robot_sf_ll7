@@ -42,6 +42,15 @@ def test_resolve_termination_reason_all_paths() -> None:
         resolve_termination_reason(
             terminated=True,
             truncated=False,
+            success=True,
+            collision=True,
+        )
+        == "collision"
+    )
+    assert (
+        resolve_termination_reason(
+            terminated=True,
+            truncated=False,
             success=False,
             collision=False,
         )
@@ -80,6 +89,15 @@ def test_resolve_termination_reason_all_paths() -> None:
             terminated=False,
             truncated=False,
             success=False,
+            collision=True,
+        )
+        == "collision"
+    )
+    assert (
+        resolve_termination_reason(
+            terminated=False,
+            truncated=False,
+            success=True,
             collision=True,
         )
         == "collision"

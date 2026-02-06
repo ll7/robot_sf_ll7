@@ -31,7 +31,8 @@ def split_scenarios(
     for entry in scenarios:
         if not isinstance(entry, dict):
             raise ValueError(f"Scenario entries must be dict-like, got {type(entry)}")
-        split_value = entry.get("split") or normalized_default
+        raw_split = entry.get("split", None)
+        split_value = normalized_default if raw_split is None else raw_split
         if not isinstance(split_value, str):
             raise ValueError(f"Scenario split must be a string, got {split_value!r}")
         split_name = split_value.strip().lower()

@@ -381,6 +381,14 @@ def check_quality_of_map_point(map_def: "MapDefinition", point: Vec2D, radius: f
     obstacle_lines: list[Line2D] = []
     for obstacle in map_def.obstacles:
         obstacle_lines.extend(((line[0], line[1]), (line[2], line[3])) for line in obstacle.lines)
-    obstacle_lines.extend(map_def.bounds)
+    for bound in map_def.bounds:
+        if isinstance(bound, (tuple, list)) and len(bound) == 2:
+            obstacle_lines.append(bound)  # type: ignore[list-item]
+            continue
+        try:
+            x1, x2, y1, y2 = bound  # type: ignore[misc]
+        except (TypeError, ValueError):
+            continue
+        obstacle_lines.append(((x1, y1), (x2, y2)))
 
     return not any(is_circle_line_intersection(circle, seg) for seg in obstacle_lines)

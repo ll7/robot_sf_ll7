@@ -74,7 +74,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,
         recording_enabled: bool = False,
-        peds_have_obstacle_forces: bool = True,
+        peds_have_obstacle_forces: bool | None = None,
         **kwargs,
     ):
         """
@@ -93,10 +93,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             env_config = PedestrianSimulationConfig()
 
         # Ensure pedestrian obstacle forces are configured consistently.
-        if hasattr(env_config, "peds_have_static_obstacle_forces"):
-            env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
-        else:
-            env_config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        if peds_have_obstacle_forces is not None:
+            if hasattr(env_config, "peds_have_static_obstacle_forces"):
+                env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            else:
+                env_config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
         # Store robot model
         if robot_model is None:
@@ -241,7 +242,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             return None
 
         target_shape = getattr(self.robot_action_space, "shape", None)
-        if target_shape:
+        if target_shape is not None:
             if arr.shape != target_shape:
                 if arr.size == int(np.prod(target_shape)):
                     arr = arr.reshape(target_shape)

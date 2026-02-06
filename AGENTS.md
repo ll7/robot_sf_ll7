@@ -19,6 +19,7 @@ Target the full `tests/` suite before pushing changes and rerun targeted slow ma
 ## Commit & Pull Request Workflow
 Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`). Each PR should summarize intent, reference related issues, and list the commands you ran. Include screenshots or short GIFs when UI or playback output changes, and note any new assets placed under `maps/` or `model/`. Ensure CI stays green by syncing with `main` and resolving lint or test failures locally before requesting review.
 Use the GitHub CLI (`gh`) for repository interactions such as viewing/commenting on issues and creating/updating PRs.
+When review feedback or PR scope identifies deferred follow-up work, always create a dedicated GitHub issue with `gh` before closing out the task.
 
 ## Donts
 

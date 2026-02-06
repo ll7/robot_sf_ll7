@@ -65,7 +65,7 @@ except (ImportError, ModuleNotFoundError):
 from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
-from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.reward import build_reward_function, simple_ped_reward
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -74,7 +74,7 @@ from robot_sf.gym_env.unified_config import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 
@@ -480,6 +480,8 @@ def make_robot_env(  # noqa: PLR0913
     seed: int | None = None,
     peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
+    reward_name: str | None = None,
+    reward_kwargs: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -516,6 +518,9 @@ def make_robot_env(  # noqa: PLR0913
             ``config.peds_have_robot_repulsion`` (robot repulsion) going forward.
         reward_func: Optional custom reward function; falls back to internal simple reward
             with warning.
+        reward_name: Optional named reward preset (`simple`, `punish_action`, `snqi_step`).
+            Ignored when ``reward_func`` is provided.
+        reward_kwargs: Optional keyword arguments passed to the named reward preset builder.
         debug: Enable debug/visual features (may trigger view creation when recording).
         recording_enabled: Master switch gating recording runtime even if options request
             it (feature flag style).
@@ -564,6 +569,9 @@ def make_robot_env(  # noqa: PLR0913
         # Any leftover keys after application are ignored (already validated by strict handling).
         render_options = render_options_local
         recording_options = recording_options_local
+
+    if reward_func is None and reward_name is not None:
+        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
 
     _apply_global_seed(seed)
 
@@ -623,6 +631,8 @@ def make_image_robot_env(  # noqa: PLR0913
     seed: int | None = None,
     peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
+    reward_name: str | None = None,
+    reward_kwargs: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -651,6 +661,8 @@ def make_image_robot_env(  # noqa: PLR0913
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
         render_options = _apply_render(mapped, render_options)
         recording_options = _apply_recording(mapped, recording_options)
+    if reward_func is None and reward_name is not None:
+        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
     _apply_global_seed(seed)
 
     # Validate configuration and log resolved config (T030/T031)

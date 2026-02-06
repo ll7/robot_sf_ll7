@@ -184,7 +184,12 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
 - `ppo_hyperparams`: Overrides Stable-Baselines3 PPO kwargs (e.g., `learning_rate`,
   `n_steps`, `batch_size`, `n_epochs`, `ent_coef`, `clip_range`, `target_kl`).
 - `best_checkpoint_metric`: Which eval metric to track for saving the best checkpoint
-  (default: `snqi`; minimize `collision_rate`/`comfort_exposure`, maximize others).
+  (default: `eval_episode_return`; minimize `collision_rate`/`comfort_exposure`, maximize others).
+- `snqi_weights`: Optional path to SNQI weights JSON used for canonical SNQI calculation.
+- `snqi_baseline`: Optional path to SNQI baseline med/p95 JSON used for normalization.
+- `env_factory_kwargs.reward_name`: Optional named reward (`simple`, `punish_action`,
+  `snqi_step`) passed to `make_robot_env` for training/eval environments.
+- `env_factory_kwargs.reward_kwargs`: Optional keyword arguments for the selected reward.
 
 Best checkpoints are written to:
 `output/benchmarks/expert_policies/checkpoints/<policy_id>/<policy_id>_best.zip`

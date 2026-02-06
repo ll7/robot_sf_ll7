@@ -4,3 +4,6 @@ pretrained_policy_id: bc_policy_v1
 total_timesteps: 100000
 learning_rate: 0.0001
 random_seeds: [42, 43, 44]
+# Optional canonical SNQI inputs used by eval metric calculation.
+# snqi_weights: ../../model/snqi_canonical_weights_v1.json
+# snqi_baseline: ../../output/benchmarks/classic_social_navigation/baseline_stats.json

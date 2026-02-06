@@ -36,8 +36,9 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
         "path_efficiency",
         "comfort_exposure",
         "snqi",
+        "eval_episode_return",
+        "eval_avg_step_reward",
     }
-
     checkpoint = result.checkpoint_path
     assert checkpoint.exists() and checkpoint.read_text(encoding="utf-8").startswith("dry-run")
 
@@ -45,6 +46,10 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert run_manifest_path.exists()
     training_payload = json.loads(run_manifest_path.read_text(encoding="utf-8"))
     assert training_payload["run_type"] == common.TrainingRunType.EXPERT_TRAINING.value
+    notes = training_payload.get("notes", [])
+    assert any(str(note).startswith("snqi_formula=") for note in notes)
+    assert any(str(note).startswith("snqi_weights_source=") for note in notes)
+    assert any(str(note).startswith("snqi_baseline_source=") for note in notes)
 
     log_dir = common.get_imitation_report_dir()
     assert any(log_dir.glob("episodes/*.jsonl"))

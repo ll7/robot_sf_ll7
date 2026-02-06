@@ -266,3 +266,25 @@ def test_multi_robot_env_render_requires_view(monkeypatch) -> None:
             env.render()
     finally:
         env.close()
+
+
+def test_multi_robot_env_exit_closes_all_views(monkeypatch, tmp_path) -> None:
+    """`exit()` should close every robot view, not only the legacy `sim_ui`."""
+    _FakeSimulationView.instances.clear()
+    _patch_multi_robot_dependencies(monkeypatch)
+    env = multi_robot_env_mod.MultiRobotEnv(
+        env_config=_build_config(),
+        debug=False,
+        num_robots=2,
+        recording_enabled=True,
+        record_video=True,
+        video_path=str(tmp_path / "episode.mp4"),
+        video_fps=12.0,
+    )
+    try:
+        env.exit()
+    finally:
+        # Keep cleanup idempotent for callers that invoke close after exit.
+        env.close()
+
+    assert all(view.exit_calls == 1 for view in _FakeSimulationView.instances)

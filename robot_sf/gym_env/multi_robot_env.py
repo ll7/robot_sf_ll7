@@ -227,21 +227,31 @@ class MultiRobotEnv(MultiAgentEnv):
                 # Best-effort close; log common failure modes but avoid
                 # silencing unrelated exceptions.
                 logger.warning("Failed to close sim_worker_pool: {}", e)
+            finally:
+                self.sim_worker_pool = None  # type: ignore[assignment]
         if getattr(self, "obs_worker_pool", None) is not None:
             try:
                 self.obs_worker_pool.close()
             except (AttributeError, OSError, RuntimeError) as e:
                 logger.warning("Failed to close obs_worker_pool: {}", e)
-        for sim_view in self._sim_views:
+            finally:
+                self.obs_worker_pool = None  # type: ignore[assignment]
+        for sim_view in list(self._sim_views):
             try:
                 sim_view.exit_simulation()
             except (AttributeError, OSError, RuntimeError) as e:
                 logger.warning("Failed to close simulation view: {}", e)
+        self._sim_views = []
+        self.sim_ui = None
 
     def close(self):
         """Close pools and simulation views."""
         self.close_extras()
         super().close()
+
+    def exit(self) -> None:
+        """Close all resources, including all per-robot render views."""
+        self.close()
 
     def _setup_render_views(self) -> None:
         """Initialize one SimulationView per robot when rendering is enabled."""

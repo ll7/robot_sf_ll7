@@ -265,12 +265,15 @@ class EnvironmentFactory:
         )  # type: ignore[return-value]
 
     @staticmethod
-    def create_pedestrian_env(
+    def create_pedestrian_env(  # noqa: PLR0913
         robot_model,
         config: PedestrianSimulationConfig | None = None,
         reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = True,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
@@ -285,6 +288,9 @@ class EnvironmentFactory:
                 simple_ped_reward if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for video recording.
+            record_video: Enable video recording to disk.
+            video_path: Output path for recorded video files.
+            video_fps: Target frames-per-second for video output.
             peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
 
         Returns:
@@ -316,6 +322,9 @@ class EnvironmentFactory:
             reward_func=reward_func,
             debug=debug,
             recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
         )  # type: ignore[return-value]
 
@@ -326,6 +335,10 @@ class EnvironmentFactory:
         num_robots: int,
         reward_func: Callable | None,
         debug: bool,
+        recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str | None = None,
+        video_fps: float | None = None,
     ) -> MultiAgentEnv:
         """Construct a multi-robot environment.
 
@@ -337,6 +350,10 @@ class EnvironmentFactory:
             num_robots: Number of robot agents in the environment.
             reward_func: Custom reward function for agents; internal default if None.
             debug: Enable visual debug features and view creation.
+            recording_enabled: Master gate for per-robot recording.
+            record_video: Enable per-robot video recording to disk.
+            video_path: Base output path for recorded videos.
+            video_fps: Target frames-per-second for video output.
 
         Returns:
             MultiAgentEnv: Initialized multi-agent environment instance.
@@ -352,6 +369,10 @@ class EnvironmentFactory:
             reward_func=reward_func,
             debug=debug,
             num_robots=num_robots,
+            recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
         )  # type: ignore[return-value]
 
 
@@ -730,8 +751,8 @@ def make_pedestrian_env(  # noqa: PLR0913
         render_options,
         recording_options,
         eff_record_video,
-        _eff_video_path,
-        _eff_video_fps,
+        eff_video_path,
+        eff_video_fps,
     ) = _normalize_factory_inputs(
         record_video=record_video,
         video_path=video_path,
@@ -767,6 +788,9 @@ def make_pedestrian_env(  # noqa: PLR0913
         reward_func=reward_func,
         debug=debug,
         recording_enabled=recording_enabled,
+        record_video=eff_record_video,
+        video_path=eff_video_path,
+        video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
     env.applied_seed = seed
@@ -814,6 +838,10 @@ def make_multi_robot_env(
     config: MultiRobotConfig | None = None,
     reward_func: Callable | None = None,
     debug: bool = False,
+    recording_enabled: bool = False,
+    record_video: bool = False,
+    video_path: str | None = None,
+    video_fps: float | None = None,
 ) -> MultiAgentEnv:
     """Create a multi-robot environment with independent agents.
 
@@ -831,6 +859,14 @@ def make_multi_robot_env(
         Custom reward function applied to each agent; falls back to internal default.
     debug : bool
         Enable visual debug features.
+    recording_enabled : bool
+        Master switch that enables simulation state recording hooks.
+    record_video : bool
+        Enable per-robot video recording.
+    video_path : str | None
+        Optional base output path. Multi-robot env appends a robot suffix per view.
+    video_fps : float | None
+        Optional FPS for recorded video files.
 
     Returns
     -------
@@ -842,6 +878,10 @@ def make_multi_robot_env(
         num_robots=num_robots,
         reward_func=reward_func,
         debug=debug,
+        recording_enabled=recording_enabled,
+        record_video=record_video,
+        video_path=video_path,
+        video_fps=video_fps,
     )
 
 

@@ -11,8 +11,14 @@ def test_pedestrian_factory_convenience_record_video(tmp_path):
     Args:
         tmp_path: TODO docstring.
     """
-    env = make_pedestrian_env(record_video=True, video_path=str(tmp_path / "ped.mp4"))
-    assert getattr(env, "sim_ui", None) is not None
+    env = make_pedestrian_env(
+        record_video=True, video_path=str(tmp_path / "ped.mp4"), video_fps=12.0
+    )
+    sim_ui = getattr(env, "sim_ui", None)
+    assert sim_ui is not None
+    assert sim_ui.record_video is True
+    assert sim_ui.video_path == str(tmp_path / "ped.mp4")
+    assert sim_ui.video_fps == 12.0
 
 
 def test_pedestrian_factory_explicit_options_override():

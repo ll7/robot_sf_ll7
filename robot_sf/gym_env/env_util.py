@@ -136,15 +136,15 @@ def init_collision_and_sensors(
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            (lambda idx=i: sim.robot_pos[idx]),
-            (lambda idx=i: sim.goal_pos[idx]),
-            lambda: sim.get_obstacle_lines(),
-            lambda: sim.ped_pos,
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=(lambda idx=i: sim.robot_pos[idx]),
+            get_goal_coords=(lambda idx=i: sim.goal_pos[idx]),
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         )
         for i in range(num_robots)
     ]
@@ -418,16 +418,16 @@ def init_ped_collision_and_sensors(
     # Initialize a occupancy object for the robot for collision detection
     occupancies.append(
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda: sim.robot_pos[0],
-            lambda: sim.goal_pos[0],
-            lambda: sim.get_obstacle_lines(),
-            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda: sim.robot_pos[0],
+            get_goal_coords=lambda: sim.goal_pos[0],
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
             # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         ),
     )
 
@@ -479,17 +479,17 @@ def init_ped_collision_and_sensors(
     # Initalize occupancy and sensor fusion for the ego pedestrian
     occupancies.append(
         EgoPedContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda: sim.ego_ped_pos,
-            lambda: sim.ego_ped_goal_pos,
-            lambda: sim.get_obstacle_lines(),
-            lambda: sim.ped_pos,
-            ego_ped_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
-            lambda: sim.robot_pos[0],
-            robot_config.radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda: sim.ego_ped_pos,
+            get_goal_coords=lambda: sim.ego_ped_goal_pos,
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            agent_radius=ego_ped_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
+            get_enemy_coords=lambda: sim.robot_pos[0],
+            enemy_radius=robot_config.radius,
         ),
     )
 
@@ -655,15 +655,15 @@ def init_collision_and_sensors_with_image(
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda i=i: sim.robot_pos[i],
-            lambda i=i: sim.goal_pos[i],
-            lambda: sim.get_obstacle_lines(),
-            lambda: sim.ped_pos,
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda i=i: sim.robot_pos[i],
+            get_goal_coords=lambda i=i: sim.goal_pos[i],
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         )
         for i in range(num_robots)
     ]

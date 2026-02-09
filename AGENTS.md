@@ -10,6 +10,9 @@ Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gy
 ## Build, Test & Development Commands
 Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pre-commit install`. Format and lint using `uv run ruff check .` followed by `uv run ruff format .`. Run the main suite with `uv run pytest tests`; add `-m "not slow"` to skip long benches. Headless GUI checks use `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame`. Validate the SocialForce backend with `uv run python -m pytest fast-pysf/tests -v`. Typical training workflows call `uv run python scripts/training_ppo.py --config configs/scenarios/classic_interactions.yaml`.
 
+## Config-First Strategy
+Prefer a config-first workflow for reproducibility and reviewability. Add or update YAML files under `configs/` for stable experiments and document the canonical command using `--config <path>`. Use CLI flags only for short-lived overrides while iterating locally.
+
 ## Coding Style & Naming Conventions
 The project enforces Ruff with a 4-space indent, 100-character lines, and double-quoted strings (`pyproject.toml`). Prefer type-annotated interfaces and keep factory functions (`environment_factory.make_*`) as the public entry point. Modules and files use `snake_case`; classes and dataclasses follow `PascalCase`. Name tests `test_<feature>.py` and keep fixtures under `conftest.py`. Avoid ad-hoc prints in library code—use the existing structured logging. Prefer to use more docstrings (for private methods also) and inline comments for clarity, especially in complex algorithms or data flows.
 

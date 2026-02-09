@@ -580,6 +580,40 @@ uv run python scripts/hparam_opt.py
 uv run python scripts/training/optuna_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 ```
 
+#### `training/launch_optuna_expert_ppo.py`
+**Purpose**: Config-first launcher for Optuna expert PPO sweeps  
+**Usage**:
+```bash
+uv run python scripts/training/launch_optuna_expert_ppo.py --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
+```
+By default the Optuna workflow logs at `WARNING`; use `--log-level INFO` (or set
+`log_level` in the launcher YAML) when you need progress/detail logs.
+W&B tracking is enabled by default for Optuna trials; disable it explicitly with
+`--disable-wandb` (or `disable_wandb: true` in the launcher config). Trials are
+grouped under the Optuna study name and tagged by objective/metric for easier
+online comparison.
+
+**Weekend GPU matrix (exact commands)**:
+```bash
+# last_n_mean (default robust mode)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_last_n_mean \
+  --objective-mode last_n_mean
+
+# final_eval
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_final_eval \
+  --objective-mode final_eval
+
+# auc
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_auc \
+  --objective-mode auc
+```
+
 #### `benchmark_repro_check.py`
 **Purpose**: Create minimal test scenario for reproducibility testing  
 **Usage**:

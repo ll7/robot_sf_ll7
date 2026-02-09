@@ -20,7 +20,7 @@ class MarkdownReportRenderer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def render(
+    def render(  # noqa: PLR0913
         self,
         experiment_name: str,
         hypothesis_result: dict[str, Any],

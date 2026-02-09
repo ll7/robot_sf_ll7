@@ -611,7 +611,7 @@ class SFPDemo:
             unicycle_mode=True,
         )
 
-    def _simulate_scenario(  # noqa: C901 - demo function prioritizes clarity over complexity budget
+    def _simulate_scenario(  # noqa: C901,PLR0913,PLR0915
         self,
         planner,
         robot_pos: list[float],

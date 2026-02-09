@@ -50,11 +50,14 @@ grid_config:
   channels: [obstacles, pedestrians, combined]
   use_ego_frame: true
   center_on_robot: true
-peds_have_obstacle_forces: true
+peds_have_static_obstacle_forces: true
+peds_have_robot_repulsion: true
 sim_config:
   prf_config:
     is_active: true
 ```
+Note: `peds_have_obstacle_forces` is deprecated and remains as a legacy alias for
+static obstacle forces.
 This ensures the policy is actually trained on the grid+SocNav observation space.
 
 ## 3) Smoke run (fast validation)

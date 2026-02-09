@@ -34,12 +34,12 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
-from robot_sf.common.types import PedPose, RobotAction, RobotPose, Vec2D
+from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
-from robot_sf.nav.occupancy import is_circle_line_intersection
+from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
@@ -236,6 +236,26 @@ class Simulator:
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
+
+    def get_obstacle_lines(self) -> np.ndarray:
+        """Return obstacle line segments for collision/occupancy queries.
+
+        Returns:
+            np.ndarray: Array of shape (N, 4) with columns
+                [start_x, start_y, end_x, end_y] for each obstacle segment.
+        """
+        return self.pysf_sim.env.obstacles_raw[:, :4]
+
+    def iter_obstacle_segments(self) -> list[Line2D]:
+        """Return obstacle line segments as typed Line2D tuples.
+
+        Returns:
+            list[Line2D]: List of ((x1, y1), (x2, y2)) tuples for each segment.
+        """
+        return [
+            ((float(sx), float(sy)), (float(ex), float(ey)))
+            for sx, sy, ex, ey in self.get_obstacle_lines()
+        ]
 
 
 def init_simulators(
@@ -444,10 +464,7 @@ class PedSimulator(Simulator):
 
         collision_distance = self.ego_ped.config.radius
         circle_agent = ((x, y), collision_distance)
-        for s_x, s_y, e_x, e_y in self.pysf_sim.env.obstacles_raw[:, :4]:
-            if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
-                return True
-        return False
+        return circle_collides_any_lines(circle_agent, self.get_obstacle_lines())
 
 
 def init_ped_simulators(

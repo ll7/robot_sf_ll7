@@ -61,6 +61,8 @@ class BaseEnvSettings(TelemetryConfigMixin):
 
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
+    # Optional map id to select deterministically from map_pool. When None, selection is random.
+    map_id: str | None = None
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
     render_scaling: int | None = None
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM

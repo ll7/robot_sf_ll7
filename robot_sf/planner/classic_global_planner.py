@@ -597,7 +597,7 @@ class ClassicGlobalPlanner:
         """
         render_grid(self.grid, output_path=output_path, title=title, equal_aspect=equal_aspect)
 
-    def visualize_path(
+    def visualize_path(  # noqa: PLR0913
         self,
         path_world: list[tuple[float, float]] | None = None,
         output_path: Path | str | None = None,

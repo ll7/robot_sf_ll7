@@ -29,9 +29,9 @@
 - Convenience functions: `make_robot_env()`, `make_image_robot_env()`, etc.
 - Consistent interface across all environment types
 
-#### Example Refactored Environment (`pedestrian_env_refactored.py`)
-- Shows how to migrate existing environments to new architecture
-- Demonstrates reduced code duplication
+#### Refactored Pedestrian Environment (`pedestrian_env_refactored.py`)
+- Canonical pedestrian environment implementation using the new architecture
+- Backward-compatible via `robot_sf.gym_env.pedestrian_env` re-export
 - Consistent interface implementation
 
 ### 3. Demonstrated Working Solution
@@ -52,10 +52,9 @@
 
 ### What Needs Completion:
 - Existing environments need to be updated to store `config` attribute
-- Complete migration of `PedestrianEnv` to use new base class
 - Update `MultiRobotEnv` to follow new patterns
 - Merge or consolidate redundant environment classes
-- Update all example scripts and tests
+- Update remaining example scripts and tests as needed
 
 ## 📋 Next Steps for Complete Migration
 
@@ -68,8 +67,8 @@
    ```
 
 2. **Migrate PedestrianEnv**:
-   - Replace current implementation with `RefactoredPedestrianEnv`
-   - Update all imports and references
+   - ✅ Completed: canonical implementation is now `RefactoredPedestrianEnv`
+   - Keep backward-compatible import path via `robot_sf.gym_env.pedestrian_env`
 
 3. **Update RobotEnvWithImage**:
    - Ensure it uses `ImageRobotConfig` by default
@@ -104,7 +103,7 @@
 
 2. **Update Test Files**:
    ```python
-   # tests/env_test.py
+   # tests/test_env.py
    from robot_sf.gym_env.environment_factory import make_robot_env
    
    def test_can_create_env():

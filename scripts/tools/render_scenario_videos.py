@@ -37,15 +37,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import load_trained_policy
+from robot_sf.benchmark.termination_reason import resolve_termination_reason
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -77,9 +79,6 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 
 
 @dataclass
@@ -195,7 +194,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--socnav-root",
         type=Path,
-        help="Optional SocNavBench root for upstream sampling planner integration.",
+        help=(
+            "Optional SocNavBench root for upstream sampling planner integration. "
+            "Set ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT=1 to allow roots outside the repo."
+        ),
+    )
+    parser.add_argument(
+        "--socnav-allow-fallback",
+        action="store_true",
+        help="Allow heuristic fallback when SocNavBench dependencies are unavailable.",
     )
     parser.add_argument(
         "--socnav-use-grid",
@@ -354,13 +361,30 @@ def _goal_action(env, *, speed: float) -> np.ndarray:
 
 def _defensive_obs_adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
     """Adapt observations for the defensive PPO policy."""
-    drive_state = orig_obs[OBS_DRIVE_STATE]
-    ray_state = orig_obs[OBS_RAYS]
-    drive_state = drive_state[:, :-1]
-    drive_state[:, 2] *= 10
-    drive_state = np.squeeze(drive_state)
-    ray_state = np.squeeze(ray_state)
-    return np.concatenate((ray_state, drive_state), axis=0)
+    if OBS_DRIVE_STATE in orig_obs and OBS_RAYS in orig_obs:
+        drive_state = np.asarray(orig_obs[OBS_DRIVE_STATE])
+        ray_state = np.asarray(orig_obs[OBS_RAYS])
+        if drive_state.ndim > 1:
+            drive_state = drive_state[-1]
+        if ray_state.ndim > 1:
+            ray_state = ray_state[-1]
+        drive_state = np.asarray(drive_state)[..., :-1]
+        drive_state = np.array(drive_state, dtype=float, copy=True)
+        if drive_state.size >= 3:
+            drive_state[2] *= 10
+        drive_state = np.ravel(drive_state)
+        ray_state = np.ravel(ray_state)
+        return np.concatenate((ray_state, drive_state), axis=0)
+
+    # Fallback: flatten available observation components deterministically.
+    if isinstance(orig_obs, Mapping):
+        parts: list[np.ndarray] = []
+        for key in sorted(orig_obs.keys()):
+            parts.append(np.asarray(orig_obs[key]).ravel())
+        if parts:
+            return np.concatenate(parts, axis=0)
+
+    return np.asarray(orig_obs).ravel()
 
 
 def _resolve_goal_action(
@@ -400,10 +424,15 @@ def _build_socnav_policy(
     socnav_root: Path | None,
     orca_time_horizon: float | None = None,
     orca_neighbor_dist: float | None = None,
+    socnav_allow_fallback: bool = False,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
     if policy_name == "socnav_sampling":
-        return SocNavPlannerPolicy()
+        return SocNavBenchComplexPolicy(
+            socnav_root=socnav_root,
+            adapter_config=SocNavPlannerConfig(),
+            allow_fallback=socnav_allow_fallback,
+        )
     if policy_name == "socnav_social_force":
         return make_social_force_policy()
     if policy_name == "socnav_orca":
@@ -419,6 +448,7 @@ def _build_socnav_policy(
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),
+            allow_fallback=socnav_allow_fallback,
         )
     return None
 
@@ -435,7 +465,7 @@ def _adapt_obs_for_policy(
     return obs
 
 
-def _select_action(
+def _select_action(  # noqa: PLR0913
     *,
     env,
     obs: Any,
@@ -468,7 +498,7 @@ def _select_action(
     return np.zeros(2)
 
 
-def _run_steps(
+def _run_steps(  # noqa: PLR0913
     *,
     env,
     obs: Any,
@@ -539,7 +569,7 @@ def _validate_video(
     return status, note
 
 
-def _prepare_episode_config(
+def _prepare_episode_config(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -629,18 +659,16 @@ def _resolve_stop_reason(
     collision: bool,
 ) -> str:
     """Translate terminal flags into a stop reason label."""
-    if terminated:
-        if success:
-            return "success"
-        if collision:
-            return "collision"
-        return "terminated"
-    if truncated:
-        return "truncated"
-    return "max_steps"
+    return resolve_termination_reason(
+        terminated=terminated,
+        truncated=truncated,
+        success=success,
+        collision=collision,
+        reached_max_steps=not terminated and not truncated,
+    )
 
 
-def _run_episode(
+def _run_episode(  # noqa: PLR0913
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -791,7 +819,7 @@ def _scenario_max_steps(scenario: Mapping[str, Any], override: int | None) -> in
     return max(1, int(sim_cfg.get("max_episode_steps", 400)))
 
 
-def _write_manifest(
+def _write_manifest(  # noqa: PLR0913
     output_dir: Path,
     *,
     scenario_path: Path,
@@ -924,6 +952,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         socnav_root=args.socnav_root,
         orca_time_horizon=orca_time_horizon,
         orca_neighbor_dist=orca_neighbor_dist,
+        socnav_allow_fallback=args.socnav_allow_fallback,
     )
 
     results: list[RenderResult] = []

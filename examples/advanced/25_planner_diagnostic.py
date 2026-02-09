@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Diagnose global planner inflation and visibility graph construction.
 
-TODO: It is unclear whether this example currently runs correctly.
-
 This script visualizes the intermediate steps of path planning to identify
 why paths violate clearance constraints.
 
@@ -23,7 +21,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 
-def main() -> None:  # noqa: C901
+def main() -> None:  # noqa: C901,PLR0915
     """Run comprehensive planner diagnostics."""
 
     # Ensure output directory

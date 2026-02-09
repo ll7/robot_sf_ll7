@@ -57,7 +57,15 @@ ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
 
 
 def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force]:
-    """Initialize forces required for simulation."""
+    """Initialize forces required for simulation.
+
+    Args:
+        sim: Simulation context providing entities.
+        config: Simulator configuration.
+
+    Returns:
+        list[forces.Force]: Force instances for the simulator.
+    """
     enable_group = config.scene_config.enable_group
     force_list = [
         forces.DesiredForce(config.desired_force_config, sim.peds),
@@ -181,7 +189,7 @@ class Simulator_v2:
 
 
 class Simulator:
-    """TODO docstring. Document this class."""
+    """Lightweight simulator wrapper for stepping pedestrian dynamics."""
 
     def __init__(
         self,
@@ -192,15 +200,15 @@ class Simulator:
         make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the simulator with an initial state.
 
         Args:
-            state: TODO docstring.
-            groups: TODO docstring.
-            obstacles: TODO docstring.
-            config: TODO docstring.
-            make_forces: TODO docstring.
-            on_step: TODO docstring.
+            state: Raw pedestrian state array.
+            groups: Optional group membership lists.
+            obstacles: Optional list of obstacle line segments.
+            config: Simulator configuration.
+            make_forces: Factory to build force components.
+            on_step: Optional callback executed after each step.
         """
         self.config = config
         self.on_step = on_step
@@ -211,21 +219,28 @@ class Simulator:
         self.t = 0
 
     def compute_forces(self):
-        """compute forces"""
+        """Compute the combined force for the current simulation state.
+
+        Returns:
+            np.ndarray: Combined force array for all pedestrians.
+        """
         return sum(force() for force in self.forces)
 
     @property
     def current_state(self) -> SimState:
-        """TODO docstring. Document this function.
-
+        """Return the current state and groupings.
 
         Returns:
-            TODO docstring.
+            SimState: Tuple of raw pedestrian state and group lists.
         """
         return self.peds.state, self.peds.groups
 
     def get_states(self):
-        """TODO docstring. Document this function."""
+        """Return the current pedestrian states.
+
+        Returns:
+            tuple[np.ndarray, list[list[int]]]: Raw states and groupings.
+        """
         warn(
             "For performance reasons This function does not retrieve the whole \
               state history (it used to facilitate video recordings). \
@@ -236,24 +251,26 @@ class Simulator:
         return self.peds.get_states()
 
     def get_length(self):
-        """Get simulation length"""
+        """Get the number of recorded states.
+
+        Returns:
+            int: Number of recorded state entries.
+        """
         return len(self.get_states()[0])
 
     def get_obstacles(self) -> list[np.ndarray]:
-        """TODO docstring. Document this function.
-
+        """Return obstacle line segments as numpy arrays.
 
         Returns:
-            TODO docstring.
+            list[np.ndarray]: Obstacle line segments.
         """
         return self.env.obstacles
 
     def get_raw_obstacles(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
+        """Return the raw obstacle array with orthogonal vectors.
 
         Returns:
-            TODO docstring.
+            np.ndarray: Obstacle array of shape (n, 6).
         """
         return self.env.obstacles_raw
 

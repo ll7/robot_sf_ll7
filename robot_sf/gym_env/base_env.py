@@ -26,7 +26,7 @@ from robot_sf.sim.simulator import init_simulators
 class BaseEnv(Env):
     """Base environment class that handles common functionality."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         env_config: EnvSettings = EnvSettings(),
         debug: bool = False,
@@ -43,22 +43,24 @@ class BaseEnv(Env):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize shared environment state, simulator backend, and recording hooks.
 
         Args:
-            env_config: TODO docstring.
-            debug: TODO docstring.
-            recording_enabled: TODO docstring.
-            record_video: TODO docstring.
-            video_path: TODO docstring.
-            video_fps: TODO docstring.
-            peds_have_obstacle_forces: TODO docstring.
-            use_jsonl_recording: TODO docstring.
-            recording_dir: TODO docstring.
-            suite_name: TODO docstring.
-            scenario_name: TODO docstring.
-            algorithm_name: TODO docstring.
-            recording_seed: TODO docstring.
+            env_config: Environment configuration (maps, sensors, simulator settings).
+            debug: Enable SimulationView rendering and debug overlays.
+            recording_enabled: Capture VisualizableSimState snapshots per step.
+            record_video: Record frames via SimulationView (requires debug or video flags).
+            video_path: Output path for recorded video when enabled.
+            video_fps: Frames-per-second override for recorded video (defaults to sim timestep).
+            peds_have_obstacle_forces: Deprecated. Toggle static obstacle forces for pedestrians
+                (robot repulsion is controlled via ``sim_config.prf_config`` or
+                ``peds_have_robot_repulsion`` in unified configs).
+            use_jsonl_recording: Enable JSONL episode recording to artifact directory.
+            recording_dir: Base directory for recording outputs (resolved via artifact policy).
+            suite_name: Recording suite label for JSONL exports.
+            scenario_name: Scenario label for JSONL exports.
+            algorithm_name: Algorithm label for JSONL exports.
+            recording_seed: Optional seed override used by JSONL recorder metadata.
         """
         super().__init__()
 
@@ -70,8 +72,15 @@ class BaseEnv(Env):
             video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
             logger.info(f"Video FPS not provided, setting to {video_fps}")
 
-        # Extract first map definition; currently only supports using the first map
-        self.map_def = env_config.map_pool.choose_random_map()
+        # Extract map definition; respect explicit map_id when provided.
+        map_id = getattr(env_config, "map_id", None)
+        if map_id:
+            try:
+                self.map_def = env_config.map_pool.get_map(map_id)
+            except KeyError as exc:
+                raise ValueError(str(exc)) from exc
+        else:
+            self.map_def = env_config.map_pool.choose_random_map()
         attach_planner_to_map(self.map_def, self.env_config)
 
         self.debug = debug
@@ -99,6 +108,17 @@ class BaseEnv(Env):
                 seed=seed,
             )
 
+        # Resolve obstacle-force flag with backwards compatibility.
+        static_obstacle_forces = getattr(
+            env_config,
+            "peds_have_static_obstacle_forces",
+            None,
+        )
+        if static_obstacle_forces is None:
+            static_obstacle_forces = peds_have_obstacle_forces
+            if hasattr(env_config, "peds_have_static_obstacle_forces"):
+                env_config.peds_have_static_obstacle_forces = static_obstacle_forces
+
         # Initialize simulator via backend registry (falls back to legacy init on error)
         backend_key = getattr(env_config, "backend", "fast-pysf")
         try:
@@ -106,7 +126,7 @@ class BaseEnv(Env):
             self.simulator = factory(
                 env_config,
                 self.map_def,
-                peds_have_obstacle_forces,
+                static_obstacle_forces,
             )
             logger.debug("Initialized simulator with backend={}", backend_key)
         except KeyError:
@@ -118,7 +138,7 @@ class BaseEnv(Env):
                 env_config,
                 self.map_def,
                 random_start_pos=True,
-                peds_have_obstacle_forces=peds_have_obstacle_forces,
+                peds_have_obstacle_forces=static_obstacle_forces,
             )[0]
 
         # Store last action executed by the robot

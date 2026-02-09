@@ -1,8 +1,4 @@
-"""POI routing demo using GlobalPlanner and POISampler with live visualization.
-
-TODO: this example is not working correctly
-
-"""
+"""POI routing demo using GlobalPlanner and POISampler with live visualization."""
 
 from __future__ import annotations
 
@@ -29,7 +25,7 @@ def _ensure_interactive_backend() -> None:
             continue
 
 
-def _visualize_planning_debug(  # noqa: C901
+def _visualize_planning_debug(  # noqa: C901,PLR0915
     planner: GlobalPlanner, path: list, via_points: list, map_path: Path
 ) -> None:
     """Create detailed debug visualization showing inflated obstacles and path."""

@@ -477,7 +477,7 @@ def _capture_visual_state(env):
         return None, None, None
 
 
-def _compute_episode_metrics(
+def _compute_episode_metrics(  # noqa: PLR0913
     job,
     scenario,
     cfg,
@@ -1053,7 +1053,9 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     return done_flag, jobs
 
 
-def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish phase)  # noqa: C901
+def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
+    cfg,
+):  # T029 + T034 integration (refactored in polish phase)
     """Execute classic benchmark with adaptive precision loop.
 
     Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest

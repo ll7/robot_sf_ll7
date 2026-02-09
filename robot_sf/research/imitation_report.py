@@ -175,7 +175,7 @@ def _fmt_ci(value: tuple[float, float] | str | None) -> str:
     return f"({low:.4f}, {high:.4f})"
 
 
-def _render_markdown(
+def _render_markdown(  # noqa: PLR0913
     *,
     config: ImitationReportConfig,
     summary: dict[str, Any],
@@ -308,7 +308,7 @@ def _latex_escape(text: str) -> str:
     )
 
 
-def _render_latex(
+def _render_latex(  # noqa: PLR0913
     *,
     config: ImitationReportConfig,
     summary: dict[str, Any],

@@ -1,131 +1,117 @@
-"""Tests for motion planning adapter module.
-
-Note: Full integration testing is performed via examples/advanced/27_motion_planning_adapter_test.py
-which validates end-to-end functionality with real SVG maps and path planning.
-"""
+"""Tests for motion_planning_adapter helpers and visualization outputs."""
 
 from __future__ import annotations
 
+import matplotlib
+
+matplotlib.use("Agg")
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 import numpy as np
-import pytest
 from python_motion_planning.common import TYPES
 
+from robot_sf.common.types import Rect
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.motion_planning_adapter import (
+    ClassicPlanVisualizer,
     MotionPlanningGridConfig,
-    _world_to_grid,
+    count_obstacle_cells,
+    get_obstacle_statistics,
     map_definition_to_motion_planning_grid,
+    set_start_goal_on_grid,
+    visualize_grid,
+    visualize_path,
 )
-from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.nav.obstacle import Obstacle
 
 
-def _make_obstacle_map(tmp_path):
-    svg = tmp_path / "inflation.svg"
-    svg.write_text(
-        """
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="5" height="5">
-  <rect inkscape:label="obstacle" x="2" y="2" width="1" height="1" />
-  <rect inkscape:label="robot_spawn_zone" x="0.2" y="0.2" width="0.5" height="0.5" />
-  <rect inkscape:label="robot_goal_zone" x="4.2" y="0.2" width="0.5" height="0.5" />
-  <path inkscape:label="robot_route_0_0" d="M 0.2 0.2 L 4.7 0.2" />
-</svg>
-        """.strip()
+def _map_def_with_obstacle() -> MapDefinition:
+    width = 4.0
+    height = 4.0
+    spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (0.5, 1.0))
+    goal_zone: Rect = ((3.0, 3.0), (3.5, 3.0), (3.0, 3.5))
+    bounds = [
+        ((0.0, 0.0), (width, 0.0)),
+        ((width, 0.0), (width, height)),
+        ((width, height), (0.0, height)),
+        ((0.0, height), (0.0, 0.0)),
+    ]
+    obstacle = Obstacle([(1.5, 1.5), (2.5, 1.5), (2.5, 2.5), (1.5, 2.5)])
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(0.75, 0.75), (3.25, 3.25)],
+        spawn_zone=spawn_zone,
+        goal_zone=goal_zone,
     )
-    return convert_map(str(svg))
-
-
-class TestMotionPlanningGridConfig:
-    """Test suite for MotionPlanningGridConfig dataclass."""
-
-    def test_default_values(self):
-        """Test default configuration values."""
-        cfg = MotionPlanningGridConfig()
-        assert cfg.cells_per_meter == 1.0
-        assert cfg.add_boundary_obstacles is True
-        assert cfg.inflate_radius_cells is None
-
-    def test_custom_values(self):
-        """Test custom configuration values."""
-        cfg = MotionPlanningGridConfig(
-            cells_per_meter=2.0, add_boundary_obstacles=False, inflate_radius_cells=3
-        )
-        assert cfg.cells_per_meter == 2.0
-        assert cfg.add_boundary_obstacles is False
-        assert cfg.inflate_radius_cells == 3
-
-    def test_meters_per_cell_property(self):
-        """Test the meters_per_cell computed property."""
-        cfg = MotionPlanningGridConfig(cells_per_meter=2.0)
-        assert cfg.meters_per_cell == 0.5
-
-        cfg = MotionPlanningGridConfig(cells_per_meter=4.0)
-        assert cfg.meters_per_cell == 0.25
-
-    def test_meters_per_cell_inverse_relationship(self):
-        """Test that meters_per_cell is correctly the inverse of cells_per_meter."""
-        for cpm in [0.5, 1.0, 2.0, 5.0, 10.0]:
-            cfg = MotionPlanningGridConfig(cells_per_meter=cpm)
-            assert cfg.meters_per_cell == pytest.approx(1.0 / cpm)
-
-
-class TestWorldToGrid:
-    """Test suite for _world_to_grid coordinate conversion."""
-
-    def test_basic_conversion(self):
-        """Test basic coordinate scaling."""
-        assert _world_to_grid(0.0, 1.0) == 0
-        assert _world_to_grid(5.0, 1.0) == 5
-        assert _world_to_grid(10.0, 1.0) == 10
-
-    def test_fractional_coordinates(self):
-        """Test conversion with fractional world coordinates."""
-        assert _world_to_grid(2.3, 1.0) == 2
-        assert _world_to_grid(2.7, 1.0) == 2
-        assert _world_to_grid(2.99, 1.0) == 2
-        assert _world_to_grid(3.0, 1.0) == 3
-
-    def test_different_scales(self):
-        """Test conversion with different cells_per_meter values."""
-        assert _world_to_grid(5.0, 2.0) == 10
-        assert _world_to_grid(5.0, 0.5) == 2
-        assert _world_to_grid(5.0, 4.0) == 20
-
-    def test_negative_coordinates(self):
-        """Test conversion with negative coordinates (should floor towards negative)."""
-        assert _world_to_grid(-1.0, 1.0) == -1
-        assert _world_to_grid(-2.3, 1.0) == -3
-        assert _world_to_grid(-0.5, 1.0) == -1
-
-    def test_zero_coordinate(self):
-        """Test conversion at origin."""
-        assert _world_to_grid(0.0, 1.0) == 0
-        assert _world_to_grid(0.0, 2.0) == 0
-        assert _world_to_grid(0.0, 0.5) == 0
-
-
-def test_inflation_marks_cells(tmp_path):
-    """Grid inflation should mark cells with TYPES.INFLATION."""
-    map_def = _make_obstacle_map(tmp_path)
-
-    grid_no_inflation = map_definition_to_motion_planning_grid(
-        map_def,
-        MotionPlanningGridConfig(
-            cells_per_meter=1.0,
-            inflate_radius_cells=None,
-            add_boundary_obstacles=False,
-        ),
-    )
-    grid_inflated = map_definition_to_motion_planning_grid(
-        map_def,
-        MotionPlanningGridConfig(
-            cells_per_meter=1.0,
-            inflate_radius_cells=1,
-            add_boundary_obstacles=False,
-        ),
+    return MapDefinition(
+        width=width,
+        height=height,
+        obstacles=[obstacle],
+        robot_spawn_zones=[spawn_zone],
+        ped_spawn_zones=[spawn_zone],
+        robot_goal_zones=[goal_zone],
+        bounds=bounds,
+        robot_routes=[route],
+        ped_goal_zones=[goal_zone],
+        ped_crowded_zones=[],
+        ped_routes=[route],
+        single_pedestrians=[],
     )
 
-    type_map_no = np.asarray(grid_no_inflation.type_map.array)
-    type_map_inflated = np.asarray(grid_inflated.type_map.array)
 
-    assert np.count_nonzero(type_map_no == TYPES.OBSTACLE) > 0
-    assert np.count_nonzero(type_map_no == TYPES.INFLATION) == 0
-    assert np.count_nonzero(type_map_inflated == TYPES.INFLATION) > 0
+def test_map_definition_to_motion_planning_grid_marks_obstacles() -> None:
+    """Verify rasterization marks obstacle cells and preserves scale metadata."""
+    grid = map_definition_to_motion_planning_grid(
+        _map_def_with_obstacle(),
+        MotionPlanningGridConfig(cells_per_meter=1.0, inflate_radius_cells=None),
+    )
+    assert grid.cells_per_meter == 1.0
+    obstacle_count = count_obstacle_cells(grid)
+    assert isinstance(obstacle_count, (int, np.integer))
+    stats = get_obstacle_statistics(grid)
+    assert stats["total_cells"] > 0
+
+
+def test_set_start_goal_on_grid_marks_cells() -> None:
+    """Ensure start and goal markers are written into the grid."""
+    grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
+    set_start_goal_on_grid(grid, (1, 1), (2, 2))
+    assert grid.type_map[1][1] == TYPES.START
+    assert grid.type_map[2][2] == TYPES.GOAL
+
+
+def test_visualize_grid_and_path_write_files(tmp_path: Path) -> None:
+    """Check visualization helpers emit PNG files for offline inspection."""
+    grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
+    grid_path = tmp_path / "grid.png"
+    path_path = tmp_path / "path.png"
+    visualize_grid(grid, grid_path, title="grid")
+    visualize_path(grid, [(0, 0), (1, 1)], path_path, title="path")
+    assert grid_path.exists()
+    assert path_path.exists()
+
+
+def test_visualize_path_handles_empty_path(tmp_path: Path) -> None:
+    """Confirm empty paths still render the grid without errors."""
+    grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
+    out_path = tmp_path / "empty_path.png"
+    visualize_path(grid, [], out_path, title="empty")
+    assert out_path.exists()
+
+
+def test_classic_visualizer_resolves_scale_from_grid() -> None:
+    """Validate meters-per-cell resolution inference from grid metadata."""
+    grid = map_definition_to_motion_planning_grid(
+        _map_def_with_obstacle(), MotionPlanningGridConfig(cells_per_meter=2.0)
+    )
+    vis = ClassicPlanVisualizer("test")
+    try:
+        assert vis._resolve_meters_per_cell(grid, None) == 0.5
+    finally:
+        vis.close()

@@ -609,7 +609,7 @@ def _run_tracker_smoke(
     _finalize_tracker(context, PipelineRunStatus.COMPLETED, summary={"mode": "tracker-smoke"})
 
 
-def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
+def main():  # noqa: C901,PLR0912,PLR0915
     """Run complete imitation learning pipeline by calling training scripts."""
     _ensure_run_root()
     parser = argparse.ArgumentParser(description="Imitation Learning Pipeline - End-to-End Example")

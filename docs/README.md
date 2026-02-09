@@ -77,6 +77,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+- **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
+- **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
+- **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 - **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
 - **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 - **[SocNav structured observation example](../examples/advanced/18_socnav_structured_observation.py)** - Run RobotEnv with SocNavBench-style observations and a simple planner adapter.
@@ -91,6 +94,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 
 ### Benchmarking & Metrics
+- **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 - **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 - **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
@@ -137,7 +141,6 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
 
 ### Hardware & Environment
-- **[GPU Setup](./GPU_SETUP.md)** - GPU configuration for accelerated training
 - **[Environment Configuration](./ENVIRONMENT.md)** - Detailed environment setup and usage
 
 ---
@@ -293,7 +296,6 @@ A performance budget for tests helps prevent runtime regressions:
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 
 ### ⚙️ Setup & Configuration
-- [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
 - [**Subtree Migration**](./SUBTREE_MIGRATION.md) - Git subtree integration for fast-pysf (migration from submodule)
 

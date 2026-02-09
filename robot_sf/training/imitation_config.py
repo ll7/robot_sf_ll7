@@ -39,7 +39,9 @@ class ExpertTrainingConfig:
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
     ppo_hyperparams: dict[str, object] = field(default_factory=dict)
-    best_checkpoint_metric: str = "snqi"
+    best_checkpoint_metric: str = "eval_episode_return"
+    snqi_weights_path: Path | None = None
+    snqi_baseline_path: Path | None = None
     randomize_seeds: bool = False
     scenario_id: str | None = None
     feature_extractor: str = "default"
@@ -54,7 +56,7 @@ class ExpertTrainingConfig:
     socnav_orca_neighbor_dist: float | None = None
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         *,
         scenario_config: Path,
@@ -65,7 +67,9 @@ class ExpertTrainingConfig:
         convergence: ConvergenceCriteria,
         evaluation: EvaluationSchedule,
         ppo_hyperparams: dict[str, object] | None = None,
-        best_checkpoint_metric: str = "snqi",
+        best_checkpoint_metric: str = "eval_episode_return",
+        snqi_weights_path: Path | None = None,
+        snqi_baseline_path: Path | None = None,
         scenario_id: str | None = None,
         feature_extractor: str = "default",
         feature_extractor_kwargs: dict[str, object] | None = None,
@@ -94,6 +98,8 @@ class ExpertTrainingConfig:
             evaluation=evaluation,
             ppo_hyperparams=dict(ppo_hyperparams or {}),
             best_checkpoint_metric=str(best_checkpoint_metric),
+            snqi_weights_path=snqi_weights_path.resolve() if snqi_weights_path else None,
+            snqi_baseline_path=snqi_baseline_path.resolve() if snqi_baseline_path else None,
             scenario_id=scenario_id,
             feature_extractor=str(feature_extractor),
             feature_extractor_kwargs=dict(feature_extractor_kwargs or {}),
@@ -213,6 +219,8 @@ class PPOFineTuningConfig:
     total_timesteps: int
     random_seeds: tuple[int, ...]
     learning_rate: float
+    snqi_weights_path: Path | None = None
+    snqi_baseline_path: Path | None = None
 
     @classmethod
     def from_raw(
@@ -223,6 +231,8 @@ class PPOFineTuningConfig:
         total_timesteps: int,
         random_seeds: tuple[int, ...] | list[int],
         learning_rate: float = 0.0003,
+        snqi_weights_path: Path | None = None,
+        snqi_baseline_path: Path | None = None,
     ) -> PPOFineTuningConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -236,6 +246,8 @@ class PPOFineTuningConfig:
             total_timesteps=total_timesteps,
             random_seeds=ensure_seed_tuple(random_seeds),
             learning_rate=learning_rate,
+            snqi_weights_path=snqi_weights_path.resolve() if snqi_weights_path else None,
+            snqi_baseline_path=snqi_baseline_path.resolve() if snqi_baseline_path else None,
         )
 
 

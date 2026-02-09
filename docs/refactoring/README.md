@@ -95,7 +95,8 @@ from robot_sf.gym_env.unified_config import (
 )
 
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True
+config.peds_have_static_obstacle_forces = True
+config.peds_have_robot_repulsion = True
 env = make_robot_env(config=config)
 ```
 
@@ -108,7 +109,7 @@ The refactoring created these new core files:
 | [`robot_sf/gym_env/abstract_envs.py`](../../robot_sf/gym_env/abstract_envs.py) | Abstract base classes |
 | [`robot_sf/gym_env/unified_config.py`](../../robot_sf/gym_env/unified_config.py) | Consolidated configuration |
 | [`robot_sf/gym_env/environment_factory.py`](../../robot_sf/gym_env/environment_factory.py) | Factory pattern |
-| [`robot_sf/gym_env/pedestrian_env_refactored.py`](../../robot_sf/gym_env/pedestrian_env_refactored.py) | Example refactored environment |
+| [`robot_sf/gym_env/pedestrian_env_refactored.py`](../../robot_sf/gym_env/pedestrian_env_refactored.py) | Canonical refactored pedestrian environment |
 
 ## 📋 Migration Tools
 
@@ -116,7 +117,7 @@ The refactoring created these new core files:
 |------|---------|
 | [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | Automated migration script |
 | [`examples/demo_refactored_environments.py`](../../examples/demo_refactored_environments.py) | Working demonstration |
-| [`tests/env_test_updated.py`](../../tests/env_test_updated.py) | Updated test patterns |
+| [`tests/test_pedestrian_env_compat.py`](../../tests/test_pedestrian_env_compat.py) | Pedestrian env compatibility tests |
 | [`examples/demo_pedestrian_updated.py`](../../examples/demo_pedestrian_updated.py) | Migration example |
 
 ## 🎯 Key Benefits Achieved

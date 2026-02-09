@@ -37,13 +37,14 @@ env_overrides:
     channels: [obstacles, pedestrians, combined]
     use_ego_frame: true
     center_on_robot: true
-  peds_have_obstacle_forces: true
+  peds_have_static_obstacle_forces: true
+  peds_have_robot_repulsion: true
   sim_config:
     prf_config:
       is_active: true
     max_peds_per_group: 3
 env_factory_kwargs:
-  peds_have_obstacle_forces: true
+  peds_have_obstacle_forces: true  # Deprecated alias for static obstacle forces.
 convergence:
   success_rate: 0.9
   collision_rate: 0.05

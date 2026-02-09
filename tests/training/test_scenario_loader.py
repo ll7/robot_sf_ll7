@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -128,3 +129,80 @@ map_search_paths:
 
     scenarios = load_scenarios(manifest, base_dir=manifest)
     assert scenarios[0]["map_file"] == "maps/demo.svg"
+
+
+def test_map_search_paths_use_base_dir_and_ignore_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure base_dir directories anchor map resolution instead of CWD."""
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    maps_dir = base_dir / "maps"
+    maps_dir.mkdir()
+    (maps_dir / "map.svg").write_text("<svg></svg>", encoding="utf-8")
+
+    scenario_file = base_dir / "scenario.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: map_search
+    map_file: map.svg
+""",
+    )
+
+    manifest = base_dir / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - scenario.yaml
+map_search_paths:
+  - maps
+""",
+    )
+
+    cwd_dir = tmp_path / "cwd"
+    cwd_dir.mkdir()
+    (cwd_dir / "map.svg").write_text("<svg></svg>", encoding="utf-8")
+    monkeypatch.chdir(cwd_dir)
+
+    scenarios = load_scenarios(manifest, base_dir=base_dir)
+    assert scenarios[0]["map_file"] == "maps/map.svg"
+
+
+def test_map_id_resolves_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Map ids resolve via the registry to keep map_id-based scenarios portable."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    (maps_dir / "demo.svg").write_text("<svg></svg>", encoding="utf-8")
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry_path,
+        """
+version: 1
+maps:
+  - map_id: demo_map
+    path: maps/demo.svg
+""",
+    )
+
+    scenarios_dir = tmp_path / "scenarios"
+    scenarios_dir.mkdir()
+    manifest = scenarios_dir / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: demo
+    map_id: demo_map
+""",
+    )
+
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario_loader._load_map_registry.cache_clear()
+
+    scenarios = load_scenarios(manifest, base_dir=manifest)
+    scenario_loader._load_map_registry.cache_clear()
+    assert scenarios[0]["map_file"] == "../maps/demo.svg"

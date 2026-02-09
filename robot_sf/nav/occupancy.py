@@ -11,7 +11,8 @@ segments/pedestrians. It works for small numbers of obstacles/agents, but is not
 large maps or dense crowds.
 """
 
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,8 @@ from robot_sf.common.types import Circle2D, Line2D, Vec2D
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
+
+logger = logging.getLogger(__name__)
 
 
 @numba.njit(fastmath=True)
@@ -100,6 +103,52 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
 
 
+def circle_collides_any(circle: Circle2D, others: Iterable[Circle2D]) -> bool:
+    """Check whether a circle collides with any other circles.
+
+    Args:
+        circle: Circle to test ((x, y), radius).
+        others: Iterable of circles to test against.
+
+    Returns:
+        bool: True if any intersection is found.
+    """
+    for other in others:
+        if is_circle_circle_intersection(circle, other):
+            return True
+    return False
+
+
+def circle_collides_any_lines(circle: Circle2D, segments: Iterable[Line2D] | np.ndarray) -> bool:
+    """Check whether a circle collides with any line segments.
+
+    Args:
+        circle: Circle to test ((x, y), radius).
+        segments: Iterable of Line2D segments or an (N, 4) array of line endpoints.
+
+    Returns:
+        bool: True if any intersection is found.
+    """
+    if isinstance(segments, np.ndarray):
+        for s_x, s_y, e_x, e_y in segments:
+            if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
+                return True
+        return False
+
+    for idx, seg in enumerate(segments):
+        try:
+            (s_x, s_y), (e_x, e_y) = seg
+        except (TypeError, ValueError):
+            try:
+                s_x, s_y, e_x, e_y = seg  # type: ignore[misc]
+            except (TypeError, ValueError):
+                logger.debug("Skipping unparseable segment at index %s: %r", idx, seg)
+                continue
+        if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
+            return True
+    return False
+
+
 @dataclass
 class ContinuousOccupancy:
     """
@@ -133,6 +182,7 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
+    get_dynamic_objects: Callable[[], list[Circle2D]] | None = None
     agent_radius: float = 1.0
     ped_radius: float = 0.4
     goal_radius: float = 1.0
@@ -177,10 +227,7 @@ class ContinuousOccupancy:
 
         collision_distance = self.agent_radius
         circle_agent = ((agent_x, agent_y), collision_distance)
-        for s_x, s_y, e_x, e_y in self.obstacle_coords:
-            if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
-                return True
-        return False
+        return circle_collides_any_lines(circle_agent, self.obstacle_coords)
 
     @property
     def is_pedestrian_collision(self) -> bool:
@@ -195,11 +242,20 @@ class ContinuousOccupancy:
         collision_distance = self.agent_radius
         ped_radius = self.ped_radius
         circle_agent = (self.get_agent_coords(), collision_distance)
-        for ped_x, ped_y in self.pedestrian_coords:
-            circle_ped = ((ped_x, ped_y), ped_radius)
-            if is_circle_circle_intersection(circle_agent, circle_ped):
-                return True
-        return False
+        ped_circles = (((ped_x, ped_y), ped_radius) for ped_x, ped_y in self.pedestrian_coords)
+        return circle_collides_any(circle_agent, ped_circles)
+
+    @property
+    def is_dynamic_collision(self) -> bool:
+        """Checks collision against arbitrary dynamic objects.
+
+        Returns:
+            bool: True if the agent intersects any dynamic object.
+        """
+        if self.get_dynamic_objects is None:
+            return False
+        circle_agent = (self.get_agent_coords(), self.agent_radius)
+        return circle_collides_any(circle_agent, self.get_dynamic_objects())
 
     @property
     def is_robot_at_goal(self) -> bool:
@@ -329,6 +385,14 @@ def check_quality_of_map_point(map_def: "MapDefinition", point: Vec2D, radius: f
     obstacle_lines: list[Line2D] = []
     for obstacle in map_def.obstacles:
         obstacle_lines.extend(((line[0], line[1]), (line[2], line[3])) for line in obstacle.lines)
-    obstacle_lines.extend(map_def.bounds)
+    for bound in map_def.bounds:
+        if isinstance(bound, (tuple, list)) and len(bound) == 2:
+            obstacle_lines.append(bound)  # type: ignore[list-item]
+            continue
+        try:
+            x1, x2, y1, y2 = bound  # type: ignore[misc]
+        except (TypeError, ValueError):
+            continue
+        obstacle_lines.append(((x1, y1), (x2, y2)))
 
     return not any(is_circle_line_intersection(circle, seg) for seg in obstacle_lines)

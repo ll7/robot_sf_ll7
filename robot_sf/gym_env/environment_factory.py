@@ -65,7 +65,7 @@ except (ImportError, ModuleNotFoundError):
 from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
-from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.reward import build_reward_function, simple_ped_reward
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -74,7 +74,7 @@ from robot_sf.gym_env.unified_config import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 
@@ -162,7 +162,7 @@ class EnvironmentFactory:
     """Internal helpers to construct concrete environments (not exported)."""
 
     @staticmethod
-    def create_robot_env(
+    def create_robot_env(  # noqa: PLR0913
         config: RobotSimulationConfig | None = None,
         *,
         use_image_obs: bool,
@@ -195,7 +195,7 @@ class EnvironmentFactory:
         Args:
             config: RobotSimulationConfig instance defining physics, maps, and sensors.
             use_image_obs: If True, select image-capable environment; else standard lidar-only.
-            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
+            peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
             reward_func: Custom reward function; falls back to internal default if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for video/JSONL recording even if options request it.
@@ -224,7 +224,16 @@ class EnvironmentFactory:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
-        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        if peds_have_obstacle_forces is not True:
+            logger.warning(
+                "peds_have_obstacle_forces is deprecated; use "
+                "peds_have_static_obstacle_forces on the config instead.",
+            )
+        if hasattr(config, "peds_have_static_obstacle_forces"):
+            config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        else:
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
         config.enable_telemetry_panel = enable_telemetry_panel
         config.telemetry_record = telemetry_record
         config.telemetry_refresh_hz = telemetry_refresh_hz
@@ -256,12 +265,15 @@ class EnvironmentFactory:
         )  # type: ignore[return-value]
 
     @staticmethod
-    def create_pedestrian_env(
+    def create_pedestrian_env(  # noqa: PLR0913
         robot_model,
         config: PedestrianSimulationConfig | None = None,
         reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = True,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
@@ -276,7 +288,10 @@ class EnvironmentFactory:
                 simple_ped_reward if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for video recording.
-            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
+            record_video: Enable video recording to disk.
+            video_path: Output path for recorded video files.
+            video_fps: Target frames-per-second for video output.
+            peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
 
         Returns:
             SingleAgentEnv: Initialized pedestrian environment for training/evaluation.
@@ -290,12 +305,26 @@ class EnvironmentFactory:
         if reward_func is None:
             reward_func = simple_ped_reward
 
+        if peds_have_obstacle_forces is not True:
+            logger.warning(
+                "peds_have_obstacle_forces is deprecated; use "
+                "peds_have_static_obstacle_forces on the config instead.",
+            )
+        if hasattr(config, "peds_have_static_obstacle_forces"):
+            config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        else:
+            config.peds_have_obstacle_forces = peds_have_obstacle_forces
+
         return PedestrianEnv(
             env_config=config,  # type: ignore[arg-type]
             robot_model=robot_model,
             reward_func=reward_func,
             debug=debug,
             recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
         )  # type: ignore[return-value]
 
@@ -306,6 +335,10 @@ class EnvironmentFactory:
         num_robots: int,
         reward_func: Callable | None,
         debug: bool,
+        recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str | None = None,
+        video_fps: float | None = None,
     ) -> MultiAgentEnv:
         """Construct a multi-robot environment.
 
@@ -317,6 +350,10 @@ class EnvironmentFactory:
             num_robots: Number of robot agents in the environment.
             reward_func: Custom reward function for agents; internal default if None.
             debug: Enable visual debug features and view creation.
+            recording_enabled: Master gate for per-robot recording.
+            record_video: Enable per-robot video recording to disk.
+            video_path: Base output path for recorded videos.
+            video_fps: Target frames-per-second for video output.
 
         Returns:
             MultiAgentEnv: Initialized multi-agent environment instance.
@@ -332,6 +369,10 @@ class EnvironmentFactory:
             reward_func=reward_func,
             debug=debug,
             num_robots=num_robots,
+            recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
         )  # type: ignore[return-value]
 
 
@@ -433,12 +474,14 @@ def _normalize_factory_inputs(
     return render_options, recording_options, eff_record, eff_path, eff_fps
 
 
-def make_robot_env(
+def make_robot_env(  # noqa: PLR0913
     config: RobotSimulationConfig | None = None,
     *,
     seed: int | None = None,
     peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
+    reward_name: str | None = None,
+    reward_kwargs: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -470,10 +513,14 @@ def make_robot_env(
         config: Optional pre-constructed config; a default instance is created if None.
         seed: Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
             the returned env as ``applied_seed``.
-        peds_have_obstacle_forces: Whether pedestrians perceive the robot as an obstacle
-            (interaction forces enabled).
+        peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
+            Use ``config.peds_have_static_obstacle_forces`` (obstacle forces) and
+            ``config.peds_have_robot_repulsion`` (robot repulsion) going forward.
         reward_func: Optional custom reward function; falls back to internal simple reward
             with warning.
+        reward_name: Optional named reward preset (`simple`, `punish_action`, `snqi_step`).
+            Ignored when ``reward_func`` is provided.
+        reward_kwargs: Optional keyword arguments passed to the named reward preset builder.
         debug: Enable debug/visual features (may trigger view creation when recording).
         recording_enabled: Master switch gating recording runtime even if options request
             it (feature flag style).
@@ -522,6 +569,9 @@ def make_robot_env(
         # Any leftover keys after application are ignored (already validated by strict handling).
         render_options = render_options_local
         recording_options = recording_options_local
+
+    if reward_func is None and reward_name is not None:
+        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
 
     _apply_global_seed(seed)
 
@@ -575,12 +625,14 @@ def make_robot_env(
     return env
 
 
-def make_image_robot_env(
+def make_image_robot_env(  # noqa: PLR0913
     config: ImageRobotConfig | None = None,
     *,
     seed: int | None = None,
     peds_have_obstacle_forces: bool = True,
     reward_func: Callable | None = None,
+    reward_name: str | None = None,
+    reward_kwargs: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -609,6 +661,8 @@ def make_image_robot_env(
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
         render_options = _apply_render(mapped, render_options)
         recording_options = _apply_recording(mapped, recording_options)
+    if reward_func is None and reward_name is not None:
+        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
     _apply_global_seed(seed)
 
     # Validate configuration and log resolved config (T030/T031)
@@ -655,7 +709,7 @@ def make_image_robot_env(
     return env
 
 
-def make_pedestrian_env(
+def make_pedestrian_env(  # noqa: PLR0913
     config: PedestrianSimulationConfig | None = None,
     *,
     seed: int | None = None,
@@ -685,7 +739,7 @@ def make_pedestrian_env(
         Trained policy / model providing robot actions. A lightweight stub is injected if
         absent so tests and simple demos can still run.
     peds_have_obstacle_forces : bool
-        Interaction force toggle for pedestrian physics.
+        Deprecated. Controls static obstacle forces for pedestrians (not robot repulsion).
 
     Returns:
         Initialized SingleAgentEnv for adversarial pedestrian training.
@@ -709,8 +763,8 @@ def make_pedestrian_env(
         render_options,
         recording_options,
         eff_record_video,
-        _eff_video_path,
-        _eff_video_fps,
+        eff_video_path,
+        eff_video_fps,
     ) = _normalize_factory_inputs(
         record_video=record_video,
         video_path=video_path,
@@ -746,6 +800,9 @@ def make_pedestrian_env(
         reward_func=reward_func,
         debug=debug,
         recording_enabled=recording_enabled,
+        record_video=eff_record_video,
+        video_path=eff_video_path,
+        video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
     env.applied_seed = seed
@@ -793,6 +850,10 @@ def make_multi_robot_env(
     config: MultiRobotConfig | None = None,
     reward_func: Callable | None = None,
     debug: bool = False,
+    recording_enabled: bool = False,
+    record_video: bool = False,
+    video_path: str | None = None,
+    video_fps: float | None = None,
 ) -> MultiAgentEnv:
     """Create a multi-robot environment with independent agents.
 
@@ -810,6 +871,14 @@ def make_multi_robot_env(
         Custom reward function applied to each agent; falls back to internal default.
     debug : bool
         Enable visual debug features.
+    recording_enabled : bool
+        Master switch that enables simulation state recording hooks.
+    record_video : bool
+        Enable per-robot video recording.
+    video_path : str | None
+        Optional base output path. Multi-robot env appends a robot suffix per view.
+    video_fps : float | None
+        Optional FPS for recorded video files.
 
     Returns
     -------
@@ -821,6 +890,10 @@ def make_multi_robot_env(
         num_robots=num_robots,
         reward_func=reward_func,
         debug=debug,
+        recording_enabled=recording_enabled,
+        record_video=record_video,
+        video_path=video_path,
+        video_fps=video_fps,
     )
 
 

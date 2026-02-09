@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Test global planner with POI routing on a simple bottleneck map.
 
-TODO: It is unclear whether this example currently runs correctly.
-
 This script tests the global planner's ability to route through a narrow
 bottleneck while maintaining clearance constraints. It's designed to help
 debug planner behavior and visualize path solutions.
@@ -25,7 +23,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 
-def main() -> None:  # noqa: C901
+def main() -> None:  # noqa: C901,PLR0912,PLR0915
     """Run planner test on bottleneck map."""
 
     # Ensure output directory

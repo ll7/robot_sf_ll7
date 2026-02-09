@@ -286,7 +286,11 @@ def generate_benchmark_plots_from_file(
     if not os.path.exists(episodes_path):
         raise FileNotFoundError(f"Episodes file not found: {episodes_path}")
 
-    if _should_use_plot_subprocess():
+    if _should_use_plot_subprocess(
+        episodes_path=str(episodes_path),
+        scenario_filter=scenario_filter,
+        baseline_filter=baseline_filter,
+    ):
         return _generate_plots_subprocess(
             str(episodes_path),
             output_dir,
@@ -342,9 +346,38 @@ def generate_benchmark_plots(
         )
 
 
-def _should_use_plot_subprocess() -> bool:
-    """Return True when plot generation should run in a subprocess."""
-    return os.environ.get("ROBOT_SF_VISUALIZATION_SUBPROCESS", "1") != "0"
+_PLOT_SUBPROCESS_MAX_BYTES = 5_000_000
+
+
+def _should_use_plot_subprocess(
+    *,
+    episodes_path: str | None = None,
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
+) -> bool:
+    """Return True when plot generation should run in a subprocess.
+
+    Defaults to an auto heuristic when the env var is unset:
+    - Use subprocess for larger episode files to keep parent RSS stable.
+    - Run in-process for small filtered workloads to avoid spawn overhead.
+    """
+    env_setting = os.environ.get("ROBOT_SF_VISUALIZATION_SUBPROCESS")
+    if env_setting is not None:
+        return env_setting != "0"
+
+    if not episodes_path or not os.path.exists(episodes_path):
+        return True
+
+    try:
+        file_size = os.path.getsize(episodes_path)
+    except OSError:
+        return True
+
+    is_small = file_size <= _PLOT_SUBPROCESS_MAX_BYTES
+    has_filters = bool(scenario_filter or baseline_filter)
+    if is_small and has_filters:
+        return False
+    return True
 
 
 def _plot_subprocess_worker(

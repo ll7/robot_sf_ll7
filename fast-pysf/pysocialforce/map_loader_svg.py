@@ -12,13 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def svg_path_info(svg_file):
-    """
-    Extracts path information from an SVG file.
+    """Extract path information from an SVG file.
 
-    returns a list of dictionaries, each containing the following keys:
-    - 'coordinates': a numpy array of shape (n, 2) containing the x and y coordinates
-    - 'label': the 'inkscape:label' attribute of the path
-    - 'id': the 'id' attribute of the path
+    Args:
+        svg_file: Path to the SVG file.
+
+    Returns:
+        list[dict]: Each dict contains ``coordinates`` (n, 2 array), ``label``,
+        and ``id`` fields extracted from SVG paths.
     """
     logger.info("Extracting path information from: %s", svg_file)
 

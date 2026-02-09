@@ -13,6 +13,7 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
     not MOVIEPY_AVAILABLE,
     reason="MoviePy/ffmpeg not available for video recording",
 )
+@pytest.mark.slow
 def test_load_states_and_record_video(delete_video: bool = True):
     """Test loading simulation states and recording them as video.
 

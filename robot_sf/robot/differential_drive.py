@@ -149,9 +149,10 @@ class DifferentialDriveMotion:
         avg_left_speed = (last_wheel_speeds[0] + new_wheel_speeds[0]) / 2
         avg_right_speed = (last_wheel_speeds[1] + new_wheel_speeds[1]) / 2
         average_velocity = (avg_left_speed + avg_right_speed) / 2
-        # TODO(#255): Validate that this is the correct formula for distance covered
-        # See: https://github.com/ll7/robot_sf_ll7/issues/255
-        return self.config.wheel_radius / 2 * average_velocity * d_t
+        # Linear velocity v = r * (wl + wr) / 2. Using trapezoidal integration yields
+        # v_avg = r * average_velocity (where average_velocity = (wl + wr) / 2).
+        # References: Dudek & Jenkin (CMP Robotics), Siegwart & Nourbakhsh (AMR).
+        return self.config.wheel_radius * average_velocity * d_t
 
     def _new_orientation(
         self,
@@ -175,8 +176,9 @@ class DifferentialDriveMotion:
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = wheel_speeds
 
-        # TODO(#255): Validate that this is the correct formula for orientation change
-        # See: https://github.com/ll7/robot_sf_ll7/issues/255
+        # Angular velocity omega = r / L * (wr - wl). Use trapezoidal integration
+        # over wheel speeds for the step.
+        # References: Dudek & Jenkin (CMP Robotics), Siegwart & Nourbakhsh (AMR).
         right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 - (
             last_wheel_speed_left + wheel_speed_left
         ) / 2
@@ -198,10 +200,8 @@ class DifferentialDriveMotion:
         distance_covered, new_orient = movement
         (robot_x, robot_y), old_orient = old_pose
         rel_rotation = (old_orient + new_orient) / 2
-        # TODO: should I use numpy for cos and sin?
         new_x = robot_x + distance_covered * cos(rel_rotation)
         new_y = robot_y + distance_covered * sin(rel_rotation)
-        # TODO: should I return this in (x, y, orientation) format?
         return (new_x, new_y), new_orient
 
 

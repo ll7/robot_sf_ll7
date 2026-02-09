@@ -19,3 +19,21 @@ models:
       - grid-obs
     notes:
       - "Fill wandb_run_path or wandb_entity/project if you want automatic download."
+  - model_id: ga3c_cadrl_iros18
+    display_name: GA3C-CADRL (IROS18) checkpoint
+    local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
+    config_path:
+    commit:
+    wandb_run_id:
+    wandb_run_path:
+    wandb_entity:
+    wandb_project:
+    wandb_file:
+    tags:
+      - sacadrl
+      - ga3c
+      - cadrl
+      - baseline
+    notes:
+      - "Checkpoint prefix: network_01900000 (see model/ga3c_cadrl/README.md)."
+      - "Source: gym-collision-avoidance (MIT ACL), GA3C_CADRL/checkpoints/IROS18."

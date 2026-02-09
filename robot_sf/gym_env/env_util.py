@@ -133,18 +133,28 @@ def init_collision_and_sensors(
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
 
+    def dynamic_robot_circles(robot_idx: int) -> list[tuple[tuple[float, float], float]]:
+        """Return circles for all robots except the requested index."""
+        circles: list[tuple[tuple[float, float], float]] = []
+        for idx, pos in enumerate(sim.robot_pos):
+            if idx == robot_idx:
+                continue
+            circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
+        return circles
+
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            (lambda idx=i: sim.robot_pos[idx]),
-            (lambda idx=i: sim.goal_pos[idx]),
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
-            lambda: sim.ped_pos,
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=(lambda idx=i: sim.robot_pos[idx]),
+            get_goal_coords=(lambda idx=i: sim.goal_pos[idx]),
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            get_dynamic_objects=(lambda idx=i: dynamic_robot_circles(idx)),
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         )
         for i in range(num_robots)
     ]
@@ -418,16 +428,16 @@ def init_ped_collision_and_sensors(
     # Initialize a occupancy object for the robot for collision detection
     occupancies.append(
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda: sim.robot_pos[0],
-            lambda: sim.goal_pos[0],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
-            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda: sim.robot_pos[0],
+            get_goal_coords=lambda: sim.goal_pos[0],
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
             # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         ),
     )
 
@@ -479,17 +489,17 @@ def init_ped_collision_and_sensors(
     # Initalize occupancy and sensor fusion for the ego pedestrian
     occupancies.append(
         EgoPedContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda: sim.ego_ped_pos,
-            lambda: sim.ego_ped_goal_pos,
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
-            lambda: sim.ped_pos,
-            ego_ped_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
-            lambda: sim.robot_pos[0],
-            robot_config.radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda: sim.ego_ped_pos,
+            get_goal_coords=lambda: sim.ego_ped_goal_pos,
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            agent_radius=ego_ped_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
+            get_enemy_coords=lambda: sim.robot_pos[0],
+            enemy_radius=robot_config.radius,
         ),
     )
 
@@ -649,21 +659,31 @@ def init_collision_and_sensors_with_image(
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
 
+    def dynamic_robot_circles(robot_idx: int) -> list[tuple[tuple[float, float], float]]:
+        """Return circles for all robots except the requested index."""
+        circles: list[tuple[tuple[float, float], float]] = []
+        for idx, pos in enumerate(sim.robot_pos):
+            if idx == robot_idx:
+                continue
+            circles.append(((float(pos[0]), float(pos[1])), float(robot_config.radius)))
+        return circles
+
     # Check if image observations are enabled
     use_image_obs = getattr(env_config, "use_image_obs", False)
 
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [
         ContinuousOccupancy(
-            sim.map_def.width,
-            sim.map_def.height,
-            lambda i=i: sim.robot_pos[i],
-            lambda i=i: sim.goal_pos[i],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
-            lambda: sim.ped_pos,
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius,
+            width=sim.map_def.width,
+            height=sim.map_def.height,
+            get_agent_coords=lambda i=i: sim.robot_pos[i],
+            get_goal_coords=lambda i=i: sim.goal_pos[i],
+            get_obstacle_coords=lambda: sim.get_obstacle_lines(),
+            get_pedestrian_coords=lambda: sim.ped_pos,
+            get_dynamic_objects=(lambda i=i: dynamic_robot_circles(i)),
+            agent_radius=robot_config.radius,
+            ped_radius=sim_config.ped_radius,
+            goal_radius=sim_config.goal_radius,
         )
         for i in range(num_robots)
     ]

@@ -247,7 +247,7 @@ class ScenarioSampler:
 class ScenarioSwitchingEnv(Env):
     """Gymnasium environment wrapper that swaps scenarios per episode."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         scenario_sampler: ScenarioSampler,

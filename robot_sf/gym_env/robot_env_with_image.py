@@ -22,7 +22,7 @@ class RobotEnvWithImage(RobotEnv):
     and includes it in the observation space for reinforcement learning.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         env_config: RobotEnvSettings = RobotEnvSettings(),
         reward_func: Callable[[dict], float] = simple_reward,
@@ -49,7 +49,7 @@ class RobotEnvWithImage(RobotEnv):
             record_video: Save rendered frames to ``video_path``.
             video_path: Output path for recorded video files.
             video_fps: Override video recording FPS.
-            peds_have_obstacle_forces: Whether pedestrians interact with obstacles via forces.
+            peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             use_jsonl_recording: Enable JSONL recording mode.
             recording_dir: Directory for recorded artifacts.
             suite_name: Suite identifier stored in metadata.

@@ -47,3 +47,39 @@ def test_can_drive_left_curve():
     pos_after, orient_after = state.pose
     assert pos_after[0] > 0 and pos_after[1] > 0  # position in 1st quadrant
     assert 0 < norm_angle(orient_after) < 0.5 * pi  # orientation in 1st quadrant
+
+
+def test_straight_line_distance_matches_kinematics() -> None:
+    """Verify kinematics math so straight motion stays accurate for planners."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(
+            max_linear_speed=5.0,
+            max_angular_speed=5.0,
+            wheel_radius=1.0,
+            interaxis_length=1.0,
+        ),
+    )
+    pose_before = ((0.0, 0.0), 0.0)
+    state = DifferentialDriveState(pose_before, (1.0, 0.0), (1.0, 1.0), (1.0, 1.0))
+    motion.move(state, (0.0, 0.0), 1.0)
+    pos_after, orient_after = state.pose
+    assert pos_after == (1.0, 0.0)
+    assert orient_after == 0.0
+
+
+def test_in_place_rotation_matches_kinematics() -> None:
+    """Verify in-place rotation math to prevent drift in heading updates."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(
+            max_linear_speed=5.0,
+            max_angular_speed=5.0,
+            wheel_radius=1.0,
+            interaxis_length=1.0,
+        ),
+    )
+    pose_before = ((0.0, 0.0), 0.0)
+    state = DifferentialDriveState(pose_before, (0.0, 2.0), (-1.0, 1.0), (-1.0, 1.0))
+    motion.move(state, (0.0, 0.0), 1.0)
+    pos_after, orient_after = state.pose
+    assert pos_after == (0.0, 0.0)
+    assert orient_after == 2.0

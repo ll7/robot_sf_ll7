@@ -26,6 +26,10 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import PPOFineTuningConfig
 from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
+from robot_sf.training.snqi_utils import (
+    compute_training_snqi,
+    resolve_training_snqi_context,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,7 +68,20 @@ def _evaluate_policy_metrics(
 
     if dry_run:
         logger.warning("Dry run mode: using placeholder metrics for evaluation")
-        return [0.85], [0.08], [0.85 - 0.5 * 0.08]
+        snqi_context = resolve_training_snqi_context(
+            weights_path=config.snqi_weights_path,
+            baseline_path=config.snqi_baseline_path,
+        )
+        dry_metrics = {
+            "success": 0.85,
+            "time_to_goal_norm": 0.5,
+            "collisions": 0.08,
+            "near_misses": 0.0,
+            "comfort_exposure": 0.0,
+            "force_exceed_events": 0.0,
+            "jerk_mean": 0.0,
+        }
+        return [0.85], [0.08], [compute_training_snqi(dry_metrics, context=snqi_context)]
     if model is None:
         raise ValueError("Model must be provided for evaluation when not in dry-run mode")
 
@@ -77,18 +94,10 @@ def _evaluate_policy_metrics(
     snqi_values: list[float] = []
     steps_list: list[float] = []
     num_eval_episodes = 10  # Small number for quick evaluation
-
-    from robot_sf.benchmark.metrics import snqi as compute_snqi
-
-    default_weights = {
-        "w_success": 1.0,
-        "w_time": 0.8,
-        "w_collisions": 2.0,
-        "w_near": 1.0,
-        "w_comfort": 0.5,
-        "w_force_exceed": 1.5,
-        "w_jerk": 0.3,
-    }
+    snqi_context = resolve_training_snqi_context(
+        weights_path=config.snqi_weights_path,
+        baseline_path=config.snqi_baseline_path,
+    )
 
     for _ in range(num_eval_episodes):
         obs, _ = eval_env.reset()
@@ -123,9 +132,8 @@ def _evaluate_policy_metrics(
             "comfort_exposure": 0.0,
             "force_exceed_events": 0.0,
             "jerk_mean": 0.0,
-            "curvature_mean": 0.0,
         }
-        snqi_values.append(float(compute_snqi(metric_values, default_weights)))
+        snqi_values.append(compute_training_snqi(metric_values, context=snqi_context))
 
     return successes, collisions, snqi_values
 
@@ -246,6 +254,15 @@ def run_ppo_finetuning(
         notes=[
             f"PPO fine-tuning from pretrained policy {config.pretrained_policy_id}",
             f"Converged at {convergence_timesteps} timesteps",
+            "snqi_formula=robot_sf.benchmark.snqi.compute_snqi",
+            (
+                "snqi_weights_source="
+                f"{config.snqi_weights_path if config.snqi_weights_path is not None else 'default'}"
+            ),
+            (
+                "snqi_baseline_source="
+                f"{config.snqi_baseline_path if config.snqi_baseline_path is not None else 'default'}"
+            ),
         ],
     )
 
@@ -277,6 +294,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
     """Load and parse PPO fine-tuning configuration from YAML."""
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_dir = config_path.parent
+
+    def _resolve_optional_path(name: str) -> Path | None:
+        raw_value = raw.get(name)
+        if raw_value is None:
+            return None
+        text = str(raw_value).strip()
+        if not text:
+            return None
+        candidate = Path(text)
+        return candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
 
     return PPOFineTuningConfig.from_raw(
         run_id=raw["run_id"],
@@ -284,6 +312,8 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         total_timesteps=raw.get("total_timesteps", 100000),
         random_seeds=tuple(raw.get("random_seeds", [42])),
         learning_rate=raw.get("learning_rate", 0.0001),
+        snqi_weights_path=_resolve_optional_path("snqi_weights"),
+        snqi_baseline_path=_resolve_optional_path("snqi_baseline"),
     )
 
 

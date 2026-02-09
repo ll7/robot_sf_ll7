@@ -173,6 +173,7 @@ class TestInitCollisionAndSensorsWithImage:
         mock_env.obstacles_raw = np.array([[0, 0, 1, 1], [2, 2, 3, 3]])  # Multiple obstacles
         mock_pysf_sim.env = mock_env
         simulator.pysf_sim = mock_pysf_sim
+        simulator.get_obstacle_lines.return_value = mock_env.obstacles_raw
 
         simulator.ped_pos = np.array([[1.0, 1.0], [3.0, 3.0]])  # Some pedestrian positions
 
@@ -350,6 +351,7 @@ class TestImageObservationIntegration:
         mock_env.obstacles_raw = np.array([[0, 0, 1, 1], [2, 2, 3, 3]])  # Multiple obstacles
         mock_pysf_sim.env = mock_env
         simulator.pysf_sim = mock_pysf_sim
+        simulator.get_obstacle_lines.return_value = mock_env.obstacles_raw
 
         simulator.ped_pos = np.array([[1.0, 1.0], [3.0, 3.0]])  # Some pedestrian positions
 

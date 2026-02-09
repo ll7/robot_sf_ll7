@@ -72,6 +72,11 @@ from robot_sf.training.scenario_sampling import (
     ScenarioSwitchingEnv,
     scenario_id_from_definition,
 )
+from robot_sf.training.snqi_utils import (
+    TrainingSNQIContext,
+    compute_training_snqi,
+    resolve_training_snqi_context,
+)
 
 MetricSamples = dict[str, list[float]]
 
@@ -112,13 +117,16 @@ _PPO_PARAM_COERCIONS: dict[str, Callable[[object], object]] = {
     "vf_coef": lambda value: float(value),
     "max_grad_norm": lambda value: float(value),
 }
-_SUPPORTED_BEST_METRICS = {
+_EVAL_METRIC_KEYS = (
     "success_rate",
     "collision_rate",
     "path_efficiency",
     "comfort_exposure",
     "snqi",
-}
+    "eval_episode_return",
+    "eval_avg_step_reward",
+)
+_SUPPORTED_BEST_METRICS = set(_EVAL_METRIC_KEYS)
 
 
 def _preconfigure_loguru_level_from_argv() -> None:
@@ -245,6 +253,9 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "planner_backend",
         "planner_clearance_margin",
         "peds_have_obstacle_forces",
+        "peds_have_static_obstacle_forces",
+        "peds_have_robot_repulsion",
+        "map_id",
     ):
         if key in overrides:
             setattr(env_config, key, overrides[key])
@@ -446,6 +457,22 @@ class TrainingOutputs:
     vec_env: DummyVecEnv | SubprocVecEnv | None
     tensorboard_log: Path | None
     best_checkpoint: BestCheckpointSummary | None
+    snqi_context: TrainingSNQIContext
+
+
+def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path | None:
+    """Resolve an optional path field relative to the config file location."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    candidate = Path(text)
+    if candidate.is_absolute():
+        return candidate
+    if path.parent == path:
+        raise ValueError(f"Unable to resolve relative path for {field_name}")
+    return (path.parent / candidate).resolve()
 
 
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
@@ -499,7 +526,17 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         convergence=convergence,
         evaluation=evaluation,
         ppo_hyperparams=dict(data.get("ppo_hyperparams", {}) or {}),
-        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "snqi")),
+        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "eval_episode_return")),
+        snqi_weights_path=_resolve_optional_path(
+            path,
+            data.get("snqi_weights"),
+            field_name="snqi_weights",
+        ),
+        snqi_baseline_path=_resolve_optional_path(
+            path,
+            data.get("snqi_baseline"),
+            field_name="snqi_baseline",
+        ),
         feature_extractor=str(data.get("feature_extractor", "default")),
         feature_extractor_kwargs=dict(data.get("feature_extractor_kwargs", {}) or {}),
         policy_net_arch=tuple(data.get("policy_net_arch", (64, 64))),
@@ -517,7 +554,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     )
 
 
-def _make_training_env(
+def _make_training_env(  # noqa: PLR0913
     seed: int | None,
     *,
     scenario: Mapping[str, Any] | None,
@@ -651,6 +688,14 @@ def _init_wandb(
             "feature_extractor": config.feature_extractor,
             "ppo_hyperparams": dict(config.ppo_hyperparams),
             "best_checkpoint_metric": config.best_checkpoint_metric,
+            "snqi_weights_source": (
+                str(config.snqi_weights_path) if config.snqi_weights_path is not None else "default"
+            ),
+            "snqi_baseline_source": (
+                str(config.snqi_baseline_path)
+                if config.snqi_baseline_path is not None
+                else "default"
+            ),
             "tensorboard_log": tensorboard_log_str,
         },
         sync_tensorboard=True,
@@ -732,6 +777,15 @@ def _execute_training(
     resume_from: Path | None,
 ) -> TrainingOutputs:
     """Run training (or dry-run) and return raw metrics + episode records."""
+    snqi_context = resolve_training_snqi_context(
+        weights_path=config.snqi_weights_path,
+        baseline_path=config.snqi_baseline_path,
+    )
+    if snqi_context.baseline_fallback_keys:
+        logger.warning(
+            "SNQI baseline missing keys {}; defaults injected.",
+            snqi_context.baseline_fallback_keys,
+        )
     tensorboard_log = (
         _resolve_tensorboard_logdir(run_id)
         if bool(config.tracking.get("tensorboard", True))
@@ -739,7 +793,10 @@ def _execute_training(
     )
     if dry_run:
         metrics_raw, episode_records = _simulate_dry_run_metrics(
-            config, eval_steps=eval_steps, scenario_id=scenario_ctx.scenario_label
+            config,
+            eval_steps=eval_steps,
+            scenario_id=scenario_ctx.scenario_label,
+            snqi_context=snqi_context,
         )
         return TrainingOutputs(
             metrics_raw=metrics_raw,
@@ -748,6 +805,7 @@ def _execute_training(
             vec_env=None,
             tensorboard_log=tensorboard_log,
             best_checkpoint=None,
+            snqi_context=snqi_context,
         )
 
     model, vec_env, tensorboard_log = _init_training_model(
@@ -782,6 +840,7 @@ def _execute_training(
         scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
         hold_out_scenarios=config.evaluation.hold_out_scenarios,
         eval_steps=eval_schedule,
+        snqi_context=snqi_context,
         wandb_run=wandb_run,
         wandb_callback=wandb_callback,
         start_timesteps=start_timesteps,
@@ -797,6 +856,7 @@ def _execute_training(
         vec_env=vec_env,
         tensorboard_log=tensorboard_log,
         best_checkpoint=best_checkpoint,
+        snqi_context=snqi_context,
     )
 
 
@@ -890,7 +950,7 @@ def _log_eval_to_wandb(
         wandb_run.log(payload, step=eval_step)
 
 
-def _train_with_schedule(
+def _train_with_schedule(  # noqa: PLR0913
     model: PPO,
     *,
     config: ExpertTrainingConfig,
@@ -898,6 +958,7 @@ def _train_with_schedule(
     scenario_id: str | None,
     hold_out_scenarios: Sequence[str],
     eval_steps: Sequence[int],
+    snqi_context: TrainingSNQIContext,
     wandb_run: object | None,
     wandb_callback: object | None,
     start_timesteps: int = 0,
@@ -905,13 +966,7 @@ def _train_with_schedule(
 ) -> tuple[MetricSamples, list[dict[str, object]], BestCheckpointSummary | None]:
     """Train PPO in chunks and evaluate at scheduled checkpoints."""
     episode_records: list[dict[str, object]] = []
-    metrics_raw: MetricSamples = {
-        "success_rate": [],
-        "collision_rate": [],
-        "path_efficiency": [],
-        "comfort_exposure": [],
-        "snqi": [],
-    }
+    metrics_raw: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
     if wandb_callback is not None:
@@ -936,6 +991,7 @@ def _train_with_schedule(
             scenario_path=config.scenario_config,
             scenario_id=scenario_id,
             hold_out_scenarios=hold_out_scenarios,
+            snqi_context=snqi_context,
             eval_step=eval_step,
         )
         for key, values in step_metrics.items():
@@ -1047,7 +1103,15 @@ def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
     return float(max(0.0, ratio))
 
 
-def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
+def _gather_episode_metrics(
+    info: Mapping[str, object],
+    *,
+    steps_taken: int,
+    max_steps: int,
+    episode_return: float,
+    avg_step_reward: float,
+    snqi_context: TrainingSNQIContext,
+) -> dict[str, float]:
     """TODO docstring. Document this function.
 
     Args:
@@ -1061,6 +1125,9 @@ def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
         meta: Mapping[str, object] = cast("Mapping[str, object]", raw_meta)
     else:
         meta = {}
+    meta_for_path = dict(meta)
+    meta_for_path.setdefault("step_of_episode", steps_taken)
+    meta_for_path.setdefault("max_sim_steps", max_steps)
     success = 1.0 if bool(meta.get("is_route_complete")) else 0.0
     collision = (
         1.0
@@ -1070,15 +1137,27 @@ def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
         )
         else 0.0
     )
-    path_eff = _estimate_path_efficiency(meta)
-    comfort = 0.0  # Placeholder until force metrics are wired in
-    snqi = success - 0.5 * collision
+    path_eff = _estimate_path_efficiency(meta_for_path)
+    comfort = float(meta.get("comfort_exposure", 0.0) or 0.0)
+    normalized_time = min(1.0, float(max(0, steps_taken)) / float(max(1, max_steps)))
+    snqi_inputs: dict[str, float | int | bool] = {
+        "success": success,
+        "time_to_goal_norm": normalized_time,
+        "collisions": collision,
+        "near_misses": float(meta.get("near_misses", 0.0) or 0.0),
+        "comfort_exposure": comfort,
+        "force_exceed_events": float(meta.get("force_exceed_events", 0.0) or 0.0),
+        "jerk_mean": float(meta.get("jerk_mean", 0.0) or 0.0),
+    }
+    snqi = compute_training_snqi(snqi_inputs, context=snqi_context)
     return {
         "success_rate": success,
         "collision_rate": collision,
         "path_efficiency": path_eff,
         "comfort_exposure": comfort,
         "snqi": snqi,
+        "eval_episode_return": float(episode_return),
+        "eval_avg_step_reward": float(avg_step_reward),
     }
 
 
@@ -1090,17 +1169,12 @@ def _evaluate_policy(
     scenario_path: Path,
     scenario_id: str | None,
     hold_out_scenarios: Sequence[str],
+    snqi_context: TrainingSNQIContext,
     eval_step: int | None = None,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
     """Evaluate a policy across hold-out or sampled scenarios."""
     episodes = max(1, config.evaluation.evaluation_episodes)
-    metrics: MetricSamples = {
-        "success_rate": [],
-        "collision_rate": [],
-        "path_efficiency": [],
-        "comfort_exposure": [],
-        "snqi": [],
-    }
+    metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
 
     use_random = _randomize_seeds(config)
@@ -1148,16 +1222,26 @@ def _evaluate_policy(
         done = False
         info: Mapping[str, object] = {}
         steps = 0
+        episode_return = 0.0
         max_steps = env.state.max_sim_steps  # type: ignore[attr-defined]
 
         while not done and steps < max_steps:
             action, _ = model.predict(obs, deterministic=True)
-            obs, _reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
+            episode_return += float(reward)
             done = bool(terminated or truncated)
             steps += 1
 
         env.close()
-        metric_row = _gather_episode_metrics(info)
+        avg_step_reward = episode_return / max(steps, 1)
+        metric_row = _gather_episode_metrics(
+            info,
+            steps_taken=steps,
+            max_steps=max_steps,
+            episode_return=episode_return,
+            avg_step_reward=avg_step_reward,
+            snqi_context=snqi_context,
+        )
         for key, value in metric_row.items():
             metrics[key].append(float(value))
         episode_records.append(
@@ -1179,16 +1263,11 @@ def _simulate_dry_run_metrics(
     *,
     eval_steps: Sequence[int],
     scenario_id: str,
+    snqi_context: TrainingSNQIContext,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
     """Generate deterministic placeholder metrics for dry-run mode."""
     episodes = max(1, config.evaluation.evaluation_episodes)
-    metrics: MetricSamples = {
-        "success_rate": [],
-        "collision_rate": [],
-        "path_efficiency": [],
-        "comfort_exposure": [],
-        "snqi": [],
-    }
+    metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
     use_random = _randomize_seeds(config)
     rng = np.random.default_rng(None if use_random else 123)
@@ -1204,13 +1283,27 @@ def _simulate_dry_run_metrics(
             collision = 0.0 if idx % 3 else 0.2
             path_eff = max(0.0, 0.85 - 0.05 * idx) + float(rng.uniform(-0.01, 0.01))
             comfort = collision * 0.1
-            snqi = success - 0.5 * collision
+            normalized_time = max(0.0, min(1.0, 1.0 - path_eff))
+            snqi_inputs: dict[str, float | int | bool] = {
+                "success": success,
+                "time_to_goal_norm": normalized_time,
+                "collisions": collision,
+                "near_misses": 0.0,
+                "comfort_exposure": comfort,
+                "force_exceed_events": 0.0,
+                "jerk_mean": 0.0,
+            }
+            snqi = compute_training_snqi(snqi_inputs, context=snqi_context)
+            episode_return = 40.0 * success - 12.0 * collision + 8.0 * path_eff
+            avg_step_reward = episode_return / max(float(config.convergence.plateau_window), 1.0)
 
             metrics["success_rate"].append(success)
             metrics["collision_rate"].append(collision)
             metrics["path_efficiency"].append(path_eff)
             metrics["comfort_exposure"].append(comfort)
             metrics["snqi"].append(snqi)
+            metrics["eval_episode_return"].append(episode_return)
+            metrics["eval_avg_step_reward"].append(avg_step_reward)
 
             episode_records.append(
                 {
@@ -1225,6 +1318,8 @@ def _simulate_dry_run_metrics(
                         "path_efficiency": path_eff,
                         "comfort_exposure": comfort,
                         "snqi": snqi,
+                        "eval_episode_return": episode_return,
+                        "eval_avg_step_reward": avg_step_reward,
                     },
                 },
             )
@@ -1340,6 +1435,11 @@ def _build_training_notes(
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
+    notes.append("snqi_formula=robot_sf.benchmark.snqi.compute_snqi")
+    notes.append(f"snqi_weights_source={outputs.snqi_context.weights_source}")
+    notes.append(f"snqi_baseline_source={outputs.snqi_context.baseline_source}")
+    if outputs.snqi_context.baseline_fallback_keys:
+        notes.append(f"snqi_baseline_fallback_keys={outputs.snqi_context.baseline_fallback_keys}")
     if outputs.best_checkpoint is not None:
         best = outputs.best_checkpoint
         notes.append(f"best_checkpoint_path={best.checkpoint_path}")
@@ -1368,6 +1468,8 @@ def _apply_synthetic_metrics_fallback(
         "path_efficiency": (0.75, 0.80),
         "snqi": (0.65, 0.70),
         "comfort_exposure": (0.05, 0.08),
+        "eval_episode_return": (28.0, 36.0),
+        "eval_avg_step_reward": (0.08, 0.12),
     }
     rng = np.random.default_rng(123)
     for key, (low, high) in demo_metrics.items():
@@ -1438,7 +1540,15 @@ def run_expert_training(
     # Backward-compat: keep timesteps_to_convergence but note it mirrors executed timesteps.
     aggregates["timesteps_to_convergence"] = aggregates["total_timesteps_executed"]
 
-    primary_keys = ("success_rate", "collision_rate", "path_efficiency", "snqi", "comfort_exposure")
+    primary_keys = (
+        "success_rate",
+        "collision_rate",
+        "path_efficiency",
+        "snqi",
+        "comfort_exposure",
+        "eval_episode_return",
+        "eval_avg_step_reward",
+    )
     notes = _build_training_notes(
         config=config,
         scenario_ctx=scenario_ctx,
@@ -1478,10 +1588,15 @@ def run_expert_training(
 
     wall_clock_seconds = max(0.0, time.perf_counter() - start_time)
     wall_clock_hours = wall_clock_seconds / 3600.0
+    input_artifacts = [str(config.scenario_config)]
+    if config.snqi_weights_path is not None:
+        input_artifacts.append(str(config.snqi_weights_path))
+    if config.snqi_baseline_path is not None:
+        input_artifacts.append(str(config.snqi_baseline_path))
     training_artifact = common.TrainingRunArtifact(
         run_id=run_id,
         run_type=common.TrainingRunType.EXPERT_TRAINING,
-        input_artefacts=(str(config.scenario_config),),
+        input_artefacts=tuple(input_artifacts),
         seeds=config.seeds,
         metrics=aggregates,
         episode_log_path=episode_log_path,

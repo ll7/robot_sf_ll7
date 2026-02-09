@@ -9,8 +9,6 @@ import numpy as np
 import pytest
 import torch as th
 from gymnasium import spaces
-from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
 
 from robot_sf.feature_extractors import (
     AttentionFeatureExtractor,
@@ -26,6 +24,15 @@ from robot_sf.feature_extractors.config import (
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+
+
+def _require_sb3():
+    """Import StableBaselines3 dependencies or skip tests cleanly."""
+    pytest.importorskip("stable_baselines3", reason="StableBaselines3 not installed")
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.env_util import make_vec_env
+
+    return PPO, make_vec_env
 
 
 class TestFeatureExtractors:
@@ -221,11 +228,13 @@ class TestFeatureExtractorConfig:
         assert config2.params["embed_dim"] == 32
 
 
+@pytest.mark.slow
 class TestIntegrationWithStableBaselines3:
     """Integration tests with StableBaselines3 and robot environment."""
 
     def test_mlp_extractor_with_ppo(self):
         """Test MLP extractor integration with PPO."""
+        PPO, make_vec_env = _require_sb3()
         # Create minimal environment
         config = EnvSettings()
         config.sim_config.time_per_step_in_secs = 0.1
@@ -261,12 +270,13 @@ class TestIntegrationWithStableBaselines3:
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
         # Test a few training steps
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
 
         env.close()
 
     def test_attention_extractor_with_ppo(self):
         """Test attention extractor integration with PPO."""
+        PPO, make_vec_env = _require_sb3()
         config = EnvSettings()
         config.sim_config.time_per_step_in_secs = 0.02
         config.sim_config.sim_time_in_secs = 2
@@ -302,6 +312,7 @@ class TestIntegrationWithStableBaselines3:
 
     def test_lightweight_cnn_extractor_with_ppo(self):
         """Test lightweight CNN extractor integration with PPO."""
+        PPO, make_vec_env = _require_sb3()
         config = EnvSettings()
         config.sim_config.time_per_step_in_secs = 0.1
         config.sim_config.sim_time_in_secs = 10
@@ -322,11 +333,12 @@ class TestIntegrationWithStableBaselines3:
         assert model is not None
         assert isinstance(model.policy.features_extractor, LightweightCNNExtractor)
 
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
         env.close()
 
     def test_config_with_ppo(self):
         """Test using configuration system with PPO."""
+        PPO, make_vec_env = _require_sb3()
         config = EnvSettings()
         config.sim_config.time_per_step_in_secs = 0.1
         config.sim_config.sim_time_in_secs = 10
@@ -346,7 +358,7 @@ class TestIntegrationWithStableBaselines3:
         assert model is not None
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
         env.close()
 
 

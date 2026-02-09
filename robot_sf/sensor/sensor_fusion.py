@@ -29,9 +29,8 @@ def fused_sensor_space(
     Parameters
     ----------
     timesteps : int
-        The number of **stacked** timesteps in the observation.
-        # TODO(#256): check if this interpretation is correct
-        # See: https://github.com/ll7/robot_sf_ll7/issues/256
+        The number of **stacked** timesteps in the observation (history length).
+        This should align with ``SimulationSettings.stack_steps``.
     robot_obs : spaces.Box
         The observation space for the robot.
     target_obs : spaces.Box
@@ -204,20 +203,25 @@ class SensorFusion:
             [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
         )
 
-        # info: populate cache with same states -> no movement
-        # If the caches are empty, fill them with the current states
+        # Populate history with the current state on first call to avoid zeros.
         if len(self.drive_state_cache) == 0:
             for _ in range(self.cache_steps):
                 self.drive_state_cache.append(drive_state)
                 self.lidar_state_cache.append(lidar_state)
-
-        # Add the current states to the caches and remove the oldest states
-        self.drive_state_cache.append(drive_state)
-        self.lidar_state_cache.append(lidar_state)
-        self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
-        self.stacked_drive_state[-1] = drive_state
-        self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
-        self.stacked_lidar_state[-1] = lidar_state
+            self.stacked_drive_state = np.repeat(
+                drive_state[np.newaxis, :], self.cache_steps, axis=0
+            )
+            self.stacked_lidar_state = np.repeat(
+                lidar_state[np.newaxis, :], self.cache_steps, axis=0
+            )
+        else:
+            # Add the current states to the caches and remove the oldest states
+            self.drive_state_cache.append(drive_state)
+            self.lidar_state_cache.append(lidar_state)
+            self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
+            self.stacked_drive_state[-1] = drive_state
+            self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
+            self.stacked_lidar_state[-1] = lidar_state
 
         # Normalize the stacked states by the maximum values in the observation space
         max_drive = self.unnormed_obs_space[OBS_DRIVE_STATE].high

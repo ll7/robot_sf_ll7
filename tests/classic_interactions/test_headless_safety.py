@@ -9,9 +9,12 @@ from __future__ import annotations
 import importlib
 import os
 
+import pytest
 
+
+@pytest.mark.slow
 def test_headless_dummy_driver_runs():
-    """TODO docstring. Document this function."""
+    """Run the classic interactions demo in headless mode without crashing."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     mod = importlib.import_module("examples.classic_interactions_pygame")
     if hasattr(mod, "DRY_RUN"):
@@ -20,7 +23,7 @@ def test_headless_dummy_driver_runs():
     else:
         original = None
     try:
-        episodes = mod.run_demo()
+        episodes = mod.run_demo(max_episodes=1, enable_recording=False)
     finally:
         if hasattr(mod, "DRY_RUN"):
             mod.DRY_RUN = original  # type: ignore

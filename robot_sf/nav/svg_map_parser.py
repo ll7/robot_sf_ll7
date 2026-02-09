@@ -593,6 +593,87 @@ class SvgMapConverter:
 
         return fallback_routes
 
+    @staticmethod
+    def _parse_zone_index(label: str | None, rect_id: str | None) -> tuple[str | None, int | None]:
+        """Parse a zone label/id into a zone type and optional index.
+
+        Returns:
+            tuple[str | None, int | None]: Zone type and optional index (None if unindexed).
+        """
+        candidates = [label, rect_id]
+        for value in candidates:
+            if not value:
+                continue
+            match = re.match(
+                r"^(robot_spawn_zone|ped_spawn_zone|robot_goal_zone|ped_goal_zone)_(\d+)$",
+                value,
+            )
+            if match:
+                return match.group(1), int(match.group(2))
+        for value in candidates:
+            if not value:
+                continue
+            match = re.match(
+                r"^(robot_spawn_zone|ped_spawn_zone|robot_goal_zone|ped_goal_zone)$",
+                value,
+            )
+            if match:
+                return match.group(1), None
+        return None, None
+
+    @staticmethod
+    def _assign_zone(
+        zone_type: str,
+        zone_index: int | None,
+        zone: Rect,
+        indexed_zones: dict[str, dict[int, Rect]],
+        unindexed_zones: dict[str, list[Rect]],
+    ) -> None:
+        """Assign a zone into indexed/unindexed buckets, warning on duplicates."""
+        if zone_index is None:
+            unindexed_zones[zone_type].append(zone)
+            return
+        if zone_index in indexed_zones[zone_type]:
+            logger.warning(
+                "Duplicate %s index %d in SVG; keeping first, ignoring duplicate.",
+                zone_type,
+                zone_index,
+            )
+            return
+        indexed_zones[zone_type][zone_index] = zone
+
+    @staticmethod
+    def _assemble_zones(
+        zone_type: str,
+        indexed_zones: dict[str, dict[int, Rect]],
+        unindexed_zones: dict[str, list[Rect]],
+    ) -> list[Rect]:
+        """Build an ordered zone list, honoring explicit indices when present.
+
+        Returns:
+            list[Rect]: Ordered zones for the requested zone type.
+        """
+        indexed = indexed_zones[zone_type]
+        unindexed = unindexed_zones[zone_type]
+        if not indexed:
+            return list(unindexed)
+
+        result: list[Rect] = []
+        max_index = max(indexed.keys())
+        for idx in range(max_index + 1):
+            if idx in indexed:
+                result.append(indexed[idx])
+            elif unindexed:
+                result.append(unindexed.pop(0))
+            else:
+                logger.warning(
+                    "Missing %s index %d with no unindexed zones available.",
+                    zone_type,
+                    idx,
+                )
+        result.extend(unindexed)
+        return result
+
     def _process_rects(
         self,
         width: float,
@@ -646,20 +727,31 @@ class SvgMapConverter:
             (width, width, 0, height),  # right
         ]
         # logger.debug(f"Bounds: {bounds}")
-        ped_goal_zones: list[Rect] = []
         ped_crowded_zones: list[Rect] = []
 
+        zone_types = {
+            "robot_spawn_zone",
+            "ped_spawn_zone",
+            "robot_goal_zone",
+            "ped_goal_zone",
+        }
+        indexed_zones: dict[str, dict[int, Rect]] = {z: {} for z in zone_types}
+        unindexed_zones: dict[str, list[Rect]] = {z: [] for z in zone_types}
+
         for rect in self.rect_info:
-            if rect.label == "robot_spawn_zone":
-                robot_spawn_zones.append(rect.get_zone())
-            elif rect.label == "ped_spawn_zone":
-                ped_spawn_zones.append(rect.get_zone())
-            elif rect.label == "robot_goal_zone":
-                robot_goal_zones.append(rect.get_zone())
-            elif rect.label == "bound":
+            zone_type, zone_index = self._parse_zone_index(rect.label, rect.id_)
+            if zone_type:
+                self._assign_zone(
+                    zone_type,
+                    zone_index,
+                    rect.get_zone(),
+                    indexed_zones,
+                    unindexed_zones,
+                )
+                continue
+
+            if rect.label == "bound":
                 bounds.append(rect.get_zone())
-            elif rect.label == "ped_goal_zone":
-                ped_goal_zones.append(rect.get_zone())
             elif rect.label == "obstacle":
                 obstacles.append(obstacle_from_svgrectangle(rect))
             elif rect.label == "ped_crowded_zone":
@@ -674,6 +766,11 @@ class SvgMapConverter:
                     id=rect.id_,
                     lab=rect.label,
                 )
+
+        robot_spawn_zones = self._assemble_zones("robot_spawn_zone", indexed_zones, unindexed_zones)
+        ped_spawn_zones = self._assemble_zones("ped_spawn_zone", indexed_zones, unindexed_zones)
+        robot_goal_zones = self._assemble_zones("robot_goal_zone", indexed_zones, unindexed_zones)
+        ped_goal_zones = self._assemble_zones("ped_goal_zone", indexed_zones, unindexed_zones)
 
         return (
             obstacles,

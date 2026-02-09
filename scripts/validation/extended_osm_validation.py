@@ -111,7 +111,7 @@ class ValidationReport:
         print("\n" + "=" * 80 + "\n")
 
 
-def test_basic_functionality(report: ValidationReport):
+def test_basic_functionality(report: ValidationReport):  # noqa: PLR0915
     """Test 1: Basic functionality of all core APIs."""
     print("\n📋 TEST 1: BASIC FUNCTIONALITY")
     print("-" * 80)

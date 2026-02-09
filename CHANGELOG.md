@@ -7,16 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Unified configs now support `map_id` for deterministic map selection when building environments.
+- Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
+- Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
+- New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
 - Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
 - Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
 - Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
 - Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
 - Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
 - Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
+- Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
+- Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.
 - Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
 - Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
 - Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
 - Benchmark outputs now include wall collision and clearing distance metrics by default.
+- Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
+- Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
+- ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
+- Added SocNavBench subset metrics (`socnavbench_path_length`, `socnavbench_path_length_ratio`, `socnavbench_path_irregularity`).
+- Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
 - Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
 - Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
 - Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
@@ -28,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
 - Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
+
+### Fixed
+- Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
+- SVG map parsing now honors indexed spawn/goal labels to keep route ordering stable.
+- Pedestrian env now validates robot action-space compatibility and falls back to null actions on mismatch.
+- SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.
+- SocNavBench path irregularity now uses heading vectors instead of origin-dependent position vectors.
+- SocNavBench upstream planner loader rejects untrusted roots unless explicitly allowed via `ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT`.
+- Vendored SocNavBench helpers now guard missing data files, fix numpy API mismatches, and correct plotting/trajectory utilities.
+- Renamed `thrid_party` to `third_party` to fix the vendor directory typo.
+- Vendored the MIT-ACL Python-RVO2 fork to keep ORCA builds compatible with newer CMake versions.
+- SocialForcePlannerAdapter now uses fast-pysf social-force interactions (goal, pedestrian, obstacle forces) instead of the heuristic placeholder.
 
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)
@@ -119,6 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expert PPO evaluation now applies the same environment overrides as training, preventing observation-space mismatches during evaluation.
 - fast-pysf group gaze force now guards against zero-distance divisions to prevent training crashes.
 - Expert PPO CLI now supports `--log-file` to tee stdout/stderr into a log file.
+- Scenario loader map resolution now anchors relative paths to `base_dir` directories instead of CWD, preventing off-by-one directory lookups and unintended map matches.
+- Pedestrian route sampling now raises a descriptive error instead of dropping obstacle checks after repeated anchor failures.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)
@@ -126,6 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added cross-links between core guides for improved discoverability
   - Normalized H1 headings and purpose statements across key documentation files
   - Collapsed legacy detailed index into expandable section for backward compatibility
+- Added a benchmark spec doc covering scenario splits, seeds, baseline categories, reproducible commands, and metric caveats.
+- Updated benchmark spec for seed-holdout evaluation and policy sweep commands; documented map_id usage in scenario README.
   
 ### Migration Guide (Version 2.1.0)
 

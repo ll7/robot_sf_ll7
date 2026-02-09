@@ -99,13 +99,16 @@ def _build_policy(  # noqa: C901
     socnav_cfg = _build_socnav_config(algo_config)
 
     if algo_key in {"socnav_sampling", "sampling"}:
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
     elif algo_key in {"orca"}:
-        adapter = ORCAPlannerAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"sacadrl", "sa_cadrl"}:
-        adapter = SACADRLPlannerAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"socnav_bench"}:
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg)
     elif algo_key in {"rvo", "dwa", "teb"}:
@@ -225,7 +228,7 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
     return stacked
 
 
-def _run_map_episode(  # noqa: C901
+def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
     *,
@@ -387,7 +390,7 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
     )
 
 
-def run_map_batch(  # noqa: C901
+def run_map_batch(  # noqa: C901,PLR0912,PLR0913
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,

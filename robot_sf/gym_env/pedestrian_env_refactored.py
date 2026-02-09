@@ -1,23 +1,32 @@
-"""
-Refactored Pedestrian Environment
+"""Refactored pedestrian environment implementation.
 
-This demonstrates how to migrate PedestrianEnv to use the new abstract base classes
-and unified configuration system.
+This module provides the canonical PedestrianEnv implementation backed by the
+new abstract environment base classes and unified configuration system. The
+legacy import path (robot_sf.gym_env.pedestrian_env) re-exports this class for
+backward compatibility.
 """
 
+import datetime
+import pickle
 from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
 import loguru
+import numpy as np
+from gymnasium import spaces
 
+from robot_sf.common.artifact_paths import get_artifact_category_path, resolve_artifact_path
+from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.abstract_envs import SingleAgentEnv
+from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
     init_ped_collision_and_sensors,
     init_ped_spaces,
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.robot_env import _build_step_info
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
@@ -55,57 +64,83 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
     last_obs_robot: Any
     last_action_robot: Any
     last_action_ped: Any
+    robot_action_space: spaces.Space | None
+    _robot_action_space_valid: bool
 
     def __init__(
         self,
-        config: PedestrianSimulationConfig | None = None,
+        env_config: PedestrianSimulationConfig | PedEnvSettings | None = None,
         robot_model=None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,
         recording_enabled: bool = False,
-        peds_have_obstacle_forces: bool = True,
+        peds_have_obstacle_forces: bool | None = None,
         **kwargs,
     ):
         """
         Initialize the Pedestrian Environment.
 
         Args:
-            config: Pedestrian simulation configuration
-            robot_model: Pre-trained robot model for adversarial interaction
-            reward_func: Reward function for pedestrian training
-            debug: Enable debug mode with visualization
-            recording_enabled: Enable state recording
-            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces
+            env_config: Pedestrian simulation configuration (unified or legacy).
+            robot_model: Pre-trained robot model for adversarial interaction.
+            reward_func: Reward function for pedestrian training.
+            debug: Enable debug mode with visualization.
+            recording_enabled: Enable state recording.
+            peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
-        if config is None:
-            config = PedestrianSimulationConfig()
+        if env_config is None:
+            env_config = PedestrianSimulationConfig()
+
+        # Ensure pedestrian obstacle forces are configured consistently.
+        if peds_have_obstacle_forces is not None:
+            if hasattr(env_config, "peds_have_static_obstacle_forces"):
+                env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            else:
+                env_config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
         # Store robot model
         if robot_model is None:
-            raise ValueError("Robot model is required for pedestrian environment!")
+            robot_model = StubRobotModel()
         self.robot_model = robot_model
 
         # Store reward function
-        if reward_func is None:
-            logger.warning("No reward function provided, using default simple_ped_reward.")
-            self.reward_func = simple_ped_reward
-        else:
-            self.reward_func = reward_func
+        self.reward_func = reward_func or simple_ped_reward
 
-        # Update config
-        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        self.robot_action_space = None
+        self._robot_action_space_valid = True
 
         # Initialize base class
-        super().__init__(config=config, debug=debug, recording_enabled=recording_enabled, **kwargs)
+        super().__init__(
+            config=env_config,
+            debug=debug,
+            recording_enabled=recording_enabled,
+            **kwargs,
+        )
+
+        # Recording directory mirrors legacy behavior (canonical artifact category).
+        self._recording_dir = get_artifact_category_path("recordings")
+
+        # Track last actions/observations
+        self.last_obs_robot = None
+        self.last_action_robot = None
+        self.last_action_ped = None
 
     def _setup_environment(self) -> None:
         """Initialize environment-specific components."""
-        # Get map definition
-        self.map_def = self.config.map_pool.choose_random_map()
+        # Get map definition (respect explicit map_id when provided)
+        map_id = getattr(self.config, "map_id", None)
+        if map_id:
+            try:
+                self.map_def = self.config.map_pool.get_map(map_id)
+            except KeyError as exc:
+                raise ValueError(str(exc)) from exc
+        else:
+            self.map_def = self.config.map_pool.choose_random_map()
 
         # Initialize spaces
         self.action_space, self.observation_space, self.orig_obs_space = self._create_spaces()
+        self._configure_robot_model_action_space()
 
         # Setup simulator and sensors
         self._setup_simulator()
@@ -128,7 +163,99 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         )
 
         # Return pedestrian spaces (index 1)
+        self.robot_action_space = combined_action_space[0]
         return combined_action_space[1], combined_observation_space[1], orig_obs_space
+
+    def _configure_robot_model_action_space(self) -> None:
+        """Configure and validate the robot model action space if available."""
+        if hasattr(self.robot_model, "set_action_space") and self.robot_action_space is not None:
+            try:
+                self.robot_model.set_action_space(self.robot_action_space)
+            except (AttributeError, TypeError, ValueError) as exc:  # pragma: no cover - defensive
+                logger.warning(f"Failed to set robot model action space: {exc}")
+
+        self._robot_action_space_valid = self._validate_robot_model_action_space()
+
+    def _validate_robot_model_action_space(self) -> bool:
+        """Validate the robot model action space against the environment.
+
+        Returns:
+            bool: True when the model action space is compatible with the environment.
+        """
+        if self.robot_action_space is None:
+            return True
+        if not hasattr(self.robot_model, "action_space"):
+            return True
+
+        model_space = getattr(self.robot_model, "action_space", None)
+        if model_space is None:
+            return True
+
+        if isinstance(self.robot_action_space, spaces.Box) and isinstance(model_space, spaces.Box):
+            if model_space.shape != self.robot_action_space.shape:
+                logger.warning(
+                    "Robot model action space shape "
+                    f"{model_space.shape} does not match env shape "
+                    f"{self.robot_action_space.shape}. Falling back to null actions."
+                )
+                return False
+            if not np.allclose(model_space.low, self.robot_action_space.low) or not np.allclose(
+                model_space.high,
+                self.robot_action_space.high,
+            ):
+                logger.warning(
+                    "Robot model action space bounds do not match env bounds. "
+                    "Falling back to null actions."
+                )
+                return False
+            return True
+
+        if hasattr(model_space, "shape") and hasattr(self.robot_action_space, "shape"):
+            if model_space.shape != self.robot_action_space.shape:
+                logger.warning(
+                    "Robot model action space shape "
+                    f"{model_space.shape} does not match env shape "
+                    f"{self.robot_action_space.shape}. Falling back to null actions."
+                )
+                return False
+        return True
+
+    def _null_robot_action(self) -> np.ndarray:
+        """Return a zero action matching the robot action space."""
+        if isinstance(self.robot_action_space, spaces.Box):
+            zeros = np.zeros(self.robot_action_space.shape, dtype=self.robot_action_space.dtype)
+            return zeros
+        shape = getattr(self.robot_action_space, "shape", (2,))
+        return np.zeros(shape, dtype=float)
+
+    def _format_robot_action(self, action: Any) -> np.ndarray | None:
+        """Validate/clip robot action to the environment action space.
+
+        Returns:
+            np.ndarray | None: The formatted action or None when invalid.
+        """
+        if self.robot_action_space is None:
+            return None
+        try:
+            arr = np.asarray(action, dtype=float)
+        except (TypeError, ValueError):
+            return None
+
+        target_shape = getattr(self.robot_action_space, "shape", None)
+        if target_shape is not None:
+            if arr.shape != target_shape:
+                if arr.size == int(np.prod(target_shape)):
+                    arr = arr.reshape(target_shape)
+                else:
+                    return None
+
+        if not np.all(np.isfinite(arr)):
+            return None
+
+        if isinstance(self.robot_action_space, spaces.Box):
+            arr = np.clip(arr, self.robot_action_space.low, self.robot_action_space.high)
+            arr = arr.astype(self.robot_action_space.dtype, copy=False)
+        return arr
 
     def _setup_simulator(self) -> None:
         """Initialize the simulator."""
@@ -136,7 +263,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             self.config,
             self.map_def,
             random_start_pos=True,
-            peds_have_obstacle_forces=self.config.peds_have_obstacle_forces,
+            peds_have_obstacle_forces=getattr(
+                self.config,
+                "peds_have_static_obstacle_forces",
+                self.config.peds_have_obstacle_forces,
+            ),
         )[0]
 
     def _setup_sensors_and_collision(self) -> None:
@@ -170,14 +301,19 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
     def _setup_visualization(self) -> None:
         """Setup visualization for debug mode."""
+        scaling_value = getattr(self.config, "render_scaling", None)
+        scaling_value = 10 if scaling_value is None else int(scaling_value)
         self.sim_ui = SimulationView(
-            scaling=10,
+            scaling=scaling_value,
             map_def=self.map_def,
             obstacles=self.map_def.obstacles,
             robot_radius=self.config.robot_config.radius,
             ego_ped_radius=self.config.ego_ped_config.radius,
             ped_radius=self.config.sim_config.ped_radius,
             goal_radius=self.config.sim_config.goal_radius,
+            record_video=self.record_video,
+            video_path=self.video_path,
+            video_fps=self.video_fps if self.video_fps is not None else 10.0,
         )
 
     def step(self, action):
@@ -191,7 +327,25 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         self.last_action_ped = action_ped
 
         # Get robot action from model
-        action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
+        if not self._robot_action_space_valid:
+            action_robot = self._null_robot_action()
+        else:
+            try:
+                action_robot, _ = self.robot_model.predict(
+                    self.last_obs_robot,
+                    deterministic=True,
+                )
+            except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+                logger.warning(f"Robot model predict failed ({exc}); using null action.")
+                action_robot = self._null_robot_action()
+            else:
+                formatted = self._format_robot_action(action_robot)
+                if formatted is None:
+                    logger.warning("Robot model produced invalid action; using null action.")
+                    action_robot = self._null_robot_action()
+                else:
+                    action_robot = formatted
+
         action_robot = self.simulator.robots[0].parse_action(action_robot)
         self.last_action_robot = action_robot
 
@@ -213,7 +367,8 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         if self.recording_enabled:
             self.record()
 
-        return obs_ped, reward, terminated, False, {"step": meta["step"], "meta": meta}
+        info = _build_step_info(meta)
+        return obs_ped, reward, terminated, False, info
 
     def reset(self, seed=None, options=None):
         """Reset the environment.
@@ -221,7 +376,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         Returns:
             Tuple of (observation, info) after environment reset.
         """
-        super().reset(seed=seed)
+        super().reset(seed=seed, options=options)
 
         # Reset simulator
         self.simulator.reset_state()
@@ -234,7 +389,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         self.last_action_robot = None
         self.last_action_ped = None
 
-        return obs_ped, {}
+        if self.recording_enabled:
+            self.save_recording()
+
+        # Preserve legacy info payload shape.
+        return obs_ped, {"info": "test"}
 
     def render(self, **kwargs):
         """Render the environment."""
@@ -313,6 +472,31 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         """Record current state for later playback."""
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
+
+    def save_recording(self, filename: str | None = None):
+        """Save recorded states to a pickle file.
+
+        Args:
+            filename: Optional target filename ending with ``.pkl``. When omitted,
+                a timestamped file is created under the recordings directory.
+        """
+        if filename is None:
+            now = datetime.datetime.now()
+            target_path = self._recording_dir / f"{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+        else:
+            target_path = resolve_artifact_path(filename)
+
+        if len(self.recorded_states) == 0:
+            logger.warning("No states recorded, skipping save")
+            return
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with target_path.open("wb") as f:  # write binary
+            pickle.dump((self.recorded_states, self.map_def), f)
+            logger.info(f"Recording saved to {target_path}")
+            logger.info("Reset state list")
+            self.recorded_states = []
 
 
 # Create alias for backward compatibility

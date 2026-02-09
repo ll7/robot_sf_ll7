@@ -6,7 +6,7 @@ Welcome to the Robot SF Development Guide! This document serves as the central r
 <!--
 This document should be kept as short as possible to maintain clarity and ease of navigation.
 Whenever possible, link out to more detailed documents or external resources.
-Refacotr this document regularly to be as concise as possible.
+Refactor this document regularly to be as concise as possible.
 LLM Constitution and guides can be found here:
 - `.specify/memory/constitution.md`
 - `.github/copilot-instructions.md`
@@ -108,7 +108,7 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 
 ### Environment factory pattern (CRITICAL)
 
-**Always use factory functions** — never instantiate gym environments directly:
+**Always use factory functions** — never instantiate gymnasium environments directly:
 
 ```python
 from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
@@ -157,7 +157,8 @@ Use unified config classes from `robot_sf.gym_env.unified_config`:
 from robot_sf.gym_env.unified_config import RobotSimulationConfig, ImageRobotConfig
 
 config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True  # Enable ped-robot physics interaction
+config.peds_have_static_obstacle_forces = True  # Enable pedestrian-obstacle forces
+config.peds_have_robot_repulsion = True  # Enable pedestrian-robot repulsion
 env = make_robot_env(config=config)
 ```
 
@@ -262,18 +263,37 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Whenever possible, add a demo or example to illustrate new functionality.
 - Avoid disabling linters, type checks, or tests unless absolutely necessary.
   - Whenever you have the chance, refactor to fix issues rather than suppressing them. Especially `# noqa: C901` (complexity) and `# type: ignore` (type hints).
+- Prefer refactoring over adding `# noqa` suppressions; only use `# noqa` as a short-lived exception with a clear plan to remove it.
 - Always document the purpose of documents at the top of the file. (e.g., Python files, README.md, design docs, issue folders)
 - Use American English.
 
 ### One-liner architecture summary
 
-- Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
+- Architecture in one line: Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
 - Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
 - Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
+
+### Test style conventions
+
+- Default to pytest-style tests in `tests/` (functions + pytest fixtures).
+- Using `unittest.mock` for mocks/stubs is fine, but avoid adding new `unittest.TestCase` suites.
+- Legacy `fast-pysf/tests/unittest` remains unittest-based for upstream compatibility; new fast-pysf tests should still prefer pytest.
+
+### Docstring-on-touch
+
+- If you change a function/class body or signature, replace any `TODO docstring` placeholder in that scope with a real docstring.
+- Keep it brief and accurate (one or two sentences is enough); focus on intent and non-obvious behavior.
+- Purely mechanical edits (formatting, imports, lint fixes) do not require docstring updates.
+- Avoid mass docstring sweeps; improve documentation incrementally as code changes.
+
+### Map Bounds Format
+
+- `MapDefinition.bounds` accepts either flat tuples `(x_start, x_end, y_start, y_end)` or pair-of-points `((x1, y1), (x2, y2))`.
+- At runtime, bounds are normalized to the flat tuple format because the fast-pysf backend and legacy utilities expect it.
 
 ### Artifact policy & tooling
 
@@ -294,6 +314,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 # Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
 uv run pytest -n auto  # Number of test is steadily increasing, ca. 1200
 
+# Run fast unit tests only (excludes slow/integration)
+uv run pytest -m "not slow" tests
+  # Note: integration/perf-heavy directories are auto-marked as slow in tests/conftest.py.
+
 # Run only robot_sf tests
 uv run pytest tests
 
@@ -309,6 +333,9 @@ uv run pytest -n auto
 ```bash
 # 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
 uv run pytest -n auto tests  # → 881 tests
+
+# Fast unit test pass (skip slow/integration)
+uv run pytest -m "not slow" tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
@@ -460,7 +487,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - [ ] Add programmatic benchmark examples and extend baseline coverage.
 - [ ] Update or add docs under `docs/` for new components; include diagrams when useful.
 - [ ] Add performance smoke (steps/sec) when touching hot paths.
-- [ ] Add proper docstrings to comply with pydoclint and and pydocstyle
+- [ ] Add proper docstrings to comply with pydoclint and pydocstyle
 
 ### Quick links
 
@@ -473,7 +500,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 
 ### Executive summary
 
-- **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
+- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
@@ -503,6 +530,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 - **Verify test value before investing fix effort** (see Test Significance Verification in Testing Strategy section).
+- Math vs numpy: use `math` for scalar ops/constants, `numpy` for vectorized/array ops, and avoid mixing within a single expression.
 
 ### Design decisions
 
@@ -539,7 +567,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Follow the pydocstyle convention specified in `pyproject.toml`.
 
 ### Clarify questions (with options)
--In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
+- In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
 - Add arguments to the options for easy decision-making.
@@ -564,7 +592,7 @@ Examples (copy‑ready):
   - Run: `uv run <cmd>` for any Python command
   - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
 - Lint/format: Ruff
-  - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean; document exceptions with comments)
+  - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean with the expanded rule set; document exceptions with comments)
 - Type checking: ty
   - VS Code task "Type Check" (uvx ty check . --exit-zero; runs type checking with exit-zero for current compatibility)
   - **All type errors must be addressed before merging PRs**
@@ -573,6 +601,7 @@ Examples (copy‑ready):
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
+  - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
 - Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
 - Diagrams: VS Code task “Generate UML”
 
@@ -606,7 +635,6 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 - dev_guide.md — Primary development reference (setup, workflow, testing, CI).
 - `ENVIRONMENT.md` — Environment overview and usage.
 - `SIM_VIEW.md` — Simulation view/UI notes.
-- `GPU_SETUP.md` — GPU/NVIDIA Docker setup.
 - `UV_MIGRATION.md` — Migration notes to uv.
 - Topic-specific guides:
   - `DATA_ANALYSIS.md`, `trajectory_visualization.md`, `SVG_MAP_EDITOR.md`, `fast_pysf_wrapper.md`, `pyreverse.md`, `curvature_metric.md`, `snqi_weight_cli_updates.md`.
@@ -646,9 +674,10 @@ Documentation should include:
 - Write for future developers who may be unfamiliar with the context
 - Keep documentation up-to-date as code evolves
 - Use consistent formatting and follow markdown linting standards
+- Prefer GitHub-flavored Markdown (GFM) conventions so docs render correctly on GitHub
 - Avoid duplications. Link to existing documentation when relevant.
 - Always provide README.md files in new documentation folders for overview and reference.
-- When the document is longer htan 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.
+- When the document is longer than 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.
 
 #### Visualizations and Reports
 
@@ -685,23 +714,6 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Figures go into `docs/figures/` (tracked).
   - Data exports (if used) into `output/figures/`.
 
-
-## Tooling and tasks (uv, Ruff, pytest, VS Code)
-- Dependencies/runtime: uv
-  - Install/resolve: VS Code task "Install Dependencies" (uv sync)
-  - Run: `uv run <cmd>` for any Python command
-  - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
-- Lint/format: Ruff
-  - VS Code task "Ruff: Format and Fix" (keeps repo ruff‑clean with expanded rule set including bug catchers, modernization, and performance checks; document exceptions with comments)
-- Tests: pytest
-  - VS Code task "Run Tests" (default suite)
-  - "Run Tests (Show All Warnings)" for diagnostics
-  - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
-- Code quality checks: VS Code task "Check Code Quality" (Ruff + ty errors‑only)
-- Diagrams: VS Code task "Generate UML"
-
-Quality gates to run locally before pushing:
-1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Run Tests
 
 ## CI/CD expectations
 - Tests: `uv run pytest tests`
@@ -962,7 +974,6 @@ Set `--log-level DEBUG` if you need the full resolved-config dumps from the fact
 ### Docker training (advanced)
 ```bash
 # Build and run GPU training (requires NVIDIA Docker)
-docker compose build && docker compose run robotsf-cuda python ./scripts/training_ppo.py
 # NOTE: May fail in CI environments due to network restrictions
 ```
 
@@ -976,14 +987,8 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 ### Runtime issues
 - Import errors → ensure venv is activated: `source .venv/bin/activate`
 - Display errors → run headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`
-- Model loading warnings → StableBaselines3 warnings about Gym are normal
+- Model loading warnings → StableBaselines3 warnings about legacy Gym-trained models are expected (re-save models to clear them)
 - Model compatibility → use newest models for best compatibility (e.g., `ppo_model_retrained_10m_2025-02-01.zip`)
-
-### Docker issues
-- Docker build fails → often network related in CI; usually fine locally
-- GPU support → see `docs/GPU_SETUP.md` for NVIDIA Docker setup
-
----
 
 ## Migration notes
 - The project uses uv for env/runner and a factory pattern for environment creation.
@@ -1104,3 +1109,31 @@ When relaxing:
 Use `ROBOT_SF_PERF_RELAX=1` temporarily only for known CI variance; file a follow-up issue if sustained.
 
 Hard timeout breaches should be rare; investigate infinite loops or large scenario expansions if encountered.
+
+## Multi-robot LiDAR and sprite rendering
+
+### LiDAR robot detection toggle
+- `LidarScannerSettings.detect_other_robots` controls whether LiDAR rays include other robots.
+- Default is `True`.
+- This modifies ray distances only and keeps observation keys unchanged (`drive_state`, `rays`).
+
+### SimulationView representation modes
+- `SimulationView` supports per-entity render mode fields:
+- `robot_render_mode`, `ped_render_mode`, `ego_ped_render_mode` with values `circle` or `sprite`.
+- Optional sprite paths:
+- `robot_sprite_path`, `ped_sprite_path`, `ego_ped_sprite_path`.
+- If sprite loading fails, rendering falls back to circles and emits a warning.
+
+### Example
+```python
+from robot_sf.render.sim_view import SimulationView
+from robot_sf.sensor.range_sensor import LidarScannerSettings
+
+lidar_cfg = LidarScannerSettings(detect_other_robots=True)
+
+view = SimulationView(
+    robot_render_mode="sprite",
+    ped_render_mode="sprite",
+    ego_ped_render_mode="sprite",
+)
+```

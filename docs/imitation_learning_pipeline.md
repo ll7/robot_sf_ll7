@@ -6,6 +6,17 @@
 
 The project supports accelerating PPO training via behavioral cloning pre-training from expert trajectories. This pipeline enables sample-efficient training by warm-starting agents with expert demonstrations.
 
+## Prerequisites
+
+Install dependencies for the imitation workflow before running BC pre-training:
+
+```bash
+uv sync --group imitation
+source .venv/bin/activate
+```
+
+When invoking commands with `uv run`, include `--group imitation`.
+
 ## Pipeline Workflow
 
 **1. Train Expert Policy** → **2. Collect Trajectories** → **3. BC Pre-training** → **4. PPO Fine-tuning** → **5. Compare Results**
@@ -59,7 +70,7 @@ Use expert trajectories to pre-train a new policy via behavioral cloning:
 
 ```bash
 # Pre-train new policy using expert trajectories
-uv run python scripts/training/pretrain_from_expert.py \
+uv run --group imitation python scripts/training/pretrain_from_expert.py \
   --config configs/training/ppo_imitation/bc_pretrain.yaml
 ```
 
@@ -271,7 +282,7 @@ uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
 
 # 3. Pre-train with BC
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 
 # 4. Fine-tune with PPO
 uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml

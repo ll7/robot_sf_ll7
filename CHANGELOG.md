@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Unified configs now support `map_id` for deterministic map selection when building environments.
+- Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
+  `scripts/training/train_dreamerv3_rllib.py`, `configs/training/rllib_dreamerv3/drive_state_rays.yaml`,
+  deterministic observation flattening/action normalization wrappers, and a dedicated runbook.
+- Optional dependency split for training stacks: `imitation` moved to the `imitation` dependency group so BC pre-training can be installed separately from RLlib-oriented environments.
+- Added an explicit uv dependency conflict declaration between `--extra rllib` and `--group imitation` to provide actionable install errors when mixed.
 - Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
 - Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
 - New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.

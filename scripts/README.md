@@ -237,6 +237,12 @@ uv run python scripts/example_snqi_workflow.py
 
 Imitation learning pipeline scripts (feature 001-ppo-imitation-pretrain):
 
+```bash
+# Required for behavioral cloning pre-training (imitation package)
+uv sync --group imitation
+# Use `uv run --group imitation ...` for pretrain_from_expert commands
+```
+
 ### `training/train_expert_ppo.py`
 **Purpose**: Expert PPO training workflow entry point  
 **Usage**:
@@ -244,6 +250,14 @@ Imitation learning pipeline scripts (feature 001-ppo-imitation-pretrain):
 uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 ```
 **Details**: Loads unified config, orchestrates PPO expert training, evaluates policy, persists manifests
+
+### `training/train_dreamerv3_rllib.py`
+**Purpose**: RLlib DreamerV3 training on `drive_state` + `rays` observations  
+**Usage**:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+**Details**: Uses factory-created Robot SF envs, deterministic observation flattening (`drive_state`, `rays`), optional `[-1,1]` action normalization, and periodic RLlib checkpoints under `output/dreamerv3/`
 
 ### `training/collect_expert_trajectories.py`
 **Purpose**: Trajectory collection for imitation learning  
@@ -257,7 +271,7 @@ uv run python scripts/training/collect_expert_trajectories.py --dataset-id exper
 **Purpose**: Behavioral cloning pre-training from expert trajectories  
 **Usage**:
 ```bash
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 ```
 **Details**: Trains PPO policy using BC on expert trajectories
 
@@ -612,6 +626,20 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/lau
   --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
   --study-name weekend_optuna_auc \
   --objective-mode auc
+```
+
+#### `training/train_dreamerv3_rllib.py`
+**Purpose**: Config-first RLlib DreamerV3 training for Robot SF (`drive_state` + `rays`)  
+**Usage**:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+Optional validation-only run:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
+  --dry-run
 ```
 
 #### `benchmark_repro_check.py`

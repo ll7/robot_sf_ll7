@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import builtins
+import warnings
+
 import numpy as np
+import pytest
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten as flatten_space
 
-from scripts.training.pretrain_from_expert import _convert_to_transitions
+from scripts.training.pretrain_from_expert import (
+    ImitationDependencyWarning,
+    _convert_to_transitions,
+    _require_imitation_bc,
+    _warn_imitation_dependency_mode,
+)
 
 
 def _build_dataset(
@@ -118,3 +127,36 @@ def test_convert_to_transitions_appends_terminal_observation_when_missing() -> N
     assert len(trajectories) == 1
     assert trajectories[0].obs.shape[0] == trajectories[0].acts.shape[0] + 1
     np.testing.assert_allclose(trajectories[0].obs[-1], trajectories[0].obs[-2])
+
+
+def test_warn_imitation_dependency_mode_emits_warning_when_training() -> None:
+    """Non-dry runs should emit a clear dependency warning for imitation stack usage."""
+    with pytest.warns(ImitationDependencyWarning, match="--group imitation"):
+        _warn_imitation_dependency_mode(dry_run=False)
+
+
+def test_warn_imitation_dependency_mode_silent_for_dry_run() -> None:
+    """Dry-run mode should not warn about imitation runtime dependency stack."""
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        _warn_imitation_dependency_mode(dry_run=True)
+
+    assert len(captured) == 0
+
+
+def test_require_imitation_bc_warns_and_raises_when_import_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Import failures should emit actionable warning before raising RuntimeError."""
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object):
+        if name == "imitation.algorithms":
+            raise ImportError("forced missing imitation")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.warns(ImitationDependencyWarning, match="uv sync --group imitation"):
+        with pytest.raises(RuntimeError, match="optional imitation stack"):
+            _require_imitation_bc()

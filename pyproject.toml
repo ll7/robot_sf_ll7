@@ -14,7 +14,7 @@ requires-python = ">=3.11"
 dependencies = [
     # Core dependencies
     "numpy>=1.26.4",
-    "gymnasium>=0.29,<1.0",
+    "gymnasium>=0.29,<1.2",
     "numba>=0.60.0",
     "pygame>=2.6.1",
     # Machine Learning
@@ -24,7 +24,6 @@ dependencies = [
     "optuna>=4.1.0",
     "tensorboard>=2.18.0",
     "wandb>=0.18.7",
-    "imitation>=1.0.0",
     # Data processing
     "pandas>=2.2.3",
     "scipy>=1.14.1",
@@ -70,6 +69,9 @@ gpu = [
 docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
+]
+rllib = [
+    "ray[rllib]>=2.53.0",
 ]
 progress = [
     "tqdm>=4.67.0",
@@ -464,12 +466,23 @@ docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
 ]
+imitation = [
+    "imitation>=1.0.0",
+]
 
 [project.scripts]
 robot_sf_bench = "robot_sf.benchmark.cli:main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "rllib" },
+        { group = "imitation" },
+    ],
+]
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }

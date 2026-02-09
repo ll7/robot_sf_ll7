@@ -156,7 +156,7 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
         os.environ.pop("ROBOT_SF_ARTIFACT_ROOT", None)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
     """Ensure torch deterministic algorithms aren't forced across the suite."""
 

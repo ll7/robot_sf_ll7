@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts.training.train_dreamerv3_rllib import load_run_config
+from scripts.training.train_dreamerv3_rllib import (
+    _build_ray_init_kwargs,
+    _resolve_auto_overrides,
+    load_run_config,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -142,3 +146,61 @@ tracking:
 
     with pytest.raises(ValueError, match="Unknown key\\(s\\) in 'tracking.wandb'"):
         load_run_config(config_path)
+
+
+def test_load_run_config_accepts_auto_resource_placeholders(tmp_path: Path):
+    """Config should accept 'auto' placeholders for runtime resource detection."""
+    config_path = _write_yaml(
+        tmp_path / "auto_resources.yaml",
+        """
+experiment:
+  run_id: smoke
+ray:
+  num_cpus: auto
+  num_gpus: auto
+algorithm:
+  env_runners:
+    num_env_runners: auto
+  resources:
+    num_gpus: auto
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.ray.num_cpus == "auto"
+    assert run_config.ray.num_gpus == "auto"
+    assert run_config.algorithm.env_runners["num_env_runners"] == "auto"
+    assert run_config.algorithm.resources["num_gpus"] == "auto"
+
+
+def test_auto_resource_resolution_uses_slurm_env(monkeypatch, tmp_path: Path):
+    """Auto placeholders should resolve against Slurm-provided CPU/GPU allocation."""
+    config_path = _write_yaml(
+        tmp_path / "auto_resolution.yaml",
+        """
+experiment:
+  run_id: smoke
+ray:
+  num_cpus: auto
+  num_gpus: auto
+algorithm:
+  env_runners:
+    num_env_runners: auto
+  resources:
+    num_gpus: auto
+""",
+    )
+    run_config = load_run_config(config_path)
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "24")
+    monkeypatch.setenv("SLURM_GPUS_ON_NODE", "gpu:a30:1")
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    ray_kwargs = _build_ray_init_kwargs(run_config)
+    env_runner_payload, resources_payload, capacity = _resolve_auto_overrides(run_config)
+
+    assert ray_kwargs["num_cpus"] == 24
+    assert ray_kwargs["num_gpus"] == 1
+    assert env_runner_payload["num_env_runners"] == 20
+    assert resources_payload["num_gpus"] == 1
+    assert capacity is not None

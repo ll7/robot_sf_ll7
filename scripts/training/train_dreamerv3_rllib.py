@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from robot_sf.common.hardware import detect_hardware_capacity, recommend_env_runners
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
@@ -46,6 +47,7 @@ _WANDB_KEYS = {
     "dir",
 }
 _IGNORED_ENV_CONTEXT_KEYS = {"worker_index", "vector_index", "num_workers", "remote"}
+_AUTO_TOKEN = "auto"
 _DEFAULT_API_STACK: dict[str, bool] = {
     "enable_rl_module_and_learner": True,
     "enable_env_runner_and_connector_v2": True,
@@ -71,8 +73,8 @@ class RaySettings:
     address: str | None
     local_mode: bool
     include_dashboard: bool
-    num_cpus: int | None
-    num_gpus: float | int | None
+    num_cpus: int | str | None
+    num_gpus: float | int | str | None
 
 
 @dataclass(slots=True)
@@ -147,20 +149,28 @@ def _ensure_known_keys(payload: dict[str, object], *, field_name: str, allowed: 
         raise ValueError(f"Unknown key(s) in '{field_name}': {', '.join(unknown)}")
 
 
-def _coerce_optional_int(value: object, *, field_name: str) -> int | None:
+def _coerce_optional_int(
+    value: object, *, field_name: str, allow_auto: bool = False
+) -> int | str | None:
     """Coerce optional integer fields."""
     if value is None:
         return None
+    if allow_auto and isinstance(value, str) and value.strip().lower() == _AUTO_TOKEN:
+        return _AUTO_TOKEN
     try:
         return int(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Expected integer for '{field_name}', received {value!r}") from exc
 
 
-def _coerce_optional_float(value: object, *, field_name: str) -> float | int | None:
+def _coerce_optional_float(
+    value: object, *, field_name: str, allow_auto: bool = False
+) -> float | int | str | None:
     """Coerce optional numeric fields."""
     if value is None:
         return None
+    if allow_auto and isinstance(value, str) and value.strip().lower() == _AUTO_TOKEN:
+        return _AUTO_TOKEN
     try:
         return float(value)
     except (TypeError, ValueError) as exc:
@@ -230,8 +240,12 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
         address=None if ray_raw.get("address") in {None, ""} else str(ray_raw.get("address")),
         local_mode=bool(ray_raw.get("local_mode", False)),
         include_dashboard=bool(ray_raw.get("include_dashboard", False)),
-        num_cpus=_coerce_optional_int(ray_raw.get("num_cpus"), field_name="ray.num_cpus"),
-        num_gpus=_coerce_optional_float(ray_raw.get("num_gpus"), field_name="ray.num_gpus"),
+        num_cpus=_coerce_optional_int(
+            ray_raw.get("num_cpus"), field_name="ray.num_cpus", allow_auto=True
+        ),
+        num_gpus=_coerce_optional_float(
+            ray_raw.get("num_gpus"), field_name="ray.num_gpus", allow_auto=True
+        ),
     )
 
 
@@ -416,6 +430,48 @@ def _apply_env_runner_settings(config_obj: object, payload: dict[str, object]) -
     return config_obj
 
 
+def _is_auto(value: object) -> bool:
+    """Return True when value is the special 'auto' token."""
+    return isinstance(value, str) and value.strip().lower() == _AUTO_TOKEN
+
+
+def _resolve_auto_overrides(
+    run_config: DreamerRunConfig,
+) -> tuple[dict[str, object], dict[str, object], object | None]:
+    """Resolve auto resource placeholders against detected local/slurm capacity."""
+    env_runner_payload = dict(run_config.algorithm.env_runners)
+    resources_payload = dict(run_config.algorithm.resources)
+    use_auto = any(
+        (
+            _is_auto(run_config.ray.num_cpus),
+            _is_auto(run_config.ray.num_gpus),
+            _is_auto(env_runner_payload.get("num_env_runners")),
+            _is_auto(resources_payload.get("num_gpus")),
+        )
+    )
+    if not use_auto:
+        return env_runner_payload, resources_payload, None
+
+    capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1)
+    if _is_auto(env_runner_payload.get("num_env_runners")):
+        env_runner_payload["num_env_runners"] = recommend_env_runners(capacity, cpu_headroom=4)
+    if _is_auto(resources_payload.get("num_gpus")):
+        resources_payload["num_gpus"] = capacity.visible_gpus
+
+    logger.info(
+        "Resolved auto resources: logical_cpus={} allocated_cpus={} usable_cpus={} "
+        "allocated_gpus={} visible_gpus={} env_runners={} algo_num_gpus={}",
+        capacity.logical_cpus,
+        capacity.allocated_cpus,
+        capacity.usable_cpus,
+        capacity.allocated_gpus,
+        capacity.visible_gpus,
+        env_runner_payload.get("num_env_runners"),
+        resources_payload.get("num_gpus"),
+    )
+    return env_runner_payload, resources_payload, capacity
+
+
 def _build_algorithm_config(
     run_config: DreamerRunConfig,
     *,
@@ -431,10 +487,11 @@ def _build_algorithm_config(
         disable_env_checking=False,
     )
     cfg = cfg.framework(run_config.algorithm.framework)
+    env_runner_payload, resources_payload, _ = _resolve_auto_overrides(run_config)
     api_stack_settings = run_config.algorithm.api_stack or dict(_DEFAULT_API_STACK)
     cfg = _apply_config_method(cfg, "api_stack", api_stack_settings)
-    cfg = _apply_env_runner_settings(cfg, run_config.algorithm.env_runners)
-    cfg = _apply_config_method(cfg, "resources", run_config.algorithm.resources)
+    cfg = _apply_env_runner_settings(cfg, env_runner_payload)
+    cfg = _apply_config_method(cfg, "resources", resources_payload)
     cfg = _apply_config_method(cfg, "learners", run_config.algorithm.learners)
     cfg = _apply_config_method(cfg, "training", run_config.algorithm.training)
     debugging = getattr(cfg, "debugging", None)
@@ -540,9 +597,17 @@ def _build_ray_init_kwargs(run_config: DreamerRunConfig) -> dict[str, object]:
     }
     if run_config.experiment.log_level in {"WARNING", "ERROR", "CRITICAL"}:
         ray_kwargs["log_to_driver"] = False
-    if run_config.ray.num_cpus is not None:
+    needs_auto = _is_auto(run_config.ray.num_cpus) or _is_auto(run_config.ray.num_gpus)
+    capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1) if needs_auto else None
+    if _is_auto(run_config.ray.num_cpus):
+        assert capacity is not None
+        ray_kwargs["num_cpus"] = capacity.usable_cpus
+    elif run_config.ray.num_cpus is not None:
         ray_kwargs["num_cpus"] = run_config.ray.num_cpus
-    if run_config.ray.num_gpus is not None:
+    if _is_auto(run_config.ray.num_gpus):
+        assert capacity is not None
+        ray_kwargs["num_gpus"] = capacity.visible_gpus
+    elif run_config.ray.num_gpus is not None:
         ray_kwargs["num_gpus"] = run_config.ray.num_gpus
     return ray_kwargs
 

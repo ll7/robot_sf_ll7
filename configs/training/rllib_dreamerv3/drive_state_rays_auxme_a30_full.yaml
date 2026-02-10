@@ -12,8 +12,8 @@ ray:
   address: null
   local_mode: false
   include_dashboard: false
-  num_cpus: 24
-  num_gpus: 1
+  num_cpus: auto
+  num_gpus: auto
 
 tracking:
   wandb:
@@ -39,11 +39,11 @@ env:
 algorithm:
   framework: torch
   env_runners:
-    num_env_runners: 20
+    num_env_runners: auto
     num_envs_per_env_runner: 1
     rollout_fragment_length: 32
   resources:
-    num_gpus: 1
+    num_gpus: auto
   learners:
     num_learners: 0
   training:

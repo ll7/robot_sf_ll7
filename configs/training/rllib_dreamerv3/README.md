@@ -15,10 +15,13 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
 
 - `drive_state_rays_auxme_a30_full.yaml`: High-throughput profile tuned for Auxme `a30` runs
   with one A30 GPU and 24 CPUs. Compared to the starter profile it enables GPU learning
-  (`resources.num_gpus=1`), scales env runners (`num_env_runners=20`), uses a larger model
+  (`resources.num_gpus=auto`), scales env runners (`num_env_runners=auto`), uses a larger model
   (`model_size=S`), and increases Dreamer sequence/training throughput (`training_ratio=128`,
   `batch_length_T=64`).
 - This profile assumes W&B online tracking is available on compute nodes.
+- The `auto` placeholders are resolved at runtime from Slurm/CUDA visibility
+  (`SLURM_CPUS_PER_TASK`, `SLURM_GPUS*`, `CUDA_VISIBLE_DEVICES`) so the same config
+  scales across different allocations.
 
 ## Canonical command
 

@@ -23,6 +23,7 @@ robot_sf/data_analysis/datasets/*.json
 
 # Canonical artifact root
 output/
+wandb
 
 # Python virtual environments
 .venv/

@@ -511,12 +511,13 @@ def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
         value = result.get(key)
         if isinstance(value, int | float):
             return value
-    env_runner_results = result.get("env_runner_results")
-    if isinstance(env_runner_results, dict):
-        for key in keys:
-            value = env_runner_results.get(key)
-            if isinstance(value, int | float):
-                return value
+    for container_name in ("env_runners", "env_runner_results"):
+        container = result.get(container_name)
+        if isinstance(container, dict):
+            for key in keys:
+                value = container.get(key)
+                if isinstance(value, int | float):
+                    return value
     return None
 
 

@@ -52,7 +52,7 @@ def _parse_positive_int(raw: str | None) -> int | None:
     return value if value >= 0 else None
 
 
-def _count_gpu_token(token: str) -> int | None:
+def _count_gpu_token(token: str, *, treat_numeric_as_device_id: bool = False) -> int | None:
     """Parse one GPU allocation token into a concrete device count.
 
     Returns:
@@ -66,7 +66,7 @@ def _count_gpu_token(token: str) -> int | None:
 
     numeric = _parse_positive_int(item)
     if numeric is not None and item.isdigit():
-        return numeric
+        return 1 if treat_numeric_as_device_id else numeric
 
     # Slurm formats like "gpu:a30:1".
     if ":" in item:
@@ -87,7 +87,7 @@ def _count_gpu_token(token: str) -> int | None:
     return None
 
 
-def _parse_gpu_count(raw: str | None) -> int | None:
+def _parse_gpu_count(raw: str | None, *, treat_numeric_as_device_id: bool = False) -> int | None:
     """Parse GPU count from Slurm/CUDA environment variable formats.
 
     Returns:
@@ -99,7 +99,10 @@ def _parse_gpu_count(raw: str | None) -> int | None:
     if not tokens:
         return None
 
-    counts = [_count_gpu_token(token) for token in tokens]
+    counts = [
+        _count_gpu_token(token, treat_numeric_as_device_id=treat_numeric_as_device_id)
+        for token in tokens
+    ]
     if any(count is None for count in counts):
         return None
 
@@ -156,7 +159,10 @@ def detect_hardware_capacity(
     usable_cpus = max(minimum_cpus, cpu_budget - reserve_cpu_cores)
 
     allocated_gpus = _env_first_count(_GPU_ENV_KEYS, _parse_gpu_count)
-    cuda_visible = _parse_gpu_count(os.environ.get("CUDA_VISIBLE_DEVICES"))
+    cuda_visible = _parse_gpu_count(
+        os.environ.get("CUDA_VISIBLE_DEVICES"),
+        treat_numeric_as_device_id=True,
+    )
     torch_visible = _torch_visible_gpu_count()
     if cuda_visible is not None:
         visible_gpus = max(0, cuda_visible)

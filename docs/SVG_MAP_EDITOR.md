@@ -68,10 +68,16 @@ When you use indexed labels/ids, those explicit indices take precedence over UI 
 
 #### NPC Pedestrians
 
-The Pedestrians also need a spawn/goal zone. If they reach the goal they will spawn again at the start\
+Preferred (benchmark-grade): define explicit spawn/goal zones so respawn behavior is
+fully controlled and reproducible. If they reach the goal they will spawn again at the start\
 Set the labels to **ped_spawn_zone** and **ped_goal_zone**. For stable ordering,
 append an index suffix to the `inkscape:label` or `id` (e.g., `ped_spawn_zone_0`,
 `ped_goal_zone_1`).
+
+Route-only mode (supported): you may omit pedestrian spawn/goal rectangles and define
+only `ped_route*` paths. In this mode, the parser derives synthetic respawn zones from
+route endpoints. This is useful for quick prototyping, but explicit zones are still
+recommended for canonical benchmark maps.
 
 For the path you don't need to set specific waypoints, just make sure the path doesn't collide with an obstacle.\
 Set the label to **ped_route_\<spawn\>_\<goal\>**

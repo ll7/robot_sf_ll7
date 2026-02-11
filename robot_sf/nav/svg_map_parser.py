@@ -78,6 +78,8 @@ class SvgMapConverter:
     rect_info: list
     circle_info: list
     map_definition: MapDefinition
+    _ROUTE_ONLY_ZONE_EDGE: float = 1.0
+    _INDEX_FALLBACK_ZONE_EDGE: float = 0.1
 
     def __init__(self, svg_file: str):
         """Initialize the SVG map converter and perform full parsing.
@@ -325,6 +327,9 @@ class SvgMapConverter:
         path: SvgPath,
         spawn_zones: list[Rect],
         goal_zones: list[Rect],
+        *,
+        route_kind: str,
+        route_only_mode: bool = False,
     ) -> GlobalRoute:
         """Process a path labeled as route (pedestrian or robot).
 
@@ -348,10 +353,22 @@ class SvgMapConverter:
                 kind: Description string ('spawn' or 'goal') for logging.
 
             Returns:
-                Rect: Zone from list if valid index, otherwise synthetic 0.1x0.1 zone around waypoint.
+                Rect: Zone from list if valid index, otherwise a deterministic synthetic zone.
             """
             if zones and 0 <= index < len(zones):
                 return zones[index]
+            if route_only_mode and not zones:
+                logger.debug(
+                    "SVG file '{svg}' route path '{pid}' uses {rk} route-only mode; deriving {k} zone from endpoint.",
+                    svg=svg_name,
+                    pid=path.id,
+                    rk=route_kind,
+                    k=kind,
+                )
+                return self._synthetic_zone_from_waypoint(
+                    waypoint,
+                    edge=self._ROUTE_ONLY_ZONE_EDGE,
+                )
             logger.warning(
                 "SVG file '{svg}' route path '{pid}' refers to {k} index {idx} but only {avail} zones available; creating synthetic zone.",
                 svg=svg_name,
@@ -360,8 +377,10 @@ class SvgMapConverter:
                 idx=index,
                 avail=len(zones),
             )
-            wx, wy = waypoint
-            return ((wx, wy), (wx + 0.1, wy), (wx + 0.1, wy + 0.1))
+            return self._synthetic_zone_from_waypoint(
+                waypoint,
+                edge=self._INDEX_FALLBACK_ZONE_EDGE,
+            )
 
         spawn_zone = _safe_zone(spawn, spawn_zones, vertices[0], "spawn")
         goal_zone = _safe_zone(goal, goal_zones, vertices[-1], "goal")
@@ -373,6 +392,25 @@ class SvgMapConverter:
             spawn_zone=spawn_zone,
             goal_zone=goal_zone,
         )
+
+    @staticmethod
+    def _synthetic_zone_from_waypoint(
+        waypoint: tuple[float, float],
+        *,
+        edge: float,
+    ) -> Rect:
+        """Create a deterministic right-triangle zone anchored at a waypoint.
+
+        Route-only maps intentionally omit explicit spawn/goal rectangles and rely on
+        route endpoints to define respawn anchors. This helper centralizes synthetic
+        zone construction so route-only behavior and malformed-index fallback can use
+        different zone sizes while sharing the same geometry convention.
+
+        Returns:
+            Rect: Synthetic triangular zone anchored at ``waypoint`` with side length ``edge``.
+        """
+        wx, wy = waypoint
+        return ((wx, wy), (wx + edge, wy), (wx + edge, wy + edge))
 
     def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
         """Process a path labeled as crowded zone.
@@ -407,14 +445,41 @@ class SvgMapConverter:
         """
         robot_routes: list[GlobalRoute] = []
         ped_routes: list[GlobalRoute] = []
+        ped_route_only_mode = not ped_spawn_zones and not ped_goal_zones
+        robot_route_only_mode = not robot_spawn_zones and not robot_goal_zones
+
+        if ped_route_only_mode and any("ped_route" in path.label for path in self.path_info):
+            logger.info(
+                "SVG file '{svg}' has pedestrian routes without ped_spawn_zone/ped_goal_zone "
+                "rectangles; enabling route-only mode.",
+                svg=Path(self.svg_file_str).name,
+            )
+        if robot_route_only_mode and any("robot_route" in path.label for path in self.path_info):
+            logger.info(
+                "SVG file '{svg}' has robot routes without robot_spawn_zone/robot_goal_zone "
+                "rectangles; enabling route-only mode.",
+                svg=Path(self.svg_file_str).name,
+            )
 
         path_processors = {
             "obstacle": lambda p: obstacles.append(self._process_obstacle_path(p)),
             "ped_route": lambda p: ped_routes.append(
-                self._process_route_path(p, ped_spawn_zones, ped_goal_zones),
+                self._process_route_path(
+                    p,
+                    ped_spawn_zones,
+                    ped_goal_zones,
+                    route_kind="ped",
+                    route_only_mode=ped_route_only_mode,
+                ),
             ),
             "robot_route": lambda p: robot_routes.append(
-                self._process_route_path(p, robot_spawn_zones, robot_goal_zones),
+                self._process_route_path(
+                    p,
+                    robot_spawn_zones,
+                    robot_goal_zones,
+                    route_kind="robot",
+                    route_only_mode=robot_route_only_mode,
+                ),
             ),
             "crowded_zone": lambda p: ped_crowded_zones.append(self._process_crowded_zone_path(p)),
         }

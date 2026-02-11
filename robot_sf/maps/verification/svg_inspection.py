@@ -472,13 +472,14 @@ def _add_risky_command_findings(
                     path_id=info.path_id or None,
                 )
             )
-        if any(cmd.islower() for cmd in info.commands):
+        relative_cmds = sorted(cmd for cmd in info.commands if cmd.islower())
+        if relative_cmds:
             report.findings.append(
                 SvgInspectionFinding(
                     severity="warning",
                     code="ROUTE_USES_RELATIVE_COMMANDS",
                     message=(
-                        f"Route path '{info.label}' uses relative commands {info.commands}; "
+                        f"Route path '{info.label}' uses relative commands {relative_cmds}; "
                         "prefer absolute commands for predictable parser behavior."
                     ),
                     path_id=info.path_id or None,

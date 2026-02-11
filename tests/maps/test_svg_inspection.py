@@ -59,7 +59,7 @@ def test_inspect_svg_preserves_unindexed_route_identity(tmp_path: Path) -> None:
         """
   <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
   <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
-  <path id="ped_path" inkscape:label="ped_route" d="m 2 2 H 9 V 9" />
+  <path id="ped_path" inkscape:label="ped_route" d="M 2 2 L 9 2 L 9 9" />
 """.strip(),
     )
 
@@ -68,7 +68,8 @@ def test_inspect_svg_preserves_unindexed_route_identity(tmp_path: Path) -> None:
     ped_route = next(route for route in report.routes if route.kind == "ped")
     assert ped_route.label == "ped_route"
     assert ped_route.path_id == "ped_path"
-    assert set(ped_route.commands) >= {"H", "V", "m"}
+    assert ped_route.waypoint_count == 3
+    assert set(ped_route.commands) >= {"M", "L"}
 
 
 def test_inspect_svg_flags_risky_route_commands(tmp_path: Path) -> None:

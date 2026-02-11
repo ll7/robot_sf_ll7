@@ -147,6 +147,33 @@ def _should_fail(reports: list[SvgInspectionReport], strict: str) -> bool:
     return any(report.max_severity_rank() >= threshold for report in reports)
 
 
+def _resolve_json_output_path(output_path: Path, *, base_dir: Path | None = None) -> Path:
+    """Resolve `--json` output path and ensure it stays within the base directory.
+
+    Args:
+        output_path: User-provided JSON path (relative or absolute).
+        base_dir: Trusted root directory. Defaults to current working directory.
+
+    Returns:
+        Path: Absolute, resolved output path.
+
+    Raises:
+        ValueError: If the resolved output path escapes the trusted base directory.
+    """
+
+    trusted_base = (base_dir or Path.cwd()).resolve()
+    resolved = (
+        output_path.resolve()
+        if output_path.is_absolute()
+        else (trusted_base / output_path).resolve()
+    )
+    if not resolved.is_relative_to(trusted_base):
+        raise ValueError(
+            f"--json path must stay inside working directory '{trusted_base}': {output_path}"
+        )
+    return resolved
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run SVG inspection CLI.
 
@@ -165,12 +192,18 @@ def main(argv: list[str] | None = None) -> int:
         _print_report(report, show_routes=args.show_routes)
 
     if args.json is not None:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(
+        try:
+            json_path = _resolve_json_output_path(args.json)
+        except ValueError as exc:
+            logger.error("{}", exc)
+            return 2
+
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
             json.dumps([report.to_dict() for report in reports], indent=2),
             encoding="utf-8",
         )
-        logger.info("Wrote JSON report: {}", args.json)
+        logger.info("Wrote JSON report: {}", json_path)
 
     return 1 if _should_fail(reports, args.strict) else 0
 

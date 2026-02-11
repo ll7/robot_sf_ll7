@@ -5,7 +5,7 @@
 ## Overview
 
 This report summarizes the Optuna sweep executed with the launcher config in
-`configs/training/ppo_imitation/optuna_expert_ppo.yaml` . The study optimizes
+`configs/training/ppo_imitation/optuna_expert_ppo.yaml`. The study optimizes
 `eval_episode_return` using the `last_n_mean` objective mode (window = 3).
 
 ## Study Configuration
@@ -13,8 +13,8 @@ This report summarizes the Optuna sweep executed with the launcher config in
 * Study name: `weekend_optuna_expert_ppo_last_n_mean`
 * Storage: `output/optuna/weekend_optuna_expert_ppo.db`
 * Trials requested: 8 per launcher run (28 total trials recorded)
-* Trial timesteps: 15, 000, 000
-* Eval cadence: every 500, 000 steps
+* Trial timesteps: 15,000,000
+* Eval cadence: every 500,000 steps
 * Eval episodes per checkpoint: 8
 * Objective: `eval_episode_return` (maximize)
 * Objective mode: `last_n_mean` (window = 3)

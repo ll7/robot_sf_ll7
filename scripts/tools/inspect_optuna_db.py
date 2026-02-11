@@ -53,10 +53,8 @@ def _print_study_list(summaries: list[optuna.study.StudySummary]) -> None:
         return
     print("Studies:")
     for summary in summaries:
-        best_value_raw = getattr(summary, "best_value", None)
-        if best_value_raw is None:
-            best_trial = getattr(summary, "best_trial", None)
-            best_value_raw = getattr(best_trial, "value", None) if best_trial else None
+        best_trial = summary.best_trial
+        best_value_raw = best_trial.value if best_trial else None
         best_value = _format_value(best_value_raw)
         print(f"  - {summary.study_name} | trials={summary.n_trials} | best={best_value}")
 

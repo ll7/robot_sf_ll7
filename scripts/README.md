@@ -523,7 +523,7 @@ uv run python scripts/tools/render_scenario_videos.py \
   --all
 ```
 
-**Details**: Writes videos under a timestamped folder in `output/recordings/` and saves a `manifest.json` . Use `--policy ppo --model-path model/run_023.zip` to drive the robot with the defensive PPO policy.
+**Details**: Writes videos under a timestamped folder in `output/recordings/` and saves a `manifest.json`. Use `--policy ppo --model-path model/run_023.zip` to drive the robot with the defensive PPO policy.
 
 ### `tools/compare_training_runs.py`
 
@@ -549,7 +549,7 @@ uv run python scripts/tools/migrate_artifacts.py
 uv run robot-sf-migrate-artifacts
 ```
 
-**Details**: Consolidates `results/` , `recordings/` , `htmlcov/` , `coverage.json` into `output/`
+**Details**: Consolidates `results/`, `recordings/`, `htmlcov/`, `coverage.json` into `output/`
 
 ### `tools/check_artifact_root.py`
 
@@ -940,5 +940,5 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2025-11-24  
+**Last Updated**: 2026-02-11  
 **Maintained By**: Robot SF Development Team

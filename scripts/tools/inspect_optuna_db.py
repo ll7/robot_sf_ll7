@@ -96,7 +96,8 @@ def _print_study_summary(
     show_params: bool,
 ) -> None:
     print(f"\nStudy: {study.study_name}")
-    print(f"Direction: {study.direction}")
+    direction_label = getattr(study.direction, "name", str(study.direction))
+    print(f"Direction: {direction_label}")
     print(f"Trials: {len(study.trials)}")
 
     completed = _completed_trials(study)

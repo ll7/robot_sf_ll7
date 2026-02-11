@@ -14,6 +14,7 @@ from loguru import logger
 from sqlalchemy.engine import make_url
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
+_CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 
 _SUPPORTED_LAUNCH_KEYS = {
@@ -28,6 +29,9 @@ _SUPPORTED_LAUNCH_KEYS = {
     "study_name",
     "storage",
     "seed",
+    "constraint_collision_rate_max",
+    "constraint_comfort_exposure_max",
+    "constraint_handling",
     "log_level",
     "disable_wandb",
     "deterministic",
@@ -51,6 +55,9 @@ _SCALAR_FLAG_MAP = {
     "study_name": "--study-name",
     "storage": "--storage",
     "seed": "--seed",
+    "constraint_collision_rate_max": "--constraint-collision-rate-max",
+    "constraint_comfort_exposure_max": "--constraint-comfort-exposure-max",
+    "constraint_handling": "--constraint-handling",
     "log_level": "--log-level",
 }
 
@@ -235,6 +242,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--study-name", type=str, default=None, help="Override Optuna study name.")
     parser.add_argument("--storage", type=str, default=None, help="Override Optuna storage URL.")
     parser.add_argument("--seed", type=int, default=None, help="Override Optuna sampler seed.")
+    parser.add_argument(
+        "--constraint-collision-rate-max",
+        type=float,
+        default=None,
+        help="Optional safety gate: require collision_rate <= threshold.",
+    )
+    parser.add_argument(
+        "--constraint-comfort-exposure-max",
+        type=float,
+        default=None,
+        help="Optional safety gate: require comfort_exposure <= threshold.",
+    )
+    parser.add_argument(
+        "--constraint-handling",
+        type=str,
+        choices=_CONSTRAINT_HANDLING_CHOICES,
+        default=None,
+        help="Infeasible trial strategy for safety constraints (penalize|prune).",
+    )
     parser.add_argument(
         "--log-level",
         type=str,

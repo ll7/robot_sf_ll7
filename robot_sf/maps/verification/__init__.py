@@ -29,11 +29,19 @@ See Also
 # This avoids heavy module loading at import time
 __all__ = [
     "MapRecord",
+    "SvgInspectionReport",
     "VerificationResult",
     "VerificationRunSummary",
+    "inspect_svg",
+    "inspect_svg_targets",
     "verify_maps",
 ]
 
 from robot_sf.maps.verification.context import VerificationResult, VerificationRunSummary
 from robot_sf.maps.verification.map_inventory import MapRecord
 from robot_sf.maps.verification.runner import verify_maps
+from robot_sf.maps.verification.svg_inspection import (
+    SvgInspectionReport,
+    inspect_svg,
+    inspect_svg_targets,
+)

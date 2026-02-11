@@ -181,7 +181,7 @@ algorithm:
 
     run_dir = run_config.experiment.output_root / "smoke_20260211T120000Z"
     summary_path = run_dir / "run_summary.json"
-    result_path = run_dir / "result.json"
+    result_path = run_dir / "result.jsonl"
     checkpoint_dir = run_dir / "checkpoints"
     assert summary_path.exists()
     assert result_path.exists()

@@ -114,7 +114,7 @@ ps -fu "$USER" | rg train_dreamerv3_rllib.py
 
 ```bash
 RUN_DIR=output/dreamerv3/<run_id>_<timestamp>
-tail -f "$RUN_DIR/result.json"
+tail -f "$RUN_DIR/result.jsonl"
 cat "$RUN_DIR/run_summary.json"
 ls -lah "$RUN_DIR/checkpoints"
 ```
@@ -151,7 +151,7 @@ sattach <jobid>.0
 
 - Worker env mismatch warnings: ensure `ray.disable_uv_run_runtime_env: true` is present.
 - Large package upload warnings: verify `ray.runtime_env.excludes` in YAML.
-- If `result.json` stops updating for prolonged time, treat run as stalled and restart.
+- If `result.jsonl` stops updating for prolonged time, treat run as stalled and restart.
 
 ## 8) Outputs
 
@@ -162,5 +162,5 @@ Artifacts are written under:
 Key files:
 
 - `checkpoints/` (periodic + final RLlib checkpoints)
-- `result.json` (JSONL per-iteration progress stream for live monitoring)
+- `result.jsonl` (JSONL per-iteration progress stream for live monitoring)
 - `run_summary.json` (iteration history and run metadata)

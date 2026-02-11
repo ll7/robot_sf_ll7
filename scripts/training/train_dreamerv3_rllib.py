@@ -819,7 +819,7 @@ def run_training(run_config: DreamerRunConfig) -> int:
     algo = None
     wandb_run = None
     summary_path = run_dir / "run_summary.json"
-    result_log_path = run_dir / "result.json"
+    result_log_path = run_dir / "result.jsonl"
     history: list[dict[str, object]] = []
     shared_capacity = _detect_shared_capacity(run_config)
     try:

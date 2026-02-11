@@ -52,6 +52,25 @@ def test_inspect_svg_detects_ped_route_only_mode(tmp_path: Path) -> None:
     assert any(f.code == "PED_ROUTE_ONLY_MODE" for f in report.findings)
 
 
+def test_inspect_svg_preserves_unindexed_route_identity(tmp_path: Path) -> None:
+    """Unindexed route labels must retain source id/label and command linkage."""
+    svg_path = _write_svg(
+        tmp_path / "unindexed_route.svg",
+        """
+  <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+  <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+  <path id="ped_path" inkscape:label="ped_route" d="m 2 2 H 9 V 9" />
+""".strip(),
+    )
+
+    report = inspect_svg(svg_path)
+
+    ped_route = next(route for route in report.routes if route.kind == "ped")
+    assert ped_route.label == "ped_route"
+    assert ped_route.path_id == "ped_path"
+    assert set(ped_route.commands) >= {"H", "V", "m"}
+
+
 def test_inspect_svg_flags_risky_route_commands(tmp_path: Path) -> None:
     """Horizontal/vertical and relative commands should be reported as parser-risky."""
     svg_path = _write_svg(

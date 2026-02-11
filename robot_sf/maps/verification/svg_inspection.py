@@ -260,8 +260,9 @@ def _collect_route_summaries(
     ]
 
     for kind, route in route_pairs:
-        route_label = f"{kind}_route_{route.spawn_id}_{route.goal_id}"
-        match_id = _find_path_id_by_label(route_labels_by_id, route_label)
+        route_label = route.source_label or f"{kind}_route_{route.spawn_id}_{route.goal_id}"
+        source_path_id = route.source_path_id
+        match_id = source_path_id or _find_path_id_by_label(route_labels_by_id, route_label)
         commands = path_commands_by_id.get(match_id, PathCommandInfo("", route_label, [])).commands
         crosses = _route_crosses_obstacle_interior(route.waypoints, map_def)
         report.routes.append(

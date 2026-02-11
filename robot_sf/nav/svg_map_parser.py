@@ -391,6 +391,8 @@ class SvgMapConverter:
             waypoints=vertices,
             spawn_zone=spawn_zone,
             goal_zone=goal_zone,
+            source_path_id=path.id,
+            source_label=path.label,
         )
 
     @staticmethod

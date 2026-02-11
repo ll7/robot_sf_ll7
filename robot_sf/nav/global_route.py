@@ -16,6 +16,8 @@ class GlobalRoute:
         waypoints: Ordered list of 2D waypoints defining the path.
         spawn_zone: Polygon describing the spawn area.
         goal_zone: Polygon describing the goal area.
+        source_path_id: Source SVG path id for traceability (empty for synthetic routes).
+        source_label: Source SVG route label for traceability (empty for synthetic routes).
     """
 
     spawn_id: int
@@ -23,6 +25,8 @@ class GlobalRoute:
     waypoints: list[Vec2D]
     spawn_zone: Rect
     goal_zone: Rect
+    source_path_id: str = ""
+    source_label: str = ""
 
     def __post_init__(self):
         """Validate spawn/goal identifiers and waypoint list."""

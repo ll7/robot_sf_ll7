@@ -1,9 +1,9 @@
 """Registry of reusable training entry points.
 
-This module exposes discoverable dotted paths for the imitation learning
-training scripts added by the PPO expert feature. Downstream tooling (CLI
-launchers, docs, or VS Code tasks) can import this mapping to avoid hard-coded
-paths when presenting available workflows.
+This module exposes discoverable dotted paths for training scripts
+(PPO expert, DreamerV3 RLlib, etc.). Downstream tooling (CLI launchers,
+docs, or VS Code tasks) can import this mapping to avoid hard-coded paths
+when presenting available workflows.
 """
 
 from __future__ import annotations

@@ -38,9 +38,12 @@ scripts/
 │
 ├── training/                          # Training workflows
 │   ├── train_expert_ppo.py           # Expert PPO training
+│   ├── train_dreamerv3_rllib.py      # RLlib DreamerV3 training
 │   ├── collect_expert_trajectories.py # Trajectory collection
 │   ├── pretrain_from_expert.py       # Behavioral cloning pre-training
-│   └── train_ppo_with_pretrained_policy.py # PPO fine-tuning
+│   ├── train_ppo_with_pretrained_policy.py # PPO fine-tuning
+│   ├── optuna_expert_ppo.py          # Optuna sweep for expert PPO
+│   └── launch_optuna_expert_ppo.py   # Config-first Optuna launcher
 │
 ├── research/                          # Research & analysis
 │   ├── generate_report.py            # Research report generation
@@ -802,5 +805,5 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2025-11-24  
+**Last Updated**: 2026-02-11  
 **Maintained By**: Robot SF Development Team

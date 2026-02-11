@@ -41,7 +41,7 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 ```bash
 PYTHONWARNINGS=ignore LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 \
-.venv/bin/python scripts/training/train_dreamerv3_rllib.py \
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
   --log-level WARNING
 ```

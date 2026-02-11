@@ -201,6 +201,7 @@ class SensorFusion:
         # Combine the robot speed and target sensor data into the drive state
         drive_state = np.array(
             [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
+            dtype=np.float32,
         )
 
         # Populate history with the current state on first call to avoid zeros.
@@ -227,8 +228,8 @@ class SensorFusion:
         max_drive = self.unnormed_obs_space[OBS_DRIVE_STATE].high
         max_lidar = self.unnormed_obs_space[OBS_RAYS].high
         return {
-            OBS_DRIVE_STATE: self.stacked_drive_state / max_drive,
-            OBS_RAYS: self.stacked_lidar_state / max_lidar,
+            OBS_DRIVE_STATE: (self.stacked_drive_state / max_drive).astype(np.float32, copy=False),
+            OBS_RAYS: (self.stacked_lidar_state / max_lidar).astype(np.float32, copy=False),
         }
 
     def reset_cache(self):

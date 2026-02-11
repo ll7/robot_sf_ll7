@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
@@ -11,9 +11,6 @@ from scripts.training.train_dreamerv3_rllib import (
     _resolve_auto_overrides,
     load_run_config,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_yaml(path: Path, content: str) -> Path:
@@ -204,3 +201,73 @@ algorithm:
     assert env_runner_payload["num_env_runners"] == 20
     assert resources_payload["num_gpus"] == 1
     assert capacity is not None
+
+
+def test_load_run_config_parses_runtime_env_settings(tmp_path: Path):
+    """Ray runtime_env settings should parse from YAML with strict key checks."""
+    config_path = _write_yaml(
+        tmp_path / "runtime_env.yaml",
+        """
+experiment:
+  run_id: smoke
+ray:
+  disable_uv_run_runtime_env: true
+  runtime_env:
+    working_dir: .
+    py_executable: /tmp/fake-python
+    excludes: [.git, output]
+    env_vars:
+      FOO: bar
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.ray.disable_uv_run_runtime_env is True
+    assert run_config.ray.runtime_env["working_dir"] == str(Path.cwd().resolve())
+    assert run_config.ray.runtime_env["py_executable"] == "/tmp/fake-python"
+    assert run_config.ray.runtime_env["excludes"] == [".git", "output"]
+    assert run_config.ray.runtime_env["env_vars"] == {"FOO": "bar"}
+
+
+def test_load_run_config_rejects_unknown_runtime_env_keys(tmp_path: Path):
+    """Unknown runtime_env keys should fail fast to avoid silent config drift."""
+    config_path = _write_yaml(
+        tmp_path / "invalid_runtime_env.yaml",
+        """
+experiment:
+  run_id: smoke
+ray:
+  runtime_env:
+    unexpected: true
+""",
+    )
+
+    with pytest.raises(ValueError, match="Unknown key\\(s\\) in 'ray.runtime_env'"):
+        load_run_config(config_path)
+
+
+def test_build_ray_init_kwargs_includes_runtime_env_defaults(tmp_path: Path):
+    """Ray init kwargs should include deterministic runtime_env defaults."""
+    config_path = _write_yaml(
+        tmp_path / "ray_defaults.yaml",
+        """
+experiment:
+  run_id: smoke
+ray:
+  num_cpus: 2
+algorithm:
+  framework: torch
+""",
+    )
+    run_config = load_run_config(config_path)
+
+    ray_kwargs = _build_ray_init_kwargs(run_config)
+    runtime_env = ray_kwargs["runtime_env"]
+
+    assert isinstance(runtime_env, dict)
+    assert runtime_env["py_executable"]
+    assert runtime_env["working_dir"]
+    assert ".git" in runtime_env["excludes"]

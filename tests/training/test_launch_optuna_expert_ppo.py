@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.training.launch_optuna_expert_ppo import build_optuna_cli_args, load_launch_config
+from scripts.training.launch_optuna_expert_ppo import (
+    _mask_storage_in_command,
+    build_optuna_cli_args,
+    load_launch_config,
+)
 
 
 def _make_args(**overrides: object) -> argparse.Namespace:
@@ -120,3 +124,35 @@ def test_build_optuna_cli_args_parses_string_booleans(tmp_path: Path):
 
     assert "--disable-wandb" not in cli_args
     assert "--deterministic" in cli_args
+
+
+def test_build_optuna_cli_args_rejects_invalid_string_booleans(tmp_path: Path):
+    """Invalid boolean strings should fail fast instead of coercing truthy values."""
+    launch_dir = tmp_path / "configs"
+    launch_dir.mkdir(parents=True)
+    expert_config = launch_dir / "expert_ppo.yaml"
+    expert_config.write_text("scenario_config: dummy.yaml\n", encoding="utf-8")
+    launch_config = launch_dir / "optuna.yaml"
+    launch_config.write_text("base_config: expert_ppo.yaml\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid boolean string value"):
+        build_optuna_cli_args(
+            launch_config_path=launch_config.resolve(),
+            payload={"base_config": "expert_ppo.yaml", "disable_wandb": "flase"},
+            args=_make_args(),
+        )
+
+
+def test_mask_storage_in_command_redacts_credentials_when_url_parse_fails():
+    """Malformed storage tokens should still redact credential-like fragments."""
+    command = [
+        "python",
+        "optuna_expert_ppo.py",
+        "--storage",
+        "not a valid url://user:super-secret@host/db",
+    ]
+
+    rendered = _mask_storage_in_command(command)
+
+    assert "super-secret" not in rendered
+    assert "***@" in rendered

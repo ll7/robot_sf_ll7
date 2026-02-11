@@ -786,6 +786,11 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/lau
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
 ```
+**Notes**:
+- Launcher pins workers to the active interpreter and disables `uv run` propagation in Ray.
+- Runtime packaging excludes heavy paths by default (`.git`, `.venv`, `output`, caches, media).
+- Auxme launch/monitor/recovery workflow: `docs/training/dreamerv3_rllib_drive_state_rays.md`
+
 Optional validation-only run:
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \

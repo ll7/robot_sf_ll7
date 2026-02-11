@@ -37,7 +37,11 @@ def test_smoke_aggregation_workflow():
     ]
 
     captured: list = []
-    handle = logger.add(lambda message: captured.append(message), level="WARNING")
+
+    def capture_message(message):
+        captured.append(message)
+
+    handle = logger.add(capture_message, level="WARNING")
     try:
         result = compute_aggregates_with_ci(
             records,

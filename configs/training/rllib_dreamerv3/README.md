@@ -10,6 +10,10 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
   `model_size=XS`, `training_ratio=64`, `num_env_runners=8`, `batch_length_T=32`.
 - W&B tracking defaults to enabled in offline mode (`tracking.wandb.mode: offline`) so each
   run records metrics locally under `output/wandb/` without requiring immediate login.
+- Ray runtime env is hardened for reliability:
+  - `disable_uv_run_runtime_env: true` avoids uv-driven worker env reconstruction.
+  - `runtime_env.py_executable` defaults to the current interpreter in the launcher.
+  - `runtime_env.excludes` trims heavy paths (e.g. `.git`, `.venv`, `output`) from uploads.
 
 ## Auxme A30 full-run profile
 

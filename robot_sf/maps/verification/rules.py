@@ -14,7 +14,7 @@ Rule Categories
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from loguru import logger
@@ -22,7 +22,7 @@ from loguru import logger
 from robot_sf.maps.verification.context import VerificationStatus
 
 
-class RuleSeverity(str, Enum):
+class RuleSeverity(StrEnum):
     """Rule violation severity levels."""
 
     ERROR = "error"  # Must fix - causes FAIL

@@ -20,6 +20,7 @@ from robot_sf.common.hardware import detect_hardware_capacity, recommend_env_run
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
+from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
 
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 _TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking"}
@@ -31,7 +32,16 @@ _EXPERIMENT_KEYS = {
     "seed",
     "log_level",
 }
-_RAY_KEYS = {"address", "local_mode", "include_dashboard", "num_cpus", "num_gpus"}
+_RAY_KEYS = {
+    "address",
+    "local_mode",
+    "include_dashboard",
+    "num_cpus",
+    "num_gpus",
+    "disable_uv_run_runtime_env",
+    "runtime_env",
+}
+_RAY_RUNTIME_ENV_KEYS = {"working_dir", "excludes", "env_vars", "py_executable"}
 _ENV_KEYS = {"flatten_observation", "flatten_keys", "normalize_actions", "factory_kwargs", "config"}
 _ALGORITHM_KEYS = {"framework", "training", "env_runners", "resources", "learners", "api_stack"}
 _TRACKING_KEYS = {"wandb"}
@@ -48,6 +58,7 @@ _WANDB_KEYS = {
 }
 _IGNORED_ENV_CONTEXT_KEYS = {"worker_index", "vector_index", "num_workers", "remote"}
 _AUTO_TOKEN = "auto"
+_RAY_ENABLE_UV_RUN_RUNTIME_ENV_ENV_VAR = "RAY_ENABLE_UV_RUN_RUNTIME_ENV"
 _DEFAULT_API_STACK: dict[str, bool] = {
     "enable_rl_module_and_learner": True,
     "enable_env_runner_and_connector_v2": True,
@@ -75,6 +86,8 @@ class RaySettings:
     include_dashboard: bool
     num_cpus: int | str | None
     num_gpus: float | int | str | None
+    disable_uv_run_runtime_env: bool
+    runtime_env: dict[str, object]
 
 
 @dataclass(slots=True)
@@ -245,6 +258,34 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
     """Parse and validate the ray section."""
     ray_raw = _ensure_mapping(payload.get("ray"), field_name="ray")
     _ensure_known_keys(ray_raw, field_name="ray", allowed=_RAY_KEYS)
+    runtime_env_raw = _ensure_mapping(ray_raw.get("runtime_env"), field_name="ray.runtime_env")
+    _ensure_known_keys(runtime_env_raw, field_name="ray.runtime_env", allowed=_RAY_RUNTIME_ENV_KEYS)
+    runtime_env: dict[str, object] = {}
+    working_dir = _coerce_optional_text(
+        runtime_env_raw.get("working_dir"), field_name="ray.runtime_env.working_dir"
+    )
+    if working_dir is not None:
+        runtime_env["working_dir"] = str(
+            _resolve_config_path(working_dir, field_name="working_dir")
+        )
+
+    excludes_raw = runtime_env_raw.get("excludes")
+    if excludes_raw is not None:
+        if not isinstance(excludes_raw, list | tuple):
+            raise ValueError("ray.runtime_env.excludes must be a list or tuple of strings.")
+        runtime_env["excludes"] = [str(path) for path in excludes_raw]
+
+    env_vars_raw = runtime_env_raw.get("env_vars")
+    if env_vars_raw is not None:
+        env_vars_mapping = _ensure_mapping(env_vars_raw, field_name="ray.runtime_env.env_vars")
+        runtime_env["env_vars"] = {str(key): str(value) for key, value in env_vars_mapping.items()}
+
+    py_executable = _coerce_optional_text(
+        runtime_env_raw.get("py_executable"), field_name="ray.runtime_env.py_executable"
+    )
+    if py_executable is not None:
+        runtime_env["py_executable"] = py_executable
+
     return RaySettings(
         address=None if ray_raw.get("address") in {None, ""} else str(ray_raw.get("address")),
         local_mode=bool(ray_raw.get("local_mode", False)),
@@ -255,6 +296,8 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
         num_gpus=_coerce_optional_float(
             ray_raw.get("num_gpus"), field_name="ray.num_gpus", allow_auto=True
         ),
+        disable_uv_run_runtime_env=bool(ray_raw.get("disable_uv_run_runtime_env", True)),
+        runtime_env=runtime_env,
     )
 
 
@@ -429,6 +472,12 @@ def _apply_config_method(
     method = getattr(config_obj, method_name, None)
     if callable(method):
         return method(**payload)
+    logger.warning(
+        "Skipping algorithm.{} payload because method is unavailable on {}. keys={}",
+        method_name,
+        type(config_obj).__name__,
+        sorted(payload.keys()),
+    )
     return config_obj
 
 
@@ -442,6 +491,12 @@ def _apply_env_runner_settings(config_obj: object, payload: dict[str, object]) -
     rollouts = getattr(config_obj, "rollouts", None)
     if callable(rollouts):
         return rollouts(**payload)
+    logger.warning(
+        "Skipping algorithm.env_runners payload because neither env_runners() nor rollouts() "
+        "is available on {}. keys={}",
+        type(config_obj).__name__,
+        sorted(payload.keys()),
+    )
     return config_obj
 
 
@@ -452,6 +507,8 @@ def _is_auto(value: object) -> bool:
 
 def _resolve_auto_overrides(
     run_config: DreamerRunConfig,
+    *,
+    capacity: object | None = None,
 ) -> tuple[dict[str, object], dict[str, object], object | None]:
     """Resolve auto resource placeholders against detected local/slurm capacity."""
     env_runner_payload = dict(run_config.algorithm.env_runners)
@@ -467,7 +524,8 @@ def _resolve_auto_overrides(
     if not use_auto:
         return env_runner_payload, resources_payload, None
 
-    capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1)
+    if capacity is None:
+        capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1)
     if _is_auto(env_runner_payload.get("num_env_runners")):
         env_runner_payload["num_env_runners"] = recommend_env_runners(capacity, cpu_headroom=4)
     if _is_auto(resources_payload.get("num_gpus")):
@@ -492,6 +550,7 @@ def _build_algorithm_config(
     *,
     env_name: str,
     env_overrides: dict[str, object] | None = None,
+    capacity: object | None = None,
 ) -> Any:
     """Construct DreamerV3Config from the validated YAML payload."""
     _, DreamerV3Config, _ = _import_rllib()
@@ -502,7 +561,10 @@ def _build_algorithm_config(
         disable_env_checking=False,
     )
     cfg = cfg.framework(run_config.algorithm.framework)
-    env_runner_payload, resources_payload, _ = _resolve_auto_overrides(run_config)
+    env_runner_payload, resources_payload, _ = _resolve_auto_overrides(
+        run_config,
+        capacity=capacity,
+    )
     api_stack_settings = (
         run_config.algorithm.api_stack
         if run_config.algorithm.api_stack is not None
@@ -606,7 +668,42 @@ def _init_wandb_tracking(run_config: DreamerRunConfig, *, run_stamp: str):
     )
 
 
-def _build_ray_init_kwargs(run_config: DreamerRunConfig) -> dict[str, object]:
+def _resolve_ray_resource_kwargs(
+    run_config: DreamerRunConfig, *, capacity: object | None = None
+) -> dict[str, object]:
+    """Resolve optional Ray CPU/GPU kwargs including 'auto' placeholders."""
+    resource_kwargs: dict[str, object] = {}
+    needs_auto = _is_auto(run_config.ray.num_cpus) or _is_auto(run_config.ray.num_gpus)
+    if needs_auto and capacity is None:
+        capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1)
+    if _is_auto(run_config.ray.num_cpus):
+        if capacity is None:
+            raise RuntimeError("Hardware capacity detection failed for auto CPU resolution.")
+        resource_kwargs["num_cpus"] = capacity.usable_cpus
+    elif run_config.ray.num_cpus is not None:
+        resource_kwargs["num_cpus"] = run_config.ray.num_cpus
+    if _is_auto(run_config.ray.num_gpus):
+        if capacity is None:
+            raise RuntimeError("Hardware capacity detection failed for auto GPU resolution.")
+        resource_kwargs["num_gpus"] = capacity.visible_gpus
+    elif run_config.ray.num_gpus is not None:
+        resource_kwargs["num_gpus"] = run_config.ray.num_gpus
+    return resource_kwargs
+
+
+def _build_runtime_env_kwargs(run_config: DreamerRunConfig) -> dict[str, object]:
+    """Build runtime_env payload with safe defaults for Dreamer worker startup."""
+    return resolve_ray_runtime_env(
+        runtime_env_base=run_config.ray.runtime_env,
+        working_dir=Path(__file__).resolve().parents[2],
+        py_executable=sys.executable,
+        expected_virtual_env=os.environ.get("VIRTUAL_ENV"),
+    )
+
+
+def _build_ray_init_kwargs(
+    run_config: DreamerRunConfig, *, capacity: object | None = None
+) -> dict[str, object]:
     """Assemble kwargs passed into ray.init()."""
     ray_kwargs: dict[str, object] = {
         "address": run_config.ray.address,
@@ -617,21 +714,28 @@ def _build_ray_init_kwargs(run_config: DreamerRunConfig) -> dict[str, object]:
     }
     if run_config.experiment.log_level in {"WARNING", "ERROR", "CRITICAL"}:
         ray_kwargs["log_to_driver"] = False
-    needs_auto = _is_auto(run_config.ray.num_cpus) or _is_auto(run_config.ray.num_gpus)
-    capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1) if needs_auto else None
-    if _is_auto(run_config.ray.num_cpus):
-        if capacity is None:
-            raise RuntimeError("Hardware capacity detection failed for auto CPU resolution.")
-        ray_kwargs["num_cpus"] = capacity.usable_cpus
-    elif run_config.ray.num_cpus is not None:
-        ray_kwargs["num_cpus"] = run_config.ray.num_cpus
-    if _is_auto(run_config.ray.num_gpus):
-        if capacity is None:
-            raise RuntimeError("Hardware capacity detection failed for auto GPU resolution.")
-        ray_kwargs["num_gpus"] = capacity.visible_gpus
-    elif run_config.ray.num_gpus is not None:
-        ray_kwargs["num_gpus"] = run_config.ray.num_gpus
+    ray_kwargs.update(_resolve_ray_resource_kwargs(run_config, capacity=capacity))
+    ray_kwargs["runtime_env"] = _build_runtime_env_kwargs(run_config)
     return ray_kwargs
+
+
+def _should_detect_shared_capacity(run_config: DreamerRunConfig) -> bool:
+    """Return True when any ray/algo setting requires hardware auto detection."""
+    return any(
+        (
+            _is_auto(run_config.ray.num_cpus),
+            _is_auto(run_config.ray.num_gpus),
+            _is_auto(run_config.algorithm.env_runners.get("num_env_runners")),
+            _is_auto(run_config.algorithm.resources.get("num_gpus")),
+        )
+    )
+
+
+def _detect_shared_capacity(run_config: DreamerRunConfig) -> object | None:
+    """Detect hardware capacity once when auto resource placeholders are used."""
+    if not _should_detect_shared_capacity(run_config):
+        return None
+    return detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1)
 
 
 def _build_algorithm_instance(algo_config: object) -> Any:
@@ -647,6 +751,7 @@ def _run_training_iterations(
     run_config: DreamerRunConfig,
     *,
     checkpoint_dir: Path,
+    result_log_path: Path,
     wandb_run: Any | None,
 ) -> list[dict[str, object]]:
     """Execute iterations, logging metrics and writing checkpoints."""
@@ -672,6 +777,15 @@ def _run_training_iterations(
                 "timesteps_total": timesteps_total,
             }
         )
+        append_jsonl_record(
+            result_log_path,
+            {
+                "ts_utc": datetime.now(UTC).isoformat(),
+                "iteration": iteration,
+                "reward_mean": reward_mean,
+                "timesteps_total": timesteps_total,
+            },
+        )
         if wandb_run is not None:
             wandb_run.log(
                 {
@@ -692,6 +806,8 @@ def _run_training_iterations(
 
 def run_training(run_config: DreamerRunConfig) -> int:
     """Execute the DreamerV3 training loop and persist run artifacts."""
+    if run_config.ray.disable_uv_run_runtime_env:
+        os.environ[_RAY_ENABLE_UV_RUN_RUNTIME_ENV_ENV_VAR] = "0"
     ray, _, register_env = _import_rllib()
     run_stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (
@@ -703,19 +819,26 @@ def run_training(run_config: DreamerRunConfig) -> int:
     algo = None
     wandb_run = None
     summary_path = run_dir / "run_summary.json"
+    result_log_path = run_dir / "result.jsonl"
     history: list[dict[str, object]] = []
+    shared_capacity = _detect_shared_capacity(run_config)
     try:
         wandb_run = _init_wandb_tracking(run_config, run_stamp=run_stamp)
         env_name = f"robot_sf_dreamerv3_{run_config.experiment.run_id}"
         register_env(env_name, _make_env_creator(run_config))
-        ray.init(**_build_ray_init_kwargs(run_config))
+        ray.init(**_build_ray_init_kwargs(run_config, capacity=shared_capacity))
 
-        algo_config = _build_algorithm_config(run_config, env_name=env_name)
+        algo_config = _build_algorithm_config(
+            run_config,
+            env_name=env_name,
+            capacity=shared_capacity,
+        )
         algo = _build_algorithm_instance(algo_config)
         history = _run_training_iterations(
             algo,
             run_config,
             checkpoint_dir=checkpoint_dir,
+            result_log_path=result_log_path,
             wandb_run=wandb_run,
         )
 
@@ -727,6 +850,7 @@ def run_training(run_config: DreamerRunConfig) -> int:
                 "train_iterations": run_config.experiment.train_iterations,
                 "checkpoint_every": run_config.experiment.checkpoint_every,
                 "seed": run_config.experiment.seed,
+                "result_log_path": str(result_log_path),
                 "history": history,
             },
         )

@@ -13,6 +13,12 @@ from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.robot_env import RobotEnv
 
 
+def _make_robot_env() -> RobotEnv:
+    """Build a default RobotEnv instance for SB3 vectorized wrappers."""
+
+    return RobotEnv()
+
+
 def test_can_load_model_snapshot():
     """Train, save, and reload a PPO model snapshot to ensure compatibility."""
     MODEL_PATH = "./temp/ppo_model"
@@ -24,7 +30,7 @@ def test_can_load_model_snapshot():
     if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):
         os.remove(MODEL_FILE)
 
-    vec_env = make_vec_env(lambda: RobotEnv(), n_envs=1)
+    vec_env = make_vec_env(_make_robot_env, n_envs=1)
     policy_kwargs = {"features_extractor_class": DynamicsExtractor}
     model = PPO(
         "MultiInputPolicy",

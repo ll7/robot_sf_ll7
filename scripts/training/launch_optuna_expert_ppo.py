@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 import subprocess
 import sys
@@ -89,7 +90,17 @@ def _as_bool(value: object) -> bool:
             return True
         if normalized in {"false", "0", "no", "n", "off", ""}:
             return False
+        raise ValueError(
+            f"Invalid boolean string value {value!r}; expected one of true/false/1/0/yes/no/on/off."
+        )
     return bool(value)
+
+
+def _mask_storage_fallback(raw_value: str) -> str:
+    """Best-effort redaction for malformed storage strings that fail URL parsing."""
+    redacted = re.sub(r"(://)[^@/\s]+@", r"\1***@", raw_value)
+    redacted = re.sub(r"(^|[\s])[^@/\s:]+:[^@/\s]+@", r"\1***@", redacted)
+    return redacted
 
 
 def _mask_storage_in_command(command: list[str]) -> str:
@@ -105,7 +116,7 @@ def _mask_storage_in_command(command: list[str]) -> str:
                 storage_url = make_url(storage_raw)
                 masked.extend([token, storage_url.render_as_string(hide_password=True)])
             except Exception:
-                masked.extend([token, storage_raw])
+                masked.extend([token, _mask_storage_fallback(storage_raw)])
             i += 2
             continue
         if token.startswith("--storage="):
@@ -114,7 +125,7 @@ def _mask_storage_in_command(command: list[str]) -> str:
                 storage_url = make_url(storage_raw)
                 masked_token = f"--storage={storage_url.render_as_string(hide_password=True)}"
             except Exception:
-                masked_token = token
+                masked_token = f"--storage={_mask_storage_fallback(storage_raw)}"
         masked.append(masked_token)
         i += 1
     return shlex.join(masked)

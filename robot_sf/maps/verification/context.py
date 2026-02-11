@@ -12,12 +12,12 @@ These classes implement the entities defined in specs/001-map-verification/data-
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(StrEnum):
     """Verification outcome status."""
 
     PASS = "pass"
@@ -25,7 +25,7 @@ class VerificationStatus(str, Enum):
     WARN = "warn"
 
 
-class FactoryType(str, Enum):
+class FactoryType(StrEnum):
     """Environment factory type used during instantiation."""
 
     ROBOT = "robot"

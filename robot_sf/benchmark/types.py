@@ -133,10 +133,9 @@ class ResumeManifest:
     episodes: list[str]
     meta: dict[str, Any] | None = None
     generated_at: str = field(
-        default_factory=lambda: datetime.now(UTC)
-        .astimezone(UTC)
-        .replace(microsecond=0)
-        .isoformat(),
+        default_factory=lambda: (
+            datetime.now(UTC).astimezone(UTC).replace(microsecond=0).isoformat()
+        ),
     )
 
     def to_dict(self) -> dict[str, Any]:

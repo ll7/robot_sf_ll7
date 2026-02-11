@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import Env, spaces
 
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import (
     DEFAULT_FLATTEN_KEYS,
     DriveStateRaysFlattenWrapper,
@@ -84,3 +86,29 @@ def test_wrap_for_dreamerv3_applies_expected_wrapper_stack():
         wrapped.action(np.array([0.0, 0.0], dtype=np.float32)),
         np.array([1.0, 0.0], dtype=np.float32),
     )
+
+
+def test_wrap_for_dreamerv3_reset_and_step_match_observation_contract():
+    """Dreamer wrapper stack should emit observations accepted by its declared space."""
+    config = RobotSimulationConfig()
+    config.use_image_obs = False
+    config.include_grid_in_observation = False
+    env = make_robot_env(config=config, debug=False, recording_enabled=False)
+    wrapped = wrap_for_dreamerv3(
+        env,
+        flatten_observation=False,
+        flatten_keys=DEFAULT_FLATTEN_KEYS,
+        normalize_actions=True,
+    )
+    try:
+        reset_obs, _ = wrapped.reset()
+        assert wrapped.observation_space.contains(reset_obs)
+        assert np.asarray(reset_obs["drive_state"]).dtype == np.float32
+        assert np.asarray(reset_obs["rays"]).dtype == np.float32
+
+        step_obs, _, _, _, _ = wrapped.step(wrapped.action_space.sample())
+        assert wrapped.observation_space.contains(step_obs)
+        assert np.asarray(step_obs["drive_state"]).dtype == np.float32
+        assert np.asarray(step_obs["rays"]).dtype == np.float32
+    finally:
+        wrapped.close()

@@ -13,6 +13,21 @@ ray:
   include_dashboard: false
   num_cpus: 12
   num_gpus: null
+  disable_uv_run_runtime_env: true
+  runtime_env:
+    working_dir: .
+    excludes:
+      - ".git"
+      - ".venv"
+      - ".pytest_cache"
+      - ".ruff_cache"
+      - "__pycache__"
+      - "output"
+      - "results"
+      - "dist"
+      - "robot_sf.egg-info"
+      - "*.mp4"
+      - "*.gif"
 
 tracking:
   wandb:

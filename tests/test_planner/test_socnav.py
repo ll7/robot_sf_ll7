@@ -322,7 +322,7 @@ def test_socnavbench_adapter_uses_upstream_when_available():
 
     adapter = __import__(
         "robot_sf.planner.socnav", fromlist=["SocNavBenchSamplingAdapter"]
-    ).SocNavBenchSamplingAdapter(planner_factory=lambda: FakePlanner())
+    ).SocNavBenchSamplingAdapter(planner_factory=FakePlanner)
     obs = _with_grid(_base_observation(), np.zeros((4, 3, 3), dtype=float))
 
     v, w = adapter.plan(obs)

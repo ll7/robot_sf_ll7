@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
 - Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
+- SVG map inspection helper (`scripts/validation/svg_inspect.py`) plus reusable API (`robot_sf.maps.verification.svg_inspection`) for route-only mode detection, route/zone index checks, risky path-command warnings, and obstacle-interior route checks.
 
 ### Fixed
 

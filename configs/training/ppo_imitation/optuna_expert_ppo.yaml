@@ -1,0 +1,20 @@
+base_config: expert_ppo.yaml
+
+# Study settings
+trials: 8
+metric: eval_episode_return
+objective_mode: last_n_mean
+objective_window: 3
+study_name: weekend_optuna_expert_ppo_last_n_mean
+storage: sqlite:///output/optuna/weekend_optuna_expert_ppo.db
+seed: 123
+log_level: WARNING
+
+# Trial runtime controls
+trial_timesteps: 15_000_000
+eval_every: 500_000
+eval_episodes: 8
+
+# Repro/logging controls
+disable_wandb: false
+deterministic: false

@@ -5,6 +5,7 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 ## Layout
 
 - `expert_ppo.yaml` – Expert training defaults, including convergence thresholds and evaluation schedule.
+- `optuna_expert_ppo.yaml` – Config-first launcher settings for Optuna sweeps on top of `expert_ppo.yaml`.
 - `bc_pretrain.yaml` – Behavioural cloning phase settings (optimizer, batch sizes, dataset references).
 - `ppo_finetune.yaml` – PPO fine-tuning schedule that resumes from a pre-trained checkpoint.
 - Additional files describe scenario coverage manifests referenced by trajectory collection commands.
@@ -14,3 +15,5 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 1. Always version-control changes alongside the corresponding manifests under `output/`.
 2. Keep seed lists consistent across configs when running comparative studies.
 3. Document any temporary overrides in the run manifest to preserve reproducibility.
+4. For Optuna launcher configs, prefer `log_level: WARNING` by default and override only when debugging.
+5. W&B is enabled by default for Optuna launcher runs; set `disable_wandb: true` only for offline/reliability scenarios.

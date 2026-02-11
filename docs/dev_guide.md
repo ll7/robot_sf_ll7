@@ -151,6 +151,15 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 
 **For complete documentation, see [Configuration Architecture](./architecture/configuration.md)** (precedence rules, migration guide, module structure).
 
+### Config-first workflow (default)
+
+Prefer committed YAML configs under `configs/` as the default way to run training and sweeps.
+This keeps runs reproducible, reviewable, and easy to replay on another machine.
+
+- Commit stable run definitions (scenario, seeds, metrics, cadence) in config files.
+- Document a canonical `uv run ... --config <path>` command in docs/PR text.
+- Reserve direct CLI tuning flags for temporary local overrides.
+
 Use unified config classes from `robot_sf.gym_env.unified_config`:
 
 ```python

@@ -174,6 +174,7 @@ All artifacts are stored under the canonical `output/` directory:
 Example configuration files are located in `configs/training/ppo_imitation/`:
 
 - `expert_ppo.yaml` - Expert PPO training configuration
+- `optuna_expert_ppo.yaml` - Config-first Optuna launcher settings for expert PPO sweeps
 - `bc_pretrain.yaml` - Behavioral cloning pre-training configuration
 - `ppo_finetune.yaml` - PPO fine-tuning configuration
 
@@ -193,6 +194,15 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
 
 Best checkpoints are written to:
 `output/benchmarks/expert_policies/checkpoints/<policy_id>/<policy_id>_best.zip`
+
+### Optuna sweeps (config-first)
+
+Use the launcher config to keep study settings reproducible:
+
+```bash
+uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
+```
 
 ---
 

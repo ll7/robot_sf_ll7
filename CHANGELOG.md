@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
+* DreamerV3 RLlib launcher now hardens Ray runtime environment setup by disabling `uv run` worker propagation, pinning worker interpreter execution, and applying packaging excludes to reduce startup fragility and upload size.
+* Dreamer observation contract now emits float32-consistent reset/step payloads (`drive_state`, `rays`) so Gymnasium space checks pass without dtype warnings.
+* Simulation throughput perf guard now supports cluster-aware calibration through env overrides and enforce mode instead of hard-failing heterogeneous nodes by default.
 * SVG map parsing now honors indexed spawn/goal labels to keep route ordering stable.
 * Pedestrian env now validates robot action-space compatibility and falls back to null actions on mismatch.
 * SocNavBenchSamplingAdapter now shares the upstream loader logic with SamplingPlannerAdapter to avoid drift and keep the vendored planner path working.

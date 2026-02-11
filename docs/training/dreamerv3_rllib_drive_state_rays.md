@@ -22,23 +22,35 @@ export MPLBACKEND=Agg
 export SDL_VIDEODRIVER=dummy
 ```
 
-## 2) Authoritative Config
+## 2) Canonical Command
 
-Primary config:
+Use this as the default launch command:
 
-`configs/training/rllib_dreamerv3/drive_state_rays.yaml`
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+```
 
-Important defaults:
+Why this command is canonical:
 
-- `use_image_obs: false`
-- `include_grid_in_observation: false`
-- deterministic flattening order: `drive_state` then `rays`
-- action-space normalization to `[-1, 1]` before DreamerV3
-- starter tuning for Apple Silicon laptops: `num_env_runners=8`, `training_ratio=64`,
-  `batch_size_B=16`, `batch_length_T=32`, `horizon_H=10`
-- W&B tracking enabled in offline mode by default (`tracking.wandb.mode: offline`)
+- pins Ray workers to the same Python executable as the driver (`runtime_env.py_executable`)
+- disables `uv run` runtime-env propagation in Ray (`ray.disable_uv_run_runtime_env: true`)
+- uses curated runtime package excludes to avoid large uploads (`ray.runtime_env.excludes`)
 
-## 3) Dry-run Validation
+Use `configs/training/rllib_dreamerv3/drive_state_rays.yaml` for local smoke runs.
+
+## 3) Config Notes
+
+Both Dreamer configs include these reliability settings:
+
+- `ray.disable_uv_run_runtime_env: true`
+- `ray.runtime_env.working_dir: .`
+- `ray.runtime_env.excludes: [...]` (e.g. `.git`, `.venv`, `output`, caches, large media)
+- action/observation contract fixes for float32-compatible env outputs
+
+These prevent worker-side uv rebuild loops and reduce startup package overhead.
+
+## 4) Dry-run Validation
 
 Use dry-run to validate YAML parsing and resolved settings:
 
@@ -48,42 +60,100 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --dry-run
 ```
 
-## 4) Training Command
+## 5) Launch Patterns (Auxme)
 
-Run DreamerV3 with the config-first entrypoint:
+### 5.1 Interactive allocation + tmux
 
 ```bash
+srun -p <partition> --gres=gpu:a30:1 --cpus-per-task=24 --mem=64G --time=24:00:00 --pty bash
+tmux new -s dreamer
+cd /path/to/robot_sf_ll7
+source .venv/bin/activate
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
 ```
 
-Recommended command for the starter profile (reduced console noise):
+Detach/reattach:
 
 ```bash
-PYTHONWARNINGS=ignore LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 \
-.venv/bin/python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
-  --log-level WARNING
+tmux detach
+tmux ls
+tmux attach -t dreamer
 ```
 
-This run writes W&B logs locally under `output/wandb/`. To sync later:
+### 5.2 Batch job
+
+```bash
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH -p <partition>
+#SBATCH --gres=gpu:a30:1
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH -J dreamer-rllib
+set -euo pipefail
+cd /path/to/robot_sf_ll7
+source .venv/bin/activate
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+EOF
+```
+
+## 6) Monitoring Checklist
+
+### Scheduler/process state
+
+```bash
+squeue -u "$USER"
+sstat -j <jobid>.batch --format=JobID,MaxRSS,AveCPU
+ps -fu "$USER" | rg train_dreamerv3_rllib.py
+```
+
+### In-run progress (inside run dir)
+
+```bash
+RUN_DIR=output/dreamerv3/<run_id>_<timestamp>
+tail -f "$RUN_DIR/result.json"
+cat "$RUN_DIR/run_summary.json"
+ls -lah "$RUN_DIR/checkpoints"
+```
+
+### W&B
+
+- online mode (`*_auxme_a30_full.yaml`): check project dashboard live
+- offline mode (`drive_state_rays.yaml`): sync later with:
 
 ```bash
 wandb sync output/wandb/wandb/offline-run-*
 ```
 
-Optional overrides:
+## 7) Recovery Playbook
+
+### Case A: allocation alive, training process gone
+
+1. Reattach to tmux (`tmux attach -t dreamer`) or inspect node logs.
+2. Confirm no active trainer process.
+3. Relaunch canonical command with same config.
+4. Verify a new `output/dreamerv3/<run_id>_<timestamp>/` appears.
+
+### Case B: no direct SSH to compute node
+
+Use scheduler attach methods:
 
 ```bash
-uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
-  --run-id dreamerv3_smoke \
-  --train-iterations 5 \
-  --checkpoint-every 1 \
-  --log-level WARNING
+srun --jobid <jobid> --pty bash
+# or
+sattach <jobid>.0
 ```
 
-## 5) Outputs
+### Case C: startup warnings/failures
+
+- Worker env mismatch warnings: ensure `ray.disable_uv_run_runtime_env: true` is present.
+- Large package upload warnings: verify `ray.runtime_env.excludes` in YAML.
+- If `result.json` stops updating for prolonged time, treat run as stalled and restart.
+
+## 8) Outputs
 
 Artifacts are written under:
 
@@ -92,4 +162,5 @@ Artifacts are written under:
 Key files:
 
 - `checkpoints/` (periodic + final RLlib checkpoints)
+- `result.json` (JSONL per-iteration progress stream for live monitoring)
 - `run_summary.json` (iteration history and run metadata)

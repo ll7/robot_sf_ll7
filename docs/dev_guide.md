@@ -1011,6 +1011,9 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 The workflow uses deterministic flattening order (`drive_state`, `rays`) and can normalize
 actions to `[-1,1]` for DreamerV3.
+The launcher also pins Ray workers to the active interpreter and disables `uv run`
+runtime-env propagation to avoid worker-side environment rebuilds.
+See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/monitor/recovery runbook.
 
 ### Docker training (advanced)
 ```bash

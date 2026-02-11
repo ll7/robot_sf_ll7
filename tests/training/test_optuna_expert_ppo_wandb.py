@@ -44,6 +44,9 @@ class _FakeTrial:
     def suggest_float(self, _name: str, low: float, _high: float, **_kwargs):
         return low
 
+    def suggest_int(self, _name: str, low: int, _high: int, **_kwargs):
+        return low
+
 
 def _args(*, disable_wandb: bool) -> argparse.Namespace:
     return argparse.Namespace(

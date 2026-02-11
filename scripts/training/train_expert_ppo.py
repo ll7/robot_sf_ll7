@@ -672,13 +672,7 @@ def _init_wandb(
     wandb_dir = get_artifact_category_path("wandb")
     wandb_dir.mkdir(parents=True, exist_ok=True)
     tensorboard_log_str = str(tensorboard_log) if tensorboard_log is not None else ""
-    raw_tags = wandb_cfg.get("tags")
-    if isinstance(raw_tags, str):
-        tags = [raw_tags]
-    elif isinstance(raw_tags, Sequence):
-        tags = [str(tag) for tag in raw_tags]
-    else:
-        tags = None
+    tags = _normalize_wandb_tags(wandb_cfg.get("tags"))
     run = wandb.init(
         project=str(wandb_cfg.get("project", "robot_sf")),
         group=str(wandb_cfg.get("group", "ppo-imitation")),
@@ -716,6 +710,19 @@ def _init_wandb(
     )
     logger.info("W&B run initialized id={} project={}", run.id if run else "unknown", run.project)
     return run, callback
+
+
+def _normalize_wandb_tags(raw_tags: object) -> list[str] | None:
+    """Normalize W&B tags to a list of strings, preserving single-string tags."""
+    if raw_tags is None:
+        return None
+    if isinstance(raw_tags, str):
+        return [raw_tags]
+    if isinstance(raw_tags, bytes):
+        return [raw_tags.decode("utf-8", errors="replace")]
+    if isinstance(raw_tags, Sequence):
+        return [str(tag) for tag in raw_tags]
+    return None
 
 
 def _build_eval_steps(

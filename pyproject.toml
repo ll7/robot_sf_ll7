@@ -55,6 +55,7 @@ dependencies = [
     "geopandas>=0.14",
     "pyproj>=3.6",
     "pyyaml>=6.0",
+    "optuna-dashboard>=0.20.0",
 ]
 
 [project.optional-dependencies]

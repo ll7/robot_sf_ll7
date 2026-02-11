@@ -23,6 +23,8 @@ from sqlalchemy.engine import make_url
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
+_DEFAULT_STORAGE_ROOT = Path("output/benchmarks/ppo_imitation/hparam_opt").resolve()
+_ALLOWED_SQLITE_ROOT = Path("output").resolve()
 
 
 def _suggest_ppo_hyperparams(trial: optuna.Trial, *, max_batch_size: int) -> dict[str, object]:
@@ -51,8 +53,28 @@ def _resolve_metric_direction(metric: str) -> tuple[str, str]:
     return normalized, "maximize"
 
 
-def _ensure_sqlite_storage_parent(storage: str) -> None:
-    """Create parent directory for sqlite-backed Optuna storage URLs."""
+def _sanitize_storage_filename(raw: str, *, fallback: str = "optuna_study") -> str:
+    """Return a filename-safe study token for sqlite database paths."""
+    sanitized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in raw.strip())
+    sanitized = sanitized.strip("._")
+    return sanitized or fallback
+
+
+def _resolve_sqlite_database_path(database: str, *, allowed_root: Path | None = None) -> Path:
+    """Resolve sqlite database path and optionally enforce an allowed root."""
+    resolved = Path(database).expanduser()
+    resolved = (
+        (Path.cwd() / resolved).resolve() if not resolved.is_absolute() else resolved.resolve()
+    )
+    if allowed_root is not None and not resolved.is_relative_to(allowed_root):
+        raise ValueError(
+            f"Refusing sqlite storage path outside allowed root '{allowed_root}': {resolved}",
+        )
+    return resolved
+
+
+def _ensure_sqlite_storage_parent(storage: str, *, allowed_root: Path | None = None) -> None:
+    """Create sqlite parent directory while rejecting paths outside an allowed root."""
     try:
         url = make_url(storage)
     except Exception:
@@ -62,7 +84,8 @@ def _ensure_sqlite_storage_parent(storage: str) -> None:
     database = url.database
     if not database or database == ":memory:":
         return
-    Path(database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+    resolved_database = _resolve_sqlite_database_path(database, allowed_root=allowed_root)
+    resolved_database.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _configure_optuna_verbosity(log_level: str) -> None:
@@ -311,10 +334,11 @@ def main(argv: list[str] | None = None) -> int:
         study_name = args.study_name or f"{base_config.policy_id}_optuna_{timestamp}"
         storage = args.storage
         if storage is None:
-            storage_path = Path("output/benchmarks/ppo_imitation/hparam_opt") / f"{study_name}.db"
+            safe_study_name = _sanitize_storage_filename(study_name)
+            storage_path = _DEFAULT_STORAGE_ROOT / f"{safe_study_name}.db"
             storage_path.parent.mkdir(parents=True, exist_ok=True)
             storage = f"sqlite:///{storage_path}"
-        _ensure_sqlite_storage_parent(storage)
+        _ensure_sqlite_storage_parent(storage, allowed_root=_ALLOWED_SQLITE_ROOT)
 
         logger.info(
             "Starting Optuna study '{}' direction={} metric={} objective_mode={} storage={}",

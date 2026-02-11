@@ -223,7 +223,8 @@ def sample_route(
     raise RuntimeError(
         f"Failed to sample {num_samples} route points after {max_anchor_attempts} anchor tries "
         f"(sampled_offset={sampled_offset:.3f}, sec_id={sec_id}) without violating obstacle "
-        "constraints. Check _route_point_at_offset, _sample_points_near_anchor, and "
+        "constraints. Consider adjusting the route, sidewalk width, or obstacle geometry. "
+        "If unexpected, check _route_point_at_offset, _sample_points_near_anchor, and "
         "_point_in_any_obstacle for route geometry and obstacle filtering."
     )
 

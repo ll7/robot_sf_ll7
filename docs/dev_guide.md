@@ -777,6 +777,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 uv run python scripts/validation/run_examples_smoke.py --dry-run
 uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
 uv run python scripts/validation/run_examples_smoke.py
+uv run python scripts/validation/svg_inspect.py maps/svg_maps --pattern "classic_*.svg" --strict warning
 uv run python scripts/tools/check_artifact_root.py
 
 # Performance baseline validation
@@ -788,6 +789,7 @@ Success criteria:
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
 - Example smoke harness: exits 0; all `ci_enabled` examples pass and archived entries are reported as skipped via manifest metadata.
+- SVG inspection: exits 0 in strict mode only if no warning/error findings are detected at the selected threshold.
 - Artifact guard: exits 0; repository root remains clean with all artifacts under `output/` (mirror of the CI enforcement step).
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
   - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.

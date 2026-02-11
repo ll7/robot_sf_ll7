@@ -134,3 +134,50 @@ def test_single_pedestrians_and_pois_parsed_from_circles(tmp_path: Path) -> None
     assert demo.goal == (2.0, 2.0)
     assert map_def.poi_positions == [(4.0, 4.0)]
     assert map_def.poi_labels["poi_1"] == "poi_1"
+
+
+def test_ped_route_only_map_derives_endpoint_zones(tmp_path: Path) -> None:
+    """Route-only pedestrian maps should derive respawn zones from route endpoints."""
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="12" height="12">
+      <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+      <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+      <path id="ped_path" inkscape:label="ped_route_0_0" d="M 2 2 L 9 9" />
+    </svg>
+    """
+    svg_path = tmp_path / "route_only.svg"
+    svg_path.write_text(svg.strip(), encoding="utf-8")
+
+    map_def = convert_map(str(svg_path))
+    assert map_def is not None
+    assert len(map_def.ped_spawn_zones) == 0
+    assert len(map_def.ped_goal_zones) == 0
+    assert len(map_def.ped_routes) == 1
+    route = map_def.ped_routes[0]
+    assert route.spawn_zone == ((2.0, 2.0), (3.0, 2.0), (3.0, 3.0))
+    assert route.goal_zone == ((9.0, 9.0), (10.0, 9.0), (10.0, 10.0))
+
+
+def test_out_of_range_route_index_keeps_small_fallback_zone(tmp_path: Path) -> None:
+    """Maps with explicit zones but invalid route indices still use tiny fallback zones."""
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="12" height="12">
+      <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+      <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+      <rect id="ped_spawn_zone_0" inkscape:label="ped_spawn_zone_0" x="2" y="2" width="1" height="1" />
+      <rect id="ped_goal_zone_0" inkscape:label="ped_goal_zone_0" x="9" y="9" width="1" height="1" />
+      <path id="ped_bad_index" inkscape:label="ped_route_9_9" d="M 2 2 L 9 9" />
+    </svg>
+    """
+    svg_path = tmp_path / "bad_index.svg"
+    svg_path.write_text(svg.strip(), encoding="utf-8")
+
+    map_def = convert_map(str(svg_path))
+    assert map_def is not None
+    route = map_def.ped_routes[0]
+    assert route.spawn_zone == ((2.0, 2.0), (2.1, 2.0), (2.1, 2.1))
+    assert route.goal_zone == ((9.0, 9.0), (9.1, 9.0), (9.1, 9.1))

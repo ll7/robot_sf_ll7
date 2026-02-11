@@ -215,6 +215,15 @@ uv run python scripts/training/launch_optuna_expert_ppo.py \
   --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
 ```
 
+Safety-gated Optuna selection is available via:
+
+- `constraint_collision_rate_max`: Require `collision_rate <= threshold`
+- `constraint_comfort_exposure_max`: Optional additional comfort gate
+- `constraint_handling`: `penalize` (default) or `prune` infeasible trials
+
+When constraints are active, each trial stores feasibility metadata in Optuna
+`user_attrs` and the run logs a feasible/infeasible trial summary.
+
 ---
 
 ## Detailed Workflow Documentation

@@ -17,3 +17,5 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 3. Document any temporary overrides in the run manifest to preserve reproducibility.
 4. For Optuna launcher configs, prefer `log_level: WARNING` by default and override only when debugging.
 5. W&B is enabled by default for Optuna launcher runs; set `disable_wandb: true` only for offline/reliability scenarios.
+6. Safety-gated Optuna sweeps can set `constraint_collision_rate_max` (and optional
+   `constraint_comfort_exposure_max`) plus `constraint_handling: penalize|prune`.

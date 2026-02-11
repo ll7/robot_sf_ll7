@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
 - Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
 - Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
+- Safety-gated Optuna objectives for expert PPO sweeps (`constraint_collision_rate_max`,
+  optional `constraint_comfort_exposure_max`, and `constraint_handling=penalize|prune`)
+  with per-trial feasibility metadata and feasible/infeasible study summaries.
 - Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
 - Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
 - Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.

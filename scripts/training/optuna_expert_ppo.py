@@ -18,6 +18,7 @@ from typing import Any
 
 import optuna
 from loguru import logger
+from optuna.trial import TrialState
 from sqlalchemy.engine import make_url
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
@@ -279,14 +280,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    log_level = str(args.log_level).upper()
     previous_loguru_level = os.environ.get("LOGURU_LEVEL")
-    os.environ["LOGURU_LEVEL"] = log_level
-    logger.remove()
-    logger.add(sys.stderr, level=log_level)
-    _configure_optuna_verbosity(log_level)
 
     try:
+        log_level = str(args.log_level).upper()
+        os.environ["LOGURU_LEVEL"] = log_level
+        logger.remove()
+        logger.add(sys.stderr, level=log_level)
+        _configure_optuna_verbosity(log_level)
+
         from train_expert_ppo import (
             _resolve_num_envs,
             load_expert_training_config,
@@ -320,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
             direction,
             metric_name,
             objective_mode,
-            storage,
+            make_url(storage).render_as_string(hide_password=True),
         )
 
         sampler = optuna.samplers.TPESampler(seed=args.seed)
@@ -370,8 +372,9 @@ def main(argv: list[str] | None = None) -> int:
             return float(metric_value)
 
         study.optimize(objective, n_trials=int(args.trials))
-        if not study.trials:
-            logger.warning("Optuna study completed with zero executed trials.")
+        completed_trials = study.get_trials(states=[TrialState.COMPLETE])
+        if not completed_trials:
+            logger.warning("Optuna study completed without any successful trials.")
             return 0
         best = study.best_trial
         logger.success(

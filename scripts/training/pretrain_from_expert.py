@@ -56,6 +56,12 @@ def _warn_imitation_dependency_mode(*, dry_run: bool) -> None:
     """Warn users how to invoke BC pre-training with the optional imitation dependency group."""
     if dry_run:
         return
+    try:
+        import imitation  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        return
     warnings.warn(
         "BC pre-training uses the optional `imitation` dependency stack. "
         "Run this command with `uv run --group imitation ...` after `uv sync --group imitation`. "

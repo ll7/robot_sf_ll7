@@ -97,7 +97,7 @@ class AlgorithmSettings:
     env_runners: dict[str, object]
     resources: dict[str, object]
     learners: dict[str, object]
-    api_stack: dict[str, object]
+    api_stack: dict[str, object] | None
 
 
 @dataclass(slots=True)
@@ -137,6 +137,15 @@ def _ensure_mapping(payload: object, *, field_name: str) -> dict[str, object]:
     """Validate that a payload section is a mapping."""
     if payload is None:
         return {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"'{field_name}' must be a mapping.")
+    return dict(payload)
+
+
+def _ensure_optional_mapping(payload: object, *, field_name: str) -> dict[str, object] | None:
+    """Validate optional mapping payloads while preserving None."""
+    if payload is None:
+        return None
     if not isinstance(payload, dict):
         raise ValueError(f"'{field_name}' must be a mapping.")
     return dict(payload)
@@ -281,7 +290,9 @@ def _parse_algorithm_settings(payload: dict[str, object]) -> AlgorithmSettings:
         ),
         resources=_ensure_mapping(algorithm_raw.get("resources"), field_name="algorithm.resources"),
         learners=_ensure_mapping(algorithm_raw.get("learners"), field_name="algorithm.learners"),
-        api_stack=_ensure_mapping(algorithm_raw.get("api_stack"), field_name="algorithm.api_stack"),
+        api_stack=_ensure_optional_mapping(
+            algorithm_raw.get("api_stack"), field_name="algorithm.api_stack"
+        ),
     )
 
 
@@ -337,16 +348,21 @@ def load_run_config(path: Path) -> DreamerRunConfig:
     )
 
 
-def _apply_nested_overrides(config_obj: object, overrides: dict[str, object]) -> None:
+def _apply_nested_overrides(
+    config_obj: object,
+    overrides: dict[str, object],
+    *,
+    context_name: str = "env.config",
+) -> None:
     """Recursively apply dict overrides onto dataclass-like objects."""
     for key, value in overrides.items():
         if not hasattr(config_obj, key):
-            raise ValueError(f"Unknown env.config override field: '{key}'")
+            raise ValueError(f"Unknown {context_name} override field: '{key}'")
         current_attr = getattr(config_obj, key)
         if isinstance(value, dict) and (
             hasattr(current_attr, "__dict__") or is_dataclass(current_attr)
         ):
-            _apply_nested_overrides(current_attr, value)
+            _apply_nested_overrides(current_attr, value, context_name=f"{context_name}.{key}")
         else:
             setattr(config_obj, key, value)
 
@@ -354,9 +370,8 @@ def _apply_nested_overrides(config_obj: object, overrides: dict[str, object]) ->
 def _create_env_template(env_settings: EnvSettings) -> RobotSimulationConfig:
     """Build the base RobotSimulationConfig used by all RLlib workers."""
     config = RobotSimulationConfig()
-    config.use_image_obs = False
-    config.include_grid_in_observation = False
-    _apply_nested_overrides(config, env_settings.config_overrides)
+    _apply_nested_overrides(config, env_settings.config_overrides, context_name="env.config")
+    # Force vector-observation mode for the drive_state+rays DreamerV3 pipeline.
     config.use_image_obs = False
     config.include_grid_in_observation = False
     return config
@@ -379,7 +394,7 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
             if key not in _IGNORED_ENV_CONTEXT_KEYS
         }
         worker_config = copy.deepcopy(template)
-        _apply_nested_overrides(worker_config, worker_overrides)
+        _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
         env = make_robot_env(config=worker_config, **factory_kwargs)
         return wrap_for_dreamerv3(
             env,
@@ -488,7 +503,11 @@ def _build_algorithm_config(
     )
     cfg = cfg.framework(run_config.algorithm.framework)
     env_runner_payload, resources_payload, _ = _resolve_auto_overrides(run_config)
-    api_stack_settings = run_config.algorithm.api_stack or dict(_DEFAULT_API_STACK)
+    api_stack_settings = (
+        run_config.algorithm.api_stack
+        if run_config.algorithm.api_stack is not None
+        else dict(_DEFAULT_API_STACK)
+    )
     cfg = _apply_config_method(cfg, "api_stack", api_stack_settings)
     cfg = _apply_env_runner_settings(cfg, env_runner_payload)
     cfg = _apply_config_method(cfg, "resources", resources_payload)
@@ -583,7 +602,7 @@ def _init_wandb_tracking(run_config: DreamerRunConfig, *, run_stamp: str):
         tags=list(wandb_cfg.tags),
         dir=str(wandb_cfg.directory),
         config=_serialize_for_wandb(run_config),
-        reinit=True,
+        reinit="finish_previous",
     )
 
 
@@ -601,12 +620,14 @@ def _build_ray_init_kwargs(run_config: DreamerRunConfig) -> dict[str, object]:
     needs_auto = _is_auto(run_config.ray.num_cpus) or _is_auto(run_config.ray.num_gpus)
     capacity = detect_hardware_capacity(reserve_cpu_cores=0, minimum_cpus=1) if needs_auto else None
     if _is_auto(run_config.ray.num_cpus):
-        assert capacity is not None
+        if capacity is None:
+            raise RuntimeError("Hardware capacity detection failed for auto CPU resolution.")
         ray_kwargs["num_cpus"] = capacity.usable_cpus
     elif run_config.ray.num_cpus is not None:
         ray_kwargs["num_cpus"] = run_config.ray.num_cpus
     if _is_auto(run_config.ray.num_gpus):
-        assert capacity is not None
+        if capacity is None:
+            raise RuntimeError("Hardware capacity detection failed for auto GPU resolution.")
         ray_kwargs["num_gpus"] = capacity.visible_gpus
     elif run_config.ray.num_gpus is not None:
         ray_kwargs["num_gpus"] = run_config.ray.num_gpus
@@ -678,17 +699,17 @@ def run_training(run_config: DreamerRunConfig) -> int:
     ).resolve()
     checkpoint_dir = run_dir / "checkpoints"
     run_dir.mkdir(parents=True, exist_ok=True)
-    wandb_run = _init_wandb_tracking(run_config, run_stamp=run_stamp)
-
-    env_name = f"robot_sf_dreamerv3_{run_config.experiment.run_id}"
-    register_env(env_name, _make_env_creator(run_config))
-
-    ray.init(**_build_ray_init_kwargs(run_config))
 
     algo = None
+    wandb_run = None
     summary_path = run_dir / "run_summary.json"
     history: list[dict[str, object]] = []
     try:
+        wandb_run = _init_wandb_tracking(run_config, run_stamp=run_stamp)
+        env_name = f"robot_sf_dreamerv3_{run_config.experiment.run_id}"
+        register_env(env_name, _make_env_creator(run_config))
+        ray.init(**_build_ray_init_kwargs(run_config))
+
         algo_config = _build_algorithm_config(run_config, env_name=env_name)
         algo = _build_algorithm_instance(algo_config)
         history = _run_training_iterations(

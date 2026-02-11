@@ -673,7 +673,12 @@ def _init_wandb(
     wandb_dir.mkdir(parents=True, exist_ok=True)
     tensorboard_log_str = str(tensorboard_log) if tensorboard_log is not None else ""
     raw_tags = wandb_cfg.get("tags")
-    tags = [str(tag) for tag in raw_tags] if isinstance(raw_tags, Sequence) else None
+    if isinstance(raw_tags, str):
+        tags = [raw_tags]
+    elif isinstance(raw_tags, Sequence):
+        tags = [str(tag) for tag in raw_tags]
+    else:
+        tags = None
     run = wandb.init(
         project=str(wandb_cfg.get("project", "robot_sf")),
         group=str(wandb_cfg.get("group", "ppo-imitation")),

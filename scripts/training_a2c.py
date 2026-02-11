@@ -14,7 +14,7 @@ def _make_robot_env() -> RobotEnv:
 
 
 def training():
-    """TODO docstring. Document this function."""
+    """Train an A2C policy on vectorized RobotEnv instances and save the model."""
     env = make_vec_env(_make_robot_env, n_envs=50, vec_env_cls=SubprocVecEnv)
     model = A2C("MlpPolicy", env, tensorboard_log="./logs/a2c_logs/")
     model.learn(total_timesteps=50_000_000, progress_bar=True)

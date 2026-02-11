@@ -104,18 +104,28 @@ _ALLOWED_PPO_HYPERPARAMS = {
     "vf_coef",
     "max_grad_norm",
 }
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    """Parse float-valued overrides while preserving explicit null values."""
+
+    if value is None:
+        return None
+    return float(value)
+
+
 _PPO_PARAM_COERCIONS: dict[str, Callable[[object], object]] = {
-    "learning_rate": lambda value: float(value),
-    "batch_size": lambda value: int(value),
-    "n_epochs": lambda value: int(value),
-    "ent_coef": lambda value: float(value),
-    "clip_range": lambda value: float(value),
-    "target_kl": lambda value: None if value is None else float(value),
-    "n_steps": lambda value: int(value),
-    "gamma": lambda value: float(value),
-    "gae_lambda": lambda value: float(value),
-    "vf_coef": lambda value: float(value),
-    "max_grad_norm": lambda value: float(value),
+    "learning_rate": float,
+    "batch_size": int,
+    "n_epochs": int,
+    "ent_coef": float,
+    "clip_range": float,
+    "target_kl": _coerce_optional_float,
+    "n_steps": int,
+    "gamma": float,
+    "gae_lambda": float,
+    "vf_coef": float,
+    "max_grad_norm": float,
 }
 _EVAL_METRIC_KEYS = (
     "success_rate",

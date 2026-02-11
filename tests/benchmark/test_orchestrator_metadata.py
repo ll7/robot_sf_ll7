@@ -43,7 +43,11 @@ def test_logs_warning_on_mismatch():
     """A conflicting nested algorithm value should trigger a warning and correction."""
 
     captured: list = []
-    handle = logger.add(lambda message: captured.append(message), level="WARNING")
+
+    def capture_message(message):
+        captured.append(message)
+
+    handle = logger.add(capture_message, level="WARNING")
     try:
         record: dict[str, object] = {
             "episode_id": "ep-003",

@@ -62,7 +62,11 @@ def test_warns_and_flags_missing_algorithms():
 
     records = [_make_record("sf", include_nested=True, scenario_id="scenario-sf")]
     captured: list = []
-    handle = logger.add(lambda message: captured.append(message), level="WARNING")
+
+    def capture_message(message):
+        captured.append(message)
+
+    handle = logger.add(capture_message, level="WARNING")
     try:
         result = compute_aggregates_with_ci(
             records,

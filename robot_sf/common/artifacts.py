@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class ExpertValidationState(str, Enum):
+class ExpertValidationState(StrEnum):
     """Lifecycle state for an expert policy artefact."""
 
     DRAFT = "draft"
@@ -20,7 +20,7 @@ class ExpertValidationState(str, Enum):
     SYNTHETIC = "synthetic"
 
 
-class TrajectoryQuality(str, Enum):
+class TrajectoryQuality(StrEnum):
     """Validation status for a recorded trajectory dataset."""
 
     DRAFT = "draft"
@@ -28,7 +28,7 @@ class TrajectoryQuality(str, Enum):
     QUARANTINED = "quarantined"
 
 
-class TrainingRunStatus(str, Enum):
+class TrainingRunStatus(StrEnum):
     """Execution outcome for a recorded training run."""
 
     COMPLETED = "completed"
@@ -36,7 +36,7 @@ class TrainingRunStatus(str, Enum):
     PARTIAL = "partial"
 
 
-class TrainingRunType(str, Enum):
+class TrainingRunType(StrEnum):
     """Tagged type for registered training workflows."""
 
     EXPERT_TRAINING = "expert_training"

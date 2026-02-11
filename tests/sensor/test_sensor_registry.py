@@ -180,7 +180,7 @@ def test_create_sensors_missing_type_raises_error(clean_registry):
 
 def test_create_sensors_unknown_type_raises_error(clean_registry):
     """Test that unknown sensor type raises KeyError."""
-    register_sensor("known", lambda c: DummySensor(c))
+    register_sensor("known", DummySensor)
 
     configs = [
         {"type": "unknown"},

@@ -130,9 +130,23 @@ def test_convert_to_transitions_appends_terminal_observation_when_missing() -> N
 
 
 def test_warn_imitation_dependency_mode_emits_warning_when_training() -> None:
-    """Non-dry runs should emit a clear dependency warning for imitation stack usage."""
-    with pytest.warns(ImitationDependencyWarning, match="--group imitation"):
-        _warn_imitation_dependency_mode(dry_run=False)
+    """Warning should be emitted only when the imitation stack is unavailable."""
+    try:
+        import imitation  # noqa: F401
+    except ImportError:
+        with pytest.warns(ImitationDependencyWarning, match="--group imitation"):
+            _warn_imitation_dependency_mode(dry_run=False)
+    else:
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            _warn_imitation_dependency_mode(dry_run=False)
+
+        imitation_warnings = [
+            warning
+            for warning in captured
+            if issubclass(warning.category, ImitationDependencyWarning)
+        ]
+        assert not imitation_warnings
 
 
 def test_warn_imitation_dependency_mode_silent_for_dry_run() -> None:

@@ -1,0 +1,57 @@
+# High-throughput DreamerV3 (RLlib) profile for Auxme A30 nodes (1x A30 GPU + 24 CPUs).
+# Use with an sbatch allocation that matches these resources.
+experiment:
+  run_id: dreamerv3_drive_state_rays_auxme_a30_full
+  output_root: output/dreamerv3
+  train_iterations: 6000
+  checkpoint_every: 100
+  seed: 123
+  log_level: WARNING
+
+ray:
+  address: null
+  local_mode: false
+  include_dashboard: false
+  num_cpus: auto
+  num_gpus: auto
+
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf_dreamerv3
+    group: drive_state_rays_auxme_a30
+    job_type: train
+    mode: online
+    tags: [dreamerv3, rllib, drive_state_rays, auxme, a30]
+    dir: output/wandb
+
+env:
+  flatten_observation: true
+  flatten_keys: [drive_state, rays]
+  normalize_actions: true
+  factory_kwargs:
+    debug: false
+    recording_enabled: false
+  config:
+    use_image_obs: false
+    include_grid_in_observation: false
+
+algorithm:
+  framework: torch
+  env_runners:
+    num_env_runners: auto
+    num_envs_per_env_runner: 1
+    rollout_fragment_length: 32
+  resources:
+    num_gpus: auto
+  learners:
+    num_learners: 0
+  training:
+    model_size: S
+    training_ratio: 128
+    batch_size_B: 32
+    batch_length_T: 64
+    horizon_H: 15
+    world_model_lr: 0.0001
+    actor_lr: 0.00003
+    critic_lr: 0.00003

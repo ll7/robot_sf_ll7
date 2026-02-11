@@ -6,43 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-### Added (Map Verification)
-
-* Unified configs now support `map_id` for deterministic map selection when building environments.
-* Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
-* Optuna sqlite inspection helper (`scripts/tools/inspect_optuna_db.py`) for quick study summaries.
-* Optuna expert PPO sweep report with recommended hyperparameter ranges (`docs/training/optuna_expert_ppo_sweep_2026-02-11.md`).
-* Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
-* New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
-* Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
-* Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
-* Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
-* Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
-* Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`,   `--policies`).
-* Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
-* Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
-* Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.
-* Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
-* Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
-* Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
-* Benchmark outputs now include wall collision and clearing distance metrics by default.
-* Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
-* Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
-* ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
-* Added SocNavBench subset metrics (`socnavbench_path_length`,   `socnavbench_path_length_ratio`,   `socnavbench_path_irregularity`).
-* Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
-* Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`,   `examples/advanced/20_occupancy_grid_workflow.py`,   `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
-* Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
-* Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`,   `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
-* Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`,   `scripts/validation/performance_research_report.py`,   `tests/research/test_performance_smoke.py`,   `tests/research/test_schemas.py`).
-* Multi-extractor training now auto-collects convergence/sample-efficiency metrics, baseline comparisons, and learning-curve/reward-distribution figures, emitting schema-compliant summaries (`summary.json`/`summary.md`) plus legacy `complete_results.json`.
-* New extractor report generator: `scripts/research/generate_extractor_report.py` converts multi-extractor `summary.json` into research-ready `report.md`/`report.tex` with figures, reproducibility metadata, and baseline comparisons.
-* Inkscape SVG map template (`maps/templates/map_template.svg`) and quickstart updates in `docs/SVG_MAP_EDITOR.md`.
-* Classic planner backend option in `RobotSimulationConfig` (`planner_backend="classic"` with `planner_classic_config`) plus ORCA demo consuming it (`examples/advanced/31_classic_planner_orca_demo.py`); planner attachment now supports grid-based planning without manual wiring.
-* Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
-* Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
-* Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
+### Added
+- Unified configs now support `map_id` for deterministic map selection when building environments.
+- Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
+  `scripts/training/train_dreamerv3_rllib.py`, `configs/training/rllib_dreamerv3/drive_state_rays.yaml`,
+  deterministic observation flattening/action normalization wrappers, and a dedicated runbook.
+- Optional dependency split for training stacks: `imitation` moved to the `imitation` dependency group so BC pre-training can be installed separately from RLlib-oriented environments.
+- Added an explicit uv dependency conflict declaration between `--extra rllib` and `--group imitation` to provide actionable install errors when mixed.
+- Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
+- Optuna sqlite inspection helper (`scripts/tools/inspect_optuna_db.py`) for quick study summaries.
+- Optuna expert PPO sweep report with recommended hyperparameter ranges (`docs/training/optuna_expert_ppo_sweep_2026-02-11.md`).
+- Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
+- New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
+- Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
+- Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
+- Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
+- Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
+- Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
+- Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
+- Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
+- Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.
+- Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
+- Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
+- Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
+- Benchmark outputs now include wall collision and clearing distance metrics by default.
+- Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
+- Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
+- ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
+- Added SocNavBench subset metrics (`socnavbench_path_length`, `socnavbench_path_length_ratio`, `socnavbench_path_irregularity`).
+- Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
+- Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
+- Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
+- Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
+- Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`, `scripts/validation/performance_research_report.py`, `tests/research/test_performance_smoke.py`, `tests/research/test_schemas.py`).
+- Multi-extractor training now auto-collects convergence/sample-efficiency metrics, baseline comparisons, and learning-curve/reward-distribution figures, emitting schema-compliant summaries (`summary.json`/`summary.md`) plus legacy `complete_results.json`.
+- New extractor report generator: `scripts/research/generate_extractor_report.py` converts multi-extractor `summary.json` into research-ready `report.md`/`report.tex` with figures, reproducibility metadata, and baseline comparisons.
+- Inkscape SVG map template (`maps/templates/map_template.svg`) and quickstart updates in `docs/SVG_MAP_EDITOR.md`.
+- Classic planner backend option in `RobotSimulationConfig` (`planner_backend="classic"` with `planner_classic_config`) plus ORCA demo consuming it (`examples/advanced/31_classic_planner_orca_demo.py`); planner attachment now supports grid-based planning without manual wiring.
+- Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
+- Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
+- Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
 
 ### Fixed
 

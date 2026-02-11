@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 from loguru import logger
+from sqlalchemy.engine import make_url
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
@@ -76,6 +77,49 @@ def _coerce_int(value: object, *, field_name: str) -> int:
         raise ValueError(f"Expected integer for '{field_name}', received {value!r}") from exc
 
 
+def _as_bool(value: object) -> bool:
+    """Coerce booleans from YAML/CLI values with string-safe semantics."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off", ""}:
+            return False
+    return bool(value)
+
+
+def _mask_storage_in_command(command: list[str]) -> str:
+    """Render shell command while masking credentials in --storage URL values."""
+    masked: list[str] = []
+    i = 0
+    while i < len(command):
+        token = command[i]
+        masked_token = token
+        if token == "--storage" and i + 1 < len(command):
+            storage_raw = command[i + 1]
+            try:
+                storage_url = make_url(storage_raw)
+                masked.extend([token, storage_url.render_as_string(hide_password=True)])
+            except Exception:
+                masked.extend([token, storage_raw])
+            i += 2
+            continue
+        if token.startswith("--storage="):
+            storage_raw = token.split("=", maxsplit=1)[1]
+            try:
+                storage_url = make_url(storage_raw)
+                masked_token = f"--storage={storage_url.render_as_string(hide_password=True)}"
+            except Exception:
+                masked_token = token
+        masked.append(masked_token)
+        i += 1
+    return shlex.join(masked)
+
+
 def load_launch_config(path: Path) -> dict[str, object]:
     """Load and validate launcher YAML payload."""
     with path.open(encoding="utf-8") as handle:
@@ -122,10 +166,10 @@ def build_optuna_cli_args(
         cli_args.extend([flag, str(value)])
 
     disable_wandb = _effective_value(payload, args, "disable_wandb")
-    if bool(disable_wandb):
+    if _as_bool(disable_wandb):
         cli_args.append("--disable-wandb")
     deterministic = _effective_value(payload, args, "deterministic")
-    if bool(deterministic):
+    if _as_bool(deterministic):
         cli_args.append("--deterministic")
 
     return cli_args
@@ -225,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
 
     optuna_script = Path(__file__).with_name("optuna_expert_ppo.py").resolve()
     command = [sys.executable, str(optuna_script), *cli_args]
-    logger.info("Resolved Optuna command: {}", shlex.join(command))
+    logger.info("Resolved Optuna command: {}", _mask_storage_in_command(command))
     if args.dry_run:
         return 0
 

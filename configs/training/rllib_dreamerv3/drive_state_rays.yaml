@@ -1,0 +1,56 @@
+# Config-first DreamerV3 (RLlib) run on Robot SF drive_state+rays observations.
+experiment:
+  run_id: dreamerv3_drive_state_rays
+  output_root: output/dreamerv3
+  train_iterations: 2000
+  checkpoint_every: 50
+  seed: 123
+  log_level: WARNING
+
+ray:
+  address: null
+  local_mode: false
+  include_dashboard: false
+  num_cpus: 12
+  num_gpus: null
+
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf_dreamerv3
+    group: drive_state_rays
+    job_type: train
+    mode: offline
+    tags: [dreamerv3, rllib, drive_state_rays]
+    dir: output/wandb
+
+env:
+  flatten_observation: true
+  flatten_keys: [drive_state, rays]
+  normalize_actions: true
+  factory_kwargs:
+    debug: false
+    recording_enabled: false
+  config:
+    use_image_obs: false
+    include_grid_in_observation: false
+
+algorithm:
+  framework: torch
+  env_runners:
+    num_env_runners: 8
+    num_envs_per_env_runner: 1
+    rollout_fragment_length: 16
+  resources:
+    num_gpus: 0
+  learners:
+    num_learners: 0
+  training:
+    model_size: XS
+    training_ratio: 64
+    batch_size_B: 16
+    batch_length_T: 32
+    horizon_H: 10
+    world_model_lr: 0.0001
+    actor_lr: 0.00003
+    critic_lr: 0.00003

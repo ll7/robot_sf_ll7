@@ -97,3 +97,26 @@ def test_build_optuna_cli_args_applies_cli_overrides(tmp_path: Path):
     assert cli_args[cli_args.index("--log-level") + 1] == "ERROR"
     assert "--disable-wandb" not in cli_args
     assert "--deterministic" in cli_args
+
+
+def test_build_optuna_cli_args_parses_string_booleans(tmp_path: Path):
+    """Quoted YAML boolean strings should be interpreted safely."""
+    launch_dir = tmp_path / "configs"
+    launch_dir.mkdir(parents=True)
+    expert_config = launch_dir / "expert_ppo.yaml"
+    expert_config.write_text("scenario_config: dummy.yaml\n", encoding="utf-8")
+    launch_config = launch_dir / "optuna.yaml"
+    launch_config.write_text("base_config: expert_ppo.yaml\n", encoding="utf-8")
+
+    cli_args = build_optuna_cli_args(
+        launch_config_path=launch_config.resolve(),
+        payload={
+            "base_config": "expert_ppo.yaml",
+            "disable_wandb": "false",
+            "deterministic": "true",
+        },
+        args=_make_args(),
+    )
+
+    assert "--disable-wandb" not in cli_args
+    assert "--deterministic" in cli_args

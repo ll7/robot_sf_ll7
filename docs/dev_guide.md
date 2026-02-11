@@ -143,7 +143,10 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 
 ### Data flow and integration
 
-- **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
+- **Training loop**: `scripts/training_ppo.py` and `scripts/training/train_expert_ppo.py` →
+  factory functions → vectorized environments → StableBaselines3
+- **RLlib workflow**: `scripts/training/train_dreamerv3_rllib.py` →
+  factory functions → RLlib env registration → DreamerV3
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
 - **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 
@@ -509,7 +512,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 
 ### Executive summary
 
-- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
+- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline, and optional RLlib DreamerV3 workflow
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
@@ -952,6 +955,14 @@ uv run python scripts/evaluate.py
 
 The project supports accelerating PPO training via behavioral cloning pre-training from expert trajectories. This enables sample-efficient training by warm-starting agents with expert demonstrations.
 
+Install the optional imitation stack before running BC pre-training:
+
+```bash
+uv sync --group imitation
+```
+
+Use `uv run --group imitation ...` for BC pre-training commands.
+
 **Quick Overview:** Expert PPO Training → Trajectory Collection → BC Pre-training → PPO Fine-tuning → Comparison Analysis
 
 **For complete documentation, see [Imitation Learning Pipeline Guide](./imitation_learning_pipeline.md)** which includes:
@@ -970,7 +981,7 @@ uv run python examples/advanced/16_imitation_learning_pipeline.py
 # Or run individual steps manually:
 uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
 ```
 
@@ -979,6 +990,27 @@ Set `--log-level DEBUG` if you need the full resolved-config dumps from the fact
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
 - Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`
+
+### RLlib DreamerV3 (`drive_state` + `rays`)
+
+RLlib DreamerV3 can be trained on the default non-image observation contract.
+
+```bash
+# Install RLlib optional dependency
+uv sync --extra rllib
+
+# Validate config
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
+  --dry-run
+
+# Run training
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+
+The workflow uses deterministic flattening order (`drive_state`, `rays`) and can normalize
+actions to `[-1,1]` for DreamerV3.
 
 ### Docker training (advanced)
 ```bash

@@ -58,10 +58,9 @@ def test_make_robot_env_builds_reward_func_from_reward_name(monkeypatch):
         captured.update(kwargs)
         return _DummyEnv()
 
-    monkeypatch.setattr(
-        "robot_sf.gym_env.environment_factory.EnvironmentFactory.create_robot_env",
-        staticmethod(_fake_create_robot_env),
-    )
+    # Patch the exact class object referenced by make_robot_env to avoid module-path alias issues.
+    env_factory_cls = make_robot_env.__globals__["EnvironmentFactory"]
+    monkeypatch.setattr(env_factory_cls, "create_robot_env", staticmethod(_fake_create_robot_env))
     env = make_robot_env(reward_name="snqi_step")
     assert isinstance(env, _DummyEnv)
     assert callable(captured["reward_func"])

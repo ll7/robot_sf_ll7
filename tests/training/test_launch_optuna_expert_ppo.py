@@ -27,6 +27,9 @@ def _make_args(**overrides: object) -> argparse.Namespace:
         "study_name": None,
         "storage": None,
         "seed": None,
+        "constraint_collision_rate_max": None,
+        "constraint_comfort_exposure_max": None,
+        "constraint_handling": None,
         "log_level": None,
         "disable_wandb": None,
         "deterministic": None,
@@ -156,3 +159,31 @@ def test_mask_storage_in_command_redacts_credentials_when_url_parse_fails():
 
     assert "super-secret" not in rendered
     assert "***@" in rendered
+
+
+def test_build_optuna_cli_args_forwards_safety_constraint_overrides(tmp_path: Path):
+    """Constraint settings should be forwarded to the Optuna runner CLI."""
+    launch_dir = tmp_path / "configs"
+    launch_dir.mkdir(parents=True)
+    expert_config = launch_dir / "expert_ppo.yaml"
+    expert_config.write_text("scenario_config: dummy.yaml\n", encoding="utf-8")
+    launch_config = launch_dir / "optuna.yaml"
+    launch_config.write_text("base_config: expert_ppo.yaml\n", encoding="utf-8")
+
+    cli_args = build_optuna_cli_args(
+        launch_config_path=launch_config.resolve(),
+        payload={
+            "base_config": "expert_ppo.yaml",
+            "constraint_collision_rate_max": 0.08,
+            "constraint_comfort_exposure_max": 0.2,
+            "constraint_handling": "prune",
+        },
+        args=_make_args(),
+    )
+
+    assert "--constraint-collision-rate-max" in cli_args
+    assert cli_args[cli_args.index("--constraint-collision-rate-max") + 1] == "0.08"
+    assert "--constraint-comfort-exposure-max" in cli_args
+    assert cli_args[cli_args.index("--constraint-comfort-exposure-max") + 1] == "0.2"
+    assert "--constraint-handling" in cli_args
+    assert cli_args[cli_args.index("--constraint-handling") + 1] == "prune"

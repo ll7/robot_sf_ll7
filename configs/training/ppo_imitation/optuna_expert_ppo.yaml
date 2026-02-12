@@ -18,3 +18,8 @@ eval_episodes: 8
 # Repro/logging controls
 disable_wandb: false
 deterministic: false
+
+# Optional safety-gated objective controls (issue #459)
+# constraint_collision_rate_max: 0.08
+# constraint_comfort_exposure_max: 0.20
+# constraint_handling: penalize  # penalize | prune

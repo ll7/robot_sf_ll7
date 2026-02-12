@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import math
 import os
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -22,9 +24,12 @@ from optuna.trial import TrialState
 from sqlalchemy.engine import make_url
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
+_CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 _DEFAULT_STORAGE_ROOT = Path("output/benchmarks/ppo_imitation/hparam_opt").resolve()
 _ALLOWED_SQLITE_ROOT = Path("output").resolve()
+_CONSTRAINT_PENALTY_OFFSET = 1_000_000.0
+_CONSTRAINT_PENALTY_SCALE = 1_000.0
 
 
 def _suggest_ppo_hyperparams(trial: optuna.Trial, *, max_batch_size: int) -> dict[str, object]:
@@ -171,12 +176,180 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Force deterministic seeds for trial evaluation.",
     )
     parser.add_argument(
+        "--constraint-collision-rate-max",
+        type=float,
+        default=None,
+        help=(
+            "Optional safety gate: require collision_rate <= threshold. "
+            "Infeasible trials are penalized or pruned (see --constraint-handling)."
+        ),
+    )
+    parser.add_argument(
+        "--constraint-comfort-exposure-max",
+        type=float,
+        default=None,
+        help=(
+            "Optional safety gate: require comfort_exposure <= threshold. "
+            "Infeasible trials are penalized or pruned (see --constraint-handling)."
+        ),
+    )
+    parser.add_argument(
+        "--constraint-handling",
+        choices=_CONSTRAINT_HANDLING_CHOICES,
+        default="penalize",
+        help=(
+            "How to handle infeasible trials when constraints are configured: "
+            "penalize (default) or prune."
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         default="WARNING",
         choices=_LOG_LEVEL_CHOICES,
         help="Console log level (default: WARNING).",
     )
     return parser
+
+
+def _build_safety_constraints(args: argparse.Namespace) -> dict[str, float]:
+    """Extract safety constraints from CLI arguments.
+
+    Returns:
+        Mapping of metric name to max-allowed threshold.
+    """
+    constraints: dict[str, float] = {}
+    if args.constraint_collision_rate_max is not None:
+        constraints["collision_rate"] = float(args.constraint_collision_rate_max)
+    if args.constraint_comfort_exposure_max is not None:
+        constraints["comfort_exposure"] = float(args.constraint_comfort_exposure_max)
+    for metric_name, threshold in constraints.items():
+        if not math.isfinite(threshold):
+            raise ValueError(f"Constraint threshold for '{metric_name}' must be finite.")
+        if threshold < 0.0:
+            raise ValueError(
+                f"Constraint threshold for '{metric_name}' must be >= 0.0, got {threshold}."
+            )
+    return constraints
+
+
+def _resolve_metric_for_mode(
+    *,
+    result,
+    records: list[dict[str, object]],
+    metric_name: str,
+    objective_mode: str,
+    objective_window: int,
+    eval_metric_series_fn: Any,
+    objective_from_series_fn: Any,
+    prefer_best_checkpoint: bool,
+) -> tuple[float | None, list[tuple[int, float]]]:
+    """Resolve a scalar metric using objective-mode reducers and training fallbacks.
+
+    Returns:
+        Tuple of scalar metric value (or ``None``) and the reduced eval series.
+    """
+    metric_value: float | None = None
+    if prefer_best_checkpoint:
+        best = result.best_checkpoint
+        raw = best.metrics.get(metric_name) if best is not None else None
+        if raw is not None:
+            metric_value = float(raw)
+
+    series = eval_metric_series_fn(records, metric_name=metric_name)
+    derived_metric = objective_from_series_fn(
+        series,
+        mode=objective_mode,
+        window=objective_window,
+    )
+    if derived_metric is not None:
+        metric_value = float(derived_metric)
+
+    if metric_value is None:
+        aggregate = result.metrics.get(metric_name)
+        metric_value = aggregate.mean if aggregate is not None else None
+    return metric_value, series
+
+
+def _evaluate_safety_constraints(
+    *,
+    result,
+    records: list[dict[str, object]],
+    constraints: dict[str, float],
+    objective_mode: str,
+    objective_window: int,
+    eval_metric_series_fn: Any,
+    objective_from_series_fn: Any,
+) -> tuple[bool, dict[str, float], dict[str, float], list[str]]:
+    """Evaluate configured safety constraints for one trial.
+
+    Returns:
+        A tuple ``(feasible, values, violations, missing_metrics)`` where:
+        - ``values`` maps constraint metric -> resolved scalar value.
+        - ``violations`` maps metric -> positive margin above threshold.
+        - ``missing_metrics`` lists constraints that could not be resolved.
+    """
+    if not constraints:
+        return True, {}, {}, []
+
+    prefer_best_checkpoint = objective_mode == "best_checkpoint"
+    values: dict[str, float] = {}
+    violations: dict[str, float] = {}
+    missing_metrics: list[str] = []
+    for metric_name, threshold in constraints.items():
+        metric_value, _ = _resolve_metric_for_mode(
+            result=result,
+            records=records,
+            metric_name=metric_name,
+            objective_mode=objective_mode,
+            objective_window=objective_window,
+            eval_metric_series_fn=eval_metric_series_fn,
+            objective_from_series_fn=objective_from_series_fn,
+            prefer_best_checkpoint=prefer_best_checkpoint,
+        )
+        if metric_value is None:
+            missing_metrics.append(metric_name)
+            continue
+        values[metric_name] = float(metric_value)
+        if metric_value > threshold:
+            violations[metric_name] = float(metric_value - threshold)
+    feasible = not violations and not missing_metrics
+    return feasible, values, violations, missing_metrics
+
+
+def _apply_constraint_handling(
+    *,
+    objective_value: float,
+    direction: str,
+    handling: str,
+    violations: dict[str, float],
+    missing_metrics: list[str],
+) -> float:
+    """Apply infeasible-trial handling and return an adjusted objective.
+
+    Raises:
+        optuna.TrialPruned: When ``handling == "prune"``.
+    """
+    if handling == "prune":
+        raise optuna.TrialPruned(
+            "Trial pruned by safety constraints "
+            f"(violations={violations}, missing_metrics={missing_metrics})."
+        )
+
+    if handling != "penalize":
+        raise ValueError(
+            f"Unknown constraint handling '{handling}'. "
+            f"Expected one of: {', '.join(_CONSTRAINT_HANDLING_CHOICES)}"
+        )
+
+    violation_budget = sum(max(0.0, float(v)) for v in violations.values()) + float(
+        len(missing_metrics)
+    )
+    penalty = _CONSTRAINT_PENALTY_OFFSET + (_CONSTRAINT_PENALTY_SCALE * violation_budget)
+    if direction == "maximize":
+        return float(objective_value - penalty)
+    if direction == "minimize":
+        return float(objective_value + penalty)
+    raise ValueError(f"Unknown study direction '{direction}'.")
 
 
 def _build_trial_config(
@@ -246,33 +419,24 @@ def _build_trial_config(
 def _resolve_trial_metric(
     *,
     result,
+    records: list[dict[str, object]],
     metric_name: str,
     objective_mode: str,
     objective_window: int,
-    load_episode_records_fn: Any,
     eval_metric_series_fn: Any,
     objective_from_series_fn: Any,
 ) -> tuple[float | None, list[tuple[int, float]]]:
     """Resolve the optimization scalar from training outputs."""
-    best = result.best_checkpoint
-    metric_value: float | None = None
-    if objective_mode == "best_checkpoint":
-        metric_value = best.metrics.get(metric_name) if best is not None else None
-
-    episode_records = load_episode_records_fn(result.training_run_artifact.episode_log_path)
-    series = eval_metric_series_fn(episode_records, metric_name=metric_name)
-    derived_metric = objective_from_series_fn(
-        series,
-        mode=objective_mode,
-        window=objective_window,
+    return _resolve_metric_for_mode(
+        result=result,
+        records=records,
+        metric_name=metric_name,
+        objective_mode=objective_mode,
+        objective_window=objective_window,
+        eval_metric_series_fn=eval_metric_series_fn,
+        objective_from_series_fn=objective_from_series_fn,
+        prefer_best_checkpoint=(objective_mode == "best_checkpoint"),
     )
-    if derived_metric is not None:
-        metric_value = float(derived_metric)
-
-    if metric_value is None:
-        aggregate = result.metrics.get(metric_name)
-        metric_value = aggregate.mean if aggregate is not None else None
-    return metric_value, series
 
 
 def _register_trial_metadata(
@@ -296,6 +460,137 @@ def _register_trial_metadata(
         trial.set_user_attr("objective_eval_last_step", int(series[-1][0]))
     best_path = best.checkpoint_path if best is not None else result.expert_artifact.checkpoint_path
     trial.set_user_attr("best_checkpoint", str(best_path))
+
+
+def _resolve_storage_url(study_name: str, storage: str | None) -> str:
+    """Resolve study storage URL and ensure sqlite parent directories exist."""
+    resolved_storage = storage
+    if resolved_storage is None:
+        safe_study_name = _sanitize_storage_filename(study_name)
+        storage_path = _DEFAULT_STORAGE_ROOT / f"{safe_study_name}.db"
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_storage = f"sqlite:///{storage_path}"
+    _ensure_sqlite_storage_parent(resolved_storage, allowed_root=_ALLOWED_SQLITE_ROOT)
+    return resolved_storage
+
+
+@dataclass(slots=True)
+class _ObjectiveContext:
+    """Captured runtime context for one Optuna objective function."""
+
+    args: argparse.Namespace
+    base_config: Any
+    config_path: Path
+    metric_name: str
+    direction: str
+    objective_mode: str
+    objective_window: int
+    study_name: str
+    safety_constraints: dict[str, float]
+    constraint_handling: str
+    log_level: str
+    resolve_num_envs_fn: Any
+    evaluation_schedule_cls: Any
+    run_expert_training_fn: Any
+    load_episode_records_fn: Any
+    eval_metric_series_fn: Any
+    objective_from_series_fn: Any
+
+
+def _make_objective(ctx: _ObjectiveContext) -> Any:
+    """Build the Optuna objective function with configured safety gating."""
+
+    def objective(trial: optuna.Trial) -> float:
+        """Single Optuna objective run."""
+        config = _build_trial_config(
+            trial,
+            base_config=ctx.base_config,
+            metric_name=ctx.metric_name,
+            objective_mode=ctx.objective_mode,
+            study_name=ctx.study_name,
+            args=ctx.args,
+            resolve_num_envs_fn=ctx.resolve_num_envs_fn,
+            evaluation_schedule_cls=ctx.evaluation_schedule_cls,
+        )
+
+        result = ctx.run_expert_training_fn(config, config_path=ctx.config_path, dry_run=False)
+        episode_records = ctx.load_episode_records_fn(result.training_run_artifact.episode_log_path)
+        metric_value, series = _resolve_trial_metric(
+            result=result,
+            records=episode_records,
+            metric_name=ctx.metric_name,
+            objective_mode=ctx.objective_mode,
+            objective_window=ctx.objective_window,
+            eval_metric_series_fn=ctx.eval_metric_series_fn,
+            objective_from_series_fn=ctx.objective_from_series_fn,
+        )
+        if metric_value is None:
+            raise ValueError(f"Metric '{ctx.metric_name}' not found in training output.")
+
+        feasible, constraint_values, violations, missing_metrics = _evaluate_safety_constraints(
+            result=result,
+            records=episode_records,
+            constraints=ctx.safety_constraints,
+            objective_mode=ctx.objective_mode,
+            objective_window=ctx.objective_window,
+            eval_metric_series_fn=ctx.eval_metric_series_fn,
+            objective_from_series_fn=ctx.objective_from_series_fn,
+        )
+        _register_trial_metadata(
+            trial,
+            config=config,
+            result=result,
+            metric_name=ctx.metric_name,
+            objective_mode=ctx.objective_mode,
+            objective_window=ctx.objective_window,
+            series=series,
+        )
+        trial.set_user_attr("safety_constraints_enabled", bool(ctx.safety_constraints))
+        if ctx.safety_constraints:
+            trial.set_user_attr("safety_constraints", dict(ctx.safety_constraints))
+            trial.set_user_attr("safety_constraint_values", constraint_values)
+            trial.set_user_attr("safety_constraint_violations", violations)
+            trial.set_user_attr("safety_constraint_missing_metrics", missing_metrics)
+            trial.set_user_attr("safety_constraints_feasible", feasible)
+            trial.set_user_attr("safety_constraint_handling", ctx.constraint_handling)
+            if not feasible:
+                logger.warning(
+                    "Trial {} infeasible under safety constraints: values={} violations={} missing={}",
+                    trial.number,
+                    constraint_values,
+                    violations,
+                    missing_metrics,
+                )
+                metric_value = _apply_constraint_handling(
+                    objective_value=float(metric_value),
+                    direction=ctx.direction,
+                    handling=ctx.constraint_handling,
+                    violations=violations,
+                    missing_metrics=missing_metrics,
+                )
+        else:
+            trial.set_user_attr("safety_constraints_feasible", True)
+        trial.set_user_attr("log_level", ctx.log_level)
+        return float(metric_value)
+
+    return objective
+
+
+def _log_safety_constraint_summary(study: optuna.Study, *, enabled: bool) -> None:
+    """Log feasible/infeasible trial counts when safety constraints are enabled."""
+    if not enabled:
+        return
+    all_trials = study.get_trials(deepcopy=False)
+    feasible_trials = sum(1 for t in all_trials if t.user_attrs.get("safety_constraints_feasible"))
+    infeasible_trials = sum(
+        1 for t in all_trials if t.user_attrs.get("safety_constraints_feasible") is False
+    )
+    logger.info(
+        "Safety constraints summary: feasible_trials={} infeasible_trials={} total_trials={}",
+        feasible_trials,
+        infeasible_trials,
+        len(all_trials),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -330,22 +625,20 @@ def main(argv: list[str] | None = None) -> int:
         metric_name, direction = _resolve_metric_direction(args.metric)
         objective_mode = str(args.objective_mode)
         objective_window = max(1, int(args.objective_window))
+        safety_constraints = _build_safety_constraints(args)
+        constraint_handling = str(args.constraint_handling)
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         study_name = args.study_name or f"{base_config.policy_id}_optuna_{timestamp}"
-        storage = args.storage
-        if storage is None:
-            safe_study_name = _sanitize_storage_filename(study_name)
-            storage_path = _DEFAULT_STORAGE_ROOT / f"{safe_study_name}.db"
-            storage_path.parent.mkdir(parents=True, exist_ok=True)
-            storage = f"sqlite:///{storage_path}"
-        _ensure_sqlite_storage_parent(storage, allowed_root=_ALLOWED_SQLITE_ROOT)
+        storage = _resolve_storage_url(study_name, args.storage)
 
         logger.info(
-            "Starting Optuna study '{}' direction={} metric={} objective_mode={} storage={}",
+            "Starting Optuna study '{}' direction={} metric={} objective_mode={} constraints={} handling={} storage={}",
             study_name,
             direction,
             metric_name,
             objective_mode,
+            safety_constraints or None,
+            constraint_handling,
             make_url(storage).render_as_string(hide_password=True),
         )
 
@@ -358,42 +651,27 @@ def main(argv: list[str] | None = None) -> int:
             load_if_exists=True,
         )
 
-        def objective(trial: optuna.Trial) -> float:
-            """Single Optuna objective run."""
-            config = _build_trial_config(
-                trial,
-                base_config=base_config,
-                metric_name=metric_name,
-                objective_mode=objective_mode,
-                study_name=study_name,
+        objective = _make_objective(
+            _ObjectiveContext(
                 args=args,
-                resolve_num_envs_fn=_resolve_num_envs,
-                evaluation_schedule_cls=EvaluationSchedule,
-            )
-
-            result = run_expert_training(config, config_path=config_path, dry_run=False)
-            metric_value, series = _resolve_trial_metric(
-                result=result,
+                base_config=base_config,
+                config_path=config_path,
                 metric_name=metric_name,
+                direction=direction,
                 objective_mode=objective_mode,
                 objective_window=objective_window,
+                study_name=study_name,
+                safety_constraints=safety_constraints,
+                constraint_handling=constraint_handling,
+                log_level=log_level,
+                resolve_num_envs_fn=_resolve_num_envs,
+                evaluation_schedule_cls=EvaluationSchedule,
+                run_expert_training_fn=run_expert_training,
                 load_episode_records_fn=load_episode_records,
                 eval_metric_series_fn=eval_metric_series,
                 objective_from_series_fn=objective_from_series,
             )
-            if metric_value is None:
-                raise ValueError(f"Metric '{metric_name}' not found in training output.")
-            _register_trial_metadata(
-                trial,
-                config=config,
-                result=result,
-                metric_name=metric_name,
-                objective_mode=objective_mode,
-                objective_window=objective_window,
-                series=series,
-            )
-            trial.set_user_attr("log_level", log_level)
-            return float(metric_value)
+        )
 
         study.optimize(objective, n_trials=int(args.trials))
         completed_trials = study.get_trials(states=[TrialState.COMPLETE])
@@ -401,6 +679,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.warning("Optuna study completed without any successful trials.")
             return 0
         best = study.best_trial
+        _log_safety_constraint_summary(study, enabled=bool(safety_constraints))
         logger.success(
             "Optuna study complete: best_value={} best_trial={} params={}",
             best.value,

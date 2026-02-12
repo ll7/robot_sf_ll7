@@ -1,0 +1,38 @@
+# Example freeze manifest for publication-grade full classic benchmark runs.
+# Copy this file, replace placeholders, and reference it via:
+#   uv run python scripts/classic_benchmark_full.py ... --freeze-manifest <path>
+
+scenario:
+  matrix_path: configs/scenarios/classic_interactions.yaml
+  matrix_hash: REPLACE_WITH_SCENARIO_MATRIX_HASH
+
+baselines:
+  algorithms:
+    - ppo
+  planner_configs:
+    - planner_backend: classic
+      planner_classic_config:
+        cells_per_meter: 2.0
+        inflate_radius_cells: 0
+
+seed_plan:
+  base_seed: 123
+  repeats: 2
+
+metrics:
+  subset:
+    - success_rate
+    - collision_rate
+    - snqi
+    - time_to_goal
+    - path_efficiency
+
+bootstrap:
+  samples: 1000
+  confidence: 0.95
+  seed: 123
+
+software:
+  identifiers:
+    python_version: REPLACE_WITH_PYTHON_VERSION
+    robot_sf_commit: REPLACE_WITH_GIT_COMMIT

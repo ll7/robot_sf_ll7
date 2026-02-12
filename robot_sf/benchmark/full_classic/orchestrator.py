@@ -25,6 +25,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -81,6 +82,7 @@ class BenchmarkManifest:
     episodes_per_second: float = 0.0
     workers: int = 1
     scaling_efficiency: dict = field(default_factory=dict)
+    freeze_validation: dict[str, Any] = field(default_factory=dict)
 
 
 def _ensure_algo_metadata(
@@ -269,7 +271,7 @@ def _build_run_meta(root: Path, cfg, manifest: BenchmarkManifest) -> dict[str, A
         repeats = getattr(cfg, "initial_episodes", None)
 
     run_id = root.resolve().name or "unknown"
-    return {
+    run_meta = {
         "run_id": run_id,
         "created_at_utc": _to_iso_utc(float(manifest.created_at)),
         "repo": {
@@ -292,6 +294,10 @@ def _build_run_meta(root: Path, cfg, manifest: BenchmarkManifest) -> dict[str, A
             "platform": platform.platform(),
         },
     }
+    freeze_validation = getattr(manifest, "freeze_validation", {})
+    if freeze_validation:
+        run_meta["freeze_manifest"] = freeze_validation
+    return run_meta
 
 
 def _write_run_meta_files(root: Path, cfg, manifest: BenchmarkManifest) -> None:
@@ -1230,6 +1236,38 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
 
     # Manifest & initial execution
     manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
+    freeze_manifest_path = getattr(cfg, "freeze_manifest_path", None)
+    if freeze_manifest_path:
+        manifest.freeze_validation = evaluate_freeze_manifest(
+            freeze_manifest_path,
+            cfg,
+            scenario_matrix_hash=scenario_matrix_hash,
+            git_commit=manifest.git_hash,
+            raw_scenarios=raw,
+        )
+        freeze_status = manifest.freeze_validation.get("status")
+        if freeze_status == "mismatch":
+            logger.warning(
+                "Freeze manifest mismatch: {} differences against {}",
+                manifest.freeze_validation.get("mismatch_count", 0),
+                freeze_manifest_path,
+            )
+            for mismatch in manifest.freeze_validation.get("mismatches", []):
+                logger.warning(
+                    "Freeze mismatch {}: expected={} observed={}",
+                    mismatch.get("path"),
+                    mismatch.get("expected"),
+                    mismatch.get("observed"),
+                )
+        elif freeze_status == "error":
+            logger.warning(
+                "Freeze manifest validation failed for {}: {}",
+                freeze_manifest_path,
+                manifest.freeze_validation.get("error"),
+            )
+        else:
+            logger.info("Freeze manifest matched runtime contract: {}", freeze_manifest_path)
+
     all_records = list(run_episode_jobs(jobs, cfg, manifest))
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
 

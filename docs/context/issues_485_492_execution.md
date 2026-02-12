@@ -11,7 +11,7 @@ Track implementation details, rationale, and validation for issues #485 through 
 - [x] #489 SACADRL indexing/runtime robustness
 - [x] #490 PPO provenance + paper-grade quality gate support
 - [x] #491 NaN-stable force metrics with invalid-sample reporting
-- [ ] #492 Structured output + log-noise controls
+- [x] #492 Structured output + log-noise controls
 
 ## Notes
 - Implementation uses map-runner and benchmark CLI as primary integration points.
@@ -24,3 +24,4 @@ Track implementation details, rationale, and validation for issues #485 through 
 - #489: hardened SACADRL pedestrian payload normalization to avoid malformed indexing/axis errors.
 - #490: PPO paper profile now requires provenance fields + explicit quality-gate pass.
 - #491: added `force_sample_stats` diagnostics (raw/finite/invalid counts + status) in metrics output.
+- #492: added structured run events (`json`/`jsonl`) and external log-noise suppression controls.

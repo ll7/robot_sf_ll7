@@ -215,11 +215,25 @@ def _handle_run(args) -> int:
     Returns:
         Exit code (0 for success, 2 for error).
     """
+
+    def _emit_structured(event_payload: dict[str, Any]) -> None:
+        mode = str(getattr(args, "structured_output", "none")).lower()
+        if mode not in {"json", "jsonl"}:
+            return
+        print(json.dumps(event_payload, sort_keys=True))
+
     try:
+        _configure_external_log_noise(
+            mode=str(getattr(args, "external_log_noise", "auto")),
+            log_level=str(getattr(args, "log_level", "INFO")),
+        )
         # Optional: load SNQI weights/baseline for inline SNQI computation
         try:
             snqi_weights, snqi_baseline = _load_snqi_inputs(args)
         except Exception:  # pragma: no cover - error path
+            _emit_structured(
+                {"event": "benchmark.run.error", "error": "failed_loading_snqi_inputs"},
+            )
             return 2
 
         readiness = get_algorithm_readiness(str(args.algo))
@@ -280,10 +294,62 @@ def _handle_run(args) -> int:
                 )
             except Exception:
                 logging.debug("Logging zero-episode failure failed", exc_info=True)
+            if str(getattr(args, "structured_output", "none")).lower() == "jsonl" and isinstance(
+                failed, list
+            ):
+                for failure in failed:
+                    if isinstance(failure, dict):
+                        _emit_structured({"event": "benchmark.run.failure", **failure})
+            _emit_structured(
+                {
+                    "event": "benchmark.run.summary",
+                    "exit_code": 2,
+                    "total_jobs": total_jobs,
+                    "written": written,
+                    "failed_jobs": failure_count,
+                    "out_path": str(summary.get("out_path", args.out)),
+                },
+            )
             return 2
+        _emit_structured(
+            {
+                "event": "benchmark.run.summary",
+                "exit_code": 0,
+                "total_jobs": total_jobs,
+                "written": written,
+                "failed_jobs": failure_count,
+                "out_path": str(summary.get("out_path", args.out)),
+            },
+        )
         return 0
     except Exception:  # pragma: no cover - error path
+        _emit_structured({"event": "benchmark.run.error", "error": "unhandled_exception"})
         return 2
+
+
+def _configure_external_log_noise(*, mode: str, log_level: str) -> None:
+    """Apply best-effort external log suppression policy for noisy dependencies."""
+    mode_norm = mode.strip().lower()
+    if mode_norm not in {"auto", "suppress", "verbose"}:
+        mode_norm = "auto"
+    should_suppress = mode_norm == "suppress" or (
+        mode_norm == "auto" and log_level.strip().upper() != "DEBUG"
+    )
+    if not should_suppress:
+        return
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
+    for logger_name in (
+        "matplotlib",
+        "PIL",
+        "pygame",
+        "moviepy",
+        "tensorflow",
+        "numba",
+        "OpenGL",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 
 def _handle_summary(args) -> int:
@@ -1090,6 +1156,24 @@ def _add_run_subparser(
         help=(
             "Behavior when SocNav dependencies/models are missing: "
             "raise, skip algorithm run, or force adapter fallback."
+        ),
+    )
+    p.add_argument(
+        "--structured-output",
+        choices=["none", "json", "jsonl"],
+        default="none",
+        help=(
+            "Emit machine-readable run events to stdout. "
+            "'json' emits a final summary object; 'jsonl' emits per-failure + summary events."
+        ),
+    )
+    p.add_argument(
+        "--external-log-noise",
+        choices=["auto", "suppress", "verbose"],
+        default="auto",
+        help=(
+            "Control suppression of noisy third-party logs. "
+            "'auto' suppresses unless --log-level DEBUG."
         ),
     )
     # Global --quiet handled at top-level parser

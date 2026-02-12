@@ -90,6 +90,18 @@ Expected outputs:
 To re-run a different baseline, change `--policy` or supply `--policies`. For deterministic runs,
 use `--seed-set dev|eval` and a fresh output folder (or delete existing JSONL files).
 
+**Recommended CI invocation (machine-readable):**
+
+```bash
+robot_sf_bench run \
+  --matrix configs/scenarios/classic_interactions.yaml \
+  --out output/benchmarks/ci/episodes.jsonl \
+  --algo goal \
+  --benchmark-profile baseline-safe \
+  --structured-output jsonl \
+  --external-log-noise auto
+```
+
 ## Resume Semantics (Map Runs)
 
 Map-runner resume identity is scoped to the full run unit, not just `(scenario, seed)`.

@@ -10,7 +10,7 @@ Track implementation details, rationale, and validation for issues #485 through 
 - [x] #488 SocNav preflight checks and missing-prereq policy
 - [x] #489 SACADRL indexing/runtime robustness
 - [x] #490 PPO provenance + paper-grade quality gate support
-- [ ] #491 NaN-stable force metrics with invalid-sample reporting
+- [x] #491 NaN-stable force metrics with invalid-sample reporting
 - [ ] #492 Structured output + log-noise controls
 
 ## Notes
@@ -23,3 +23,4 @@ Track implementation details, rationale, and validation for issues #485 through 
 - #488: added SocNav preflight policy (`fail-fast`, `skip-with-warning`, `fallback`) before simulation loop.
 - #489: hardened SACADRL pedestrian payload normalization to avoid malformed indexing/axis errors.
 - #490: PPO paper profile now requires provenance fields + explicit quality-gate pass.
+- #491: added `force_sample_stats` diagnostics (raw/finite/invalid counts + status) in metrics output.

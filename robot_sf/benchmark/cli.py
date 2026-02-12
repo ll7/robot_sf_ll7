@@ -42,6 +42,9 @@ from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario_thumbnails import (
+    resolve_scenario_label as _thumb_resolve_label,
+)
 from robot_sf.benchmark.scenario_thumbnails import save_montage as _thumb_montage
 from robot_sf.benchmark.scenario_thumbnails import (
     save_scenario_thumbnails as _thumb_save_all,
@@ -604,7 +607,7 @@ def _handle_plot_scenarios(args) -> int:
         seen = set()
         unique_scenarios = []
         for sc in scenarios:
-            sid = str(sc.get("id") or sc.get("name") or sc.get("scenario_id") or "scenario")
+            sid = _thumb_resolve_label(sc)
             if sid not in seen:
                 seen.add(sid)
                 unique_scenarios.append(sc)
@@ -636,10 +639,7 @@ def _handle_list_scenarios(args) -> int:
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
-        ids = [
-            str(s.get("id") or s.get("name") or s.get("scenario_id") or "unknown")
-            for s in scenarios
-        ]
+        ids = [_thumb_resolve_label(s) for s in scenarios]
         for sid in ids:
             print(sid)
         return 0

@@ -9,10 +9,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import platform
 import random
+import subprocess
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -21,6 +25,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -58,6 +63,26 @@ except ImportError:
 # -----------------------------
 
 
+def _find_repo_root(path: Path) -> Path:
+    """Locate repository root by searching upward for git metadata.
+
+    Returns:
+        Repository root path when ``.git`` is found, otherwise a layout fallback.
+    """
+
+    start = path if path.is_dir() else path.parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    try:
+        return path.resolve().parents[3]
+    except IndexError:  # pragma: no cover - defensive fallback
+        return start
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
+
+
 @dataclass
 class BenchmarkManifest:
     """Manifest metadata for a benchmark run."""
@@ -75,6 +100,7 @@ class BenchmarkManifest:
     episodes_per_second: float = 0.0
     workers: int = 1
     scaling_efficiency: dict = field(default_factory=dict)
+    freeze_validation: dict[str, Any] = field(default_factory=dict)
 
 
 def _ensure_algo_metadata(
@@ -145,14 +171,19 @@ def _compute_git_hash(root: Path) -> str:
     Returns:
         Short git hash (12 characters) or 'unknown' if not retrievable.
     """
+    repo_root = _REPO_ROOT if (_REPO_ROOT / ".git").exists() else root
+    commit = _run_git(repo_root, "rev-parse", "--short=12", "HEAD")
+    if commit:
+        return commit
+
     git_hash = "unknown"
     try:  # pragma: no cover - environment dependent
-        head_ref = root / ".git" / "HEAD"
+        head_ref = repo_root / ".git" / "HEAD"
         if head_ref.exists():
             content = head_ref.read_text(encoding="utf-8").strip()
             if content.startswith("ref:"):
                 ref_path = content.split(" ", 1)[1].strip()
-                ref_file = root / ".git" / ref_path
+                ref_file = repo_root / ".git" / ref_path
                 if ref_file.exists():
                     git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
             else:
@@ -164,6 +195,125 @@ def _compute_git_hash(root: Path) -> str:
         # Unexpected but plausible runtime/type errors -> log at debug and continue
         logger.debug("_compute_git_hash unexpected error")
     return git_hash
+
+
+def _run_git(repo_root: Path, *args: str) -> str | None:
+    """Run a git command and return stripped stdout on success.
+
+    Returns:
+        Command stdout with surrounding whitespace removed, or None on failure.
+    """
+
+    try:  # pragma: no cover - depends on external git runtime
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, RuntimeError):
+        return None
+    if proc.returncode != 0:
+        return None
+    out = proc.stdout.strip()
+    return out if out else None
+
+
+def _repo_name_from_remote(remote: str) -> str:
+    """Derive a repository name from a git remote string.
+
+    Returns:
+        Parsed repository name or "unknown" when unavailable.
+    """
+
+    candidate = remote.strip().rstrip("/")
+    if candidate.startswith("git@") and ":" in candidate:
+        candidate = candidate.split(":", 1)[1]
+    tail = candidate.rsplit("/", 1)[-1]
+    if tail.endswith(".git"):
+        tail = tail[:-4]
+    return tail or "unknown"
+
+
+def _to_iso_utc(ts: float) -> str:
+    """Format unix timestamp as canonical UTC ISO-8601 string.
+
+    Returns:
+        UTC timestamp in ISO-8601 format with trailing "Z".
+    """
+
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _build_run_meta(root: Path, cfg, manifest: BenchmarkManifest) -> dict[str, Any]:
+    """Build canonical run-level traceability metadata.
+
+    Returns:
+        JSON-serializable run metadata payload.
+    """
+
+    remote = _run_git(_REPO_ROOT, "config", "--get", "remote.origin.url") or "unknown"
+    branch = _run_git(_REPO_ROOT, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
+    commit = _run_git(_REPO_ROOT, "rev-parse", "HEAD") or _compute_git_hash(root)
+
+    argv = [str(v) for v in (sys.argv or [])]
+    command = argv[0] if argv else "unknown"
+    args = argv[1:] if argv else []
+
+    matrix_path_raw = getattr(cfg, "scenario_matrix_path", None)
+    matrix_path = "unknown"
+    if matrix_path_raw is not None:
+        try:
+            matrix_path = str(Path(str(matrix_path_raw)).resolve())
+        except (OSError, RuntimeError, ValueError, TypeError):
+            matrix_path = str(matrix_path_raw)
+
+    base_seed = getattr(cfg, "base_seed", None)
+    if base_seed is None:
+        base_seed = getattr(cfg, "master_seed", None)
+    repeats = getattr(cfg, "repeats", None)
+    if repeats is None:
+        repeats = getattr(cfg, "initial_episodes", None)
+
+    run_id = root.resolve().name or "unknown"
+    run_meta = {
+        "run_id": run_id,
+        "created_at_utc": _to_iso_utc(float(manifest.created_at)),
+        "repo": {
+            "name": _repo_name_from_remote(remote) if remote != "unknown" else _REPO_ROOT.name,
+            "remote": remote,
+            "branch": branch,
+            "commit": commit,
+        },
+        "cli": {
+            "command": command,
+            "args": args,
+        },
+        "matrix_path": matrix_path,
+        "seed_plan": {
+            "base_seed": safe_int(base_seed),
+            "repeats": safe_int(repeats),
+        },
+        "environment": {
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "platform": platform.platform(),
+        },
+    }
+    freeze_validation = getattr(manifest, "freeze_validation", {})
+    if freeze_validation:
+        run_meta["freeze_manifest"] = freeze_validation
+    return run_meta
+
+
+def _write_run_meta_files(root: Path, cfg, manifest: BenchmarkManifest) -> None:
+    """Write canonical run metadata file in both local and paper-contract locations."""
+
+    run_meta = _build_run_meta(root, cfg, manifest)
+    run_id = str(run_meta.get("run_id", "unknown"))
+    paper_path = root / "artifacts" / run_id / "run_meta.json"
+    paper_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(paper_path, run_meta)
+    _write_json(root / "run_meta.json", run_meta)
 
 
 def _prepare_output_dirs(cfg):
@@ -335,9 +485,7 @@ def _build_env_config(scenario, cfg, horizon: int):
     if candidate is not None and not candidate.is_absolute():
         candidate = (matrix_dir / candidate).resolve()
     if candidate is None or not candidate.exists():
-        fallback = (
-            Path(__file__).resolve().parents[3] / "maps" / "svg_maps" / "classic_crossing.svg"
-        )
+        fallback = _REPO_ROOT / "maps" / "svg_maps" / "classic_crossing.svg"
         if fallback.exists():
             raw["map_file"] = str(fallback)
     config = build_robot_config_from_scenario(
@@ -1091,6 +1239,38 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
 
     # Manifest & initial execution
     manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
+    freeze_manifest_path = getattr(cfg, "freeze_manifest_path", None)
+    if freeze_manifest_path:
+        manifest.freeze_validation = evaluate_freeze_manifest(
+            freeze_manifest_path,
+            cfg,
+            scenario_matrix_hash=scenario_matrix_hash,
+            git_commit=manifest.git_hash,
+            raw_scenarios=raw,
+        )
+        freeze_status = manifest.freeze_validation.get("status")
+        if freeze_status == "mismatch":
+            logger.warning(
+                "Freeze manifest mismatch: {} differences against {}",
+                manifest.freeze_validation.get("mismatch_count", 0),
+                freeze_manifest_path,
+            )
+            for mismatch in manifest.freeze_validation.get("mismatches", []):
+                logger.warning(
+                    "Freeze mismatch {}: expected={} observed={}",
+                    mismatch.get("path"),
+                    mismatch.get("expected"),
+                    mismatch.get("observed"),
+                )
+        elif freeze_status == "error":
+            logger.warning(
+                "Freeze manifest validation failed for {}: {}",
+                freeze_manifest_path,
+                manifest.freeze_validation.get("error"),
+            )
+        else:
+            logger.info("Freeze manifest matched runtime contract: {}", freeze_manifest_path)
+
     all_records = list(run_episode_jobs(jobs, cfg, manifest))
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
 
@@ -1143,6 +1323,7 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
     _update_scaling_efficiency(manifest, cfg)
     manifest.scaling_efficiency.setdefault("finalized", True)
     write_manifest(manifest, str(root / "manifest.json"))
+    _write_run_meta_files(root, cfg, manifest)
 
     # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
     try:

@@ -9,13 +9,16 @@ step the simulator. Headless-safe via MPL Agg backend (see seed_utils).
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+from loguru import logger
 from PIL import Image  # pillow
 
 from robot_sf.benchmark.plotting_style import apply_latex_style
@@ -37,6 +40,9 @@ class ThumbMeta:
     scenario_id: str
     png: str
     pdf: str | None
+
+
+_SAFE_SCENARIO_ID_PATTERN = re.compile(r"[^0-9A-Za-z._-]+")
 
 
 def _latex_rcparams():
@@ -63,6 +69,71 @@ def _scenario_seed(base_seed: int, scenario_id: str) -> int:
     """
     h = hashlib.sha256(scenario_id.encode()).hexdigest()[:8]
     return (base_seed + int(h, 16)) % (2**31 - 1)
+
+
+def resolve_scenario_label(params: dict[str, object]) -> str:
+    """Resolve scenario label with explicit fallback priority.
+
+    Priority: ``id`` -> ``name`` -> ``scenario_id`` -> stable hash fallback.
+
+    Returns:
+        Human-readable scenario label before filename sanitization.
+    """
+
+    for key in ("id", "name", "scenario_id"):
+        raw = params.get(key)
+        if isinstance(raw, str):
+            stripped = raw.strip()
+            if stripped:
+                return stripped
+    payload = json.dumps(params, sort_keys=True, separators=(",", ":"), default=str)
+    fallback = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+    return f"scenario_{fallback}"
+
+
+def sanitize_scenario_label(label: str) -> str:
+    """Sanitize scenario labels for filesystem-safe output filenames.
+
+    Returns:
+        Lowercase, sanitized basename suitable for PNG/PDF output.
+    """
+
+    cleaned = _SAFE_SCENARIO_ID_PATTERN.sub("_", label.strip())
+    cleaned = cleaned.strip("._-").lower()
+    return cleaned or "scenario"
+
+
+def _resolve_unique_scenario_ids(
+    scenarios: list[dict[str, object]],
+) -> list[str]:
+    """Resolve deterministic unique scenario identifiers for output files.
+
+    Returns:
+        Sanitized, unique per-scenario identifiers aligned with input order.
+    """
+
+    counts: dict[str, int] = {}
+    emitted_ids: set[str] = set()
+    ids: list[str] = []
+    for scenario in scenarios:
+        raw = resolve_scenario_label(scenario)
+        base = sanitize_scenario_label(raw)
+        count = counts.get(base, 0) + 1
+        unique = base if count == 1 else f"{base}__{count}"
+        while unique in emitted_ids:
+            count += 1
+            unique = f"{base}__{count}"
+        counts[base] = count
+        if unique != base:
+            logger.warning(
+                "Scenario thumbnail id collision after sanitization: '{}' -> '{}' (using '{}')",
+                raw,
+                base,
+                unique,
+            )
+        emitted_ids.add(unique)
+        ids.append(unique)
+    return ids
 
 
 def _draw_obstacles(ax, obstacles: Sequence[tuple[float, float, float, float]]):
@@ -143,7 +214,8 @@ def render_scenario_thumbnail(
     # Minimal ticks
     ax.set_xticks([])
     ax.set_yticks([])
-    sid = str(params.get("id", "scenario"))
+    raw_id = params.get("id")
+    sid = str(raw_id) if raw_id else resolve_scenario_label(params)
     title_bits = [sid]
     if "flow" in params:
         title_bits.append(str(params["flow"]))
@@ -175,13 +247,22 @@ def save_scenario_thumbnails(
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_list = [dict(sc) for sc in scenarios]
+    scenario_ids = _resolve_unique_scenario_ids(scenarios_list)
     metas: list[ThumbMeta] = []
-    for sc in scenarios:
-        sid = str(sc.get("id", "scenario"))
+    for sc, sid in zip(scenarios_list, scenario_ids, strict=False):
         seed = _scenario_seed(base_seed, sid)
         png = out_dir / f"{sid}.png"
         pdf = (out_dir / f"{sid}.pdf") if out_pdf else None
-        meta = render_scenario_thumbnail(sc, seed=seed, out_png=png, out_pdf=pdf, figsize=figsize)
+        render_payload = dict(sc)
+        render_payload["id"] = sid
+        meta = render_scenario_thumbnail(
+            render_payload,
+            seed=seed,
+            out_png=png,
+            out_pdf=pdf,
+            figsize=figsize,
+        )
         metas.append(meta)
     return metas
 
@@ -247,6 +328,8 @@ def save_montage(
 __all__ = [
     "ThumbMeta",
     "render_scenario_thumbnail",
+    "resolve_scenario_label",
+    "sanitize_scenario_label",
     "save_montage",
     "save_scenario_thumbnails",
 ]

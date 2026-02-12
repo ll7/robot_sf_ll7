@@ -13,6 +13,7 @@ The Full Classic Interaction Benchmark provides a reproducible evaluation harnes
 - Plot artifacts (distributions, trajectories, path efficiency, success/collision scatter, episode length histogram) under `plots/`
 - Optional annotated videos of representative episodes under `videos/` (SimulationView-first with replay-driven frames)
 - A manifest capturing configuration, git hash, scenario matrix hash, timing & scaling efficiency (`manifest.json`)
+- Run-level traceability metadata (`run_meta.json`, mirrored to `artifacts/<run_id>/run_meta.json`)
 
 All outputs are deterministic given the scenario matrix file and master seed.
 
@@ -51,6 +52,11 @@ uv run python scripts/classic_benchmark_full.py \
 | `--target-collision-half-width F` | CI half-width target for collision_rate |
 | `--target-success-half-width F` | CI half-width target for success_rate |
 | `--target-snqi-half-width F` | CI half-width target for snqi (placeholder until SNQI integrated) |
+| `--bootstrap-samples N` | Bootstrap sample count used for aggregate CIs |
+| `--bootstrap-confidence F` | Bootstrap confidence level used for aggregate CIs |
+| `--bootstrap-seed N` | Optional bootstrap RNG seed (defaults to master seed) |
+| `--metrics-subset CSV` | Comma-separated metric subset tracked for freeze-manifest validation |
+| `--freeze-manifest PATH` | Optional YAML/JSON freeze contract validated against runtime config |
 | `--disable-videos` | Skip video artifact generation |
 | `--max-videos N` | Max representative videos to render |
 | `--capture-replay/--no-capture-replay` | Enable/disable per-step replay capture for videos/plots |
@@ -110,6 +116,33 @@ when enabled). The values are **not** decomposed by source.
 }
 ```
 
+`run_meta.json` adds (excerpt):
+```json
+{
+  "run_id": "full_classic_run_2026-02-12_10-30-00",
+  "created_at_utc": "2026-02-12T09:30:00.123456Z",
+  "repo": {
+    "name": "robot_sf_ll7",
+    "remote": "git@github.com:ll7/robot_sf_ll7.git",
+    "branch": "main",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "cli": {
+    "command": "scripts/classic_benchmark_full.py",
+    "args": ["--smoke", "--workers", "1"]
+  },
+  "matrix_path": "/abs/path/to/configs/scenarios/classic_interactions.yaml",
+  "seed_plan": {"base_seed": 123, "repeats": 2},
+  "environment": {"python_version": "3.11.11", "platform": "Linux-..."}
+}
+```
+
+The `artifacts/<run_id>/run_meta.json` mirror is intended for downstream paper pipelines that
+consume run metadata from a canonical artifacts subtree.
+
+When `--freeze-manifest` is provided, `run_meta.json` also includes a `freeze_manifest` block
+with validation status (`match`, `mismatch`, or `error`) and structured mismatches.
+
 ## Scaling & Efficiency
 Current efficiency metric is a placeholder (episodes_per_second / (workers * episodes_per_second)) and will be replaced with a more meaningful comparison vs. sequential baseline timing in a future optimization task.
 
@@ -119,6 +152,39 @@ Determinism hinges on two persisted identifiers:
 - `scenario_matrix_hash`: SHA1 (first 12 chars) of a canonical JSON dump of the scenario matrix file.
 
 If these two values plus `master_seed` and the scenario matrix file content are the same, the benchmark will produce deterministic episode IDs and replay-driven outputs. The manifest stores all three, enabling downstream verification scripts to compare runs.
+
+## Freeze Workflow (Pilot -> Freeze -> Final)
+For paper-grade reproducibility, use a freeze manifest that captures the exact run contract:
+- scenario matrix path/hash
+- baseline algorithms + planner config
+- seed plan
+- metric subset used in tables/figures
+- bootstrap settings
+- software identifiers
+
+Example freeze manifest:
+- `configs/benchmarks/classic_benchmark_freeze.example.yaml`
+
+Typical workflow:
+1. Run pilot benchmarks and decide final contract.
+2. Create a concrete freeze manifest from the example file.
+3. Run final benchmarks with freeze validation enabled:
+
+```bash
+uv run python scripts/classic_benchmark_full.py \
+  --scenarios configs/scenarios/classic_interactions.yaml \
+  --output results/full_classic_final \
+  --seed 123 \
+  --initial-episodes 2 \
+  --max-episodes 4 \
+  --bootstrap-samples 1000 \
+  --bootstrap-confidence 0.95 \
+  --metrics-subset success_rate,collision_rate,snqi,time_to_goal,path_efficiency \
+  --freeze-manifest configs/benchmarks/classic_benchmark_freeze.yaml
+```
+
+If runtime settings drift from the freeze contract, the run continues but emits warnings and records
+the mismatches in `run_meta.json`.
 
 ## Visual Artifacts (plots + videos)
 - Generated once after the adaptive loop; outputs live under `plots/`, `videos/`, and
@@ -212,6 +278,10 @@ full_classic_smoke/
     pareto_placeholder.pdf
     force_heatmap_placeholder.pdf
   manifest.json
+  run_meta.json
+  artifacts/
+    full_classic_smoke/
+      run_meta.json
 ```
 
 ## Changelog

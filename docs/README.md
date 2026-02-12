@@ -451,4 +451,4 @@ When contributing to the project:
 
 ---
 
-*Last updated: September 2025 - Benchmark runner and batch API added*
+*Last updated: February 2026 - Cold/warm performance regression suite added*

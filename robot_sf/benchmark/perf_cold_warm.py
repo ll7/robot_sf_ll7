@@ -36,6 +36,7 @@ _PHASES = ("cold", "warm")
 _TIME_METRICS = ("env_create_sec", "first_step_sec", "episode_sec")
 _STARTUP_METRICS = ("env_create_sec", "first_step_sec")
 _STEADY_METRICS = ("episode_sec", "steps_per_sec")
+_COLD_SUBPROCESS_TIMEOUT_SEC = 300
 
 
 @dataclass(slots=True)
@@ -421,6 +422,27 @@ def run_suite(
     return cold_samples, warm_samples
 
 
+def _positive_int(value: str) -> int:
+    """Argparse validator for positive integer values.
+
+    Args:
+        value: Raw CLI value.
+
+    Returns:
+        int: Parsed positive integer.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive integer.
+    """
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"{value!r} must be > 0")
+    return parsed
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for cold/warm perf checks.
 
@@ -451,19 +473,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--episode-steps",
-        type=int,
+        type=_positive_int,
         default=64,
         help="Number of steps executed per sample.",
     )
     parser.add_argument(
         "--cold-runs",
-        type=int,
+        type=_positive_int,
         default=1,
         help="Number of cold subprocess runs (fresh interpreter each run).",
     )
     parser.add_argument(
         "--warm-runs",
-        type=int,
+        type=_positive_int,
         default=2,
         help="Number of warm in-process runs after warmup.",
     )
@@ -548,9 +570,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         sample = measure_once(config=config, seed=args.seed, episode_steps=args.episode_steps)
         sys.stdout.write(json.dumps(sample.to_dict()) + "\n")
         return 0
-
-    if args.cold_runs <= 0 or args.warm_runs <= 0:
-        raise ValueError("--cold-runs and --warm-runs must be > 0")
 
     config, scenario_label = _load_scenario_config(
         args.scenario_config,
@@ -766,12 +785,21 @@ def _measure_cold_subprocess(
             str(md_out),
             "--internal-measure-once",
         ]
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_COLD_SUBPROCESS_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired as exc:
+            cmd = " ".join(command)
+            msg = (
+                "Cold subprocess measurement timed out after "
+                f"{_COLD_SUBPROCESS_TIMEOUT_SEC}s: {cmd}"
+            )
+            raise RuntimeError(msg) from exc
         if completed.returncode != 0:
             msg = (
                 "Cold subprocess measurement failed with exit code "

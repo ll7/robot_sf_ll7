@@ -204,7 +204,7 @@ def test_measure_once_validates_episode_steps() -> None:
         perf_cold_warm.measure_once(config=object(), seed=1, episode_steps=0)  # type: ignore[arg-type]
 
 
-def test_measure_once_with_fake_env(monkeypatch) -> None:
+def test_measure_once_with_fake_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Measurement should compute metrics and close env even with resets during loop."""
 
     class _FakeEnv:
@@ -250,7 +250,7 @@ def test_measure_once_with_fake_env(monkeypatch) -> None:
     assert fake_env.closed
 
 
-def test_run_suite_uses_warmup_then_warm_samples(monkeypatch) -> None:
+def test_run_suite_uses_warmup_then_warm_samples(monkeypatch: pytest.MonkeyPatch) -> None:
     """Suite runner should perform one warmup run before warm measurements."""
     call_log: list[int] = []
 
@@ -317,7 +317,7 @@ def test_report_to_dict_and_diagnostics_mixed_regressions() -> None:
     assert perf_cold_warm._report_to_dict(None)["status"] == "no-baseline"
 
 
-def test_load_scenario_config_and_not_found(monkeypatch) -> None:
+def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     """Scenario loader should resolve named scenario and set sim-time override."""
 
     class _SimConfig:
@@ -352,7 +352,7 @@ def test_load_scenario_config_and_not_found(monkeypatch) -> None:
         perf_cold_warm._load_scenario_config(Path("x.yaml"), "missing", 10)
 
 
-def test_measure_cold_subprocess_success_and_failures(monkeypatch) -> None:
+def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     """Subprocess helper should parse JSON payloads and raise on failure modes."""
 
     class _Completed:
@@ -407,6 +407,23 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch) -> None:
             episode_steps=10,
         )
 
+    def _raise_timeout(*args, **kwargs) -> _Completed:
+        raise perf_cold_warm.subprocess.TimeoutExpired(cmd="python", timeout=300)
+
+    monkeypatch.setattr(
+        perf_cold_warm.subprocess,
+        "run",
+        _raise_timeout,
+    )
+    with pytest.raises(RuntimeError, match="timed out"):
+        perf_cold_warm._measure_cold_subprocess(
+            script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
+            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
+            scenario_name="classic_crossing_low",
+            seed=1,
+            episode_steps=10,
+        )
+
 
 def test_parse_args_custom_values() -> None:
     """Parser should accept overrides used by CI workflows."""
@@ -430,7 +447,17 @@ def test_parse_args_custom_values() -> None:
     assert parsed.fail_on_regression is True
 
 
-def test_main_internal_measure_path(monkeypatch, capsys) -> None:
+def test_parse_args_rejects_non_positive_counts() -> None:
+    """Parser should reject non-positive warm/cold run counts."""
+    with pytest.raises(SystemExit):
+        perf_cold_warm.parse_args(["--cold-runs", "0"])
+    with pytest.raises(SystemExit):
+        perf_cold_warm.parse_args(["--warm-runs", "-1"])
+
+
+def test_main_internal_measure_path(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Main should emit a JSON sample and exit 0 in internal measure mode."""
     monkeypatch.setattr(perf_cold_warm, "ensure_canonical_tree", lambda **kwargs: None)
     monkeypatch.setattr(
@@ -456,7 +483,7 @@ def test_main_internal_measure_path(monkeypatch, capsys) -> None:
     assert '"env_create_sec": 1.0' in out
 
 
-def test_main_non_internal_paths(monkeypatch, tmp_path: Path) -> None:
+def test_main_non_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Main should return expected exit codes for baseline and regression outcomes."""
     out_json = tmp_path / "out.json"
     out_md = tmp_path / "out.md"

@@ -79,8 +79,8 @@ CI integration:
 
 Use the committed snapshot as the initial reference point. If hardware/runtime
 changes make it stale, regenerate values from nightly artifacts and update
-`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json` in a dedicated PR.
-```
+`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json` and
+`configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json` in a dedicated PR.
 
 ### Simulation Throughput Guard (cluster-aware)
 Location: `tests/perf/test_simulation_speed_perf.py`

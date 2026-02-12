@@ -221,7 +221,7 @@ def _handle_run(args) -> int:
         except Exception:  # pragma: no cover - error path
             return 2
 
-        run_batch(
+        summary = run_batch(
             scenarios_or_path=args.matrix,
             out_path=args.out,
             schema_path=args.schema,
@@ -242,10 +242,32 @@ def _handle_run(args) -> int:
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
         )
+        total_jobs = int(summary.get("total_jobs", 0))
+        written = int(summary.get("written", 0))
+        failed = summary.get("failures", [])
+        failure_count = (
+            len(failed) if isinstance(failed, list) else int(summary.get("failed_jobs", 0))
+        )
         try:
-            logging.info("Episodes written to %s", args.out)
+            logging.info(
+                "Run summary: total_jobs=%s written=%s failed=%s out=%s",
+                total_jobs,
+                written,
+                failure_count,
+                args.out,
+            )
         except Exception:
             logging.debug("Logging 'Episodes written' failed", exc_info=True)
+        if total_jobs > 0 and written == 0:
+            try:
+                logging.error(
+                    "Benchmark run produced zero episodes for %s scheduled jobs (%s failures).",
+                    total_jobs,
+                    failure_count,
+                )
+            except Exception:
+                logging.debug("Logging zero-episode failure failed", exc_info=True)
+            return 2
         return 0
     except Exception:  # pragma: no cover - error path
         return 2

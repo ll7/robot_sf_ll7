@@ -13,6 +13,7 @@ The Full Classic Interaction Benchmark provides a reproducible evaluation harnes
 - Plot artifacts (distributions, trajectories, path efficiency, success/collision scatter, episode length histogram) under `plots/`
 - Optional annotated videos of representative episodes under `videos/` (SimulationView-first with replay-driven frames)
 - A manifest capturing configuration, git hash, scenario matrix hash, timing & scaling efficiency (`manifest.json`)
+- Run-level traceability metadata (`run_meta.json`, mirrored to `artifacts/<run_id>/run_meta.json`)
 
 All outputs are deterministic given the scenario matrix file and master seed.
 
@@ -109,6 +110,30 @@ when enabled). The values are **not** decomposed by source.
   }
 }
 ```
+
+`run_meta.json` adds (excerpt):
+```json
+{
+  "run_id": "full_classic_run_2026-02-12_10-30-00",
+  "created_at_utc": "2026-02-12T09:30:00.123456Z",
+  "repo": {
+    "name": "robot_sf_ll7",
+    "remote": "git@github.com:ll7/robot_sf_ll7.git",
+    "branch": "main",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "cli": {
+    "command": "scripts/classic_benchmark_full.py",
+    "args": ["--smoke", "--workers", "1"]
+  },
+  "matrix_path": "/abs/path/to/configs/scenarios/classic_interactions.yaml",
+  "seed_plan": {"base_seed": 123, "repeats": 2},
+  "environment": {"python_version": "3.11.11", "platform": "Linux-..."}
+}
+```
+
+The `artifacts/<run_id>/run_meta.json` mirror is intended for downstream paper pipelines that
+consume run metadata from a canonical artifacts subtree.
 
 ## Scaling & Efficiency
 Current efficiency metric is a placeholder (episodes_per_second / (workers * episodes_per_second)) and will be replaced with a more meaningful comparison vs. sequential baseline timing in a future optimization task.
@@ -212,6 +237,10 @@ full_classic_smoke/
     pareto_placeholder.pdf
     force_heatmap_placeholder.pdf
   manifest.json
+  run_meta.json
+  artifacts/
+    full_classic_smoke/
+      run_meta.json
 ```
 
 ## Changelog

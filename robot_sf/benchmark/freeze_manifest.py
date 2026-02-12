@@ -58,7 +58,7 @@ def _as_list_of_str(value: Any) -> list[str]:
     return [text] if text else []
 
 
-def _safe_int(value: Any) -> int | None:
+def safe_int(value: Any) -> int | None:
     """Best-effort integer conversion.
 
     Returns:
@@ -203,16 +203,16 @@ def build_runtime_freeze_contract(
             "planner_configs": planner_configs,
         },
         "seed_plan": {
-            "base_seed": _safe_int(base_seed),
-            "repeats": _safe_int(repeats),
+            "base_seed": safe_int(base_seed),
+            "repeats": safe_int(repeats),
         },
         "metrics": {
             "subset": metrics_subset,
         },
         "bootstrap": {
-            "samples": _safe_int(getattr(cfg, "bootstrap_samples", 1000)),
+            "samples": safe_int(getattr(cfg, "bootstrap_samples", 1000)),
             "confidence": _safe_float(getattr(cfg, "bootstrap_confidence", 0.95)),
-            "seed": _safe_int(bootstrap_seed),
+            "seed": safe_int(bootstrap_seed),
         },
         "software": {
             "identifiers": {
@@ -277,18 +277,18 @@ def normalize_freeze_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "planner_configs": _canonical_planner_configs(planner_configs),
         },
         "seed_plan": {
-            "base_seed": _safe_int(seed_plan.get("base_seed", payload.get("base_seed"))),
-            "repeats": _safe_int(seed_plan.get("repeats", payload.get("repeats"))),
+            "base_seed": safe_int(seed_plan.get("base_seed", payload.get("base_seed"))),
+            "repeats": safe_int(seed_plan.get("repeats", payload.get("repeats"))),
         },
         "metrics": {
             "subset": _canonical_str_list(metric_subset) or sorted(DEFAULT_METRIC_SUBSET),
         },
         "bootstrap": {
-            "samples": _safe_int(bootstrap.get("samples", payload.get("bootstrap_samples", 1000))),
+            "samples": safe_int(bootstrap.get("samples", payload.get("bootstrap_samples", 1000))),
             "confidence": _safe_float(
                 bootstrap.get("confidence", payload.get("bootstrap_confidence", 0.95))
             ),
-            "seed": _safe_int(bootstrap.get("seed", payload.get("bootstrap_seed"))),
+            "seed": safe_int(bootstrap.get("seed", payload.get("bootstrap_seed"))),
         },
         "software": {
             "identifiers": {
@@ -430,4 +430,5 @@ __all__ = [
     "evaluate_freeze_manifest",
     "load_freeze_manifest",
     "normalize_freeze_contract",
+    "safe_int",
 ]

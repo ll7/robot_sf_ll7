@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.full_classic import orchestrator
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_injects_nested_algo_metadata():
@@ -65,3 +70,16 @@ def test_logs_warning_on_mismatch():
     assert updated["scenario_params"]["algo"] == "ppo"
     assert updated["algo"] == "ppo"
     assert any(msg.record["extra"].get("event") == "episode_metadata_mismatch" for msg in captured)
+
+
+def test_find_repo_root_walks_up_to_git_metadata(tmp_path: Path) -> None:
+    """Repo root discovery should walk parents until `.git` metadata is found."""
+
+    repo_root = tmp_path / "repo"
+    nested_dir = repo_root / "robot_sf" / "benchmark" / "full_classic"
+    nested_dir.mkdir(parents=True)
+    (repo_root / ".git").mkdir()
+
+    found = orchestrator._find_repo_root(nested_dir / "orchestrator.py")
+
+    assert found == repo_root

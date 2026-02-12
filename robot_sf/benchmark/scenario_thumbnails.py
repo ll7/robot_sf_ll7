@@ -113,22 +113,25 @@ def _resolve_unique_scenario_ids(
     """
 
     counts: dict[str, int] = {}
+    emitted_ids: set[str] = set()
     ids: list[str] = []
     for scenario in scenarios:
         raw = resolve_scenario_label(scenario)
         base = sanitize_scenario_label(raw)
         count = counts.get(base, 0) + 1
+        unique = base if count == 1 else f"{base}__{count}"
+        while unique in emitted_ids:
+            count += 1
+            unique = f"{base}__{count}"
         counts[base] = count
-        if count == 1:
-            ids.append(base)
-            continue
-        unique = f"{base}__{count}"
-        logger.warning(
-            "Scenario thumbnail id collision after sanitization: '{}' -> '{}' (using '{}')",
-            raw,
-            base,
-            unique,
-        )
+        if unique != base:
+            logger.warning(
+                "Scenario thumbnail id collision after sanitization: '{}' -> '{}' (using '{}')",
+                raw,
+                base,
+                unique,
+            )
+        emitted_ids.add(unique)
         ids.append(unique)
     return ids
 
@@ -211,7 +214,8 @@ def render_scenario_thumbnail(
     # Minimal ticks
     ax.set_xticks([])
     ax.set_yticks([])
-    sid = str(params.get("id") or resolve_scenario_label(params))
+    raw_id = params.get("id")
+    sid = str(raw_id) if raw_id else resolve_scenario_label(params)
     title_bits = [sid]
     if "flow" in params:
         title_bits.append(str(params["flow"]))

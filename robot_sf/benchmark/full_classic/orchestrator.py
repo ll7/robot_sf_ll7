@@ -25,7 +25,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
-from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest
+from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -62,7 +62,25 @@ except ImportError:
 # Manifest dataclass & helpers
 # -----------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def _find_repo_root(path: Path) -> Path:
+    """Locate repository root by searching upward for git metadata.
+
+    Returns:
+        Repository root path when ``.git`` is found, otherwise a layout fallback.
+    """
+
+    start = path if path.is_dir() else path.parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    try:
+        return path.resolve().parents[3]
+    except IndexError:  # pragma: no cover - defensive fallback
+        return start
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
 
 
 @dataclass
@@ -217,19 +235,6 @@ def _repo_name_from_remote(remote: str) -> str:
     return tail or "unknown"
 
 
-def _safe_int(value: Any) -> int | None:
-    """Best-effort integer conversion for metadata fields.
-
-    Returns:
-        Parsed integer value, or None when conversion fails.
-    """
-
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _to_iso_utc(ts: float) -> str:
     """Format unix timestamp as canonical UTC ISO-8601 string.
 
@@ -286,8 +291,8 @@ def _build_run_meta(root: Path, cfg, manifest: BenchmarkManifest) -> dict[str, A
         },
         "matrix_path": matrix_path,
         "seed_plan": {
-            "base_seed": _safe_int(base_seed),
-            "repeats": _safe_int(repeats),
+            "base_seed": safe_int(base_seed),
+            "repeats": safe_int(repeats),
         },
         "environment": {
             "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
@@ -480,9 +485,7 @@ def _build_env_config(scenario, cfg, horizon: int):
     if candidate is not None and not candidate.is_absolute():
         candidate = (matrix_dir / candidate).resolve()
     if candidate is None or not candidate.exists():
-        fallback = (
-            Path(__file__).resolve().parents[3] / "maps" / "svg_maps" / "classic_crossing.svg"
-        )
+        fallback = _REPO_ROOT / "maps" / "svg_maps" / "classic_crossing.svg"
         if fallback.exists():
             raw["map_file"] = str(fallback)
     config = build_robot_config_from_scenario(

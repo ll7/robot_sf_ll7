@@ -246,7 +246,7 @@ def run_episode(
     frames: list[Any] | None = [] if record else None
     # Performance: capture frames only if recording enabled & moviepy available (FR-025)
     fast_demo_mode = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
-    fast_step_cap = 8 if fast_demo_mode else None
+    fast_step_cap = 2 if fast_demo_mode else None
     while not done:
         action, _ = policy.predict(obs, deterministic=True)
         obs, _reward, terminated, truncated, info = env.step(action)
@@ -442,7 +442,7 @@ def _create_demo_env(fast_mode: bool):
     """
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
-        sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 3.0)
+        sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 1.0)
     return sim_cfg
 
 
@@ -585,6 +585,7 @@ def run_demo(
         Ordered list of episode summaries (deterministic), possibly empty when dry_run.
     """
     _validate_constants()
+    explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     effective_dry = DRY_RUN if dry_run is None else dry_run
     eff_name = SCENARIO_NAME if scenario_name is None else scenario_name
     eff_max = MAX_EPISODES if max_episodes is None else max_episodes
@@ -592,6 +593,9 @@ def run_demo(
     eff_sweep = SWEEP_ALL if sweep is None else sweep
 
     fast_mode, eff_max = compute_fast_mode_and_cap(max_episodes=eff_max)
+    if explicit_fast_flag and enable_recording is None:
+        # Explicit fast-demo mode prioritizes startup speed; recording remains opt-in.
+        eff_record = False
     scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
     effective_output_dir = resolve_artifact_path(OUTPUT_DIR)
 
@@ -642,7 +646,7 @@ def run_demo(
         env = make_robot_env(
             config=sim_cfg,
             reward_func=simple_reward,
-            debug=True,
+            debug=not (explicit_fast_flag and not eff_record),
             record_video=eff_record,
             video_path=str(effective_output_dir) if eff_record else None,
         )

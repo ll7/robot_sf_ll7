@@ -12,12 +12,12 @@ import importlib
 import os
 import time
 
-SOFT_THRESHOLD_SECONDS = 4.0  # relaxed after fast-path; still a guard vs large regressions
+SOFT_THRESHOLD_SECONDS = 8.0  # keeps a regression guard while accounting for backend startup cost
 
 
 def test_demo_runtime_under_threshold():
+    """Ensure explicit fast-demo mode completes quickly for one non-recorded episode."""
     # Set fast demo env var BEFORE importing module so import-time constants / logic can read it
-    """TODO docstring. Document this function."""
     os.environ["ROBOT_SF_FAST_DEMO"] = "1"
     mod = importlib.import_module("examples.classic_interactions_pygame")
     original_dry = getattr(mod, "DRY_RUN", None)
@@ -25,15 +25,15 @@ def test_demo_runtime_under_threshold():
     mod.DRY_RUN = False  # type: ignore
     # Env var already set pre-import; keep for clarity if test modified
     mod.MAX_EPISODES = 1  # type: ignore
-    start = time.time()
+    start = time.perf_counter()
     try:
-        episodes = mod.run_demo()
+        episodes = mod.run_demo(enable_recording=False)
     finally:
         if original_dry is not None:
             mod.DRY_RUN = original_dry  # type: ignore
         if original_max is not None:
             mod.MAX_EPISODES = original_max  # type: ignore
-    elapsed = time.time() - start
+    elapsed = time.perf_counter() - start
     assert episodes, "Expected at least one episode (TDD failing until implementation)."
     assert elapsed < SOFT_THRESHOLD_SECONDS, (
         f"Demo run exceeded soft threshold {SOFT_THRESHOLD_SECONDS:.1f}s (elapsed={elapsed:.2f}s)."

@@ -42,15 +42,17 @@ baseline; use the entrypoint noted below.
 | `orca` | heuristic | `scripts/run_classic_interactions.py --algo orca` |
 | `goal` / `simple` | heuristic | `scripts/run_classic_interactions.py --algo goal` |
 | `random` | heuristic | Registry-only baseline (not wired into policy_analysis_run.py) |
-| `ppo` | learned | `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
+| `ppo` | learned | `scripts/run_classic_interactions.py --algo ppo` or `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
 
 Notes:
 * Map-based benchmark runs use `scripts/run_classic_interactions.py` (see below) and accept the
   `--algo` names shown above.
 * Learned baselines require model checkpoints; for policy analysis, provide `--model-path`.
-* `random`/`ppo` are exposed via the baseline registry for non-map scenario matrices; map-based
-  suites should use policy analysis for learned/GT comparisons. `random` is not currently wired
-  into `policy_analysis_run.py`.
+* `random` is exposed via the baseline registry for non-map scenario matrices and is not currently
+  wired into `policy_analysis_run.py`.
+* `ppo` is available in both map-based benchmark runs and policy-analysis runs; policy analysis
+  remains the preferred path when you need richer learned-policy diagnostics (videos, per-policy
+  reports, and policy sweep metadata).
 * ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
   in the algo config to use the heuristic fallback.
 
@@ -74,6 +76,19 @@ Expected outputs:
 
 To re-run a different baseline, change `--policy` or supply `--policies`. For deterministic runs,
 use `--seed-set dev|eval` and a fresh output folder (or delete existing JSONL files).
+
+## Resume Semantics (Map Runs)
+
+Map-runner resume identity is scoped to the full run unit, not just `(scenario, seed)`.
+Each episode identity includes:
+
+* scenario payload + seed
+* algorithm (`algo`)
+* algorithm config hash (`algo_config_hash`)
+* run-shaping overrides when provided (`run_horizon`, `run_dt`, `record_forces`)
+
+This guarantees that resuming across mixed algorithm/config batches does not accidentally skip
+jobs that belong to a different algorithm or planner configuration.
 
 ## Metrics: Definitions + Caveats (Summary)
 

@@ -258,7 +258,10 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
 
     # Resume path skips existing episode
     monkeypatch.setattr("robot_sf.benchmark.map_runner.index_existing", lambda path: {"ep1"})
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.compute_episode_id", lambda sc, seed: "ep1")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._compute_map_episode_id",
+        lambda sc, seed: "ep1",
+    )
     result = run_map_batch(
         [scenario],
         out_path,

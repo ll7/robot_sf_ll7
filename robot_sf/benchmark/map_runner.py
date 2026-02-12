@@ -13,6 +13,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
+from robot_sf.baselines.ppo import PPOPlanner
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -21,7 +22,6 @@ from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
-    compute_episode_id,
     index_existing,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -79,6 +79,118 @@ def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float,
     return linear, angular
 
 
+def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
+    """Convert map-runner observations into the PPO baseline observation contract.
+
+    Returns:
+        Mapping compatible with ``robot_sf.baselines.ppo.PPOPlanner.step``.
+    """
+    robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
+    goal = obs.get("goal", {}) if isinstance(obs.get("goal"), dict) else {}
+    pedestrians = obs.get("pedestrians", {}) if isinstance(obs.get("pedestrians"), dict) else {}
+
+    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)
+    if robot_vel.size < 2:
+        speed = float(np.asarray(robot.get("speed", [0.0]), dtype=float).reshape(-1)[0])
+        heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
+        robot_vel = np.array([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
+    robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
+
+    ped_pos = np.asarray(pedestrians.get("positions", []), dtype=float)
+    ped_vel = np.asarray(pedestrians.get("velocities", []), dtype=float)
+    if ped_pos.size == 0:
+        ped_pos = np.zeros((0, 2), dtype=float)
+    if ped_pos.ndim == 1:
+        ped_pos = ped_pos.reshape(1, -1)
+    if ped_pos.shape[-1] < 2:
+        ped_pos = np.pad(ped_pos, ((0, 0), (0, 2 - ped_pos.shape[-1])), constant_values=0.0)
+    if ped_vel.size == 0:
+        ped_vel = np.zeros_like(ped_pos)
+    if ped_vel.ndim == 1:
+        ped_vel = ped_vel.reshape(1, -1)
+    if ped_vel.shape[-1] < 2:
+        ped_vel = np.pad(ped_vel, ((0, 0), (0, 2 - ped_vel.shape[-1])), constant_values=0.0)
+
+    ped_radius_raw = np.asarray(pedestrians.get("radius", [0.35]), dtype=float).reshape(-1)
+    ped_radius = float(ped_radius_raw[0]) if ped_radius_raw.size else 0.35
+
+    agents = []
+    for idx in range(ped_pos.shape[0]):
+        vel = ped_vel[idx] if idx < ped_vel.shape[0] else np.zeros(2, dtype=float)
+        agents.append(
+            {
+                "position": [float(ped_pos[idx, 0]), float(ped_pos[idx, 1])],
+                "velocity": [float(vel[0]), float(vel[1])],
+                "radius": ped_radius,
+            }
+        )
+
+    dt_raw = np.asarray(obs.get("dt", [0.1]), dtype=float).reshape(-1)
+    dt = float(dt_raw[0]) if dt_raw.size else 0.1
+    return {
+        "dt": dt,
+        "robot": {
+            "position": [float(robot_pos[0]), float(robot_pos[1])]
+            if robot_pos.size >= 2
+            else [0.0, 0.0],
+            "velocity": [float(robot_vel[0]), float(robot_vel[1])]
+            if robot_vel.size >= 2
+            else [0.0, 0.0],
+            "goal": [float(robot_goal[0]), float(robot_goal[1])]
+            if robot_goal.size >= 2
+            else [0.0, 0.0],
+            "radius": robot_radius,
+        },
+        "agents": agents,
+        "obstacles": [],
+    }
+
+
+def _normalize_heading(value: float) -> float:
+    """Normalize heading to [-pi, pi].
+
+    Returns:
+        Wrapped heading angle in radians.
+    """
+    return float((value + np.pi) % (2.0 * np.pi) - np.pi)
+
+
+def _ppo_action_to_unicycle(
+    action: dict[str, Any],
+    obs: dict[str, Any],
+    cfg: dict[str, Any],
+) -> tuple[float, float]:
+    """Convert PPO action dict into the unicycle command used by map environments.
+
+    Returns:
+        Tuple of ``(linear_velocity, angular_velocity)``.
+    """
+    if "v" in action and "omega" in action:
+        return float(action["v"]), float(action["omega"])
+
+    if "vx" not in action or "vy" not in action:
+        raise ValueError(f"Unsupported PPO action payload: {action}")
+
+    vx = float(action["vx"])
+    vy = float(action["vy"])
+    speed = float(np.hypot(vx, vy))
+    if speed < 1e-9:
+        return 0.0, 0.0
+
+    robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
+    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
+    desired_heading = float(np.arctan2(vy, vx))
+    heading_error = _normalize_heading(desired_heading - heading)
+
+    v_max = float(cfg.get("v_max", 2.0))
+    omega_max = float(cfg.get("omega_max", 1.0))
+    v = float(np.clip(speed, 0.0, v_max))
+    omega = float(np.clip(heading_error, -omega_max, omega_max))
+    return v, omega
+
+
 def _build_policy(  # noqa: C901
     algo: str,
     algo_config: dict[str, Any],
@@ -103,6 +215,27 @@ def _build_policy(  # noqa: C901
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
+    elif algo_key in {"ppo"}:
+        ppo_planner = PPOPlanner(algo_config, seed=None)
+        if hasattr(ppo_planner, "get_metadata"):
+            planner_meta = ppo_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            ppo_obs = _obs_to_ppo_format(obs)
+            action = ppo_planner.step(ppo_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
+            return _ppo_action_to_unicycle(action, obs, algo_config)
+
+        _policy._planner_close = ppo_planner.close
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "ppo")
+        meta.setdefault("config", algo_config)
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -160,6 +293,54 @@ def _select_seeds(
     if suite_seeds.get("default"):
         return list(suite_seeds["default"])
     return [0]
+
+
+def _scenario_identity_payload(
+    scenario: dict[str, Any],
+    *,
+    algo: str,
+    algo_config: dict[str, Any],
+    horizon: int | None,
+    dt: float | None,
+    record_forces: bool,
+) -> dict[str, Any]:
+    """Build the canonical scenario payload used for episode identity.
+
+    Resume safety relies on using the same identity dimensions at write-time and
+    skip-time. For map runs this includes algorithm and run-shaping options.
+
+    Returns:
+        dict[str, Any]: Identity payload consumed by ``compute_episode_id``.
+    """
+    payload = dict(scenario)
+    scenario_id = (
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+    payload.setdefault("id", scenario_id)
+    payload["algo"] = str(algo)
+    payload["algo_config_hash"] = _config_hash(algo_config)
+    payload["record_forces"] = bool(record_forces)
+    if horizon is not None and int(horizon) > 0:
+        payload["run_horizon"] = int(horizon)
+    if dt is not None and float(dt) > 0.0:
+        payload["run_dt"] = float(dt)
+    return payload
+
+
+def _compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
+    """Return a map-runner episode id scoped to algorithm + run dimensions.
+
+    The default benchmark ``compute_episode_id`` uses ``<scenario_id>--<seed>``.
+    Map-batch resume needs richer scoping for mixed algorithm/config runs.
+    """
+    scenario_id = (
+        identity_payload.get("id")
+        or identity_payload.get("name")
+        or identity_payload.get("scenario_id")
+        or "unknown"
+    )
+    identity_hash = _config_hash(identity_payload)
+    return f"{scenario_id}--{seed}--{identity_hash}"
 
 
 def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
@@ -238,8 +419,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
-    algo_config_path: str | None,
     scenario_path: Path,
+    algo_config: dict[str, Any] | None = None,
+    algo_config_path: str | None = None,
 ) -> dict[str, Any]:
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
@@ -251,8 +433,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
 
-    policy_cfg = _parse_algo_config(algo_config_path)
+    policy_cfg = (
+        dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
+    )
     policy_fn, algo_meta = _build_policy(algo, policy_cfg)
+    planner_close = getattr(policy_fn, "_planner_close", None)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -295,6 +480,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             map_def = env.simulator.map_def
             goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
+        if callable(planner_close):
+            try:
+                planner_close()
+            except (RuntimeError, ValueError, TypeError):
+                logger.debug("Planner close hook failed", exc_info=True)
         env.close()
 
     robot_pos_arr = np.asarray(robot_positions, dtype=float)
@@ -311,7 +501,6 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
     else:
         shortest_path = float("nan")
-    env.close()
 
     if robot_pos_arr.size == 0:
         metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
@@ -335,12 +524,17 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
 
     ts_end = datetime.now(UTC).isoformat()
-    scenario_params = dict(scenario)
-    scenario_id = (
+    scenario_id = str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
-    scenario_params.setdefault("id", scenario_id)
-    scenario_params.setdefault("algo", algo)
+    scenario_params = _scenario_identity_payload(
+        scenario,
+        algo=algo,
+        algo_config=policy_cfg,
+        horizon=horizon,
+        dt=dt,
+        record_forces=record_forces,
+    )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
     timing = {"steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0}
@@ -349,7 +543,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         status = "collision"
     record = {
         "version": "v1",
-        "episode_id": compute_episode_id(scenario_params, seed),
+        "episode_id": _compute_map_episode_id(scenario_params, seed),
         "scenario_id": scenario_id,
         "seed": seed,
         "scenario_params": scenario_params,
@@ -385,7 +579,7 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
         snqi_weights=params.get("snqi_weights"),
         snqi_baseline=params.get("snqi_baseline"),
         algo=str(params.get("algo", "goal")),
-        algo_config_path=params.get("algo_config_path"),
+        algo_config=params.get("algo_config"),
         scenario_path=Path(params.get("scenario_path")),
     )
 
@@ -447,12 +641,24 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
+    policy_cfg = _parse_algo_config(algo_config_path)
 
     if resume and out_path.exists():
         existing = index_existing(out_path)
-        jobs = [
-            (sc, seed) for sc, seed in jobs if compute_episode_id(dict(sc), seed) not in existing
-        ]
+        if existing:
+            filtered_jobs: list[tuple[dict[str, Any], int]] = []
+            for sc, seed in jobs:
+                identity_payload = _scenario_identity_payload(
+                    sc,
+                    algo=algo,
+                    algo_config=policy_cfg,
+                    horizon=horizon,
+                    dt=dt,
+                    record_forces=record_forces,
+                )
+                if _compute_map_episode_id(identity_payload, seed) not in existing:
+                    filtered_jobs.append((sc, seed))
+            jobs = filtered_jobs
 
     fixed_params = {
         "horizon": horizon,
@@ -461,10 +667,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
         "snqi_weights": snqi_weights,
         "snqi_baseline": snqi_baseline,
         "algo": algo,
-        "algo_config_path": algo_config_path,
+        "algo_config": policy_cfg,
         "scenario_path": str(scenario_path),
     }
 
+    total_jobs = len(jobs)
     wrote = 0
     failures: list[dict[str, Any]] = []
     if workers <= 1:
@@ -503,8 +710,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
                     )
 
     return {
-        "total_jobs": len(jobs),
+        "total_jobs": total_jobs,
         "written": wrote,
+        "successful_jobs": wrote,
+        "failed_jobs": len(failures),
         "failures": failures,
         "out_path": str(out_path),
     }

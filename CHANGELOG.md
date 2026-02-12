@@ -51,10 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
 - SVG map inspection helper (`scripts/validation/svg_inspect.py`) plus reusable API (`robot_sf.maps.verification.svg_inspection`) for route-only mode detection, route/zone index checks, risky path-command warnings, and obstacle-interior route checks.
 - Full classic benchmark now emits `run_meta.json` traceability metadata (repo/branch/commit, CLI invocation, matrix path, seed plan, environment), with a mirror at `artifacts/<run_id>/run_meta.json` for paper artifact workflows.
+- Full classic benchmark supports freeze-manifest validation (`--freeze-manifest`) with runtime contract checks (matrix hash/path, baselines/planner config, seed plan, metric subset, bootstrap settings, software identifiers) and structured status/mismatch reporting in `run_meta.json`.
+- Added a machine-readable freeze manifest template at `configs/benchmarks/classic_benchmark_freeze.example.yaml` and documented the pilot -> freeze -> final workflow.
 
 ### Fixed
 
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
+* `robot_sf_bench plot-scenarios` now avoids thumbnail filename collisions for name-only matrices by applying deterministic `id -> name -> scenario_id -> hash` fallback resolution, sanitization, and collision suffixing.
 * DreamerV3 RLlib launcher now hardens Ray runtime environment setup by disabling `uv run` worker propagation, pinning worker interpreter execution, and applying packaging excludes to reduce startup fragility and upload size.
 * Dreamer observation contract now emits float32-consistent reset/step payloads (`drive_state`, `rays`) so Gymnasium space checks pass without dtype warnings.
 * Simulation throughput perf guard now supports cluster-aware calibration through env overrides and enforce mode instead of hard-failing heterogeneous nodes by default.

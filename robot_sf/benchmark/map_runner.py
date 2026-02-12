@@ -196,6 +196,71 @@ def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float,
     return linear, angular
 
 
+def _normalize_xy_rows(values: Any) -> np.ndarray:
+    """Normalize scalar/list/ndarray payloads to an ``(N, 2)`` float array.
+
+    Returns:
+        np.ndarray: ``(N, 2)`` array, or ``(0, 2)`` when input is empty/malformed.
+    """
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return np.zeros((0, 2), dtype=float)
+    if arr.ndim == 1:
+        if arr.size % 2 != 0:
+            return np.zeros((0, 2), dtype=float)
+        return arr.reshape(-1, 2)
+    if arr.ndim == 2:
+        if arr.shape[1] == 2:
+            return arr
+        if arr.shape[1] > 2:
+            return arr[:, :2]
+        return np.pad(arr, ((0, 0), (0, 2 - arr.shape[1])), constant_values=0.0)
+    return np.zeros((0, 2), dtype=float)
+
+
+def _extract_ppo_pedestrians(pedestrians: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, float]:
+    """Extract count-aware pedestrian positions, velocities, and shared radius.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, float]: Pedestrian positions, velocities, and radius.
+    """
+    ped_pos = _normalize_xy_rows(pedestrians.get("positions", []))
+    ped_count_arr = np.asarray(pedestrians.get("count", [ped_pos.shape[0]]), dtype=float).reshape(
+        -1
+    )
+    ped_count = int(ped_count_arr[0]) if ped_count_arr.size else int(ped_pos.shape[0])
+    ped_count = max(0, min(ped_count, int(ped_pos.shape[0])))
+    ped_pos = ped_pos[:ped_count]
+
+    ped_vel = _normalize_xy_rows(pedestrians.get("velocities", []))
+    if ped_vel.shape[0] < ped_count:
+        ped_vel = np.pad(
+            ped_vel,
+            ((0, ped_count - ped_vel.shape[0]), (0, 0)),
+            constant_values=0.0,
+        )
+    ped_vel = ped_vel[:ped_count]
+
+    ped_radius_raw = np.asarray(pedestrians.get("radius", [0.35]), dtype=float).reshape(-1)
+    ped_radius = float(ped_radius_raw[0]) if ped_radius_raw.size else 0.35
+    return ped_pos, ped_vel, ped_radius
+
+
+def _extract_ppo_dt(obs: dict[str, Any]) -> float:
+    """Resolve PPO dt from structured sim metadata first, then fallback fields.
+
+    Returns:
+        float: Timestep for PPO planner observations.
+    """
+    sim_info = obs.get("sim")
+    if isinstance(sim_info, dict) and "timestep" in sim_info:
+        dt_source = sim_info.get("timestep")
+    else:
+        dt_source = obs.get("dt", 0.1)
+    dt_raw = np.asarray(0.1 if dt_source is None else dt_source, dtype=float).reshape(-1)
+    return float(dt_raw[0]) if dt_raw.size else 0.1
+
+
 def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     """Convert map-runner observations into the PPO baseline observation contract.
 
@@ -215,23 +280,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
     robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
 
-    ped_pos = np.asarray(pedestrians.get("positions", []), dtype=float)
-    ped_vel = np.asarray(pedestrians.get("velocities", []), dtype=float)
-    if ped_pos.size == 0:
-        ped_pos = np.zeros((0, 2), dtype=float)
-    if ped_pos.ndim == 1:
-        ped_pos = ped_pos.reshape(1, -1)
-    if ped_pos.shape[-1] < 2:
-        ped_pos = np.pad(ped_pos, ((0, 0), (0, 2 - ped_pos.shape[-1])), constant_values=0.0)
-    if ped_vel.size == 0:
-        ped_vel = np.zeros_like(ped_pos)
-    if ped_vel.ndim == 1:
-        ped_vel = ped_vel.reshape(1, -1)
-    if ped_vel.shape[-1] < 2:
-        ped_vel = np.pad(ped_vel, ((0, 0), (0, 2 - ped_vel.shape[-1])), constant_values=0.0)
-
-    ped_radius_raw = np.asarray(pedestrians.get("radius", [0.35]), dtype=float).reshape(-1)
-    ped_radius = float(ped_radius_raw[0]) if ped_radius_raw.size else 0.35
+    ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(pedestrians)
 
     agents = []
     for idx in range(ped_pos.shape[0]):
@@ -244,8 +293,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    dt_raw = np.asarray(obs.get("dt", [0.1]), dtype=float).reshape(-1)
-    dt = float(dt_raw[0]) if dt_raw.size else 0.1
+    dt = _extract_ppo_dt(obs)
     return {
         "dt": dt,
         "robot": {
@@ -452,7 +500,7 @@ def _scenario_identity_payload(
     Returns:
         dict[str, Any]: Identity payload consumed by ``compute_episode_id``.
     """
-    payload = dict(scenario)
+    payload = {key: value for key, value in scenario.items() if key not in {"seed", "seeds"}}
     scenario_id = (
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )

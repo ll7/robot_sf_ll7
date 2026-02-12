@@ -2124,7 +2124,9 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         heading_ego_frame = self._wrap_angle(robot_heading - ref_angle)
         return dist_to_goal, ref_prll, ref_orth, heading_ego_frame
 
-    def _normalize_pedestrians(self, ped_state: dict) -> tuple[np.ndarray, np.ndarray, float]:
+    def _normalize_pedestrians(  # noqa: C901
+        self, ped_state: dict
+    ) -> tuple[np.ndarray, np.ndarray, float]:
         """Normalize pedestrian positions/velocities and radius from observation.
 
         Returns:
@@ -2132,20 +2134,65 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             and shared pedestrian radius.
         """
         ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
-        if ped_positions.ndim != 2 or ped_positions.shape[1] != 2:
+        if ped_positions.size == 0:
             ped_positions = np.zeros((0, 2), dtype=float)
-        ped_count = int(
-            np.asarray(ped_state.get("count", [ped_positions.shape[0]]), dtype=float)[0]
-        )
+        elif ped_positions.ndim == 1:
+            ped_positions = (
+                ped_positions.reshape(-1, 2)
+                if ped_positions.size % 2 == 0
+                else np.zeros((0, 2), dtype=float)
+            )
+        elif ped_positions.ndim == 2 and ped_positions.shape[1] != 2:
+            if ped_positions.shape[1] > 2:
+                ped_positions = ped_positions[:, :2]
+            else:
+                ped_positions = np.pad(
+                    ped_positions,
+                    ((0, 0), (0, 2 - ped_positions.shape[1])),
+                    constant_values=0.0,
+                )
+        elif ped_positions.ndim != 2:
+            ped_positions = np.zeros((0, 2), dtype=float)
+
+        count_arr = np.asarray(
+            ped_state.get("count", [ped_positions.shape[0]]), dtype=float
+        ).reshape(-1)
+        ped_count = int(count_arr[0]) if count_arr.size else int(ped_positions.shape[0])
+        ped_count = max(0, min(ped_count, int(ped_positions.shape[0])))
         ped_positions = ped_positions[:ped_count]
-        ped_velocities = ped_state.get("velocities")
-        if ped_velocities is None:
+
+        ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
+        if ped_velocities.size == 0:
             ped_velocities = np.zeros_like(ped_positions, dtype=float)
-        ped_velocities = np.asarray(ped_velocities, dtype=float)
-        if ped_velocities.ndim != 2 or ped_velocities.shape[1] != 2:
-            ped_velocities = np.zeros_like(ped_positions, dtype=float)
+        elif ped_velocities.ndim == 1:
+            ped_velocities = (
+                ped_velocities.reshape(-1, 2)
+                if ped_velocities.size % 2 == 0
+                else np.zeros((0, 2), dtype=float)
+            )
+        elif ped_velocities.ndim == 2 and ped_velocities.shape[1] != 2:
+            if ped_velocities.shape[1] > 2:
+                ped_velocities = ped_velocities[:, :2]
+            else:
+                ped_velocities = np.pad(
+                    ped_velocities,
+                    ((0, 0), (0, 2 - ped_velocities.shape[1])),
+                    constant_values=0.0,
+                )
+        elif ped_velocities.ndim != 2:
+            ped_velocities = np.zeros((0, 2), dtype=float)
+
+        if ped_velocities.shape[0] < ped_count:
+            pad_rows = ped_count - ped_velocities.shape[0]
+            ped_velocities = np.pad(
+                ped_velocities,
+                ((0, pad_rows), (0, 0)),
+                constant_values=0.0,
+            )
         ped_velocities = ped_velocities[:ped_count]
-        ped_radius = float(np.asarray(ped_state.get("radius", [0.3]), dtype=float)[0])
+
+        radius_arr = np.asarray(ped_state.get("radius", [0.3]), dtype=float).reshape(-1)
+        ped_radius = float(radius_arr[0]) if radius_arr.size else 0.3
         return ped_positions, ped_velocities, ped_radius
 
     def _ego_to_global_velocities(
@@ -2278,9 +2325,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         to_goal = goal - robot_pos
         goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
 
-        ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
-        ped_positions = ped_positions[:ped_count]
+        ped_positions, _ped_velocities, _ped_radius = self._normalize_pedestrians(ped_state)
         if ped_positions.shape[0] > 0:
             dists = np.linalg.norm(ped_positions - robot_pos, axis=1)
             neighbor_count = max(0, int(self.config.sacadrl_neighbors))

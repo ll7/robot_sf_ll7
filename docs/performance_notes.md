@@ -41,7 +41,45 @@ Location: `scripts/validation/performance_smoke_test.py`
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   uv run python scripts/validation/performance_smoke_test.py
 
-# Results saved to: results/performance_smoke_test.json
+# Results saved to: output/benchmarks/performance_smoke_test.json
+```
+
+### Cold/Warm Regression Suite
+Location: `robot_sf/benchmark/perf_cold_warm.py`
+
+This suite separates cold-start and steady-state runs and compares medians against
+a tracked baseline snapshot (`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`).
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python -m robot_sf.benchmark.perf_cold_warm \
+    --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
+    --scenario-name classic_crossing_low \
+    --episode-steps 64 \
+    --cold-runs 1 \
+    --warm-runs 2 \
+    --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json \
+    --output-json output/benchmarks/perf/cold_warm_local.json \
+    --output-markdown output/benchmarks/perf/cold_warm_local.md
+```
+
+The report includes:
+- `env_create_sec`
+- `first_step_sec`
+- `episode_sec`
+- `steps_per_sec`
+
+and classifies regressions as startup-dominated vs steady-state-dominated.
+
+CI integration:
+- PR smoke: `.github/workflows/ci.yml` (`Cold/warm perf regression smoke`)
+- Nightly broader checks: `.github/workflows/perf-nightly.yml`
+
+### Baseline Management
+
+Use the committed snapshot as the initial reference point. If hardware/runtime
+changes make it stale, regenerate values from nightly artifacts and update
+`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json` in a dedicated PR.
 ```
 
 ### Simulation Throughput Guard (cluster-aware)
@@ -79,8 +117,8 @@ Location: `robot_sf/benchmark/runner.py`
 
 ### Regression Detection
 - Performance degradation > 50% should trigger investigation
-- Compare against baseline measurements from this document
-- Use `results/performance_smoke_test.json` for automated monitoring
+- Compare against `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+- Use `output/benchmarks/perf/*.json` and nightly artifacts for trend monitoring
 
 ## Optimization Notes
 

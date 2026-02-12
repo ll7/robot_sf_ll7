@@ -99,12 +99,7 @@ ENABLE_RECORDING = True
 
 
 def _default_output_dir() -> Path:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Return a timestamped artifact directory for demo outputs."""
     return resolve_artifact_path(Path("tmp/vis_runs") / time.strftime("%Y%m%d_%H%M%S"))
 
 
@@ -125,7 +120,7 @@ _CACHED_MODEL_SENTINEL = object()
 
 
 class EpisodeSummary(TypedDict):  # (FR-020)
-    """TODO docstring. Document this class."""
+    """Typed schema for per-episode demo results."""
 
     scenario: str
     seed: int
@@ -146,7 +141,7 @@ else:
 
 
 def _validate_constants() -> None:  # (FR-019)
-    """TODO docstring. Document this function."""
+    """Validate required paths/constants before executing a non-dry demo run."""
     if not SCENARIO_MATRIX_PATH.exists():
         raise FileNotFoundError(
             f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant.",
@@ -188,17 +183,17 @@ def _maybe_record(
     episode_index: int,
     out_dir: Path,
 ) -> bool:
-    """TODO docstring. Document this function.
+    """Write collected frames as an MP4 and report success.
 
     Args:
-        frames: TODO docstring.
-        scenario_name: TODO docstring.
-        seed: TODO docstring.
-        episode_index: TODO docstring.
-        out_dir: TODO docstring.
+        frames: Ordered RGB frames to encode.
+        scenario_name: Scenario name used in output filename.
+        seed: Episode seed used in output filename.
+        episode_index: Episode index used in output filename.
+        out_dir: Destination directory for rendered video.
 
     Returns:
-        TODO docstring.
+        True when a video was written successfully, otherwise False.
     """
     if not frames:
         return False
@@ -225,19 +220,19 @@ def run_episode(
     seed: int,
     episode_index: int,
 ) -> EpisodeSummary:
-    """TODO docstring. Document this function.
+    """Run one episode for a scenario and return a normalized summary.
 
     Args:
-        env: TODO docstring.
-        policy: TODO docstring.
-        record: TODO docstring.
-        out_dir: TODO docstring.
-        scenario_name: TODO docstring.
-        seed: TODO docstring.
-        episode_index: TODO docstring.
+        env: Initialized robot environment instance.
+        policy: Policy object exposing `predict(obs, deterministic=True)`.
+        record: Whether to capture frames and attempt MP4 export.
+        out_dir: Output directory for optional video recording.
+        scenario_name: Name used in result summary and output filename.
+        seed: Random seed for env reset.
+        episode_index: Index used for deterministic output naming.
 
     Returns:
-        TODO docstring.
+        EpisodeSummary containing outcome flags, steps, and recording status.
     """
     obs, _ = env.reset(seed=seed)
     done = False
@@ -332,11 +327,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
 
         def frame_sum(frame_obj):
             # Prefer ndarray.sum if present, else construct array
-            """TODO docstring. Document this function.
-
-            Args:
-                frame_obj: TODO docstring.
-            """
+            """Return a scalar frame intensity sum for placeholder-frame detection."""
             if hasattr(frame_obj, "sum") and callable(frame_obj.sum):
                 try:
                     return frame_obj.sum()  # type: ignore[no-any-return]
@@ -382,11 +373,11 @@ def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str,
 
 
 def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
-    """TODO docstring. Document this function.
+    """Log a concise dry-run status line for one scenario.
 
     Args:
-        scenario: TODO docstring.
-        seeds: TODO docstring.
+        scenario: Scenario definition dictionary.
+        seeds: Deterministic seed list for the scenario.
     """
     logger.debug(
         f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}",
@@ -394,11 +385,11 @@ def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
 
 
 def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-any]
-    """TODO docstring. Document this function.
+    """Load the trained policy or return a stub policy in explicit fast mode.
 
     Args:
-        fast_mode: TODO docstring.
-        eff_max: TODO docstring.
+        fast_mode: Whether test/demo fast mode is active.
+        eff_max: Effective episode limit after fast-mode capping.
     """
     explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     if fast_mode and eff_max <= 1:
@@ -410,15 +401,10 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
         if explicit_fast_flag:
 
             class _StubPolicy:  # pragma: no cover - trivial
-                """TODO docstring. Document this class."""
+                """Deterministic zero-action policy used for explicit fast-demo runs."""
 
                 def predict(self, _obs, **_kwargs):
-                    """TODO docstring. Document this function.
-
-                    Args:
-                        _obs: TODO docstring.
-                        _kwargs: TODO docstring.
-                    """
+                    """Return a zero action and a placeholder state tuple."""
                     return np.zeros(2, dtype=float), None
 
             logger.info("FAST DEMO: Using stub policy (ROBOT_SF_FAST_DEMO=1)")
@@ -435,10 +421,10 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
 
 
 def _create_demo_env(fast_mode: bool):
-    """TODO docstring. Document this function.
+    """Create base simulation config and apply fast-mode horizon reduction.
 
     Args:
-        fast_mode: TODO docstring.
+        fast_mode: Whether fast demo constraints should be applied.
     """
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
@@ -487,19 +473,19 @@ def _run_episodes(
     eff_record: bool,
     out_dir: Path,
 ) -> list[EpisodeSummary]:
-    """TODO docstring. Document this function.
+    """Run a bounded set of episodes for one scenario and collect summaries.
 
     Args:
-        env: TODO docstring.
-        model: TODO docstring.
-        scenario: TODO docstring.
-        seeds: TODO docstring.
-        eff_max: TODO docstring.
-        eff_record: TODO docstring.
-        out_dir: TODO docstring.
+        env: Initialized environment (closed by this helper).
+        model: Loaded/stub policy used for action selection.
+        scenario: Scenario metadata dictionary.
+        seeds: Ordered seed list for repeated episodes.
+        eff_max: Maximum number of episodes to execute.
+        eff_record: Whether to record episode videos.
+        out_dir: Destination directory for optional recordings.
 
     Returns:
-        TODO docstring.
+        Ordered list of EpisodeSummary records.
     """
     results: list[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
@@ -529,11 +515,11 @@ def _run_episodes(
 
 
 def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[override]
-    """TODO docstring. Document this function.
+    """Warn when recording is requested but no simulation view is available.
 
     Args:
-        env: TODO docstring.
-        record: TODO docstring.
+        env: Environment potentially carrying a `sim_ui`.
+        record: Whether recording was requested.
     """
     if record and not getattr(env, "sim_ui", None):  # user expects video but debug disabled
         logger.warning(
@@ -543,10 +529,10 @@ def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[ov
 
 
 def _maybe_print_summary(results: list[EpisodeSummary]) -> None:
-    """TODO docstring. Document this function.
+    """Print a formatted summary table when logging output is enabled.
 
     Args:
-        results: TODO docstring.
+        results: Episode summaries to display.
     """
     if LOGGING_ENABLED:
         print("Summary:")

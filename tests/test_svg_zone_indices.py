@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from robot_sf.nav.svg_map_parser import SvgMapConverter, convert_map
 
 if TYPE_CHECKING:
@@ -158,6 +160,74 @@ def test_ped_route_only_map_derives_endpoint_zones(tmp_path: Path) -> None:
     route = map_def.ped_routes[0]
     assert route.spawn_zone == ((2.0, 2.0), (3.0, 2.0), (3.0, 3.0))
     assert route.goal_zone == ((9.0, 9.0), (10.0, 9.0), (10.0, 10.0))
+
+
+def test_ped_route_parses_vertical_and_horizontal_commands(tmp_path: Path) -> None:
+    """Pedestrian routes using V/H commands should retain non-zero route length."""
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="12" height="12">
+      <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+      <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+      <rect id="ped_spawn_zone_0" inkscape:label="ped_spawn_zone_0" x="2" y="2" width="1" height="1" />
+      <rect id="ped_goal_zone_0" inkscape:label="ped_goal_zone_0" x="9" y="9" width="1" height="1" />
+      <path id="ped_path" inkscape:label="ped_route_0_0" d="M 2 2 V 8 H 9" />
+    </svg>
+    """
+    svg_path = tmp_path / "vh_route.svg"
+    svg_path.write_text(svg.strip(), encoding="utf-8")
+
+    map_def = convert_map(str(svg_path))
+    assert map_def is not None
+    route = map_def.ped_routes[0]
+    assert route.waypoints == [(2.0, 2.0), (2.0, 8.0), (9.0, 8.0)]
+    assert route.total_length > 0
+
+
+def test_ped_route_parses_curve_commands(tmp_path: Path) -> None:
+    """Pedestrian routes should parse cubic curve commands into non-degenerate waypoints."""
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="12" height="12">
+      <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+      <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+      <rect id="ped_spawn_zone_0" inkscape:label="ped_spawn_zone_0" x="2" y="2" width="1" height="1" />
+      <rect id="ped_goal_zone_0" inkscape:label="ped_goal_zone_0" x="9" y="9" width="1" height="1" />
+      <path id="ped_path" inkscape:label="ped_route_0_0" d="M 2 2 C 3 1 5 1 6 2 S 8 3 9 2" />
+    </svg>
+    """
+    svg_path = tmp_path / "curve_route.svg"
+    svg_path.write_text(svg.strip(), encoding="utf-8")
+
+    map_def = convert_map(str(svg_path))
+    assert map_def is not None
+    route = map_def.ped_routes[0]
+    assert route.waypoints[0] == (2.0, 2.0)
+    assert route.waypoints[-1] == pytest.approx((9.0, 2.0))
+    assert len(route.waypoints) > 4
+    assert route.total_length > 0
+
+
+def test_route_with_single_waypoint_is_rejected(tmp_path: Path) -> None:
+    """Routes with fewer than two waypoints should fail fast during conversion."""
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="12" height="12">
+      <rect id="robot_spawn_zone_0" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+      <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+      <rect id="ped_spawn_zone_0" inkscape:label="ped_spawn_zone_0" x="2" y="2" width="1" height="1" />
+      <rect id="ped_goal_zone_0" inkscape:label="ped_goal_zone_0" x="9" y="9" width="1" height="1" />
+      <path id="ped_path" inkscape:label="ped_route_0_0" d="M 2 2" />
+    </svg>
+    """
+    svg_path = tmp_path / "single_waypoint_route.svg"
+    svg_path.write_text(svg.strip(), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="at least two waypoints"):
+        SvgMapConverter(str(svg_path))
 
 
 def test_out_of_range_route_index_keeps_small_fallback_zone(tmp_path: Path) -> None:

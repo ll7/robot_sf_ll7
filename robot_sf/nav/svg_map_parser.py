@@ -35,6 +35,7 @@ Typical Usage:
 
 import re
 import xml.etree.ElementTree as ET
+from math import atan2, ceil, cos, dist, pi, radians, sin, sqrt
 from pathlib import Path
 
 import numpy as np
@@ -80,6 +81,7 @@ class SvgMapConverter:
     map_definition: MapDefinition
     _ROUTE_ONLY_ZONE_EDGE: float = 1.0
     _INDEX_FALLBACK_ZONE_EDGE: float = 0.1
+    _CURVE_MAX_STEP: float = 0.75
 
     def __init__(self, svg_file: str):
         """Initialize the SVG map converter and perform full parsing.
@@ -128,6 +130,436 @@ class SvgMapConverter:
                 "Ensure the SVG file is valid XML (use Inkscape or check XML syntax)",
             )
 
+    @staticmethod
+    def _append_point(points: list[tuple[float, float]], point: tuple[float, float]) -> None:
+        """Append a point unless it duplicates the latest waypoint."""
+        normalized = (float(point[0]), float(point[1]))
+        if not points or dist(points[-1], normalized) > 1e-9:
+            points.append(normalized)
+
+    @staticmethod
+    def _estimate_segment_count(
+        polyline_length: float,
+        *,
+        max_step: float,
+        min_segments: int = 2,
+        max_segments: int = 256,
+    ) -> int:
+        """Estimate interpolation segments from control-polygon length.
+
+        Returns:
+            int: Segment count bounded by ``min_segments`` and ``max_segments``.
+        """
+        if polyline_length <= 0:
+            return min_segments
+        return max(min_segments, min(max_segments, ceil(polyline_length / max_step)))
+
+    @staticmethod
+    def _sample_cubic_curve(
+        p0: tuple[float, float],
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        p3: tuple[float, float],
+        *,
+        max_step: float,
+    ) -> list[tuple[float, float]]:
+        """Return sampled points for a cubic bezier segment, excluding the start point."""
+        control_len = dist(p0, p1) + dist(p1, p2) + dist(p2, p3)
+        segments = SvgMapConverter._estimate_segment_count(control_len, max_step=max_step)
+        samples: list[tuple[float, float]] = []
+        for i in range(1, segments + 1):
+            t = i / segments
+            omt = 1.0 - t
+            x = omt**3 * p0[0] + 3.0 * omt**2 * t * p1[0] + 3.0 * omt * t**2 * p2[0] + t**3 * p3[0]
+            y = omt**3 * p0[1] + 3.0 * omt**2 * t * p1[1] + 3.0 * omt * t**2 * p2[1] + t**3 * p3[1]
+            samples.append((x, y))
+        return samples
+
+    @staticmethod
+    def _sample_quadratic_curve(
+        p0: tuple[float, float],
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        *,
+        max_step: float,
+    ) -> list[tuple[float, float]]:
+        """Return sampled points for a quadratic bezier segment, excluding the start point."""
+        control_len = dist(p0, p1) + dist(p1, p2)
+        segments = SvgMapConverter._estimate_segment_count(control_len, max_step=max_step)
+        samples: list[tuple[float, float]] = []
+        for i in range(1, segments + 1):
+            t = i / segments
+            omt = 1.0 - t
+            x = omt**2 * p0[0] + 2.0 * omt * t * p1[0] + t**2 * p2[0]
+            y = omt**2 * p0[1] + 2.0 * omt * t * p1[1] + t**2 * p2[1]
+            samples.append((x, y))
+        return samples
+
+    @staticmethod
+    def _sample_arc_segment(
+        start: tuple[float, float],
+        end: tuple[float, float],
+        rx: float,
+        ry: float,
+        x_axis_rotation_deg: float,
+        large_arc: bool,
+        sweep: bool,
+        *,
+        max_step: float,
+    ) -> list[tuple[float, float]]:
+        """Return sampled points for an SVG arc segment, excluding the start point."""
+        if dist(start, end) <= 1e-12:
+            return []
+        if abs(rx) <= 1e-12 or abs(ry) <= 1e-12:
+            return [end]
+
+        rx = abs(rx)
+        ry = abs(ry)
+        x1, y1 = start
+        x2, y2 = end
+        phi = radians(x_axis_rotation_deg % 360.0)
+        cos_phi = cos(phi)
+        sin_phi = sin(phi)
+
+        dx2 = (x1 - x2) / 2.0
+        dy2 = (y1 - y2) / 2.0
+        x1p = cos_phi * dx2 + sin_phi * dy2
+        y1p = -sin_phi * dx2 + cos_phi * dy2
+
+        lambda_ratio = (x1p**2) / (rx**2) + (y1p**2) / (ry**2)
+        if lambda_ratio > 1.0:
+            scale = sqrt(lambda_ratio)
+            rx *= scale
+            ry *= scale
+
+        num = rx**2 * ry**2 - rx**2 * y1p**2 - ry**2 * x1p**2
+        den = rx**2 * y1p**2 + ry**2 * x1p**2
+        if den <= 1e-18:
+            return [end]
+
+        sign = -1.0 if large_arc == sweep else 1.0
+        coef = sign * sqrt(max(0.0, num / den))
+        cxp = coef * (rx * y1p / ry)
+        cyp = coef * (-ry * x1p / rx)
+
+        cx = cos_phi * cxp - sin_phi * cyp + (x1 + x2) / 2.0
+        cy = sin_phi * cxp + cos_phi * cyp + (y1 + y2) / 2.0
+
+        ux = (x1p - cxp) / rx
+        uy = (y1p - cyp) / ry
+        vx = (-x1p - cxp) / rx
+        vy = (-y1p - cyp) / ry
+
+        theta_1 = atan2(uy, ux)
+        delta_theta = atan2(ux * vy - uy * vx, ux * vx + uy * vy)
+        if not sweep and delta_theta > 0:
+            delta_theta -= 2.0 * pi
+        elif sweep and delta_theta < 0:
+            delta_theta += 2.0 * pi
+
+        if abs(delta_theta) <= 1e-12:
+            return [end]
+
+        arc_len = abs(delta_theta) * max(rx, ry)
+        segments = SvgMapConverter._estimate_segment_count(
+            arc_len,
+            max_step=max_step,
+            min_segments=2,
+        )
+
+        samples: list[tuple[float, float]] = []
+        for i in range(1, segments + 1):
+            theta = theta_1 + delta_theta * i / segments
+            cos_theta = cos(theta)
+            sin_theta = sin(theta)
+            x = cx + cos_phi * rx * cos_theta - sin_phi * ry * sin_theta
+            y = cy + sin_phi * rx * cos_theta + cos_phi * ry * sin_theta
+            samples.append((x, y))
+
+        # Keep deterministic exact endpoint to avoid tiny floating point drift.
+        samples[-1] = end
+        return samples
+
+    @staticmethod
+    def _reflect_point(
+        current: tuple[float, float],
+        control: tuple[float, float] | None,
+    ) -> tuple[float, float]:
+        """Reflect a control point around the current position.
+
+        Returns:
+            tuple[float, float]: Reflected control point. If ``control`` is None,
+                returns ``current`` unchanged.
+        """
+        if control is None:
+            return current
+        return (2.0 * current[0] - control[0], 2.0 * current[1] - control[1])
+
+    @staticmethod
+    def _split_arc_flag_token(tokens: list[str], idx: int) -> None:
+        """Split compact arc-flag tokens like ``01`` into separate values.
+
+        SVG arc syntax allows two adjacent boolean flags (large-arc, sweep).
+        Some authoring tools emit them without separators, which the generic
+        numeric tokenization reads as a single token (e.g. ``"01"``). This
+        helper rewrites that token into ``["0", "1"]`` in-place.
+        """
+        if idx >= len(tokens):
+            return
+        token = tokens[idx]
+        if len(token) == 2 and set(token) <= {"0", "1"}:
+            tokens[idx : idx + 1] = [token[0], token[1]]
+
+    @staticmethod
+    def _parse_path_coordinates(  # noqa: C901, PLR0912, PLR0915
+        path_d: str,
+    ) -> tuple[tuple[float, float], ...]:
+        """Parse SVG path commands into ordered waypoint coordinates.
+
+        Supports absolute and relative variants of ``M L H V C S Q T A Z``.
+        Curves and arcs are flattened into deterministic waypoint samples.
+
+        Returns:
+            tuple[tuple[float, float], ...]: Ordered waypoints extracted from path commands.
+        """
+        token_pattern = re.compile(
+            r"[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[eE][-+]?\d+)?",
+        )
+        tokens = token_pattern.findall(path_d)
+        if not tokens:
+            return ()
+
+        def is_command(token: str) -> bool:
+            return len(token) == 1 and token.isalpha()
+
+        idx = 0
+        command: str | None = None
+        current = (0.0, 0.0)
+        subpath_start: tuple[float, float] | None = None
+        last_cubic_ctrl: tuple[float, float] | None = None
+        last_quad_ctrl: tuple[float, float] | None = None
+        points: list[tuple[float, float]] = []
+
+        def read_number() -> float:
+            nonlocal idx
+            if idx >= len(tokens):
+                raise ValueError("Unexpected end of path data while reading numeric parameter.")
+            token = tokens[idx]
+            if is_command(token):
+                raise ValueError(f"Expected numeric path parameter, found command {token!r}.")
+            idx += 1
+            return float(token)
+
+        def has_more_numbers() -> bool:
+            return idx < len(tokens) and not is_command(tokens[idx])
+
+        while idx < len(tokens):
+            token = tokens[idx]
+            if is_command(token):
+                command = token
+                idx += 1
+                if command in {"Z", "z"}:
+                    if subpath_start is not None:
+                        SvgMapConverter._append_point(points, subpath_start)
+                        current = subpath_start
+                    command = None
+                    last_cubic_ctrl = None
+                    last_quad_ctrl = None
+                    continue
+
+            if command is None:
+                raise ValueError("Path data is missing an initial SVG command.")
+
+            if command in {"M", "m"}:
+                x = read_number()
+                y = read_number()
+                if command == "m":
+                    current = (current[0] + x, current[1] + y)
+                else:
+                    current = (x, y)
+                subpath_start = current
+                SvgMapConverter._append_point(points, current)
+
+                line_command = "l" if command == "m" else "L"
+                while has_more_numbers():
+                    x = read_number()
+                    y = read_number()
+                    if line_command == "l":
+                        current = (current[0] + x, current[1] + y)
+                    else:
+                        current = (x, y)
+                    SvgMapConverter._append_point(points, current)
+                command = line_command
+                last_cubic_ctrl = None
+                last_quad_ctrl = None
+                continue
+
+            if command in {"L", "l"}:
+                while has_more_numbers():
+                    x = read_number()
+                    y = read_number()
+                    if command == "l":
+                        current = (current[0] + x, current[1] + y)
+                    else:
+                        current = (x, y)
+                    SvgMapConverter._append_point(points, current)
+                last_cubic_ctrl = None
+                last_quad_ctrl = None
+                continue
+
+            if command in {"H", "h"}:
+                while has_more_numbers():
+                    x = read_number()
+                    current = (current[0] + x, current[1]) if command == "h" else (x, current[1])
+                    SvgMapConverter._append_point(points, current)
+                last_cubic_ctrl = None
+                last_quad_ctrl = None
+                continue
+
+            if command in {"V", "v"}:
+                while has_more_numbers():
+                    y = read_number()
+                    current = (current[0], current[1] + y) if command == "v" else (current[0], y)
+                    SvgMapConverter._append_point(points, current)
+                last_cubic_ctrl = None
+                last_quad_ctrl = None
+                continue
+
+            if command in {"C", "c"}:
+                while has_more_numbers():
+                    x1 = read_number()
+                    y1 = read_number()
+                    x2 = read_number()
+                    y2 = read_number()
+                    x = read_number()
+                    y = read_number()
+                    if command == "c":
+                        p1 = (current[0] + x1, current[1] + y1)
+                        p2 = (current[0] + x2, current[1] + y2)
+                        p3 = (current[0] + x, current[1] + y)
+                    else:
+                        p1 = (x1, y1)
+                        p2 = (x2, y2)
+                        p3 = (x, y)
+                    for point in SvgMapConverter._sample_cubic_curve(
+                        current,
+                        p1,
+                        p2,
+                        p3,
+                        max_step=SvgMapConverter._CURVE_MAX_STEP,
+                    ):
+                        SvgMapConverter._append_point(points, point)
+                    current = p3
+                    last_cubic_ctrl = p2
+                    last_quad_ctrl = None
+                continue
+
+            if command in {"S", "s"}:
+                while has_more_numbers():
+                    x2 = read_number()
+                    y2 = read_number()
+                    x = read_number()
+                    y = read_number()
+                    p1 = SvgMapConverter._reflect_point(current, last_cubic_ctrl)
+                    if command == "s":
+                        p2 = (current[0] + x2, current[1] + y2)
+                        p3 = (current[0] + x, current[1] + y)
+                    else:
+                        p2 = (x2, y2)
+                        p3 = (x, y)
+                    for point in SvgMapConverter._sample_cubic_curve(
+                        current,
+                        p1,
+                        p2,
+                        p3,
+                        max_step=SvgMapConverter._CURVE_MAX_STEP,
+                    ):
+                        SvgMapConverter._append_point(points, point)
+                    current = p3
+                    last_cubic_ctrl = p2
+                    last_quad_ctrl = None
+                continue
+
+            if command in {"Q", "q"}:
+                while has_more_numbers():
+                    x1 = read_number()
+                    y1 = read_number()
+                    x = read_number()
+                    y = read_number()
+                    if command == "q":
+                        p1 = (current[0] + x1, current[1] + y1)
+                        p2 = (current[0] + x, current[1] + y)
+                    else:
+                        p1 = (x1, y1)
+                        p2 = (x, y)
+                    for point in SvgMapConverter._sample_quadratic_curve(
+                        current,
+                        p1,
+                        p2,
+                        max_step=SvgMapConverter._CURVE_MAX_STEP,
+                    ):
+                        SvgMapConverter._append_point(points, point)
+                    current = p2
+                    last_quad_ctrl = p1
+                    last_cubic_ctrl = None
+                continue
+
+            if command in {"T", "t"}:
+                while has_more_numbers():
+                    x = read_number()
+                    y = read_number()
+                    control = SvgMapConverter._reflect_point(current, last_quad_ctrl)
+                    if command == "t":
+                        p2 = (current[0] + x, current[1] + y)
+                    else:
+                        p2 = (x, y)
+                    for point in SvgMapConverter._sample_quadratic_curve(
+                        current,
+                        control,
+                        p2,
+                        max_step=SvgMapConverter._CURVE_MAX_STEP,
+                    ):
+                        SvgMapConverter._append_point(points, point)
+                    current = p2
+                    last_quad_ctrl = control
+                    last_cubic_ctrl = None
+                continue
+
+            if command in {"A", "a"}:
+                while has_more_numbers():
+                    rx = read_number()
+                    ry = read_number()
+                    x_axis_rotation = read_number()
+                    SvgMapConverter._split_arc_flag_token(tokens, idx)
+                    large_arc_flag = read_number()
+                    SvgMapConverter._split_arc_flag_token(tokens, idx)
+                    sweep_flag = read_number()
+                    x = read_number()
+                    y = read_number()
+                    if command == "a":
+                        end = (current[0] + x, current[1] + y)
+                    else:
+                        end = (x, y)
+                    for point in SvgMapConverter._sample_arc_segment(
+                        current,
+                        end,
+                        rx,
+                        ry,
+                        x_axis_rotation,
+                        large_arc_flag >= 0.5,
+                        sweep_flag >= 0.5,
+                        max_step=SvgMapConverter._CURVE_MAX_STEP,
+                    ):
+                        SvgMapConverter._append_point(points, point)
+                    current = end
+                    last_cubic_ctrl = None
+                    last_quad_ctrl = None
+                continue
+
+            raise ValueError(f"Unsupported SVG path command {command!r}.")
+
+        return tuple(points)
+
     def _parse_path_element(
         self, path: ET.Element, coordinate_pattern: re.Pattern
     ) -> SvgPath | None:
@@ -140,14 +572,28 @@ class SvgMapConverter:
         if not input_string:
             return None
 
-        filtered_coordinates = coordinate_pattern.findall(input_string)
-        if not filtered_coordinates:
-            logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
-            return None
+        try:
+            coordinates = self._parse_path_coordinates(input_string)
+        except ValueError as parse_error:
+            logger.debug(
+                "Falling back to regex coordinate extraction for path %s: %s",
+                path.attrib.get("id"),
+                parse_error,
+            )
+            coordinates = ()
 
-        coordinates = tuple(
-            map(tuple, np.array(filtered_coordinates, dtype=float).tolist()),
-        )
+        if len(coordinates) < 2:
+            filtered_coordinates = coordinate_pattern.findall(input_string)
+            # If both structured parsing and fallback regex fail, the path has
+            # no usable coordinates and should be dropped entirely.
+            if not filtered_coordinates and not coordinates:
+                logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
+                return None
+            regex_coordinates = tuple(
+                map(tuple, np.array(filtered_coordinates, dtype=float).tolist()),
+            )
+            if len(regex_coordinates) > len(coordinates):
+                coordinates = regex_coordinates
 
         label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
         path_id = path.attrib.get("id")
@@ -337,6 +783,11 @@ class SvgMapConverter:
             GlobalRoute: Route with spawn/goal zones and waypoints extracted from path.
         """
         vertices = list(path.coordinates)
+        if len(vertices) < 2:
+            raise ValueError(
+                "Route path must provide at least two waypoints; got "
+                f"{len(vertices)} for path id={path.id!r} label={path.label!r}"
+            )
         spawn, goal = self.__get_path_number(path.label)
 
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create

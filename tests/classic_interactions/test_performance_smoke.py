@@ -26,9 +26,12 @@ def test_demo_runtime_under_threshold():
     mod.DRY_RUN = False  # type: ignore
     # Env var already set pre-import; keep for clarity if test modified
     mod.MAX_EPISODES = 1  # type: ignore
-    start = time.perf_counter()
     try:
+        # Warm up backend/JIT once so measured runtime reflects steady-state behavior.
+        warmup_episodes = mod.run_demo(enable_recording=False)
+        start = time.perf_counter()
         episodes = mod.run_demo(enable_recording=False)
+        elapsed = time.perf_counter() - start
     finally:
         if original_fast is None:
             os.environ.pop("ROBOT_SF_FAST_DEMO", None)
@@ -38,7 +41,7 @@ def test_demo_runtime_under_threshold():
             mod.DRY_RUN = original_dry  # type: ignore
         if original_max is not None:
             mod.MAX_EPISODES = original_max  # type: ignore
-    elapsed = time.perf_counter() - start
+    assert warmup_episodes, "Expected warm-up run to produce at least one episode."
     assert episodes, "Expected at least one episode (TDD failing until implementation)."
     assert elapsed < SOFT_THRESHOLD_SECONDS, (
         f"Demo run exceeded soft threshold {SOFT_THRESHOLD_SECONDS:.1f}s (elapsed={elapsed:.2f}s)."

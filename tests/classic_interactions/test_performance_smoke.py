@@ -17,16 +17,18 @@ SOFT_THRESHOLD_SECONDS = 8.0  # keeps a regression guard while accounting for ba
 
 def test_demo_runtime_under_threshold():
     """Ensure explicit fast-demo mode completes quickly for one non-recorded episode."""
-    # Set fast demo env var BEFORE importing module so import-time constants / logic can read it
     original_fast = os.environ.get("ROBOT_SF_FAST_DEMO")
-    os.environ["ROBOT_SF_FAST_DEMO"] = "1"
-    mod = importlib.import_module("examples.classic_interactions_pygame")
-    original_dry = getattr(mod, "DRY_RUN", None)
-    original_max = getattr(mod, "MAX_EPISODES", None)
-    mod.DRY_RUN = False  # type: ignore
-    # Env var already set pre-import; keep for clarity if test modified
-    mod.MAX_EPISODES = 1  # type: ignore
+    original_dry = None
+    original_max = None
+    mod = None
     try:
+        # Set fast-demo env var before import so module logic can observe it.
+        os.environ["ROBOT_SF_FAST_DEMO"] = "1"
+        mod = importlib.import_module("examples.classic_interactions_pygame")
+        original_dry = getattr(mod, "DRY_RUN", None)
+        original_max = getattr(mod, "MAX_EPISODES", None)
+        mod.DRY_RUN = False  # type: ignore
+        mod.MAX_EPISODES = 1  # type: ignore
         # Warm up backend/JIT once so measured runtime reflects steady-state behavior.
         warmup_episodes = mod.run_demo(enable_recording=False)
         start = time.perf_counter()
@@ -37,9 +39,9 @@ def test_demo_runtime_under_threshold():
             os.environ.pop("ROBOT_SF_FAST_DEMO", None)
         else:
             os.environ["ROBOT_SF_FAST_DEMO"] = original_fast
-        if original_dry is not None:
+        if mod is not None and original_dry is not None:
             mod.DRY_RUN = original_dry  # type: ignore
-        if original_max is not None:
+        if mod is not None and original_max is not None:
             mod.MAX_EPISODES = original_max  # type: ignore
     assert warmup_episodes, "Expected warm-up run to produce at least one episode."
     assert episodes, "Expected at least one episode (TDD failing until implementation)."

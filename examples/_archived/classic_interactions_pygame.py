@@ -96,6 +96,8 @@ SCENARIO_NAME: str | None = None  # default = first scenario
 SWEEP_ALL = False
 MAX_EPISODES = 8
 ENABLE_RECORDING = True
+FAST_DEMO_STEP_CAP = 2
+FAST_DEMO_SIM_TIME_CAP_SECS = 1.0
 
 
 def _default_output_dir() -> Path:
@@ -150,6 +152,11 @@ def _validate_constants() -> None:  # (FR-019)
     # Use helper catalog to ensure output directory exists
     if ENABLE_RECORDING:
         ensure_output_dir(OUTPUT_DIR)
+
+
+def _is_explicit_fast_demo() -> bool:
+    """Return True when explicit fast-demo mode is requested via env var."""
+    return bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
 
 
 # _load_policy function removed - now using load_trained_policy from helper catalog
@@ -240,8 +247,8 @@ def run_episode(
     last_info: dict[str, Any] = {}
     frames: list[Any] | None = [] if record else None
     # Performance: capture frames only if recording enabled & moviepy available (FR-025)
-    fast_demo_mode = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
-    fast_step_cap = 2 if fast_demo_mode else None
+    fast_demo_mode = _is_explicit_fast_demo()
+    fast_step_cap = FAST_DEMO_STEP_CAP if fast_demo_mode else None
     while not done:
         action, _ = policy.predict(obs, deterministic=True)
         obs, _reward, terminated, truncated, info = env.step(action)
@@ -391,7 +398,7 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
         fast_mode: Whether test/demo fast mode is active.
         eff_max: Effective episode limit after fast-mode capping.
     """
-    explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
+    explicit_fast_flag = _is_explicit_fast_demo()
     if fast_mode and eff_max <= 1:
         # Only fall back to stub if user explicitly requested fast demo; otherwise enforce model presence.
         if not MODEL_PATH.exists() and not explicit_fast_flag:
@@ -428,7 +435,10 @@ def _create_demo_env(fast_mode: bool):
     """
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
-        sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 1.0)
+        sim_cfg.sim_config.sim_time_in_secs = min(
+            sim_cfg.sim_config.sim_time_in_secs,
+            FAST_DEMO_SIM_TIME_CAP_SECS,
+        )
     return sim_cfg
 
 
@@ -571,7 +581,7 @@ def run_demo(
         Ordered list of episode summaries (deterministic), possibly empty when dry_run.
     """
     _validate_constants()
-    explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
+    explicit_fast_flag = _is_explicit_fast_demo()
     effective_dry = DRY_RUN if dry_run is None else dry_run
     eff_name = SCENARIO_NAME if scenario_name is None else scenario_name
     eff_max = MAX_EPISODES if max_episodes is None else max_episodes
@@ -629,7 +639,7 @@ def run_demo(
         env = make_robot_env(
             config=sim_cfg,
             reward_func=simple_reward,
-            debug=not (explicit_fast_flag and not eff_record),
+            debug=not explicit_fast_flag or eff_record,
             record_video=eff_record,
             video_path=str(effective_output_dir) if eff_record else None,
         )

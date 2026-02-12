@@ -1354,6 +1354,8 @@ def run_batch(  # noqa: PLR0913
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None = None,
     algo: str = "simple_policy",
     algo_config_path: str | None = None,
+    benchmark_profile: str = "baseline-safe",
+    socnav_missing_prereq_policy: str = "fail-fast",
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1386,6 +1388,8 @@ def run_batch(  # noqa: PLR0913
             snqi_baseline=snqi_baseline,
             algo=algo,
             algo_config_path=algo_config_path,
+            benchmark_profile=benchmark_profile,
+            socnav_missing_prereq_policy=socnav_missing_prereq_policy,
             workers=workers,
             resume=resume,
         )

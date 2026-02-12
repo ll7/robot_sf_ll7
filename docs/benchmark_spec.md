@@ -56,6 +56,19 @@ Notes:
 * ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
   in the algo config to use the heuristic fallback.
 
+## Algorithm Readiness Profiles
+
+Canonical readiness profiles are versioned in
+[`configs/benchmarks/paper_baseline_algorithms_v1.yaml`](../configs/benchmarks/paper_baseline_algorithms_v1.yaml).
+
+CLI gating:
+* `--benchmark-profile baseline-safe` (default): allows only baseline-ready algorithms.
+* `--benchmark-profile paper-baseline`: publication profile; allows PPO only when paper-grade
+  provenance and quality-gate fields are present in the algo config.
+* `--benchmark-profile experimental`: allows baseline-ready + experimental algorithms.
+
+Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
+
 ## Reproducible Command (One-Liner)
 
 Run the full suite with a single command (seed-holdout eval set):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.baselines.ppo import PPOPlanner
+from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -43,6 +45,24 @@ if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 
+_SOCNAV_ALGO_KEYS = {
+    "socnav_sampling",
+    "sampling",
+    "orca",
+    "sacadrl",
+    "sa_cadrl",
+    "socnav_bench",
+}
+_PPO_PAPER_REQUIRED_PROVENANCE = (
+    "training_config",
+    "training_commit",
+    "dataset_version",
+    "checkpoint_id",
+    "normalization_id",
+    "deterministic_seed_set",
+)
+
+
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not algo_config_path:
         return {}
@@ -53,6 +73,103 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
     return data
+
+
+def _is_socnav_algorithm(algo: str) -> bool:
+    return algo.strip().lower() in _SOCNAV_ALGO_KEYS
+
+
+def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
+    """Return whether PPO config satisfies paper-grade provenance/quality gates."""
+    profile = str(config.get("profile", "experimental")).strip().lower()
+    if profile not in {"paper", "paper-baseline"}:
+        return False, None
+
+    provenance = config.get("provenance")
+    if not isinstance(provenance, dict):
+        return False, "missing 'provenance' mapping"
+    missing = [k for k in _PPO_PAPER_REQUIRED_PROVENANCE if not provenance.get(k)]
+    if missing:
+        return False, f"missing provenance keys: {', '.join(missing)}"
+
+    gate = config.get("quality_gate")
+    if not isinstance(gate, dict):
+        return False, "missing 'quality_gate' mapping"
+    min_success = gate.get("min_success_rate")
+    measured_success = gate.get("measured_success_rate")
+    try:
+        min_success_f = float(min_success)
+        measured_success_f = float(measured_success)
+    except (TypeError, ValueError):
+        return False, "quality gate requires numeric min_success_rate and measured_success_rate"
+    if not math.isfinite(min_success_f) or not math.isfinite(measured_success_f):
+        return False, "quality gate success-rate values must be finite"
+    if measured_success_f < min_success_f:
+        return (
+            False,
+            f"quality gate failed: measured_success_rate={measured_success_f:.3f} "
+            f"< min_success_rate={min_success_f:.3f}",
+        )
+    return True, None
+
+
+def _preflight_policy(
+    *,
+    algo: str,
+    algo_config: dict[str, Any],
+    missing_prereq_policy: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Preflight planner initialization and apply SocNav prereq policy.
+
+    Returns:
+        tuple[dict[str, Any], dict[str, Any]]: Effective policy config and
+        preflight status payload.
+    """
+    policy = missing_prereq_policy.strip().lower()
+    if policy not in {"fail-fast", "skip-with-warning", "fallback"}:
+        raise ValueError(
+            "Unsupported socnav prereq policy "
+            f"'{missing_prereq_policy}'. Expected fail-fast|skip-with-warning|fallback.",
+        )
+
+    def _build_and_close(cfg: dict[str, Any]) -> None:
+        policy_fn, _meta = _build_policy(algo, cfg)
+        planner_close = getattr(policy_fn, "_planner_close", None)
+        if callable(planner_close):
+            planner_close()
+
+    try:
+        _build_and_close(algo_config)
+        return dict(algo_config), {"status": "ok"}
+    except Exception as exc:
+        if not _is_socnav_algorithm(algo):
+            raise
+        message = (
+            f"SocNav preflight failed for algorithm '{algo}': {exc}. "
+            "Check missing dependencies/models or choose a different prereq policy."
+        )
+        if policy == "skip-with-warning":
+            logger.warning("{}", message)
+            return dict(algo_config), {"status": "skipped", "error": str(exc), "policy": policy}
+        if policy == "fallback":
+            fallback_cfg = dict(algo_config)
+            fallback_cfg["allow_fallback"] = True
+            try:
+                _build_and_close(fallback_cfg)
+                logger.warning(
+                    "SocNav preflight failed for '{}'; continuing with allow_fallback=True.",
+                    algo,
+                )
+                return fallback_cfg, {
+                    "status": "fallback",
+                    "error": str(exc),
+                    "policy": policy,
+                }
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"{message} Fallback attempt also failed: {fallback_exc}",
+                ) from fallback_exc
+        raise RuntimeError(message) from exc
 
 
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
@@ -191,14 +308,14 @@ def _ppo_action_to_unicycle(
     return v, omega
 
 
-def _build_policy(  # noqa: C901
+def _build_policy(  # noqa: C901, PLR0912
     algo: str,
     algo_config: dict[str, Any],
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
 
-    if algo_key in {"goal", "simple", "goal_policy"}:
+    if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
         meta.update(
             {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
         )
@@ -216,6 +333,19 @@ def _build_policy(  # noqa: C901
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
     elif algo_key in {"ppo"}:
+        paper_ready, paper_reason = _ppo_paper_gate_status(algo_config)
+        if (
+            str(algo_config.get("profile", "experimental")).strip().lower()
+            in {
+                "paper",
+                "paper-baseline",
+            }
+            and not paper_ready
+        ):
+            raise ValueError(
+                "PPO paper profile requested but gate failed: "
+                f"{paper_reason}. Provide provenance + quality_gate in algo config.",
+            )
         ppo_planner = PPOPlanner(algo_config, seed=None)
         if hasattr(ppo_planner, "get_metadata"):
             planner_meta = ppo_planner.get_metadata()
@@ -234,6 +364,16 @@ def _build_policy(  # noqa: C901
             meta["status"] = "ok"
         meta.setdefault("algorithm", "ppo")
         meta.setdefault("config", algo_config)
+        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
+        provenance = algo_config.get("provenance")
+        if isinstance(provenance, dict):
+            meta["provenance"] = provenance
+        quality_gate = algo_config.get("quality_gate")
+        if isinstance(quality_gate, dict):
+            meta["quality_gate"] = quality_gate
+        meta["paper_ready"] = bool(paper_ready)
+        if paper_reason:
+            meta["paper_gate_reason"] = paper_reason
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
     elif algo_key in {"orca"}:
@@ -584,7 +724,7 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
     )
 
 
-def run_map_batch(  # noqa: C901,PLR0912,PLR0913
+def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
@@ -596,6 +736,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
     snqi_baseline: dict[str, dict[str, float]] | None = None,
     algo: str = "goal",
     algo_config_path: str | None = None,
+    benchmark_profile: BenchmarkProfile = "baseline-safe",
+    socnav_missing_prereq_policy: str = "fail-fast",
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -642,6 +784,35 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
     policy_cfg = _parse_algo_config(algo_config_path)
+    ppo_paper_ready, _paper_reason = (
+        _ppo_paper_gate_status(policy_cfg) if algo.strip().lower() == "ppo" else (False, None)
+    )
+    readiness = require_algorithm_allowed(
+        algo=algo,
+        benchmark_profile=benchmark_profile,
+        ppo_paper_ready=ppo_paper_ready,
+    )
+    policy_cfg, preflight = _preflight_policy(
+        algo=algo,
+        algo_config=policy_cfg,
+        missing_prereq_policy=socnav_missing_prereq_policy,
+    )
+    if preflight.get("status") == "skipped":
+        return {
+            "total_jobs": 0,
+            "written": 0,
+            "successful_jobs": 0,
+            "failed_jobs": 0,
+            "skipped_jobs": len(jobs),
+            "failures": [],
+            "out_path": str(out_path),
+            "algorithm_readiness": {
+                "name": readiness.canonical_name if readiness is not None else algo,
+                "tier": readiness.tier if readiness is not None else "unknown",
+                "profile": benchmark_profile,
+            },
+            "preflight": preflight,
+        }
 
     if resume and out_path.exists():
         existing = index_existing(out_path)
@@ -716,6 +887,12 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913
         "failed_jobs": len(failures),
         "failures": failures,
         "out_path": str(out_path),
+        "algorithm_readiness": {
+            "name": readiness.canonical_name if readiness is not None else algo,
+            "tier": readiness.tier if readiness is not None else "unknown",
+            "profile": benchmark_profile,
+        },
+        "preflight": preflight,
     }
 
 

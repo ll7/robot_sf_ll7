@@ -1,0 +1,34 @@
+# Canonical algorithm readiness profiles for map-based benchmark runs.
+# Use with:
+#   robot_sf_bench run --benchmark-profile <profile> --algo <algorithm>
+
+version: 1
+profiles:
+  baseline-safe:
+    description: "Only baseline-ready algorithms; no placeholders/experimental planners."
+    algorithms: [goal, social_force, orca]
+  paper-baseline:
+    description: "Publication profile; PPO allowed only with paper-grade provenance + quality gate."
+    algorithms: [goal, social_force, orca, ppo]
+    ppo_requirements:
+      profile: paper
+      provenance_keys:
+        - training_config
+        - training_commit
+        - dataset_version
+        - checkpoint_id
+        - normalization_id
+        - deterministic_seed_set
+      quality_gate:
+        - min_success_rate
+        - measured_success_rate
+  experimental:
+    description: "Allows baseline-ready and experimental algorithms for exploratory sweeps."
+    algorithms:
+      - goal
+      - social_force
+      - orca
+      - ppo
+      - socnav_sampling
+      - sacadrl
+      - socnav_bench

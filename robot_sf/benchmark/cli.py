@@ -27,6 +27,7 @@ from robot_sf.benchmark.ablation import to_json as _abl_to_json
 from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
+from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
@@ -221,6 +222,16 @@ def _handle_run(args) -> int:
         except Exception:  # pragma: no cover - error path
             return 2
 
+        readiness = get_algorithm_readiness(str(args.algo))
+        if readiness is not None:
+            logging.info(
+                "Algorithm readiness: algo=%s tier=%s profile=%s note=%s",
+                readiness.canonical_name,
+                readiness.tier,
+                getattr(args, "benchmark_profile", "baseline-safe"),
+                readiness.note,
+            )
+
         summary = run_batch(
             scenarios_or_path=args.matrix,
             out_path=args.out,
@@ -237,6 +248,8 @@ def _handle_run(args) -> int:
             progress_cb=_progress_cb_factory(bool(args.quiet)),
             algo=args.algo,
             algo_config_path=args.algo_config,
+            benchmark_profile=args.benchmark_profile,
+            socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
@@ -1059,6 +1072,25 @@ def _add_run_subparser(
         action="store_true",
         default=False,
         help="Stop on first failure instead of collecting errors",
+    )
+    p.add_argument(
+        "--benchmark-profile",
+        choices=["baseline-safe", "paper-baseline", "experimental"],
+        default="baseline-safe",
+        help=(
+            "Algorithm readiness profile. "
+            "'baseline-safe' blocks experimental/placeholder planners; "
+            "'paper-baseline' additionally requires paper-grade PPO gating."
+        ),
+    )
+    p.add_argument(
+        "--socnav-missing-prereq-policy",
+        choices=["fail-fast", "skip-with-warning", "fallback"],
+        default="fail-fast",
+        help=(
+            "Behavior when SocNav dependencies/models are missing: "
+            "raise, skip algorithm run, or force adapter fallback."
+        ),
     )
     # Global --quiet handled at top-level parser
     p.set_defaults(cmd="run")

@@ -27,6 +27,7 @@ from robot_sf.benchmark.ablation import to_json as _abl_to_json
 from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
+from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
@@ -214,14 +215,38 @@ def _handle_run(args) -> int:
     Returns:
         Exit code (0 for success, 2 for error).
     """
+
+    def _emit_structured(event_payload: dict[str, Any]) -> None:
+        mode = str(getattr(args, "structured_output", "none")).lower()
+        if mode not in {"json", "jsonl"}:
+            return
+        print(json.dumps(event_payload, sort_keys=True))
+
     try:
+        _configure_external_log_noise(
+            mode=str(getattr(args, "external_log_noise", "auto")),
+            log_level=str(getattr(args, "log_level", "INFO")),
+        )
         # Optional: load SNQI weights/baseline for inline SNQI computation
         try:
             snqi_weights, snqi_baseline = _load_snqi_inputs(args)
         except Exception:  # pragma: no cover - error path
+            _emit_structured(
+                {"event": "benchmark.run.error", "error": "failed_loading_snqi_inputs"},
+            )
             return 2
 
-        run_batch(
+        readiness = get_algorithm_readiness(str(args.algo))
+        if readiness is not None:
+            logging.info(
+                "Algorithm readiness: algo=%s tier=%s profile=%s note=%s",
+                readiness.canonical_name,
+                readiness.tier,
+                getattr(args, "benchmark_profile", "baseline-safe"),
+                readiness.note,
+            )
+
+        summary = run_batch(
             scenarios_or_path=args.matrix,
             out_path=args.out,
             schema_path=args.schema,
@@ -237,18 +262,94 @@ def _handle_run(args) -> int:
             progress_cb=_progress_cb_factory(bool(args.quiet)),
             algo=args.algo,
             algo_config_path=args.algo_config,
+            benchmark_profile=args.benchmark_profile,
+            socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
         )
+        total_jobs = int(summary.get("total_jobs", 0))
+        written = int(summary.get("written", 0))
+        failed = summary.get("failures", [])
+        failure_count = (
+            len(failed) if isinstance(failed, list) else int(summary.get("failed_jobs", 0))
+        )
         try:
-            logging.info("Episodes written to %s", args.out)
+            logging.info(
+                "Run summary: total_jobs=%s written=%s failed=%s out=%s",
+                total_jobs,
+                written,
+                failure_count,
+                args.out,
+            )
         except Exception:
             logging.debug("Logging 'Episodes written' failed", exc_info=True)
+        if total_jobs > 0 and written == 0:
+            try:
+                logging.error(
+                    "Benchmark run produced zero episodes for %s scheduled jobs (%s failures).",
+                    total_jobs,
+                    failure_count,
+                )
+            except Exception:
+                logging.debug("Logging zero-episode failure failed", exc_info=True)
+            if str(getattr(args, "structured_output", "none")).lower() == "jsonl" and isinstance(
+                failed, list
+            ):
+                for failure in failed:
+                    if isinstance(failure, dict):
+                        _emit_structured({"event": "benchmark.run.failure", **failure})
+            _emit_structured(
+                {
+                    "event": "benchmark.run.summary",
+                    "exit_code": 2,
+                    "total_jobs": total_jobs,
+                    "written": written,
+                    "failed_jobs": failure_count,
+                    "out_path": str(summary.get("out_path", args.out)),
+                },
+            )
+            return 2
+        _emit_structured(
+            {
+                "event": "benchmark.run.summary",
+                "exit_code": 0,
+                "total_jobs": total_jobs,
+                "written": written,
+                "failed_jobs": failure_count,
+                "out_path": str(summary.get("out_path", args.out)),
+            },
+        )
         return 0
     except Exception:  # pragma: no cover - error path
+        _emit_structured({"event": "benchmark.run.error", "error": "unhandled_exception"})
         return 2
+
+
+def _configure_external_log_noise(*, mode: str, log_level: str) -> None:
+    """Apply best-effort external log suppression policy for noisy dependencies."""
+    mode_norm = mode.strip().lower()
+    if mode_norm not in {"auto", "suppress", "verbose"}:
+        mode_norm = "auto"
+    should_suppress = mode_norm == "suppress" or (
+        mode_norm == "auto" and log_level.strip().upper() != "DEBUG"
+    )
+    if not should_suppress:
+        return
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
+    for logger_name in (
+        "matplotlib",
+        "PIL",
+        "pygame",
+        "moviepy",
+        "tensorflow",
+        "numba",
+        "OpenGL",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 
 def _handle_summary(args) -> int:
@@ -1037,6 +1138,43 @@ def _add_run_subparser(
         action="store_true",
         default=False,
         help="Stop on first failure instead of collecting errors",
+    )
+    p.add_argument(
+        "--benchmark-profile",
+        choices=["baseline-safe", "paper-baseline", "experimental"],
+        default="baseline-safe",
+        help=(
+            "Algorithm readiness profile. "
+            "'baseline-safe' blocks experimental/placeholder planners; "
+            "'paper-baseline' additionally requires paper-grade PPO gating."
+        ),
+    )
+    p.add_argument(
+        "--socnav-missing-prereq-policy",
+        choices=["fail-fast", "skip-with-warning", "fallback"],
+        default="fail-fast",
+        help=(
+            "Behavior when SocNav dependencies/models are missing: "
+            "raise, skip algorithm run, or force adapter fallback."
+        ),
+    )
+    p.add_argument(
+        "--structured-output",
+        choices=["none", "json", "jsonl"],
+        default="none",
+        help=(
+            "Emit machine-readable run events to stdout. "
+            "'json' emits a final summary object; 'jsonl' emits per-failure + summary events."
+        ),
+    )
+    p.add_argument(
+        "--external-log-noise",
+        choices=["auto", "suppress", "verbose"],
+        default="auto",
+        help=(
+            "Control suppression of noisy third-party logs. "
+            "'auto' suppresses unless --log-level DEBUG."
+        ),
     )
     # Global --quiet handled at top-level parser
     p.set_defaults(cmd="run")

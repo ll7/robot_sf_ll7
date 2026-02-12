@@ -116,6 +116,72 @@ def has_force_data(data: EpisodeData) -> bool:
     return not np.allclose(data.ped_forces, 0.0)
 
 
+def force_sample_stats(data: EpisodeData) -> dict[str, int | float | str]:
+    """Summarize force sample validity for transparent degenerate-case reporting.
+
+    Returns:
+        Dict with status and counts of raw/finite/invalid/zero/nonzero samples.
+    """
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if ped_count == 0:
+        return {
+            "status": "no-pedestrians",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    if data.ped_forces.shape != data.peds_pos.shape:
+        return {
+            "status": "shape-mismatch",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    magnitudes = np.linalg.norm(data.ped_forces, axis=2)
+    raw_samples = int(magnitudes.size)
+    if raw_samples == 0:
+        return {
+            "status": "empty",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    finite_mask = np.isfinite(magnitudes)
+    finite_samples = int(np.count_nonzero(finite_mask))
+    invalid_samples = int(raw_samples - finite_samples)
+    zero_force_samples = int(np.count_nonzero(np.abs(magnitudes[finite_mask]) <= 1e-12))
+    nonzero_force_samples = int(finite_samples - zero_force_samples)
+
+    if finite_samples == 0:
+        status = "all-invalid"
+    elif nonzero_force_samples == 0:
+        status = "all-zero"
+    else:
+        status = "ok"
+
+    return {
+        "status": status,
+        "raw_samples": raw_samples,
+        "finite_samples": finite_samples,
+        "invalid_samples": invalid_samples,
+        "zero_force_samples": zero_force_samples,
+        "nonzero_force_samples": nonzero_force_samples,
+        "valid_fraction": float(finite_samples / raw_samples) if raw_samples > 0 else 0.0,
+    }
+
+
 # --- Internal helper functions for paper metrics ---
 
 
@@ -1910,6 +1976,7 @@ def compute_all_metrics(
     values.update(per_ped_force_quantiles(data))
     values["ped_force_mean"] = ped_force_mean(data)
     values["force_exceed_events"] = force_exceed_events(data)
+    values["force_sample_stats"] = force_sample_stats(data)
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)
     values["curvature_mean"] = curvature_mean(data)
@@ -1997,6 +2064,7 @@ __all__ = [
     "force_exceed_events",
     "force_gradient_norm_mean",
     "force_quantiles",
+    "force_sample_stats",
     "has_force_data",
     "human_collisions",
     "jerk_avg",

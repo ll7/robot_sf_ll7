@@ -67,13 +67,13 @@ class BenchmarkCLIConfig:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    # Generate timestamp for default output directory
-    """TODO docstring. Document this function.
-
+    """Create the CLI argument parser for full classic benchmark runs.
 
     Returns:
-        TODO docstring.
+        Configured ``argparse.ArgumentParser`` with all benchmark runtime,
+        precision, visualization, and freeze-manifest flags.
     """
+    # Generate timestamp for default output directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     default_output = f"tmp/results/full_classic_run_{timestamp}"
 
@@ -217,13 +217,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
-    """TODO docstring. Document this function.
+    """Convert parsed CLI arguments into a benchmark config object.
 
     Args:
-        ns: TODO docstring.
+        ns: Parsed command-line namespace from ``build_arg_parser``.
 
     Returns:
-        TODO docstring.
+        ``BenchmarkCLIConfig`` populated from CLI arguments with normalized
+        optional fields (for example, horizon and metric subset parsing).
     """
     horizon_override = ns.horizon if ns.horizon and ns.horizon > 0 else None
     metrics_subset = [

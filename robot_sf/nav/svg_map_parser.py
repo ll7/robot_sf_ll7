@@ -296,6 +296,21 @@ class SvgMapConverter:
         return (2.0 * current[0] - control[0], 2.0 * current[1] - control[1])
 
     @staticmethod
+    def _split_arc_flag_token(tokens: list[str], idx: int) -> None:
+        """Split compact arc-flag tokens like ``01`` into separate values.
+
+        SVG arc syntax allows two adjacent boolean flags (large-arc, sweep).
+        Some authoring tools emit them without separators, which the generic
+        numeric tokenization reads as a single token (e.g. ``"01"``). This
+        helper rewrites that token into ``["0", "1"]`` in-place.
+        """
+        if idx >= len(tokens):
+            return
+        token = tokens[idx]
+        if len(token) == 2 and set(token) <= {"0", "1"}:
+            tokens[idx : idx + 1] = [token[0], token[1]]
+
+    @staticmethod
     def _parse_path_coordinates(  # noqa: C901, PLR0912, PLR0915
         path_d: str,
     ) -> tuple[tuple[float, float], ...]:
@@ -515,7 +530,9 @@ class SvgMapConverter:
                     rx = read_number()
                     ry = read_number()
                     x_axis_rotation = read_number()
+                    SvgMapConverter._split_arc_flag_token(tokens, idx)
                     large_arc_flag = read_number()
+                    SvgMapConverter._split_arc_flag_token(tokens, idx)
                     sweep_flag = read_number()
                     x = read_number()
                     y = read_number()
@@ -567,6 +584,8 @@ class SvgMapConverter:
 
         if len(coordinates) < 2:
             filtered_coordinates = coordinate_pattern.findall(input_string)
+            # If both structured parsing and fallback regex fail, the path has
+            # no usable coordinates and should be dropped entirely.
             if not filtered_coordinates and not coordinates:
                 logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
                 return None

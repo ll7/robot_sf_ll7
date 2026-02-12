@@ -58,6 +58,15 @@ def test_parse_path_coordinates_supports_arc_absolute_and_relative() -> None:
     assert len(rel_coords) > 2
 
 
+def test_parse_path_coordinates_supports_compact_arc_flags() -> None:
+    """Arc commands should accept compact flag tokens like ``01``."""
+    coords = SvgMapConverter._parse_path_coordinates("M 0 0 A 5 5 0 01 10 0")
+
+    assert coords[0] == (0.0, 0.0)
+    assert coords[-1] == pytest.approx((10.0, 0.0))
+    assert len(coords) > 2
+
+
 def test_parse_path_coordinates_supports_close_path() -> None:
     """Close-path commands should append the starting waypoint."""
     coords = SvgMapConverter._parse_path_coordinates("M 0 0 l 1 0 0 1 -1 0 z")

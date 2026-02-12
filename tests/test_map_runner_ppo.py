@@ -87,3 +87,37 @@ def test_build_policy_ppo_rejects_unknown_action_payload(monkeypatch):
 
     with pytest.raises(ValueError, match="Unsupported PPO action payload"):
         policy(_sample_obs())
+
+
+def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():
+    """Ensure padded pedestrian channels are sliced by count and dt comes from sim metadata."""
+    obs = _sample_obs()
+    obs["sim"] = {"timestep": np.array([0.25], dtype=float)}
+    obs["pedestrians"] = {
+        "positions": np.array([[2.0, 2.0], [5.0, 5.0], [0.0, 0.0]], dtype=float),
+        "velocities": np.array([[0.1, 0.2]], dtype=float),
+        "count": np.array([2], dtype=float),
+        "radius": np.array([0.35], dtype=float),
+    }
+
+    formatted = map_runner._obs_to_ppo_format(obs)
+    assert formatted["dt"] == pytest.approx(0.25)
+    assert len(formatted["agents"]) == 2
+    assert formatted["agents"][0]["position"] == [2.0, 2.0]
+    assert formatted["agents"][0]["velocity"] == [0.1, 0.2]
+    assert formatted["agents"][1]["position"] == [5.0, 5.0]
+    assert formatted["agents"][1]["velocity"] == [0.0, 0.0]
+
+
+def test_obs_to_ppo_format_handles_malformed_flat_ped_arrays():
+    """Malformed odd-length flat pedestrian arrays should not produce ghost agents."""
+    obs = _sample_obs()
+    obs["pedestrians"] = {
+        "positions": np.array([1.0, 2.0, 3.0], dtype=float),
+        "velocities": np.array([0.1], dtype=float),
+        "count": np.array([3], dtype=float),
+        "radius": np.array([0.35], dtype=float),
+    }
+
+    formatted = map_runner._obs_to_ppo_format(obs)
+    assert formatted["agents"] == []

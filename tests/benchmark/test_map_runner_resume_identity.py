@@ -135,3 +135,30 @@ def test_resume_identity_includes_algo_config_hash(
         resume=True,
     )
     assert second["written"] == 1
+
+
+def test_scenario_identity_ignores_seed_schedule_fields() -> None:
+    """Identity hash should be stable even when scenario seed schedule changes."""
+    scenario_a = _minimal_map_scenario()
+    scenario_b = {**_minimal_map_scenario(), "seeds": [7, 9, 11]}
+
+    payload_a = map_runner._scenario_identity_payload(
+        scenario_a,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+    payload_b = map_runner._scenario_identity_payload(
+        scenario_b,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+
+    episode_a = map_runner._compute_map_episode_id(payload_a, seed=1)
+    episode_b = map_runner._compute_map_episode_id(payload_b, seed=1)
+    assert episode_a == episode_b

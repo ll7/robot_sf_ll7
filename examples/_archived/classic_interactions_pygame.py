@@ -593,9 +593,6 @@ def run_demo(
     eff_sweep = SWEEP_ALL if sweep is None else sweep
 
     fast_mode, eff_max = compute_fast_mode_and_cap(max_episodes=eff_max)
-    if explicit_fast_flag and enable_recording is None:
-        # Explicit fast-demo mode prioritizes startup speed; recording remains opt-in.
-        eff_record = False
     scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
     effective_output_dir = resolve_artifact_path(OUTPUT_DIR)
 

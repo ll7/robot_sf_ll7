@@ -18,6 +18,7 @@ SOFT_THRESHOLD_SECONDS = 8.0  # keeps a regression guard while accounting for ba
 def test_demo_runtime_under_threshold():
     """Ensure explicit fast-demo mode completes quickly for one non-recorded episode."""
     # Set fast demo env var BEFORE importing module so import-time constants / logic can read it
+    original_fast = os.environ.get("ROBOT_SF_FAST_DEMO")
     os.environ["ROBOT_SF_FAST_DEMO"] = "1"
     mod = importlib.import_module("examples.classic_interactions_pygame")
     original_dry = getattr(mod, "DRY_RUN", None)
@@ -29,6 +30,10 @@ def test_demo_runtime_under_threshold():
     try:
         episodes = mod.run_demo(enable_recording=False)
     finally:
+        if original_fast is None:
+            os.environ.pop("ROBOT_SF_FAST_DEMO", None)
+        else:
+            os.environ["ROBOT_SF_FAST_DEMO"] = original_fast
         if original_dry is not None:
             mod.DRY_RUN = original_dry  # type: ignore
         if original_max is not None:

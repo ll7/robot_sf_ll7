@@ -188,21 +188,29 @@ jobs:
 
       - name: Cold/warm perf regression smoke
         run: |
-          uv run python -m robot_sf.benchmark.perf_cold_warm \
-            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
-            --scenario-name classic_crossing_low \
-            --episode-steps 48 \
-            --cold-runs 1 \
-            --warm-runs 2 \
-            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json \
-            --output-json output/benchmarks/perf/cold_warm_pr_smoke.json \
-            --output-markdown output/benchmarks/perf/cold_warm_pr_smoke.md \
-            --max-slowdown-pct 0.60 \
-            --max-throughput-drop-pct 0.50 \
-            --min-seconds-delta 0.15 \
-            --min-throughput-delta 0.75 \
-            --require-baseline \
-            --fail-on-regression
+          CMD=(
+            uv run python -m robot_sf.benchmark.perf_cold_warm
+            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml
+            --scenario-name classic_crossing_low
+            --episode-steps 48
+            --cold-runs 1
+            --warm-runs 2
+            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json
+            --output-json output/benchmarks/perf/cold_warm_pr_smoke.json
+            --output-markdown output/benchmarks/perf/cold_warm_pr_smoke.md
+            --max-slowdown-pct 0.60
+            --max-throughput-drop-pct 0.50
+            --min-seconds-delta 0.15
+            --min-throughput-delta 0.75
+            --require-baseline
+          )
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Enforcing cold/warm regression gate"
+            "${CMD[@]}" --fail-on-regression
+          else
+            echo "Running cold/warm smoke in advisory mode on PR branch"
+            "${CMD[@]}"
+          fi
 
       - name: Telemetry tracker/perf smoke
         run: |

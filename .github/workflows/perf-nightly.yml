@@ -1,0 +1,96 @@
+name: Nightly Performance
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  perf-nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+      SDL_VIDEODRIVER: dummy
+      MPLBACKEND: Agg
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.11"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: System packages for headless
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libglib2.0-0 libgl1
+
+      - name: Sync dependencies (locked)
+        run: uv sync --all-extras --frozen
+
+      - name: Run nightly cold/warm perf suite (classic_crossing_low)
+        id: nightly_low
+        continue-on-error: true
+        run: |
+          uv run python -m robot_sf.benchmark.perf_cold_warm \
+            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
+            --scenario-name classic_crossing_low \
+            --episode-steps 96 \
+            --cold-runs 2 \
+            --warm-runs 4 \
+            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json \
+            --output-json output/benchmarks/perf/nightly/classic_crossing_low.json \
+            --output-markdown output/benchmarks/perf/nightly/classic_crossing_low.md \
+            --max-slowdown-pct 0.60 \
+            --max-throughput-drop-pct 0.50 \
+            --min-seconds-delta 0.15 \
+            --min-throughput-delta 0.75 \
+            --require-baseline \
+            --fail-on-regression
+
+      - name: Run nightly cold/warm perf suite (classic_crossing_medium)
+        id: nightly_medium
+        continue-on-error: true
+        run: |
+          uv run python -m robot_sf.benchmark.perf_cold_warm \
+            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
+            --scenario-name classic_crossing_medium \
+            --episode-steps 96 \
+            --cold-runs 2 \
+            --warm-runs 4 \
+            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json \
+            --output-json output/benchmarks/perf/nightly/classic_crossing_medium.json \
+            --output-markdown output/benchmarks/perf/nightly/classic_crossing_medium.md \
+            --max-slowdown-pct 0.60 \
+            --max-throughput-drop-pct 0.50 \
+            --min-seconds-delta 0.15 \
+            --min-throughput-delta 0.75 \
+            --require-baseline \
+            --fail-on-regression
+
+      - name: Fail if any nightly scenario regressed
+        if: always()
+        run: |
+          if [[ "${{ steps.nightly_low.outcome }}" == "failure" || "${{ steps.nightly_medium.outcome }}" == "failure" ]]; then
+            echo "At least one nightly cold/warm benchmark scenario failed."
+            exit 1
+          fi
+
+      - name: Upload nightly perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-perf-artifacts
+          path: output/benchmarks/perf/nightly/
+          if-no-files-found: ignore

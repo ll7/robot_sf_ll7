@@ -151,6 +151,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Performance & CI
 
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
+* **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
 * **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
 
 ### Hardware & Environment
@@ -450,4 +451,4 @@ When contributing to the project:
 
 ---
 
-*Last updated: September 2025 - Benchmark runner and batch API added*
+*Last updated: February 2026 - Cold/warm performance regression suite added*

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "suite": "classic-interactions-cold-warm-v1",
+  "scenario": "classic_crossing_low",
+  "notes": "Conservative baseline snapshot for CI regression checks. Tune via nightly artifacts if needed.",
+  "cold": {
+    "median": {
+      "env_create_sec": 3.0,
+      "first_step_sec": 2.0,
+      "episode_sec": 8.0,
+      "steps_per_sec": 2.5
+    }
+  },
+  "warm": {
+    "median": {
+      "env_create_sec": 2.0,
+      "first_step_sec": 0.35,
+      "episode_sec": 6.0,
+      "steps_per_sec": 3.5
+    }
+  }
+}

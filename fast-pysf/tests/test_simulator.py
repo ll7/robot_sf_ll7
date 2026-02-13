@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Integration-style simulator smoke tests for the fast-pysf package."""
 
 import warnings
 
@@ -8,7 +8,7 @@ from pysocialforce.scene import PedState
 
 
 def test_can_simulate_with_empty_map_no_peds():
-    """TODO docstring. Document this function."""
+    """Simulator should step without errors on an empty default map."""
     simulator = pysf.Simulator_v2()
     for _ in range(10):
         simulator.step()
@@ -16,7 +16,7 @@ def test_can_simulate_with_empty_map_no_peds():
 
 
 def test_can_simulate_with_populated_map():
-    """TODO docstring. Document this function."""
+    """Simulator should step without errors when obstacles/routes/zones are present."""
     obstacle01 = pysf.map_config.Obstacle([(10, 10), (15, 10), (15, 15), (10, 15)])
     obstacle02 = pysf.map_config.Obstacle([(20, 10), (25, 10), (25, 15), (20, 15)])
 

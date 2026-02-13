@@ -259,6 +259,20 @@ def _extract_robot_xy(robot_pose: Any) -> np.ndarray:
     return np.zeros(2, dtype=float)
 
 
+def _coerce_xy_rows(data: Any) -> np.ndarray:
+    """Coerce simulator arrays into ``(N, 2)`` float rows.
+
+    Returns:
+        np.ndarray: Array with shape ``(N, 2)``; invalid layouts produce an empty array.
+    """
+    values = np.asarray(data, dtype=float)
+    if values.ndim == 1:
+        return values.reshape(-1, 2) if values.size % 2 == 0 else np.zeros((0, 2), dtype=float)
+    if values.ndim == 2 and values.shape[-1] >= 2:
+        return values[:, :2]
+    return np.zeros((0, 2), dtype=float)
+
+
 def _resolve_snqi_thresholds() -> tuple[float, float, float]:
     """Resolve SNQI threshold constants lazily to avoid import cycles.
 
@@ -279,7 +293,7 @@ def _resolve_snqi_thresholds() -> tuple[float, float, float]:
             near_miss_dist,
             comfort_force_threshold,
         )
-    except (ImportError, ModuleNotFoundError):
+    except (ImportError, ModuleNotFoundError, AttributeError):
         _SNQI_THRESHOLD_CACHE = (
             _DEFAULT_COLLISION_DIST,
             _DEFAULT_NEAR_MISS_DIST,
@@ -318,9 +332,7 @@ def _compute_snqi_step_proxies(
         else np.zeros(2)
     )
 
-    ped_pos = np.asarray(getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float)), dtype=float)
-    if ped_pos.ndim == 1:
-        ped_pos = ped_pos.reshape(-1, 2) if ped_pos.size % 2 == 0 else np.zeros((0, 2), dtype=float)
+    ped_pos = _coerce_xy_rows(getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float)))
 
     near_misses = 0.0
     if ped_pos.size > 0:
@@ -328,19 +340,12 @@ def _compute_snqi_step_proxies(
         min_dist = float(np.linalg.norm(deltas, axis=1).min())
         near_misses = 1.0 if d_coll <= min_dist < d_near else 0.0
 
-    ped_forces = np.asarray(
-        getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float)),
-        dtype=float,
+    ped_forces = _coerce_xy_rows(
+        getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float))
     )
-    if ped_forces.ndim == 1:
-        ped_forces = (
-            ped_forces.reshape(-1, 2) if ped_forces.size % 2 == 0 else np.zeros((0, 2), dtype=float)
-        )
-    if ped_forces.ndim == 2 and ped_forces.shape[-1] >= 2:
-        force_magnitudes = np.linalg.norm(ped_forces[:, :2], axis=1)
-    else:
-        force_magnitudes = np.zeros((0,), dtype=float)
+    force_magnitudes = np.linalg.norm(ped_forces, axis=1) if ped_forces.size > 0 else np.zeros((0,))
     force_exceed_events = float(np.count_nonzero(force_magnitudes > comfort_force_threshold))
+    # Some backends can transiently report different lengths for ped positions/forces between ticks.
     ped_count = max(int(ped_pos.shape[0]), int(force_magnitudes.shape[0]))
     comfort_exposure = force_exceed_events / float(max(1, ped_count))
 

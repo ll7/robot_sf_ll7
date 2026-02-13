@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.robot_env import _compute_snqi_step_proxies, _StepSNQIProxyState
@@ -17,9 +18,24 @@ class _FakeSimulator:
         self.last_ped_forces = np.array([[3.0, 0.0], [0.5, 0.0]], dtype=float)
 
 
-def test_compute_snqi_step_proxies_emits_non_default_terms() -> None:
+def test_compute_snqi_step_proxies_emits_non_default_terms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Proxy computation should emit near-miss, force, and running jerk signals."""
+    d_coll = 0.2
+    d_near = 0.6
+    comfort_threshold = 1.4
+    near_distance = (d_coll + d_near) / 2.0
     sim = _FakeSimulator()
+    sim.ped_pos = np.array([[near_distance, 0.0], [4.0, 4.0]], dtype=float)
+    sim.last_ped_forces = np.array(
+        [[comfort_threshold + 0.8, 0.0], [comfort_threshold - 0.8, 0.0]],
+        dtype=float,
+    )
+    monkeypatch.setattr(
+        "robot_sf.gym_env.robot_env._resolve_snqi_thresholds",
+        lambda: (d_coll, d_near, comfort_threshold),
+    )
     state = _StepSNQIProxyState()
 
     first = _compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=state)

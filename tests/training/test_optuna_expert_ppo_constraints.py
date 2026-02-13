@@ -167,7 +167,7 @@ def test_resolve_trial_metric_episodic_mode_uses_episode_values() -> None:
         {"eval_step": 100, "metrics": {"snqi": 1.0}},
         {"eval_step": 200, "metrics": {"snqi": 1.0}},
     ]
-    metric_value, _series = _resolve_trial_metric(
+    metric_value, series = _resolve_trial_metric(
         result=result,
         records=records,
         metric_name="snqi",
@@ -178,3 +178,8 @@ def test_resolve_trial_metric_episodic_mode_uses_episode_values() -> None:
         episodic_metric_from_records_fn=episodic_metric_from_records,
     )
     assert metric_value == pytest.approx(2.0 / 3.0)
+    assert len(series) == 2
+    assert series[0][0] == 100
+    assert series[0][1] == pytest.approx(0.5)
+    assert series[1][0] == 200
+    assert series[1][1] == pytest.approx(1.0)

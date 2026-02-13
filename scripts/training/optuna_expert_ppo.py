@@ -264,6 +264,11 @@ def _resolve_metric_for_mode(  # noqa: PLR0913
         )
         if episodic_metric is not None:
             metric_value = float(episodic_metric)
+    elif objective_mode == "episodic_snqi":
+        logger.debug(
+            "episodic_snqi mode requested but episodic_metric_from_records_fn is None; "
+            "falling back to aggregate metric."
+        )
 
     series = eval_metric_series_fn(records, metric_name=metric_name)
     if objective_mode != "episodic_snqi":

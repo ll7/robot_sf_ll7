@@ -8,11 +8,16 @@ from dataclasses import dataclass
 import optuna
 import pytest
 
-from robot_sf.training.optuna_objective import eval_metric_series, objective_from_series
+from robot_sf.training.optuna_objective import (
+    episodic_metric_from_records,
+    eval_metric_series,
+    objective_from_series,
+)
 from scripts.training.optuna_expert_ppo import (
     _apply_constraint_handling,
     _build_safety_constraints,
     _evaluate_safety_constraints,
+    _resolve_trial_metric,
 )
 
 
@@ -135,3 +140,41 @@ def test_apply_constraint_handling_prune_raises_trial_pruned() -> None:
             violations={"collision_rate": 0.1},
             missing_metrics=[],
         )
+
+
+def test_resolve_trial_metric_episodic_mode_falls_back_when_logs_missing() -> None:
+    """Episodic mode should fall back to aggregate metrics when episode logs are absent."""
+    result = _ResultStub(metrics={"snqi": _MetricAggregateStub(mean=0.42)})
+    metric_value, series = _resolve_trial_metric(
+        result=result,
+        records=[],
+        metric_name="snqi",
+        objective_mode="episodic_snqi",
+        objective_window=3,
+        eval_metric_series_fn=eval_metric_series,
+        objective_from_series_fn=objective_from_series,
+        episodic_metric_from_records_fn=episodic_metric_from_records,
+    )
+    assert metric_value == pytest.approx(0.42)
+    assert series == []
+
+
+def test_resolve_trial_metric_episodic_mode_uses_episode_values() -> None:
+    """Episodic mode should use full episode records when available."""
+    result = _ResultStub(metrics={"snqi": _MetricAggregateStub(mean=0.0)})
+    records = [
+        {"eval_step": 100, "metrics": {"snqi": 0.0}},
+        {"eval_step": 100, "metrics": {"snqi": 1.0}},
+        {"eval_step": 200, "metrics": {"snqi": 1.0}},
+    ]
+    metric_value, _series = _resolve_trial_metric(
+        result=result,
+        records=records,
+        metric_name="snqi",
+        objective_mode="episodic_snqi",
+        objective_window=3,
+        eval_metric_series_fn=eval_metric_series,
+        objective_from_series_fn=objective_from_series,
+        episodic_metric_from_records_fn=episodic_metric_from_records,
+    )
+    assert metric_value == pytest.approx(2.0 / 3.0)

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
+OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -111,6 +111,54 @@ def objective_from_series(
         return area / span
     if mode == "best_checkpoint":
         return None
+    if mode == "episodic_snqi":
+        return None
     raise ValueError(
         f"Unknown objective mode '{mode}'. Expected one of: {', '.join(OBJECTIVE_MODES)}"
     )
+
+
+def episodic_metric_from_records(
+    records: Iterable[Mapping[str, object]],
+    *,
+    metric_name: str,
+    window: int,
+) -> float | None:
+    """Compute an episodic objective directly from per-episode evaluation records.
+
+    Args:
+        records: Episode-level records loaded from training JSONL artifacts.
+        metric_name: Metric key expected inside ``record['metrics']``.
+        window: Number of latest eval steps to include (``>=1``).
+
+    Returns:
+        float | None: Mean metric across selected episodes, or ``None`` if unavailable.
+    """
+    step_values: list[tuple[int, float]] = []
+    for record in records:
+        eval_step_raw = record.get("eval_step")
+        metrics = record.get("metrics")
+        if eval_step_raw is None or not isinstance(metrics, Mapping):
+            continue
+        metric_value = metrics.get(metric_name)
+        if metric_value is None:
+            continue
+        try:
+            eval_step = int(eval_step_raw)
+            value = float(metric_value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(value):
+            continue
+        step_values.append((eval_step, value))
+
+    if not step_values:
+        return None
+
+    tail = max(1, int(window))
+    ordered_steps = sorted({step for step, _ in step_values})
+    keep_steps = set(ordered_steps[-tail:])
+    selected_values = [value for step, value in step_values if step in keep_steps]
+    if not selected_values:
+        return None
+    return float(np.mean(selected_values))

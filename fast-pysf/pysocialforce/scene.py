@@ -14,15 +14,15 @@ Group = list[int]
 
 
 class PedState:
-    """Tracks the state of pedstrains and social groups"""
+    """Track pedestrian kinematic state and optional social groups."""
 
     def __init__(self, state: np.ndarray, groups: list[Group], config: SceneConfig):
-        """TODO docstring. Document this function.
+        """Initialize pedestrian state from raw simulator arrays.
 
         Args:
-            state: TODO docstring.
-            groups: TODO docstring.
-            config: TODO docstring.
+            state: Pedestrian state matrix ``(N, 6|7)`` with position/velocity/goal.
+            groups: Pedestrian grouping indices.
+            config: Scene configuration with integration and speed settings.
         """
         self.default_tau = config.tau
         self.d_t = config.dt_secs
@@ -34,20 +34,20 @@ class PedState:
         self.update(state, groups)
 
     def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
-        """TODO docstring. Document this function.
+        """Update pedestrian state and group memberships.
 
         Args:
-            state: TODO docstring.
-            groups: TODO docstring.
+            state: Updated pedestrian state matrix.
+            groups: Updated pedestrian groups.
         """
         self.state = state
         self.groups = groups
 
     def _update_state(self, state: np.ndarray) -> None:
-        """TODO docstring. Document this function.
+        """Normalize and cache state-derived fields.
 
         Args:
-            state: TODO docstring.
+            state: Pedestrian state matrix with or without explicit ``tau`` column.
         """
         tau = np.full((state.shape[0]), self.default_tau)
         if state.shape[1] < 7:
@@ -60,75 +60,40 @@ class PedState:
 
     @property
     def state(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the current pedestrian state matrix."""
         return self._state
 
     @state.setter
     def state(self, state: np.ndarray):
-        """TODO docstring. Document this function.
+        """Set pedestrian state and refresh derived caches.
 
         Args:
-            state: TODO docstring.
+            state: Pedestrian state matrix.
         """
         self._update_state(state)
 
     def get_states(self) -> tuple[np.ndarray, list[list[list[int]]]]:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return a batched snapshot of state and group assignments."""
         return np.array([self.state]), [self.groups]
 
     def size(self) -> int:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the number of pedestrians in the scene."""
         return self.state.shape[0]
 
     def pos(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return pedestrian positions as ``(N, 2)`` array."""
         return self.state[:, 0:2]
 
     def vel(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return pedestrian velocities as ``(N, 2)`` array."""
         return self.state[:, 2:4]
 
     def goal(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return pedestrian goal positions as ``(N, 2)`` array."""
         return self.state[:, 4:6]
 
     def tau(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return relaxation-time values as ``(N, 1)`` column vector."""
         return self.state[:, 6:7]
 
     def speeds(self) -> np.ndarray:
@@ -136,7 +101,12 @@ class PedState:
         return np.linalg.norm(self.vel(), axis=1)
 
     def step(self, force, groups=None):
-        """Move peds according to forces"""
+        """Advance pedestrians by one integration step.
+
+        Args:
+            force: Per-pedestrian force vectors.
+            groups: Optional updated group assignments.
+        """
         # desired velocity
         desired_velocity = self.vel() + self.d_t * force
         desired_velocity = self.capped_velocity(desired_velocity, self.max_speeds)
@@ -169,20 +139,15 @@ class PedState:
 
     @property
     def groups(self) -> list[list]:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return grouped pedestrian indices."""
         return self._groups
 
     @groups.setter
     def groups(self, groups: list[list]):
-        """TODO docstring. Document this function.
+        """Set grouped pedestrian indices.
 
         Args:
-            groups: TODO docstring.
+            groups: Group definitions; ``None`` maps to empty groups.
         """
         if groups is None:
             self._groups = []
@@ -190,12 +155,7 @@ class PedState:
             self._groups = groups
 
     def has_group(self) -> bool:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return whether group metadata is present."""
         return self.groups is not None
 
     def which_group(self, index: int) -> int:
@@ -223,7 +183,7 @@ class EnvState:
     _obstacles_raw: np.ndarray = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize cached obstacle representations."""
         self._obstacles_raw = self._update_obstacles_raw(self._orig_obstacles)
         self._obstacles_linspace = self._update_obstacles_linspace(self._orig_obstacles)
 
@@ -249,13 +209,13 @@ class EnvState:
         self._obstacles_linspace = self._update_obstacles_linspace(obstacles)
 
     def _update_obstacles_linspace(self, obs_lines: list[Line2D]) -> list[np.ndarray]:
-        """TODO docstring. Document this function.
+        """Convert obstacle segments into sampled polyline points.
 
         Args:
-            obs_lines: TODO docstring.
+            obs_lines: Obstacle line segments.
 
         Returns:
-            TODO docstring.
+            list[np.ndarray]: Sampled points for each obstacle segment.
         """
         if obs_lines is None:
             obstacles = []

@@ -47,6 +47,19 @@ def test_build_reward_function_supports_snqi_step_name():
     assert math.isfinite(value)
 
 
+def test_snqi_step_reward_consumes_extended_proxy_terms():
+    """Additional SNQI proxy terms should affect the step reward score."""
+    base = snqi_step_reward(_meta(collision=False, success=False))
+    enriched_meta = {
+        **_meta(collision=False, success=False),
+        "near_misses": 2.0,
+        "force_exceed_events": 3.0,
+        "jerk_mean": 1.5,
+    }
+    enriched = snqi_step_reward(enriched_meta)
+    assert enriched < base
+
+
 def test_make_robot_env_builds_reward_func_from_reward_name(monkeypatch):
     """Factory should build reward callables from reward_name when reward_func is omitted."""
     captured: dict[str, object] = {}

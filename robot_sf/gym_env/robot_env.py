@@ -11,6 +11,7 @@ It also defines the action and observation spaces for the robot.
 """
 
 import hashlib
+import importlib
 import json
 import time
 import uuid
@@ -24,15 +25,6 @@ import numpy as np
 from gymnasium import spaces
 from loguru import logger
 
-from robot_sf.benchmark.constants import (
-    COLLISION_DIST as D_COLL,
-)
-from robot_sf.benchmark.constants import (
-    COMFORT_FORCE_THRESHOLD,
-)
-from robot_sf.benchmark.constants import (
-    NEAR_MISS_DIST as D_NEAR,
-)
 from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
@@ -65,6 +57,10 @@ DEFAULT_PANE_WIDTH = 320
 DEFAULT_PANE_HEIGHT = 240
 MIN_PANE_WIDTH = 200
 MIN_PANE_HEIGHT = 160
+_DEFAULT_COLLISION_DIST = 0.25
+_DEFAULT_NEAR_MISS_DIST = 0.50
+_DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
+_SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
 
 
 @dataclass(slots=True)
@@ -263,6 +259,35 @@ def _extract_robot_xy(robot_pose: Any) -> np.ndarray:
     return np.zeros(2, dtype=float)
 
 
+def _resolve_snqi_thresholds() -> tuple[float, float, float]:
+    """Resolve SNQI threshold constants lazily to avoid import cycles.
+
+    Returns:
+        tuple[float, float, float]: ``(collision_dist, near_miss_dist, comfort_force_threshold)``.
+    """
+    global _SNQI_THRESHOLD_CACHE
+    if _SNQI_THRESHOLD_CACHE is not None:
+        return _SNQI_THRESHOLD_CACHE
+    try:
+        constants_module = importlib.import_module("robot_sf.benchmark.constants")
+        collision_dist = float(constants_module.COLLISION_DIST)
+        near_miss_dist = float(constants_module.NEAR_MISS_DIST)
+        comfort_force_threshold = float(constants_module.COMFORT_FORCE_THRESHOLD)
+
+        _SNQI_THRESHOLD_CACHE = (
+            collision_dist,
+            near_miss_dist,
+            comfort_force_threshold,
+        )
+    except (ImportError, ModuleNotFoundError):
+        _SNQI_THRESHOLD_CACHE = (
+            _DEFAULT_COLLISION_DIST,
+            _DEFAULT_NEAR_MISS_DIST,
+            _DEFAULT_COMFORT_FORCE_THRESHOLD,
+        )
+    return _SNQI_THRESHOLD_CACHE
+
+
 def _compute_snqi_step_proxies(
     *,
     simulator: Any,
@@ -285,6 +310,7 @@ def _compute_snqi_step_proxies(
     Returns:
         dict[str, float]: Step-level SNQI-aligned metadata terms.
     """
+    d_coll, d_near, comfort_force_threshold = _resolve_snqi_thresholds()
     robot_poses = getattr(simulator, "robot_poses", [])
     robot_pos = (
         _extract_robot_xy(robot_poses[0])
@@ -300,7 +326,7 @@ def _compute_snqi_step_proxies(
     if ped_pos.size > 0:
         deltas = ped_pos[:, :2] - robot_pos
         min_dist = float(np.linalg.norm(deltas, axis=1).min())
-        near_misses = 1.0 if D_COLL <= min_dist < D_NEAR else 0.0
+        near_misses = 1.0 if d_coll <= min_dist < d_near else 0.0
 
     ped_forces = np.asarray(
         getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float)),
@@ -314,7 +340,7 @@ def _compute_snqi_step_proxies(
         force_magnitudes = np.linalg.norm(ped_forces[:, :2], axis=1)
     else:
         force_magnitudes = np.zeros((0,), dtype=float)
-    force_exceed_events = float(np.count_nonzero(force_magnitudes > COMFORT_FORCE_THRESHOLD))
+    force_exceed_events = float(np.count_nonzero(force_magnitudes > comfort_force_threshold))
     ped_count = max(int(ped_pos.shape[0]), int(force_magnitudes.shape[0]))
     comfort_exposure = force_exceed_events / float(max(1, ped_count))
 

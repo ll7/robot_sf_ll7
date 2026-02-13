@@ -12,7 +12,7 @@ without additional context.
   uv sync --all-extras
   source .venv/bin/activate
   ```
-- Stable-Baselines3 installed (included in extras).
+- Stable-Baselines3 installed (included in core dependencies).
 - Artifact root (recommended):
   ```bash
   export ROBOT_SF_ARTIFACT_ROOT=$PWD/output

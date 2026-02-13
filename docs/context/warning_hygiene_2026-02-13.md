@@ -34,6 +34,12 @@ Previous full test run emitted 10 warning-summary entries:
 - `tests/test_classic_interactions_matrix.py`
   - Replaced runtime advisory warnings with explicit annotation assertions.
   - Intentional outliers stay visible via config metadata, while test output remains high signal.
+- `pyproject.toml` + `uv.lock`
+  - Replaced `stable-baselines3[extra]` with `stable-baselines3` to avoid pulling
+    `opencv-python` (and its SDL dylibs) into the default environment.
+  - This removes the cv2/pygame SDL duplicate-library collision source on macOS.
+- `docs/training/issue_403_grid_training.md`
+  - Updated dependency note to reflect that Stable-Baselines3 is now part of core dependencies.
 
 ## Validation
 - Targeted checks:
@@ -44,5 +50,5 @@ Previous full test run emitted 10 warning-summary entries:
   - Result: `1808 passed, 10 skipped` with no warnings summary block.
 
 ## Remaining / Deferred
-- macOS SDL duplicate-class `objc` log flood (cv2 + pygame SDL dylibs) is environment/dependency-level and remains tracked in #496.
-- Proposed next step for SDL item: isolate OpenCV usage to headless dependency in non-GUI contexts and document import-order/runtime guard strategy.
+- No known pytest warning-summary entries remain from the #496 checklist after these changes.
+- Keep monitoring for environment-specific SDL diagnostics when users install additional local packages manually.

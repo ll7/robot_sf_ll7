@@ -162,8 +162,9 @@ class PedState:
             np.ndarray: Capped velocity vectors.
         """
         desired_speeds = np.linalg.norm(desired_velocity, axis=-1)
-        factor = np.minimum(1.0, max_velocity / desired_speeds)
-        factor[desired_speeds == 0] = 0.0
+        factor = np.zeros_like(desired_speeds, dtype=float)
+        np.divide(max_velocity, desired_speeds, out=factor, where=desired_speeds > 0.0)
+        factor = np.minimum(1.0, factor)
         return desired_velocity * np.expand_dims(factor, -1)
 
     @property

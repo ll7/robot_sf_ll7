@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://robot-sf.dev/specs/270-imitation-report/report-metadata.schema.v1.json",
   "title": "ResearchReportMetadata",
   "description": "Complete metadata for a research report including experiment context, reproducibility, and artifact locations",

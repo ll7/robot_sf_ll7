@@ -23,7 +23,7 @@ from loguru import logger
 from optuna.trial import TrialState
 from sqlalchemy.engine import make_url
 
-_OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
+_OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 _DEFAULT_STORAGE_ROOT = Path("output/benchmarks/ppo_imitation/hparam_opt").resolve()
@@ -122,7 +122,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=_OBJECTIVE_MODES,
         help=(
             "How to reduce evaluation history to a scalar objective: "
-            "best_checkpoint|final_eval|last_n_mean|auc."
+            "best_checkpoint|final_eval|last_n_mean|auc|episodic_snqi."
         ),
     )
     parser.add_argument(
@@ -232,7 +232,7 @@ def _build_safety_constraints(args: argparse.Namespace) -> dict[str, float]:
     return constraints
 
 
-def _resolve_metric_for_mode(
+def _resolve_metric_for_mode(  # noqa: PLR0913
     *,
     result,
     records: list[dict[str, object]],
@@ -241,6 +241,7 @@ def _resolve_metric_for_mode(
     objective_window: int,
     eval_metric_series_fn: Any,
     objective_from_series_fn: Any,
+    episodic_metric_from_records_fn: Any | None = None,
     prefer_best_checkpoint: bool,
 ) -> tuple[float | None, list[tuple[int, float]]]:
     """Resolve a scalar metric using objective-mode reducers and training fallbacks.
@@ -255,14 +256,29 @@ def _resolve_metric_for_mode(
         if raw is not None:
             metric_value = float(raw)
 
+    if objective_mode == "episodic_snqi" and episodic_metric_from_records_fn is not None:
+        episodic_metric = episodic_metric_from_records_fn(
+            records,
+            metric_name=metric_name,
+            window=objective_window,
+        )
+        if episodic_metric is not None:
+            metric_value = float(episodic_metric)
+    elif objective_mode == "episodic_snqi":
+        logger.debug(
+            "episodic_snqi mode requested but episodic_metric_from_records_fn is None; "
+            "falling back to aggregate metric."
+        )
+
     series = eval_metric_series_fn(records, metric_name=metric_name)
-    derived_metric = objective_from_series_fn(
-        series,
-        mode=objective_mode,
-        window=objective_window,
-    )
-    if derived_metric is not None:
-        metric_value = float(derived_metric)
+    if objective_mode != "episodic_snqi":
+        derived_metric = objective_from_series_fn(
+            series,
+            mode=objective_mode,
+            window=objective_window,
+        )
+        if derived_metric is not None:
+            metric_value = float(derived_metric)
 
     if metric_value is None:
         aggregate = result.metrics.get(metric_name)
@@ -279,6 +295,7 @@ def _evaluate_safety_constraints(
     objective_window: int,
     eval_metric_series_fn: Any,
     objective_from_series_fn: Any,
+    episodic_metric_from_records_fn: Any | None = None,
 ) -> tuple[bool, dict[str, float], dict[str, float], list[str]]:
     """Evaluate configured safety constraints for one trial.
 
@@ -304,6 +321,7 @@ def _evaluate_safety_constraints(
             objective_window=objective_window,
             eval_metric_series_fn=eval_metric_series_fn,
             objective_from_series_fn=objective_from_series_fn,
+            episodic_metric_from_records_fn=episodic_metric_from_records_fn,
             prefer_best_checkpoint=prefer_best_checkpoint,
         )
         if metric_value is None:
@@ -425,6 +443,7 @@ def _resolve_trial_metric(
     objective_window: int,
     eval_metric_series_fn: Any,
     objective_from_series_fn: Any,
+    episodic_metric_from_records_fn: Any | None = None,
 ) -> tuple[float | None, list[tuple[int, float]]]:
     """Resolve the optimization scalar from training outputs."""
     return _resolve_metric_for_mode(
@@ -435,6 +454,7 @@ def _resolve_trial_metric(
         objective_window=objective_window,
         eval_metric_series_fn=eval_metric_series_fn,
         objective_from_series_fn=objective_from_series_fn,
+        episodic_metric_from_records_fn=episodic_metric_from_records_fn,
         prefer_best_checkpoint=(objective_mode == "best_checkpoint"),
     )
 
@@ -495,6 +515,7 @@ class _ObjectiveContext:
     load_episode_records_fn: Any
     eval_metric_series_fn: Any
     objective_from_series_fn: Any
+    episodic_metric_from_records_fn: Any
 
 
 def _make_objective(ctx: _ObjectiveContext) -> Any:
@@ -523,6 +544,7 @@ def _make_objective(ctx: _ObjectiveContext) -> Any:
             objective_window=ctx.objective_window,
             eval_metric_series_fn=ctx.eval_metric_series_fn,
             objective_from_series_fn=ctx.objective_from_series_fn,
+            episodic_metric_from_records_fn=ctx.episodic_metric_from_records_fn,
         )
         if metric_value is None:
             raise ValueError(f"Metric '{ctx.metric_name}' not found in training output.")
@@ -535,6 +557,7 @@ def _make_objective(ctx: _ObjectiveContext) -> Any:
             objective_window=ctx.objective_window,
             eval_metric_series_fn=ctx.eval_metric_series_fn,
             objective_from_series_fn=ctx.objective_from_series_fn,
+            episodic_metric_from_records_fn=ctx.episodic_metric_from_records_fn,
         )
         _register_trial_metadata(
             trial,
@@ -615,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from robot_sf.training.imitation_config import EvaluationSchedule
         from robot_sf.training.optuna_objective import (
+            episodic_metric_from_records,
             eval_metric_series,
             load_episode_records,
             objective_from_series,
@@ -624,6 +648,12 @@ def main(argv: list[str] | None = None) -> int:
         base_config = load_expert_training_config(config_path)
         metric_name, direction = _resolve_metric_direction(args.metric)
         objective_mode = str(args.objective_mode)
+        if objective_mode == "episodic_snqi" and metric_name != "snqi":
+            logger.warning(
+                "objective_mode=episodic_snqi requires SNQI. Overriding metric '{}' -> 'snqi'.",
+                metric_name,
+            )
+            metric_name, direction = "snqi", "maximize"
         objective_window = max(1, int(args.objective_window))
         safety_constraints = _build_safety_constraints(args)
         constraint_handling = str(args.constraint_handling)
@@ -670,6 +700,7 @@ def main(argv: list[str] | None = None) -> int:
                 load_episode_records_fn=load_episode_records,
                 eval_metric_series_fn=eval_metric_series,
                 objective_from_series_fn=objective_from_series,
+                episodic_metric_from_records_fn=episodic_metric_from_records,
             )
         )
 

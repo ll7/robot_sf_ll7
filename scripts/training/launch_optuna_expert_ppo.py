@@ -13,7 +13,7 @@ import yaml
 from loguru import logger
 from sqlalchemy.engine import make_url
 
-_OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc")
+_OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 

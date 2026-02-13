@@ -203,6 +203,12 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
   `snqi_step`) passed to `make_robot_env` for training/eval environments.
 - `env_factory_kwargs.reward_kwargs`: Optional keyword arguments for the selected reward.
 
+`snqi_step` metadata notes (for reward fidelity):
+- `near_misses`: Exact per-step robot-pedestrian threshold event.
+- `force_exceed_events`: Exact per-step count of pedestrians above comfort force threshold.
+- `jerk_mean`: Running finite-difference proxy from robot motion (step-level approximation).
+- `comfort_exposure`: Per-step normalized proxy (`force_exceed_events / pedestrian_count`).
+
 Best checkpoints are written to:
 `output/benchmarks/expert_policies/checkpoints/<policy_id>/<policy_id>_best.zip`
 
@@ -214,6 +220,13 @@ Use the launcher config to keep study settings reproducible:
 uv run python scripts/training/launch_optuna_expert_ppo.py \
   --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
 ```
+
+Objective modes:
+- `best_checkpoint`
+- `final_eval`
+- `last_n_mean`
+- `auc`
+- `episodic_snqi` (uses full episode-level SNQI records and falls back to aggregated metrics when logs are missing)
 
 Safety-gated Optuna selection is available via:
 

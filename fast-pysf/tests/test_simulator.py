@@ -1,5 +1,7 @@
 """TODO docstring. Document this module."""
 
+import warnings
+
 import numpy as np
 import pysocialforce as pysf
 from pysocialforce.scene import PedState
@@ -37,7 +39,9 @@ def test_capped_velocity_handles_zero_desired_speed_without_runtime_warning():
     desired_velocity = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float)
     max_velocity = np.array([0.0, 0.5], dtype=float)
 
-    capped = PedState.capped_velocity(desired_velocity, max_velocity)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        capped = PedState.capped_velocity(desired_velocity, max_velocity)
 
     assert np.all(np.isfinite(capped))
     assert np.allclose(capped[0], np.array([0.0, 0.0], dtype=float))

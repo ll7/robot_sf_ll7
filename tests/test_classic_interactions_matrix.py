@@ -28,9 +28,8 @@ REQUIRED_SCENARIO_KEYS = {
     "seeds",
 }
 # Recommended canonical density triad retained for benchmarking summaries.
-# Tests now accept any positive ped_density but emit a warning when a value
-# falls outside the recommended inclusive range [0.02, 0.08]. This enables
-# exploratory sweeps while preserving guidance for benchmark stability.
+# Tests now accept any non-negative ped_density, but require explicit
+# ``metadata.density_advisory`` annotations for intentional outlier values.
 RECOMMENDED_DENSITIES = {0.02, 0.05, 0.08}
 RECOMMENDED_RANGE = (0.02, 0.08)
 ZERO_DENSITY_ADVISORY = "zero_baseline_route_spawn"
@@ -55,7 +54,13 @@ def test_yaml_parses() -> None:
 
 
 def test_each_scenario_structure_and_files() -> None:
-    """TODO docstring. Document this function."""
+    """Validate per-scenario schema, map references, and density advisory contracts.
+
+    This test ensures each scenario includes required keys, references an existing
+    map file, uses non-negative pedestrian density, and sets
+    ``metadata.density_advisory`` when densities intentionally fall outside the
+    recommended range.
+    """
     scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     for scenario in scenarios:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
@@ -77,20 +82,16 @@ def test_each_scenario_structure_and_files() -> None:
                     f"Scenario {scenario['name']} uses ped_density=0.0 and must set "
                     f"metadata.density_advisory={ZERO_DENSITY_ADVISORY!r}."
                 )
-            low, high = RECOMMENDED_RANGE
-            if not (low <= density <= high):
-                if density == 0:
-                    pass
-                elif density < low:
-                    assert advisory == LOW_DENSITY_ADVISORY, (
-                        f"Scenario {scenario['name']} uses ped_density={density} and must set "
-                        f"metadata.density_advisory={LOW_DENSITY_ADVISORY!r}."
-                    )
-                else:
-                    assert advisory == HIGH_DENSITY_ADVISORY, (
-                        f"Scenario {scenario['name']} uses ped_density={density} and must set "
-                        f"metadata.density_advisory={HIGH_DENSITY_ADVISORY!r}."
-                    )
+            elif density < RECOMMENDED_RANGE[0]:
+                assert advisory == LOW_DENSITY_ADVISORY, (
+                    f"Scenario {scenario['name']} uses ped_density={density} and must set "
+                    f"metadata.density_advisory={LOW_DENSITY_ADVISORY!r}."
+                )
+            elif density > RECOMMENDED_RANGE[1]:
+                assert advisory == HIGH_DENSITY_ADVISORY, (
+                    f"Scenario {scenario['name']} uses ped_density={density} and must set "
+                    f"metadata.density_advisory={HIGH_DENSITY_ADVISORY!r}."
+                )
             else:
                 assert advisory in (None, ""), (
                     f"Scenario {scenario['name']} is in the recommended density range and should "

@@ -164,7 +164,7 @@ class PedState:
         desired_speeds = np.linalg.norm(desired_velocity, axis=-1)
         factor = np.zeros_like(desired_speeds, dtype=float)
         np.divide(max_velocity, desired_speeds, out=factor, where=desired_speeds > 0.0)
-        factor = np.minimum(1.0, factor)
+        np.minimum(factor, 1.0, out=factor)
         return desired_velocity * np.expand_dims(factor, -1)
 
     @property

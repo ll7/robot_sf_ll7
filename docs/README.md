@@ -152,6 +152,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
+* **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes
 * **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
 
 ### Hardware & Environment

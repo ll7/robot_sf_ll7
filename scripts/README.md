@@ -777,6 +777,13 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/lau
   --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
   --study-name weekend_optuna_auc \
   --objective-mode auc
+
+# episodic_snqi (full episode-log objective)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_episodic_snqi \
+  --metric snqi \
+  --objective-mode episodic_snqi
 ```
 
 #### `training/train_dreamerv3_rllib.py`

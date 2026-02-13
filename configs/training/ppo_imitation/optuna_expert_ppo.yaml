@@ -3,7 +3,7 @@ base_config: expert_ppo.yaml
 # Study settings
 trials: 8
 metric: eval_episode_return
-objective_mode: last_n_mean
+objective_mode: last_n_mean # best_checkpoint | final_eval | last_n_mean | auc | episodic_snqi
 objective_window: 3
 study_name: weekend_optuna_expert_ppo_last_n_mean
 storage: sqlite:///output/optuna/weekend_optuna_expert_ppo.db

@@ -10,7 +10,6 @@ Ensures that:
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 
 import pytest
@@ -29,11 +28,13 @@ REQUIRED_SCENARIO_KEYS = {
     "seeds",
 }
 # Recommended canonical density triad retained for benchmarking summaries.
-# Tests now accept any positive ped_density but emit a warning when a value
-# falls outside the recommended inclusive range [0.02, 0.08]. This enables
-# exploratory sweeps while preserving guidance for benchmark stability.
+# Tests now accept any non-negative ped_density, but require explicit
+# ``metadata.density_advisory`` annotations for intentional outlier values.
 RECOMMENDED_DENSITIES = {0.02, 0.05, 0.08}
 RECOMMENDED_RANGE = (0.02, 0.08)
+ZERO_DENSITY_ADVISORY = "zero_baseline_route_spawn"
+LOW_DENSITY_ADVISORY = "low_density_exploration"
+HIGH_DENSITY_ADVISORY = "high_density_stress"
 
 
 @pytest.mark.parametrize("path", [SCENARIO_FILE])
@@ -53,7 +54,13 @@ def test_yaml_parses() -> None:
 
 
 def test_each_scenario_structure_and_files() -> None:
-    """TODO docstring. Document this function."""
+    """Validate per-scenario schema, map references, and density advisory contracts.
+
+    This test ensures each scenario includes required keys, references an existing
+    map file, uses non-negative pedestrian density, and sets
+    ``metadata.density_advisory`` when densities intentionally fall outside the
+    recommended range.
+    """
     scenarios = load_scenarios(SCENARIO_FILE, base_dir=SCENARIO_FILE)
     for scenario in scenarios:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
@@ -64,25 +71,35 @@ def test_each_scenario_structure_and_files() -> None:
         # simulation_config density check
         sim_cfg = scenario["simulation_config"]
         assert isinstance(sim_cfg, dict), "simulation_config must be a mapping"
+        metadata = scenario["metadata"]
+        assert isinstance(metadata, dict), "metadata must be a mapping"
         density = sim_cfg.get("ped_density")
         if density is not None:
             assert density >= 0, f"ped_density must be non-negative (got {density})"
+            advisory = metadata.get("density_advisory")
             if density == 0:
-                warnings.warn(
-                    f"""Scenario {scenario["name"]} ped_density=0.0 means no pedestrians spawn. This is allowed for certain empty-crowd baselines but should be used intentionally.""",
-                    UserWarning,
-                    stacklevel=2,
+                assert advisory == ZERO_DENSITY_ADVISORY, (
+                    f"Scenario {scenario['name']} uses ped_density=0.0 and must set "
+                    f"metadata.density_advisory={ZERO_DENSITY_ADVISORY!r}."
                 )
-            low, high = RECOMMENDED_RANGE
-            if not (low <= density <= high):
-                warnings.warn(
-                    f"""Scenario {scenario["name"]} ped_density={density} is outside the recommended [{low}, {high}] range. This is allowed, but may reduce comparability with canonical benchmark results.""",
-                    UserWarning,
-                    stacklevel=2,
+            elif density < RECOMMENDED_RANGE[0]:
+                assert advisory == LOW_DENSITY_ADVISORY, (
+                    f"Scenario {scenario['name']} uses ped_density={density} and must set "
+                    f"metadata.density_advisory={LOW_DENSITY_ADVISORY!r}."
+                )
+            elif density > RECOMMENDED_RANGE[1]:
+                assert advisory == HIGH_DENSITY_ADVISORY, (
+                    f"Scenario {scenario['name']} uses ped_density={density} and must set "
+                    f"metadata.density_advisory={HIGH_DENSITY_ADVISORY!r}."
+                )
+            else:
+                assert advisory in (None, ""), (
+                    f"Scenario {scenario['name']} is in the recommended density range and should "
+                    "not set metadata.density_advisory."
                 )
         # groups usage rule
         groups_val = sim_cfg.get("groups", 0.0)
-        archetype = scenario["metadata"].get("archetype")
+        archetype = metadata.get("archetype")
         if archetype == "group_crossing":
             assert groups_val == 0.5, (
                 f"group_crossing scenario must have groups=0.5 (got {groups_val})"

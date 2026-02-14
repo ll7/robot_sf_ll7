@@ -18,7 +18,7 @@ dependencies = [
     "numba>=0.60.0",
     "pygame>=2.6.1",
     # Machine Learning
-    "stable-baselines3[extra]>=2.4.0",
+    "stable-baselines3>=2.4.0",
     "torch>=2.5.1",
     "scikit-learn>=1.6.1",
     "optuna>=4.1.0",

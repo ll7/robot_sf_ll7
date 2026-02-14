@@ -38,6 +38,8 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     # Basic field presence
     assert record["scenario_id"] == scenario["id"]
     assert "metrics" in record
+    assert "metric_parameters" in record
+    assert "threshold_signature" in record["metric_parameters"]
     # Validate schema
     schema = load_schema(SCHEMA_PATH)
     validate_episode(record, schema)

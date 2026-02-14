@@ -47,6 +47,8 @@ def test_replay_and_metrics_present(config_factory, tmp_path):
     assert record, "episode record should be written"
     replay_steps = record.get("replay_steps") or []
     assert len(replay_steps) >= 1
+    replay_forces = record.get("replay_ped_forces") or []
+    assert len(replay_forces) == len(replay_steps)
     metrics = record.get("metrics") or {}
     assert "time_to_goal" in metrics
     assert "avg_speed" in metrics

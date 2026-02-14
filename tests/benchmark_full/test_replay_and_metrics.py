@@ -27,11 +27,11 @@ def _read_first_record(path: Path) -> dict:
 
 
 def test_replay_and_metrics_present(config_factory, tmp_path):
-    """TODO docstring. Document this function.
+    """Ensure full-benchmark smoke runs emit replay and core metric artifacts.
 
     Args:
-        config_factory: TODO docstring.
-        tmp_path: TODO docstring.
+        config_factory: Fixture that builds orchestrator config objects.
+        tmp_path: Temporary output root for the benchmark run.
     """
     cfg = config_factory(
         smoke=True,

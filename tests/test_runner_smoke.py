@@ -18,10 +18,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Run one benchmark episode and validate schema-compliant JSONL persistence.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory for writing the smoke output JSONL.
     """
     scenario = {
         "id": "smoke-uni-low-open",

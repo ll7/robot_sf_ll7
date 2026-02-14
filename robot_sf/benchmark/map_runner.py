@@ -21,6 +21,7 @@ from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -747,6 +748,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "wall_time_sec": wall_time,
         "timing": timing,
     }
+    ensure_metric_parameters(record)
     return record
 
 

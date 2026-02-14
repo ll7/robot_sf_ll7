@@ -221,6 +221,19 @@ uv run python scripts/seed_variance.py
 
 **Details**: Groups episodes and reports variability across seed means
 
+#### `benchmark_threshold_sensitivity.py`
+
+**Purpose**: Quantify sensitivity of near-miss and comfort metrics to threshold choices
+and evaluate speed-aware near-miss alternatives (relative-speed weighting and TTC-gating)
+across scenario families.
+**Usage**:
+
+```bash
+uv run python scripts/benchmark_threshold_sensitivity.py \
+    --in output/benchmarks/full_classic/episodes/episodes.jsonl \
+    --out output/benchmarks/full_classic/reports/threshold_sensitivity.json
+```
+
 ### SNQI Weight Scripts
 
 #### `recompute_snqi_weights.py`

@@ -21,6 +21,7 @@ minimal (sample efficiency + optional sensitivity).
 
 from __future__ import annotations
 
+import importlib
 import json
 import platform
 import re
@@ -42,11 +43,6 @@ from robot_sf.research.aggregation import (
     compute_completeness_score,
     export_metrics_csv,
     export_metrics_json,
-)
-from robot_sf.research.figures import (
-    plot_learning_curve,
-    plot_sample_efficiency,
-    plot_sensitivity,
 )
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.report_template import MarkdownReportRenderer
@@ -170,12 +166,14 @@ class ReportOrchestrator:
         Returns:
             list[dict[str, Any]]: List of figure descriptors including output paths.
         """
+        figures_module = importlib.import_module("robot_sf.research.figures")
+
         figures: list[dict[str, Any]] = []
         safe_exceptions = (OSError, RuntimeError, ValueError)
 
         if baseline_timesteps and pretrained_timesteps:
             try:
-                figure = plot_sample_efficiency(
+                figure = figures_module.plot_sample_efficiency(
                     baseline_timesteps, pretrained_timesteps, figures_dir
                 )
                 if figure.get("paths"):
@@ -186,7 +184,7 @@ class ReportOrchestrator:
         if baseline_rewards and pretrained_rewards:
             try:
                 timesteps = [float(i) for i in range(len(baseline_rewards[0]))]
-                figure = plot_learning_curve(
+                figure = figures_module.plot_learning_curve(
                     timesteps, baseline_rewards, pretrained_rewards, figures_dir
                 )
                 if figure.get("paths"):
@@ -682,6 +680,7 @@ class AblationOrchestrator:
         Returns:
             Path: Path to the generated `report.md` file.
         """
+        figures_module = importlib.import_module("robot_sf.research.figures")
         variants = variants or self.run_ablation_matrix()
         figures_dir = self.output_dir / "figures"
         figures_dir.mkdir(exist_ok=True)
@@ -695,7 +694,7 @@ class AblationOrchestrator:
                 first_param = "dataset_size"
         if first_param and variants:
             try:
-                sens = plot_sensitivity(variants, first_param, figures_dir)
+                sens = figures_module.plot_sensitivity(variants, first_param, figures_dir)
                 if sens.get("paths"):
                     figures.append(sens)
             except safe_exceptions as exc:  # pragma: no cover

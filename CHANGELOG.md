@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full classic benchmark now emits `run_meta.json` traceability metadata (repo/branch/commit, CLI invocation, matrix path, seed plan, environment), with a mirror at `artifacts/<run_id>/run_meta.json` for paper artifact workflows.
 - Full classic benchmark supports freeze-manifest validation (`--freeze-manifest`) with runtime contract checks (matrix hash/path, baselines/planner config, seed plan, metric subset, bootstrap settings, software identifiers) and structured status/mismatch reporting in `run_meta.json`.
 - Added a machine-readable freeze manifest template at `configs/benchmarks/classic_benchmark_freeze.example.yaml` and documented the pilot -> freeze -> final workflow.
+- Benchmark episodes now include canonical threshold profile metadata (`metric_parameters.threshold_profile` + signature), aggregation validates profile consistency, and a new sensitivity tool (`scripts/benchmark_threshold_sensitivity.py`) reports near-miss/comfort threshold impacts (including speed-aware alternatives) by scenario family.
 
 ### Fixed
 

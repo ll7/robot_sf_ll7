@@ -153,7 +153,14 @@ Full details live in
 Each episode record is schema-validated against
 `robot_sf/benchmark/schemas/episode.schema.v1.json` and includes:
 * `scenario_id`,  `seed`,  `scenario_params`,  `metrics`, timing fields
+* `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
+  for threshold provenance and reproducibility
 * Git/config hashes for reproducibility
 
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.
+Aggregation validates threshold-profile consistency and rejects mixed profiles.
+
+For threshold studies, run `scripts/benchmark_threshold_sensitivity.py` to quantify
+distance/comfort threshold impacts across scenario families and to compare speed-aware
+near-miss alternatives (relative-speed weighting and TTC-gating).

@@ -88,16 +88,19 @@ def speed_weighted_near_miss(
             ped_steps=int(data.peds_pos.shape[0]),
         )
         return 0.0
-    total = 0.0
-    for step in np.where(near_mask)[0]:
-        ped_idx = int(nearest_idx[step])
-        if ped_idx < 0:
-            continue
-        rel = data.robot_vel[step] - ped_vel[step, ped_idx]
-        rel_speed = float(np.linalg.norm(rel))
-        weight = min(max_weight, max(0.0, rel_speed / relative_speed_reference))
-        total += weight
-    return float(total)
+    near_steps = np.where(near_mask)[0]
+    if near_steps.size == 0:
+        return 0.0
+    ped_indices = nearest_idx[near_steps].astype(int)
+    valid_mask = ped_indices >= 0
+    if not np.any(valid_mask):
+        return 0.0
+    valid_steps = near_steps[valid_mask]
+    valid_ped_indices = ped_indices[valid_mask]
+    rel_vel = data.robot_vel[valid_steps] - ped_vel[valid_steps, valid_ped_indices]
+    rel_speed = np.linalg.norm(rel_vel, axis=1)
+    weights = np.minimum(max_weight, np.maximum(0.0, rel_speed / relative_speed_reference))
+    return float(np.sum(weights))
 
 
 def ttc_gated_near_miss_count(

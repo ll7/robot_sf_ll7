@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.benchmark.constants import COLLISION_DIST, COMFORT_FORCE_THRESHOLD, NEAR_MISS_DIST
 from robot_sf.benchmark.metrics import EpisodeData
@@ -46,7 +47,7 @@ def comfort_exposure_ratio(data: EpisodeData, *, force_threshold: float) -> floa
         Ratio in [0, 1] when force samples are available; NaN when force samples
         are unavailable for non-empty pedestrian episodes.
     """
-    ped_count = data.peds_pos.shape[1] if data.peds_pos.ndim == 3 else 0
+    ped_count = _ped_count(data)
     if ped_count == 0:
         return 0.0
     if data.ped_forces.shape != data.peds_pos.shape:
@@ -81,6 +82,11 @@ def speed_weighted_near_miss(
         return 0.0
     ped_vel = _ped_velocities(data.peds_pos, dt=data.dt)
     if data.robot_vel.shape[0] != data.peds_pos.shape[0]:
+        logger.warning(
+            "speed_weighted_near_miss received shape-mismatched trajectories; returning 0.0",
+            robot_steps=int(data.robot_vel.shape[0]),
+            ped_steps=int(data.peds_pos.shape[0]),
+        )
         return 0.0
     total = 0.0
     for step in np.where(near_mask)[0]:
@@ -108,7 +114,7 @@ def ttc_gated_near_miss_count(
     """
     if ttc_horizon_sec <= 0.0:
         raise ValueError("ttc_horizon_sec must be positive")
-    if data.peds_pos.shape[1] == 0:
+    if _ped_count(data) == 0:
         return 0.0
     dists, rel_vecs, rel_speed = _distance_and_relative_speed(data)
     in_band = (dists >= collision_distance) & (dists < near_miss_distance)
@@ -293,7 +299,9 @@ def sensitivity_episodes_from_replay_records(  # noqa: C901, PLR0912
                         ped_forces[t, k, 0] = float(force[0])
                         ped_forces[t, k, 1] = float(force[1])
 
-        dt = float(rec.get("replay_dt") or 0.1)
+        raw_dt = rec.get("replay_dt")
+        parsed_dt = float(raw_dt) if raw_dt is not None else 0.1
+        dt = parsed_dt if parsed_dt > 0 else 0.1
         robot_vel = _robot_velocity(robot_pos, dt)
         robot_acc = _robot_velocity(robot_vel, dt)
         goal = robot_pos[-1] if t_steps else np.zeros(2, dtype=float)
@@ -348,7 +356,7 @@ def _scenario_family(record: dict[str, Any], scenario_params: dict[str, Any]) ->
 
 def _nearest_pedestrian_distances(data: EpisodeData) -> tuple[np.ndarray, np.ndarray]:
     """Return per-step nearest pedestrian distance and index."""
-    if data.peds_pos.shape[1] == 0:
+    if _ped_count(data) == 0:
         return np.full(data.robot_pos.shape[0], np.inf, dtype=float), np.full(
             data.robot_pos.shape[0], -1, dtype=int
         )
@@ -386,7 +394,7 @@ def _distance_and_relative_speed(data: EpisodeData) -> tuple[np.ndarray, np.ndar
     Returns:
         Tuple of (distance matrix, relative velocity vectors, relative speed matrix).
     """
-    if data.peds_pos.shape[1] == 0:
+    if _ped_count(data) == 0:
         empty = np.empty((data.robot_pos.shape[0], 0), dtype=float)
         return empty, np.empty((data.robot_pos.shape[0], 0, 2), dtype=float), empty
     ped_vel = _ped_velocities(data.peds_pos, dt=data.dt)
@@ -411,6 +419,17 @@ def _robot_velocity(pos: np.ndarray, dt: float) -> np.ndarray:
         return vel
     vel[1:] = (pos[1:] - pos[:-1]) / dt
     return vel
+
+
+def _ped_count(data: EpisodeData) -> int:
+    """Return number of pedestrians in an episode with defensive shape handling.
+
+    Returns:
+        Number of pedestrians when `peds_pos` is three-dimensional; otherwise 0.
+    """
+    if data.peds_pos.ndim < 3:
+        return 0
+    return int(data.peds_pos.shape[1])
 
 
 def _summary_stats(values: list[float]) -> dict[str, float]:

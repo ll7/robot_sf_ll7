@@ -60,6 +60,15 @@ def _iso() -> str:  # small helper
     return datetime.now(UTC).isoformat()
 
 
+def _figures_module():
+    """Lazy-load the figures module to defer heavy plotting imports.
+
+    Returns:
+        Imported `robot_sf.research.figures` module object.
+    """
+    return importlib.import_module("robot_sf.research.figures")
+
+
 @dataclass
 class SeedSummary:
     """TODO docstring. Document this class."""
@@ -166,7 +175,7 @@ class ReportOrchestrator:
         Returns:
             list[dict[str, Any]]: List of figure descriptors including output paths.
         """
-        figures_module = importlib.import_module("robot_sf.research.figures")
+        figures_module = _figures_module()
 
         figures: list[dict[str, Any]] = []
         safe_exceptions = (OSError, RuntimeError, ValueError)
@@ -680,7 +689,7 @@ class AblationOrchestrator:
         Returns:
             Path: Path to the generated `report.md` file.
         """
-        figures_module = importlib.import_module("robot_sf.research.figures")
+        figures_module = _figures_module()
         variants = variants or self.run_ablation_matrix()
         figures_dir = self.output_dir / "figures"
         figures_dir.mkdir(exist_ok=True)

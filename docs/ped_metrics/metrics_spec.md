@@ -150,4 +150,4 @@ For SNQI computation, metrics are normalized using baseline statistics:
 - Force threshold calibrated empirically for current fast-pysf physics model
 - SNQI methodology follows composite index best practices with learned weights
 
-*Last updated: September 2025*
+*Last updated: February 2026*

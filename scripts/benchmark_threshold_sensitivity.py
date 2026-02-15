@@ -34,21 +34,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", dest="output_json", required=True, help="Output report JSON path")
     parser.add_argument(
         "--collision-grid",
-        default=f"{COLLISION_DIST - 0.05:.2f},{COLLISION_DIST:.2f},{COLLISION_DIST + 0.05:.2f}",
+        default=_default_collision_grid(),
         help="Collision distance thresholds in meters (comma-separated).",
     )
     parser.add_argument(
         "--near-grid",
-        default=f"{NEAR_MISS_DIST - 0.1:.2f},{NEAR_MISS_DIST:.2f},{NEAR_MISS_DIST + 0.1:.2f}",
+        default=_default_near_grid(),
         help="Near-miss distance thresholds in meters (comma-separated).",
     )
     parser.add_argument(
         "--comfort-grid",
-        default=(
-            f"{COMFORT_FORCE_THRESHOLD - 0.5:.2f},"
-            f"{COMFORT_FORCE_THRESHOLD:.2f},"
-            f"{COMFORT_FORCE_THRESHOLD + 0.5:.2f}"
-        ),
+        default=_default_comfort_grid(),
         help="Comfort force thresholds (comma-separated).",
     )
     parser.add_argument(
@@ -65,17 +61,39 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _default_collision_grid() -> str:
+    """Return safe default collision-threshold grid with non-negative lower bound."""
+    lo = max(0.0, COLLISION_DIST - 0.05)
+    hi = max(0.0, COLLISION_DIST + 0.05)
+    return f"{lo:.2f},{COLLISION_DIST:.2f},{hi:.2f}"
+
+
+def _default_near_grid() -> str:
+    """Return safe default near-miss-threshold grid with non-negative lower bound."""
+    lo = max(0.0, NEAR_MISS_DIST - 0.1)
+    hi = max(0.0, NEAR_MISS_DIST + 0.1)
+    return f"{lo:.2f},{NEAR_MISS_DIST:.2f},{hi:.2f}"
+
+
+def _default_comfort_grid() -> str:
+    """Return safe default comfort-force-threshold grid with non-negative lower bound."""
+    lo = max(0.0, COMFORT_FORCE_THRESHOLD - 0.5)
+    hi = max(0.0, COMFORT_FORCE_THRESHOLD + 0.5)
+    return f"{lo:.2f},{COMFORT_FORCE_THRESHOLD:.2f},{hi:.2f}"
+
+
 def run(argv: list[str] | None = None) -> int:
     """Execute the threshold sensitivity analysis CLI.
 
     Returns:
         Process exit code.
     """
-    args = build_arg_parser().parse_args(argv)
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
     records = read_jsonl(args.input_jsonl)
     episodes = sensitivity_episodes_from_replay_records(records)
     if not episodes:
-        raise ValueError(
+        parser.error(
             "No replay episodes found. Generate records with replay payloads "
             "(capture-replay enabled) and rerun.",
         )

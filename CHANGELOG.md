@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Benchmark episodes now include canonical threshold profile metadata (`metric_parameters.threshold_profile` + signature).
 - Aggregation now validates threshold-profile consistency and rejects mixed-threshold reports.
 - Added threshold sensitivity tooling (`scripts/benchmark_threshold_sensitivity.py`) to report near-miss and comfort-threshold impacts by scenario family, including speed-aware alternatives.
+- Root `README.md` now includes an explicit attribution section documenting that this project builds on Caruso et al. (Machines 2023) and listing upstream reference repositories.
+- Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
 

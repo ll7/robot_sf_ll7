@@ -1,14 +1,20 @@
 # Repository Guidelines
 
-Use `.specify/memory/constitution.md`, `docs/dev-guide.md` and `.github/copilot-instructions.md` to guide AI assistants.
+Use `.specify/memory/constitution.md`, `docs/dev_guide.md` and `.github/copilot-instructions.md` to guide AI assistants.
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
-Look at `.vscode/tasks.json` for common commands.
+Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
+Use `.vscode/tasks.json` as thin wrappers around those scripts.
 
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
 ## Build, Test & Development Commands
 Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pre-commit install`. Format and lint using `uv run ruff check .` followed by `uv run ruff format .`. Run the main suite with `uv run pytest tests`; add `-m "not slow"` to skip long benches. Headless GUI checks use `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame`. Validate the SocialForce backend with `uv run python -m pytest fast-pysf/tests -v`. Typical training workflows call `uv run python scripts/training_ppo.py --config configs/scenarios/classic_interactions.yaml`.
+
+For shared local + VS Code + Codex workflows, prefer:
+- `scripts/dev/ruff_fix_format.sh`
+- `scripts/dev/run_tests_parallel.sh tests` (uses `pytest -n auto`)
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 
 ## Config-First Strategy
 Prefer a config-first workflow for reproducibility and reviewability. Add or update YAML files under `configs/` for stable experiments and document the canonical command using `--config <path>`. Use CLI flags only for short-lived overrides while iterating locally.

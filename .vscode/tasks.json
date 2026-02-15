@@ -4,13 +4,13 @@
 		{
 			"label": "Ruff: Format and Fix",
 			"type": "shell",
-			"command": "uv run ruff check --fix . --output-format concise; uv run ruff format .; uv run ruff check . --statistics",
+			"command": "scripts/dev/ruff_fix_format.sh",
 			"problemMatcher": []
 		},
 		{
 			"label": "Run Tests",
 			"type": "shell",
-			"command": "uv run pytest tests",
+			"command": "scripts/dev/run_tests_parallel.sh tests",
 			"group": {
 				"kind": "test",
 				"isDefault": true
@@ -19,7 +19,7 @@
 		{
 			"label": "Run Tests in parallel",
 			"type": "shell",
-			"command": "uv run pytest -n auto",
+			"command": "scripts/dev/run_tests_parallel.sh",
 			"group": {
 				"kind": "test",
 				"isDefault": true
@@ -34,13 +34,13 @@
 		{
 			"label": "PR Ready Check",
 			"type": "shell",
-			"command": "uv run ruff check --fix . --output-format concise && uv run ruff format . && uv run ruff check . --statistics && uv run pytest -n auto && uv run python scripts/coverage/check_changed_files_coverage.py --base origin/main --min 80 --goal 100 && uv run python scripts/validation/check_docstring_todos.py --base origin/main",
+			"command": "BASE_REF=origin/main scripts/dev/pr_ready_check.sh",
 			"group": "test"
 		},
 		{
 			"label": "Docstring TODO Check (diff)",
 			"type": "shell",
-			"command": "uv run python scripts/validation/check_docstring_todos.py --base origin/main",
+			"command": "BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh",
 			"group": "test"
 		},
 		{
@@ -89,7 +89,7 @@
 		{
 			"label": "Run Tests with Coverage",
 			"type": "shell",
-			"command": "uv run pytest -n auto tests",
+			"command": "scripts/dev/run_tests_parallel.sh tests",
 			"group": "test",
 			"presentation": {
 				"echo": true,

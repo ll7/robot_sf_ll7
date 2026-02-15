@@ -1,6 +1,6 @@
 ---
 name: clean-up
-description: "Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and the repo VS Code tasks; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes."
+description: "Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes."
 ---
 
 # Clean Up
@@ -27,13 +27,13 @@ workflow, running Ruff format/fix, and running parallel tests.
      `uv run pre-commit install`.
 
 3. Run formatting and fixes first
-   - Use VS Code task "Ruff: Format and Fix":
-     `uv run ruff check --fix . --output-format concise; uv run ruff format .; uv run ruff check . --statistics`
+   - Use the shared script:
+     `scripts/dev/ruff_fix_format.sh`
    - If Ruff reports issues, fix them and rerun until clean.
 
 4. Run tests in parallel
-   - Use VS Code task "Run Tests in parallel":
-     `uv run pytest -n auto`
+   - Use the shared script:
+     `scripts/dev/run_tests_parallel.sh tests`
    - If tests fail, evaluate test value first (Constitution Principle XIII /
      dev guide testing strategy). Classify failures and decide whether to fix,
      defer, or ask for direction before removing or relaxing tests.

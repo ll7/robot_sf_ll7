@@ -106,6 +106,17 @@ registry from training pipelines.
 uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
 ```
 
+### Reusable dev scripts
+
+Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex
+skills use the same commands:
+
+```bash
+scripts/dev/ruff_fix_format.sh
+scripts/dev/run_tests_parallel.sh tests
+BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+```
+
 ### Environment factory pattern (CRITICAL)
 
 **Always use factory functions** — never instantiate gymnasium environments directly:

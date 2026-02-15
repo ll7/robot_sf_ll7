@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full classic benchmark now emits `run_meta.json` traceability metadata (repo/branch/commit, CLI invocation, matrix path, seed plan, environment), with a mirror at `artifacts/<run_id>/run_meta.json` for paper artifact workflows.
 - Full classic benchmark supports freeze-manifest validation (`--freeze-manifest`) with runtime contract checks (matrix hash/path, baselines/planner config, seed plan, metric subset, bootstrap settings, software identifiers) and structured status/mismatch reporting in `run_meta.json`.
 - Added a machine-readable freeze manifest template at `configs/benchmarks/classic_benchmark_freeze.example.yaml` and documented the pilot -> freeze -> final workflow.
+- Benchmark episodes now include canonical threshold profile metadata (`metric_parameters.threshold_profile` + signature).
+- Aggregation now validates threshold-profile consistency and rejects mixed-threshold reports.
+- Added threshold sensitivity tooling (`scripts/benchmark_threshold_sensitivity.py`) to report near-miss and comfort-threshold impacts by scenario family, including speed-aware alternatives.
+- Root `README.md` now includes an explicit attribution section documenting that this project builds on Caruso et al. (Machines 2023) and listing upstream reference repositories.
+- Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
 

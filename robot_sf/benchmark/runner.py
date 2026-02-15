@@ -54,6 +54,7 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_pr
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -855,6 +856,7 @@ def _build_episode_record(
     algo_value = scenario_params.get("algo")
     if algo_value is not None:
         record["algo"] = algo_value
+    ensure_metric_parameters(record)
     return record
 
 

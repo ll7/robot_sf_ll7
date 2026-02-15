@@ -26,6 +26,7 @@ from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.metrics import snqi as snqi_fn
+from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -263,6 +264,7 @@ def compute_aggregates(
     """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
+    threshold_meta = validate_threshold_parameter_consistency(records)
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     present_algorithms: set[str] = set()
@@ -295,6 +297,12 @@ def compute_aggregates(
         "effective_group_key": _EFFECTIVE_GROUP_KEY,
         "missing_algorithms": [],
         "warnings": [],
+        "metric_parameters": {
+            "threshold_profile": threshold_meta["threshold_profile"],
+            "threshold_signature": threshold_meta["threshold_signature"],
+            "missing_profile_records": threshold_meta["missing_profile_records"],
+            "explicit_profile_records": threshold_meta["explicit_profile_records"],
+        },
     }
 
     if expected_algorithms:

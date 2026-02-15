@@ -64,6 +64,44 @@
             },
             "additionalProperties": true
         },
+        "metric_parameters": {
+            "type": "object",
+            "description": "Metric threshold profile and signature used for report reproducibility.",
+            "properties": {
+                "threshold_signature": {
+                    "type": "string"
+                },
+                "threshold_profile": {
+                    "type": "object",
+                    "properties": {
+                        "profile_id": {
+                            "type": "string"
+                        },
+                        "collision_distance_m": {
+                            "type": "number"
+                        },
+                        "near_miss_distance_m": {
+                            "type": "number"
+                        },
+                        "comfort_force_threshold": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "profile_id",
+                        "collision_distance_m",
+                        "near_miss_distance_m",
+                        "comfort_force_threshold"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "required": [
+                "threshold_signature",
+                "threshold_profile"
+            ],
+            "additionalProperties": true
+        },
         "metrics": {
             "type": "object",
             "minProperties": 1,

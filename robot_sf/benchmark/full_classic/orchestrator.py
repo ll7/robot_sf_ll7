@@ -29,6 +29,7 @@ from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_in
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -824,7 +825,7 @@ def _close_env(env):
         pass
 
 
-def _make_episode_record(job, cfg) -> dict[str, Any]:
+def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
     """Execute a real episode using the environment factory and compute metrics.
 
     Returns:
@@ -867,10 +868,12 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
             replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
             record["replay_steps"] = replay
             record["replay_peds"] = [[] for _ in replay]
+            record["replay_ped_forces"] = [[] for _ in replay]
             record["replay_actions"] = [(0.05, 0.0) for _ in replay]
             record["replay_dt"] = 0.1
             record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
         _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
+        ensure_metric_parameters(record)
         return record
     scenario = getattr(job, "scenario", None)
     if scenario is None:
@@ -969,6 +972,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         finalized = episode.steps
         record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
         record["replay_peds"] = [s.ped_positions or [] for s in finalized]
+        record["replay_ped_forces"] = [np.asarray(f, dtype=float).tolist() for f in ped_forces]
         record["replay_actions"] = [s.action for s in finalized]
         record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
         record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
@@ -980,6 +984,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         algo=getattr(cfg, "algo", None),
         episode_id=episode_id,
     )
+    ensure_metric_parameters(record)
     return record
 
 

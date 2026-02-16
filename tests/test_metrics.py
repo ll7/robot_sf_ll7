@@ -14,6 +14,7 @@ from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
+    post_process_metrics,
     snqi,
     time_to_goal,
 )
@@ -144,6 +145,33 @@ def test_time_to_goal_nan_when_goal_not_reached():
     ep = _make_episode(T=4, K=0)
     ep.reached_goal_step = None
     assert math.isnan(time_to_goal(ep))
+
+
+def test_success_only_time_to_goal_metrics_flag_validity() -> None:
+    """Success-only time metrics should expose explicit validity flags."""
+    ep = _make_episode(T=6, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 5.0, 6)
+    ep.reached_goal_step = 5
+    vals = compute_all_metrics(ep, horizon=10, shortest_path_len=5.0, robot_max_speed=1.0)
+    assert np.isclose(vals["time_to_goal_norm_success_only"], 0.5)
+    assert vals["time_to_goal_success_only_valid"] == 1.0
+    assert np.isclose(vals["time_to_goal_ideal_ratio"], 0.1)
+    assert vals["time_to_goal_ideal_ratio_valid"] == 1.0
+
+
+def test_success_only_time_to_goal_metrics_drop_on_failure() -> None:
+    """Failed episodes should keep validity false and omit NaN success-only values."""
+    ep = _make_episode(T=6, K=1)
+    ep.reached_goal_step = 5
+    ep.peds_pos[:, 0, 0] = 0.0  # force collision -> failure
+    raw = compute_all_metrics(ep, horizon=10, shortest_path_len=5.0, robot_max_speed=1.0)
+    assert math.isnan(raw["time_to_goal_norm_success_only"])
+    assert raw["time_to_goal_success_only_valid"] == 0.0
+    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+    assert metrics["time_to_goal_success_only_valid"] is False
+    assert "time_to_goal_norm_success_only" not in metrics
+    assert metrics["time_to_goal_ideal_ratio_valid"] is False
+    assert "time_to_goal_ideal_ratio" not in metrics
 
 
 def test_success_failure_due_to_collision():

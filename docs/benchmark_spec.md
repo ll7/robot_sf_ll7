@@ -30,19 +30,19 @@ metric definitions/caveats.
 * If a scenario omits `seeds` and no seed set is requested, the map runner falls back to
   [`configs/benchmarks/seed_list_v1.yaml`](../configs/benchmarks/seed_list_v1.yaml).
 
-## Baseline Categories (Oracle / Heuristic / Learned)
+## Baseline Categories (Diagnostic / Classical / Learning)
 
 Baselines are labeled by category to keep comparisons explicit. Not every runner exposes every
 baseline; use the entrypoint noted below.
 
 | Baseline | Category | Entrypoint |
 | --- | --- | --- |
-| `fast_pysf_planner` | oracle | `scripts/tools/policy_analysis_run.py --policy fast_pysf_planner` |
-| `social_force` | heuristic | `scripts/run_classic_interactions.py --algo social_force` |
-| `orca` | heuristic | `scripts/run_classic_interactions.py --algo orca` |
-| `goal` / `simple` | heuristic | `scripts/run_classic_interactions.py --algo goal` |
-| `random` | heuristic | Registry-only baseline (not wired into policy_analysis_run.py) |
-| `ppo` | learned | `scripts/run_classic_interactions.py --algo ppo` or `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
+| `fast_pysf_planner` | diagnostic | `scripts/tools/policy_analysis_run.py --policy fast_pysf_planner` |
+| `random` | diagnostic | Registry-only baseline (not wired into policy_analysis_run.py) |
+| `social_force` | classical | `scripts/run_classic_interactions.py --algo social_force` |
+| `orca` | classical | `scripts/run_classic_interactions.py --algo orca` |
+| `goal` / `simple` | classical | `scripts/run_classic_interactions.py --algo goal` |
+| `ppo` | learning | `scripts/run_classic_interactions.py --algo ppo` or `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
 
 Notes:
 * Map-based benchmark runs use `scripts/run_classic_interactions.py` (see below) and accept the
@@ -50,6 +50,8 @@ Notes:
 * Learned baselines require model checkpoints; for policy analysis, provide `--model-path`.
 * `random` is exposed via the baseline registry for non-map scenario matrices and is not currently
   wired into `policy_analysis_run.py`.
+* `random` is the **stochastic reference baseline**: it samples actions from a configured uniform
+  distribution (seeded RNG), and is intentionally distinct from deterministic `goal`.
 * `ppo` is available in both map-based benchmark runs and policy-analysis runs; policy analysis
   remains the preferred path when you need richer learned-policy diagnostics (videos, per-policy
   reports, and policy sweep metadata).
@@ -66,6 +68,8 @@ CLI gating:
 * `--benchmark-profile paper-baseline`: publication profile; allows PPO only when paper-grade
   provenance and quality-gate fields are present in the algo config.
 * `--benchmark-profile experimental`: allows baseline-ready + experimental algorithms.
+* `--adapter-impact-eval` (optional): records adapter-impact metadata (native vs adapted step
+  counts where measurable, currently most informative for PPO command conversion).
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
@@ -122,7 +126,10 @@ Full details live in
 
 **Core metrics**
 * `success`: goal reached before horizon without collision.
-* `time_to_goal_norm`: steps-to-goal normalized by horizon (1.0 on failure).
+* `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).
+* `time_to_goal_norm_success_only`: same normalization, but only valid for successful episodes.
+* `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
+  (`shortest_path_len / robot_max_speed`).
 * `collisions`,  `near_misses`: counts based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
 
@@ -145,6 +152,8 @@ Full details live in
 * If forces are not recorded, force-based metrics are `NaN`.
 * If there are no pedestrians, distance/force metrics may be `NaN` while collisions are `0`.
 * Curvature excludes near-zero velocities; invalid samples are filtered.
+* `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, filter with
+  `time_to_goal_success_only_valid=true` and use `time_to_goal_norm_success_only`.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 
@@ -153,6 +162,10 @@ Full details live in
 Each episode record is schema-validated against
 `robot_sf/benchmark/schemas/episode.schema.v1.json` and includes:
 * `scenario_id`,  `seed`,  `scenario_params`,  `metrics`, timing fields
+* `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
+  `algorithm_metadata.policy_semantics`
+* `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
+  adapter markers for compatibility interpretation
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
   for threshold provenance and reproducibility
 * Git/config hashes for reproducibility

@@ -21,8 +21,7 @@
 			"type": "shell",
 			"command": "scripts/dev/run_tests_parallel.sh",
 			"group": {
-				"kind": "test",
-				"isDefault": true
+				"kind": "test"
 			}
 		},
 		{
@@ -89,7 +88,7 @@
 		{
 			"label": "Run Tests with Coverage",
 			"type": "shell",
-			"command": "scripts/dev/run_tests_parallel.sh tests",
+			"command": "uv run pytest -n auto --cov=robot_sf --cov-report=html --cov-report=json tests",
 			"group": "test",
 			"presentation": {
 				"echo": true,

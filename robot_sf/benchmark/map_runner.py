@@ -66,6 +66,7 @@ _PPO_PAPER_REQUIRED_PROVENANCE = (
     "normalization_id",
     "deterministic_seed_set",
 )
+_DEFAULT_KINEMATICS = "differential_drive"
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -335,7 +336,8 @@ def _ppo_action_to_unicycle(
     """Convert PPO action dict into the unicycle command used by map environments.
 
     Returns:
-        Tuple of ``(linear_velocity, angular_velocity)``.
+        Tuple of ``(linear_velocity, angular_velocity, conversion_mode)`` where
+        conversion_mode is ``"native"`` or ``"adapter"``.
     """
     if "v" in action and "omega" in action:
         return float(action["v"]), float(action["omega"]), "native"
@@ -365,8 +367,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
     *,
+    robot_kinematics: str | None = None,
     adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build an action policy and algorithm metadata for map-based benchmarking.
+
+    Args:
+        algo: Algorithm key to instantiate.
+        algo_config: Algorithm configuration payload.
+        robot_kinematics: Runtime robot kinematics label for metadata enrichment.
+        adapter_impact_eval: Whether to collect native-vs-adapter step counters.
+
+    Returns:
+        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+        Policy callable and enriched metadata dictionary. For PPO, adapter-impact
+        counters are mutated in-place in the returned metadata during episode rollout.
+    """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
 
@@ -374,7 +390,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta.update(
             {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
         )
-        meta = enrich_algorithm_metadata(algo=algo_key, metadata=meta, execution_mode="native")
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="native",
+            robot_kinematics=robot_kinematics,
+        )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
             return _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
@@ -412,6 +433,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             metadata=meta,
             execution_mode="mixed",
             adapter_name="ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
             adapter_impact_requested=adapter_impact_eval,
         )
 
@@ -465,7 +487,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta["status"] = "ok"
     meta["config"] = algo_config
     meta["config_hash"] = _config_hash(algo_config)
-    meta = enrich_algorithm_metadata(algo=algo_key, metadata=meta, execution_mode="adapter")
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="adapter",
+        robot_kinematics=robot_kinematics,
+    )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         return adapter.plan(obs)
@@ -602,18 +629,28 @@ def _build_env_config(
 
 
 def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
+    """Derive the runtime robot kinematics label from simulation config.
+
+    Returns:
+        Canonical kinematics label used in benchmark metadata.
+    """
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
-        return "unknown"
+        return _DEFAULT_KINEMATICS
     cls_name = robot_cfg.__class__.__name__.lower()
     if "bicycle" in cls_name:
         return "bicycle_drive"
     if "differential" in cls_name:
         return "differential_drive"
-    return cls_name or "unknown"
+    return cls_name or _DEFAULT_KINEMATICS
 
 
 def _robot_max_speed(config: RobotSimulationConfig) -> float | None:
+    """Extract a positive robot max-speed setting from simulation config if available.
+
+    Returns:
+        Configured positive max speed, or ``None`` when not available.
+    """
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
         return None
@@ -625,14 +662,19 @@ def _robot_max_speed(config: RobotSimulationConfig) -> float | None:
 
 
 def _scenario_robot_kinematics_label(scenario: dict[str, Any]) -> str:
+    """Derive the scenario-declared robot kinematics label from scenario metadata.
+
+    Returns:
+        Canonical kinematics label inferred from scenario robot configuration fields.
+    """
     robot_cfg = scenario.get("robot_config")
     if not isinstance(robot_cfg, dict):
-        return "differential_drive"
+        return _DEFAULT_KINEMATICS
     raw = str(robot_cfg.get("type") or robot_cfg.get("model") or "").strip().lower()
     if "bicycle" in raw:
         return "bicycle_drive"
     if "differential" in raw or raw == "":
-        return "differential_drive"
+        return _DEFAULT_KINEMATICS
     return raw
 
 
@@ -681,20 +723,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
 
+    robot_kinematics = _robot_kinematics_label(config)
     policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
     policy_fn, algo_meta = _build_policy(
         algo,
         policy_cfg,
-        adapter_impact_eval=adapter_impact_eval,
-    )
-    robot_kinematics = _robot_kinematics_label(config)
-    algo_meta = enrich_algorithm_metadata(
-        algo=algo,
-        metadata=algo_meta,
         robot_kinematics=robot_kinematics,
-        adapter_impact_requested=adapter_impact_eval,
+        adapter_impact_eval=adapter_impact_eval,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
 

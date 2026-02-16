@@ -144,6 +144,18 @@ def _base_kinematics_metadata(
     adapter_name: str | None = None,
     robot_kinematics: str | None = None,
 ) -> dict[str, Any]:
+    """Construct planner/robot kinematics metadata for a canonical algorithm.
+
+    Args:
+        canonical_algo: Canonical algorithm key used to resolve profile defaults.
+        execution_mode: Optional runtime override for execution mode.
+        adapter_name: Optional runtime override for adapter label.
+        robot_kinematics: Optional runtime override for robot kinematics label.
+
+    Returns:
+        dict[str, Any]: Kinematics metadata containing robot kinematics, planner command space,
+        native/adapter support flags, execution mode, adapter name, and adapter_active.
+    """
     profile = _KINEMATICS_PROFILE_BY_CANONICAL.get(canonical_algo, {})
     metadata = {
         "robot_kinematics": robot_kinematics or "unknown",
@@ -202,20 +214,17 @@ def enrich_algorithm_metadata(
         adapter_name=adapter_name,
         robot_kinematics=robot_kinematics,
     )
+    merged = dict(base_kinematics)
     if isinstance(current_kinematics, dict):
-        merged = dict(current_kinematics)
-        for key, value in base_kinematics.items():
-            merged.setdefault(key, value)
-        if execution_mode is not None:
-            merged["execution_mode"] = execution_mode
-            merged["adapter_active"] = execution_mode in {"adapter", "mixed"}
-        if adapter_name is not None:
-            merged["adapter_name"] = adapter_name
-        if robot_kinematics is not None:
-            merged["robot_kinematics"] = robot_kinematics
-        enriched["planner_kinematics"] = merged
-    else:
-        enriched["planner_kinematics"] = base_kinematics
+        merged.update(current_kinematics)
+    if execution_mode is not None:
+        merged["execution_mode"] = execution_mode
+    if adapter_name is not None:
+        merged["adapter_name"] = adapter_name
+    if robot_kinematics is not None:
+        merged["robot_kinematics"] = robot_kinematics
+    merged["adapter_active"] = merged.get("execution_mode") in {"adapter", "mixed"}
+    enriched["planner_kinematics"] = merged
 
     if canonical == "random":
         enriched.setdefault("stochastic_reference", True)

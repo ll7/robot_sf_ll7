@@ -152,8 +152,9 @@ Full details live in
 * If forces are not recorded, force-based metrics are `NaN`.
 * If there are no pedestrians, distance/force metrics may be `NaN` while collisions are `0`.
 * Curvature excludes near-zero velocities; invalid samples are filtered.
-* `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, filter with
-  `time_to_goal_success_only_valid=true` and use `time_to_goal_norm_success_only`.
+* `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, use
+  `time_to_goal_norm_success_only` together with the numeric validity flag
+  `time_to_goal_success_only_valid == 1.0`.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 

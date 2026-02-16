@@ -141,7 +141,7 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
     assert _robot_kinematics_label(diff) == "differential_drive"
     assert _robot_kinematics_label(bike) == "bicycle_drive"
     assert _robot_kinematics_label(unknown) != ""
-    assert _robot_kinematics_label(none_cfg) == "unknown"
+    assert _robot_kinematics_label(none_cfg) == "differential_drive"
     assert _robot_max_speed(diff) == 2.5
     assert _robot_max_speed(bike) == 3.5
     assert _robot_max_speed(none_cfg) is None

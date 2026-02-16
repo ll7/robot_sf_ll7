@@ -312,6 +312,16 @@ def ideal_time_to_goal(
 
 
 def _resolved_robot_max_speed(data: EpisodeData, *, robot_max_speed: float | None) -> float:
+    """Resolve the effective robot max speed from override, observations, or fallback.
+
+    Args:
+        data: Episode trajectory data, including robot velocities.
+        robot_max_speed: Optional caller-provided max speed override.
+
+    Returns:
+        float: Positive finite speed. Uses valid ``robot_max_speed`` first, then
+        max observed ``||robot_vel||``, and finally falls back to ``1.0``.
+    """
     if robot_max_speed is not None and math.isfinite(robot_max_speed) and robot_max_speed > 0.0:
         return float(robot_max_speed)
     if data.robot_vel.size > 0:

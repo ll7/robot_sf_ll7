@@ -8,6 +8,7 @@ from robot_sf.baselines.random_policy import Observation, RandomPlanner
 
 
 def _obs() -> Observation:
+    """Build a minimal Observation payload for RandomPlanner unit tests."""
     return Observation(
         dt=0.1,
         robot={

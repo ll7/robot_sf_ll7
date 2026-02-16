@@ -89,6 +89,24 @@ def test_build_policy_ppo_rejects_unknown_action_payload(monkeypatch):
         policy(_sample_obs())
 
 
+def test_build_policy_ppo_adapter_impact_updates_metadata(monkeypatch):
+    """PPO adapter-impact counters should mutate the returned metadata in-place."""
+    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    policy, meta = map_runner._build_policy(
+        "ppo",
+        {"test_action": {"v": 0.4, "omega": 0.1}},
+        adapter_impact_eval=True,
+    )
+
+    policy(_sample_obs())
+    impact = meta.get("adapter_impact")
+    assert isinstance(impact, dict)
+    assert impact["requested"] is True
+    assert impact["native_steps"] == 1
+    assert impact["adapted_steps"] == 0
+    assert impact["status"] == "collecting"
+
+
 def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():
     """Ensure padded pedestrian channels are sliced by count and dt comes from sim metadata."""
     obs = _sample_obs()

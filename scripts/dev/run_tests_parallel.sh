@@ -91,5 +91,7 @@ case "$order_mode" in
     ;;
 esac
 
-cmd+=("${pytest_args[@]}")
+if [[ ${#pytest_args[@]} -gt 0 ]]; then
+  cmd+=("${pytest_args[@]}")
+fi
 "${cmd[@]}"

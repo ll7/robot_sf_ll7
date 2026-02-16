@@ -111,18 +111,6 @@ _SUMMARY_METRICS = (
 
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
 
-_POLICY_CATEGORIES = {
-    "fast_pysf": "diagnostic",
-    "fast_pysf_planner": "diagnostic",
-    "goal": "classical",
-    "socnav_sampling": "classical",
-    "socnav_social_force": "classical",
-    "socnav_orca": "classical",
-    "socnav_sacadrl": "learning",
-    "socnav_bench": "classical",
-    "ppo": "learning",
-}
-
 
 @dataclass
 class EpisodeArtifacts:
@@ -1354,7 +1342,6 @@ def _build_episode_record(  # noqa: PLR0913
     algo_metadata = enrich_algorithm_metadata(
         algo=policy_name,
         metadata={"algorithm": policy_name},
-        execution_mode="adapter" if policy_name.startswith("socnav_") else "native",
     )
     record = {
         "version": "v1",
@@ -1972,6 +1959,10 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
     Returns:
         dict[str, Any]: Summary metadata for the policy run.
     """
+    canonical_meta = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name},
+    )
     output_base = sweep_root / policy_name if sweep_root is not None else args.output
     video_base = (
         sweep_video_root / policy_name if sweep_video_root is not None else args.video_output
@@ -2019,9 +2010,14 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
         policy_name=policy_name,
         output_root=output_root,
     )
+    baseline_category = str(
+        result["summary"].get("baseline_category")
+        or canonical_meta.get("baseline_category")
+        or "unknown"
+    )
     return {
         "policy": policy_name,
-        "category": _POLICY_CATEGORIES.get(policy_name, "unknown"),
+        "category": baseline_category,
         "summary": result["summary"],
         "metric_means": result["summary"].get("metric_means", {}),
         "report_md": result["report_md"],

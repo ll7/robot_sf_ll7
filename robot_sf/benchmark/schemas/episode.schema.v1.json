@@ -149,7 +149,8 @@
                         },
                         "adapter_fraction": {
                             "type": "number",
-                            "minimum": 0
+                            "minimum": 0,
+                            "maximum": 1.0
                         }
                     },
                     "additionalProperties": true

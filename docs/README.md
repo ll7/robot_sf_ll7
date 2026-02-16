@@ -342,6 +342,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 * [**NPC Pedestrian Design**](./ped_metrics/NPC_PEDESTRIAN.md) - Details on the design and behavior of NPC pedestrians
  - [**Pedestrian Density Reference**](./ped_metrics/PEDESTRIAN_DENSITY.md) - Units, canonical triad (0.02/0.05/0.08), advisory range, difficulty mapping & test policy
 * [Per-pedestrian force quantiles demo](../examples/benchmarks/per_ped_force_quantiles_demo.py) - Script comparing aggregated vs per-ped force quantiles
+* [**Issue 503 Pedestrian-Impact Metrics Notes**](./context/issue_503_pedestrian_impact_metrics.md) - Execution notes for the optional experimental `ped_impact_*` metric group
 
 ### 📁 Media Resources
 

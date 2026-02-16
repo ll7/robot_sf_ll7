@@ -113,7 +113,7 @@ skills use the same commands:
 
 ```bash
 scripts/dev/ruff_fix_format.sh
-scripts/dev/run_tests_parallel.sh tests
+scripts/dev/run_tests_parallel.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 

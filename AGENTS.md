@@ -13,7 +13,7 @@ Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pr
 
 For shared local + VS Code + Codex workflows, prefer:
 - `scripts/dev/ruff_fix_format.sh`
-- `scripts/dev/run_tests_parallel.sh tests` (uses `pytest -n auto`)
+- `scripts/dev/run_tests_parallel.sh` (uses `pytest -n auto` full discovery)
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 
 ## Config-First Strategy

@@ -33,7 +33,7 @@ workflow, running Ruff format/fix, and running parallel tests.
 
 4. Run tests in parallel
    - Use the shared script:
-     `scripts/dev/run_tests_parallel.sh tests`
+     `scripts/dev/run_tests_parallel.sh`
    - If tests fail, evaluate test value first (Constitution Principle XIII /
      dev guide testing strategy). Classify failures and decide whether to fix,
      defer, or ask for direction before removing or relaxing tests.

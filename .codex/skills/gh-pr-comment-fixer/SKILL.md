@@ -16,7 +16,9 @@ the full test suite, and resolve the review threads after pushing.
    - Prefer `gh pr view --json number,headRefName` and confirm it matches the branch.
 
 2. Retrieve review threads and comments.
-   - Use `gh pr view --json reviewThreads` and `gh pr view --json comments`.
+   - Use GraphQL for review threads:
+     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:20){nodes{id body path line url}}}}}}}'`
+   - Use `gh pr view --json comments` for top-level discussion comments.
    - Summarize the requested changes and note any questions or ambiguities.
 
 3. Evaluate each comment.
@@ -44,3 +46,6 @@ the full test suite, and resolve the review threads after pushing.
 
 - Prefer `gh pr view` and `gh pr diff` over manual web browsing.
 - If no PR exists for the current branch, ask the user to open one or provide a PR number.
+- Post multiline comments using a body file, not escaped `\n`:
+  - Preferred helper: `scripts/dev/gh_comment.sh pr --current <<'EOF' ... EOF`
+  - Alternative: `gh pr comment <num> --body-file <file>`

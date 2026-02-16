@@ -115,6 +115,11 @@ skills use the same commands:
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+scripts/dev/gh_comment.sh pr --current <<'EOF'
+Summary line
+- bullet 1
+- bullet 2
+EOF
 ```
 
 ### Environment factory pattern (CRITICAL)

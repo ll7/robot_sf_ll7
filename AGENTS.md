@@ -15,6 +15,7 @@ For shared local + VS Code + Codex workflows, prefer:
 - `scripts/dev/ruff_fix_format.sh`
 - `scripts/dev/run_tests_parallel.sh` (uses `pytest -n auto -x --failed-first` by default; supports wrapper flags `--new-first`, `--no-ordering`, `--no-fast-fail`)
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+- `scripts/dev/gh_comment.sh` for multiline `gh` PR/issue comments (stdin or `--body-file`, avoids literal `\n` formatting issues)
 
 ## Config-First Strategy
 Prefer a config-first workflow for reproducibility and reviewability. Add or update YAML files under `configs/` for stable experiments and document the canonical command using `--config <path>`. Use CLI flags only for short-lived overrides while iterating locally.

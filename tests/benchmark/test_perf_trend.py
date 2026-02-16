@@ -59,6 +59,71 @@ scenarios: []
         perf_trend.load_matrix(matrix)
 
 
+def test_load_matrix_validation_errors(tmp_path: Path) -> None:
+    """Loader should reject malformed matrix structures."""
+    not_object = tmp_path / "not_object.yaml"
+    _write_text(not_object, "- just-a-list\n")
+    with pytest.raises(ValueError, match="expected object"):
+        perf_trend.load_matrix(not_object)
+
+    missing_suite = tmp_path / "missing_suite.yaml"
+    _write_text(
+        missing_suite,
+        """
+schema_version: benchmark-perf-trend-matrix.v1
+scenarios: []
+""".strip()
+        + "\n",
+    )
+    with pytest.raises(ValueError, match="Missing suite_name"):
+        perf_trend.load_matrix(missing_suite)
+
+    bad_scenario = tmp_path / "bad_scenario.yaml"
+    _write_text(
+        bad_scenario,
+        """
+schema_version: benchmark-perf-trend-matrix.v1
+suite_name: suite
+scenarios:
+  - {}
+""".strip()
+        + "\n",
+    )
+    with pytest.raises(ValueError, match="missing scenario_name"):
+        perf_trend.load_matrix(bad_scenario)
+
+
+def test_parse_args_accepts_overrides() -> None:
+    """Argument parser should accept explicit matrix and threshold overrides."""
+    parsed = perf_trend.parse_args(
+        [
+            "--matrix",
+            "configs/benchmarks/perf_trend_matrix_classic_v1.yaml",
+            "--seed",
+            "123",
+            "--history-glob",
+            "output/benchmarks/perf/trend/history/*.json",
+            "--history-limit",
+            "5",
+            "--max-history-slowdown-pct",
+            "0.4",
+            "--max-history-throughput-drop-pct",
+            "0.2",
+            "--min-history-seconds-delta",
+            "0.12",
+            "--min-history-throughput-delta",
+            "0.8",
+            "--fail-on-regression",
+            "--fail-on-history-regression",
+        ]
+    )
+    assert parsed.seed == 123
+    assert parsed.history_limit == 5
+    assert parsed.max_history_slowdown_pct == pytest.approx(0.4)
+    assert parsed.fail_on_regression is True
+    assert parsed.fail_on_history_regression is True
+
+
 def test_compare_with_history_no_reports() -> None:
     """History comparison should report no-history when no snapshots exist."""
     result = perf_trend.compare_with_history(
@@ -179,6 +244,21 @@ def test_compare_with_history_passes_when_within_thresholds() -> None:
     )
     assert result["status"] == "pass"
     assert "No historical regressions detected." in result["diagnostics"][0]
+
+
+def test_load_history_reports_filters_invalid_payloads(tmp_path: Path) -> None:
+    """History loader should keep only schema-valid JSON objects."""
+    valid = tmp_path / "valid.json"
+    _write_text(valid, json.dumps({"schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION}))
+    invalid_json = tmp_path / "invalid.json"
+    _write_text(invalid_json, "{not json")
+    wrong_schema = tmp_path / "wrong_schema.json"
+    _write_text(wrong_schema, json.dumps({"schema_version": "other"}))
+
+    loaded = perf_trend._load_history_reports(str(tmp_path / "*.json"), limit=10)
+    assert len(loaded) == 1
+    assert loaded[0]["schema_version"] == perf_trend.TREND_REPORT_SCHEMA_VERSION
+    assert "_source_path" in loaded[0]
 
 
 def test_run_scenario_builds_perf_cold_warm_args(
@@ -337,4 +417,68 @@ def test_main_fails_on_history_regression_when_enabled(
         "compare_with_history",
         lambda **kwargs: {"status": "fail", "findings": [], "diagnostics": ["regression"]},
     )
+    assert perf_trend.main([]) == 1
+
+
+def test_main_fails_on_scenario_regression_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Main should return non-zero when scenario regression gate is enabled."""
+    out_json = tmp_path / "trend.json"
+    out_md = tmp_path / "trend.md"
+    monkeypatch.setattr(perf_trend, "ensure_canonical_tree", lambda **kwargs: None)
+    monkeypatch.setattr(
+        perf_trend,
+        "parse_args",
+        lambda _argv=None: Namespace(
+            matrix=Path("configs/benchmarks/perf_trend_matrix_classic_v1.yaml"),
+            seed=101,
+            output_json=out_json,
+            output_markdown=out_md,
+            history_glob="",
+            history_limit=10,
+            max_history_slowdown_pct=0.35,
+            max_history_throughput_drop_pct=0.30,
+            min_history_seconds_delta=0.10,
+            min_history_throughput_delta=0.75,
+            fail_on_regression=True,
+            fail_on_history_regression=False,
+        ),
+    )
+    monkeypatch.setattr(
+        perf_trend,
+        "load_matrix",
+        lambda _path: (
+            "suite-v1",
+            [
+                perf_trend.ScenarioSpec(
+                    scenario_config=Path("x.yaml"),
+                    scenario_name="scenario",
+                    episode_steps=16,
+                    cold_runs=1,
+                    warm_runs=1,
+                    baseline=Path("baseline.json"),
+                    require_baseline=False,
+                    max_slowdown_pct=0.6,
+                    max_throughput_drop_pct=0.5,
+                    min_seconds_delta=0.1,
+                    min_throughput_delta=0.75,
+                    enforce_regression_gate=True,
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        perf_trend,
+        "_run_scenario",
+        lambda **kwargs: {
+            "scenario_name": "scenario",
+            "exit_code": 1,
+            "comparison_status": "fail",
+            "cold_median": {"steps_per_sec": 10.0},
+            "warm_median": {"steps_per_sec": 12.0},
+        },
+    )
+    monkeypatch.setattr(perf_trend, "_load_history_reports", lambda *args: [])
+
     assert perf_trend.main([]) == 1

@@ -437,6 +437,11 @@ _DEFAULT_SNQI_WEIGHTS = {
     "w_jerk": 0.25,
     "w_curvature": 0.25,
 }
+_STUB_DT_SECONDS = 0.1
+_STUB_PATH_EFFICIENCY = 0.9
+_STUB_AVG_SPEED = 1.0
+_STUB_MAX_STEPS = 5
+_STUB_REPLAY_LINEAR_V = 0.05
 
 
 @lru_cache(maxsize=4)
@@ -855,11 +860,12 @@ def _make_stub_episode_record(
         "metrics": {
             "collision_rate": 0.0,
             "success_rate": 1.0,
-            "time_to_goal": float(horizon) * 0.1,
-            "path_efficiency": 0.9,
-            "avg_speed": 1.0,
+            # Keep deterministic synthetic defaults stable across runs.
+            "time_to_goal": float(horizon) * _STUB_DT_SECONDS,
+            "path_efficiency": _STUB_PATH_EFFICIENCY,
+            "avg_speed": _STUB_AVG_SPEED,
         },
-        "steps": min(horizon, 5),
+        "steps": min(horizon, _STUB_MAX_STEPS),
         "horizon": horizon,
         "wall_time_sec": 0.0,
         "created_at": now,
@@ -873,12 +879,15 @@ def _make_stub_episode_record(
         "timing": {"steps_per_second": 0.0},
     }
     if bool(getattr(cfg, "capture_replay", False)):
-        replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
+        replay = [
+            (i * _STUB_DT_SECONDS, _STUB_REPLAY_LINEAR_V * i, 0.0, 0.0)
+            for i in range(record["steps"])
+        ]
         record["replay_steps"] = replay
         record["replay_peds"] = [[] for _ in replay]
         record["replay_ped_forces"] = [[] for _ in replay]
-        record["replay_actions"] = [(0.05, 0.0) for _ in replay]
-        record["replay_dt"] = 0.1
+        record["replay_actions"] = [(_STUB_REPLAY_LINEAR_V, 0.0) for _ in replay]
+        record["replay_dt"] = _STUB_DT_SECONDS
         record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
     return record
 
@@ -904,24 +913,23 @@ def _require_job_scenario(job, *, episode_id: str):
     return scenario
 
 
-def _sanitize_episode_metrics(metrics_raw: dict[str, float]) -> dict[str, float | None]:
+def _sanitize_episode_metrics(metrics_raw: dict[str, float]) -> dict[str, float]:
     """Drop non-finite metric values prior to serialization.
 
     Args:
         metrics_raw: Raw metric payload from metric computation.
 
     Returns:
-        dict[str, float | None]: Serializable metrics with non-finite values removed.
+        dict[str, float]: Serializable metrics with non-finite values removed.
     """
-    metrics: dict[str, float | None] = {}
-    for key, value in metrics_raw.items():
-        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-            continue
-        metrics[key] = value
-    return metrics
+    return {
+        key: value
+        for key, value in metrics_raw.items()
+        if not isinstance(value, float) or math.isfinite(value)
+    }
 
 
-def _status_from_metrics(metrics: dict[str, float | None]) -> str:
+def _status_from_metrics(metrics: dict[str, float]) -> str:
     """Compute episode status from success and collision metrics.
 
     Args:
@@ -930,7 +938,7 @@ def _status_from_metrics(metrics: dict[str, float | None]) -> str:
     Returns:
         Status label (`success`, `failure`, or `collision`).
     """
-    success_rate = float(metrics.get("success_rate") or 0.0)
+    success_rate = float(metrics.get("success_rate", 0.0))
     collision_rate = metrics.get("collision_rate")
     status = "success" if success_rate >= 1.0 else "failure"
     if collision_rate:
@@ -1029,7 +1037,6 @@ def _attach_replay_payload(
         ped_forces: Per-step pedestrian force snapshots from rollout.
     """
     episode = replay_capture.finalize()
-    episode.map_path = getattr(scenario, "map_path", "")
     finalized = episode.steps
     record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
     record["replay_peds"] = [s.ped_positions or [] for s in finalized]
@@ -1039,7 +1046,7 @@ def _attach_replay_payload(
     record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
     record["replay_goals"] = [s.robot_goal for s in finalized]
     record["replay_dt"] = episode.dt
-    record["replay_map_path"] = episode.map_path
+    record["replay_map_path"] = getattr(scenario, "map_path", "")
 
 
 def _make_episode_record(job, cfg) -> dict[str, Any]:

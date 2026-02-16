@@ -41,5 +41,5 @@ Run the same PR validation pipeline used by local VS Code tasks, but via reusabl
 
 6. Commit and PR
    - Once all checks pass, commit your changes with a clear message.
-   - Verify the issue addressed is acutally resolved by the changes.
+   - Verify the issue addressed is actually resolved by the changes.
    - Push to your branch and create/update the PR referencing related issues.

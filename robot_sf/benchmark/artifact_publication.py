@@ -15,12 +15,13 @@ import tarfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from statistics import mean
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from pathlib import Path
+import numpy as np
 
+from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v1"
 SIZE_REPORT_SCHEMA_VERSION = "benchmark-artifact-size-report.v1"
@@ -100,6 +101,20 @@ def _kind_for_path(relative_path: Path) -> str:
     return "misc"
 
 
+def _to_repo_relative(path: Path) -> str:
+    """Return a repository-relative path string when possible.
+
+    Returns:
+        Path relative to repository root, or ``path.name`` when outside repo.
+    """
+    resolved = path.resolve()
+    repo_root = get_repository_root().resolve()
+    try:
+        return resolved.relative_to(repo_root).as_posix()
+    except ValueError:
+        return resolved.name
+
+
 def list_publication_files(run_dir: Path, *, include_videos: bool = True) -> list[Path]:
     """Return sorted run-relative file paths eligible for publication export.
 
@@ -116,6 +131,8 @@ def list_publication_files(run_dir: Path, *, include_videos: bool = True) -> lis
 
     selected: list[Path] = []
     for candidate in run_dir.rglob("*"):
+        if candidate.is_symlink():
+            continue
         if not candidate.is_file():
             continue
         rel = candidate.relative_to(run_dir)
@@ -177,15 +194,8 @@ def _percentile(values: list[float], q: float) -> float:
     """Return linear-interpolated percentile for ``values`` at quantile ``q``."""
     if not values:
         return 0.0
-    if len(values) == 1:
-        return float(values[0])
     clamped = min(1.0, max(0.0, q))
-    ordered = sorted(values)
-    index = (len(ordered) - 1) * clamped
-    low = int(index)
-    high = min(low + 1, len(ordered) - 1)
-    frac = index - low
-    return float(ordered[low] * (1.0 - frac) + ordered[high] * frac)
+    return float(np.percentile(values, clamped * 100.0, method="linear"))
 
 
 def _distribution(values: list[int]) -> dict[str, float | int]:
@@ -246,7 +256,7 @@ def measure_artifact_size_ranges(
             bytes_by_kind[kind].append(size_value)
         run_records.append(
             {
-                "run_dir": str(run_dir),
+                "run_dir": _to_repo_relative(run_dir),
                 "file_count": len(files),
                 "total_bytes": total,
                 "bytes_by_kind": dict(sorted(per_kind_totals.items())),
@@ -260,7 +270,7 @@ def measure_artifact_size_ranges(
     return {
         "schema_version": SIZE_REPORT_SCHEMA_VERSION,
         "generated_at_utc": _utc_now_iso(),
-        "benchmarks_root": str(benchmarks_root.resolve()),
+        "benchmarks_root": _to_repo_relative(benchmarks_root),
         "run_count": len(run_records),
         "include_videos": bool(include_videos),
         "distributions": distributions,
@@ -275,7 +285,7 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:
         JSON-serializable provenance dictionary with run and repository metadata.
     """
     provenance: dict[str, Any] = {
-        "run_dir": str(run_dir.resolve()),
+        "run_dir": _to_repo_relative(run_dir),
         "run_id": run_dir.name,
     }
 
@@ -315,8 +325,38 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:
                 }
             matrix_path = run_meta_payload.get("matrix_path")
             if isinstance(matrix_path, str) and matrix_path:
-                provenance["matrix_path"] = matrix_path
+                provenance["matrix_path"] = _to_repo_relative(Path(matrix_path))
     return provenance
+
+
+def _validate_bundle_name(bundle_name: str) -> None:
+    """Validate user-provided bundle name for safe output path construction."""
+    name_path = Path(bundle_name)
+    if (
+        not bundle_name
+        or name_path.is_absolute()
+        or ".." in name_path.parts
+        or len(name_path.parts) != 1
+    ):
+        raise ValueError(f"Invalid bundle_name: {bundle_name!r}")
+
+
+def _resolve_bundle_output_paths(
+    out_dir: Path,
+    target_name: str,
+) -> tuple[Path, Path, Path]:
+    """Resolve and validate target root, bundle directory, and archive path.
+
+    Returns:
+        Tuple of ``(target_root, bundle_dir, archive_path)`` paths.
+    """
+    target_root = out_dir.resolve()
+    target_root.mkdir(parents=True, exist_ok=True)
+    bundle_dir = (target_root / target_name).resolve()
+    archive_path = (target_root / f"{target_name}.tar.gz").resolve()
+    if not bundle_dir.is_relative_to(target_root) or not archive_path.is_relative_to(target_root):
+        raise ValueError("Bundle output must remain within out_dir")
+    return target_root, bundle_dir, archive_path
 
 
 def export_publication_bundle(
@@ -350,13 +390,13 @@ def export_publication_bundle(
         raise ValueError(f"No eligible files found under {run_root}")
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
-    target_root = out_dir.resolve()
-    target_root.mkdir(parents=True, exist_ok=True)
-    bundle_dir = target_root / target_name
-    archive_path = target_root / f"{target_name}.tar.gz"
+    _validate_bundle_name(target_name)
+    target_root, bundle_dir, archive_path = _resolve_bundle_output_paths(out_dir, target_name)
 
     if overwrite:
         if bundle_dir.exists():
+            if bundle_dir == target_root:
+                raise ValueError("Refusing to delete out_dir via overwrite")
             shutil.rmtree(bundle_dir)
         if archive_path.exists():
             archive_path.unlink()

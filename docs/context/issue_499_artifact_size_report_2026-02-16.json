@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-artifact-size-report.v1",
-  "generated_at_utc": "2026-02-16T13:17:21.837896Z",
-  "benchmarks_root": "/Users/lennart/git/robot_sf_ll7/output/benchmarks",
+  "generated_at_utc": "2026-02-16T13:34:07.698728Z",
+  "benchmarks_root": "output/benchmarks",
   "run_count": 38,
   "include_videos": true,
   "distributions": {
@@ -41,14 +41,14 @@
       "count": 32,
       "min": 2514.0,
       "p50": 155916.5,
-      "p90": 181913.90000000002,
+      "p90": 181913.9,
       "max": 182140.0,
       "mean": 118689.75
     }
   },
   "runs": [
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/20260130_135339_policy_analysis_ppo",
+      "run_dir": "output/benchmarks/20260130_135339_policy_analysis_ppo",
       "file_count": 4,
       "total_bytes": 914994,
       "bytes_by_kind": {
@@ -58,7 +58,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/20260130_141010_policy_analysis_ppo",
+      "run_dir": "output/benchmarks/20260130_141010_policy_analysis_ppo",
       "file_count": 4,
       "total_bytes": 916188,
       "bytes_by_kind": {
@@ -68,7 +68,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260127_172827",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_172827",
       "file_count": 3,
       "total_bytes": 621780,
       "bytes_by_kind": {
@@ -78,7 +78,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260127_173917",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_173917",
       "file_count": 1,
       "total_bytes": 247996,
       "bytes_by_kind": {
@@ -86,7 +86,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260127_175457",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_175457",
       "file_count": 1,
       "total_bytes": 75059,
       "bytes_by_kind": {
@@ -94,7 +94,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260127_180624",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_180624",
       "file_count": 4,
       "total_bytes": 628642,
       "bytes_by_kind": {
@@ -104,7 +104,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260127_191536",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_191536",
       "file_count": 4,
       "total_bytes": 628631,
       "bytes_by_kind": {
@@ -114,7 +114,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_fast_pysf_planner_20260128_132624",
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260128_132624",
       "file_count": 4,
       "total_bytes": 760114,
       "bytes_by_kind": {
@@ -124,7 +124,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_ppo_20260127_193254",
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260127_193254",
       "file_count": 4,
       "total_bytes": 5922,
       "bytes_by_kind": {
@@ -134,7 +134,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_ppo_20260127_193444",
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260127_193444",
       "file_count": 1,
       "total_bytes": 22216,
       "bytes_by_kind": {
@@ -142,7 +142,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_ppo_20260128_094234",
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260128_094234",
       "file_count": 4,
       "total_bytes": 617926,
       "bytes_by_kind": {
@@ -152,7 +152,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_ppo_20260128_132624",
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260128_132624",
       "file_count": 4,
       "total_bytes": 740915,
       "bytes_by_kind": {
@@ -162,7 +162,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_ppo_20260130_124830",
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260130_124830",
       "file_count": 1,
       "total_bytes": 108717,
       "bytes_by_kind": {
@@ -170,7 +170,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260128_104400",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260128_104400",
       "file_count": 4,
       "total_bytes": 624698,
       "bytes_by_kind": {
@@ -180,7 +180,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260128_132624",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260128_132624",
       "file_count": 4,
       "total_bytes": 752576,
       "bytes_by_kind": {
@@ -190,7 +190,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_105503",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_105503",
       "file_count": 4,
       "total_bytes": 26471,
       "bytes_by_kind": {
@@ -200,7 +200,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_131148",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_131148",
       "file_count": 4,
       "total_bytes": 29956,
       "bytes_by_kind": {
@@ -210,7 +210,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_135758",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_135758",
       "file_count": 4,
       "total_bytes": 433575,
       "bytes_by_kind": {
@@ -220,7 +220,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_140130",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_140130",
       "file_count": 4,
       "total_bytes": 438648,
       "bytes_by_kind": {
@@ -230,7 +230,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_140828",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_140828",
       "file_count": 4,
       "total_bytes": 440138,
       "bytes_by_kind": {
@@ -240,7 +240,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_144845",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_144845",
       "file_count": 4,
       "total_bytes": 40578,
       "bytes_by_kind": {
@@ -250,7 +250,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_161726",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_161726",
       "file_count": 4,
       "total_bytes": 66339,
       "bytes_by_kind": {
@@ -260,7 +260,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_163513",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_163513",
       "file_count": 4,
       "total_bytes": 76020,
       "bytes_by_kind": {
@@ -270,7 +270,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260129_164725",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_164725",
       "file_count": 4,
       "total_bytes": 76002,
       "bytes_by_kind": {
@@ -280,7 +280,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260130_090224",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_090224",
       "file_count": 4,
       "total_bytes": 67663,
       "bytes_by_kind": {
@@ -290,7 +290,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260130_091802",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_091802",
       "file_count": 4,
       "total_bytes": 68995,
       "bytes_by_kind": {
@@ -300,7 +300,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260130_093550",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_093550",
       "file_count": 4,
       "total_bytes": 66091,
       "bytes_by_kind": {
@@ -310,7 +310,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/policy_analysis_socnav_orca_20260130_101858",
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_101858",
       "file_count": 4,
       "total_bytes": 456938,
       "bytes_by_kind": {
@@ -320,7 +320,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 678378,
       "bytes_by_kind": {
@@ -330,7 +330,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run2/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run2/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 676729,
       "bytes_by_kind": {
@@ -340,7 +340,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run3/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run3/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 676646,
       "bytes_by_kind": {
@@ -350,7 +350,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run4/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run4/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 676802,
       "bytes_by_kind": {
@@ -360,7 +360,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run5/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run5/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 678255,
       "bytes_by_kind": {
@@ -370,7 +370,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run6/fast_pysf_planner",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/fast_pysf_planner",
       "file_count": 4,
       "total_bytes": 678479,
       "bytes_by_kind": {
@@ -380,7 +380,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run6/ppo",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/ppo",
       "file_count": 4,
       "total_bytes": 667589,
       "bytes_by_kind": {
@@ -390,7 +390,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/seed_holdout_eval_run6/socnav_orca",
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/socnav_orca",
       "file_count": 4,
       "total_bytes": 675354,
       "bytes_by_kind": {
@@ -400,7 +400,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/smoke_classic_fixed",
+      "run_dir": "output/benchmarks/smoke_classic_fixed",
       "file_count": 5,
       "total_bytes": 4441,
       "bytes_by_kind": {
@@ -409,7 +409,7 @@
       }
     },
     {
-      "run_dir": "/Users/lennart/git/robot_sf_ll7/output/benchmarks/smoke_classic_fixed_v2",
+      "run_dir": "output/benchmarks/smoke_classic_fixed_v2",
       "file_count": 3,
       "total_bytes": 2664,
       "bytes_by_kind": {

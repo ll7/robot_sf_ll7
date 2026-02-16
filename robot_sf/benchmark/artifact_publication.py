@@ -325,7 +325,10 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:
                 }
             matrix_path = run_meta_payload.get("matrix_path")
             if isinstance(matrix_path, str) and matrix_path:
-                provenance["matrix_path"] = _to_repo_relative(Path(matrix_path))
+                matrix_candidate = Path(matrix_path)
+                if not matrix_candidate.is_absolute():
+                    matrix_candidate = get_repository_root() / matrix_candidate
+                provenance["matrix_path"] = _to_repo_relative(matrix_candidate)
     return provenance
 
 

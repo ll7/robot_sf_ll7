@@ -148,3 +148,34 @@ def test_export_publication_bundle_rejects_unsafe_bundle_names(tmp_path: Path) -
 
     with pytest.raises(ValueError, match="Invalid bundle_name"):
         export_publication_bundle(run_dir, out_dir, bundle_name="../escape", overwrite=True)
+
+
+def test_export_bundle_matrix_path_is_repo_relative_from_any_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Relative matrix paths should resolve against repository root, not current cwd."""
+    run_dir = tmp_path / "benchmarks" / "run_matrix_path"
+    _make_run(run_dir, with_video=False)
+    matrix_path = "configs/scenarios/classic_interactions.yaml"
+    _write(
+        run_dir / "run_meta.json",
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "matrix_path": matrix_path,
+            }
+        ),
+    )
+
+    cwd_outside_repo = tmp_path / "outside_repo"
+    cwd_outside_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(cwd_outside_repo)
+
+    result = export_publication_bundle(
+        run_dir,
+        tmp_path / "publication",
+        bundle_name="run_matrix_bundle",
+        include_videos=False,
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["provenance"]["matrix_path"] == matrix_path

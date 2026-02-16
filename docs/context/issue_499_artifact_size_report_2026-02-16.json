@@ -1,0 +1,421 @@
+{
+  "schema_version": "benchmark-artifact-size-report.v1",
+  "generated_at_utc": "2026-02-16T13:34:07.698728Z",
+  "benchmarks_root": "output/benchmarks",
+  "run_count": 38,
+  "include_videos": true,
+  "distributions": {
+    "total_bytes": {
+      "count": 38,
+      "min": 2664.0,
+      "p50": 448538.0,
+      "p90": 744413.3,
+      "max": 916188.0,
+      "mean": 404450.65789473685
+    },
+    "aggregates_bytes": {
+      "count": 32,
+      "min": 2122.0,
+      "p50": 153187.0,
+      "p90": 180226.8,
+      "max": 180480.0,
+      "mean": 116915.6875
+    },
+    "episodes_bytes": {
+      "count": 38,
+      "min": 1286.0,
+      "p50": 179744.5,
+      "p90": 435719.60000000003,
+      "max": 561709.0,
+      "mean": 205981.05263157896
+    },
+    "misc_bytes": {
+      "count": 2,
+      "min": 1048.0,
+      "p50": 1235.5,
+      "p90": 1385.5,
+      "max": 1423.0,
+      "mean": 1235.5
+    },
+    "reports_bytes": {
+      "count": 32,
+      "min": 2514.0,
+      "p50": 155916.5,
+      "p90": 181913.9,
+      "max": 182140.0,
+      "mean": 118689.75
+    }
+  },
+  "runs": [
+    {
+      "run_dir": "output/benchmarks/20260130_135339_policy_analysis_ppo",
+      "file_count": 4,
+      "total_bytes": 914994,
+      "bytes_by_kind": {
+        "aggregates": 175808,
+        "episodes": 560677,
+        "reports": 178509
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/20260130_141010_policy_analysis_ppo",
+      "file_count": 4,
+      "total_bytes": 916188,
+      "bytes_by_kind": {
+        "aggregates": 175889,
+        "episodes": 561709,
+        "reports": 178590
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_172827",
+      "file_count": 3,
+      "total_bytes": 621780,
+      "bytes_by_kind": {
+        "aggregates": 129024,
+        "episodes": 363699,
+        "reports": 129057
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_173917",
+      "file_count": 1,
+      "total_bytes": 247996,
+      "bytes_by_kind": {
+        "episodes": 247996
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_175457",
+      "file_count": 1,
+      "total_bytes": 75059,
+      "bytes_by_kind": {
+        "episodes": 75059
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_180624",
+      "file_count": 4,
+      "total_bytes": 628642,
+      "bytes_by_kind": {
+        "aggregates": 130550,
+        "episodes": 366128,
+        "reports": 131964
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260127_191536",
+      "file_count": 4,
+      "total_bytes": 628631,
+      "bytes_by_kind": {
+        "aggregates": 130550,
+        "episodes": 366117,
+        "reports": 131964
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_fast_pysf_planner_20260128_132624",
+      "file_count": 4,
+      "total_bytes": 760114,
+      "bytes_by_kind": {
+        "aggregates": 153995,
+        "episodes": 449221,
+        "reports": 156898
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260127_193254",
+      "file_count": 4,
+      "total_bytes": 5922,
+      "bytes_by_kind": {
+        "aggregates": 2122,
+        "episodes": 1286,
+        "reports": 2514
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260127_193444",
+      "file_count": 1,
+      "total_bytes": 22216,
+      "bytes_by_kind": {
+        "episodes": 22216
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260128_094234",
+      "file_count": 4,
+      "total_bytes": 617926,
+      "bytes_by_kind": {
+        "aggregates": 130020,
+        "episodes": 356485,
+        "reports": 131421
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260128_132624",
+      "file_count": 4,
+      "total_bytes": 740915,
+      "bytes_by_kind": {
+        "aggregates": 152726,
+        "episodes": 432836,
+        "reports": 155353
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_ppo_20260130_124830",
+      "file_count": 1,
+      "total_bytes": 108717,
+      "bytes_by_kind": {
+        "episodes": 108717
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260128_104400",
+      "file_count": 4,
+      "total_bytes": 624698,
+      "bytes_by_kind": {
+        "aggregates": 130544,
+        "episodes": 362181,
+        "reports": 131973
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260128_132624",
+      "file_count": 4,
+      "total_bytes": 752576,
+      "bytes_by_kind": {
+        "aggregates": 153648,
+        "episodes": 442448,
+        "reports": 156480
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_105503",
+      "file_count": 4,
+      "total_bytes": 26471,
+      "bytes_by_kind": {
+        "aggregates": 10330,
+        "episodes": 5225,
+        "reports": 10916
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_131148",
+      "file_count": 4,
+      "total_bytes": 29956,
+      "bytes_by_kind": {
+        "aggregates": 11227,
+        "episodes": 6916,
+        "reports": 11813
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_135758",
+      "file_count": 4,
+      "total_bytes": 433575,
+      "bytes_by_kind": {
+        "aggregates": 164705,
+        "episodes": 101573,
+        "reports": 167297
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_140130",
+      "file_count": 4,
+      "total_bytes": 438648,
+      "bytes_by_kind": {
+        "aggregates": 164705,
+        "episodes": 106646,
+        "reports": 167297
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_140828",
+      "file_count": 4,
+      "total_bytes": 440138,
+      "bytes_by_kind": {
+        "aggregates": 164910,
+        "episodes": 107520,
+        "reports": 167708
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_144845",
+      "file_count": 4,
+      "total_bytes": 40578,
+      "bytes_by_kind": {
+        "aggregates": 9821,
+        "episodes": 20337,
+        "reports": 10420
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_161726",
+      "file_count": 4,
+      "total_bytes": 66339,
+      "bytes_by_kind": {
+        "aggregates": 21044,
+        "episodes": 22489,
+        "reports": 22806
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_163513",
+      "file_count": 4,
+      "total_bytes": 76020,
+      "bytes_by_kind": {
+        "aggregates": 25676,
+        "episodes": 22342,
+        "reports": 28002
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260129_164725",
+      "file_count": 4,
+      "total_bytes": 76002,
+      "bytes_by_kind": {
+        "aggregates": 25678,
+        "episodes": 22320,
+        "reports": 28004
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_090224",
+      "file_count": 4,
+      "total_bytes": 67663,
+      "bytes_by_kind": {
+        "aggregates": 23182,
+        "episodes": 20191,
+        "reports": 24290
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_091802",
+      "file_count": 4,
+      "total_bytes": 68995,
+      "bytes_by_kind": {
+        "aggregates": 22441,
+        "episodes": 22184,
+        "reports": 24370
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_093550",
+      "file_count": 4,
+      "total_bytes": 66091,
+      "bytes_by_kind": {
+        "aggregates": 20803,
+        "episodes": 22748,
+        "reports": 22540
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/policy_analysis_socnav_orca_20260130_101858",
+      "file_count": 4,
+      "total_bytes": 456938,
+      "bytes_by_kind": {
+        "aggregates": 171331,
+        "episodes": 111493,
+        "reports": 174114
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 678378,
+      "bytes_by_kind": {
+        "aggregates": 180439,
+        "episodes": 315840,
+        "reports": 182099
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run2/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 676729,
+      "bytes_by_kind": {
+        "aggregates": 180062,
+        "episodes": 314963,
+        "reports": 181704
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run3/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 676646,
+      "bytes_by_kind": {
+        "aggregates": 180002,
+        "episodes": 314987,
+        "reports": 181657
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run4/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 676802,
+      "bytes_by_kind": {
+        "aggregates": 180117,
+        "episodes": 314925,
+        "reports": 181760
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run5/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 678255,
+      "bytes_by_kind": {
+        "aggregates": 180378,
+        "episodes": 315836,
+        "reports": 182041
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/fast_pysf_planner",
+      "file_count": 4,
+      "total_bytes": 678479,
+      "bytes_by_kind": {
+        "aggregates": 180480,
+        "episodes": 315859,
+        "reports": 182140
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/ppo",
+      "file_count": 4,
+      "total_bytes": 667589,
+      "bytes_by_kind": {
+        "aggregates": 178856,
+        "episodes": 308293,
+        "reports": 180440
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/seed_holdout_eval_run6/socnav_orca",
+      "file_count": 4,
+      "total_bytes": 675354,
+      "bytes_by_kind": {
+        "aggregates": 180239,
+        "episodes": 313184,
+        "reports": 181931
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/smoke_classic_fixed",
+      "file_count": 5,
+      "total_bytes": 4441,
+      "bytes_by_kind": {
+        "episodes": 3018,
+        "misc": 1423
+      }
+    },
+    {
+      "run_dir": "output/benchmarks/smoke_classic_fixed_v2",
+      "file_count": 3,
+      "total_bytes": 2664,
+      "bytes_by_kind": {
+        "episodes": 1616,
+        "misc": 1048
+      }
+    }
+  ]
+}

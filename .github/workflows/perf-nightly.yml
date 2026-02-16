@@ -39,52 +39,35 @@ jobs:
       - name: Sync dependencies (locked)
         run: uv sync --all-extras --frozen
 
-      - name: Run nightly cold/warm perf suite (classic_crossing_low)
-        id: nightly_low
-        continue-on-error: true
-        run: |
-          uv run python -m robot_sf.benchmark.perf_cold_warm \
-            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
-            --scenario-name classic_crossing_low \
-            --episode-steps 96 \
-            --cold-runs 2 \
-            --warm-runs 4 \
-            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json \
-            --output-json output/benchmarks/perf/nightly/classic_crossing_low.json \
-            --output-markdown output/benchmarks/perf/nightly/classic_crossing_low.md \
-            --max-slowdown-pct 0.60 \
-            --max-throughput-drop-pct 0.50 \
-            --min-seconds-delta 0.15 \
-            --min-throughput-delta 0.75 \
-            --require-baseline \
-            --fail-on-regression
+      - name: Restore trend history cache
+        uses: actions/cache@v4
+        with:
+          path: output/benchmarks/perf/trend/history
+          key: perf-trend-history-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            perf-trend-history-${{ github.ref_name }}-
+            perf-trend-history-main-
 
-      - name: Run nightly cold/warm perf suite (classic_crossing_medium)
-        id: nightly_medium
-        continue-on-error: true
+      - name: Run nightly trend benchmark matrix
+        id: nightly_trend
         run: |
-          uv run python -m robot_sf.benchmark.perf_cold_warm \
-            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
-            --scenario-name classic_crossing_medium \
-            --episode-steps 96 \
-            --cold-runs 2 \
-            --warm-runs 4 \
-            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json \
-            --output-json output/benchmarks/perf/nightly/classic_crossing_medium.json \
-            --output-markdown output/benchmarks/perf/nightly/classic_crossing_medium.md \
-            --max-slowdown-pct 0.60 \
-            --max-throughput-drop-pct 0.50 \
-            --min-seconds-delta 0.15 \
-            --min-throughput-delta 0.75 \
-            --require-baseline \
-            --fail-on-regression
+          mkdir -p output/benchmarks/perf/trend/history
+          uv run python -m robot_sf.benchmark.perf_trend \
+            --matrix configs/benchmarks/perf_trend_matrix_classic_v1.yaml \
+            --seed 101 \
+            --history-glob 'output/benchmarks/perf/trend/history/*.json' \
+            --history-limit 14 \
+            --output-json output/benchmarks/perf/trend/latest.json \
+            --output-markdown output/benchmarks/perf/trend/latest.md \
+            --fail-on-regression \
+            --fail-on-history-regression
 
-      - name: Fail if any nightly scenario regressed
+      - name: Store latest report in trend history cache path
         if: always()
         run: |
-          if [[ "${{ steps.nightly_low.outcome }}" == "failure" || "${{ steps.nightly_medium.outcome }}" == "failure" ]]; then
-            echo "At least one nightly cold/warm benchmark scenario failed."
-            exit 1
+          mkdir -p output/benchmarks/perf/trend/history
+          if [ -f output/benchmarks/perf/trend/latest.json ]; then
+            cp output/benchmarks/perf/trend/latest.json "output/benchmarks/perf/trend/history/${{ github.run_id }}.json"
           fi
 
       - name: Upload nightly perf artifacts
@@ -92,5 +75,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nightly-perf-artifacts
-          path: output/benchmarks/perf/nightly/
+          path: output/benchmarks/perf/
           if-no-files-found: ignore

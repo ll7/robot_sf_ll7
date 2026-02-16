@@ -1,0 +1,41 @@
+schema_version: benchmark-perf-trend-matrix.v1
+suite_name: classic-interactions-overall-trend-v1
+scenarios:
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic_crossing_low
+    episode_steps: 96
+    cold_runs: 1
+    warm_runs: 2
+    baseline: configs/benchmarks/perf_baseline_classic_cold_warm_v1.json
+    require_baseline: true
+    max_slowdown_pct: 0.60
+    max_throughput_drop_pct: 0.50
+    min_seconds_delta: 0.15
+    min_throughput_delta: 0.75
+    enforce_regression_gate: true
+
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic_crossing_medium
+    episode_steps: 96
+    cold_runs: 1
+    warm_runs: 2
+    baseline: configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json
+    require_baseline: true
+    max_slowdown_pct: 0.60
+    max_throughput_drop_pct: 0.50
+    min_seconds_delta: 0.15
+    min_throughput_delta: 0.75
+    enforce_regression_gate: true
+
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic_crossing_high
+    episode_steps: 96
+    cold_runs: 1
+    warm_runs: 2
+    baseline: configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json
+    require_baseline: false
+    max_slowdown_pct: 0.60
+    max_throughput_drop_pct: 0.50
+    min_seconds_delta: 0.15
+    min_throughput_delta: 0.75
+    enforce_regression_gate: false

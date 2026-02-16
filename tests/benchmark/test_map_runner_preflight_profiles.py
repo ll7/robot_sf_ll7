@@ -116,6 +116,7 @@ def test_paper_baseline_allows_ppo_when_gate_is_met(tmp_path: Path, monkeypatch)
 
     assert summary["written"] == 1
     assert summary["algorithm_readiness"]["profile"] == "paper-baseline"
+    assert summary["algorithm_metadata_contract"]["baseline_category"] == "learning"
 
 
 def test_socnav_fail_fast_policy_raises(tmp_path: Path, monkeypatch) -> None:
@@ -165,6 +166,7 @@ def test_socnav_skip_with_warning_policy_returns_skipped_summary(
     assert summary["total_jobs"] == 0
     assert summary["skipped_jobs"] == 1
     assert summary["preflight"]["status"] == "skipped"
+    assert summary["algorithm_metadata_contract"]["canonical_algorithm"] == "socnav_sampling"
 
 
 def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatch) -> None:
@@ -190,3 +192,20 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
 
     assert summary["written"] == 1
     assert summary["preflight"]["status"] == "fallback"
+
+
+def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:
+    """Adapter-impact mode should be represented in summary metadata contract."""
+    _patch_lightweight_batch(monkeypatch)
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="goal",
+        benchmark_profile="baseline-safe",
+        adapter_impact_eval=True,
+        resume=False,
+    )
+    impact = summary["algorithm_metadata_contract"].get("adapter_impact")
+    assert isinstance(impact, dict)
+    assert impact.get("requested") is True

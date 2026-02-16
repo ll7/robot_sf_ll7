@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
@@ -155,9 +156,8 @@ def _ensure_algo_metadata(
     algo_meta = record.get("algorithm_metadata")
     if algo_meta is None or not isinstance(algo_meta, dict):
         algo_meta = {}
-        record["algorithm_metadata"] = algo_meta
-    algo_meta.setdefault("algorithm", algo_value)
-    algo_meta.setdefault("status", "ok")
+    algo_meta = enrich_algorithm_metadata(algo=algo_value, metadata=algo_meta)
+    record["algorithm_metadata"] = algo_meta
 
     record["algo"] = algo_value
     return record

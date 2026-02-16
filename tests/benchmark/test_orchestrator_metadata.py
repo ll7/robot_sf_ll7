@@ -30,6 +30,9 @@ def test_injects_nested_algo_metadata():
 
     assert updated["algo"] == "sf"
     assert updated["scenario_params"]["algo"] == "sf"
+    algo_meta = updated["algorithm_metadata"]
+    assert algo_meta["baseline_category"] == "classical"
+    assert algo_meta["canonical_algorithm"] == "social_force"
 
 
 def test_raises_on_missing_algo():

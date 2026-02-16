@@ -39,6 +39,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -109,18 +110,6 @@ _SUMMARY_METRICS = (
 )
 
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
-
-_POLICY_CATEGORIES = {
-    "fast_pysf": "oracle",
-    "fast_pysf_planner": "oracle",
-    "goal": "heuristic",
-    "socnav_sampling": "heuristic",
-    "socnav_social_force": "heuristic",
-    "socnav_orca": "heuristic",
-    "socnav_sacadrl": "learned",
-    "socnav_bench": "heuristic",
-    "ppo": "learned",
-}
 
 
 @dataclass
@@ -1273,6 +1262,7 @@ def _build_episode_record(  # noqa: PLR0913
     wall_time: float,
     max_steps: int,
     dt: float,
+    robot_max_speed: float | None,
     ts_start: str,
     video_path: Path | None,
     terminated: bool,
@@ -1307,7 +1297,12 @@ def _build_episode_record(  # noqa: PLR0913
             dt=float(dt),
             reached_goal_step=reached_goal_step,
         )
-        metrics_raw = compute_all_metrics(ep, horizon=max_steps, shortest_path_len=shortest_path)
+        metrics_raw = compute_all_metrics(
+            ep,
+            horizon=max_steps,
+            shortest_path_len=shortest_path,
+            robot_max_speed=robot_max_speed,
+        )
         metrics_raw["shortest_path_len"] = float(shortest_path)
         # Filter jerk/curvature at low speeds to avoid numerical blow-ups when |v| ~ 0.
         speed_eps = 0.1
@@ -1344,6 +1339,10 @@ def _build_episode_record(  # noqa: PLR0913
     scenario_params.setdefault("id", scenario_id)
     scenario_params.setdefault("algo", policy_name)
 
+    algo_metadata = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name},
+    )
     record = {
         "version": "v1",
         "episode_id": compute_episode_id(scenario_params, seed),
@@ -1351,7 +1350,7 @@ def _build_episode_record(  # noqa: PLR0913
         "seed": int(seed),
         "scenario_params": scenario_params,
         "metrics": metrics,
-        "algorithm_metadata": {"algorithm": policy_name},
+        "algorithm_metadata": algo_metadata,
         "algo": policy_name,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
@@ -1399,6 +1398,11 @@ def _build_error_episode_record(
         collision=False,
         had_error=True,
     )
+    algo_metadata = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name, "status": "error"},
+        execution_mode="adapter" if policy_name.startswith("socnav_") else "native",
+    )
     return {
         "version": "v1",
         "episode_id": compute_episode_id(scenario_params, seed),
@@ -1406,7 +1410,7 @@ def _build_error_episode_record(
         "seed": int(seed),
         "scenario_params": scenario_params,
         "metrics": {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0},
-        "algorithm_metadata": {"algorithm": policy_name, "status": "error"},
+        "algorithm_metadata": algo_metadata,
         "algo": policy_name,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
@@ -1477,6 +1481,14 @@ def _run_episode(  # noqa: PLR0913
         env_factory_kwargs=env_factory_kwargs,
     )
     ts_start = datetime.now(_TIMESTAMP_TZ).isoformat()
+    cfg_robot = getattr(config, "robot_config", None)
+    robot_max_speed = None
+    if cfg_robot is not None:
+        for attr in ("max_linear_speed", "max_velocity"):
+            value = getattr(cfg_robot, attr, None)
+            if isinstance(value, (int, float)) and float(value) > 0.0:
+                robot_max_speed = float(value)
+                break
     record: dict[str, Any] | None = None
     try:
         obs = _reset_env(
@@ -1511,6 +1523,7 @@ def _run_episode(  # noqa: PLR0913
             wall_time=runtime.wall_time,
             max_steps=max_steps,
             dt=config.sim_config.time_per_step_in_secs,
+            robot_max_speed=robot_max_speed,
             ts_start=ts_start,
             video_path=episode_video,
             terminated=runtime.terminated,
@@ -1946,6 +1959,10 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
     Returns:
         dict[str, Any]: Summary metadata for the policy run.
     """
+    canonical_meta = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name},
+    )
     output_base = sweep_root / policy_name if sweep_root is not None else args.output
     video_base = (
         sweep_video_root / policy_name if sweep_video_root is not None else args.video_output
@@ -1993,9 +2010,14 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
         policy_name=policy_name,
         output_root=output_root,
     )
+    baseline_category = str(
+        result["summary"].get("baseline_category")
+        or canonical_meta.get("baseline_category")
+        or "unknown"
+    )
     return {
         "policy": policy_name,
-        "category": _POLICY_CATEGORIES.get(policy_name, "unknown"),
+        "category": baseline_category,
         "summary": result["summary"],
         "metric_means": result["summary"].get("metric_means", {}),
         "report_md": result["report_md"],

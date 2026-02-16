@@ -34,6 +34,12 @@ workflow, running Ruff format/fix, and running parallel tests.
 4. Run tests in parallel
    - Use the shared script:
      `scripts/dev/run_tests_parallel.sh`
+   - Default behavior is fail-fast + failed-first ordering:
+     `pytest -n auto -x --failed-first`
+   - Optional ordering toggle:
+     `scripts/dev/run_tests_parallel.sh --new-first`
+   - To disable fail-fast when you need a full failure set:
+     `scripts/dev/run_tests_parallel.sh --no-fast-fail`
    - If tests fail, evaluate test value first (Constitution Principle XIII /
      dev guide testing strategy). Classify failures and decide whether to fix,
      defer, or ask for direction before removing or relaxing tests.

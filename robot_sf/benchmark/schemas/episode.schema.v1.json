@@ -43,6 +43,9 @@
                 "algorithm": {
                     "type": "string"
                 },
+                "canonical_algorithm": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string",
                     "enum": [
@@ -55,11 +58,102 @@
                 "fallback_reason": {
                     "type": "string"
                 },
+                "baseline_category": {
+                    "type": "string",
+                    "enum": [
+                        "diagnostic",
+                        "classical",
+                        "learning",
+                        "unknown"
+                    ]
+                },
+                "policy_semantics": {
+                    "type": "string"
+                },
                 "config": {
                     "type": "object"
                 },
                 "config_hash": {
                     "type": "string"
+                },
+                "stochastic_reference": {
+                    "type": "boolean"
+                },
+                "distinct_from_goal_baseline": {
+                    "type": "boolean"
+                },
+                "planner_kinematics": {
+                    "type": "object",
+                    "properties": {
+                        "robot_kinematics": {
+                            "type": "string"
+                        },
+                        "planner_command_space": {
+                            "type": "string"
+                        },
+                        "supports_native_commands": {
+                            "type": "boolean"
+                        },
+                        "supports_adapter_commands": {
+                            "type": "boolean"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_name": {
+                            "type": "string"
+                        },
+                        "adapter_active": {
+                            "type": "boolean"
+                        },
+                        "scenario_kinematics": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "adapter_impact": {
+                    "type": "object",
+                    "properties": {
+                        "requested": {
+                            "type": "boolean"
+                        },
+                        "native_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "adapted_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_fraction": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": true

@@ -15,6 +15,10 @@ import yaml
 from loguru import logger
 
 from robot_sf.baselines.ppo import PPOPlanner
+from robot_sf.benchmark.algorithm_metadata import (
+    enrich_algorithm_metadata,
+    infer_execution_mode_from_counts,
+)
 from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
@@ -62,6 +66,7 @@ _PPO_PAPER_REQUIRED_PROVENANCE = (
     "normalization_id",
     "deterministic_seed_set",
 )
+_DEFAULT_KINEMATICS = "differential_drive"
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -327,14 +332,15 @@ def _ppo_action_to_unicycle(
     action: dict[str, Any],
     obs: dict[str, Any],
     cfg: dict[str, Any],
-) -> tuple[float, float]:
+) -> tuple[float, float, str]:
     """Convert PPO action dict into the unicycle command used by map environments.
 
     Returns:
-        Tuple of ``(linear_velocity, angular_velocity)``.
+        Tuple of ``(linear_velocity, angular_velocity, conversion_mode)`` where
+        conversion_mode is ``"native"`` or ``"adapter"``.
     """
     if "v" in action and "omega" in action:
-        return float(action["v"]), float(action["omega"])
+        return float(action["v"]), float(action["omega"]), "native"
 
     if "vx" not in action or "vy" not in action:
         raise ValueError(f"Unsupported PPO action payload: {action}")
@@ -343,7 +349,7 @@ def _ppo_action_to_unicycle(
     vy = float(action["vy"])
     speed = float(np.hypot(vx, vy))
     if speed < 1e-9:
-        return 0.0, 0.0
+        return 0.0, 0.0, "adapter"
 
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
     heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
@@ -354,19 +360,41 @@ def _ppo_action_to_unicycle(
     omega_max = float(cfg.get("omega_max", 1.0))
     v = float(np.clip(speed, 0.0, v_max))
     omega = float(np.clip(heading_error, -omega_max, omega_max))
-    return v, omega
+    return v, omega, "adapter"
 
 
-def _build_policy(  # noqa: C901, PLR0912
+def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
+    *,
+    robot_kinematics: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build an action policy and algorithm metadata for map-based benchmarking.
+
+    Args:
+        algo: Algorithm key to instantiate.
+        algo_config: Algorithm configuration payload.
+        robot_kinematics: Runtime robot kinematics label for metadata enrichment.
+        adapter_impact_eval: Whether to collect native-vs-adapter step counters.
+
+    Returns:
+        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+        Policy callable and enriched metadata dictionary. For PPO, adapter-impact
+        counters are mutated in-place in the returned metadata during episode rollout.
+    """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
 
     if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
         meta.update(
             {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="native",
+            robot_kinematics=robot_kinematics,
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -400,13 +428,29 @@ def _build_policy(  # noqa: C901, PLR0912
             planner_meta = ppo_planner.get_metadata()
             if isinstance(planner_meta, dict):
                 meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
             ppo_obs = _obs_to_ppo_format(obs)
             action = ppo_planner.step(ppo_obs)
             if not isinstance(action, dict):
                 raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
-            return _ppo_action_to_unicycle(action, obs, algo_config)
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(action, obs, algo_config)
+            impact = meta.get("adapter_impact")
+            if isinstance(impact, dict) and bool(impact.get("requested", False)):
+                if conversion_mode == "native":
+                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+                else:
+                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+                impact["status"] = "collecting"
+            return linear, angular
 
         _policy._planner_close = ppo_planner.close
         if "status" not in meta:
@@ -443,6 +487,12 @@ def _build_policy(  # noqa: C901, PLR0912
         meta["status"] = "ok"
     meta["config"] = algo_config
     meta["config_hash"] = _config_hash(algo_config)
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="adapter",
+        robot_kinematics=robot_kinematics,
+    )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         return adapter.plan(obs)
@@ -578,6 +628,56 @@ def _build_env_config(
     return config
 
 
+def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
+    """Derive the runtime robot kinematics label from simulation config.
+
+    Returns:
+        Canonical kinematics label used in benchmark metadata.
+    """
+    robot_cfg = getattr(config, "robot_config", None)
+    if robot_cfg is None:
+        return _DEFAULT_KINEMATICS
+    cls_name = robot_cfg.__class__.__name__.lower()
+    if "bicycle" in cls_name:
+        return "bicycle_drive"
+    if "differential" in cls_name:
+        return "differential_drive"
+    return cls_name or _DEFAULT_KINEMATICS
+
+
+def _robot_max_speed(config: RobotSimulationConfig) -> float | None:
+    """Extract a positive robot max-speed setting from simulation config if available.
+
+    Returns:
+        Configured positive max speed, or ``None`` when not available.
+    """
+    robot_cfg = getattr(config, "robot_config", None)
+    if robot_cfg is None:
+        return None
+    for attr in ("max_linear_speed", "max_velocity"):
+        value = getattr(robot_cfg, attr, None)
+        if isinstance(value, (int, float)) and float(value) > 0:
+            return float(value)
+    return None
+
+
+def _scenario_robot_kinematics_label(scenario: dict[str, Any]) -> str:
+    """Derive the scenario-declared robot kinematics label from scenario metadata.
+
+    Returns:
+        Canonical kinematics label inferred from scenario robot configuration fields.
+    """
+    robot_cfg = scenario.get("robot_config")
+    if not isinstance(robot_cfg, dict):
+        return _DEFAULT_KINEMATICS
+    raw = str(robot_cfg.get("type") or robot_cfg.get("model") or "").strip().lower()
+    if "bicycle" in raw:
+        return "bicycle_drive"
+    if "differential" in raw or raw == "":
+        return _DEFAULT_KINEMATICS
+    return raw
+
+
 def _vel_and_acc(positions: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
     if positions.shape[0] < 2:
         return np.zeros_like(positions), np.zeros_like(positions)
@@ -611,6 +711,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario_path: Path,
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> dict[str, Any]:
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
@@ -622,10 +723,16 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
 
+    robot_kinematics = _robot_kinematics_label(config)
     policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
-    policy_fn, algo_meta = _build_policy(algo, policy_cfg)
+    policy_fn, algo_meta = _build_policy(
+        algo,
+        policy_cfg,
+        robot_kinematics=robot_kinematics,
+        adapter_impact_eval=adapter_impact_eval,
+    )
     planner_close = getattr(policy_fn, "_planner_close", None)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
@@ -705,7 +812,31 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
         )
-        metrics_raw = compute_all_metrics(ep, horizon=horizon_val, shortest_path_len=shortest_path)
+        metrics_raw = compute_all_metrics(
+            ep,
+            horizon=horizon_val,
+            shortest_path_len=shortest_path,
+            robot_max_speed=_robot_max_speed(config),
+        )
+    impact = algo_meta.get("adapter_impact")
+    if isinstance(impact, dict) and bool(impact.get("requested", False)):
+        native_steps = int(impact.get("native_steps", 0))
+        adapted_steps = int(impact.get("adapted_steps", 0))
+        total = native_steps + adapted_steps
+        if total > 0:
+            execution_mode = infer_execution_mode_from_counts(native_steps, adapted_steps)
+            impact["status"] = "complete"
+            impact["execution_mode"] = execution_mode
+            impact["adapter_fraction"] = float(adapted_steps / total)
+            algo_meta = enrich_algorithm_metadata(
+                algo=algo,
+                metadata=algo_meta,
+                execution_mode=execution_mode,
+                robot_kinematics=robot_kinematics,
+            )
+        else:
+            impact["status"] = "not_applicable"
+            impact["adapter_fraction"] = 0.0
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -771,6 +902,7 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
         algo=str(params.get("algo", "goal")),
         algo_config=params.get("algo_config"),
         scenario_path=Path(params.get("scenario_path")),
+        adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
     )
 
 
@@ -788,6 +920,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config_path: str | None = None,
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
+    adapter_impact_eval: bool = False,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -825,6 +958,22 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         filtered.append(scenario)
 
     jobs: list[tuple[dict[str, Any], int]] = []
+    scenario_kinematics = sorted({_scenario_robot_kinematics_label(sc) for sc in filtered})
+    if not scenario_kinematics:
+        kinematics_tag = "unknown"
+    elif len(scenario_kinematics) == 1:
+        kinematics_tag = scenario_kinematics[0]
+    else:
+        kinematics_tag = "mixed"
+    algo_contract = enrich_algorithm_metadata(
+        algo=algo,
+        metadata={},
+        robot_kinematics=kinematics_tag,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    planner_meta = algo_contract.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["scenario_kinematics"] = scenario_kinematics
     for scenario in filtered:
         seeds = _select_seeds(scenario, suite_seeds=suite_seeds, suite_key=suite_key)
         for seed in seeds:
@@ -847,6 +996,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=policy_cfg,
         missing_prereq_policy=socnav_missing_prereq_policy,
     )
+    preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
         return {
             "total_jobs": 0,
@@ -861,6 +1011,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 "tier": readiness.tier if readiness is not None else "unknown",
                 "profile": benchmark_profile,
             },
+            "algorithm_metadata_contract": algo_contract,
             "preflight": preflight,
         }
 
@@ -890,6 +1041,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo": algo,
         "algo_config": policy_cfg,
         "scenario_path": str(scenario_path),
+        "adapter_impact_eval": bool(adapter_impact_eval),
     }
 
     total_jobs = len(jobs)
@@ -942,6 +1094,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "tier": readiness.tier if readiness is not None else "unknown",
             "profile": benchmark_profile,
         },
+        "algorithm_metadata_contract": algo_contract,
         "preflight": preflight,
     }
 

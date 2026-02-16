@@ -9,7 +9,8 @@ field grid, and ``time_to_goal`` is undefined when the goal is never
 reached).
 
 Implemented categories:
-- Core navigation: success, time_to_goal_norm, collisions, near_misses, min_distance,
+- Core navigation: success, time_to_goal_norm, time_to_goal_norm_success_only,
+  time_to_goal_ideal_ratio, collisions, near_misses, min_distance,
   mean_distance, path_efficiency, avg_speed.
 - Comfort/force: force_quantiles, per_ped_force_quantiles, force_exceed_events,
   comfort_exposure, force_gradient_norm_mean.
@@ -278,6 +279,83 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
         assert data.reached_goal_step is not None
         return float(data.reached_goal_step) / float(horizon)
     return 1.0
+
+
+def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
+    """Success-only normalized time-to-goal value.
+
+    Returns:
+        Normalized time-to-goal for successful episodes, NaN otherwise.
+    """
+    if success(data, horizon=horizon) != 1.0:
+        return float("nan")
+    assert data.reached_goal_step is not None
+    return float(data.reached_goal_step) / float(horizon)
+
+
+def ideal_time_to_goal(
+    data: EpisodeData,
+    *,
+    shortest_path_len: float,
+    robot_max_speed: float,
+) -> float:
+    """Return ideal travel time as shortest-path length divided by max speed.
+
+    Returns:
+        Ideal lower-bound travel time in seconds, or NaN if inputs are invalid.
+    """
+    if not math.isfinite(shortest_path_len) or shortest_path_len < 0.0:
+        return float("nan")
+    if not math.isfinite(robot_max_speed) or robot_max_speed <= 0.0:
+        return float("nan")
+    return float(shortest_path_len / robot_max_speed)
+
+
+def _resolved_robot_max_speed(data: EpisodeData, *, robot_max_speed: float | None) -> float:
+    """Resolve the effective robot max speed from override, observations, or fallback.
+
+    Args:
+        data: Episode trajectory data, including robot velocities.
+        robot_max_speed: Optional caller-provided max speed override.
+
+    Returns:
+        float: Positive finite speed. Uses valid ``robot_max_speed`` first, then
+        max observed ``||robot_vel||``, and finally falls back to ``1.0``.
+    """
+    if robot_max_speed is not None and math.isfinite(robot_max_speed) and robot_max_speed > 0.0:
+        return float(robot_max_speed)
+    if data.robot_vel.size > 0:
+        observed = float(np.linalg.norm(data.robot_vel, axis=1).max(initial=0.0))
+        if math.isfinite(observed) and observed > 0.0:
+            return observed
+    return 1.0
+
+
+def time_to_goal_ideal_ratio(
+    data: EpisodeData,
+    *,
+    horizon: int,
+    shortest_path_len: float,
+    robot_max_speed: float,
+) -> float:
+    """Success-only ratio between achieved time and ideal shortest-path time.
+
+    Returns:
+        ``time_to_goal / ideal_time`` for successful episodes, NaN otherwise.
+    """
+    if success(data, horizon=horizon) != 1.0:
+        return float("nan")
+    actual = time_to_goal(data)
+    if not math.isfinite(actual):
+        return float("nan")
+    ideal = ideal_time_to_goal(
+        data,
+        shortest_path_len=shortest_path_len,
+        robot_max_speed=robot_max_speed,
+    )
+    if not math.isfinite(ideal) or ideal <= 0.0:
+        return float("nan")
+    return float(actual / ideal)
 
 
 def collisions(data: EpisodeData) -> float:
@@ -1901,6 +1979,10 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 METRIC_NAMES: list[str] = [
     "success",
     "time_to_goal_norm",
+    "time_to_goal_norm_success_only",
+    "time_to_goal_success_only_valid",
+    "time_to_goal_ideal_ratio",
+    "time_to_goal_ideal_ratio_valid",
     "collisions",
     "near_misses",
     "min_distance",
@@ -1935,6 +2017,7 @@ def compute_all_metrics(
     *,
     horizon: int,
     shortest_path_len: float | None = None,
+    robot_max_speed: float | None = None,
 ) -> dict[str, float]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
@@ -1946,6 +2029,8 @@ def compute_all_metrics(
         horizon: Episode horizon (number of timesteps) used by normalized metrics.
         shortest_path_len: Optional precomputed shortest path length from start to goal. When
             ``None``, the Euclidean distance between initial pose and goal acts as fallback.
+        robot_max_speed: Optional robot speed cap (m/s) for ideal-time normalization. When
+            ``None``, observed max speed (fallback ``1.0``) is used.
 
     Returns:
         dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
@@ -1963,6 +2048,20 @@ def compute_all_metrics(
     values: dict[str, float] = {}
     values["success"] = success(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
+    values["time_to_goal_norm_success_only"] = time_to_goal_norm_success_only(data, horizon)
+    values["time_to_goal_success_only_valid"] = (
+        1.0 if math.isfinite(values["time_to_goal_norm_success_only"]) else 0.0
+    )
+    speed_cap = _resolved_robot_max_speed(data, robot_max_speed=robot_max_speed)
+    values["time_to_goal_ideal_ratio"] = time_to_goal_ideal_ratio(
+        data,
+        horizon=horizon,
+        shortest_path_len=shortest_path_len,
+        robot_max_speed=speed_cap,
+    )
+    values["time_to_goal_ideal_ratio_valid"] = (
+        1.0 if math.isfinite(values["time_to_goal_ideal_ratio"]) else 0.0
+    )
     values["collisions"] = collisions(data)
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
@@ -2020,6 +2119,12 @@ def post_process_metrics(
                 metrics[count_key] = int(metrics[count_key])
             except Exception:  # pragma: no cover
                 pass
+    for valid_key in ("time_to_goal_success_only_valid", "time_to_goal_ideal_ratio_valid"):
+        if valid_key in metrics and metrics[valid_key] is not None:
+            try:
+                metrics[valid_key] = bool(int(metrics[valid_key]))
+            except Exception:  # pragma: no cover
+                pass
     return _sanitize_metrics(metrics)
 
 
@@ -2067,6 +2172,7 @@ __all__ = [
     "force_sample_stats",
     "has_force_data",
     "human_collisions",
+    "ideal_time_to_goal",
     "jerk_avg",
     "jerk_max",
     "jerk_mean",
@@ -2091,7 +2197,9 @@ __all__ = [
     "success_rate",
     "time_to_collision_min",
     "time_to_goal",
+    "time_to_goal_ideal_ratio",
     "time_to_goal_norm",
+    "time_to_goal_norm_success_only",
     "timeout",
     "velocity_avg",
     "velocity_max",

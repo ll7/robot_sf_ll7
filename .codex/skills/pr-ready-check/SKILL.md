@@ -35,6 +35,6 @@ Run the same PR validation pipeline used by local VS Code tasks, but via reusabl
 5. Report result
    - Summarize which checks ran and whether each passed:
      - Ruff fix/format/lint stats
-     - Parallel pytest (`-n auto`, full discovery)
+     - Parallel pytest (`-n auto -x --failed-first` by default via `scripts/dev/run_tests_parallel.sh`)
      - Changed-files coverage gate
      - Touched-definition docstring TODO gate

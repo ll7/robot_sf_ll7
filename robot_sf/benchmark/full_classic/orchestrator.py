@@ -825,56 +825,74 @@ def _close_env(env):
         pass
 
 
-def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
-    """Execute a real episode using the environment factory and compute metrics.
+def _make_stub_episode_record(
+    job,
+    cfg,
+    *,
+    episode_id: str,
+    horizon: int,
+) -> dict[str, Any]:
+    """Build a synthetic episode record used by fast-stub benchmark runs.
+
+    Args:
+        job: Episode job descriptor with scenario/seed identifiers.
+        cfg: Benchmark configuration namespace.
+        episode_id: Deterministic episode identifier.
+        horizon: Episode horizon in simulation steps.
 
     Returns:
-        Episode record dictionary containing metrics, status, and metadata.
+        dict[str, Any]: Synthetic benchmark episode record.
     """
-
-    episode_id = _episode_id_from_job(job)
-    if bool(getattr(cfg, "fast_stub", False)):
-        now = time.time()
-        horizon = _resolve_horizon(job, cfg)
-        record: dict[str, Any] = {
-            "version": "v1",
-            "episode_id": episode_id,
-            "scenario_id": job.scenario_id,
-            "seed": job.seed,
+    now = time.time()
+    record: dict[str, Any] = {
+        "version": "v1",
+        "episode_id": episode_id,
+        "scenario_id": job.scenario_id,
+        "seed": job.seed,
+        "archetype": job.archetype,
+        "density": job.density,
+        "status": "success",
+        "metrics": {
+            "collision_rate": 0.0,
+            "success_rate": 1.0,
+            "time_to_goal": float(horizon) * 0.1,
+            "path_efficiency": 0.9,
+            "avg_speed": 1.0,
+        },
+        "steps": min(horizon, 5),
+        "horizon": horizon,
+        "wall_time_sec": 0.0,
+        "created_at": now,
+        "scenario_params": {
             "archetype": job.archetype,
             "density": job.density,
-            "status": "success",
-            "metrics": {
-                "collision_rate": 0.0,
-                "success_rate": 1.0,
-                "time_to_goal": float(horizon) * 0.1,
-                "path_efficiency": 0.9,
-                "avg_speed": 1.0,
-            },
-            "steps": min(horizon, 5),
-            "horizon": horizon,
-            "wall_time_sec": 0.0,
-            "created_at": now,
-            "scenario_params": {
-                "archetype": job.archetype,
-                "density": job.density,
-                "max_episode_steps": horizon,
-                "scenario_id": job.scenario_id,
-                "hash_fragment": getattr(getattr(job, "scenario", None), "hash_fragment", ""),
-            },
-            "timing": {"steps_per_second": 0.0},
-        }
-        if bool(getattr(cfg, "capture_replay", False)):
-            replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
-            record["replay_steps"] = replay
-            record["replay_peds"] = [[] for _ in replay]
-            record["replay_ped_forces"] = [[] for _ in replay]
-            record["replay_actions"] = [(0.05, 0.0) for _ in replay]
-            record["replay_dt"] = 0.1
-            record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
-        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
-        ensure_metric_parameters(record)
-        return record
+            "max_episode_steps": horizon,
+            "scenario_id": job.scenario_id,
+            "hash_fragment": getattr(getattr(job, "scenario", None), "hash_fragment", ""),
+        },
+        "timing": {"steps_per_second": 0.0},
+    }
+    if bool(getattr(cfg, "capture_replay", False)):
+        replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
+        record["replay_steps"] = replay
+        record["replay_peds"] = [[] for _ in replay]
+        record["replay_ped_forces"] = [[] for _ in replay]
+        record["replay_actions"] = [(0.05, 0.0) for _ in replay]
+        record["replay_dt"] = 0.1
+        record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
+    return record
+
+
+def _require_job_scenario(job, *, episode_id: str):
+    """Return job.scenario or raise a contract error when missing.
+
+    Args:
+        job: Episode job descriptor.
+        episode_id: Deterministic episode identifier for diagnostics.
+
+    Returns:
+        Scenario descriptor object attached to the job.
+    """
     scenario = getattr(job, "scenario", None)
     if scenario is None:
         raise AggregationMetadataError(
@@ -883,7 +901,63 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
             missing_fields=("scenario",),
             advice="Regenerate jobs via plan_scenarios/expand_episode_jobs.",
         )
-    horizon = _resolve_horizon(job, cfg)
+    return scenario
+
+
+def _sanitize_episode_metrics(metrics_raw: dict[str, float]) -> dict[str, float | None]:
+    """Drop non-finite metric values prior to serialization.
+
+    Args:
+        metrics_raw: Raw metric payload from metric computation.
+
+    Returns:
+        dict[str, float | None]: Serializable metrics with non-finite values removed.
+    """
+    metrics: dict[str, float | None] = {}
+    for key, value in metrics_raw.items():
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            continue
+        metrics[key] = value
+    return metrics
+
+
+def _status_from_metrics(metrics: dict[str, float | None]) -> str:
+    """Compute episode status from success and collision metrics.
+
+    Args:
+        metrics: Episode metric payload.
+
+    Returns:
+        Status label (`success`, `failure`, or `collision`).
+    """
+    success_rate = float(metrics.get("success_rate") or 0.0)
+    collision_rate = metrics.get("collision_rate")
+    status = "success" if success_rate >= 1.0 else "failure"
+    if collision_rate:
+        status = "collision"
+    return status
+
+
+def _orchestrate_real_episode(
+    job,
+    cfg,
+    *,
+    episode_id: str,
+    scenario,
+    horizon: int,
+) -> dict[str, Any]:
+    """Run a real environment episode and compute finalized metric payload.
+
+    Args:
+        job: Episode job descriptor with seed/archetype metadata.
+        cfg: Benchmark configuration namespace.
+        episode_id: Deterministic episode identifier.
+        scenario: Scenario descriptor attached to ``job``.
+        horizon: Episode horizon in simulation steps.
+
+    Returns:
+        dict[str, Any]: Runtime payload used for record assembly.
+    """
     start_time = time.time()
     env, dt, replay_cap, goal_vec = _init_env_for_job(
         job,
@@ -928,17 +1002,78 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
         goal=goal_vec,
         horizon=horizon,
     )
-    metrics: dict[str, float | None] = {}
-    for key, value in metrics_raw.items():
-        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-            continue
-        metrics[key] = value
-    success_rate = float(metrics.get("success_rate") or 0.0)
-    collision_rate = metrics.get("collision_rate")
-    status = "success" if success_rate >= 1.0 else "failure"
-    if collision_rate:
-        status = "collision"
     wall_time = time.time() - start_time
+    return {
+        "metrics": _sanitize_episode_metrics(metrics_raw),
+        "steps_taken": steps_taken,
+        "wall_time": wall_time,
+        "start_time": start_time,
+        "ped_forces": ped_forces,
+        "replay_capture": replay_cap,
+    }
+
+
+def _attach_replay_payload(
+    record: dict[str, Any],
+    *,
+    scenario,
+    replay_capture: ReplayCapture,
+    ped_forces: list[np.ndarray],
+) -> None:
+    """Attach finalized replay arrays to an episode record in-place.
+
+    Args:
+        record: Episode record being assembled.
+        scenario: Scenario descriptor for map path metadata.
+        replay_capture: Replay capture object used during rollout.
+        ped_forces: Per-step pedestrian force snapshots from rollout.
+    """
+    episode = replay_capture.finalize()
+    episode.map_path = getattr(scenario, "map_path", "")
+    finalized = episode.steps
+    record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
+    record["replay_peds"] = [s.ped_positions or [] for s in finalized]
+    record["replay_ped_forces"] = [np.asarray(f, dtype=float).tolist() for f in ped_forces]
+    record["replay_actions"] = [s.action for s in finalized]
+    record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
+    record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
+    record["replay_goals"] = [s.robot_goal for s in finalized]
+    record["replay_dt"] = episode.dt
+    record["replay_map_path"] = episode.map_path
+
+
+def _make_episode_record(job, cfg) -> dict[str, Any]:
+    """Execute a real episode using the environment factory and compute metrics.
+
+    Returns:
+        Episode record dictionary containing metrics, status, and metadata.
+    """
+
+    episode_id = _episode_id_from_job(job)
+    horizon = _resolve_horizon(job, cfg)
+    if bool(getattr(cfg, "fast_stub", False)):
+        record = _make_stub_episode_record(
+            job,
+            cfg,
+            episode_id=episode_id,
+            horizon=horizon,
+        )
+        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
+        ensure_metric_parameters(record)
+        return record
+
+    scenario = _require_job_scenario(job, episode_id=episode_id)
+    runtime = _orchestrate_real_episode(
+        job,
+        cfg,
+        episode_id=episode_id,
+        scenario=scenario,
+        horizon=horizon,
+    )
+    metrics = runtime["metrics"]
+    steps_taken = int(runtime["steps_taken"])
+    wall_time = float(runtime["wall_time"])
+    start_time = float(runtime["start_time"])
     record: dict[str, Any] = {
         "version": "v1",
         "episode_id": episode_id,
@@ -946,7 +1081,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
         "seed": job.seed,
         "archetype": job.archetype,
         "density": job.density,
-        "status": status,
+        "status": _status_from_metrics(metrics),
         "metrics": metrics,
         "steps": steps_taken,
         "horizon": horizon,
@@ -966,19 +1101,14 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # noqa: PLR0915
             "hash_fragment": getattr(scenario, "hash_fragment", ""),
         },
     }
-    if bool(getattr(cfg, "capture_replay", False)) and replay_cap is not None:
-        episode = replay_cap.finalize()
-        episode.map_path = getattr(scenario, "map_path", "")
-        finalized = episode.steps
-        record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
-        record["replay_peds"] = [s.ped_positions or [] for s in finalized]
-        record["replay_ped_forces"] = [np.asarray(f, dtype=float).tolist() for f in ped_forces]
-        record["replay_actions"] = [s.action for s in finalized]
-        record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
-        record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
-        record["replay_goals"] = [s.robot_goal for s in finalized]
-        record["replay_dt"] = episode.dt
-        record["replay_map_path"] = episode.map_path
+    replay_capture = runtime["replay_capture"]
+    if bool(getattr(cfg, "capture_replay", False)) and isinstance(replay_capture, ReplayCapture):
+        _attach_replay_payload(
+            record,
+            scenario=scenario,
+            replay_capture=replay_capture,
+            ped_forces=runtime["ped_forces"],
+        )
     _ensure_algo_metadata(
         record,
         algo=getattr(cfg, "algo", None),

@@ -14,11 +14,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_algorithm_metadata_present(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Smoke-test that benchmark episode records include enriched algorithm metadata."""
     matrix = [
         {
             "id": "algo-meta-smoke",

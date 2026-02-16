@@ -31,6 +31,17 @@ Adopt the conventional commit style seen in history (e.g., `refactor: adjust obs
 Use the GitHub CLI (`gh`) for repository interactions such as viewing/commenting on issues and creating/updating PRs.
 When review feedback or PR scope identifies deferred follow-up work, always create a dedicated GitHub issue with `gh` before closing out the task.
 
+## Key Codex Skills
+
+For issue management and delivery, use these local skills:
+
+- `.codex/skills/gh-issue-autopilot/SKILL.md`
+  - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open draft PR.
+- `.codex/skills/gh-issue-sequencer/SKILL.md`
+  - Maintains a clear sequential execution queue in GitHub Project #5 (`In progress`/`Ready`/`Tracked`).
+- `.codex/skills/gh-issue-clarifier/SKILL.md`
+  - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
+
 ## Donts
 
 - Never change code in `.venv`. To manage dependencies, edit `pyproject.toml` and run `uv sync` to update the virtual environment.

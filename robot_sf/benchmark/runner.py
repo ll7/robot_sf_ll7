@@ -47,6 +47,7 @@ except ImportError as exc:  # pragma: no cover - optional baseline dependency
 else:
     _BASELINE_IMPORT_ERROR = None
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
@@ -300,7 +301,15 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         }
 
     if algo == "simple_policy":
-        return _simple_policy_adapter()
+        policy_fn, metadata = _simple_policy_adapter()
+        return (
+            policy_fn,
+            enrich_algorithm_metadata(
+                algo=algo,
+                metadata=metadata,
+                execution_mode="native",
+            ),
+        )
 
     planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
@@ -396,6 +405,11 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
+    metadata = enrich_algorithm_metadata(
+        algo=algo,
+        metadata=metadata,
+        execution_mode="native",
+    )
 
     return policy_fn, metadata
 
@@ -841,6 +855,8 @@ def _build_episode_record(
         Episode record dictionary.
     """
     episode_id = compute_episode_id(scenario_params, seed)
+    algo_name = str(scenario_params.get("algo") or algo_metadata.get("algorithm") or "unknown")
+    enriched_algo_metadata = enrich_algorithm_metadata(algo=algo_name, metadata=algo_metadata)
     record = {
         "version": "v1",
         "episode_id": episode_id,
@@ -848,7 +864,7 @@ def _build_episode_record(
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
-        "algorithm_metadata": algo_metadata,
+        "algorithm_metadata": enriched_algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_start},
@@ -1358,6 +1374,7 @@ def run_batch(  # noqa: PLR0913
     algo_config_path: str | None = None,
     benchmark_profile: str = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
+    adapter_impact_eval: bool = False,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1392,6 +1409,7 @@ def run_batch(  # noqa: PLR0913
             algo_config_path=algo_config_path,
             benchmark_profile=benchmark_profile,
             socnav_missing_prereq_policy=socnav_missing_prereq_policy,
+            adapter_impact_eval=adapter_impact_eval,
             workers=workers,
             resume=resume,
         )

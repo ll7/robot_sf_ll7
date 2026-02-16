@@ -11,9 +11,15 @@ from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_config,
     _goal_policy,
+    _normalize_xy_rows,
     _parse_algo_config,
+    _ppo_action_to_unicycle,
+    _ppo_paper_gate_status,
     _resolve_seed_list,
+    _robot_kinematics_label,
+    _robot_max_speed,
     _run_map_episode,
+    _scenario_robot_kinematics_label,
     _select_seeds,
     _stack_ped_positions,
     _suite_key,
@@ -57,6 +63,9 @@ def test_goal_policy_and_build_policy() -> None:
     }
     linear, angular = policy(obs)
     assert meta["status"] == "ok"
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "deterministic_goal_seeking"
+    assert meta["planner_kinematics"]["execution_mode"] == "native"
     assert linear > 0.0
     assert abs(angular) <= 1.0
 
@@ -69,6 +78,7 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     _, meta = _build_policy("rvo", {})
     assert meta["status"] == "placeholder"
     assert meta["fallback_reason"] == "unimplemented"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
 def test_suite_seed_selection_and_behavior_sanity() -> None:
@@ -106,6 +116,71 @@ def test_velocity_and_ped_stack_helpers() -> None:
     traj = [np.array([[0.0, 0.0]]), np.array([[1.0, 1.0], [2.0, 2.0]])]
     stacked = _stack_ped_positions(traj)
     assert stacked.shape == (2, 2, 2)
+    assert _stack_ped_positions([]).shape == (0, 0, 2)
+
+
+def test_map_runner_metadata_and_normalization_helpers() -> None:
+    """Cover helper branches for kinematics metadata and PPO payload conversion."""
+    assert _normalize_xy_rows([]).shape == (0, 2)
+    assert _normalize_xy_rows([1.0, 2.0]).shape == (1, 2)
+    assert _normalize_xy_rows([1.0]).shape == (0, 2)
+    trimmed = _normalize_xy_rows(np.array([[1.0, 2.0, 3.0]]))
+    assert trimmed.shape == (1, 2)
+
+    class DifferentialDriveSettings:
+        max_linear_speed = 2.5
+
+    class BicycleDriveSettings:
+        max_velocity = 3.5
+
+    diff = type("Cfg", (), {"robot_config": DifferentialDriveSettings()})()
+    bike = type("Cfg", (), {"robot_config": BicycleDriveSettings()})()
+    unknown = type("Cfg", (), {"robot_config": object()})()
+    none_cfg = type("Cfg", (), {"robot_config": None})()
+
+    assert _robot_kinematics_label(diff) == "differential_drive"
+    assert _robot_kinematics_label(bike) == "bicycle_drive"
+    assert _robot_kinematics_label(unknown) != ""
+    assert _robot_kinematics_label(none_cfg) == "unknown"
+    assert _robot_max_speed(diff) == 2.5
+    assert _robot_max_speed(bike) == 3.5
+    assert _robot_max_speed(none_cfg) is None
+
+    assert _scenario_robot_kinematics_label({}) == "differential_drive"
+    assert (
+        _scenario_robot_kinematics_label({"robot_config": {"type": "bicycle_drive"}})
+        == "bicycle_drive"
+    )
+    assert (
+        _scenario_robot_kinematics_label({"robot_config": {"type": "skid_steer"}}) == "skid_steer"
+    )
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": 0.5, "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is True and reason is None
+    ok, reason = _ppo_paper_gate_status({"profile": "paper"})
+    assert ok is False and "missing 'provenance'" in str(reason)
+
+    native = _ppo_action_to_unicycle({"v": 0.2, "omega": 0.1}, {"robot": {}}, {})
+    assert native[2] == "native"
+    adapted = _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 0.0},
+        {"robot": {"heading": [0.0]}},
+        {"v_max": 1.0, "omega_max": 1.0},
+    )
+    assert adapted[2] == "adapter"
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
@@ -225,6 +300,9 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert record["scenario_id"] == "s1"
     assert record["metrics"]["success"] == 1.0
+    algo_md = record["algorithm_metadata"]
+    assert algo_md["baseline_category"] == "classical"
+    assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
 
 
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,6 +333,11 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         resume=False,
     )
     assert result["written"] == 1
+    assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
+    assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
+        "unknown",
+        "differential_drive",
+    }
 
     # Resume path skips existing episode
     monkeypatch.setattr("robot_sf.benchmark.map_runner.index_existing", lambda path: {"ep1"})

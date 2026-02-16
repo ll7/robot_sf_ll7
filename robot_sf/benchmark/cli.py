@@ -264,6 +264,7 @@ def _handle_run(args) -> int:
             algo_config_path=args.algo_config,
             benchmark_profile=args.benchmark_profile,
             socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
+            adapter_impact_eval=bool(getattr(args, "adapter_impact_eval", False)),
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
@@ -1156,6 +1157,14 @@ def _add_run_subparser(
         help=(
             "Behavior when SocNav dependencies/models are missing: "
             "raise, skip algorithm run, or force adapter fallback."
+        ),
+    )
+    p.add_argument(
+        "--adapter-impact-eval",
+        action="store_true",
+        help=(
+            "Enable adapter-impact metadata probing. "
+            "For mixed-command planners (e.g., PPO), records native vs adapted step usage."
         ),
     )
     p.add_argument(

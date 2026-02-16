@@ -534,6 +534,72 @@ def test_force_gradient_norm_mean():
     assert 0.9 <= g <= 1.1
 
 
+def test_experimental_ped_impact_metrics_are_opt_in() -> None:
+    """Experimental pedestrian-impact keys should only appear when explicitly enabled."""
+    ep = _make_episode(T=8, K=1)
+    ep.peds_pos[:, 0, 0] = 1.0
+
+    base = compute_all_metrics(ep, horizon=10)
+    assert not any(key.startswith("ped_impact_") for key in base)
+
+    enabled = compute_all_metrics(ep, horizon=10, experimental_ped_impact=True)
+    assert "ped_impact_radius_m" in enabled
+    assert "ped_impact_window_steps" in enabled
+    assert "ped_impact_accel_delta_valid" in enabled
+    assert "ped_impact_turn_rate_delta_valid" in enabled
+
+
+def test_experimental_ped_impact_near_vs_far_deltas() -> None:
+    """Near-vs-far split should expose positive disturbance deltas for a crafted trajectory."""
+    ep = _make_episode(T=12, K=1)
+    ep.dt = 0.1
+
+    # Keep robot static at origin.
+    ep.robot_pos[:] = 0.0
+
+    # Far segment: smooth straight walk (distance > 2m).
+    ep.peds_pos[:6, 0, 0] = np.linspace(4.0, 3.0, 6)
+    ep.peds_pos[:6, 0, 1] = 0.0
+    # Near segment: zig-zag close to robot (distance <= 2m) to induce
+    # larger acceleration and heading-rate changes.
+    ep.peds_pos[6:, 0, 0] = np.linspace(1.4, 1.1, 6)
+    ep.peds_pos[6:, 0, 1] = np.array([0.20, -0.20, 0.25, -0.25, 0.20, -0.20])
+
+    vals = compute_all_metrics(
+        ep,
+        horizon=12,
+        experimental_ped_impact=True,
+        ped_impact_radius_m=2.0,
+        ped_impact_window_steps=1,
+    )
+    assert vals["ped_impact_accel_delta_valid"] == 1.0
+    assert vals["ped_impact_turn_rate_delta_valid"] == 1.0
+    assert vals["ped_impact_near_samples"] > 0.0
+    assert vals["ped_impact_far_samples"] > 0.0
+    assert vals["ped_impact_accel_delta_mean"] > 0.0
+    assert vals["ped_impact_turn_rate_delta_mean"] > 0.0
+
+
+def test_experimental_ped_impact_handles_empty_crowd() -> None:
+    """Experimental pedestrian-impact metrics should stay stable when K=0."""
+    ep = _make_episode(T=8, K=0)
+    vals = compute_all_metrics(
+        ep,
+        horizon=8,
+        experimental_ped_impact=True,
+        ped_impact_radius_m=2.5,
+        ped_impact_window_steps=7,
+    )
+    assert vals["ped_impact_ped_count"] == 0.0
+    assert vals["ped_impact_near_samples"] == 0.0
+    assert vals["ped_impact_far_samples"] == 0.0
+    assert vals["ped_impact_near_sample_frac"] == 0.0
+    assert vals["ped_impact_accel_delta_valid"] == 0.0
+    assert vals["ped_impact_turn_rate_delta_valid"] == 0.0
+    assert vals["ped_impact_radius_m"] == 2.5
+    assert vals["ped_impact_window_steps"] == 7.0
+
+
 def test_snqi_scoring():
     # Construct two metric dicts: one ideal, one poor
     """TODO docstring. Document this function."""

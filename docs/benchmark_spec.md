@@ -140,6 +140,18 @@ Full details live in
 **Smoothness**
 * `jerk_mean`,  `curvature_mean`,  `energy`
 
+**Experimental pedestrian-impact (opt-in)**
+* `ped_impact_*` metrics (enabled only via
+  `compute_all_metrics(..., experimental_ped_impact=True)`).
+* Current prototype exposes near-vs-far deltas for pedestrian acceleration and
+  heading turn-rate, plus sample/validity counters.
+* Near/far semantics: distance to robot `<= ped_impact_radius_m` is "near",
+  `> ped_impact_radius_m` is "far".
+* Time-window semantics: signal smoothing uses trailing rolling means over
+  `ped_impact_window_steps`.
+* Aggregation strategy: compute per-pedestrian `(near_mean - far_mean)` first,
+  then aggregate across pedestrians (mean/median) to reduce density bias.
+
 **SocNavBench subset (vendored)**
 * `socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`
   (subset of upstream SocNavBench metrics).
@@ -155,6 +167,9 @@ Full details live in
 * `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, use
   `time_to_goal_norm_success_only` together with the numeric validity flag
   `time_to_goal_success_only_valid == 1.0`.
+* Experimental `ped_impact_*` metrics are exploratory and should be reported
+  with the associated validity/sample counters. Deltas can be undefined when a
+  pedestrian has only near or only far samples.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 

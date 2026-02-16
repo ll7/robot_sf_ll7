@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,18 @@ TIME_METRICS = ("env_create_sec", "first_step_sec", "episode_sec")
 ALL_METRICS = (*TIME_METRICS, "steps_per_sec")
 STARTUP_METRICS = ("env_create_sec", "first_step_sec")
 STEADY_METRICS = ("episode_sec", "steps_per_sec")
+SCENARIO_DEFAULTS: dict[str, int | float | bool | str] = {
+    "episode_steps": 96,
+    "cold_runs": 1,
+    "warm_runs": 2,
+    "baseline": "configs/benchmarks/perf_baseline_classic_cold_warm_v1.json",
+    "require_baseline": True,
+    "max_slowdown_pct": 0.60,
+    "max_throughput_drop_pct": 0.50,
+    "min_seconds_delta": 0.15,
+    "min_throughput_delta": 0.75,
+    "enforce_regression_gate": True,
+}
 
 
 @dataclass(slots=True)
@@ -187,37 +200,56 @@ def load_matrix(path: Path) -> tuple[str, list[ScenarioSpec]]:
         raise ValueError(f"Matrix {path} must include a non-empty scenarios list")
 
     scenarios: list[ScenarioSpec] = []
+    scenario_slugs: dict[str, str] = {}
     for idx, entry in enumerate(scenario_payload):
         if not isinstance(entry, dict):
             raise ValueError(f"Matrix scenario #{idx} in {path} is not an object")
-        scenario_name = str(entry.get("scenario_name") or "").strip()
+        merged_entry: dict[str, Any] = dict(SCENARIO_DEFAULTS)
+        merged_entry.update(entry)
+        scenario_name = str(merged_entry.get("scenario_name") or "").strip()
         if not scenario_name:
             raise ValueError(f"Matrix scenario #{idx} in {path} is missing scenario_name")
-        scenario_config_raw = str(entry.get("scenario_config") or "").strip()
+        scenario_config_raw = str(merged_entry.get("scenario_config") or "").strip()
         if not scenario_config_raw:
             raise ValueError(f"Matrix scenario '{scenario_name}' is missing scenario_config")
+        scenario_slug = _scenario_slug(scenario_name)
+        existing = scenario_slugs.get(scenario_slug)
+        if existing is not None and existing != scenario_name:
+            raise ValueError(
+                "Matrix scenario names produce duplicate output slug "
+                f"{scenario_slug!r}: {existing!r} and {scenario_name!r}"
+            )
+        scenario_slugs[scenario_slug] = scenario_name
         scenarios.append(
             ScenarioSpec(
                 scenario_config=Path(scenario_config_raw),
                 scenario_name=scenario_name,
-                episode_steps=int(entry.get("episode_steps", 96)),
-                cold_runs=int(entry.get("cold_runs", 1)),
-                warm_runs=int(entry.get("warm_runs", 2)),
-                baseline=Path(
-                    str(
-                        entry.get("baseline")
-                        or "configs/benchmarks/perf_baseline_classic_cold_warm_v1.json"
-                    )
-                ),
-                require_baseline=bool(entry.get("require_baseline", True)),
-                max_slowdown_pct=float(entry.get("max_slowdown_pct", 0.60)),
-                max_throughput_drop_pct=float(entry.get("max_throughput_drop_pct", 0.50)),
-                min_seconds_delta=float(entry.get("min_seconds_delta", 0.15)),
-                min_throughput_delta=float(entry.get("min_throughput_delta", 0.75)),
-                enforce_regression_gate=bool(entry.get("enforce_regression_gate", True)),
+                episode_steps=int(merged_entry["episode_steps"]),
+                cold_runs=int(merged_entry["cold_runs"]),
+                warm_runs=int(merged_entry["warm_runs"]),
+                baseline=Path(str(merged_entry["baseline"])),
+                require_baseline=bool(merged_entry["require_baseline"]),
+                max_slowdown_pct=float(merged_entry["max_slowdown_pct"]),
+                max_throughput_drop_pct=float(merged_entry["max_throughput_drop_pct"]),
+                min_seconds_delta=float(merged_entry["min_seconds_delta"]),
+                min_throughput_delta=float(merged_entry["min_throughput_delta"]),
+                enforce_regression_gate=bool(merged_entry["enforce_regression_gate"]),
             )
         )
     return suite_name, scenarios
+
+
+def _scenario_slug(scenario_name: str) -> str:
+    """Build a filesystem-safe slug for matrix scenario artifact filenames.
+
+    Args:
+        scenario_name: Scenario identifier from matrix config.
+
+    Returns:
+        str: Lowercase filename-safe scenario slug.
+    """
+    candidate = re.sub(r"[^a-zA-Z0-9]+", "_", scenario_name).strip("_").lower()
+    return candidate or "scenario"
 
 
 def _run_scenario(
@@ -238,7 +270,7 @@ def _run_scenario(
     Returns:
         dict[str, Any]: Scenario execution summary and parsed perf payload fields.
     """
-    scenario_slug = spec.scenario_name.replace("/", "_")
+    scenario_slug = _scenario_slug(spec.scenario_name)
     scenario_json = output_root / "runs" / f"{scenario_slug}.json"
     scenario_md = output_root / "runs" / f"{scenario_slug}.md"
 
@@ -353,23 +385,43 @@ def _scenario_metric_values(
         scenario_results = report.get("scenario_results")
         if not isinstance(scenario_results, list):
             continue
-        for entry in scenario_results:
-            if not isinstance(entry, dict):
-                continue
-            scenario_name = str(entry.get("scenario_name") or "").strip()
-            if not scenario_name:
-                continue
-            scenario_bucket = values.setdefault(scenario_name, {"cold": {}, "warm": {}})
-            for phase in ("cold", "warm"):
-                phase_payload = entry.get(f"{phase}_median")
-                if not isinstance(phase_payload, dict):
-                    continue
-                metric_bucket = scenario_bucket.setdefault(phase, {})
-                for metric in ALL_METRICS:
-                    value = phase_payload.get(metric)
-                    if isinstance(value, (int, float)):
-                        metric_bucket.setdefault(metric, []).append(float(value))
+        _extend_metric_values(values, scenario_results)
     return values
+
+
+def _extend_metric_values(
+    values: dict[str, dict[str, dict[str, list[float]]]], scenario_results: Sequence[Any]
+) -> None:
+    """Extend history metric buckets from one report's scenario result list."""
+    for entry in scenario_results:
+        if not isinstance(entry, dict):
+            continue
+        scenario_name = str(entry.get("scenario_name") or "").strip()
+        if not scenario_name:
+            continue
+        if scenario_name not in values:
+            values[scenario_name] = {"cold": {}, "warm": {}}
+        scenario_bucket = values[scenario_name]
+        _append_phase_metrics(scenario_bucket, entry)
+
+
+def _append_phase_metrics(
+    scenario_bucket: dict[str, dict[str, list[float]]], entry: dict[str, Any]
+) -> None:
+    """Append one scenario entry's phase metric values into history buckets."""
+    for phase in ("cold", "warm"):
+        phase_payload = entry.get(f"{phase}_median")
+        if not isinstance(phase_payload, dict):
+            continue
+        metric_bucket = scenario_bucket[phase]
+        for metric in ALL_METRICS:
+            value = phase_payload.get(metric)
+            if isinstance(value, (int, float)):
+                current_values = metric_bucket.get(metric)
+                if current_values is None:
+                    metric_bucket[metric] = [float(value)]
+                else:
+                    current_values.append(float(value))
 
 
 def compare_with_history(

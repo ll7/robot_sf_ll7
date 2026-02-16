@@ -43,6 +43,29 @@ scenarios:
     assert scenarios[0].require_baseline is True
 
 
+def test_load_matrix_applies_defaults_with_entry_precedence(tmp_path: Path) -> None:
+    """Matrix defaults should apply first, while scenario entries may override them."""
+    matrix = tmp_path / "matrix_defaults.yaml"
+    _write_text(
+        matrix,
+        """
+schema_version: benchmark-perf-trend-matrix.v1
+suite_name: suite-v1
+scenarios:
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic_crossing_low
+    warm_runs: 5
+""".strip()
+        + "\n",
+    )
+
+    _suite, scenarios = perf_trend.load_matrix(matrix)
+    assert len(scenarios) == 1
+    assert scenarios[0].cold_runs == 1
+    assert scenarios[0].warm_runs == 5
+    assert scenarios[0].max_slowdown_pct == pytest.approx(0.60)
+
+
 def test_load_matrix_rejects_invalid_schema(tmp_path: Path) -> None:
     """Loader should reject unsupported schema versions."""
     matrix = tmp_path / "matrix.yaml"
@@ -91,6 +114,26 @@ scenarios:
     )
     with pytest.raises(ValueError, match="missing scenario_name"):
         perf_trend.load_matrix(bad_scenario)
+
+
+def test_load_matrix_rejects_duplicate_scenario_slugs(tmp_path: Path) -> None:
+    """Scenario names that normalize to the same artifact slug should be rejected."""
+    matrix = tmp_path / "duplicate_slug.yaml"
+    _write_text(
+        matrix,
+        """
+schema_version: benchmark-perf-trend-matrix.v1
+suite_name: suite-v1
+scenarios:
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic/crossing
+  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+    scenario_name: classic_crossing
+""".strip()
+        + "\n",
+    )
+    with pytest.raises(ValueError, match="duplicate output slug"):
+        perf_trend.load_matrix(matrix)
 
 
 def test_parse_args_accepts_overrides() -> None:
@@ -309,6 +352,46 @@ def test_run_scenario_builds_perf_cold_warm_args(
     assert "--fail-on-regression" in argv
     assert result["comparison_status"] == "pass"
     assert result["exit_code"] == 0
+
+
+def test_run_scenario_uses_sanitized_slug_for_output_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scenario output filenames should use sanitized slugs."""
+    captured: dict[str, list[str]] = {}
+
+    def _fake_main(argv: list[str]) -> int:
+        captured["argv"] = list(argv)
+        out_json = Path(argv[argv.index("--output-json") + 1])
+        _write_text(out_json, json.dumps({"comparison": {"status": "pass"}}))
+        return 0
+
+    monkeypatch.setattr(perf_trend.perf_cold_warm, "main", _fake_main)
+    spec = perf_trend.ScenarioSpec(
+        scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
+        scenario_name="Classic/Crossing (Low)",
+        episode_steps=96,
+        cold_runs=1,
+        warm_runs=2,
+        baseline=Path("configs/benchmarks/perf_baseline_classic_cold_warm_v1.json"),
+        require_baseline=True,
+        max_slowdown_pct=0.60,
+        max_throughput_drop_pct=0.50,
+        min_seconds_delta=0.15,
+        min_throughput_delta=0.75,
+        enforce_regression_gate=True,
+    )
+
+    perf_trend._run_scenario(
+        spec=spec,
+        seed=101,
+        output_root=tmp_path,
+        fail_on_regression=False,
+    )
+
+    argv = captured["argv"]
+    out_json = Path(argv[argv.index("--output-json") + 1])
+    assert out_json.name == "classic_crossing_low.json"
 
 
 def test_main_writes_report_and_returns_zero(

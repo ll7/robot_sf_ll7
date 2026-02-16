@@ -329,9 +329,8 @@ def _masked_nanmean(samples: np.ndarray, mask: np.ndarray) -> float:
 def _masked_nanmean_axis0(samples: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """Return per-column NaN-aware mean over samples constrained by mask."""
     masked = np.where(mask, samples, np.nan)
-    finite = np.isfinite(masked)
-    sums = np.nansum(np.where(finite, masked, 0.0), axis=0)
-    counts = np.sum(finite, axis=0)
+    sums = np.nansum(masked, axis=0)
+    counts = np.sum(np.isfinite(masked), axis=0)
     out = np.full(masked.shape[1], np.nan, dtype=float)
     valid = counts > 0
     out[valid] = sums[valid] / counts[valid]

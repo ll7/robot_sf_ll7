@@ -38,8 +38,16 @@ workflow, running Ruff format/fix, and running parallel tests.
      dev guide testing strategy). Classify failures and decide whether to fix,
      defer, or ask for direction before removing or relaxing tests.
 
-5. Report and follow-ups
+5. Run diff-based quality gates and fix them.
+   - Run changed-files coverage check:
+     `BASE_REF=origin/main scripts/dev/check_changed_coverage.sh`
+     - If you changed any test files, run these new tests locally.
+   - Run touched-definition TODO docstring check:
+     `BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh`
+
+6. Report and follow-ups
    - Summarize commands run and results.
    - Note remaining failures, flaky tests, or follow-up tasks (for example,
      GUI tests if rendering changes were made, or CHANGELOG updates for
      user-facing changes).
+  - Suggest commit batches and messages for any uncommited changes.

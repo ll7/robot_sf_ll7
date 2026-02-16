@@ -393,8 +393,8 @@ def experimental_ped_impact_metrics(
     if accel_mag.shape[0] == 0 or turn_rate_mag.shape[0] == 0:
         return metrics
 
-    # Align to second-difference samples (T-2, K).
-    aligned_dist = distances[2:]
+    # Align distance at time i+1 with second-difference signals (T-2, K).
+    aligned_dist = distances[1:]
     sample_count = min(aligned_dist.shape[0], accel_mag.shape[0], turn_rate_mag.shape[0])
     if sample_count <= 0:
         return metrics

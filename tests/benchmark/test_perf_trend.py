@@ -304,6 +304,16 @@ def test_load_history_reports_filters_invalid_payloads(tmp_path: Path) -> None:
     assert "_source_path" in loaded[0]
 
 
+def test_load_history_reports_zero_limit_returns_empty(tmp_path: Path) -> None:
+    """History loader should treat zero limit as loading no reports."""
+    valid = tmp_path / "valid.json"
+    _write_text(valid, json.dumps({"schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION}))
+
+    loaded = perf_trend._load_history_reports(str(tmp_path / "*.json"), limit=0)
+
+    assert loaded == []
+
+
 def test_run_scenario_builds_perf_cold_warm_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

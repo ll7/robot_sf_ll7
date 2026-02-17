@@ -344,16 +344,17 @@ def _load_history_reports(pattern: str, limit: int) -> list[dict[str, Any]]:
 
     Args:
         pattern: Glob pattern for report JSON files.
-        limit: Maximum number of reports to load.
+        limit: Maximum number of reports to load; non-positive values load none.
 
     Returns:
         list[dict[str, Any]]: Parsed report payloads with `_source_path`.
     """
     if not pattern.strip():
         return []
+    if limit <= 0:
+        return []
     candidates = sorted((Path(p) for p in glob.glob(pattern)), key=lambda p: p.stat().st_mtime)
-    if limit > 0:
-        candidates = candidates[-limit:]
+    candidates = candidates[-limit:]
     reports: list[dict[str, Any]] = []
     for path in candidates:
         try:

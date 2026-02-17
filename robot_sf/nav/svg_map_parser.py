@@ -792,24 +792,29 @@ class SvgMapConverter:
             Polygon | None: Largest valid polygon candidate or ``None`` when no
                 polygon geometry can be recovered.
         """
-        repaired = make_valid(polygon)
-        candidates = SvgMapConverter._polygon_members(repaired)
+        candidate = SvgMapConverter._largest_usable_polygon(make_valid(polygon))
+        if candidate is None:
+            return None
+        if candidate.is_valid:
+            return candidate
+
+        buffered_candidate = SvgMapConverter._largest_usable_polygon(candidate.buffer(0))
+        return buffered_candidate if buffered_candidate and buffered_candidate.is_valid else None
+
+    @staticmethod
+    def _largest_usable_polygon(geometry) -> Polygon | None:
+        """Extract the largest non-empty polygon candidate from a geometry tree.
+
+        Returns:
+            Polygon | None: Largest polygon with positive area, otherwise ``None``.
+        """
+        candidates = SvgMapConverter._polygon_members(geometry)
         if not candidates:
             return None
         candidate = max(candidates, key=lambda part: part.area)
         if candidate.is_empty or candidate.area <= 0.0:
             return None
-        if candidate.is_valid:
-            return candidate
-
-        buffered = candidate.buffer(0)
-        buffered_candidates = SvgMapConverter._polygon_members(buffered)
-        if not buffered_candidates:
-            return None
-        buffered_best = max(buffered_candidates, key=lambda part: part.area)
-        if buffered_best.is_empty or buffered_best.area <= 0.0:
-            return None
-        return buffered_best if buffered_best.is_valid else None
+        return candidate
 
     @staticmethod
     def _polygon_members(geometry) -> list[Polygon]:
@@ -818,16 +823,17 @@ class SvgMapConverter:
         Returns:
             list[Polygon]: Non-empty polygon members extracted from ``geometry``.
         """
-        if isinstance(geometry, Polygon):
-            return [] if geometry.is_empty else [geometry]
-        if isinstance(geometry, MultiPolygon):
-            return [polygon for polygon in geometry.geoms if not polygon.is_empty]
-        if isinstance(geometry, GeometryCollection):
-            members: list[Polygon] = []
-            for child in geometry.geoms:
-                members.extend(SvgMapConverter._polygon_members(child))
-            return members
-        return []
+        members: list[Polygon] = []
+        stack = [geometry]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, Polygon):
+                if not current.is_empty:
+                    members.append(current)
+                continue
+            if isinstance(current, (MultiPolygon, GeometryCollection)):
+                stack.extend(reversed(list(current.geoms)))
+        return members
 
     def _process_route_path(
         self,

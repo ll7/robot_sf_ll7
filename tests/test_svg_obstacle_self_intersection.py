@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from shapely.geometry import Polygon
+from shapely.geometry import GeometryCollection, Polygon
 
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 
@@ -31,3 +31,15 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
         polygon = Polygon(obstacle.vertices)
         assert polygon.is_valid, f"Obstacle {path_id} should be repaired to a valid polygon"
         assert polygon.area > 0.0
+
+
+def test_polygon_members_handles_deep_nested_geometry_collection() -> None:
+    """Nested geometry collections should be flattened without recursion errors."""
+    geometry = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)])
+    for _ in range(1500):
+        geometry = GeometryCollection([geometry])
+
+    members = SvgMapConverter._polygon_members(geometry)
+    assert len(members) == 1
+    assert members[0].is_valid
+    assert members[0].area > 0.0

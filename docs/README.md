@@ -136,6 +136,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   + **API Reference**: 6 helper functions (zones, routes, config management, YAML loading)
   + **Examples**: 4 realistic scenarios (simple navigation, urban intersection, variable density, load/verify)
 * **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
+* **[Issue 388 Execution Notes](./context/issue_388_execution.md)** - Self-intersecting obstacle-path repair behavior and validation details
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
   scenario matrix for Fig. 7 archetypes; definitions in
   [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml)

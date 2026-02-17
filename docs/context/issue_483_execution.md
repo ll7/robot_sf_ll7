@@ -10,7 +10,8 @@ Implement continuous cold/warm performance regression checks for classic interac
 - Added PR smoke gate in CI (`.github/workflows/ci.yml`):
   - one classic crossing scenario,
   - 1 cold sample + 2 warm samples,
-  - relative regression thresholds and baseline enforcement.
+  - regression enforcement for PRs and main/workflow_dispatch runs,
+  - conservative PR profile with widened relative/absolute thresholds.
 - Added nightly scheduled workflow (`.github/workflows/perf-nightly.yml`):
   - broader run budget (2 cold + 4 warm),
   - two scenario densities (`classic_crossing_low`, `classic_crossing_medium`),

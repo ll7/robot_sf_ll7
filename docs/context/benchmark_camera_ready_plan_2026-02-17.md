@@ -167,3 +167,47 @@ A campaign is accepted when:
   - Mitigation: provide smoke and full presets; document expected runtime.
 - Risk: mixed fallback behavior reduces comparability.
   - Mitigation: include fallback/status fields in campaign summary.
+
+## 10. Implementation Status (This Branch)
+
+Implemented artifacts and entry points:
+
+- campaign engine:
+  - `robot_sf/benchmark/camera_ready_campaign.py`
+- CLI:
+  - `scripts/tools/run_camera_ready_benchmark.py`
+- campaign presets:
+  - `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
+  - `configs/benchmarks/camera_ready_baseline_safe.yaml`
+  - `configs/benchmarks/camera_ready_all_planners.yaml`
+- tests:
+  - `tests/benchmark/test_camera_ready_campaign.py`
+- docs:
+  - `docs/benchmark_camera_ready.md`
+
+Compatibility fix included:
+
+- `socnav_bench` now forwards `allow_fallback` in `_build_policy`:
+  - `robot_sf/benchmark/map_runner.py`
+  - regression test:
+    - `tests/benchmark/test_map_runner_utils.py`
+
+Validation runs executed:
+
+- smoke campaign (`7` planners, `1` scenario): success (`7/7`)
+- full campaign (`7` planners, `45` scenarios, `1` seed): success (`7/7`, `315` episodes)
+- publication bundle export: success
+
+## 11. Deferred Follow-Ups Before Final Publication Freeze
+
+1. SNQI calibration for table completeness
+   - Add stable canonical `snqi_weights` + baseline stats path in campaign presets.
+   - Target: eliminate `snqi_mean = nan` in campaign tables.
+
+2. Multi-seed evaluation policy
+   - Switch full preset from single fixed seed to canonical seed sets.
+   - Target: stronger CI reliability and less seed sensitivity.
+
+3. Release metadata finalization
+   - Replace placeholder release tag and DOI values in camera-ready config
+     before public archival.

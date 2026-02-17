@@ -21,6 +21,14 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
   --log-level INFO
 ```
 
+For long/full campaigns, force worker log noise down:
+
+```bash
+LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/camera_ready_all_planners.yaml \
+  --label full_run
+```
+
 ## Config Presets
 
 - `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
@@ -90,3 +98,37 @@ Experimental planners are executed with explicit profile and prereq policy from
 the campaign config. For dependency-sensitive planners (for example SocNav
 adapters), set `socnav_missing_prereq_policy: fallback` when you want campaign
 execution to continue with degraded behavior instead of hard-fail.
+
+## Current Validation Snapshot
+
+Validated on branch `codex/benchmark-camera-ready-pipeline`:
+
+- smoke all-planners:
+  - `camera_ready_smoke_all_planners_smoke3_20260217_112307`
+  - `total_runs=7`, `successful_runs=7`, `total_episodes=7`
+- full all-planners:
+  - `camera_ready_all_planners_full2_20260217_112600`
+  - `total_runs=7`, `successful_runs=7`, `total_episodes=315`
+  - campaign runtime: `130.03s`
+  - publication bundle created
+
+Artifact locations:
+
+- campaign root:
+  - `output/benchmarks/camera_ready/camera_ready_all_planners_full2_20260217_112600`
+- publication bundle:
+  - `output/benchmarks/publication/camera_ready_all_planners_full2_20260217_112600_publication_bundle`
+
+## Remaining Camera-Ready Gaps
+
+The pipeline is complete and reproducible, but final publication-grade reporting
+still requires:
+
+- calibrated SNQI setup:
+  - provide canonical `snqi_weights` and baseline stats in config so `snqi_mean`
+    is no longer `nan` in comparison tables
+- multi-seed campaign presets:
+  - use fixed seed sets (`seed_policy.mode: seed-set`) for stronger confidence
+    intervals than single-seed runs
+- release metadata finalization:
+  - replace `release_tag`/DOI placeholders in campaign config before archival

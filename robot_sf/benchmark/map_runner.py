@@ -476,7 +476,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"socnav_bench"}:
-        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg)
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"rvo", "dwa", "teb"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})

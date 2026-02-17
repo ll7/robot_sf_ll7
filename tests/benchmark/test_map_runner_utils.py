@@ -81,6 +81,28 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_socnav_bench_forwards_allow_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure socnav_bench policy wiring respects allow_fallback setting."""
+
+    captured: dict[str, bool] = {}
+
+    class _DummyAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config
+            captured["allow_fallback"] = bool(allow_fallback)
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter", _DummyAdapter)
+    _, meta = _build_policy("socnav_bench", {"allow_fallback": True})
+    assert captured["allow_fallback"] is True
+    assert meta["status"] == "ok"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"

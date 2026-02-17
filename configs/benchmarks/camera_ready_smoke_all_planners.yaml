@@ -1,0 +1,56 @@
+name: camera_ready_smoke_all_planners
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [111]
+
+workers: 1
+horizon: 30
+dt: 0.1
+record_forces: true
+resume: true
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+export_publication_bundle: true
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+
+planners:
+  - key: goal
+    algo: goal
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+
+  - key: ppo
+    algo: ppo
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: socnav_sampling
+    algo: socnav_sampling
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback
+
+  - key: sacadrl
+    algo: sacadrl
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback
+
+  - key: socnav_bench
+    algo: socnav_bench
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback

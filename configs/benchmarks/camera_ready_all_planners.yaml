@@ -2,8 +2,12 @@ name: camera_ready_all_planners
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 
 seed_policy:
-  mode: fixed-list
-  seeds: [111]
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v1.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v1.json
 
 workers: 2
 horizon: 100
@@ -37,6 +41,7 @@ planners:
 
   - key: ppo
     algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
 

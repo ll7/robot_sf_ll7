@@ -502,6 +502,10 @@ def _planner_report_row(
         "algo": planner.algo,
         "status": str(summary.get("status", "unknown")),
         "episodes": int(summary.get("written", 0)),
+        "started_at_utc": str(summary.get("started_at_utc", "unknown")),
+        "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
+        "runtime_sec": _safe_float(summary.get("runtime_sec")),
+        "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
         "failed_jobs": int(summary.get("failed_jobs", 0)),
         "success_mean": _safe_float(_metric_mean(metric_block, "success")),
         "collision_mean": _safe_float(_metric_mean(metric_block, "collisions")),
@@ -539,6 +543,8 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
         f"- Scenario matrix hash: `{campaign.get('scenario_matrix_hash', 'unknown')}`",
         f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
         f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
+        f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+        f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
         "",
         "## Planner Summary",
         "",
@@ -547,15 +553,16 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
     if rows:
         lines.extend(
             [
-                "| planner | algo | status | episodes | success | collisions | snqi |",
-                "|---|---|---|---:|---:|---:|---:|",
+                "| planner | algo | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi |",
+                "|---|---|---|---|---:|---:|---:|---:|---:|---:|",
             ],
         )
         for row in rows:
             lines.append(
                 "| "
                 f"{row.get('planner_key')} | {row.get('algo')} | {row.get('status')} | "
-                f"{row.get('episodes')} | {row.get('success_mean')} | "
+                f"{row.get('started_at_utc')} | {row.get('runtime_sec')} | {row.get('episodes')} | "
+                f"{row.get('episodes_per_second')} | {row.get('success_mean')} | "
                 f"{row.get('collision_mean')} | {row.get('snqi_mean')} |",
             )
     else:
@@ -591,6 +598,7 @@ def run_campaign(  # noqa: PLR0915
     output_root: Path | None = None,
     label: str | None = None,
     skip_publication_bundle: bool = False,
+    invoked_command: str | None = None,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign and emit campaign artifacts.
 
@@ -615,6 +623,7 @@ def run_campaign(  # noqa: PLR0915
     runs_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
+    campaign_started_at_utc = _utc_now()
     start = time.perf_counter()
     scenarios = _load_campaign_scenarios(cfg)
     scenario_hash = _hash_payload(scenarios)
@@ -625,6 +634,7 @@ def run_campaign(  # noqa: PLR0915
         "campaign_id": campaign_id,
         "name": cfg.name,
         "created_at_utc": _utc_now(),
+        "started_at_utc": campaign_started_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
         "seed_policy": {
@@ -635,6 +645,7 @@ def run_campaign(  # noqa: PLR0915
         },
         "git": git_meta,
         "config_hash": _config_hash(_jsonable(asdict(cfg))),
+        "invoked_command": invoked_command,
         "planners": [
             {
                 "key": planner.key,
@@ -676,6 +687,7 @@ def run_campaign(  # noqa: PLR0915
             effective_workers,
         )
 
+        planner_started_at_utc = _utc_now()
         planner_start = time.perf_counter()
         status = "ok"
         summary: dict[str, Any]
@@ -715,9 +727,16 @@ def run_campaign(  # noqa: PLR0915
             }
             warnings.append(f"Planner '{planner.key}' failed: {exc}")
 
+        planner_finished_at_utc = _utc_now()
         runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
+        episodes_written = int(summary.get("written", 0))
         summary["status"] = status
+        summary["started_at_utc"] = planner_started_at_utc
+        summary["finished_at_utc"] = planner_finished_at_utc
         summary["runtime_sec"] = runtime_sec
+        summary["episodes_per_second"] = (
+            (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+        )
         _write_json(planner_dir / "summary.json", summary)
 
         if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
@@ -756,6 +775,9 @@ def run_campaign(  # noqa: PLR0915
                     "dt": effective_dt,
                 },
                 "status": status,
+                "started_at_utc": planner_started_at_utc,
+                "finished_at_utc": planner_finished_at_utc,
+                "runtime_sec": runtime_sec,
                 "episodes_path": _repo_relative(episodes_path),
                 "summary_path": _repo_relative(planner_dir / "summary.json"),
                 "summary": summary,
@@ -778,6 +800,7 @@ def run_campaign(  # noqa: PLR0915
     _write_csv(csv_path, planner_rows)
     _write_markdown_table(md_table_path, planner_rows)
 
+    campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(
@@ -790,10 +813,14 @@ def run_campaign(  # noqa: PLR0915
             "campaign_id": campaign_id,
             "name": cfg.name,
             "created_at_utc": _utc_now(),
+            "started_at_utc": campaign_started_at_utc,
+            "finished_at_utc": campaign_finished_at_utc,
             "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
             "scenario_matrix_hash": scenario_hash,
             "git_hash": git_meta.get("commit", "unknown"),
+            "invoked_command": invoked_command,
             "runtime_sec": runtime_sec,
+            "episodes_per_second": (total_episodes / runtime_sec) if runtime_sec > 0 else 0.0,
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
@@ -850,7 +877,11 @@ def run_campaign(  # noqa: PLR0915
         "matrix_path": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
         "campaign_id": campaign_id,
+        "started_at_utc": campaign_started_at_utc,
+        "finished_at_utc": campaign_finished_at_utc,
+        "invoked_command": invoked_command,
         "runtime_sec": runtime_sec,
+        "episodes_per_second": (total_episodes / runtime_sec) if runtime_sec > 0 else 0.0,
     }
     run_manifest = {
         "git_hash": git_meta.get("commit", "unknown"),

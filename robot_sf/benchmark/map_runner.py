@@ -33,7 +33,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
-from robot_sf.nav.occupancy_grid import GridConfig
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -621,10 +621,17 @@ def _build_env_config(
     config.use_occupancy_grid = True
     config.include_grid_in_observation = True
     config.grid_config = GridConfig(
-        resolution=0.5,
+        # Benchmark default upgraded to higher-resolution occupancy grids.
+        resolution=0.2,
         width=32.0,
         height=32.0,
+        channels=[
+            GridChannel.OBSTACLES,
+            GridChannel.PEDESTRIANS,
+            GridChannel.COMBINED,
+        ],
         use_ego_frame=True,
+        center_on_robot=True,
     )
     return config
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -56,8 +57,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute camera-ready benchmark campaign from CLI arguments."""
+    raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     parser = _build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    args = parser.parse_args(raw_argv)
 
     logger.remove()
     logger.add(sys.stderr, level=args.log_level)
@@ -68,6 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_root=args.output_root,
         label=args.label,
         skip_publication_bundle=bool(args.skip_publication_bundle),
+        invoked_command=shlex.join([sys.executable, str(Path(__file__)), *raw_argv]),
     )
     print(json.dumps(result, indent=2))
     return 0

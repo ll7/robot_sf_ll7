@@ -1,0 +1,24 @@
+# PPO baseline config pinned to the 15M grid+sociNav expert policy.
+#
+# Intended for benchmark/evaluation runs where PPO should use the same
+# occupancy-grid observation setup as the 15M training artifact.
+
+model_path: output/model_cache/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip
+
+# Device selection for SB3
+device: auto
+# Use deterministic=True for evaluation/benchmarking
+deterministic: true
+
+# Observation handling
+obs_mode: vector
+nearest_k: 5
+
+# Action formatting
+action_space: velocity
+v_max: 2.0
+omega_max: 1.0
+
+# Robustness: if model fails to predict (e.g., shape mismatch),
+# fall back to a simple goal-seeking action so runs continue.
+fallback_to_goal: true

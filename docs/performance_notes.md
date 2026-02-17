@@ -75,6 +75,36 @@ CI integration:
 - PR smoke: `.github/workflows/ci.yml` (`Cold/warm perf regression smoke`)
 - Nightly broader checks: `.github/workflows/perf-nightly.yml`
 
+### Overall Trend Benchmark Suite
+Location: `robot_sf/benchmark/perf_trend.py`
+
+This suite executes a stable scenario matrix and emits a single schema-versioned report:
+
+- matrix config: `configs/benchmarks/perf_trend_matrix_classic_v1.yaml`
+- report schema: `benchmark-perf-trend-report.v1`
+- fixed KPI set per phase: `env_create_sec`, `first_step_sec`, `episode_sec`, `steps_per_sec`
+
+Local run:
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python -m robot_sf.benchmark.perf_trend \
+    --matrix configs/benchmarks/perf_trend_matrix_classic_v1.yaml \
+    --history-glob 'output/benchmarks/perf/trend/history/*.json' \
+    --output-json output/benchmarks/perf/trend/latest.json \
+    --output-markdown output/benchmarks/perf/trend/latest.md
+```
+
+Nightly behavior:
+- runs the matrix in `.github/workflows/perf-nightly.yml`
+- restores prior trend reports from cache when available
+- compares current run against recent history medians
+- stores latest report back into history cache path
+- uploads all perf artifacts from `output/benchmarks/perf/`
+
+Regression diagnostics include whether degradation is startup-dominated
+(`env_create_sec`/`first_step_sec`) or steady-state-dominated (`episode_sec`/`steps_per_sec`).
+
 ### Baseline Management
 
 Use the committed snapshot as the initial reference point. If hardware/runtime

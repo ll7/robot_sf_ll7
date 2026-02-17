@@ -11,11 +11,11 @@ device: auto
 deterministic: true
 
 # Observation handling
-obs_mode: vector
+obs_mode: dict
 nearest_k: 5
 
 # Action formatting
-action_space: velocity
+action_space: unicycle
 v_max: 2.0
 omega_max: 1.0
 

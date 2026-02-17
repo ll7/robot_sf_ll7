@@ -209,3 +209,45 @@ def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatc
     impact = summary["algorithm_metadata_contract"].get("adapter_impact")
     assert isinstance(impact, dict)
     assert impact.get("requested") is True
+
+
+def test_adapter_impact_summary_finalizes_from_worker_records(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Summary adapter-impact status should finalize when worker records include counters."""
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
+    monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
+    monkeypatch.setattr(map_runner, "_write_validated", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        map_runner,
+        "_run_map_job_worker",
+        lambda _job: {
+            "episode_id": "ep-smoke",
+            "algorithm_metadata": {
+                "adapter_impact": {
+                    "requested": True,
+                    "native_steps": 3,
+                    "adapted_steps": 2,
+                }
+            },
+        },
+    )
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="ppo",
+        benchmark_profile="experimental",
+        adapter_impact_eval=True,
+        resume=False,
+    )
+
+    impact = summary["algorithm_metadata_contract"].get("adapter_impact")
+    assert isinstance(impact, dict)
+    assert impact.get("requested") is True
+    assert impact.get("status") == "complete"
+    assert impact.get("native_steps") == 3
+    assert impact.get("adapted_steps") == 2
+    assert impact.get("adapter_fraction") == pytest.approx(0.4)

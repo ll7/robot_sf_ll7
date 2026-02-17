@@ -424,6 +424,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 f"{paper_reason}. Provide provenance + quality_gate in algo config.",
             )
         ppo_planner = PPOPlanner(algo_config, seed=None)
+        planner_cfg = getattr(ppo_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            ppo_obs_mode = str(planner_cfg.get("obs_mode", "vector")).strip().lower()
+        else:
+            ppo_obs_mode = str(getattr(planner_cfg, "obs_mode", "vector")).strip().lower()
         if hasattr(ppo_planner, "get_metadata"):
             planner_meta = ppo_planner.get_metadata()
             if isinstance(planner_meta, dict):
@@ -438,7 +443,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            ppo_obs = _obs_to_ppo_format(obs)
+            if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
+                ppo_obs = obs
+            else:
+                ppo_obs = _obs_to_ppo_format(obs)
             action = ppo_planner.step(ppo_obs)
             if not isinstance(action, dict):
                 raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
@@ -1055,10 +1063,20 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     total_jobs = len(jobs)
     wrote = 0
     failures: list[dict[str, Any]] = []
+    adapter_native_steps = 0
+    adapter_adapted_steps = 0
+    adapter_samples_seen = False
     if workers <= 1:
         for scenario, seed in jobs:
             try:
                 rec = _run_map_job_worker((scenario, seed, fixed_params))
+                impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
+                if isinstance(impact_meta, dict):
+                    adapter_samples_seen = adapter_samples_seen or bool(
+                        impact_meta.get("requested", False),
+                    )
+                    adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
+                    adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -1079,6 +1097,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
+                    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
+                    if isinstance(impact_meta, dict):
+                        adapter_samples_seen = adapter_samples_seen or bool(
+                            impact_meta.get("requested", False),
+                        )
+                        adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
+                        adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
                     _write_validated(out_path, schema, rec)
                     wrote += 1
                 except Exception as exc:  # pragma: no cover
@@ -1089,6 +1114,34 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "error": repr(exc),
                         }
                     )
+
+    impact_contract = algo_contract.get("adapter_impact")
+    if (
+        isinstance(impact_contract, dict)
+        and bool(impact_contract.get("requested", False))
+        and adapter_samples_seen
+    ):
+        impact_contract["native_steps"] = int(adapter_native_steps)
+        impact_contract["adapted_steps"] = int(adapter_adapted_steps)
+        total_steps = adapter_native_steps + adapter_adapted_steps
+        if total_steps > 0:
+            execution_mode = infer_execution_mode_from_counts(
+                adapter_native_steps, adapter_adapted_steps
+            )
+            impact_contract["status"] = "complete"
+            impact_contract["execution_mode"] = execution_mode
+            impact_contract["adapter_fraction"] = float(adapter_adapted_steps / total_steps)
+            algo_contract = enrich_algorithm_metadata(
+                algo=algo,
+                metadata=algo_contract,
+                execution_mode=execution_mode,
+                robot_kinematics=kinematics_tag,
+            )
+        else:
+            impact_contract["status"] = "not_applicable"
+            impact_contract["adapter_fraction"] = 0.0
+
+    preflight["algorithm_metadata_contract"] = algo_contract
 
     return {
         "total_jobs": total_jobs,

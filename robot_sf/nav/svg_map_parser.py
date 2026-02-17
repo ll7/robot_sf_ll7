@@ -40,8 +40,8 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
-from shapely.geometry import Polygon
-from shapely.validation import explain_validity
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+from shapely.validation import explain_validity, make_valid
 
 from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.common.types import Line2D, Rect, Zone
@@ -765,8 +765,69 @@ class SvgMapConverter:
                 empty=poly.is_empty,
                 reason=explain_validity(poly),
             )
+            repaired = self._repair_invalid_obstacle_polygon(poly)
+            if repaired is not None:
+                vertices = list(repaired.exterior.coords)
+                logger.info(
+                    "Repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}).",
+                    pid=path.id,
+                    area=repaired.area,
+                )
+            else:
+                logger.warning(
+                    "Failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    pid=path.id,
+                )
 
         return Obstacle(vertices)
+
+    @staticmethod
+    def _repair_invalid_obstacle_polygon(polygon: Polygon) -> Polygon | None:
+        """Repair an invalid obstacle polygon and return the largest usable polygon.
+
+        Args:
+            polygon: Raw polygon built from SVG obstacle vertices.
+
+        Returns:
+            Polygon | None: Largest valid polygon candidate or ``None`` when no
+                polygon geometry can be recovered.
+        """
+        repaired = make_valid(polygon)
+        candidates = SvgMapConverter._polygon_members(repaired)
+        if not candidates:
+            return None
+        candidate = max(candidates, key=lambda part: part.area)
+        if candidate.is_empty or candidate.area <= 0.0:
+            return None
+        if candidate.is_valid:
+            return candidate
+
+        buffered = candidate.buffer(0)
+        buffered_candidates = SvgMapConverter._polygon_members(buffered)
+        if not buffered_candidates:
+            return None
+        buffered_best = max(buffered_candidates, key=lambda part: part.area)
+        if buffered_best.is_empty or buffered_best.area <= 0.0:
+            return None
+        return buffered_best if buffered_best.is_valid else None
+
+    @staticmethod
+    def _polygon_members(geometry) -> list[Polygon]:
+        """Collect polygon members from Polygon/MultiPolygon/GeometryCollection.
+
+        Returns:
+            list[Polygon]: Non-empty polygon members extracted from ``geometry``.
+        """
+        if isinstance(geometry, Polygon):
+            return [] if geometry.is_empty else [geometry]
+        if isinstance(geometry, MultiPolygon):
+            return [polygon for polygon in geometry.geoms if not polygon.is_empty]
+        if isinstance(geometry, GeometryCollection):
+            members: list[Polygon] = []
+            for child in geometry.geoms:
+                members.extend(SvgMapConverter._polygon_members(child))
+            return members
+        return []
 
     def _process_route_path(
         self,

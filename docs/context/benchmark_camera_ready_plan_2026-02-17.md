@@ -197,17 +197,85 @@ Validation runs executed:
 - smoke campaign (`7` planners, `1` scenario): success (`7/7`)
 - full campaign (`7` planners, `45` scenarios, `1` seed): success (`7/7`, `315` episodes)
 - publication bundle export: success
+- baseline-safe calibration campaign (`3` planners, `45` scenarios, `3` eval seeds):
+  success (`3/3`, `405` episodes)
+- baseline-safe verification campaign with SNQI enabled (`3` planners, `45` scenarios, `3` eval seeds):
+  success (`3/3`, `405` episodes)
+- full all-planners verification with SNQI + multi-seed (`7` planners, `45` scenarios, `3` eval seeds):
+  success (`7/7`, `945` episodes)
 
-## 11. Deferred Follow-Ups Before Final Publication Freeze
+## 11. Publication Freeze Follow-Ups
+
+Resolved in this branch:
 
 1. SNQI calibration for table completeness
-   - Add stable canonical `snqi_weights` + baseline stats path in campaign presets.
-   - Target: eliminate `snqi_mean = nan` in campaign tables.
+   - Added canonical camera-ready SNQI config assets:
+     - `configs/benchmarks/snqi_weights_camera_ready_v1.json`
+     - `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
+   - Wired into campaign presets:
+     - `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
+     - `configs/benchmarks/camera_ready_baseline_safe.yaml`
+     - `configs/benchmarks/camera_ready_all_planners.yaml`
+   - Verified smoke campaign table now emits numeric `snqi_mean` values.
 
 2. Multi-seed evaluation policy
-   - Switch full preset from single fixed seed to canonical seed sets.
-   - Target: stronger CI reliability and less seed sensitivity.
+   - Switched canonical full presets to seed sets:
+     - `configs/benchmarks/camera_ready_baseline_safe.yaml`
+     - `configs/benchmarks/camera_ready_all_planners.yaml`
+   - Seed policy now uses:
+     - `mode: seed-set`
+     - `seed_set: eval`
+     - `seed_sets_path: configs/benchmarks/seed_sets_v1.yaml`
+
+Still pending:
 
 3. Release metadata finalization
    - Replace placeholder release tag and DOI values in camera-ready config
      before public archival.
+
+## 12. Documentation + Visualization Helper Roadmap
+
+To make benchmark outputs easier to review and publish, implement the
+following helper layer on top of existing campaign artifacts.
+
+1. Report builder helper (`scripts/tools/benchmark_report_build.py`)
+   - Input: `reports/campaign_summary.json`
+   - Output: normalized markdown brief with:
+     - best/worst planner per key metric
+     - runtime leaderboard
+     - fallback/degraded planner flags
+   - Why: reduces manual interpretation work before PR/release.
+
+2. Artifact explorer helper (`scripts/tools/benchmark_artifact_inspect.py`)
+   - Input: campaign root path
+   - Output: structural validation + human summary:
+     - required files present/missing
+     - schema version, git hash, command provenance
+     - publication bundle completeness
+   - Why: faster publication freeze checks.
+
+3. Visualization helper (`scripts/tools/benchmark_plot.py`)
+   - Input: `campaign_table.csv` or `campaign_summary.json`
+   - Output:
+     - planner metric bar charts (success/collision/SNQI)
+     - runtime vs quality scatter plot
+     - optional SVG/PNG exports under `reports/figures/`
+   - Why: camera-ready figure generation from canonical artifacts.
+
+4. Notebook template for deep dives (`docs/notebooks/benchmark_analysis.ipynb`)
+   - Reusable notebook loading one campaign and comparing two runs.
+   - Includes significance checks for multi-seed summaries.
+   - Why: supports paper iteration and regression analysis.
+
+5. PR-facing summary integration
+   - Add optional step in `scripts/dev/pr_ready_check.sh` to print:
+     - latest campaign id
+     - planner runtime table
+     - any warning/fallback counts
+   - Why: puts benchmark signal directly into review workflow.
+
+6. Potential tooling stack
+   - Dataframes: `pandas`
+   - Plots: `matplotlib` (default) with optional `seaborn`
+   - Rich terminal summaries: `tabulate` or `rich`
+   - Why: low-friction, already common in research/dev environments.

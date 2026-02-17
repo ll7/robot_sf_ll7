@@ -215,9 +215,14 @@ jobs:
             --min-seconds-delta "$MIN_SECONDS_DELTA"
             --min-throughput-delta "$MIN_THROUGHPUT_DELTA"
             --require-baseline
-            --fail-on-regression
           )
-          "${CMD[@]}"
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Enforcing cold/warm regression gate"
+            "${CMD[@]}" --fail-on-regression
+          else
+            echo "Running cold/warm smoke in advisory mode on PR branch"
+            "${CMD[@]}"
+          fi
 
       - name: Telemetry tracker/perf smoke
         run: |

@@ -40,8 +40,8 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
-from shapely.geometry import Polygon
-from shapely.validation import explain_validity
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+from shapely.validation import explain_validity, make_valid
 
 from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.common.types import Line2D, Rect, Zone
@@ -765,8 +765,75 @@ class SvgMapConverter:
                 empty=poly.is_empty,
                 reason=explain_validity(poly),
             )
+            repaired = self._repair_invalid_obstacle_polygon(poly)
+            if repaired is not None:
+                vertices = list(repaired.exterior.coords)
+                logger.info(
+                    "Repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}).",
+                    pid=path.id,
+                    area=repaired.area,
+                )
+            else:
+                logger.warning(
+                    "Failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    pid=path.id,
+                )
 
         return Obstacle(vertices)
+
+    @staticmethod
+    def _repair_invalid_obstacle_polygon(polygon: Polygon) -> Polygon | None:
+        """Repair an invalid obstacle polygon and return the largest usable polygon.
+
+        Args:
+            polygon: Raw polygon built from SVG obstacle vertices.
+
+        Returns:
+            Polygon | None: Largest valid polygon candidate or ``None`` when no
+                polygon geometry can be recovered.
+        """
+        candidate = SvgMapConverter._largest_usable_polygon(make_valid(polygon))
+        if candidate is None:
+            return None
+        if candidate.is_valid:
+            return candidate
+
+        buffered_candidate = SvgMapConverter._largest_usable_polygon(candidate.buffer(0))
+        return buffered_candidate if buffered_candidate and buffered_candidate.is_valid else None
+
+    @staticmethod
+    def _largest_usable_polygon(geometry) -> Polygon | None:
+        """Extract the largest non-empty polygon candidate from a geometry tree.
+
+        Returns:
+            Polygon | None: Largest polygon with positive area, otherwise ``None``.
+        """
+        candidates = SvgMapConverter._polygon_members(geometry)
+        if not candidates:
+            return None
+        candidate = max(candidates, key=lambda part: part.area)
+        if candidate.is_empty or candidate.area <= 0.0:
+            return None
+        return candidate
+
+    @staticmethod
+    def _polygon_members(geometry) -> list[Polygon]:
+        """Collect polygon members from Polygon/MultiPolygon/GeometryCollection.
+
+        Returns:
+            list[Polygon]: Non-empty polygon members extracted from ``geometry``.
+        """
+        members: list[Polygon] = []
+        stack = [geometry]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, Polygon):
+                if not current.is_empty:
+                    members.append(current)
+                continue
+            if isinstance(current, (MultiPolygon, GeometryCollection)):
+                stack.extend(reversed(list(current.geoms)))
+        return members
 
     def _process_route_path(
         self,

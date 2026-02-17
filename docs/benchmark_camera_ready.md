@@ -128,6 +128,22 @@ jq '.campaign | {invoked_command, started_at_utc, finished_at_utc, runtime_sec, 
   output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json
 ```
 
+Analyzer helper:
+
+```bash
+uv run python scripts/tools/analyze_camera_ready_campaign.py \
+  --campaign-root output/benchmarks/camera_ready/<campaign_id>
+```
+
+This emits:
+
+- `reports/campaign_analysis.json`
+- `reports/campaign_analysis.md`
+
+Analyzer findings now also include portability checks, including detection of
+absolute `scenario_params.map_file` paths in episodes (these should be
+repository-relative for publication-grade portability).
+
 ## Camera-Ready Table Fields
 
 `campaign_table.csv` and `campaign_table.md` include at least:

@@ -42,6 +42,8 @@ For issue management and delivery, use these local skills:
   - Maintains a clear sequential execution queue in GitHub Project #5 (`In progress`/`Ready`/`Tracked`).
 - `.codex/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
+- `.codex/skills/analyze-camera-ready-benchmark/SKILL.md`
+  - Runs consistency diagnostics for camera-ready benchmark campaigns and summarizes runtime/quality/fallback signals.
 
 ## Donts
 

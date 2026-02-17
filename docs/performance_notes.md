@@ -73,6 +73,14 @@ and classifies regressions as startup-dominated vs steady-state-dominated.
 
 CI integration:
 - PR smoke: `.github/workflows/ci.yml` (`Cold/warm perf regression smoke`)
+  - advisory on PRs with a conservative profile:
+    - baseline: `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+    - thresholds: `max_slowdown_pct=0.75`, `max_throughput_drop_pct=0.60`
+    - absolute deltas: `min_seconds_delta=0.20`, `min_throughput_delta=1.00`
+  - enforced on `main`/`workflow_dispatch` with default profile:
+    - baseline: `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+    - thresholds: `max_slowdown_pct=0.60`, `max_throughput_drop_pct=0.50`
+    - absolute deltas: `min_seconds_delta=0.15`, `min_throughput_delta=0.75`
 - Nightly broader checks: `.github/workflows/perf-nightly.yml`
 
 ### Overall Trend Benchmark Suite

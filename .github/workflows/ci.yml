@@ -188,6 +188,18 @@ jobs:
 
       - name: Cold/warm perf regression smoke
         run: |
+          BASELINE="configs/benchmarks/perf_baseline_classic_cold_warm_v1.json"
+          MAX_SLOWDOWN="0.60"
+          MAX_THROUGHPUT_DROP="0.50"
+          MIN_SECONDS_DELTA="0.15"
+          MIN_THROUGHPUT_DELTA="0.75"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "Using conservative PR perf gate profile"
+            MAX_SLOWDOWN="0.75"
+            MAX_THROUGHPUT_DROP="0.60"
+            MIN_SECONDS_DELTA="0.20"
+            MIN_THROUGHPUT_DELTA="1.00"
+          fi
           CMD=(
             uv run python -m robot_sf.benchmark.perf_cold_warm
             --scenario-config configs/scenarios/archetypes/classic_crossing.yaml
@@ -195,13 +207,13 @@ jobs:
             --episode-steps 48
             --cold-runs 1
             --warm-runs 2
-            --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json
+            --baseline "$BASELINE"
             --output-json output/benchmarks/perf/cold_warm_pr_smoke.json
             --output-markdown output/benchmarks/perf/cold_warm_pr_smoke.md
-            --max-slowdown-pct 0.60
-            --max-throughput-drop-pct 0.50
-            --min-seconds-delta 0.15
-            --min-throughput-delta 0.75
+            --max-slowdown-pct "$MAX_SLOWDOWN"
+            --max-throughput-drop-pct "$MAX_THROUGHPUT_DROP"
+            --min-seconds-delta "$MIN_SECONDS_DELTA"
+            --min-throughput-delta "$MIN_THROUGHPUT_DELTA"
             --require-baseline
           )
           if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then

@@ -10,6 +10,25 @@ import numpy as np
 Command2D = tuple[float, float]
 
 
+def _build_diagnostics(
+    model: KinematicsModel,
+    command: Command2D,
+    projected: Command2D,
+) -> dict[str, Any]:
+    """Build a standard command-projection diagnostics payload.
+
+    Returns:
+        dict[str, Any]: Structured diagnostics for command adaptation.
+    """
+    return {
+        "kinematics_model": model.name,
+        "feasible_native": bool(model.is_feasible(command)),
+        "projection_applied": command != projected,
+        "command_in": [float(command[0]), float(command[1])],
+        "command_projected": [float(projected[0]), float(projected[1])],
+    }
+
+
 class KinematicsModel(Protocol):
     """Runtime contract for command feasibility and projection."""
 
@@ -66,23 +85,26 @@ class DifferentialDriveKinematicsModel:
         Returns:
             dict[str, Any]: Structured diagnostics for command adaptation.
         """
-        return {
-            "kinematics_model": self.name,
-            "feasible_native": bool(self.is_feasible(command)),
-            "projection_applied": command != projected,
-            "command_in": [float(command[0]), float(command[1])],
-            "command_projected": [float(projected[0]), float(projected[1])],
-        }
+        return _build_diagnostics(self, command, projected)
 
 
 @dataclass(frozen=True)
 class BicycleDriveKinematicsModel:
     """Bicycle-drive feasibility in (v, omega) planning command space."""
 
-    min_velocity: float
     max_velocity: float
     max_angular_speed: float
+    allow_backwards: bool = False
     name: str = "bicycle_drive"
+
+    @property
+    def min_velocity(self) -> float:
+        """Return the minimum feasible linear velocity.
+
+        Returns:
+            float: Negative max speed when backwards motion is allowed, otherwise ``0.0``.
+        """
+        return -self.max_velocity if self.allow_backwards else 0.0
 
     def is_feasible(self, command: Command2D) -> bool:
         """Check whether command is inside bicycle planning bounds.
@@ -114,13 +136,7 @@ class BicycleDriveKinematicsModel:
         Returns:
             dict[str, Any]: Structured diagnostics for command adaptation.
         """
-        return {
-            "kinematics_model": self.name,
-            "feasible_native": bool(self.is_feasible(command)),
-            "projection_applied": command != projected,
-            "command_in": [float(command[0]), float(command[1])],
-            "command_projected": [float(projected[0]), float(projected[1])],
-        }
+        return _build_diagnostics(self, command, projected)
 
 
 @dataclass(frozen=True)
@@ -152,13 +168,7 @@ class HolonomicPassthroughKinematicsModel:
         Returns:
             dict[str, Any]: Diagnostics marking passthrough semantics.
         """
-        return {
-            "kinematics_model": self.name,
-            "feasible_native": True,
-            "projection_applied": False,
-            "command_in": [float(command[0]), float(command[1])],
-            "command_projected": [float(projected[0]), float(projected[1])],
-        }
+        return _build_diagnostics(self, command, projected)
 
 
 def resolve_benchmark_kinematics_model(
@@ -175,13 +185,11 @@ def resolve_benchmark_kinematics_model(
     kinematics = str(robot_kinematics or "differential_drive").strip().lower()
     if kinematics == "bicycle_drive":
         max_velocity = float(limits.get("max_velocity", limits.get("v_max", 2.0)))
-        allow_backwards = bool(limits.get("allow_backwards", False))
-        min_velocity = -max_velocity if allow_backwards else 0.0
         max_angular = float(limits.get("max_angular_speed", limits.get("omega_max", 1.0)))
         return BicycleDriveKinematicsModel(
-            min_velocity=min_velocity,
             max_velocity=max_velocity,
             max_angular_speed=max_angular,
+            allow_backwards=bool(limits.get("allow_backwards", False)),
         )
     if kinematics in {"holonomic", "omni", "omnidirectional"}:
         return HolonomicPassthroughKinematicsModel()

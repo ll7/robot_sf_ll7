@@ -86,10 +86,14 @@ class PlannerActionAdapter:
         """
         if isinstance(self.robot, BicycleDriveRobot):
             cfg = self.robot.config
+            # Bicycle max angular speed derives from max steering at max velocity.
+            max_angular_speed = (
+                cfg.max_velocity * math.tan(cfg.max_steer) / max(cfg.wheelbase, 1e-6)
+            )
             return BicycleDriveKinematicsModel(
-                min_velocity=cfg.min_velocity,
                 max_velocity=cfg.max_velocity,
-                max_angular_speed=cfg.max_steer,
+                max_angular_speed=max_angular_speed,
+                allow_backwards=cfg.allow_backwards,
             )
         if isinstance(self.robot, DifferentialDriveRobot):
             cfg = self.robot.config

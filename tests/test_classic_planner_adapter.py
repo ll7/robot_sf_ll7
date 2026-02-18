@@ -107,13 +107,24 @@ def test_differential_kinematics_model_projection_and_feasibility() -> None:
 
 def test_bicycle_kinematics_model_projection_and_feasibility() -> None:
     """Bicycle kinematics should enforce configured velocity and angular limits."""
-    model = BicycleDriveKinematicsModel(min_velocity=0.0, max_velocity=2.0, max_angular_speed=0.4)
+    model = BicycleDriveKinematicsModel(max_velocity=2.0, max_angular_speed=0.4)
     assert model.is_feasible((1.0, 0.2)) is True
     assert model.is_feasible((-0.5, 0.2)) is False
     projected = model.project((-0.5, 1.0))
     assert projected == pytest.approx((0.0, 0.4))
     diag = model.diagnostics((-0.5, 1.0), projected)
     assert diag["projection_applied"] is True
+
+
+def test_bicycle_kinematics_model_allows_backwards_when_enabled() -> None:
+    """Bicycle kinematics should allow negative velocity when configured."""
+    model = BicycleDriveKinematicsModel(
+        max_velocity=2.0,
+        max_angular_speed=0.4,
+        allow_backwards=True,
+    )
+    assert model.min_velocity == pytest.approx(-2.0)
+    assert model.is_feasible((-0.5, 0.2)) is True
 
 
 def test_holonomic_passthrough_kinematics_model() -> None:

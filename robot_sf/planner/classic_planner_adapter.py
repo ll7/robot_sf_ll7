@@ -65,6 +65,8 @@ class PlannerActionAdapter:
         """
         linear_target, angular_target = command
         kinematics_model = self.kinematics_model or self._default_kinematics_model()
+        if self.kinematics_model is None:
+            self.kinematics_model = kinematics_model
         projected = kinematics_model.project((float(linear_target), float(angular_target)))
         self.last_kinematics_diagnostics = kinematics_model.diagnostics(
             (float(linear_target), float(angular_target)),
@@ -137,7 +139,9 @@ class PlannerActionAdapter:
         """
         config = self.robot.config
         current_linear, current_angular = self.robot.current_speed
-        target_linear = float(np.clip(linear_target, 0.0, config.max_linear_speed))
+        target_linear = float(
+            np.clip(linear_target, config.min_linear_speed, config.max_linear_speed)
+        )
         target_angular = float(
             np.clip(angular_target, -config.max_angular_speed, config.max_angular_speed)
         )

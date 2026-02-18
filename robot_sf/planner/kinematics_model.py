@@ -6,8 +6,24 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 import numpy as np
+from loguru import logger
 
 Command2D = tuple[float, float]
+
+
+class KinematicsModel(Protocol):
+    """Runtime contract for command feasibility and projection."""
+
+    name: str
+
+    def is_feasible(self, command: Command2D) -> bool:
+        """Return whether a command is natively feasible for this model."""
+
+    def project(self, command: Command2D) -> Command2D:
+        """Project/clip a command into the feasible set."""
+
+    def diagnostics(self, command: Command2D, projected: Command2D) -> dict[str, Any]:
+        """Return diagnostics payload for metadata and debugging."""
 
 
 def _build_diagnostics(
@@ -27,21 +43,6 @@ def _build_diagnostics(
         "command_in": [float(command[0]), float(command[1])],
         "command_projected": [float(projected[0]), float(projected[1])],
     }
-
-
-class KinematicsModel(Protocol):
-    """Runtime contract for command feasibility and projection."""
-
-    name: str
-
-    def is_feasible(self, command: Command2D) -> bool:
-        """Return whether a command is natively feasible for this model."""
-
-    def project(self, command: Command2D) -> Command2D:
-        """Project/clip a command into the feasible set."""
-
-    def diagnostics(self, command: Command2D, projected: Command2D) -> dict[str, Any]:
-        """Return diagnostics payload for metadata and debugging."""
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,12 @@ def resolve_benchmark_kinematics_model(
         )
     if kinematics in {"holonomic", "omni", "omnidirectional"}:
         return HolonomicPassthroughKinematicsModel()
+    if kinematics != "differential_drive":
+        logger.warning(
+            "Unknown robot kinematics '{}' resolved as fallback '{}'.",
+            kinematics,
+            "differential_drive",
+        )
     max_linear = float(limits.get("max_linear_speed", limits.get("v_max", 2.0)))
     max_angular = float(limits.get("max_angular_speed", limits.get("omega_max", 1.0)))
     return DifferentialDriveKinematicsModel(

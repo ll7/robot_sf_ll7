@@ -34,7 +34,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
-from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
+from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -335,6 +335,7 @@ def _ppo_action_to_unicycle(
     cfg: dict[str, Any],
     *,
     robot_kinematics: str | None = None,
+    kinematics_model: KinematicsModel | None = None,
 ) -> tuple[float, float, str]:
     """Convert PPO action dict into the unicycle command used by map environments.
 
@@ -342,7 +343,7 @@ def _ppo_action_to_unicycle(
         Tuple of ``(linear_velocity, angular_velocity, conversion_mode)`` where
         conversion_mode is ``"native"`` or ``"adapter"``.
     """
-    model = resolve_benchmark_kinematics_model(
+    model = kinematics_model or resolve_benchmark_kinematics_model(
         robot_kinematics=robot_kinematics,
         command_limits=cfg,
     )
@@ -391,15 +392,16 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
-    kinematics_model = resolve_benchmark_kinematics_model(
-        robot_kinematics=robot_kinematics,
-        command_limits=algo_config,
-    )
-
-    def _project(v: float, w: float) -> tuple[float, float]:
-        return kinematics_model.project((v, w))
 
     if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
+        goal_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _project(v: float, w: float) -> tuple[float, float]:
+            return goal_kinematics_model.project((v, w))
+
         meta.update(
             {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
         )
@@ -455,6 +457,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             adapter_impact_requested=adapter_impact_eval,
         )
+        ppo_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
             if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
@@ -469,6 +475,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 obs,
                 algo_config,
                 robot_kinematics=robot_kinematics,
+                kinematics_model=ppo_kinematics_model,
             )
             impact = meta.get("adapter_impact")
             if isinstance(impact, dict) and bool(impact.get("requested", False)):
@@ -521,10 +528,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         execution_mode="adapter",
         robot_kinematics=robot_kinematics,
     )
+    adapter_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         linear, angular = adapter.plan(obs)
-        return _project(float(linear), float(angular))
+        return adapter_kinematics_model.project((float(linear), float(angular)))
 
     return _policy, meta
 

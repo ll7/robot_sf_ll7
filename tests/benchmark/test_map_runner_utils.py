@@ -32,6 +32,33 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 
 
+class _KinematicsStub:
+    """Minimal kinematics model test double for map-runner wiring tests."""
+
+    name: str = "stub"
+
+    def __init__(self, projected: tuple[float, float], *, feasible: bool = True) -> None:
+        self._projected = projected
+        self._feasible = feasible
+        self.calls: list[tuple[float, float]] = []
+
+    def is_feasible(self, command: tuple[float, float]) -> bool:
+        del command
+        return self._feasible
+
+    def project(self, command: tuple[float, float]) -> tuple[float, float]:
+        self.calls.append((float(command[0]), float(command[1])))
+        return self._projected
+
+    def diagnostics(
+        self,
+        command: tuple[float, float],
+        projected: tuple[float, float],
+    ) -> dict[str, object]:
+        del command, projected
+        return {}
+
+
 def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
     """Ensure YAML config parsing handles missing, valid, and invalid files."""
     assert _parse_algo_config(None) == {}
@@ -209,16 +236,7 @@ def test_ppo_action_to_unicycle_uses_kinematics_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """PPO command conversion should route through the kinematics contract."""
-
-    class _Model:
-        def __init__(self) -> None:
-            self.calls: list[tuple[float, float]] = []
-
-        def project(self, command):
-            self.calls.append((float(command[0]), float(command[1])))
-            return (0.7, -0.3)
-
-    model = _Model()
+    model = _KinematicsStub((0.7, -0.3))
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
         lambda **kwargs: model,
@@ -233,23 +251,14 @@ def test_ppo_action_to_unicycle_uses_kinematics_contract(
     assert native[0] == pytest.approx(0.7)
     assert native[1] == pytest.approx(-0.3)
     assert native[2] == "native"
-    assert model.calls
+    assert model.calls == [(1.8, 2.0)]
 
 
 def test_build_policy_goal_path_uses_kinematics_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Goal policy should project commands through kinematics contract wiring."""
-
-    class _Model:
-        def __init__(self) -> None:
-            self.calls: list[tuple[float, float]] = []
-
-        def project(self, command):
-            self.calls.append((float(command[0]), float(command[1])))
-            return (0.2, 0.1)
-
-    model = _Model()
+    model = _KinematicsStub((0.2, 0.1))
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
         lambda **kwargs: model,
@@ -260,7 +269,7 @@ def test_build_policy_goal_path_uses_kinematics_contract(
         "goal": {"current": [10.0, 0.0]},
     }
     assert policy(obs) == pytest.approx((0.2, 0.1))
-    assert model.calls, "Expected projected commands via kinematics contract."
+    assert model.calls == [(10.0, 0.0)]
     assert meta["planner_kinematics"]["execution_mode"] == "native"
 
 

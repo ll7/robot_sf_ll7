@@ -378,6 +378,39 @@ def test_robot_measured_kinematics_draws_speed_and_acceleration(monkeypatch) -> 
     assert abs(s_end[0] - 20.0) < 1e-6
 
 
+def test_robot_measured_kinematics_resets_on_episode_start(monkeypatch) -> None:
+    """Episode start (timestep=0) should clear prior kinematic history spikes."""
+    view = SimulationView(
+        record_video=True, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+    )
+    view._prev_robot_pose_xy = (50.0, 50.0)
+    view._prev_robot_speed_vec = np.array([100.0, 0.0], dtype=float)
+
+    line_calls: list[tuple[tuple[float, float], tuple[float, float], int]] = []
+
+    def _spy_line(_screen, _color, start, end, width=1):
+        line_calls.append((start, end, width))
+
+    monkeypatch.setattr(pygame.draw, "line", _spy_line)
+    state = VisualizableSimState(
+        timestep=0,
+        robot_action=None,
+        robot_pose=((1.0, 0.0), 0.0),
+        pedestrian_positions=np.empty((0, 2)),
+        ray_vecs=np.empty((0, 2, 2)),
+        ped_actions=np.empty((0, 2, 2)),
+        time_per_step_in_secs=1.0,
+    )
+    view._augment_robot_measured_kinematics(state)
+
+    # 2nd line is speed vector; it should collapse to zero length at episode start.
+    assert len(line_calls) == 3
+    speed_start, speed_end, _ = line_calls[1]
+    assert speed_start == speed_end
+    assert view._prev_robot_pose_xy == (1.0, 0.0)
+    assert np.array_equal(view._prev_robot_speed_vec, np.array([0.0, 0.0], dtype=float))
+
+
 def test_robot_rotation_action_draws_clamped_directional_arc(monkeypatch) -> None:
     """Rotation action should render an orange arc with turn direction and pi clamp."""
     view = SimulationView(

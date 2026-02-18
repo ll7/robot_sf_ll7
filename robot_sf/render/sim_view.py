@@ -1074,6 +1074,10 @@ class SimulationView:
         heading_dir = np.array([cos(float(pose[1])), sin(float(pose[1]))], dtype=float)
         dt = float(state.time_per_step_in_secs or 0.1)
         dt = max(dt, 1e-6)
+        episode_start = int(getattr(state, "timestep", -1)) <= 0
+        if episode_start:
+            self._prev_robot_pose_xy = None
+            self._prev_robot_speed_vec = None
 
         if self._prev_robot_pose_xy is None:
             speed_vec = np.array([0.0, 0.0], dtype=float)

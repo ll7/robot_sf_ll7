@@ -49,6 +49,8 @@ ROBOT_ROUTE_COLOR = (30, 30, 255)
 ROBOT_COLOR = (0, 0, 200)
 COLLISION_COLOR = (200, 0, 0)
 ROBOT_ACTION_COLOR = (65, 105, 225)
+ROBOT_ACCEL_COLOR = (255, 215, 0)
+ROBOT_ROTATION_ACTION_COLOR = (255, 165, 0)
 PED_ACTION_COLOR = (255, 50, 50)
 ROBOT_GOAL_COLOR = (0, 204, 102)
 ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
@@ -65,6 +67,7 @@ _DEFAULT_SPRITE_DIR = os.path.join(os.path.dirname(__file__), "assets")
 _DEFAULT_ROBOT_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "robot.png")
 _DEFAULT_PED_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "pedestrian.png")
 _DEFAULT_EGO_PED_SPRITE = os.path.join(_DEFAULT_SPRITE_DIR, "ego_pedestrian.png")
+_SPRITE_HEADING_OFFSET_RAD = np.pi / 2.0
 
 
 def _empty_map_definition() -> MapDefinition:
@@ -147,6 +150,8 @@ class VisualizableSimState:
 
     planned_path: list[Vec2D] | None = None
     """Optional planned path waypoints for debugging (world coordinates)."""
+    observation_image: np.ndarray | None = None
+    """Optional image observation payload for observation-space visualization."""
 
     def __post_init__(self):
         """validate the visualizable state"""
@@ -230,6 +235,17 @@ class SimulationView:
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
     display_text: bool = field(default=False)  # Add this field to control text visibility
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
+    action_horizon_s: float = field(default=1.0)  # Distance horizon for speed vectors (m/s * s)
+    direction_line_length_m: float = field(default=0.5)  # Always-visible direction indicator
+    direction_line_width_px: int = field(default=1)
+    speed_line_width_px: int = field(default=3)
+    speed_line_scale: float = field(default=1.0)
+    acceleration_horizon_s: float = field(default=1.0)
+    acceleration_line_width_px: int = field(default=3)
+    acceleration_line_scale: float = field(default=1.0)
+    rotation_arc_radius_scale: float = field(default=1.0)
+    rotation_arc_width_px: int = field(default=4)
+    robot_rotation_action_max_abs: float = field(default=1.0)
     # Internal flag: True when a display window is created via pygame.display.set_mode
     _use_display: bool = field(init=False, default=False)
     # Maximum number of frames to retain in memory when recording. None means no hard cap.
@@ -243,7 +259,9 @@ class SimulationView:
         default_factory=lambda: {0: True, 1: True}
     )
     grid_alpha: float = field(default=0.5)  # Alpha blending for grid overlay
-    show_lidar: bool = field(default=True)  # Toggle lidar ray visualization
+    show_lidar: bool = field(default=False)  # Manual lidar ray visualization toggle
+    show_observation_space: bool = field(default=False)  # Toggle observation-space overlay
+    observation_space_mode: str = field(default="auto")  # auto|lidar|grid|image
     robot_render_mode: str = field(default="circle")  # circle|sprite
     ped_render_mode: str = field(default="circle")  # circle|sprite
     ego_ped_render_mode: str = field(default="circle")  # circle|sprite
@@ -254,6 +272,9 @@ class SimulationView:
         init=False, default_factory=dict
     )
     _sprite_warning_once: set[str] = field(init=False, default_factory=set)
+    _ped_last_directions: list[tuple[float, float]] = field(init=False, default_factory=list)
+    _prev_robot_pose_xy: tuple[float, float] | None = field(init=False, default=None)
+    _prev_robot_speed_vec: np.ndarray | None = field(init=False, default=None)
     # Telemetry pane state
     show_telemetry_panel: bool = field(default=False)
     telemetry_session: object | None = field(default=None)
@@ -331,6 +352,13 @@ class SimulationView:
                     mode,
                 )
                 setattr(self, attr_name, "circle")
+        valid_obs_modes = {"auto", "lidar", "grid", "image"}
+        if self.observation_space_mode not in valid_obs_modes:
+            logger.warning(
+                "Invalid observation_space_mode '%s'; falling back to 'auto'.",
+                self.observation_space_mode,
+            )
+            self.observation_space_mode = "auto"
 
     def _is_headless_environment(self) -> bool:
         """Return True if the runtime should be treated as headless.
@@ -427,19 +455,27 @@ class SimulationView:
 
     def _draw_dynamic_elements(self, state: VisualizableSimState):
         """Draw dynamic elements based on the simulation state."""
-        self._draw_sensor_data(state)
+        mode = self._observation_overlay_mode(state)
+        self._draw_sensor_data(state, mode=mode)
         self._draw_actions(state)
         self._draw_entities(state)
         self._draw_planned_path(state)
         # Draw occupancy grid overlay after entities so it appears on top
-        if hasattr(state, "robot_pose") and state.robot_pose is not None:
-            # numpy arrays are not directly truthy; require non-empty content
-            if not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0:
-                self._render_occupancy_grid(state.robot_pose)
+        if (
+            (mode == "grid" or self.show_occupancy_grid)
+            and hasattr(state, "robot_pose")
+            and state.robot_pose is not None
+            and (not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0)
+        ):
+            self._render_occupancy_grid(state.robot_pose)
+        if mode == "image":
+            self._render_observation_image(getattr(state, "observation_image", None))
 
-    def _draw_sensor_data(self, state: VisualizableSimState):
+    def _draw_sensor_data(self, state: VisualizableSimState, mode: str | None = None):
         """Draw sensor data like lidar rays."""
-        if not self.show_lidar:
+        if mode is None:
+            mode = self._observation_overlay_mode(state)
+        if not (self.show_lidar or mode == "lidar"):
             return
         if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
             self._augment_lidar(state.ray_vecs)
@@ -452,13 +488,33 @@ class SimulationView:
             if state.ego_ped_ray_vecs is not None:
                 self._augment_lidar(state.ego_ped_ray_vecs)
 
+    def _observation_overlay_mode(self, state: VisualizableSimState) -> str:
+        """Resolve active observation-space visualization mode for current state.
+
+        Returns:
+            str: One of ``none``, ``lidar``, ``grid``, or ``image``.
+        """
+        if not self.show_observation_space:
+            return "none"
+        if self.observation_space_mode != "auto":
+            return self.observation_space_mode
+        if getattr(state, "observation_image", None) is not None:
+            return "image"
+        if self.occupancy_grid is not None:
+            return "grid"
+        if getattr(state, "ray_vecs", None) is not None:
+            return "lidar"
+        return "none"
+
     def _draw_actions(self, state: VisualizableSimState):
         """Draw action indicators for all entities."""
         if hasattr(state, "ped_actions"):
             self._augment_ped_actions(state.ped_actions)
 
-        if hasattr(state, "robot_action") and state.robot_action:
-            self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
+        if hasattr(state, "robot_pose") and state.robot_pose is not None:
+            self._augment_robot_measured_kinematics(state)
+        if hasattr(state, "robot_action") and state.robot_action and state.robot_pose is not None:
+            self._augment_robot_rotation_action(state.robot_pose, state.robot_action)
             if hasattr(state.robot_action, "goal"):
                 self._augment_goal_position(state.robot_action.goal)
 
@@ -641,6 +697,12 @@ class SimulationView:
             ),
             # toggle text display (add this line)
             pygame.K_t: lambda: setattr(self, "display_text", not self.display_text),
+            # toggle observation-space visualization overlay (auto mode by default)
+            pygame.K_o: lambda: setattr(
+                self,
+                "show_observation_space",
+                not self.show_observation_space,
+            ),
         }
 
         if e.key in key_action_map:
@@ -776,7 +838,10 @@ class SimulationView:
         if self.robot_render_mode == "sprite":
             sprite = self._get_entity_sprite("robot")
             if sprite is not None:
-                self._draw_sprite(sprite, center, radius_px, theta=theta)
+                # Asset forward direction is drawn upward; simulation heading 0 points right.
+                self._draw_sprite(
+                    sprite, center, radius_px, theta=theta + _SPRITE_HEADING_OFFSET_RAD
+                )
                 return
 
         pygame.draw.circle(self.screen, ROBOT_COLOR, center, radius_px)
@@ -804,7 +869,12 @@ class SimulationView:
         if self.ego_ped_render_mode == "sprite":
             sprite = self._get_entity_sprite("ego_ped")
             if sprite is not None:
-                self._draw_sprite(sprite, center, radius_px, theta=pose[1])
+                self._draw_sprite(
+                    sprite,
+                    center,
+                    radius_px,
+                    theta=pose[1] + _SPRITE_HEADING_OFFSET_RAD,
+                )
                 return
 
         pygame.draw.circle(
@@ -878,10 +948,10 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
-        """TODO docstring. Document this function.
+        """Draw the robot goal marker in world space.
 
         Args:
-            robot_goal: TODO docstring.
+            robot_goal: Goal position as ``(x, y)`` world coordinates.
         """
         pygame.draw.circle(
             self.screen,
@@ -914,67 +984,207 @@ class SimulationView:
             )
 
     def _augment_action(self, action: VisualizableAction, color):
-        """TODO docstring. Document this function.
+        """Render a direction and speed indicator for an entity action.
 
         Args:
-            action: TODO docstring.
-            color: TODO docstring.
+            action: Pose and command tuple used for visualization.
+            color: RGB or RGBA line color.
         """
         r_x, r_y = action.pose[0]
-        # scale vector length to be always visible
-        vec_length = action.action[0] * self.scaling
-        vec_orient = action.pose[1]
+        theta = float(action.pose[1])
+        direction = np.array([cos(theta), sin(theta)], dtype=float)
+        speed_mps = float(action.action[0]) if len(action.action) > 0 else 0.0
+        self._draw_direction_and_speed(
+            origin=(float(r_x), float(r_y)),
+            direction=direction,
+            speed_mps=speed_mps,
+            color=color,
+            speed_scale=1.0,
+        )
 
-        def from_polar(length: float, orient: float) -> Vec2D:
-            """TODO docstring. Document this function.
+    def _draw_direction_and_speed(
+        self,
+        origin: tuple[float, float],
+        direction: np.ndarray,
+        speed_mps: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        speed_scale: float,
+    ) -> None:
+        """Draw a thin direction line plus a speed line scaled by horizon."""
+        norm = float(np.linalg.norm(direction))
+        if norm <= 1e-8:
+            unit = np.array([1.0, 0.0], dtype=float)
+        else:
+            unit = direction / norm
 
-            Args:
-                length: TODO docstring.
-                orient: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
-            return cos(orient) * length, sin(orient) * length
-
-        def add_vec(v_1: Vec2D, v_2: Vec2D) -> Vec2D:
-            """TODO docstring. Document this function.
-
-            Args:
-                v_1: TODO docstring.
-                v_2: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
-            return v_1[0] + v_2[0], v_1[1] + v_2[1]
-
-        vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
+        direction_end = (
+            origin[0] + float(unit[0]) * self.direction_line_length_m,
+            origin[1] + float(unit[1]) * self.direction_line_length_m,
+        )
         pygame.draw.line(
             self.screen,
             color,
-            self._scale_tuple((r_x, r_y)),
-            self._scale_tuple((vec_x, vec_y)),
-            width=3,
+            self._scale_tuple(origin),
+            self._scale_tuple(direction_end),
+            width=max(1, int(self.direction_line_width_px)),
+        )
+
+        speed_len_m = speed_mps * self.action_horizon_s * self.speed_line_scale * speed_scale
+        speed_end = (
+            origin[0] + float(unit[0]) * speed_len_m,
+            origin[1] + float(unit[1]) * speed_len_m,
+        )
+        pygame.draw.line(
+            self.screen,
+            color,
+            self._scale_tuple(origin),
+            self._scale_tuple(speed_end),
+            width=max(1, int(self.speed_line_width_px)),
+        )
+
+    def _draw_vector_line(
+        self,
+        origin: tuple[float, float],
+        direction: np.ndarray,
+        length_m: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        width_px: int,
+    ) -> None:
+        """Draw a single vector line from an origin in world-space meters."""
+        norm = float(np.linalg.norm(direction))
+        if norm <= 1e-8:
+            return
+        unit = direction / norm
+        end = (
+            origin[0] + float(unit[0]) * length_m,
+            origin[1] + float(unit[1]) * length_m,
+        )
+        pygame.draw.line(
+            self.screen,
+            color,
+            self._scale_tuple(origin),
+            self._scale_tuple(end),
+            width=max(1, int(width_px)),
+        )
+
+    def _augment_robot_measured_kinematics(self, state: VisualizableSimState) -> None:
+        """Draw measured robot speed (blue) and acceleration (yellow) overlays."""
+        pose = state.robot_pose
+        origin = (float(pose[0][0]), float(pose[0][1]))
+        heading_dir = np.array([cos(float(pose[1])), sin(float(pose[1]))], dtype=float)
+        dt = float(state.time_per_step_in_secs or 0.1)
+        dt = max(dt, 1e-6)
+        episode_start = int(getattr(state, "timestep", -1)) <= 0
+        if episode_start:
+            self._prev_robot_pose_xy = None
+            self._prev_robot_speed_vec = None
+
+        if self._prev_robot_pose_xy is None:
+            speed_vec = np.array([0.0, 0.0], dtype=float)
+        else:
+            speed_vec = (
+                np.array(origin, dtype=float) - np.array(self._prev_robot_pose_xy, dtype=float)
+            ) / dt
+        speed_mps = float(np.linalg.norm(speed_vec))
+        speed_dir = speed_vec if speed_mps > 1e-8 else heading_dir
+        self._draw_direction_and_speed(
+            origin=origin,
+            direction=speed_dir,
+            speed_mps=speed_mps,
+            color=ROBOT_ACTION_COLOR,
+            speed_scale=1.0,
+        )
+
+        if self._prev_robot_speed_vec is None:
+            accel_vec = np.array([0.0, 0.0], dtype=float)
+        else:
+            accel_vec = (speed_vec - self._prev_robot_speed_vec) / dt
+        accel_mps2 = float(np.linalg.norm(accel_vec))
+        accel_dir = accel_vec if accel_mps2 > 1e-8 else speed_dir
+        accel_len_m = (
+            0.5
+            * accel_mps2
+            * self.acceleration_horizon_s
+            * self.acceleration_horizon_s
+            * self.acceleration_line_scale
+        )
+        self._draw_vector_line(
+            origin=origin,
+            direction=accel_dir,
+            length_m=accel_len_m,
+            color=ROBOT_ACCEL_COLOR,
+            width_px=self.acceleration_line_width_px,
+        )
+
+        self._prev_robot_pose_xy = origin
+        self._prev_robot_speed_vec = speed_vec
+
+    def _augment_robot_rotation_action(
+        self,
+        pose: RobotPose,
+        action: VisualizableAction,
+    ) -> None:
+        """Draw a perimeter arc that visualizes commanded robot rotation action."""
+        if len(action.action) < 2:
+            return
+        angular_cmd = float(action.action[1])
+        if abs(angular_cmd) <= 1e-8:
+            return
+
+        max_abs = max(1e-8, float(self.robot_rotation_action_max_abs))
+        norm = min(1.0, abs(angular_cmd) / max_abs)
+        span_signed = np.sign(angular_cmd) * (norm * np.pi)
+        theta = float(pose[1])
+        if abs(span_signed) <= 1e-8:
+            return
+
+        center = self._scale_tuple(pose[0])
+        base_radius_px = float(self.robot_radius * self.scaling)
+        arc_radius_px = max(2.0, base_radius_px * float(self.rotation_arc_radius_scale))
+        start_angle = theta
+        end_angle = theta + span_signed
+        segments = max(8, int(abs(span_signed) / (np.pi / 24.0)))
+        angles = np.linspace(start_angle, end_angle, segments + 1)
+        points = [
+            (
+                float(center[0]) + arc_radius_px * float(np.cos(angle)),
+                float(center[1]) + arc_radius_px * float(np.sin(angle)),
+            )
+            for angle in angles
+        ]
+        pygame.draw.lines(
+            self.screen,
+            ROBOT_ROTATION_ACTION_COLOR,
+            False,
+            points,
+            width=max(1, int(self.rotation_arc_width_px)),
         )
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
         """Draw the actions of the pedestrians as lines with optional velocity scaling."""
-        for p1, p2 in ped_actions:
-            # Apply velocity scaling for visualization if different from 1.0
-            if self.ped_velocity_scale != 1.0:
-                velocity_vector = np.array(p2) - np.array(p1)
-                scaled_p2 = np.array(p1) + velocity_vector * self.ped_velocity_scale
-                p2_display = tuple(scaled_p2)
-            else:
-                p2_display = p2
+        count = len(ped_actions)
+        if len(self._ped_last_directions) < count:
+            self._ped_last_directions.extend(
+                [(1.0, 0.0)] * (count - len(self._ped_last_directions))
+            )
+        elif len(self._ped_last_directions) > count:
+            self._ped_last_directions = self._ped_last_directions[:count]
 
-            pygame.draw.line(
-                self.screen,
-                PED_ACTION_COLOR,
-                self._scale_tuple(p1),
-                self._scale_tuple(p2_display),
-                width=3,
+        for idx, (p1, p2) in enumerate(ped_actions):
+            velocity = np.array(p2, dtype=float) - np.array(p1, dtype=float)
+            speed_mps = float(np.linalg.norm(velocity))
+            if speed_mps > 1e-8:
+                direction = velocity / speed_mps
+                self._ped_last_directions[idx] = (float(direction[0]), float(direction[1]))
+            else:
+                direction = np.array(self._ped_last_directions[idx], dtype=float)
+
+            self._draw_direction_and_speed(
+                origin=(float(p1[0]), float(p1[1])),
+                direction=direction,
+                speed_mps=speed_mps,
+                color=PED_ACTION_COLOR,
+                speed_scale=float(self.ped_velocity_scale),
             )
 
     def _draw_pedestrian_routes(self):
@@ -1196,6 +1406,7 @@ class SimulationView:
             "Scale down: -",
             "Display robot info: q",
             "Toggle text: t",  # Add this line
+            "Toggle observation overlay: o",
             "Help: h",
         ]
 
@@ -1237,7 +1448,7 @@ class SimulationView:
         Args:
             robot_pose (RobotPose): Current robot pose for ego-frame alignment and rotation.
         """
-        if not self.show_occupancy_grid or self.occupancy_grid is None:
+        if self.occupancy_grid is None:
             return
 
         grid = self.occupancy_grid
@@ -1357,6 +1568,66 @@ class SimulationView:
         elapsed_ms = pygame.time.get_ticks() - start_time
         if elapsed_ms > 10:
             logger.debug(f"Grid rendering took {elapsed_ms}ms for {grid_width}x{grid_height} grid")
+
+    def _render_observation_image(self, image_obs: np.ndarray | None) -> None:
+        """Render an image-observation overlay panel when available."""
+        if image_obs is None:
+            return
+        try:
+            obs = np.asarray(image_obs)
+            if obs.ndim == 3 and obs.shape[0] in (1, 3, 4) and obs.shape[-1] not in (1, 3, 4):
+                obs = np.transpose(obs, (1, 2, 0))
+            if obs.ndim == 2:
+                obs = np.stack([obs, obs, obs], axis=-1)
+            if obs.ndim != 3 or obs.shape[2] not in (1, 3, 4):
+                return
+            if obs.shape[2] == 1:
+                obs = np.repeat(obs, 3, axis=2)
+            if np.issubdtype(obs.dtype, np.floating):
+                obs = np.clip(obs, 0.0, 1.0) * 255.0
+            obs_u8 = obs.astype(np.uint8, copy=False)
+            surface = pygame.surfarray.make_surface(np.transpose(obs_u8[:, :, :3], (1, 0, 2)))
+        except (TypeError, ValueError, pygame.error):
+            return
+
+        max_w = max(64, int(self.width * 0.3))
+        max_h = max(64, int(self.height * 0.3))
+        w, h = surface.get_size()
+        scale = min(max_w / max(1, w), max_h / max(1, h))
+        target_w = max(1, int(w * scale))
+        target_h = max(1, int(h * scale))
+        scaled = pygame.transform.scale(surface, (target_w, target_h))
+
+        panel = pygame.Surface((target_w + 8, target_h + 28), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 120))
+        panel.blit(scaled, (4, 20))
+        label = self.font.render(f"obs image {w}x{h}", True, TEXT_COLOR)
+        panel.blit(label, (4, 2))
+        panel_x, panel_y = self._observation_panel_position(panel)
+        self.screen.blit(panel, (panel_x, panel_y))
+
+    def _observation_panel_position(
+        self,
+        panel: pygame.surface.Surface,
+    ) -> tuple[int, int]:
+        """Return top-right panel placement while avoiding telemetry overlap."""
+        panel_x = self.width - panel.get_width() - 8
+        panel_y = 8
+        if not (self.show_telemetry_panel and self.telemetry_layout == "vertical_split"):
+            return panel_x, panel_y
+
+        telemetry_surface = None
+        if self.telemetry_session is not None:
+            try:
+                telemetry_surface = self.telemetry_session.render_surface()
+            except AttributeError:
+                telemetry_surface = None
+        if telemetry_surface is None:
+            return panel_x, panel_y
+
+        _, pane_h = telemetry_surface.get_size()
+        panel_y = max(panel_y, pane_h + TELEMETRY_PANE_PADDING + 6)
+        return panel_x, panel_y
 
     def _render_telemetry_panel(self) -> None:
         """Render the docked telemetry panel if enabled."""

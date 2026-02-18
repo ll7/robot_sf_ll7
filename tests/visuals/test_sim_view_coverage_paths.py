@@ -261,7 +261,9 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(view, "_draw_sprite", _spy_draw_sprite)
     view._draw_ego_ped(((1.0, 1.0), 0.25))
-    assert draw_calls == [0.25]
+    assert len(draw_calls) == 1
+    assert draw_calls[0] is not None
+    assert abs(float(draw_calls[0]) - (0.25 + (np.pi / 2.0))) < 1e-9
 
     # Invalid entity path
     with pytest.raises(ValueError):
@@ -290,6 +292,141 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
     view.height = 100
     view._resize_window()
     view.clear()
+
+
+def test_robot_action_uses_speed_times_horizon_without_extra_scaling(monkeypatch) -> None:
+    """Robot speed vector should use distance = speed * horizon (meters), then one screen scaling."""
+    view = SimulationView(
+        record_video=True, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+    )
+    view.action_horizon_s = 1.0
+    view.direction_line_length_m = 0.5
+    view.speed_line_scale = 1.0
+
+    line_calls: list[tuple[tuple[float, float], tuple[float, float], int]] = []
+    original_line = pygame.draw.line
+
+    def _spy_line(_screen, _color, start, end, width=1):
+        line_calls.append((start, end, width))
+        return original_line(_screen, _color, start, end, width)
+
+    monkeypatch.setattr(pygame.draw, "line", _spy_line)
+    action = VisualizableAction(
+        pose=((1.0, 1.0), 0.0), action=np.array([2.0, 0.0]), goal=(0.0, 0.0)
+    )
+    view._augment_action(action, (255, 0, 0))
+
+    # Last line is the speed line. Start at (10,10), end at (30,10) for 2 m/s * 1 s horizon.
+    assert line_calls
+    speed_start, speed_end, speed_width = line_calls[-1]
+    assert speed_width == view.speed_line_width_px
+    assert abs(speed_start[0] - 10.0) < 1e-6
+    assert abs(speed_start[1] - 10.0) < 1e-6
+    assert abs(speed_end[0] - 30.0) < 1e-6
+    assert abs(speed_end[1] - 10.0) < 1e-6
+
+
+def test_robot_measured_kinematics_draws_speed_and_acceleration(monkeypatch) -> None:
+    """Measured robot overlays should draw blue speed and yellow acceleration vectors."""
+    view = SimulationView(
+        record_video=True, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+    )
+    view.action_horizon_s = 1.0
+    view.acceleration_horizon_s = 1.0
+    view.speed_line_scale = 1.0
+    view.acceleration_line_scale = 1.0
+    view._prev_robot_pose_xy = (0.0, 0.0)
+    view._prev_robot_speed_vec = np.array([0.0, 0.0], dtype=float)
+
+    line_calls: list[
+        tuple[tuple[int, int, int], tuple[float, float], tuple[float, float], int]
+    ] = []
+
+    def _spy_line(_screen, color, start, end, width=1):
+        line_calls.append((color, start, end, width))
+
+    monkeypatch.setattr(pygame.draw, "line", _spy_line)
+    state = VisualizableSimState(
+        timestep=1,
+        robot_action=None,
+        robot_pose=((1.0, 0.0), 0.0),
+        pedestrian_positions=np.empty((0, 2)),
+        ray_vecs=np.empty((0, 2, 2)),
+        ped_actions=np.empty((0, 2, 2)),
+        time_per_step_in_secs=1.0,
+    )
+    view._augment_robot_measured_kinematics(state)
+
+    # Expect: direction line (blue), speed line (blue), acceleration line (yellow).
+    assert len(line_calls) == 3
+    assert line_calls[0][0] == sim_view_mod.ROBOT_ACTION_COLOR
+    assert line_calls[1][0] == sim_view_mod.ROBOT_ACTION_COLOR
+    assert line_calls[2][0] == sim_view_mod.ROBOT_ACCEL_COLOR
+    # Speed line should reach +1m at scaling 10 => +10 px from x=10 to x=20.
+    _, s_start, s_end, s_width = line_calls[1]
+    assert s_width == view.speed_line_width_px
+    assert abs(s_start[0] - 10.0) < 1e-6
+    assert abs(s_end[0] - 20.0) < 1e-6
+
+
+def test_robot_rotation_action_draws_clamped_directional_arc(monkeypatch) -> None:
+    """Rotation action should render an orange arc with turn direction and pi clamp."""
+    view = SimulationView(
+        record_video=True, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+    )
+    arc_calls: list[tuple[list[tuple[float, float]], int]] = []
+
+    def _spy_lines(_screen, _color, _closed, points, width=1):
+        arc_calls.append((list(points), int(width)))
+
+    monkeypatch.setattr(pygame.draw, "lines", _spy_lines)
+    pose = ((1.0, 1.0), 0.2)
+    # Command exceeds clamp; expected span is pi.
+    action = VisualizableAction(pose=pose, action=np.array([0.0, 10.0]), goal=(0.0, 0.0))
+    view._augment_robot_rotation_action(pose, action)
+    assert arc_calls
+    points, width = arc_calls[-1]
+    assert width == view.rotation_arc_width_px
+    assert len(points) >= 2
+    center = np.array(view._scale_tuple(pose[0]), dtype=float)
+    first = np.array(points[0], dtype=float) - center
+    last = np.array(points[-1], dtype=float) - center
+    start_angle = float(np.arctan2(first[1], first[0]))
+    end_angle = float(np.arctan2(last[1], last[0]))
+    # First point anchored at robot heading.
+    assert abs(start_angle - pose[1]) < 1e-6
+    # Span is pi (mod 2pi) due to clamp.
+    span = (end_angle - start_angle + 2.0 * np.pi) % (2.0 * np.pi)
+    assert abs(span - np.pi) < 1e-6
+
+
+def test_ped_action_direction_line_persists_when_speed_zero(monkeypatch) -> None:
+    """Pedestrians with zero current speed should still show a thin direction line from last movement."""
+    view = SimulationView(
+        record_video=True, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+    )
+    view.action_horizon_s = 1.0
+    view.direction_line_length_m = 0.5
+    view.speed_line_scale = 1.0
+
+    draw_calls: list[tuple[tuple[float, float], tuple[float, float], int]] = []
+
+    def _spy_line(_screen, _color, start, end, width=1):
+        draw_calls.append((start, end, width))
+
+    monkeypatch.setattr(pygame.draw, "line", _spy_line)
+    # First frame: moving upward (stores last direction).
+    view._augment_ped_actions(np.array([[[0.0, 0.0], [0.0, 1.0]]], dtype=float))
+    # Second frame: zero speed -> should reuse stored direction for thin line.
+    view._augment_ped_actions(np.array([[[0.0, 0.0], [0.0, 0.0]]], dtype=float))
+
+    # Two lines per call; for the second call, first line is the direction line.
+    assert len(draw_calls) >= 4
+    second_call_direction = draw_calls[2]
+    start, end, width = second_call_direction
+    assert width == view.direction_line_width_px
+    assert abs(start[0] - end[0]) < 1e-6  # keeps upward direction (x unchanged)
+    assert end[1] > start[1]  # y increases in world-up direction after scaling
 
 
 def test_sim_view_exit_and_telemetry_paths(monkeypatch) -> None:

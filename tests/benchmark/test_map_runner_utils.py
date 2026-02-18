@@ -15,6 +15,7 @@ from robot_sf.benchmark.map_runner import (
     _parse_algo_config,
     _ppo_action_to_unicycle,
     _ppo_paper_gate_status,
+    _preflight_policy,
     _resolve_seed_list,
     _robot_kinematics_label,
     _robot_max_speed,
@@ -30,6 +31,33 @@ from robot_sf.benchmark.map_runner import (
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+
+
+class _KinematicsStub:
+    """Minimal kinematics model test double for map-runner wiring tests."""
+
+    name: str = "stub"
+
+    def __init__(self, projected: tuple[float, float], *, feasible: bool = True) -> None:
+        self._projected = projected
+        self._feasible = feasible
+        self.calls: list[tuple[float, float]] = []
+
+    def is_feasible(self, command: tuple[float, float]) -> bool:
+        del command
+        return self._feasible
+
+    def project(self, command: tuple[float, float]) -> tuple[float, float]:
+        self.calls.append((float(command[0]), float(command[1])))
+        return self._projected
+
+    def diagnostics(
+        self,
+        command: tuple[float, float],
+        projected: tuple[float, float],
+    ) -> dict[str, object]:
+        del command, projected
+        return {}
 
 
 def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
@@ -203,6 +231,113 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
         {"v_max": 1.0, "omega_max": 1.0},
     )
     assert adapted[2] == "adapter"
+
+
+def test_ppo_action_to_unicycle_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PPO command conversion should route through the kinematics contract."""
+    model = _KinematicsStub((0.7, -0.3))
+    resolver_calls: list[dict[str, object]] = []
+
+    def _resolver(**kwargs):
+        resolver_calls.append(dict(kwargs))
+        return model
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        _resolver,
+    )
+
+    native = _ppo_action_to_unicycle(
+        {"v": 1.8, "omega": 2.0},
+        {"robot": {"heading": [0.0]}},
+        {"v_max": 1.0, "omega_max": 1.0},
+        robot_kinematics="differential_drive",
+    )
+    assert native[0] == pytest.approx(0.7)
+    assert native[1] == pytest.approx(-0.3)
+    assert native[2] == "native"
+    assert model.calls == [(1.8, 2.0)]
+    assert resolver_calls
+    assert resolver_calls[0].get("robot_kinematics") == "differential_drive"
+
+
+def test_build_policy_goal_path_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Goal policy should project commands through kinematics contract wiring."""
+    model = _KinematicsStub((0.2, 0.1))
+    resolver_calls: list[dict[str, object]] = []
+
+    def _resolver(**kwargs):
+        resolver_calls.append(dict(kwargs))
+        return model
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        _resolver,
+    )
+    policy, meta = _build_policy("goal", {"max_speed": 10.0}, robot_kinematics="bicycle_drive")
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [10.0, 0.0]},
+    }
+    assert policy(obs) == pytest.approx((0.2, 0.1))
+    assert model.calls == [(10.0, 0.0)]
+    assert resolver_calls
+    assert resolver_calls[0].get("robot_kinematics") == "bicycle_drive"
+    assert meta["planner_kinematics"]["execution_mode"] == "native"
+
+
+def test_ppo_action_to_unicycle_adapter_converts_heading_error_to_angular_velocity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter path should project speed with gain-scaled angular velocity."""
+    model = _KinematicsStub((0.0, 0.0))
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        lambda **kwargs: model,
+    )
+    _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 1.0},
+        {"robot": {"heading": [0.0]}},
+        {"omega_kp": 2.0, "omega_max": 1.0},
+        robot_kinematics="differential_drive",
+    )
+    assert model.calls
+    assert model.calls[0][0] == pytest.approx(1.0)
+    # heading error = pi/2, with kp=2 and omega_max=1 clips to 1.0
+    assert model.calls[0][1] == pytest.approx(1.0)
+
+
+def test_preflight_policy_passes_robot_kinematics_to_build_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preflight should build policy with the requested robot kinematics."""
+    captured: dict[str, object] = {}
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del adapter_impact_eval
+        captured["algo"] = algo
+        captured["cfg"] = cfg
+        captured["robot_kinematics"] = robot_kinematics
+
+        def _policy(_obs):
+            return (0.0, 0.0)
+
+        return _policy, {}
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="goal",
+        algo_config={"max_speed": 1.0},
+        missing_prereq_policy="fail-fast",
+        robot_kinematics="bicycle_drive",
+    )
+    assert cfg["max_speed"] == 1.0
+    assert preflight["status"] == "ok"
+    assert captured["robot_kinematics"] == "bicycle_drive"
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:

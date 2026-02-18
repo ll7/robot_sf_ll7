@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.planner.classic_global_planner import ClassicGlobalPlanner, ClassicPlannerConfig
+from robot_sf.planner.kinematics_model import (
+    BicycleDriveKinematicsModel,
+    DifferentialDriveKinematicsModel,
+    KinematicsModel,
+)
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot
 from robot_sf.robot.differential_drive import DifferentialDriveRobot
 
@@ -44,11 +49,13 @@ def attach_classic_global_planner(
 
 @dataclass
 class PlannerActionAdapter:
-    """Convert (linear, angular) commands into the environment's action space."""
+    """Convert planner (linear, angular) commands into the environment action space."""
 
     robot: BicycleDriveRobot | DifferentialDriveRobot
     action_space: spaces.Box
     time_step: float
+    kinematics_model: KinematicsModel | None = None
+    last_kinematics_diagnostics: dict[str, Any] | None = None
 
     def from_velocity_command(self, command: Iterable[float]) -> np.ndarray:
         """Map a (v, w) command into the simulator action space and clip to limits.
@@ -57,10 +64,47 @@ class PlannerActionAdapter:
             np.ndarray: Action formatted for the robot's configured action space.
         """
         linear_target, angular_target = command
+        float_cmd = (float(linear_target), float(angular_target))
+        kinematics_model = self.kinematics_model or self._default_kinematics_model()
+        if self.kinematics_model is None:
+            self.kinematics_model = kinematics_model
+        projected = kinematics_model.project(float_cmd)
+        self.last_kinematics_diagnostics = kinematics_model.diagnostics(
+            float_cmd,
+            projected,
+        )
+        linear_target, angular_target = projected
         if isinstance(self.robot, BicycleDriveRobot):
             return self._bicycle_action(linear_target, angular_target)
         if isinstance(self.robot, DifferentialDriveRobot):
             return self._differential_action(linear_target, angular_target)
+        msg = f"Unsupported robot type for planner adapter: {type(self.robot)}"
+        raise ValueError(msg)
+
+    def _default_kinematics_model(self) -> KinematicsModel:
+        """Infer a default kinematics model from the attached robot type.
+
+        Returns:
+            KinematicsModel: Contract implementation for the configured drivetrain.
+        """
+        if isinstance(self.robot, BicycleDriveRobot):
+            cfg = self.robot.config
+            # Bicycle max angular speed derives from max steering at max velocity.
+            max_angular_speed = (
+                cfg.max_velocity * math.tan(cfg.max_steer) / max(cfg.wheelbase, 1e-6)
+            )
+            return BicycleDriveKinematicsModel(
+                max_velocity=cfg.max_velocity,
+                max_angular_speed=max_angular_speed,
+                allow_backwards=cfg.allow_backwards,
+            )
+        if isinstance(self.robot, DifferentialDriveRobot):
+            cfg = self.robot.config
+            return DifferentialDriveKinematicsModel(
+                max_linear_speed=cfg.max_linear_speed,
+                max_angular_speed=cfg.max_angular_speed,
+                allow_backwards=cfg.allow_backwards,
+            )
         msg = f"Unsupported robot type for planner adapter: {type(self.robot)}"
         raise ValueError(msg)
 
@@ -96,7 +140,9 @@ class PlannerActionAdapter:
         """
         config = self.robot.config
         current_linear, current_angular = self.robot.current_speed
-        target_linear = float(np.clip(linear_target, 0.0, config.max_linear_speed))
+        target_linear = float(
+            np.clip(linear_target, config.min_linear_speed, config.max_linear_speed)
+        )
         target_angular = float(
             np.clip(angular_target, -config.max_angular_speed, config.max_angular_speed)
         )

@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
-from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
+from robot_sf.benchmark.camera_ready_campaign import (
+    DEFAULT_SEED_SETS_PATH,
+    load_campaign_config,
+    run_campaign,
+)
+from robot_sf.common.artifact_paths import get_repository_root
 
 
 def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
@@ -215,3 +220,40 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
     assert (campaign_root / "reports" / "campaign_table.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
     assert result["publication_bundle"] is not None
+
+
+def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
+    """Seed-set mode without explicit seed_sets_path should use repository default path."""
+    config_dir = tmp_path / "cfg" / "nested"
+    config_dir.mkdir(parents=True)
+
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (config_dir / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = config_dir / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_seed_set_default_path",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: seed-set",
+                "  seed_set: canonical",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    assert (
+        cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
+    )

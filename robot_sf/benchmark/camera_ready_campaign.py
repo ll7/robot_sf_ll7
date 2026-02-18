@@ -405,7 +405,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         else None
     )
     if seed_sets_path is None:
-        seed_sets_path = (config_path.parent / DEFAULT_SEED_SETS_PATH).resolve()
+        seed_sets_path = (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
 
     snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)

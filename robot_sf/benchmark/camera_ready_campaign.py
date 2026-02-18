@@ -640,7 +640,7 @@ def run_campaign(  # noqa: PLR0915
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign_id": campaign_id,
         "name": cfg.name,
-        "created_at_utc": _utc_now(),
+        "created_at_utc": campaign_started_at_utc,
         "started_at_utc": campaign_started_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
@@ -682,8 +682,12 @@ def run_campaign(  # noqa: PLR0915
         planner_dir.mkdir(parents=True, exist_ok=True)
         episodes_path = planner_dir / "episodes.jsonl"
 
-        effective_workers = planner.workers_override if planner.workers_override else cfg.workers
-        effective_horizon = planner.horizon_override if planner.horizon_override else cfg.horizon
+        effective_workers = (
+            planner.workers_override if planner.workers_override is not None else cfg.workers
+        )
+        effective_horizon = (
+            planner.horizon_override if planner.horizon_override is not None else cfg.horizon
+        )
         effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
 
         logger.info(

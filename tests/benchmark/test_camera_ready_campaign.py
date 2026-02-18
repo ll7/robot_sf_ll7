@@ -58,12 +58,20 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
 
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
     """Campaign runner should emit summary artifacts and publication metadata."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
     config_path = tmp_path / "campaign.yaml"
     config_path.write_text(
         "\n".join(
             [
                 "name: test_campaign_runner",
-                "scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -81,6 +89,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
     )
 
     cfg = load_campaign_config(config_path)
+    assert cfg.scenario_matrix_path == scenario_abs
 
     def _fake_run_batch(
         scenarios_or_path,

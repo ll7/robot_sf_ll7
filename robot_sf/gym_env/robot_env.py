@@ -42,7 +42,7 @@ from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-from robot_sf.sensor.sensor_fusion import SensorFusion
+from robot_sf.sensor.sensor_fusion import OBS_IMAGE, SensorFusion
 from robot_sf.sensor.socnav_observation import (
     DEFAULT_MAX_PEDS,
     SocNavObservationFusion,
@@ -479,9 +479,11 @@ class RobotEnv(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
+        self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
             self.sim_ui.show_occupancy_grid = True
+        self._configure_observation_overlay_mode()
         # Initialize telemetry session/pane when requested
         self._init_telemetry(env_config)
         self._last_wall_time = time.perf_counter()
@@ -515,6 +517,36 @@ class RobotEnv(BaseEnv):
                 resolution=env_config.grid_config.resolution,
             )
             return grid
+        return None
+
+    def _configure_observation_overlay_mode(self) -> None:
+        """Configure visualization overlay mode to match the active observation pipeline."""
+        if self.sim_ui is None:
+            return
+        if getattr(self.env_config, "use_image_obs", False):
+            self.sim_ui.observation_space_mode = "image"
+            return
+        if bool(self.include_grid_in_observation and self.occupancy_grid is not None):
+            self.sim_ui.observation_space_mode = "grid"
+            return
+        self.sim_ui.observation_space_mode = "lidar"
+
+    @staticmethod
+    def _extract_observation_image(obs: Any) -> np.ndarray | None:
+        """Extract an image-like tensor from an observation payload when present.
+
+        Returns:
+            np.ndarray | None: Image tensor when present in the observation payload.
+        """
+        if isinstance(obs, dict):
+            image_obs = obs.get(OBS_IMAGE)
+            if isinstance(image_obs, np.ndarray):
+                return image_obs
+            agent_obs = obs.get("agent_obs")
+            if isinstance(agent_obs, dict):
+                nested = agent_obs.get(OBS_IMAGE)
+                if isinstance(nested, np.ndarray):
+                    return nested
         return None
 
     def _setup_socnav_observation(self, env_config: EnvSettings):
@@ -701,6 +733,7 @@ class RobotEnv(BaseEnv):
 
         # observation, reward, terminal, truncated,info
         info = _build_step_info(reward_dict)
+        self._latest_observation = obs
         return (
             obs,
             reward,
@@ -768,6 +801,7 @@ class RobotEnv(BaseEnv):
                     f"Initial occupancy grid generated: "
                     f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
                 )
+        self._latest_observation = obs
 
         # Handle recording for both systems
         if self.recording_enabled:
@@ -883,11 +917,10 @@ class RobotEnv(BaseEnv):
         return line_segments, polygons
 
     def _prepare_visualizable_state(self):
-        # Prepare action visualization, if any action was executed
-        """TODO docstring. Document this function.
+        """Build a renderer-friendly simulation snapshot from the current environment state.
 
         Returns:
-            VisualizableSimState containing the current simulation state for rendering.
+            VisualizableSimState: Current state payload consumed by ``SimulationView``.
         """
         action = (
             None
@@ -909,8 +942,6 @@ class RobotEnv(BaseEnv):
 
         # Construct ray vectors for visualization
         ray_vecs_np = render_lidar(robot_pos, distances, directions)
-        if self.sim_ui and not getattr(self.sim_ui, "show_lidar", True):
-            ray_vecs_np = None
 
         # Prepare pedestrian action visualization
         ped_actions_np = prepare_pedestrian_actions(self.simulator)
@@ -929,6 +960,7 @@ class RobotEnv(BaseEnv):
             ped_actions=ped_actions_np,
             time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
             planned_path=planned_path,
+            observation_image=self._extract_observation_image(self._latest_observation),
         )
 
         return state

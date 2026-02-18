@@ -150,6 +150,8 @@ class VisualizableSimState:
 
     planned_path: list[Vec2D] | None = None
     """Optional planned path waypoints for debugging (world coordinates)."""
+    observation_image: np.ndarray | None = None
+    """Optional image observation payload for observation-space visualization."""
 
     def __post_init__(self):
         """validate the visualizable state"""
@@ -257,7 +259,9 @@ class SimulationView:
         default_factory=lambda: {0: True, 1: True}
     )
     grid_alpha: float = field(default=0.5)  # Alpha blending for grid overlay
-    show_lidar: bool = field(default=True)  # Toggle lidar ray visualization
+    show_lidar: bool = field(default=False)  # Manual lidar ray visualization toggle
+    show_observation_space: bool = field(default=False)  # Toggle observation-space overlay
+    observation_space_mode: str = field(default="auto")  # auto|lidar|grid|image
     robot_render_mode: str = field(default="circle")  # circle|sprite
     ped_render_mode: str = field(default="circle")  # circle|sprite
     ego_ped_render_mode: str = field(default="circle")  # circle|sprite
@@ -348,6 +352,13 @@ class SimulationView:
                     mode,
                 )
                 setattr(self, attr_name, "circle")
+        valid_obs_modes = {"auto", "lidar", "grid", "image"}
+        if self.observation_space_mode not in valid_obs_modes:
+            logger.warning(
+                "Invalid observation_space_mode '%s'; falling back to 'auto'.",
+                self.observation_space_mode,
+            )
+            self.observation_space_mode = "auto"
 
     def _is_headless_environment(self) -> bool:
         """Return True if the runtime should be treated as headless.
@@ -448,15 +459,22 @@ class SimulationView:
         self._draw_actions(state)
         self._draw_entities(state)
         self._draw_planned_path(state)
+        mode = self._observation_overlay_mode(state)
         # Draw occupancy grid overlay after entities so it appears on top
-        if hasattr(state, "robot_pose") and state.robot_pose is not None:
-            # numpy arrays are not directly truthy; require non-empty content
-            if not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0:
-                self._render_occupancy_grid(state.robot_pose)
+        if (
+            (mode == "grid" or self.show_occupancy_grid)
+            and hasattr(state, "robot_pose")
+            and state.robot_pose is not None
+            and (not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0)
+        ):
+            self._render_occupancy_grid(state.robot_pose)
+        if mode == "image":
+            self._render_observation_image(getattr(state, "observation_image", None))
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""
-        if not self.show_lidar:
+        mode = self._observation_overlay_mode(state)
+        if not (self.show_lidar or mode == "lidar"):
             return
         if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
             self._augment_lidar(state.ray_vecs)
@@ -468,6 +486,24 @@ class SimulationView:
             # ego_ped_ray_vecs is Optional; skip if None to avoid TypeError
             if state.ego_ped_ray_vecs is not None:
                 self._augment_lidar(state.ego_ped_ray_vecs)
+
+    def _observation_overlay_mode(self, state: VisualizableSimState) -> str:
+        """Resolve active observation-space visualization mode for current state.
+
+        Returns:
+            str: One of ``none``, ``lidar``, ``grid``, or ``image``.
+        """
+        if not self.show_observation_space:
+            return "none"
+        if self.observation_space_mode != "auto":
+            return self.observation_space_mode
+        if getattr(state, "observation_image", None) is not None:
+            return "image"
+        if self.occupancy_grid is not None:
+            return "grid"
+        if getattr(state, "ray_vecs", None) is not None:
+            return "lidar"
+        return "none"
 
     def _draw_actions(self, state: VisualizableSimState):
         """Draw action indicators for all entities."""
@@ -660,6 +696,12 @@ class SimulationView:
             ),
             # toggle text display (add this line)
             pygame.K_t: lambda: setattr(self, "display_text", not self.display_text),
+            # toggle observation-space visualization overlay (auto mode by default)
+            pygame.K_o: lambda: setattr(
+                self,
+                "show_observation_space",
+                not self.show_observation_space,
+            ),
         }
 
         if e.key in key_action_map:
@@ -905,10 +947,10 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
-        """TODO docstring. Document this function.
+        """Draw the robot goal marker in world space.
 
         Args:
-            robot_goal: TODO docstring.
+            robot_goal: Goal position as ``(x, y)`` world coordinates.
         """
         pygame.draw.circle(
             self.screen,
@@ -941,11 +983,11 @@ class SimulationView:
             )
 
     def _augment_action(self, action: VisualizableAction, color):
-        """TODO docstring. Document this function.
+        """Render a direction and speed indicator for an entity action.
 
         Args:
-            action: TODO docstring.
-            color: TODO docstring.
+            action: Pose and command tuple used for visualization.
+            color: RGB or RGBA line color.
         """
         r_x, r_y = action.pose[0]
         theta = float(action.pose[1])
@@ -1359,6 +1401,7 @@ class SimulationView:
             "Scale down: -",
             "Display robot info: q",
             "Toggle text: t",  # Add this line
+            "Toggle observation overlay: o",
             "Help: h",
         ]
 
@@ -1400,7 +1443,7 @@ class SimulationView:
         Args:
             robot_pose (RobotPose): Current robot pose for ego-frame alignment and rotation.
         """
-        if not self.show_occupancy_grid or self.occupancy_grid is None:
+        if self.occupancy_grid is None:
             return
 
         grid = self.occupancy_grid
@@ -1520,6 +1563,42 @@ class SimulationView:
         elapsed_ms = pygame.time.get_ticks() - start_time
         if elapsed_ms > 10:
             logger.debug(f"Grid rendering took {elapsed_ms}ms for {grid_width}x{grid_height} grid")
+
+    def _render_observation_image(self, image_obs: np.ndarray | None) -> None:
+        """Render an image-observation overlay panel when available."""
+        if image_obs is None:
+            return
+        try:
+            obs = np.asarray(image_obs)
+            if obs.ndim == 3 and obs.shape[0] in (1, 3, 4) and obs.shape[-1] not in (1, 3, 4):
+                obs = np.transpose(obs, (1, 2, 0))
+            if obs.ndim == 2:
+                obs = np.stack([obs, obs, obs], axis=-1)
+            if obs.ndim != 3 or obs.shape[2] not in (1, 3, 4):
+                return
+            if obs.shape[2] == 1:
+                obs = np.repeat(obs, 3, axis=2)
+            if np.issubdtype(obs.dtype, np.floating):
+                obs = np.clip(obs, 0.0, 1.0) * 255.0
+            obs_u8 = obs.astype(np.uint8, copy=False)
+            surface = pygame.surfarray.make_surface(np.transpose(obs_u8[:, :, :3], (1, 0, 2)))
+        except (TypeError, ValueError, pygame.error):
+            return
+
+        max_w = max(64, int(self.width * 0.3))
+        max_h = max(64, int(self.height * 0.3))
+        w, h = surface.get_size()
+        scale = min(max_w / max(1, w), max_h / max(1, h))
+        target_w = max(1, int(w * scale))
+        target_h = max(1, int(h * scale))
+        scaled = pygame.transform.scale(surface, (target_w, target_h))
+
+        panel = pygame.Surface((target_w + 8, target_h + 28), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 120))
+        panel.blit(scaled, (4, 20))
+        label = self.font.render(f"obs image {w}x{h}", True, TEXT_COLOR)
+        panel.blit(label, (4, 2))
+        self.screen.blit(panel, (self.width - panel.get_width() - 8, 8))
 
     def _render_telemetry_panel(self) -> None:
         """Render the docked telemetry panel if enabled."""

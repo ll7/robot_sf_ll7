@@ -208,13 +208,22 @@ def test_sim_view_key_controls_and_event_loops(monkeypatch) -> None:
     view._handle_keydown(SimpleNamespace(key=pygame.K_DOWN))
 
     monkeypatch.setattr(pygame.key, "get_mods", lambda: 0)
-    for key in (pygame.K_r, pygame.K_f, pygame.K_p, pygame.K_h, pygame.K_q, pygame.K_t):
+    for key in (
+        pygame.K_r,
+        pygame.K_f,
+        pygame.K_p,
+        pygame.K_h,
+        pygame.K_q,
+        pygame.K_t,
+        pygame.K_o,
+    ):
         view._handle_keydown(SimpleNamespace(key=key))
 
     assert view.focus_on_robot is False
     assert view.focus_on_ego_ped is True
     assert view.display_help is True
     assert view.display_text is True
+    assert view.show_observation_space is True
     assert view.display_robot_info in (0, 1, 2)
     assert view.redraw_needed is True
 

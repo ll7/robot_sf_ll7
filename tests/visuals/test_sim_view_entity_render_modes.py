@@ -71,6 +71,28 @@ def test_robot_sprite_mode_uses_rotation(monkeypatch, tmp_path: Path) -> None:
     assert rotate_calls
 
 
+def test_robot_sprite_heading_has_right_90deg_offset(monkeypatch, tmp_path: Path) -> None:
+    """Robot sprite with theta=0 should rotate -90° to match world-frame heading."""
+    sprite_path = tmp_path / "robot_sprite_offset.png"
+    _write_sprite(sprite_path)
+    rotate_calls: list[float] = []
+    orig_rotate = pygame.transform.rotate
+
+    def _spy_rotate(surface, angle):
+        rotate_calls.append(float(angle))
+        return orig_rotate(surface, angle)
+
+    monkeypatch.setattr(pygame.transform, "rotate", _spy_rotate)
+    view = SimulationView(
+        record_video=True,
+        robot_render_mode="sprite",
+        robot_sprite_path=str(sprite_path),
+    )
+    view._draw_robot(((1.0, 1.0), 0.0))
+    assert rotate_calls
+    assert abs(rotate_calls[-1] + 90.0) < 1e-6
+
+
 def test_robot_sprite_missing_path_falls_back_to_circle(monkeypatch) -> None:
     """Missing robot sprite should fall back to circle rendering."""
     draw_calls: list[tuple] = []

@@ -40,6 +40,10 @@ def run_simulation() -> None:
         robot_config=DifferentialDriveSettings(radius=1.0),
     )
     env = RobotEnv(env_config, debug=True)
+    if env.sim_ui is not None:
+        env.sim_ui.robot_render_mode = "sprite"
+        env.sim_ui.ped_render_mode = "sprite"
+        env.sim_ui.ego_ped_render_mode = "sprite"
     env.observation_space, env.action_space = prepare_gym_spaces()
     model_path = Path(__file__).resolve().parents[2] / "model" / "run_023.zip"
     model = load_trained_policy(str(model_path))

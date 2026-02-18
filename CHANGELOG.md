@@ -138,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Policy analysis runs now force `use_planner=False` in the episode config to avoid attaching global planners during metrics/video sweeps.
 * Classic global planner defaults now use 0.5m grid cells (`cells_per_meter=2`) with zero inflation for shortest-path planning, reducing invalid start/goal cell failures.
 * Default global planner selection now prefers the classic Theta* (v2) grid planner, and benchmark shortest-path calculations use the same planner.
+* `SimulationView` now starts with lidar-ray visualization disabled by default (`show_lidar=False`); use `show_lidar=True` or press `O` to toggle observation-space overlays (auto-selecting lidar/grid/image based on the active observation mode).
 * Occupancy grid rasterization now logs out-of-bounds obstacle segments at DEBUG instead of the custom SPAM level.
 * Benchmark CLI list-algorithms now reports only implemented baseline planners to avoid registry KeyErrors.
 * Expert PPO training and trajectory collection now honor scenario YAML entries, including map files, simulation overrides, and scenario identifiers, while publishing `scenario_coverage` metadata consistent with dataset validators.

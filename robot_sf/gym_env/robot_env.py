@@ -726,6 +726,7 @@ class RobotEnv(BaseEnv):
 
         # Telemetry update
         self._emit_telemetry(reward, term, False, action)
+        self._latest_observation = obs
 
         # if recording is enabled, record the state
         if self.recording_enabled:
@@ -733,7 +734,6 @@ class RobotEnv(BaseEnv):
 
         # observation, reward, terminal, truncated,info
         info = _build_step_info(reward_dict)
-        self._latest_observation = obs
         return (
             obs,
             reward,

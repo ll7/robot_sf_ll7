@@ -37,7 +37,8 @@ def run_simulation() -> None:
             difficulty=0,
             ped_density_by_difficulty=[0.06],
         ),
-        robot_config=DifferentialDriveSettings(radius=1.0),
+        # run_023 was trained with +/-0.5 rad/s angular bounds; keep runtime dynamics aligned.
+        robot_config=DifferentialDriveSettings(radius=1.0, max_angular_speed=0.5),
     )
     env = RobotEnv(env_config, debug=True)
     if env.sim_ui is not None:

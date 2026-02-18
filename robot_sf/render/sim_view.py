@@ -455,11 +455,11 @@ class SimulationView:
 
     def _draw_dynamic_elements(self, state: VisualizableSimState):
         """Draw dynamic elements based on the simulation state."""
-        self._draw_sensor_data(state)
+        mode = self._observation_overlay_mode(state)
+        self._draw_sensor_data(state, mode=mode)
         self._draw_actions(state)
         self._draw_entities(state)
         self._draw_planned_path(state)
-        mode = self._observation_overlay_mode(state)
         # Draw occupancy grid overlay after entities so it appears on top
         if (
             (mode == "grid" or self.show_occupancy_grid)
@@ -471,9 +471,10 @@ class SimulationView:
         if mode == "image":
             self._render_observation_image(getattr(state, "observation_image", None))
 
-    def _draw_sensor_data(self, state: VisualizableSimState):
+    def _draw_sensor_data(self, state: VisualizableSimState, mode: str | None = None):
         """Draw sensor data like lidar rays."""
-        mode = self._observation_overlay_mode(state)
+        if mode is None:
+            mode = self._observation_overlay_mode(state)
         if not (self.show_lidar or mode == "lidar"):
             return
         if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
@@ -1598,7 +1599,31 @@ class SimulationView:
         panel.blit(scaled, (4, 20))
         label = self.font.render(f"obs image {w}x{h}", True, TEXT_COLOR)
         panel.blit(label, (4, 2))
-        self.screen.blit(panel, (self.width - panel.get_width() - 8, 8))
+        panel_x, panel_y = self._observation_panel_position(panel)
+        self.screen.blit(panel, (panel_x, panel_y))
+
+    def _observation_panel_position(
+        self,
+        panel: pygame.surface.Surface,
+    ) -> tuple[int, int]:
+        """Return top-right panel placement while avoiding telemetry overlap."""
+        panel_x = self.width - panel.get_width() - 8
+        panel_y = 8
+        if not (self.show_telemetry_panel and self.telemetry_layout == "vertical_split"):
+            return panel_x, panel_y
+
+        telemetry_surface = None
+        if self.telemetry_session is not None:
+            try:
+                telemetry_surface = self.telemetry_session.render_surface()
+            except AttributeError:
+                telemetry_surface = None
+        if telemetry_surface is None:
+            return panel_x, panel_y
+
+        _, pane_h = telemetry_surface.get_size()
+        panel_y = max(panel_y, pane_h + TELEMETRY_PANE_PADDING + 6)
+        return panel_x, panel_y
 
     def _render_telemetry_panel(self) -> None:
         """Render the docked telemetry panel if enabled."""

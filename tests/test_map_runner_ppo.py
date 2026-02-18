@@ -15,8 +15,10 @@ class _DummyPPOPlanner:
         self.config = dict(config)
         self.seed = seed
         self.closed = False
+        self.last_obs = None
 
     def step(self, _obs):
+        self.last_obs = _obs
         return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
 
     def close(self):
@@ -105,6 +107,34 @@ def test_build_policy_ppo_adapter_impact_updates_metadata(monkeypatch):
     assert impact["native_steps"] == 1
     assert impact["adapted_steps"] == 0
     assert impact["status"] == "collecting"
+
+
+def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
+    """Dict obs mode should pass the raw SocNav structured observation through to PPO."""
+    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    policy, _ = map_runner._build_policy(
+        "ppo",
+        {
+            "obs_mode": "dict",
+            "test_action": {"v": 0.3, "omega": 0.0},
+        },
+    )
+
+    obs = _sample_obs()
+    obs["robot_position"] = np.array([1.0, 1.0], dtype=float)
+    obs["goal_current"] = np.array([4.0, 1.0], dtype=float)
+    action_v, action_w = policy(obs)
+    assert action_v == pytest.approx(0.3)
+    assert action_w == pytest.approx(0.0)
+    # Validate passthrough by rebuilding policy and checking last_obs on dummy planner.
+    dummy = _DummyPPOPlanner({"obs_mode": "dict", "test_action": {"v": 0.3, "omega": 0.0}})
+    monkeypatch.setattr(map_runner, "PPOPlanner", lambda *_args, **_kwargs: dummy)
+    policy2, _ = map_runner._build_policy(
+        "ppo",
+        {"obs_mode": "dict", "test_action": {"v": 0.3, "omega": 0.0}},
+    )
+    policy2(obs)
+    assert dummy.last_obs is obs
 
 
 def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():

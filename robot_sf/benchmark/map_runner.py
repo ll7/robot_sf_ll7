@@ -34,6 +34,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -332,6 +333,8 @@ def _ppo_action_to_unicycle(
     action: dict[str, Any],
     obs: dict[str, Any],
     cfg: dict[str, Any],
+    *,
+    robot_kinematics: str | None = None,
 ) -> tuple[float, float, str]:
     """Convert PPO action dict into the unicycle command used by map environments.
 
@@ -339,8 +342,13 @@ def _ppo_action_to_unicycle(
         Tuple of ``(linear_velocity, angular_velocity, conversion_mode)`` where
         conversion_mode is ``"native"`` or ``"adapter"``.
     """
+    model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=cfg,
+    )
     if "v" in action and "omega" in action:
-        return float(action["v"]), float(action["omega"]), "native"
+        v, omega = model.project((float(action["v"]), float(action["omega"])))
+        return v, omega, "native"
 
     if "vx" not in action or "vy" not in action:
         raise ValueError(f"Unsupported PPO action payload: {action}")
@@ -349,17 +357,15 @@ def _ppo_action_to_unicycle(
     vy = float(action["vy"])
     speed = float(np.hypot(vx, vy))
     if speed < 1e-9:
-        return 0.0, 0.0, "adapter"
+        v, omega = model.project((0.0, 0.0))
+        return v, omega, "adapter"
 
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
     heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     desired_heading = float(np.arctan2(vy, vx))
     heading_error = _normalize_heading(desired_heading - heading)
 
-    v_max = float(cfg.get("v_max", 2.0))
-    omega_max = float(cfg.get("omega_max", 1.0))
-    v = float(np.clip(speed, 0.0, v_max))
-    omega = float(np.clip(heading_error, -omega_max, omega_max))
+    v, omega = model.project((float(speed), float(heading_error)))
     return v, omega, "adapter"
 
 
@@ -385,6 +391,13 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
+    kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _project(v: float, w: float) -> tuple[float, float]:
+        return kinematics_model.project((v, w))
 
     if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
         meta.update(
@@ -398,7 +411,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            return _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
+            linear, angular = _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
+            return _project(linear, angular)
 
         return _policy, meta
 
@@ -450,7 +464,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             action = ppo_planner.step(ppo_obs)
             if not isinstance(action, dict):
                 raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
-            linear, angular, conversion_mode = _ppo_action_to_unicycle(action, obs, algo_config)
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+            )
             impact = meta.get("adapter_impact")
             if isinstance(impact, dict) and bool(impact.get("requested", False)):
                 if conversion_mode == "native":
@@ -504,7 +523,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-        return adapter.plan(obs)
+        linear, angular = adapter.plan(obs)
+        return _project(float(linear), float(angular))
 
     return _policy, meta
 

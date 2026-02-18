@@ -12,6 +12,11 @@ from robot_sf.planner.classic_planner_adapter import (
     PlannerActionAdapter,
     attach_classic_global_planner,
 )
+from robot_sf.planner.kinematics_model import (
+    BicycleDriveKinematicsModel,
+    DifferentialDriveKinematicsModel,
+    HolonomicPassthroughKinematicsModel,
+)
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
@@ -61,6 +66,8 @@ def test_planner_action_adapter_bicycle_conversion(tmp_path):
     assert action[1] == pytest.approx(expected_steer)
     assert np.all(action <= robot.action_space.high)
     assert np.all(action >= robot.action_space.low)
+    assert adapter.last_kinematics_diagnostics is not None
+    assert adapter.last_kinematics_diagnostics["kinematics_model"] == "bicycle_drive"
 
 
 def test_planner_action_adapter_differential_conversion():
@@ -83,3 +90,38 @@ def test_planner_action_adapter_differential_conversion():
     assert action[1] == pytest.approx(robot.action_space.low[1])
     assert np.all(action <= robot.action_space.high)
     assert np.all(action >= robot.action_space.low)
+    assert adapter.last_kinematics_diagnostics is not None
+    assert adapter.last_kinematics_diagnostics["kinematics_model"] == "differential_drive"
+
+
+def test_differential_kinematics_model_projection_and_feasibility() -> None:
+    """Differential kinematics should clip infeasible v/omega commands."""
+    model = DifferentialDriveKinematicsModel(max_linear_speed=1.0, max_angular_speed=0.5)
+    assert model.is_feasible((0.5, 0.1)) is True
+    assert model.is_feasible((1.5, 0.1)) is False
+    projected = model.project((1.5, -0.8))
+    assert projected == pytest.approx((1.0, -0.5))
+    diag = model.diagnostics((1.5, -0.8), projected)
+    assert diag["projection_applied"] is True
+
+
+def test_bicycle_kinematics_model_projection_and_feasibility() -> None:
+    """Bicycle kinematics should enforce configured velocity and angular limits."""
+    model = BicycleDriveKinematicsModel(min_velocity=0.0, max_velocity=2.0, max_angular_speed=0.4)
+    assert model.is_feasible((1.0, 0.2)) is True
+    assert model.is_feasible((-0.5, 0.2)) is False
+    projected = model.project((-0.5, 1.0))
+    assert projected == pytest.approx((0.0, 0.4))
+    diag = model.diagnostics((-0.5, 1.0), projected)
+    assert diag["projection_applied"] is True
+
+
+def test_holonomic_passthrough_kinematics_model() -> None:
+    """Holonomic model should pass commands through without projection."""
+    model = HolonomicPassthroughKinematicsModel()
+    command = (2.5, -3.0)
+    assert model.is_feasible(command) is True
+    projected = model.project(command)
+    assert projected == pytest.approx(command)
+    diag = model.diagnostics(command, projected)
+    assert diag["projection_applied"] is False

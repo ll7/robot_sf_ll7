@@ -205,6 +205,65 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
     assert adapted[2] == "adapter"
 
 
+def test_ppo_action_to_unicycle_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PPO command conversion should route through the kinematics contract."""
+
+    class _Model:
+        def __init__(self) -> None:
+            self.calls: list[tuple[float, float]] = []
+
+        def project(self, command):
+            self.calls.append((float(command[0]), float(command[1])))
+            return (0.7, -0.3)
+
+    model = _Model()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        lambda **kwargs: model,
+    )
+
+    native = _ppo_action_to_unicycle(
+        {"v": 1.8, "omega": 2.0},
+        {"robot": {"heading": [0.0]}},
+        {"v_max": 1.0, "omega_max": 1.0},
+        robot_kinematics="differential_drive",
+    )
+    assert native[0] == pytest.approx(0.7)
+    assert native[1] == pytest.approx(-0.3)
+    assert native[2] == "native"
+    assert model.calls
+
+
+def test_build_policy_goal_path_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Goal policy should project commands through kinematics contract wiring."""
+
+    class _Model:
+        def __init__(self) -> None:
+            self.calls: list[tuple[float, float]] = []
+
+        def project(self, command):
+            self.calls.append((float(command[0]), float(command[1])))
+            return (0.2, 0.1)
+
+    model = _Model()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        lambda **kwargs: model,
+    )
+    policy, meta = _build_policy("goal", {"max_speed": 10.0}, robot_kinematics="bicycle_drive")
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [10.0, 0.0]},
+    }
+    assert policy(obs) == pytest.approx((0.2, 0.1))
+    assert model.calls, "Expected projected commands via kinematics contract."
+    assert meta["planner_kinematics"]["execution_mode"] == "native"
+
+
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
     """Verify SocNav config fallback and seed list parsing."""
     cfg = _build_socnav_config({"invalid_key": 123})

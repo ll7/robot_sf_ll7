@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.navigation import NavigationSettings
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
@@ -105,6 +106,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     # Planner backend selection: "classic" (default) or "visibility"
     planner_backend: str = field(default="classic")
     planner_classic_config: ClassicPlannerConfig | None = field(default=None)
+    navigation_settings: NavigationSettings = field(default_factory=NavigationSettings)
 
     def __post_init__(self):
         """Validate robot-specific configuration.

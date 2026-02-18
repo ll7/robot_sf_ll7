@@ -81,6 +81,7 @@ class BaseEnv(Env):
                 raise ValueError(str(exc)) from exc
         else:
             self.map_def = env_config.map_pool.choose_random_map()
+        self.map_def._navigation_settings = getattr(env_config, "navigation_settings", None)
         attach_planner_to_map(self.map_def, self.env_config)
 
         self.debug = debug

@@ -21,6 +21,22 @@ def _write_sprite(path: Path) -> None:
     pygame.image.save(surface, str(path))
 
 
+def test_default_sprite_assets_are_not_placeholder_pixels() -> None:
+    """Default sprite assets should be production-sized images, not 1x1 placeholders."""
+    sprite_paths = (
+        "robot_sf/render/assets/robot.png",
+        "robot_sf/render/assets/pedestrian.png",
+        "robot_sf/render/assets/ego_pedestrian.png",
+    )
+    for sprite_path in sprite_paths:
+        surface = pygame.image.load(sprite_path)
+        width, height = surface.get_size()
+        assert width >= 64
+        assert height >= 64
+        alpha_values = pygame.surfarray.array_alpha(surface)
+        assert int((alpha_values > 0).sum()) >= 1000
+
+
 def test_robot_circle_mode_draws_circle(monkeypatch) -> None:
     """Robot circle mode should use pygame circle drawing path."""
     draw_calls: list[tuple] = []

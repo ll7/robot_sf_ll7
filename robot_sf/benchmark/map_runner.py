@@ -120,11 +120,12 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
-def _preflight_policy(
+def _preflight_policy(  # noqa: C901
     *,
     algo: str,
     algo_config: dict[str, Any],
     missing_prereq_policy: str,
+    robot_kinematics: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Preflight planner initialization and apply SocNav prereq policy.
 
@@ -140,7 +141,22 @@ def _preflight_policy(
         )
 
     def _build_and_close(cfg: dict[str, Any]) -> None:
-        policy_fn, _meta = _build_policy(algo, cfg)
+        effective_kinematics = robot_kinematics
+        if effective_kinematics is None:
+            effective_kinematics = str(
+                cfg.get("robot_kinematics", cfg.get("kinematics", _DEFAULT_KINEMATICS))
+            )
+        try:
+            policy_fn, _meta = _build_policy(
+                algo,
+                cfg,
+                robot_kinematics=effective_kinematics,
+            )
+        except TypeError as exc:
+            # Backward compatibility for tests or monkeypatches with legacy _build_policy signatures.
+            if "unexpected keyword argument 'robot_kinematics'" not in str(exc):
+                raise
+            policy_fn, _meta = _build_policy(algo, cfg)
         planner_close = getattr(policy_fn, "_planner_close", None)
         if callable(planner_close):
             planner_close()
@@ -365,8 +381,11 @@ def _ppo_action_to_unicycle(
     heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     desired_heading = float(np.arctan2(vy, vx))
     heading_error = _normalize_heading(desired_heading - heading)
+    omega_max = float(cfg.get("omega_max", cfg.get("max_angular_speed", 1.0)))
+    omega_kp = float(cfg.get("omega_kp", cfg.get("heading_error_gain", 1.0)))
+    angular_velocity = float(np.clip(omega_kp * heading_error, -omega_max, omega_max))
 
-    v, omega = model.project((float(speed), float(heading_error)))
+    v, omega = model.project((float(speed), angular_velocity))
     return v, omega, "adapter"
 
 
@@ -1042,6 +1061,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo=algo,
         algo_config=policy_cfg,
         missing_prereq_policy=socnav_missing_prereq_policy,
+        robot_kinematics=kinematics_tag,
     )
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":

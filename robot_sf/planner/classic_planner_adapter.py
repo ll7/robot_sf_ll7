@@ -64,12 +64,13 @@ class PlannerActionAdapter:
             np.ndarray: Action formatted for the robot's configured action space.
         """
         linear_target, angular_target = command
+        float_cmd = (float(linear_target), float(angular_target))
         kinematics_model = self.kinematics_model or self._default_kinematics_model()
         if self.kinematics_model is None:
             self.kinematics_model = kinematics_model
-        projected = kinematics_model.project((float(linear_target), float(angular_target)))
+        projected = kinematics_model.project(float_cmd)
         self.last_kinematics_diagnostics = kinematics_model.diagnostics(
-            (float(linear_target), float(angular_target)),
+            float_cmd,
             projected,
         )
         linear_target, angular_target = projected

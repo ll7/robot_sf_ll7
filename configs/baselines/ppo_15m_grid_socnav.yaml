@@ -3,7 +3,7 @@
 # Intended for benchmark/evaluation runs where PPO should use the same
 # occupancy-grid observation setup as the 15M training artifact.
 
-model_path: output/model_cache/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip
+model_path: output/model_cache/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip  # Download or retrain this checkpoint (see model/*/README.md); otherwise fallback_to_goal=true will silently degrade benchmark results.
 
 # Device selection for SB3
 device: auto

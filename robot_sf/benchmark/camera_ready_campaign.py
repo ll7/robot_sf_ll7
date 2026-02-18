@@ -352,7 +352,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     if not isinstance(matrix_raw, str) or not matrix_raw.strip():
         raise ValueError("Campaign config requires a non-empty 'scenario_matrix' string")
     scenario_matrix_path = _resolve_path(matrix_raw, base_dir=config_path.parent)
-    assert scenario_matrix_path is not None
+    if scenario_matrix_path is None:
+        raise FileNotFoundError(
+            f"Could not resolve scenario_matrix '{matrix_raw}' from config '{config_path}'.",
+        )
 
     planners_raw = payload.get("planners")
     if not isinstance(planners_raw, list) or not planners_raw:
@@ -396,7 +399,11 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     seed_set = seed_policy_raw.get("seed_set")
     seeds = seed_policy_raw.get("seeds") if isinstance(seed_policy_raw.get("seeds"), list) else []
     seed_sets_path_raw = seed_policy_raw.get("seed_sets_path")
-    seed_sets_path = _resolve_path(str(seed_sets_path_raw), base_dir=config_path.parent)
+    seed_sets_path = (
+        _resolve_path(str(seed_sets_path_raw), base_dir=config_path.parent)
+        if isinstance(seed_sets_path_raw, str) and seed_sets_path_raw.strip()
+        else None
+    )
     if seed_sets_path is None:
         seed_sets_path = (config_path.parent / DEFAULT_SEED_SETS_PATH).resolve()
 
@@ -812,7 +819,7 @@ def run_campaign(  # noqa: PLR0915
             "schema_version": CAMPAIGN_SCHEMA_VERSION,
             "campaign_id": campaign_id,
             "name": cfg.name,
-            "created_at_utc": _utc_now(),
+            "created_at_utc": campaign_started_at_utc,
             "started_at_utc": campaign_started_at_utc,
             "finished_at_utc": campaign_finished_at_utc,
             "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
@@ -892,7 +899,12 @@ def run_campaign(  # noqa: PLR0915
     _write_json(campaign_root / "run_meta.json", run_meta)
     _write_json(campaign_root / "manifest.json", run_manifest)
     _write_json(
-        campaign_root / "campaign_manifest.json", {**manifest_payload, "runtime_sec": runtime_sec}
+        campaign_root / "campaign_manifest.json",
+        {
+            **manifest_payload,
+            "runtime_sec": runtime_sec,
+            "finished_at_utc": campaign_finished_at_utc,
+        },
     )
 
     logger.info(

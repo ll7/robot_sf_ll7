@@ -16,6 +16,15 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
 
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     algo_cfg_rel = Path("configs/algos/social_force_example.yaml")
+    scenario_abs = (config_dir / scenario_rel).resolve()
+    algo_cfg_abs = (config_dir / algo_cfg_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    algo_cfg_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    algo_cfg_abs.write_text("v_max: 1.0\n", encoding="utf-8")
 
     config_path = config_dir / "campaign.yaml"
     config_path.write_text(
@@ -39,8 +48,10 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     cfg = load_campaign_config(config_path)
 
     assert cfg.name == "test_campaign"
+    assert cfg.scenario_matrix_path == scenario_abs
     assert cfg.scenario_matrix_path.exists()
     assert cfg.planners[0].algo_config_path is not None
+    assert cfg.planners[0].algo_config_path == algo_cfg_abs
     assert cfg.planners[0].algo_config_path.exists()
     assert list(cfg.seed_policy.seeds) == [101]
 

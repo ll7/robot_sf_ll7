@@ -161,7 +161,7 @@ A campaign is accepted when:
 
 ## 9. Risks and Mitigations
 
-- Risk: experimental planners fail due optional deps/models.
+- Risk: experimental planners fail due to optional deps/models.
   - Mitigation: prereq policy in config + explicit run status reporting.
 - Risk: high runtime for full 45-scenario x multi-planner matrix.
   - Mitigation: provide smoke and full presets; document expected runtime.

@@ -124,6 +124,33 @@ def _planner_row_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
+    """Resolve episodes path while preventing traversal outside trusted roots."""
+    candidate_path = Path(raw_path)
+    repo_root = _get_repository_root()
+    trusted_roots = (campaign_root.resolve(), repo_root.resolve())
+
+    if candidate_path.is_absolute():
+        resolved = candidate_path.resolve()
+        if any(resolved.is_relative_to(root) for root in trusted_roots):
+            return resolved
+        raise ValueError(
+            f"Unsafe absolute episodes_path outside trusted roots: {candidate_path}",
+        )
+
+    for base in trusted_roots:
+        resolved = (base / candidate_path).resolve()
+        if not resolved.is_relative_to(base):
+            continue
+        if resolved.exists():
+            return resolved
+    # Keep deterministic fallback for diagnostics while still rejecting traversal.
+    fallback = (trusted_roots[0] / candidate_path).resolve()
+    if fallback.is_relative_to(trusted_roots[0]):
+        return fallback
+    raise ValueError(f"Unsafe relative episodes_path: {raw_path}")
+
+
 def _analyze_planner(
     run_entry: dict[str, Any],
     row_entry: dict[str, Any] | None,
@@ -145,14 +172,7 @@ def _analyze_planner(
 
     episodes_rel = run_entry.get("episodes_path")
     rel_text = str(episodes_rel or "")
-    episodes_path = Path(rel_text)
-    if not episodes_path.is_absolute():
-        campaign_candidate = campaign_root / rel_text
-        repo_candidate = _get_repository_root() / rel_text
-        if campaign_candidate.exists():
-            episodes_path = campaign_candidate
-        else:
-            episodes_path = repo_candidate
+    episodes_path = _resolve_safe_episodes_path(campaign_root, rel_text)
     episodes = _read_jsonl(episodes_path)
     episodes_n = len(episodes)
 
@@ -192,13 +212,14 @@ def _analyze_planner(
         findings.append(
             f"episode count mismatch: summary.written={summary_written}, episodes.jsonl={episodes_n}",
         )
+    success_mean = _mean(metrics_success)
+    collision_mean = _mean(metrics_collisions)
+    snqi_mean = _mean(snqi_clean) if snqi_clean else None
+
     if row_entry is not None:
         row_success = _safe_float(row_entry.get("success_mean"))
         row_collision = _safe_float(row_entry.get("collision_mean"))
         row_snqi = _safe_float(row_entry.get("snqi_mean"))
-        success_mean = _mean(metrics_success)
-        collision_mean = _mean(metrics_collisions)
-        snqi_mean = _mean(snqi_clean) if snqi_clean else None
         if row_success is not None and abs(row_success - success_mean) > tolerance:
             findings.append(
                 f"success_mean mismatch: row={row_success:.6f}, episodes={success_mean:.6f}",
@@ -231,9 +252,9 @@ def _analyze_planner(
         algo=algo,
         episodes_summary=summary_written,
         episodes_file=episodes_n,
-        success_mean_episodes=_mean(metrics_success),
-        collision_mean_episodes=_mean(metrics_collisions),
-        snqi_mean_episodes=(_mean(snqi_clean) if snqi_clean else None),
+        success_mean_episodes=success_mean,
+        collision_mean_episodes=collision_mean,
+        snqi_mean_episodes=snqi_mean,
         status_counts=dict(status_counts),
         preflight_status=preflight_status,
         adapter_summary_status=(

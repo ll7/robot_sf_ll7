@@ -133,6 +133,6 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
   --campaign-root output/benchmarks/camera_ready/camera_ready_all_planners_deep_audit_20260217_150448
 
 # PPO v_max A/B calibration checks
-LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py --config /tmp/ppo_only_full.yaml --label calib_vmax2
-LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py --config /tmp/ppo_only_full_vmax3.yaml --label calib_vmax3
+LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py --config <path/to/ppo_only_full.yaml> --label calib_vmax2
+LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py --config <path/to/ppo_only_full_vmax3.yaml> --label calib_vmax3
 ```

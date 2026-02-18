@@ -7,10 +7,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pygame
 
+from robot_sf.render import sim_view
 from robot_sf.render.sim_view import SimulationView
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+MIN_SPRITE_DIMENSION = 64
+MIN_NON_TRANSPARENT_PIXELS = 1000
 
 
 def _write_sprite(path: Path) -> None:
@@ -24,17 +28,17 @@ def _write_sprite(path: Path) -> None:
 def test_default_sprite_assets_are_not_placeholder_pixels() -> None:
     """Default sprite assets should be production-sized images, not 1x1 placeholders."""
     sprite_paths = (
-        "robot_sf/render/assets/robot.png",
-        "robot_sf/render/assets/pedestrian.png",
-        "robot_sf/render/assets/ego_pedestrian.png",
+        sim_view._DEFAULT_ROBOT_SPRITE,
+        sim_view._DEFAULT_PED_SPRITE,
+        sim_view._DEFAULT_EGO_PED_SPRITE,
     )
     for sprite_path in sprite_paths:
         surface = pygame.image.load(sprite_path)
         width, height = surface.get_size()
-        assert width >= 64
-        assert height >= 64
+        assert width >= MIN_SPRITE_DIMENSION
+        assert height >= MIN_SPRITE_DIMENSION
         alpha_values = pygame.surfarray.array_alpha(surface)
-        assert int((alpha_values > 0).sum()) >= 1000
+        assert int((alpha_values > 0).sum()) >= MIN_NON_TRANSPARENT_PIXELS
 
 
 def test_robot_circle_mode_draws_circle(monkeypatch) -> None:

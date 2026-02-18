@@ -158,7 +158,7 @@ class BaseEnv(Env):
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 robot_rotation_action_max_abs=float(
-                    getattr(env_config.robot_config, "max_angular_speed", 0.5),
+                    getattr(env_config.robot_config, "max_angular_speed", 1.0),
                 ),
                 ped_radius=env_config.sim_config.ped_radius,
                 goal_radius=env_config.sim_config.goal_radius,

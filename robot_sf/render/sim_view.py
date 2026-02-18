@@ -241,11 +241,11 @@ class SimulationView:
     speed_line_width_px: int = field(default=3)
     speed_line_scale: float = field(default=1.0)
     acceleration_horizon_s: float = field(default=1.0)
-    acceleration_line_width_px: int = field(default=1)
+    acceleration_line_width_px: int = field(default=3)
     acceleration_line_scale: float = field(default=1.0)
     rotation_arc_radius_scale: float = field(default=1.0)
     rotation_arc_width_px: int = field(default=4)
-    robot_rotation_action_max_abs: float = field(default=0.5)
+    robot_rotation_action_max_abs: float = field(default=1.0)
     # Internal flag: True when a display window is created via pygame.display.set_mode
     _use_display: bool = field(init=False, default=False)
     # Maximum number of frames to retain in memory when recording. None means no hard cap.
@@ -512,7 +512,7 @@ class SimulationView:
 
         if hasattr(state, "robot_pose") and state.robot_pose is not None:
             self._augment_robot_measured_kinematics(state)
-        if hasattr(state, "robot_action") and state.robot_action:
+        if hasattr(state, "robot_action") and state.robot_action and state.robot_pose is not None:
             self._augment_robot_rotation_action(state.robot_pose, state.robot_action)
             if hasattr(state.robot_action, "goal"):
                 self._augment_goal_position(state.robot_action.goal)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.gym_env.reward import build_reward_function
 from robot_sf.gym_env.reward_alyassi import (
     AlyassiRewardWeights,
@@ -11,7 +13,7 @@ from robot_sf.gym_env.reward_alyassi import (
 )
 
 
-def _base_meta() -> dict:
+def _base_meta() -> dict[str, object]:
     """Create a minimal metadata payload compatible with Alyassi reward defaults.
 
     Returns:
@@ -74,9 +76,10 @@ def test_alyassi_optional_prediction_and_preference_terms_are_used() -> None:
     assert scores["human_prediction"] < 0.0
 
 
-def test_alyassi_registry_name_builds_callable() -> None:
-    """Reward registry should resolve the Alyassi reward name."""
-    reward_fn = build_reward_function("alyassi", reward_kwargs={"step_cost": 0.02})
+@pytest.mark.parametrize("alias", ["alyassi", "alyassi_reward", "alyassi_composite"])
+def test_alyassi_registry_name_builds_callable(alias: str) -> None:
+    """Reward registry should resolve each Alyassi alias to a callable."""
+    reward_fn = build_reward_function(alias, reward_kwargs={"step_cost": 0.02})
     value = reward_fn(_base_meta())
     assert isinstance(value, float)
 
@@ -97,6 +100,7 @@ def test_alyassi_weights_can_focus_single_component() -> None:
         w_exploration=0.0,
         w_task_specific=0.0,
         w_demo_learning=0.0,
+        w_weight_learning=0.0,
     )
     value = alyassi_reward(meta, weights=weights)
     assert value < 0.0

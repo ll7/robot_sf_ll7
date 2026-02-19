@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.gym_env.reward_alyassi import alyassi_reward
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
@@ -251,5 +253,7 @@ def build_reward_function(
         return partial(punish_action_reward, **kwargs)
     if normalized in {"snqi", "snqi_step", "snqi_step_reward"}:
         return partial(snqi_step_reward, **kwargs)
-    supported = ("simple", "punish_action", "snqi_step")
+    if normalized in {"alyassi", "alyassi_reward", "alyassi_composite"}:
+        return partial(alyassi_reward, **kwargs)
+    supported = ("simple", "punish_action", "snqi_step", "alyassi")
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")

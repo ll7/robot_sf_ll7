@@ -1,0 +1,31 @@
+# Example config for the RGL-inspired predictive planner adapter.
+# Use with map-runner: --algo prediction_planner --algo-config configs/algos/prediction_planner_example.yaml
+
+predictive_model_id: predictive_rgl_v1
+# predictive_checkpoint_path: model/predictive_rgl_v1/predictive_model.pt
+predictive_device: cpu
+predictive_max_agents: 16
+predictive_horizon_steps: 8
+predictive_rollout_dt: 0.2
+
+max_linear_speed: 1.5
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+
+predictive_goal_weight: 5.0
+predictive_collision_weight: 0.4
+predictive_near_miss_weight: 0.05
+predictive_velocity_weight: 0.05
+predictive_turn_weight: 0.01
+predictive_safe_distance: 0.35
+predictive_near_distance: 0.7
+
+# Discrete rollout search set (speed scales in [0, 1] multiplied by max_linear_speed)
+predictive_candidate_speeds: [0.0, 0.4, 0.7, 1.0]
+# Heading deltas in radians per rollout interval.
+predictive_candidate_heading_deltas: [-0.785398, -0.392699, 0.0, 0.392699, 0.785398]
+
+# Occupancy-aware scoring inherited from SamplingPlannerAdapter mixin
+occupancy_weight: 0.3
+occupancy_lookahead: 2.5
+occupancy_candidates: 7

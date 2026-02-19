@@ -31,4 +31,5 @@ profiles:
       - ppo
       - socnav_sampling
       - sacadrl
+      - prediction_planner
       - socnav_bench

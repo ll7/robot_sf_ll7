@@ -7,6 +7,7 @@ import pytest
 
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
+    PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
     SamplingPlannerAdapter,
     SocialForcePlannerAdapter,
@@ -15,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
     make_orca_policy,
+    make_prediction_policy,
     make_sacadrl_policy,
     make_social_force_policy,
 )
@@ -306,6 +308,92 @@ def test_sacadrl_adapter_runs_model_when_available():
     assert np.isfinite(w)
 
 
+def test_prediction_adapter_fallback_when_model_missing(monkeypatch):
+    """Predictive adapter can fall back to constant-velocity prediction when model is unavailable."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
+    obs = _make_obs_with_peds([(1.0, 0.2), (1.6, -0.1)], goal=(4.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert np.isfinite(v)
+    assert np.isfinite(w)
+
+
+def test_prediction_adapter_requires_model_when_fallback_disabled(monkeypatch):
+    """Predictive adapter fails fast when checkpoint/model loading fails and fallback is disabled."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    with pytest.raises(RuntimeError, match="missing predictive model"):
+        adapter.plan(obs)
+
+
+def test_prediction_adapter_ttc_penalty_reduces_speed(monkeypatch):
+    """High TTC weight should bias the predictive planner toward slower commands."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.2, 0.0)], goal=(5.0, 0.0), heading=0.0)
+
+    cfg_lo = SocNavPlannerConfig(
+        predictive_ttc_weight=0.0,
+        predictive_ttc_distance=0.9,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_hi = SocNavPlannerConfig(
+        predictive_ttc_weight=0.8,
+        predictive_ttc_distance=1.2,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    v_lo, _w_lo = PredictionPlannerAdapter(cfg_lo, allow_fallback=True).plan(obs)
+    v_hi, _w_hi = PredictionPlannerAdapter(cfg_hi, allow_fallback=True).plan(obs)
+    assert v_hi <= v_lo
+
+
+def test_prediction_adapter_speed_clearance_gain_reduces_speed(monkeypatch):
+    """Speed-adaptive safety margin should discourage aggressive forward speed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.4, 0.0)], goal=(5.0, 0.0), heading=0.0)
+
+    cfg_base = SocNavPlannerConfig(
+        predictive_collision_weight=0.8,
+        predictive_ttc_weight=0.6,
+        predictive_ttc_distance=0.9,
+        predictive_robot_radius=0.25,
+        predictive_pedestrian_radius=0.25,
+        predictive_speed_clearance_gain=0.0,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_gain = SocNavPlannerConfig(
+        predictive_collision_weight=0.8,
+        predictive_ttc_weight=0.6,
+        predictive_ttc_distance=0.9,
+        predictive_robot_radius=0.25,
+        predictive_pedestrian_radius=0.25,
+        predictive_speed_clearance_gain=0.6,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+
+    v_base, _w_base = PredictionPlannerAdapter(cfg_base, allow_fallback=True).plan(obs)
+    v_gain, _w_gain = PredictionPlannerAdapter(cfg_gain, allow_fallback=True).plan(obs)
+    assert v_gain <= v_base
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
@@ -318,3 +406,5 @@ def test_policy_constructors():
     assert v >= 0.0
     sacadrl_policy = make_sacadrl_policy(allow_fallback=True)
     assert isinstance(sacadrl_policy.adapter, SACADRLPlannerAdapter)
+    prediction_policy = make_prediction_policy(allow_fallback=True)
+    assert isinstance(prediction_policy.adapter, PredictionPlannerAdapter)

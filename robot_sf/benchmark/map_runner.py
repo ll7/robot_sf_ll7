@@ -37,6 +37,7 @@ from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
+    PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
     SamplingPlannerAdapter,
     SocialForcePlannerAdapter,
@@ -56,6 +57,9 @@ _SOCNAV_ALGO_KEYS = {
     "sampling",
     "orca",
     "sacadrl",
+    "prediction_planner",
+    "predictive",
+    "prediction",
     "sa_cadrl",
     "socnav_bench",
 }
@@ -637,6 +641,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"prediction_planner", "predictive", "prediction"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -917,6 +924,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
     reached_goal_step: int | None = None
+    termination_reason = "horizon"
 
     map_def = None
     goal_vec = np.zeros(2, dtype=float)
@@ -943,9 +951,20 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_positions.append(peds)
             ped_forces.append(forces_arr)
 
-            if reached_goal_step is None and bool(info.get("success")):
+            step_success = bool(info.get("success") or info.get("is_success"))
+            if reached_goal_step is None and step_success:
                 reached_goal_step = step_idx
+            # Freeze episode once success is first achieved to avoid later collisions
+            # flipping benchmark success labels as horizon changes.
+            if step_success:
+                termination_reason = "success_reached"
+                break
             if terminated or truncated:
+                termination_reason = str(
+                    info.get("done_reason")
+                    or info.get("termination_reason")
+                    or ("terminated" if terminated else "truncated")
+                )
                 break
         if getattr(env, "simulator", None) is not None:
             map_def = env.simulator.map_def
@@ -1053,6 +1072,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "horizon": horizon_val,
         "wall_time_sec": wall_time,
         "timing": timing,
+        "termination_reason": termination_reason,
     }
     ensure_metric_parameters(record)
     return record

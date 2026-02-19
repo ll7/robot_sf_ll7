@@ -2249,7 +2249,8 @@ def compute_all_metrics(
         )
 
     values: dict[str, float] = {}
-    values["success"] = success(data, horizon=horizon)
+    # Use collision-count-based success semantics for benchmark-facing outputs.
+    values["success"] = success_rate(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
     values["time_to_goal_norm_success_only"] = time_to_goal_norm_success_only(data, horizon)
     values["time_to_goal_success_only_valid"] = (

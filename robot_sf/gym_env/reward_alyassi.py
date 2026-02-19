@@ -193,7 +193,10 @@ def _efficiency_component(
         s = float(speed)
     except (TypeError, ValueError):
         return value
-    value += 1.0 - abs(s - speed_target) / max(speed_target, 1e-6)
+    speed_term = 1.0 - abs(s - speed_target) / max(speed_target, 1e-6)
+    # Keep speed shaping bounded so large speed outliers do not dominate all terms.
+    speed_term = float(np.clip(speed_term, -1.0, 1.0))
+    value += speed_term
     return value
 
 
@@ -209,19 +212,27 @@ def _smoothness_component(meta: Mapping[str, object]) -> float:
 
     if action is not None and last_action is not None:
         try:
-            diff = float(np.linalg.norm(np.asarray(action, dtype=float) - np.asarray(last_action)))
+            diff = float(
+                np.linalg.norm(
+                    np.asarray(action, dtype=float) - np.asarray(last_action, dtype=float)
+                )
+            )
             term -= diff
         except (TypeError, ValueError):
             pass
 
-    omega = meta.get("angular_velocity")
-    if omega is not None:
-        term -= abs(_f(meta, "angular_velocity"))
+    term -= abs(_f(meta, "angular_velocity"))
     return term
 
 
 def _social_component(meta: Mapping[str, object]) -> float:
     """Social term from near-miss and comfort proxies.
+
+    Note:
+        ``near_misses`` is intentionally used here and also in
+        :func:`_geometric_collision_component`, so the final :func:`alyassi_reward`
+        can apply distinct tunable weights (`w_social`, `w_geometric_collision`)
+        to the same event stream from different conceptual channels.
 
     Returns:
         Social component score.
@@ -233,6 +244,11 @@ def _social_component(meta: Mapping[str, object]) -> float:
 
 def _geometric_collision_component(meta: Mapping[str, object]) -> float:
     """Geometric safety proxy from threshold and force-exceed events.
+
+    Note:
+        ``near_misses`` is intentionally shared with :func:`_social_component`.
+        This overlap is expected and controlled via :func:`alyassi_reward`
+        weights (`w_social`, `w_geometric_collision`).
 
     Returns:
         Geometric-collision component score.

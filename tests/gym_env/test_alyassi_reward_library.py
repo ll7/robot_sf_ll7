@@ -121,3 +121,19 @@ def test_alyassi_component_citations_cover_core_terms() -> None:
     ]:
         assert term in citations
         assert len(citations[term]) >= 1
+
+
+def test_alyassi_efficiency_speed_term_is_clamped() -> None:
+    """Extreme speed metadata should not create unbounded efficiency penalties."""
+    meta = _base_meta()
+    meta["speed"] = 100.0
+    scores = alyassi_component_scores(meta, step_cost=0.01, speed_target=0.7)
+    assert scores["efficiency"] >= -1.01
+
+
+def test_alyassi_efficiency_ignores_non_numeric_speed_metadata() -> None:
+    """Non-numeric speed metadata should safely fall back to step-cost-only efficiency."""
+    meta = _base_meta()
+    meta["speed"] = "unknown"
+    scores = alyassi_component_scores(meta, step_cost=0.05, speed_target=0.7)
+    assert scores["efficiency"] == -0.05

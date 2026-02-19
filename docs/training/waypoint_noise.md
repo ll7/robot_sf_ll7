@@ -7,7 +7,7 @@ route memorization during training.
 
 Use `RobotSimulationConfig.navigation_settings`:
 
-- `waypoint_noise_enabled`: enable/disable noise (default: `false`)
+- `waypoint_noise_enabled`: enable/disable noise (default: `False`)
 - `waypoint_noise_std`: Gaussian standard deviation in meters (default: `0.0`)
 
 Noise is applied only to route waypoints. Sampled spawn and sampled goal positions are unchanged.

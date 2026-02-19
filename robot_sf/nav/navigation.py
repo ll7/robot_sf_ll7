@@ -58,17 +58,13 @@ def _apply_waypoint_noise(
     Returns:
         list[Vec2D]: New waypoint list with optional noise on intermediate points.
     """
-    if not settings.waypoint_noise_enabled:
+    if not settings.waypoint_noise_enabled or settings.waypoint_noise_std <= 0.0:
         return list(waypoints)
-    if settings.waypoint_noise_std <= 0.0:
-        return list(waypoints)
-    return [
-        (
-            float(point[0] + np.random.normal(0.0, settings.waypoint_noise_std)),
-            float(point[1] + np.random.normal(0.0, settings.waypoint_noise_std)),
-        )
-        for point in waypoints
-    ]
+    if not waypoints:
+        return []
+    waypoints_array = np.asarray(waypoints, dtype=float)
+    noise = np.random.normal(0.0, settings.waypoint_noise_std, size=waypoints_array.shape)
+    return [tuple(point) for point in (waypoints_array + noise)]
 
 
 def _select_spawn_id(map_def: MapDefinition, spawn_id: int | None) -> int:

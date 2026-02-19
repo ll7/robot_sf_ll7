@@ -62,10 +62,13 @@ def test_sample_route_applies_noise_only_to_intermediate_waypoints(
 
     # 3 waypoints x (x,y) => 6 normal samples
     noise_values = itertools.cycle([0.1, -0.1, 0.2, -0.2, 0.3, -0.3])
-    monkeypatch.setattr(
-        "robot_sf.nav.navigation.np.random.normal",
-        lambda mean, std: next(noise_values),
-    )
+
+    def _mock_normal(mean, std, size=None):
+        del mean, std
+        assert size == (3, 2)
+        return [[next(noise_values), next(noise_values)] for _ in range(size[0])]
+
+    monkeypatch.setattr("robot_sf.nav.navigation.np.random.normal", _mock_normal)
 
     route = sample_route(map_def, spawn_id=0)
     assert route[0] == (0.5, 0.5)

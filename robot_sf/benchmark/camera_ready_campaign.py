@@ -242,6 +242,25 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     return seeded
 
 
+def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
+    """Return sorted unique seed values actually present in campaign scenarios.
+
+    Returns:
+        Sorted list of unique integer seeds.
+    """
+    seeds: set[int] = set()
+    for scenario in scenarios:
+        scenario_seeds = scenario.get("seeds")
+        if not isinstance(scenario_seeds, list):
+            continue
+        for value in scenario_seeds:
+            try:
+                seeds.add(int(value))
+            except (TypeError, ValueError):
+                continue
+    return sorted(seeds)
+
+
 def _metric_mean(block: dict[str, Any], metric: str) -> float:
     """Extract aggregate mean value for one metric.
 
@@ -814,14 +833,48 @@ def run_campaign(  # noqa: PLR0915
     campaign_root = (base_dir / campaign_id).resolve()
     runs_dir = campaign_root / "runs"
     reports_dir = campaign_root / "reports"
+    preflight_dir = campaign_root / "preflight"
     runs_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
+    preflight_dir.mkdir(parents=True, exist_ok=True)
 
     campaign_started_at_utc = _utc_now()
     start = time.perf_counter()
     scenarios = _load_campaign_scenarios(cfg)
+    resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     git_meta = _git_context()
+    validate_config_path = preflight_dir / "validate_config.json"
+    preview_scenarios_path = preflight_dir / "preview_scenarios.json"
+
+    validate_payload = {
+        "schema_version": "benchmark-preflight-validate-config.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": campaign_started_at_utc,
+        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "scenario_count": len(scenarios),
+        "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
+        "workers": cfg.workers,
+        "horizon": cfg.horizon,
+        "dt": cfg.dt,
+        "resume": cfg.resume,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+    }
+    preview_payload = {
+        "schema_version": "benchmark-preflight-preview-scenarios.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": campaign_started_at_utc,
+        "scenario_count": len(scenarios),
+        "scenarios": scenarios,
+    }
+    _write_json(validate_config_path, validate_payload)
+    _write_json(preview_scenarios_path, preview_payload)
 
     manifest_payload: dict[str, Any] = {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
@@ -835,6 +888,7 @@ def run_campaign(  # noqa: PLR0915
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,
             "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
         "git": git_meta,
@@ -1097,6 +1151,8 @@ def run_campaign(  # noqa: PLR0915
             "campaign_summary_json": _repo_relative(summary_json_path),
             "campaign_table_csv": _repo_relative(csv_path),
             "campaign_table_md": _repo_relative(md_table_path),
+            "preflight_validate_config": _repo_relative(validate_config_path),
+            "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
             "scenario_breakdown_md": _repo_relative(scenario_md_path),
             "scenario_family_breakdown_csv": _repo_relative(family_csv_path),
@@ -1144,6 +1200,17 @@ def run_campaign(  # noqa: PLR0915
         },
         "matrix_path": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+        "preflight_artifacts": {
+            "validate_config": _repo_relative(validate_config_path),
+            "preview_scenarios": _repo_relative(preview_scenarios_path),
+        },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
         "finished_at_utc": campaign_finished_at_utc,

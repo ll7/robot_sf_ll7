@@ -23,7 +23,7 @@ import numpy as np
 
 from robot_sf.common.artifact_paths import get_repository_root
 
-PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v1"
+PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
 SIZE_REPORT_SCHEMA_VERSION = "benchmark-artifact-size-report.v1"
 _VIDEO_SUFFIXES = {".mp4", ".gif", ".webm", ".mov"}
 _MARKER_FILES = ("manifest.json", "run_meta.json", "episodes.jsonl", "summary.json", "report.json")
@@ -31,6 +31,10 @@ _NON_RUN_DIRECTORY_NAMES = {"episodes", "aggregates", "reports", "plots", "video
 _DEFAULT_REPO_URL = "https://github.com/ll7/robot_sf_ll7"
 _DEFAULT_RELEASE_TAG_TEMPLATE = "{release_tag}"
 _DEFAULT_DOI_TEMPLATE = "10.5281/zenodo.<record-id>"
+_CAMPAIGN_PREFLIGHT_REQUIRED = (
+    "preflight/validate_config.json",
+    "preflight/preview_scenarios.json",
+)
 
 
 @dataclass(frozen=True)
@@ -278,7 +282,7 @@ def measure_artifact_size_ranges(
     }
 
 
-def _build_provenance(run_dir: Path) -> dict[str, Any]:
+def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
     """Build provenance metadata from optional ``manifest.json`` and ``run_meta.json``.
 
     Returns:
@@ -329,7 +333,33 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:
                 if not matrix_candidate.is_absolute():
                     matrix_candidate = get_repository_root() / matrix_candidate
                 provenance["matrix_path"] = _to_repo_relative(matrix_candidate)
+            seed_policy = run_meta_payload.get("seed_policy")
+            if isinstance(seed_policy, dict):
+                provenance["seed_policy"] = {
+                    "mode": seed_policy.get("mode"),
+                    "seed_set": seed_policy.get("seed_set"),
+                    "seeds": seed_policy.get("seeds"),
+                    "resolved_seeds": seed_policy.get("resolved_seeds"),
+                }
+            preflight_artifacts = run_meta_payload.get("preflight_artifacts")
+            if isinstance(preflight_artifacts, dict):
+                provenance["preflight_artifacts"] = {
+                    key: value for key, value in preflight_artifacts.items() if value
+                }
     return provenance
+
+
+def _validate_publication_requirements(run_root: Path, selected_files: list[Path]) -> None:
+    """Validate bundle completeness requirements for publication-critical runs."""
+    selected_set = {path.as_posix() for path in selected_files}
+    campaign_manifest = run_root / "campaign_manifest.json"
+    if not campaign_manifest.exists():
+        return
+    missing = [path for path in _CAMPAIGN_PREFLIGHT_REQUIRED if path not in selected_set]
+    if missing:
+        raise ValueError(
+            "Publication bundle missing required preflight artifacts: " + ", ".join(sorted(missing))
+        )
 
 
 def _validate_bundle_name(bundle_name: str) -> None:
@@ -391,6 +421,7 @@ def export_publication_bundle(
     selected_files = list_publication_files(run_root, include_videos=include_videos)
     if not selected_files:
         raise ValueError(f"No eligible files found under {run_root}")
+    _validate_publication_requirements(run_root, selected_files)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)

@@ -239,6 +239,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
+    assert (campaign_root / "preflight" / "validate_config.json").exists()
+    assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
     assert "Readiness & Degraded/Fallback Status" in report_text
     assert "fallback" in report_text
@@ -246,6 +248,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
+    run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
+    assert "seed_policy" in run_meta
+    assert "resolved_seeds" in run_meta["seed_policy"]
+    assert run_meta["preflight_artifacts"]["validate_config"].endswith(
+        "preflight/validate_config.json"
+    )
     assert result["publication_bundle"] is not None
 
 

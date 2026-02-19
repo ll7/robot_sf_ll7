@@ -182,6 +182,11 @@ Each episode record is schema-validated against
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
   adapter markers for compatibility interpretation
+* `preflight.learned_policy_contract` for learned planners (currently PPO), including:
+  * contract schema (allowed observation/action modes)
+  * observed runtime config values
+  * `status` (`pass|warn|fail|not_applicable`)
+  * explicit mismatch/warning lists for auditability
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
   for threshold provenance and reproducibility
 * Git/config hashes for reproducibility

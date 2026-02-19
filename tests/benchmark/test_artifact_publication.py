@@ -179,3 +179,57 @@ def test_export_bundle_matrix_path_is_repo_relative_from_any_cwd(
     )
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["provenance"]["matrix_path"] == matrix_path
+
+
+def test_export_camera_campaign_bundle_requires_preflight_artifacts(tmp_path: Path) -> None:
+    """Camera-ready bundle export must fail when required preflight files are missing."""
+    run_dir = tmp_path / "benchmarks" / "camera_campaign_missing_preflight"
+    _make_run(run_dir, with_video=False)
+    _write(run_dir / "campaign_manifest.json", json.dumps({"schema_version": "camera-ready"}))
+
+    with pytest.raises(ValueError, match="missing required preflight artifacts"):
+        export_publication_bundle(
+            run_dir,
+            tmp_path / "publication",
+            bundle_name="missing_preflight_bundle",
+            include_videos=False,
+        )
+
+
+def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: Path) -> None:
+    """Camera-ready bundle manifest should carry preflight paths and seed policy provenance."""
+    run_dir = tmp_path / "benchmarks" / "camera_campaign_ok"
+    _make_run(run_dir, with_video=False)
+    _write(run_dir / "campaign_manifest.json", json.dumps({"schema_version": "camera-ready"}))
+    _write(run_dir / "preflight" / "validate_config.json", "{}")
+    _write(run_dir / "preflight" / "preview_scenarios.json", "{}")
+    _write(
+        run_dir / "run_meta.json",
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "matrix_path": "configs/scenarios/classic_interactions.yaml",
+                "seed_policy": {
+                    "mode": "fixed-list",
+                    "seeds": [1, 2],
+                    "resolved_seeds": [1, 2],
+                },
+                "preflight_artifacts": {
+                    "validate_config": "preflight/validate_config.json",
+                    "preview_scenarios": "preflight/preview_scenarios.json",
+                },
+            }
+        ),
+    )
+
+    result = export_publication_bundle(
+        run_dir,
+        tmp_path / "publication",
+        bundle_name="camera_campaign_bundle",
+        include_videos=False,
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["provenance"]
+    assert provenance["seed_policy"]["mode"] == "fixed-list"
+    assert provenance["seed_policy"]["resolved_seeds"] == [1, 2]
+    assert provenance["preflight_artifacts"]["validate_config"] == "preflight/validate_config.json"

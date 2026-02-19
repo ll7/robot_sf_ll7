@@ -56,6 +56,9 @@ Expected tree:
   campaign_manifest.json
   manifest.json
   run_meta.json
+  preflight/
+    validate_config.json
+    preview_scenarios.json
   runs/
     <planner_key>/
       episodes.jsonl
@@ -94,6 +97,8 @@ Captured fields include:
 - campaign wallclock start/end (`started_at_utc`, `finished_at_utc`)
 - campaign runtime and throughput (`runtime_sec`, `episodes_per_second`)
 - per-planner start/end/runtime/throughput in run entries and planner summaries
+- seed-policy provenance (`mode`, configured seeds, resolved seed list)
+- preflight artifact paths (`validate_config`, `preview_scenarios`)
 
 Primary locations:
 
@@ -117,6 +122,10 @@ Primary locations:
   - `finished_at_utc`
   - `runtime_sec`
   - `episodes_per_second`
+  - `seed_policy.*`
+  - `preflight_artifacts.*`
+- `output/benchmarks/camera_ready/<campaign_id>/preflight/validate_config.json`
+- `output/benchmarks/camera_ready/<campaign_id>/preflight/preview_scenarios.json`
 - `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
   - command in header
   - per-planner timing columns in the summary table

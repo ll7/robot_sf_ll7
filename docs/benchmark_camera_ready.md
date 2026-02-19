@@ -37,6 +37,8 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
   - baseline-ready planners on full scenario suite
 - `configs/benchmarks/camera_ready_all_planners.yaml`
   - baseline + experimental planners on full scenario suite
+- `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
+  - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
 
 SNQI calibration assets used by camera-ready presets:
 
@@ -187,6 +189,14 @@ Experimental planners are executed with explicit profile and prereq policy from
 the campaign config. For dependency-sensitive planners (for example SocNav
 adapters), set `socnav_missing_prereq_policy: fallback` when you want campaign
 execution to continue with degraded behavior instead of hard-fail.
+
+Decision rule for publication:
+
+- Use strict profile/config when you need publication claims without degraded
+  fallback behavior.
+- Use fallback profile/config for diagnostics/exploration only, and always cite
+  `preflight_status` plus the report disclosure section
+  `SocNav Strict-vs-Fallback Disclosure`.
 
 ## Current Validation Snapshot
 

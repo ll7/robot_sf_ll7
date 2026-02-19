@@ -243,11 +243,13 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
     assert "Readiness & Degraded/Fallback Status" in report_text
+    assert "SocNav Strict-vs-Fallback Disclosure" in report_text
     assert "fallback" in report_text
     assert "learned contract" in report_text
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
+    assert "socnav_prereq_policy" in table_md
     run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
     assert "seed_policy" in run_meta
     assert "resolved_seeds" in run_meta["seed_policy"]

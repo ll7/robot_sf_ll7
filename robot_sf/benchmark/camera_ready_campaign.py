@@ -574,6 +574,7 @@ def _planner_report_row(
         "readiness_status": readiness_status,
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
+        "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
         "learned_policy_contract_status": contract_status,
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
@@ -702,7 +703,35 @@ def _build_breakdown_rows(  # noqa: C901
     return scenario_rows, family_rows
 
 
-def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa: C901
+def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
+    """Build strict-vs-fallback comparison summaries when both modes are present.
+
+    Returns:
+        Human-readable comparison lines.
+    """
+    by_algo: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        algo = str(row.get("algo", "unknown"))
+        by_algo.setdefault(algo, []).append(row)
+
+    lines: list[str] = []
+    for algo, algo_rows in sorted(by_algo.items()):
+        strict = [row for row in algo_rows if str(row.get("socnav_prereq_policy")) == "fail-fast"]
+        fallback = [row for row in algo_rows if str(row.get("socnav_prereq_policy")) == "fallback"]
+        if not strict or not fallback:
+            continue
+        strict_best = strict[0]
+        fallback_best = fallback[0]
+        lines.append(
+            f"`{algo}`: strict preflight={strict_best.get('preflight_status')}, "
+            f"fallback preflight={fallback_best.get('preflight_status')}, "
+            f"strict success={strict_best.get('success_mean')}, "
+            f"fallback success={fallback_best.get('success_mean')}"
+        )
+    return lines
+
+
+def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Write a human-readable campaign report in Markdown."""
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
@@ -772,6 +801,29 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
     else:
         lines.append("")
         lines.append("- No fallback/degraded planners detected.")
+
+    lines.extend(["", "## SocNav Strict-vs-Fallback Disclosure", ""])
+    if rows:
+        lines.append("| planner | algo | prereq policy | preflight status | readiness status |")
+        lines.append("|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{row.get('planner_key')} | {row.get('algo')} | "
+                f"{row.get('socnav_prereq_policy')} | {row.get('preflight_status')} | "
+                f"{row.get('readiness_status')} |"
+            )
+        comparisons = _strict_vs_fallback_comparisons(rows)
+        if comparisons:
+            lines.append("")
+            lines.append("Strict-vs-fallback comparisons (where both modes are present):")
+            for line in comparisons:
+                lines.append(f"- {line}")
+        else:
+            lines.append("")
+            lines.append(
+                "- No within-campaign strict-vs-fallback pair available for direct comparison."
+            )
 
     scenario_path = (payload.get("artifacts") or {}).get("scenario_breakdown_csv")
     family_path = (payload.get("artifacts") or {}).get("scenario_family_breakdown_csv")
@@ -1065,6 +1117,7 @@ def run_campaign(  # noqa: PLR0915
             "readiness_tier",
             "preflight_status",
             "learned_policy_contract_status",
+            "socnav_prereq_policy",
             "status",
             "episodes",
             "success_mean",

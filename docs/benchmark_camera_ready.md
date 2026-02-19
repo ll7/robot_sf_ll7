@@ -149,6 +149,8 @@ repository-relative for publication-grade portability).
 `campaign_table.csv` and `campaign_table.md` include at least:
 
 - planner key and algorithm
+- execution mode and readiness status (`native` / `adapter` / `fallback` / `degraded`)
+- readiness tier and preflight status
 - episode count and failure count
 - success/collision/near-miss means
 - time-to-goal normalization mean
@@ -156,6 +158,19 @@ repository-relative for publication-grade portability).
 - comfort exposure mean
 - jerk mean
 - SNQI mean and CI fields (if available)
+
+Portability guarantee:
+
+- Episode `scenario_params.map_file` is normalized to repository-relative paths
+  when the map resides in the repository tree (for example
+  `maps/svg_maps/classic_crossing.svg`).
+
+Additional diagnostics generated per campaign:
+
+- `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
+  - per-planner, per-scenario metric means
+- `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
+  - per-planner, per-family (archetype) metric means
 
 ## Notes on Experimental Planners
 

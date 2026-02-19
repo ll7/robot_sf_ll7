@@ -209,15 +209,24 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     scenario_dicts = [dict(scenario) for scenario in scenarios]
     matrix_root = cfg.scenario_matrix_path.parent
     normalized: list[dict[str, Any]] = []
+    repo_root = get_repository_root().resolve()
     for scenario in scenario_dicts:
         patched = dict(scenario)
         map_file = patched.get("map_file")
         if isinstance(map_file, str):
             map_path = Path(map_file)
-            if not map_path.is_absolute():
+            if map_path.is_absolute():
+                try:
+                    patched["map_file"] = map_path.resolve().relative_to(repo_root).as_posix()
+                except ValueError:
+                    patched["map_file"] = map_path.resolve().as_posix()
+            else:
                 candidate = (matrix_root / map_path).resolve()
                 if candidate.exists():
-                    patched["map_file"] = candidate.as_posix()
+                    try:
+                        patched["map_file"] = candidate.relative_to(repo_root).as_posix()
+                    except ValueError:
+                        patched["map_file"] = map_path.as_posix()
         normalized.append(patched)
 
     scenario_dicts = normalized
@@ -446,21 +455,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
-def _write_markdown_table(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write the main camera-ready comparison table in Markdown format."""
-    headers = (
-        "planner_key",
-        "algo",
-        "episodes",
-        "success_mean",
-        "collision_mean",
-        "near_miss_mean",
-        "time_to_goal_norm_mean",
-        "path_efficiency_mean",
-        "comfort_exposure_mean",
-        "jerk_mean",
-        "snqi_mean",
-    )
+def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
+    """Write a table in Markdown format using explicit header order."""
     lines = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join("---" for _ in headers) + "|",
@@ -504,10 +500,25 @@ def _planner_report_row(
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
+    execution_mode = str(
+        (summary.get("algorithm_metadata_contract") or {}).get("execution_mode")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else "unknown"
+    )
+    preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
+    status = str(summary.get("status", "unknown"))
+    readiness_status = "native"
+    if preflight_status == "fallback":
+        readiness_status = "fallback"
+    elif preflight_status == "skipped" or status == "failed":
+        readiness_status = "degraded"
+    elif execution_mode in {"adapter", "mixed"}:
+        readiness_status = "adapter"
+
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
-        "status": str(summary.get("status", "unknown")),
+        "status": status,
         "episodes": int(summary.get("written", 0)),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
         "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
@@ -528,13 +539,136 @@ def _planner_report_row(
         "collision_ci_high": _safe_float(collision_ci[1]),
         "snqi_ci_low": _safe_float(snqi_ci[0]),
         "snqi_ci_high": _safe_float(snqi_ci[1]),
+        "execution_mode": execution_mode,
+        "readiness_status": readiness_status,
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
-        "preflight_status": str((summary.get("preflight") or {}).get("status", "unknown")),
+        "preflight_status": preflight_status,
     }
     return row
 
 
-def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
+def _scenario_family(record: dict[str, Any]) -> str:
+    """Resolve scenario-family/archetype label from episode record metadata.
+
+    Returns:
+        Best-effort scenario family label.
+    """
+    scenario_params = record.get("scenario_params")
+    if not isinstance(scenario_params, dict):
+        scenario_params = {}
+    metadata = scenario_params.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    for key in ("archetype", "scenario_family", "family"):
+        value = metadata.get(key) or scenario_params.get(key) or record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    scenario_id = record.get("scenario_id")
+    if isinstance(scenario_id, str) and scenario_id.strip():
+        return scenario_id.split("_", 1)[0]
+    return "unknown"
+
+
+def _build_breakdown_rows(  # noqa: C901
+    run_entries: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build per-scenario and per-family campaign diagnostic rows.
+
+    Returns:
+        Tuple of per-scenario rows and per-family rows.
+    """
+    per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
+        if value is None:
+            return
+        bucket.setdefault(metric, []).append(value)
+
+    def _mean(values: list[float]) -> str:
+        if not values:
+            return "nan"
+        return _safe_float(float(sum(values) / len(values)))
+
+    for entry in run_entries:
+        planner = entry.get("planner") if isinstance(entry.get("planner"), dict) else {}
+        planner_key = str(planner.get("key", "unknown"))
+        algo = str(planner.get("algo", "unknown"))
+        episodes_path = entry.get("episodes_path")
+        if not isinstance(episodes_path, str):
+            continue
+        candidate = get_repository_root() / episodes_path
+        if not candidate.exists():
+            continue
+        for record in read_jsonl(str(candidate)):
+            if not isinstance(record, dict):
+                continue
+            scenario_id = str(record.get("scenario_id", "unknown"))
+            family = _scenario_family(record)
+            metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+            scenario_key = (planner_key, algo, scenario_id, family)
+            family_key = (planner_key, algo, family)
+
+            scenario_bucket = per_scenario.setdefault(
+                scenario_key,
+                {
+                    "planner_key": planner_key,
+                    "algo": algo,
+                    "scenario_id": scenario_id,
+                    "scenario_family": family,
+                    "episodes": 0,
+                },
+            )
+            family_bucket = per_family.setdefault(
+                family_key,
+                {
+                    "planner_key": planner_key,
+                    "algo": algo,
+                    "scenario_family": family,
+                    "episodes": 0,
+                },
+            )
+            scenario_bucket["episodes"] += 1
+            family_bucket["episodes"] += 1
+            for metric in _REPORT_METRICS:
+                raw = metrics.get(metric)
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None and not math.isfinite(value):
+                    value = None
+                _add_metric(scenario_bucket, metric, value)
+                _add_metric(family_bucket, metric, value)
+
+    def _finalize(row: dict[str, Any]) -> dict[str, Any]:
+        finalized = dict(row)
+        for metric in _REPORT_METRICS:
+            values = finalized.pop(metric, [])
+            if not isinstance(values, list):
+                values = []
+            finalized[f"{metric}_mean"] = _mean(values)
+        return finalized
+
+    scenario_rows = sorted(
+        (_finalize(row) for row in per_scenario.values()),
+        key=lambda row: (
+            row.get("planner_key", ""),
+            row.get("scenario_id", ""),
+            row.get("scenario_family", ""),
+        ),
+    )
+    family_rows = sorted(
+        (_finalize(row) for row in per_family.values()),
+        key=lambda row: (
+            row.get("planner_key", ""),
+            row.get("scenario_family", ""),
+        ),
+    )
+    return scenario_rows, family_rows
+
+
+def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa: C901
     """Write a human-readable campaign report in Markdown."""
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
@@ -576,6 +710,43 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
         lines.append("No planner rows were produced.")
 
     lines.extend(["", "## Notes", ""])
+    fallback_rows = [
+        row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
+    ]
+    lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
+    if rows:
+        lines.append(
+            "| planner | execution mode | readiness status | tier | preflight | run status |"
+        )
+        lines.append("|---|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{row.get('planner_key')} | {row.get('execution_mode')} | "
+                f"{row.get('readiness_status')} | {row.get('readiness_tier')} | "
+                f"{row.get('preflight_status')} | {row.get('status')} |"
+            )
+    if fallback_rows:
+        lines.append("")
+        lines.append("Planners in fallback/degraded mode:")
+        for row in fallback_rows:
+            lines.append(
+                f"- `{row.get('planner_key')}`: readiness={row.get('readiness_status')}, "
+                f"preflight={row.get('preflight_status')}, tier={row.get('readiness_tier')}"
+            )
+    else:
+        lines.append("")
+        lines.append("- No fallback/degraded planners detected.")
+
+    scenario_path = (payload.get("artifacts") or {}).get("scenario_breakdown_csv")
+    family_path = (payload.get("artifacts") or {}).get("scenario_family_breakdown_csv")
+    if isinstance(scenario_path, str) or isinstance(family_path, str):
+        lines.extend(["", "## Scenario Diagnostics", ""])
+        if isinstance(scenario_path, str):
+            lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
+        if isinstance(family_path, str):
+            lines.append(f"- Per-family breakdown: `{family_path}`")
+
     if warnings:
         for warning in warnings:
             lines.append(f"- {warning}")
@@ -805,11 +976,76 @@ def run_campaign(  # noqa: PLR0915
 
     csv_path = reports_dir / "campaign_table.csv"
     md_table_path = reports_dir / "campaign_table.md"
+    scenario_csv_path = reports_dir / "scenario_breakdown.csv"
+    scenario_md_path = reports_dir / "scenario_breakdown.md"
+    family_csv_path = reports_dir / "scenario_family_breakdown.csv"
+    family_md_path = reports_dir / "scenario_family_breakdown.md"
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
 
     _write_csv(csv_path, planner_rows)
-    _write_markdown_table(md_table_path, planner_rows)
+    _write_markdown_table(
+        md_table_path,
+        planner_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "execution_mode",
+            "readiness_status",
+            "readiness_tier",
+            "preflight_status",
+            "status",
+            "episodes",
+            "success_mean",
+            "collision_mean",
+            "near_miss_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
+    scenario_rows, family_rows = _build_breakdown_rows(run_entries)
+    _write_csv(scenario_csv_path, scenario_rows)
+    _write_markdown_table(
+        scenario_md_path,
+        scenario_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "scenario_id",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "near_misses_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
+    _write_csv(family_csv_path, family_rows)
+    _write_markdown_table(
+        family_md_path,
+        family_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "near_misses_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
 
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
@@ -844,6 +1080,10 @@ def run_campaign(  # noqa: PLR0915
             "campaign_summary_json": _repo_relative(summary_json_path),
             "campaign_table_csv": _repo_relative(csv_path),
             "campaign_table_md": _repo_relative(md_table_path),
+            "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
+            "scenario_breakdown_md": _repo_relative(scenario_md_path),
+            "scenario_family_breakdown_csv": _repo_relative(family_csv_path),
+            "scenario_family_breakdown_md": _repo_relative(family_md_path),
             "campaign_report_md": _repo_relative(report_md_path),
         },
     }

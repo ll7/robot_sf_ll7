@@ -1,0 +1,6 @@
+# Predictive planner hard-case campaign seeds (v1)
+# Derived from repeated failures observed across full classic evaluations.
+classic_crossing_high: [101, 102, 103]
+classic_crossing_medium: [102, 103]
+classic_crossing_low: [102]
+classic_group_crossing_high: [171]

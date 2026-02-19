@@ -255,5 +255,5 @@ def build_reward_function(
         return partial(snqi_step_reward, **kwargs)
     if normalized in {"alyassi", "alyassi_reward", "alyassi_composite"}:
         return partial(alyassi_reward, **kwargs)
-    supported = ("simple", "punish_action", "snqi_step", "alyassi")
+    supported = ("simple", "punish_action", "snqi_step", "alyassi", "alyassi_composite")
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")

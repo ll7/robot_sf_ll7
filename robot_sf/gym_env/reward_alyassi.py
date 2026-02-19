@@ -33,6 +33,7 @@ class AlyassiRewardWeights:
     w_exploration: float = 0.05
     w_task_specific: float = 0.2
     w_demo_learning: float = 0.2
+    w_weight_learning: float = 0.0
 
 
 ALYASSI_COMPONENT_CITATIONS: dict[str, tuple[str, ...]] = {
@@ -188,7 +189,10 @@ def _efficiency_component(
     if speed is None:
         return value
 
-    s = float(speed)
+    try:
+        s = float(speed)
+    except (TypeError, ValueError):
+        return value
     value += 1.0 - abs(s - speed_target) / max(speed_target, 1e-6)
     return value
 
@@ -288,6 +292,15 @@ def _demo_learning_component(meta: Mapping[str, object]) -> float:
     return _f(meta, "demonstration_similarity", 0.0)
 
 
+def _weight_learning_component(meta: Mapping[str, object]) -> float:
+    """Optional reward-weight adaptation quality signal.
+
+    Returns:
+        Weight-learning component score.
+    """
+    return _f(meta, "weight_learning_score", 0.0)
+
+
 def alyassi_component_scores(
     meta: Mapping[str, object],
     *,
@@ -313,6 +326,7 @@ def alyassi_component_scores(
         "exploration": _exploration_component(meta),
         "task_specific": _task_specific_component(meta),
         "demo_learning": _demo_learning_component(meta),
+        "weight_learning": _weight_learning_component(meta),
     }
 
 
@@ -349,6 +363,7 @@ def alyassi_reward(
         + weights.w_exploration * components["exploration"]
         + weights.w_task_specific * components["task_specific"]
         + weights.w_demo_learning * components["demo_learning"]
+        + weights.w_weight_learning * components["weight_learning"]
     )
     return float(total)
 

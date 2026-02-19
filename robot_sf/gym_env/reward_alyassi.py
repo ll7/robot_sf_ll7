@@ -296,7 +296,11 @@ def _task_specific_component(meta: Mapping[str, object]) -> float:
     companion_err = meta.get("companion_distance_error")
     if companion_err is None:
         return custom
-    return custom - abs(_f(meta, "companion_distance_error", 0.0))
+    try:
+        companion_err_value = float(companion_err)
+    except (TypeError, ValueError):
+        companion_err_value = 0.0
+    return custom - abs(companion_err_value)
 
 
 def _demo_learning_component(meta: Mapping[str, object]) -> float:

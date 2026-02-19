@@ -8,6 +8,7 @@ from pathlib import Path
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
+    _load_campaign_scenarios,
     load_campaign_config,
     run_campaign,
 )
@@ -61,7 +62,7 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert list(cfg.seed_policy.seeds) == [101]
 
 
-def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
+def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915
     """Campaign runner should emit summary artifacts and publication metadata."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()
@@ -77,6 +78,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
             [
                 "name: test_campaign_runner",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
+                "paper_interpretation_profile: baseline-ready-core",
+                "preview_scenario_limit: 0",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -105,9 +108,13 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
         benchmark_profile,
         **kwargs,
     ):
-        _ = scenarios_or_path
+        scenarios = list(scenarios_or_path) if isinstance(scenarios_or_path, list) else []
         _ = schema_path
         _ = kwargs
+        if scenarios:
+            map_file = scenarios[0].get("map_file")
+            if isinstance(map_file, str):
+                assert not Path(map_file).is_absolute()
         out_file = Path(out_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
         records = [
@@ -115,7 +122,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
                 "episode_id": f"e-{algo}-0",
                 "scenario_id": "mock",
                 "seed": 111,
-                "scenario_params": {"algo": algo},
+                "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
                 "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
                 "algorithm_metadata": {"algorithm": algo, "status": "ok"},
             },
@@ -134,7 +141,18 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
                 "tier": "experimental" if benchmark_profile == "experimental" else "baseline-ready",
                 "profile": benchmark_profile,
             },
-            "preflight": {"status": "ok"},
+            "preflight": {
+                "status": "fallback" if algo == "ppo" else "ok",
+                "learned_policy_contract": (
+                    {
+                        "status": "warn",
+                        "critical_mismatches": ["obs_mode=image mismatch"],
+                        "warnings": [],
+                    }
+                    if algo == "ppo"
+                    else {"status": "not_applicable"}
+                ),
+            },
         }
 
     def _fake_compute_aggregates_with_ci(
@@ -218,7 +236,43 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):
     assert (campaign_root / "reports" / "campaign_summary.json").exists()
     assert (campaign_root / "reports" / "campaign_table.csv").exists()
     assert (campaign_root / "reports" / "campaign_table.md").exists()
+    assert (campaign_root / "reports" / "campaign_table_core.csv").exists()
+    assert (campaign_root / "reports" / "campaign_table_core.md").exists()
+    assert (campaign_root / "reports" / "campaign_table_experimental.csv").exists()
+    assert (campaign_root / "reports" / "campaign_table_experimental.md").exists()
+    assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
+    assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
+    assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
+    assert (campaign_root / "reports" / "scenario_family_breakdown.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
+    assert (campaign_root / "preflight" / "validate_config.json").exists()
+    assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
+    preview_payload = json.loads(
+        (campaign_root / "preflight" / "preview_scenarios.json").read_text(encoding="utf-8")
+    )
+    assert preview_payload["truncated"] is True
+    assert preview_payload["total_scenarios"] == 1
+    assert preview_payload["preview_limit"] == 0
+    assert preview_payload["scenarios"] == []
+    report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
+    assert "Readiness & Degraded/Fallback Status" in report_text
+    assert "SocNav Strict-vs-Fallback Disclosure" in report_text
+    assert "fallback" in report_text
+    assert "learned contract" in report_text
+    table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
+    assert "readiness_status" in table_md
+    assert "learned_policy_contract_status" in table_md
+    assert "socnav_prereq_policy" in table_md
+    run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
+    assert "seed_policy" in run_meta
+    assert "resolved_seeds" in run_meta["seed_policy"]
+    assert run_meta["preflight_artifacts"]["validate_config"].endswith(
+        "preflight/validate_config.json"
+    )
+    summary_payload = json.loads(
+        (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
     assert result["publication_bundle"] is not None
 
 
@@ -257,3 +311,34 @@ def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
     assert (
         cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
     )
+
+
+def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp_path: Path):
+    """Scenario map paths under repository root should normalize to repo-relative form."""
+    repo_root = get_repository_root().resolve()
+    abs_map = (repo_root / "maps" / "svg_maps" / "classic_crossing.svg").resolve()
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        f"- name: smoke\n  map_file: {abs_map.as_posix()}\n  seeds: [1]\n",
+        encoding="utf-8",
+    )
+    campaign_path = tmp_path / "campaign.yaml"
+    campaign_path.write_text(
+        "\n".join(
+            [
+                "name: map_path_norm",
+                f"scenario_matrix: {matrix_path.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(campaign_path)
+    scenarios = _load_campaign_scenarios(cfg)
+    assert scenarios
+    map_file = scenarios[0].get("map_file")
+    assert isinstance(map_file, str)
+    assert map_file == "maps/svg_maps/classic_crossing.svg"

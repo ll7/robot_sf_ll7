@@ -100,6 +100,8 @@ class CampaignConfig:
     repository_url: str = "https://github.com/ll7/robot_sf_ll7"
     release_tag: str = "{release_tag}"
     doi: str = "10.5281/zenodo.<record-id>"
+    paper_interpretation_profile: str = "baseline-ready-core"
+    preview_scenario_limit: int = 100
 
 
 def _repo_relative(path: Path) -> str:
@@ -209,15 +211,24 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     scenario_dicts = [dict(scenario) for scenario in scenarios]
     matrix_root = cfg.scenario_matrix_path.parent
     normalized: list[dict[str, Any]] = []
+    repo_root = get_repository_root().resolve()
     for scenario in scenario_dicts:
         patched = dict(scenario)
         map_file = patched.get("map_file")
         if isinstance(map_file, str):
             map_path = Path(map_file)
-            if not map_path.is_absolute():
+            if map_path.is_absolute():
+                try:
+                    patched["map_file"] = map_path.resolve().relative_to(repo_root).as_posix()
+                except ValueError:
+                    patched["map_file"] = map_path.resolve().as_posix()
+            else:
                 candidate = (matrix_root / map_path).resolve()
                 if candidate.exists():
-                    patched["map_file"] = candidate.as_posix()
+                    try:
+                        patched["map_file"] = candidate.relative_to(repo_root).as_posix()
+                    except ValueError:
+                        patched["map_file"] = candidate.as_posix()
         normalized.append(patched)
 
     scenario_dicts = normalized
@@ -231,6 +242,25 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
         patched["seeds"] = list(seeds_override)
         seeded.append(patched)
     return seeded
+
+
+def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
+    """Return sorted unique seed values actually present in campaign scenarios.
+
+    Returns:
+        Sorted list of unique integer seeds.
+    """
+    seeds: set[int] = set()
+    for scenario in scenarios:
+        scenario_seeds = scenario.get("seeds")
+        if not isinstance(scenario_seeds, list):
+            continue
+        for value in scenario_seeds:
+            try:
+                seeds.add(int(value))
+            except (TypeError, ValueError):
+                continue
+    return sorted(seeds)
 
 
 def _metric_mean(block: dict[str, Any], metric: str) -> float:
@@ -437,6 +467,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         repository_url=str(payload.get("repository_url", "https://github.com/ll7/robot_sf_ll7")),
         release_tag=str(payload.get("release_tag", "{release_tag}")),
         doi=str(payload.get("doi", "10.5281/zenodo.<record-id>")),
+        paper_interpretation_profile=str(
+            payload.get("paper_interpretation_profile", "baseline-ready-core")
+        ),
+        preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
     )
 
 
@@ -446,21 +480,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
-def _write_markdown_table(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write the main camera-ready comparison table in Markdown format."""
-    headers = (
-        "planner_key",
-        "algo",
-        "episodes",
-        "success_mean",
-        "collision_mean",
-        "near_miss_mean",
-        "time_to_goal_norm_mean",
-        "path_efficiency_mean",
-        "comfort_exposure_mean",
-        "jerk_mean",
-        "snqi_mean",
-    )
+def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
+    """Write a table in Markdown format using explicit header order."""
     lines = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join("---" for _ in headers) + "|",
@@ -484,6 +505,26 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow(row)
 
 
+def _write_table_artifacts(
+    reports_dir: Path,
+    base_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    headers: tuple[str, ...],
+) -> tuple[Path, Path]:
+    """Write CSV and Markdown table artifacts for one table dataset.
+
+    Returns:
+        Tuple of generated ``(csv_path, markdown_path)``.
+    """
+    csv_path = reports_dir / f"{base_name}.csv"
+    md_path = reports_dir / f"{base_name}.md"
+    csv_rows = [{key: row.get(key, "") for key in headers} for row in rows]
+    _write_csv(csv_path, csv_rows)
+    _write_markdown_table(md_path, rows, headers=headers)
+    return csv_path, md_path
+
+
 def _planner_report_row(
     planner: PlannerSpec,
     summary: dict[str, Any],
@@ -504,10 +545,37 @@ def _planner_report_row(
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
+    execution_mode = str(
+        ((summary.get("algorithm_metadata_contract") or {}).get("execution_mode") or "unknown")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else "unknown"
+    )
+    preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
+    learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
+    contract_status = "not_applicable"
+    contract_critical = 0
+    contract_warnings = 0
+    if isinstance(learned_policy_contract, dict):
+        contract_status = str(learned_policy_contract.get("status", "not_applicable"))
+        critical_list = learned_policy_contract.get("critical_mismatches")
+        warning_list = learned_policy_contract.get("warnings")
+        if isinstance(critical_list, list):
+            contract_critical = len(critical_list)
+        if isinstance(warning_list, list):
+            contract_warnings = len(warning_list)
+    status = str(summary.get("status", "unknown"))
+    readiness_status = "native"
+    if preflight_status == "fallback":
+        readiness_status = "fallback"
+    elif preflight_status == "skipped" or status == "failed":
+        readiness_status = "degraded"
+    elif execution_mode in {"adapter", "mixed"}:
+        readiness_status = "adapter"
+
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
-        "status": str(summary.get("status", "unknown")),
+        "status": status,
         "episodes": int(summary.get("written", 0)),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
         "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
@@ -515,8 +583,8 @@ def _planner_report_row(
         "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
         "failed_jobs": int(summary.get("failed_jobs", 0)),
         "success_mean": _safe_float(_metric_mean(metric_block, "success")),
-        "collision_mean": _safe_float(_metric_mean(metric_block, "collisions")),
-        "near_miss_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
+        "collisions_mean": _safe_float(_metric_mean(metric_block, "collisions")),
+        "near_misses_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
         "time_to_goal_norm_mean": _safe_float(_metric_mean(metric_block, "time_to_goal_norm")),
         "path_efficiency_mean": _safe_float(_metric_mean(metric_block, "path_efficiency")),
         "comfort_exposure_mean": _safe_float(_metric_mean(metric_block, "comfort_exposure")),
@@ -528,13 +596,169 @@ def _planner_report_row(
         "collision_ci_high": _safe_float(collision_ci[1]),
         "snqi_ci_low": _safe_float(snqi_ci[0]),
         "snqi_ci_high": _safe_float(snqi_ci[1]),
+        "execution_mode": execution_mode,
+        "readiness_status": readiness_status,
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
-        "preflight_status": str((summary.get("preflight") or {}).get("status", "unknown")),
+        "preflight_status": preflight_status,
+        "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
+        "learned_policy_contract_status": contract_status,
+        "learned_policy_contract_critical": contract_critical,
+        "learned_policy_contract_warnings": contract_warnings,
     }
     return row
 
 
-def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
+def _scenario_family(record: dict[str, Any]) -> str:
+    """Resolve scenario-family/archetype label from episode record metadata.
+
+    Returns:
+        Best-effort scenario family label.
+    """
+    scenario_params = record.get("scenario_params")
+    if not isinstance(scenario_params, dict):
+        scenario_params = {}
+    metadata = scenario_params.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    for key in ("archetype", "scenario_family", "family"):
+        value = metadata.get(key) or scenario_params.get(key) or record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    scenario_id = record.get("scenario_id")
+    if isinstance(scenario_id, str) and scenario_id.strip():
+        return scenario_id.split("_", 1)[0]
+    return "unknown"
+
+
+def _build_breakdown_rows(  # noqa: C901
+    run_entries: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build per-scenario and per-family campaign diagnostic rows.
+
+    Returns:
+        Tuple of per-scenario rows and per-family rows.
+    """
+    per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
+        if value is None:
+            return
+        bucket.setdefault(metric, []).append(value)
+
+    def _mean(values: list[float]) -> str:
+        # Return a display-formatted value via _safe_float for table rendering.
+        if not values:
+            return "nan"
+        return _safe_float(float(sum(values) / len(values)))
+
+    for entry in run_entries:
+        planner = entry.get("planner") if isinstance(entry.get("planner"), dict) else {}
+        planner_key = str(planner.get("key", "unknown"))
+        algo = str(planner.get("algo", "unknown"))
+        episodes_path = entry.get("episodes_path")
+        if not isinstance(episodes_path, str):
+            continue
+        candidate = get_repository_root() / episodes_path
+        if not candidate.exists():
+            continue
+        for record in read_jsonl(str(candidate)):
+            if not isinstance(record, dict):
+                continue
+            scenario_id = str(record.get("scenario_id", "unknown"))
+            family = _scenario_family(record)
+            metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+            scenario_key = (planner_key, algo, scenario_id, family)
+            family_key = (planner_key, algo, family)
+
+            scenario_bucket = per_scenario.setdefault(
+                scenario_key,
+                {
+                    "planner_key": planner_key,
+                    "algo": algo,
+                    "scenario_id": scenario_id,
+                    "scenario_family": family,
+                    "episodes": 0,
+                },
+            )
+            family_bucket = per_family.setdefault(
+                family_key,
+                {
+                    "planner_key": planner_key,
+                    "algo": algo,
+                    "scenario_family": family,
+                    "episodes": 0,
+                },
+            )
+            scenario_bucket["episodes"] += 1
+            family_bucket["episodes"] += 1
+            for metric in _REPORT_METRICS:
+                raw = metrics.get(metric)
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None and not math.isfinite(value):
+                    value = None
+                _add_metric(scenario_bucket, metric, value)
+                _add_metric(family_bucket, metric, value)
+
+    def _finalize(row: dict[str, Any]) -> dict[str, Any]:
+        finalized = dict(row)
+        for metric in _REPORT_METRICS:
+            values = finalized.pop(metric, [])
+            if not isinstance(values, list):
+                values = []
+            finalized[f"{metric}_mean"] = _mean(values)
+        return finalized
+
+    scenario_rows = sorted(
+        (_finalize(row) for row in per_scenario.values()),
+        key=lambda row: (
+            row.get("planner_key", ""),
+            row.get("scenario_id", ""),
+            row.get("scenario_family", ""),
+        ),
+    )
+    family_rows = sorted(
+        (_finalize(row) for row in per_family.values()),
+        key=lambda row: (
+            row.get("planner_key", ""),
+            row.get("scenario_family", ""),
+        ),
+    )
+    return scenario_rows, family_rows
+
+
+def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
+    """Build strict-vs-fallback comparison summaries when both modes are present.
+
+    Returns:
+        Human-readable comparison lines.
+    """
+    by_algo: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        algo = str(row.get("algo", "unknown"))
+        by_algo.setdefault(algo, []).append(row)
+
+    lines: list[str] = []
+    for algo, algo_rows in sorted(by_algo.items()):
+        strict = [row for row in algo_rows if str(row.get("socnav_prereq_policy")) == "fail-fast"]
+        fallback = [row for row in algo_rows if str(row.get("socnav_prereq_policy")) == "fallback"]
+        if not strict or not fallback:
+            continue
+        strict_row = strict[0]
+        fallback_row = fallback[0]
+        lines.append(
+            f"`{algo}`: strict preflight={strict_row.get('preflight_status')}, "
+            f"fallback preflight={fallback_row.get('preflight_status')}, "
+            f"strict success={strict_row.get('success_mean')}, "
+            f"fallback success={fallback_row.get('success_mean')}"
+        )
+    return lines
+
+
+def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Write a human-readable campaign report in Markdown."""
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
@@ -551,6 +775,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
         f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
         f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
         f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+        f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
         f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
         "",
         "## Planner Summary",
@@ -570,12 +795,72 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
                 f"{row.get('planner_key')} | {row.get('algo')} | {row.get('status')} | "
                 f"{row.get('started_at_utc')} | {row.get('runtime_sec')} | {row.get('episodes')} | "
                 f"{row.get('episodes_per_second')} | {row.get('success_mean')} | "
-                f"{row.get('collision_mean')} | {row.get('snqi_mean')} |",
+                f"{row.get('collisions_mean')} | {row.get('snqi_mean')} |",
             )
     else:
         lines.append("No planner rows were produced.")
+    fallback_rows = [
+        row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
+    ]
+    lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
+    if rows:
+        lines.append(
+            "| planner | execution mode | readiness status | tier | preflight | learned contract | run status |"
+        )
+        lines.append("|---|---|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{row.get('planner_key')} | {row.get('execution_mode')} | "
+                f"{row.get('readiness_status')} | {row.get('readiness_tier')} | "
+                f"{row.get('preflight_status')} | {row.get('learned_policy_contract_status')} | "
+                f"{row.get('status')} |"
+            )
+    if fallback_rows:
+        lines.append("")
+        lines.append("Planners in fallback/degraded mode:")
+        for row in fallback_rows:
+            lines.append(
+                f"- `{row.get('planner_key')}`: readiness={row.get('readiness_status')}, "
+                f"preflight={row.get('preflight_status')}, tier={row.get('readiness_tier')}"
+            )
+    else:
+        lines.append("")
+        lines.append("- No fallback/degraded planners detected.")
 
-    lines.extend(["", "## Notes", ""])
+    lines.extend(["", "## SocNav Strict-vs-Fallback Disclosure", ""])
+    if rows:
+        lines.append("| planner | algo | prereq policy | preflight status | readiness status |")
+        lines.append("|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{row.get('planner_key')} | {row.get('algo')} | "
+                f"{row.get('socnav_prereq_policy')} | {row.get('preflight_status')} | "
+                f"{row.get('readiness_status')} |"
+            )
+        comparisons = _strict_vs_fallback_comparisons(rows)
+        if comparisons:
+            lines.append("")
+            lines.append("Strict-vs-fallback comparisons (where both modes are present):")
+            for line in comparisons:
+                lines.append(f"- {line}")
+        else:
+            lines.append("")
+            lines.append(
+                "- No within-campaign strict-vs-fallback pair available for direct comparison."
+            )
+
+    scenario_path = (payload.get("artifacts") or {}).get("scenario_breakdown_csv")
+    family_path = (payload.get("artifacts") or {}).get("scenario_family_breakdown_csv")
+    if isinstance(scenario_path, str) or isinstance(family_path, str):
+        lines.extend(["", "## Scenario Diagnostics", ""])
+        if isinstance(scenario_path, str):
+            lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
+        if isinstance(family_path, str):
+            lines.append(f"- Per-family breakdown: `{family_path}`")
+
+    lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
         for warning in warnings:
             lines.append(f"- {warning}")
@@ -599,7 +884,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_campaign(  # noqa: PLR0915
+def run_campaign(  # noqa: C901, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -627,14 +912,64 @@ def run_campaign(  # noqa: PLR0915
     campaign_root = (base_dir / campaign_id).resolve()
     runs_dir = campaign_root / "runs"
     reports_dir = campaign_root / "reports"
+    preflight_dir = campaign_root / "preflight"
     runs_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
+    preflight_dir.mkdir(parents=True, exist_ok=True)
 
     campaign_started_at_utc = _utc_now()
     start = time.perf_counter()
     scenarios = _load_campaign_scenarios(cfg)
+    resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     git_meta = _git_context()
+    validate_config_path = preflight_dir / "validate_config.json"
+    preview_scenarios_path = preflight_dir / "preview_scenarios.json"
+
+    validate_payload = {
+        "schema_version": "benchmark-preflight-validate-config.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": campaign_started_at_utc,
+        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "scenario_count": len(scenarios),
+        "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
+        "workers": cfg.workers,
+        "horizon": cfg.horizon,
+        "dt": cfg.dt,
+        "resume": cfg.resume,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+    }
+    preview_limit = max(0, int(cfg.preview_scenario_limit))
+    preview_payload = {
+        "schema_version": "benchmark-preflight-preview-scenarios.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": campaign_started_at_utc,
+        "scenario_count": len(scenarios),
+        "preview_limit": preview_limit,
+    }
+    if len(scenarios) > preview_limit:
+        preview_payload["truncated"] = True
+        preview_payload["total_scenarios"] = len(scenarios)
+        preview_payload["scenarios"] = [
+            {
+                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
+                "map_file": scenario.get("map_file"),
+                "seeds": scenario.get("seeds"),
+                "metadata": scenario.get("metadata"),
+            }
+            for scenario in scenarios[:preview_limit]
+        ]
+    else:
+        preview_payload["truncated"] = False
+        preview_payload["scenarios"] = scenarios
+    _write_json(validate_config_path, validate_payload)
+    _write_json(preview_scenarios_path, preview_payload)
 
     manifest_payload: dict[str, Any] = {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
@@ -648,6 +983,7 @@ def run_campaign(  # noqa: PLR0915
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,
             "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
         "git": git_meta,
@@ -803,13 +1139,108 @@ def run_campaign(  # noqa: PLR0915
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
     )
 
-    csv_path = reports_dir / "campaign_table.csv"
-    md_table_path = reports_dir / "campaign_table.md"
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
 
-    _write_csv(csv_path, planner_rows)
-    _write_markdown_table(md_table_path, planner_rows)
+    csv_path, md_table_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table",
+        planner_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "execution_mode",
+            "readiness_status",
+            "readiness_tier",
+            "preflight_status",
+            "learned_policy_contract_status",
+            "socnav_prereq_policy",
+            "status",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "near_misses_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
+    core_rows = [row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"]
+    experimental_rows = [
+        row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
+    ]
+    core_csv_path, core_md_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table_core",
+        core_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "readiness_tier",
+            "status",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "snqi_mean",
+        ),
+    )
+    experimental_csv_path, experimental_md_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table_experimental",
+        experimental_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "readiness_tier",
+            "status",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "snqi_mean",
+        ),
+    )
+    scenario_rows, family_rows = _build_breakdown_rows(run_entries)
+    scenario_csv_path, scenario_md_path = _write_table_artifacts(
+        reports_dir,
+        "scenario_breakdown",
+        scenario_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "scenario_id",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "near_misses_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
+    family_csv_path, family_md_path = _write_table_artifacts(
+        reports_dir,
+        "scenario_family_breakdown",
+        family_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "episodes",
+            "success_mean",
+            "collisions_mean",
+            "near_misses_mean",
+            "time_to_goal_norm_mean",
+            "path_efficiency_mean",
+            "comfort_exposure_mean",
+            "jerk_mean",
+            "snqi_mean",
+        ),
+    )
 
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
@@ -835,6 +1266,7 @@ def run_campaign(  # noqa: PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "paper_interpretation_profile": cfg.paper_interpretation_profile,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -844,6 +1276,16 @@ def run_campaign(  # noqa: PLR0915
             "campaign_summary_json": _repo_relative(summary_json_path),
             "campaign_table_csv": _repo_relative(csv_path),
             "campaign_table_md": _repo_relative(md_table_path),
+            "campaign_table_core_csv": _repo_relative(core_csv_path),
+            "campaign_table_core_md": _repo_relative(core_md_path),
+            "campaign_table_experimental_csv": _repo_relative(experimental_csv_path),
+            "campaign_table_experimental_md": _repo_relative(experimental_md_path),
+            "preflight_validate_config": _repo_relative(validate_config_path),
+            "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
+            "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
+            "scenario_breakdown_md": _repo_relative(scenario_md_path),
+            "scenario_family_breakdown_csv": _repo_relative(family_csv_path),
+            "scenario_family_breakdown_md": _repo_relative(family_md_path),
             "campaign_report_md": _repo_relative(report_md_path),
         },
     }
@@ -887,6 +1329,17 @@ def run_campaign(  # noqa: PLR0915
         },
         "matrix_path": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+        "preflight_artifacts": {
+            "validate_config": _repo_relative(validate_config_path),
+            "preview_scenarios": _repo_relative(preview_scenarios_path),
+        },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
         "finished_at_utc": campaign_finished_at_utc,

@@ -332,6 +332,7 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     cfg, preflight = _preflight_policy(
         algo="goal",
         algo_config={"max_speed": 1.0},
+        benchmark_profile="baseline-safe",
         missing_prereq_policy="fail-fast",
         robot_kinematics="bicycle_drive",
     )

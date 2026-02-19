@@ -1,4 +1,4 @@
-name: camera_ready_all_planners
+name: camera_ready_all_planners_strict_socnav
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 
 seed_policy:
@@ -38,7 +38,7 @@ planners:
   - key: orca
     algo: orca
     benchmark_profile: baseline-safe
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   - key: ppo
     algo: ppo
@@ -49,14 +49,14 @@ planners:
   - key: socnav_sampling
     algo: socnav_sampling
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   - key: sacadrl
     algo: sacadrl
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   - key: socnav_bench
     algo: socnav_bench
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast

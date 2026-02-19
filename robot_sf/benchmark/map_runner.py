@@ -254,9 +254,9 @@ def _preflight_policy(  # noqa: C901
         contract_mismatches = learned_contract.get("critical_mismatches")
         details = []
         if isinstance(contract_mismatches, list):
-            details.extend(str(item) for item in contract_mismatches)
+            details.extend(contract_mismatches)
         if isinstance(contract_warnings, list):
-            details.extend(str(item) for item in contract_warnings)
+            details.extend(contract_warnings)
         logger.warning(
             "Learned-policy contract warning for '{}' (profile='{}'): {}",
             algo,

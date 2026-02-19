@@ -184,7 +184,7 @@ Each episode record is schema-validated against
   adapter markers for compatibility interpretation
 * `preflight.learned_policy_contract` for learned planners (currently PPO), including:
   * contract schema (allowed observation/action modes)
-  * observed runtime config values
+  * captured runtime config values
   * `status` (`pass|warn|fail|not_applicable`)
   * explicit mismatch/warning lists for auditability
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`

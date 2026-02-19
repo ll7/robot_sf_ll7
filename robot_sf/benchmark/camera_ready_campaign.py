@@ -227,7 +227,7 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
                     try:
                         patched["map_file"] = candidate.relative_to(repo_root).as_posix()
                     except ValueError:
-                        patched["map_file"] = map_path.as_posix()
+                        patched["map_file"] = candidate.as_posix()
         normalized.append(patched)
 
     scenario_dicts = normalized
@@ -503,6 +503,25 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow(row)
 
 
+def _write_table_artifacts(
+    reports_dir: Path,
+    base_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    headers: tuple[str, ...],
+) -> tuple[Path, Path]:
+    """Write CSV and Markdown table artifacts for one table dataset.
+
+    Returns:
+        Tuple of generated ``(csv_path, markdown_path)``.
+    """
+    csv_path = reports_dir / f"{base_name}.csv"
+    md_path = reports_dir / f"{base_name}.md"
+    _write_csv(csv_path, rows)
+    _write_markdown_table(md_path, rows, headers=headers)
+    return csv_path, md_path
+
+
 def _planner_report_row(
     planner: PlannerSpec,
     summary: dict[str, Any],
@@ -524,7 +543,7 @@ def _planner_report_row(
     snqi_ci = _metric_ci(metric_block, "snqi")
 
     execution_mode = str(
-        (summary.get("algorithm_metadata_contract") or {}).get("execution_mode")
+        (summary.get("algorithm_metadata_contract") or {}).get("execution_mode", "unknown")
         if isinstance(summary.get("algorithm_metadata_contract"), dict)
         else "unknown"
     )
@@ -561,8 +580,8 @@ def _planner_report_row(
         "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
         "failed_jobs": int(summary.get("failed_jobs", 0)),
         "success_mean": _safe_float(_metric_mean(metric_block, "success")),
-        "collision_mean": _safe_float(_metric_mean(metric_block, "collisions")),
-        "near_miss_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
+        "collisions_mean": _safe_float(_metric_mean(metric_block, "collisions")),
+        "near_misses_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
         "time_to_goal_norm_mean": _safe_float(_metric_mean(metric_block, "time_to_goal_norm")),
         "path_efficiency_mean": _safe_float(_metric_mean(metric_block, "path_efficiency")),
         "comfort_exposure_mean": _safe_float(_metric_mean(metric_block, "comfort_exposure")),
@@ -724,13 +743,13 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
         fallback = [row for row in algo_rows if str(row.get("socnav_prereq_policy")) == "fallback"]
         if not strict or not fallback:
             continue
-        strict_best = strict[0]
-        fallback_best = fallback[0]
+        strict_row = strict[0]
+        fallback_row = fallback[0]
         lines.append(
-            f"`{algo}`: strict preflight={strict_best.get('preflight_status')}, "
-            f"fallback preflight={fallback_best.get('preflight_status')}, "
-            f"strict success={strict_best.get('success_mean')}, "
-            f"fallback success={fallback_best.get('success_mean')}"
+            f"`{algo}`: strict preflight={strict_row.get('preflight_status')}, "
+            f"fallback preflight={fallback_row.get('preflight_status')}, "
+            f"strict success={strict_row.get('success_mean')}, "
+            f"fallback success={fallback_row.get('success_mean')}"
         )
     return lines
 
@@ -772,12 +791,10 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
                 f"{row.get('planner_key')} | {row.get('algo')} | {row.get('status')} | "
                 f"{row.get('started_at_utc')} | {row.get('runtime_sec')} | {row.get('episodes')} | "
                 f"{row.get('episodes_per_second')} | {row.get('success_mean')} | "
-                f"{row.get('collision_mean')} | {row.get('snqi_mean')} |",
+                f"{row.get('collisions_mean')} | {row.get('snqi_mean')} |",
             )
     else:
         lines.append("No planner rows were produced.")
-
-    lines.extend(["", "## Notes", ""])
     fallback_rows = [
         row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
     ]
@@ -839,6 +856,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
         if isinstance(family_path, str):
             lines.append(f"- Per-family breakdown: `{family_path}`")
 
+    lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
         for warning in warnings:
             lines.append(f"- {warning}")
@@ -1101,22 +1119,12 @@ def run_campaign(  # noqa: PLR0915
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
     )
 
-    csv_path = reports_dir / "campaign_table.csv"
-    md_table_path = reports_dir / "campaign_table.md"
-    core_csv_path = reports_dir / "campaign_table_core.csv"
-    core_md_path = reports_dir / "campaign_table_core.md"
-    experimental_csv_path = reports_dir / "campaign_table_experimental.csv"
-    experimental_md_path = reports_dir / "campaign_table_experimental.md"
-    scenario_csv_path = reports_dir / "scenario_breakdown.csv"
-    scenario_md_path = reports_dir / "scenario_breakdown.md"
-    family_csv_path = reports_dir / "scenario_family_breakdown.csv"
-    family_md_path = reports_dir / "scenario_family_breakdown.md"
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
 
-    _write_csv(csv_path, planner_rows)
-    _write_markdown_table(
-        md_table_path,
+    csv_path, md_table_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table",
         planner_rows,
         headers=(
             "planner_key",
@@ -1130,8 +1138,8 @@ def run_campaign(  # noqa: PLR0915
             "status",
             "episodes",
             "success_mean",
-            "collision_mean",
-            "near_miss_mean",
+            "collisions_mean",
+            "near_misses_mean",
             "time_to_goal_norm_mean",
             "path_efficiency_mean",
             "comfort_exposure_mean",
@@ -1143,9 +1151,9 @@ def run_campaign(  # noqa: PLR0915
     experimental_rows = [
         row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
     ]
-    _write_csv(core_csv_path, core_rows)
-    _write_markdown_table(
-        core_md_path,
+    core_csv_path, core_md_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table_core",
         core_rows,
         headers=(
             "planner_key",
@@ -1154,13 +1162,13 @@ def run_campaign(  # noqa: PLR0915
             "status",
             "episodes",
             "success_mean",
-            "collision_mean",
+            "collisions_mean",
             "snqi_mean",
         ),
     )
-    _write_csv(experimental_csv_path, experimental_rows)
-    _write_markdown_table(
-        experimental_md_path,
+    experimental_csv_path, experimental_md_path = _write_table_artifacts(
+        reports_dir,
+        "campaign_table_experimental",
         experimental_rows,
         headers=(
             "planner_key",
@@ -1169,14 +1177,14 @@ def run_campaign(  # noqa: PLR0915
             "status",
             "episodes",
             "success_mean",
-            "collision_mean",
+            "collisions_mean",
             "snqi_mean",
         ),
     )
     scenario_rows, family_rows = _build_breakdown_rows(run_entries)
-    _write_csv(scenario_csv_path, scenario_rows)
-    _write_markdown_table(
-        scenario_md_path,
+    scenario_csv_path, scenario_md_path = _write_table_artifacts(
+        reports_dir,
+        "scenario_breakdown",
         scenario_rows,
         headers=(
             "planner_key",
@@ -1194,9 +1202,9 @@ def run_campaign(  # noqa: PLR0915
             "snqi_mean",
         ),
     )
-    _write_csv(family_csv_path, family_rows)
-    _write_markdown_table(
-        family_md_path,
+    family_csv_path, family_md_path = _write_table_artifacts(
+        reports_dir,
+        "scenario_family_breakdown",
         family_rows,
         headers=(
             "planner_key",

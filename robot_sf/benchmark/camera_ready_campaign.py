@@ -101,6 +101,7 @@ class CampaignConfig:
     release_tag: str = "{release_tag}"
     doi: str = "10.5281/zenodo.<record-id>"
     paper_interpretation_profile: str = "baseline-ready-core"
+    preview_scenario_limit: int = 100
 
 
 def _repo_relative(path: Path) -> str:
@@ -469,6 +470,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         paper_interpretation_profile=str(
             payload.get("paper_interpretation_profile", "baseline-ready-core")
         ),
+        preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
     )
 
 
@@ -517,7 +519,8 @@ def _write_table_artifacts(
     """
     csv_path = reports_dir / f"{base_name}.csv"
     md_path = reports_dir / f"{base_name}.md"
-    _write_csv(csv_path, rows)
+    csv_rows = [{key: row.get(key, "") for key in headers} for row in rows]
+    _write_csv(csv_path, csv_rows)
     _write_markdown_table(md_path, rows, headers=headers)
     return csv_path, md_path
 
@@ -543,7 +546,7 @@ def _planner_report_row(
     snqi_ci = _metric_ci(metric_block, "snqi")
 
     execution_mode = str(
-        (summary.get("algorithm_metadata_contract") or {}).get("execution_mode", "unknown")
+        ((summary.get("algorithm_metadata_contract") or {}).get("execution_mode") or "unknown")
         if isinstance(summary.get("algorithm_metadata_contract"), dict)
         else "unknown"
     )
@@ -644,6 +647,7 @@ def _build_breakdown_rows(  # noqa: C901
         bucket.setdefault(metric, []).append(value)
 
     def _mean(values: list[float]) -> str:
+        # Return a display-formatted value via _safe_float for table rendering.
         if not values:
             return "nan"
         return _safe_float(float(sum(values) / len(values)))
@@ -880,7 +884,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_campaign(  # noqa: PLR0915
+def run_campaign(  # noqa: C901, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -941,13 +945,29 @@ def run_campaign(  # noqa: PLR0915
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
     }
+    preview_limit = max(0, int(cfg.preview_scenario_limit))
     preview_payload = {
         "schema_version": "benchmark-preflight-preview-scenarios.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": campaign_started_at_utc,
         "scenario_count": len(scenarios),
-        "scenarios": scenarios,
+        "preview_limit": preview_limit,
     }
+    if len(scenarios) > preview_limit:
+        preview_payload["truncated"] = True
+        preview_payload["total_scenarios"] = len(scenarios)
+        preview_payload["scenarios"] = [
+            {
+                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
+                "map_file": scenario.get("map_file"),
+                "seeds": scenario.get("seeds"),
+                "metadata": scenario.get("metadata"),
+            }
+            for scenario in scenarios[:preview_limit]
+        ]
+    else:
+        preview_payload["truncated"] = False
+        preview_payload["scenarios"] = scenarios
     _write_json(validate_config_path, validate_payload)
     _write_json(preview_scenarios_path, preview_payload)
 

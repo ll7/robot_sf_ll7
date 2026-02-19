@@ -182,14 +182,17 @@ Each episode record is schema-validated against
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
   adapter markers for compatibility interpretation
+* `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
+  for threshold provenance and reproducibility
+* Git/config hashes for reproducibility
+
+Batch/campaign-level metadata returned by `run_map_batch` (not individual
+records from `_run_map_episode`) includes:
 * `preflight.learned_policy_contract` for learned planners (currently PPO), including:
   * contract schema (allowed observation/action modes)
   * captured runtime config values
   * `status` (`pass|warn|fail|not_applicable`)
   * explicit mismatch/warning lists for auditability
-* `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
-  for threshold provenance and reproducibility
-* Git/config hashes for reproducibility
 
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.

@@ -79,6 +79,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 "name: test_campaign_runner",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "paper_interpretation_profile: baseline-ready-core",
+                "preview_scenario_limit: 0",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -246,6 +247,13 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "campaign_report.md").exists()
     assert (campaign_root / "preflight" / "validate_config.json").exists()
     assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
+    preview_payload = json.loads(
+        (campaign_root / "preflight" / "preview_scenarios.json").read_text(encoding="utf-8")
+    )
+    assert preview_payload["truncated"] is True
+    assert preview_payload["total_scenarios"] == 1
+    assert preview_payload["preview_limit"] == 0
+    assert preview_payload["scenarios"] == []
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
     assert "Readiness & Degraded/Fallback Status" in report_text
     assert "SocNav Strict-vs-Fallback Disclosure" in report_text

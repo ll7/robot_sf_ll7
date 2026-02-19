@@ -68,6 +68,10 @@ _PPO_PAPER_REQUIRED_PROVENANCE = (
     "deterministic_seed_set",
 )
 _DEFAULT_KINEMATICS = "differential_drive"
+_STRICT_LEARNED_POLICY_PROFILES = {"baseline-safe", "paper-baseline"}
+_PPO_ALLOWED_OBS_MODES = {"vector", "dict", "native_dict", "multi_input"}
+_PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
+_PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -120,10 +124,81 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
+def _evaluate_learned_policy_contract(
+    *,
+    algo: str,
+    algo_config: dict[str, Any],
+    benchmark_profile: str,
+    robot_kinematics: str | None = None,
+) -> dict[str, Any]:
+    """Evaluate learned-policy compatibility against a benchmark contract schema.
+
+    Returns:
+        Contract evaluation payload with schema, observed fields, and status.
+    """
+    algo_key = algo.strip().lower()
+    if algo_key != "ppo":
+        return {"status": "not_applicable"}
+
+    obs_mode = str(algo_config.get("obs_mode", "vector")).strip().lower()
+    action_space = str(algo_config.get("action_space", "velocity")).strip().lower()
+    kinematics = str(robot_kinematics or _DEFAULT_KINEMATICS).strip().lower()
+
+    critical_mismatches: list[str] = []
+    warnings: list[str] = []
+    if obs_mode == "image":
+        critical_mismatches.append(
+            "obs_mode=image is incompatible with map-runner preflight contract "
+            "(expected vector/dict-style inputs).",
+        )
+    elif obs_mode not in _PPO_ALLOWED_OBS_MODES:
+        critical_mismatches.append(
+            f"Unsupported obs_mode='{obs_mode}'. Allowed: {sorted(_PPO_ALLOWED_OBS_MODES)}.",
+        )
+
+    if action_space not in _PPO_ALLOWED_ACTION_SPACES:
+        critical_mismatches.append(
+            f"Unsupported action_space='{action_space}'. "
+            f"Allowed: {sorted(_PPO_ALLOWED_ACTION_SPACES)}.",
+        )
+
+    if kinematics in _PPO_WARN_ROBOT_KINEMATICS:
+        warnings.append(
+            f"robot_kinematics='{kinematics}' may require stronger calibration for PPO "
+            "adapter conversion.",
+        )
+
+    strict_profile = benchmark_profile.strip().lower() in _STRICT_LEARNED_POLICY_PROFILES
+    status = "pass"
+    if critical_mismatches:
+        status = "fail" if strict_profile else "warn"
+    elif warnings:
+        status = "warn"
+
+    return {
+        "status": status,
+        "schema": {
+            "algorithm": "ppo",
+            "observation_modes": sorted(_PPO_ALLOWED_OBS_MODES),
+            "action_spaces": sorted(_PPO_ALLOWED_ACTION_SPACES),
+            "strict_profiles": sorted(_STRICT_LEARNED_POLICY_PROFILES),
+        },
+        "observed": {
+            "obs_mode": obs_mode,
+            "action_space": action_space,
+            "robot_kinematics": kinematics,
+            "benchmark_profile": benchmark_profile,
+        },
+        "critical_mismatches": critical_mismatches,
+        "warnings": warnings,
+    }
+
+
 def _preflight_policy(  # noqa: C901
     *,
     algo: str,
     algo_config: dict[str, Any],
+    benchmark_profile: str,
     missing_prereq_policy: str,
     robot_kinematics: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -161,9 +236,37 @@ def _preflight_policy(  # noqa: C901
         if callable(planner_close):
             planner_close()
 
+    learned_contract = _evaluate_learned_policy_contract(
+        algo=algo,
+        algo_config=algo_config,
+        benchmark_profile=benchmark_profile,
+        robot_kinematics=robot_kinematics,
+    )
+    contract_status = str(learned_contract.get("status", "not_applicable"))
+    if contract_status == "fail":
+        mismatches = learned_contract.get("critical_mismatches", [])
+        detail = ", ".join(mismatches) if isinstance(mismatches, list) else "unknown mismatch"
+        raise ValueError(
+            f"Learned-policy compatibility contract failed for '{algo}': {detail}",
+        )
+    if contract_status == "warn":
+        contract_warnings = learned_contract.get("warnings")
+        contract_mismatches = learned_contract.get("critical_mismatches")
+        details = []
+        if isinstance(contract_mismatches, list):
+            details.extend(str(item) for item in contract_mismatches)
+        if isinstance(contract_warnings, list):
+            details.extend(str(item) for item in contract_warnings)
+        logger.warning(
+            "Learned-policy contract warning for '{}' (profile='{}'): {}",
+            algo,
+            benchmark_profile,
+            "; ".join(details) if details else "contract warning",
+        )
+
     try:
         _build_and_close(algo_config)
-        return dict(algo_config), {"status": "ok"}
+        return dict(algo_config), {"status": "ok", "learned_policy_contract": learned_contract}
     except Exception as exc:
         if not _is_socnav_algorithm(algo):
             raise
@@ -173,7 +276,12 @@ def _preflight_policy(  # noqa: C901
         )
         if policy == "skip-with-warning":
             logger.warning("{}", message)
-            return dict(algo_config), {"status": "skipped", "error": str(exc), "policy": policy}
+            return dict(algo_config), {
+                "status": "skipped",
+                "error": str(exc),
+                "policy": policy,
+                "learned_policy_contract": learned_contract,
+            }
         if policy == "fallback":
             fallback_cfg = dict(algo_config)
             fallback_cfg["allow_fallback"] = True
@@ -187,6 +295,7 @@ def _preflight_policy(  # noqa: C901
                     "status": "fallback",
                     "error": str(exc),
                     "policy": policy,
+                    "learned_policy_contract": learned_contract,
                 }
             except Exception as fallback_exc:
                 raise RuntimeError(
@@ -1060,6 +1169,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     policy_cfg, preflight = _preflight_policy(
         algo=algo,
         algo_config=policy_cfg,
+        benchmark_profile=benchmark_profile,
         missing_prereq_policy=socnav_missing_prereq_policy,
         robot_kinematics=kinematics_tag,
     )

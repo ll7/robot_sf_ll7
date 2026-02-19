@@ -139,7 +139,18 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 "tier": "experimental" if benchmark_profile == "experimental" else "baseline-ready",
                 "profile": benchmark_profile,
             },
-            "preflight": {"status": "fallback" if algo == "ppo" else "ok"},
+            "preflight": {
+                "status": "fallback" if algo == "ppo" else "ok",
+                "learned_policy_contract": (
+                    {
+                        "status": "warn",
+                        "critical_mismatches": ["obs_mode=image mismatch"],
+                        "warnings": [],
+                    }
+                    if algo == "ppo"
+                    else {"status": "not_applicable"}
+                ),
+            },
         }
 
     def _fake_compute_aggregates_with_ci(
@@ -231,8 +242,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
     assert "Readiness & Degraded/Fallback Status" in report_text
     assert "fallback" in report_text
+    assert "learned contract" in report_text
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
     assert "readiness_status" in table_md
+    assert "learned_policy_contract_status" in table_md
     assert result["publication_bundle"] is not None
 
 

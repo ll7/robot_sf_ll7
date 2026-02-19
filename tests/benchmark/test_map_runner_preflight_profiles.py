@@ -251,3 +251,89 @@ def test_adapter_impact_summary_finalizes_from_worker_records(
     assert impact.get("native_steps") == 3
     assert impact.get("adapted_steps") == 2
     assert impact.get("adapter_fraction") == pytest.approx(0.4)
+
+
+def test_ppo_contract_strict_profile_fails_on_incompatible_obs_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Strict benchmark profiles should fail on incompatible learned-policy contracts."""
+    _patch_lightweight_batch(monkeypatch)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
+    algo_cfg_path = tmp_path / "ppo_contract_fail.yaml"
+    algo_cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "obs_mode": "image",
+                "action_space": "velocity",
+                "profile": "paper",
+                "provenance": {
+                    "training_config": "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml",
+                    "training_commit": "abc123def",
+                    "dataset_version": "v1",
+                    "checkpoint_id": "ppo-paper-001",
+                    "normalization_id": "norm-v1",
+                    "deterministic_seed_set": "eval",
+                },
+                "quality_gate": {
+                    "min_success_rate": 0.60,
+                    "measured_success_rate": 0.75,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Learned-policy compatibility contract failed"):
+        map_runner.run_map_batch(
+            [_scenario()],
+            tmp_path / "episodes.jsonl",
+            schema_path=SCHEMA_PATH,
+            algo="ppo",
+            benchmark_profile="paper-baseline",
+            algo_config_path=str(algo_cfg_path),
+            resume=False,
+        )
+
+
+def test_ppo_contract_experimental_warns_on_incompatible_obs_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Experimental profile should keep running while surfacing contract warnings."""
+    _patch_lightweight_batch(monkeypatch)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
+    algo_cfg_path = tmp_path / "ppo_contract_warn.yaml"
+    algo_cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "obs_mode": "image",
+                "action_space": "velocity",
+                "profile": "experimental",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="ppo",
+        benchmark_profile="experimental",
+        algo_config_path=str(algo_cfg_path),
+        resume=False,
+    )
+
+    contract = summary["preflight"].get("learned_policy_contract")
+    assert isinstance(contract, dict)
+    assert contract.get("status") == "warn"
+    assert contract.get("critical_mismatches")

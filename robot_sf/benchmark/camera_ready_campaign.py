@@ -506,6 +506,18 @@ def _planner_report_row(
         else "unknown"
     )
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
+    learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
+    contract_status = "not_applicable"
+    contract_critical = 0
+    contract_warnings = 0
+    if isinstance(learned_policy_contract, dict):
+        contract_status = str(learned_policy_contract.get("status", "not_applicable"))
+        critical_list = learned_policy_contract.get("critical_mismatches")
+        warning_list = learned_policy_contract.get("warnings")
+        if isinstance(critical_list, list):
+            contract_critical = len(critical_list)
+        if isinstance(warning_list, list):
+            contract_warnings = len(warning_list)
     status = str(summary.get("status", "unknown"))
     readiness_status = "native"
     if preflight_status == "fallback":
@@ -543,6 +555,9 @@ def _planner_report_row(
         "readiness_status": readiness_status,
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
+        "learned_policy_contract_status": contract_status,
+        "learned_policy_contract_critical": contract_critical,
+        "learned_policy_contract_warnings": contract_warnings,
     }
     return row
 
@@ -716,15 +731,16 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
     lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
     if rows:
         lines.append(
-            "| planner | execution mode | readiness status | tier | preflight | run status |"
+            "| planner | execution mode | readiness status | tier | preflight | learned contract | run status |"
         )
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|")
         for row in rows:
             lines.append(
                 "| "
                 f"{row.get('planner_key')} | {row.get('execution_mode')} | "
                 f"{row.get('readiness_status')} | {row.get('readiness_tier')} | "
-                f"{row.get('preflight_status')} | {row.get('status')} |"
+                f"{row.get('preflight_status')} | {row.get('learned_policy_contract_status')} | "
+                f"{row.get('status')} |"
             )
     if fallback_rows:
         lines.append("")
@@ -994,6 +1010,7 @@ def run_campaign(  # noqa: PLR0915
             "readiness_status",
             "readiness_tier",
             "preflight_status",
+            "learned_policy_contract_status",
             "status",
             "episodes",
             "success_mean",

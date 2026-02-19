@@ -78,6 +78,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
             [
                 "name: test_campaign_runner",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
+                "paper_interpretation_profile: baseline-ready-core",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -234,6 +235,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "campaign_summary.json").exists()
     assert (campaign_root / "reports" / "campaign_table.csv").exists()
     assert (campaign_root / "reports" / "campaign_table.md").exists()
+    assert (campaign_root / "reports" / "campaign_table_core.csv").exists()
+    assert (campaign_root / "reports" / "campaign_table_core.md").exists()
+    assert (campaign_root / "reports" / "campaign_table_experimental.csv").exists()
+    assert (campaign_root / "reports" / "campaign_table_experimental.md").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
@@ -256,6 +261,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert run_meta["preflight_artifacts"]["validate_config"].endswith(
         "preflight/validate_config.json"
     )
+    summary_payload = json.loads(
+        (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
     assert result["publication_bundle"] is not None
 
 

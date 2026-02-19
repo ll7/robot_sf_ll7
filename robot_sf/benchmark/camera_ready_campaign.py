@@ -100,6 +100,7 @@ class CampaignConfig:
     repository_url: str = "https://github.com/ll7/robot_sf_ll7"
     release_tag: str = "{release_tag}"
     doi: str = "10.5281/zenodo.<record-id>"
+    paper_interpretation_profile: str = "baseline-ready-core"
 
 
 def _repo_relative(path: Path) -> str:
@@ -465,6 +466,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         repository_url=str(payload.get("repository_url", "https://github.com/ll7/robot_sf_ll7")),
         release_tag=str(payload.get("release_tag", "{release_tag}")),
         doi=str(payload.get("doi", "10.5281/zenodo.<record-id>")),
+        paper_interpretation_profile=str(
+            payload.get("paper_interpretation_profile", "baseline-ready-core")
+        ),
     )
 
 
@@ -748,6 +752,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
         f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
         f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
         f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+        f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
         f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
         "",
         "## Planner Summary",
@@ -1098,6 +1103,10 @@ def run_campaign(  # noqa: PLR0915
 
     csv_path = reports_dir / "campaign_table.csv"
     md_table_path = reports_dir / "campaign_table.md"
+    core_csv_path = reports_dir / "campaign_table_core.csv"
+    core_md_path = reports_dir / "campaign_table_core.md"
+    experimental_csv_path = reports_dir / "campaign_table_experimental.csv"
+    experimental_md_path = reports_dir / "campaign_table_experimental.md"
     scenario_csv_path = reports_dir / "scenario_breakdown.csv"
     scenario_md_path = reports_dir / "scenario_breakdown.md"
     family_csv_path = reports_dir / "scenario_family_breakdown.csv"
@@ -1127,6 +1136,40 @@ def run_campaign(  # noqa: PLR0915
             "path_efficiency_mean",
             "comfort_exposure_mean",
             "jerk_mean",
+            "snqi_mean",
+        ),
+    )
+    core_rows = [row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"]
+    experimental_rows = [
+        row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
+    ]
+    _write_csv(core_csv_path, core_rows)
+    _write_markdown_table(
+        core_md_path,
+        core_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "readiness_tier",
+            "status",
+            "episodes",
+            "success_mean",
+            "collision_mean",
+            "snqi_mean",
+        ),
+    )
+    _write_csv(experimental_csv_path, experimental_rows)
+    _write_markdown_table(
+        experimental_md_path,
+        experimental_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "readiness_tier",
+            "status",
+            "episodes",
+            "success_mean",
+            "collision_mean",
             "snqi_mean",
         ),
     )
@@ -1195,6 +1238,7 @@ def run_campaign(  # noqa: PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "paper_interpretation_profile": cfg.paper_interpretation_profile,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -1204,6 +1248,10 @@ def run_campaign(  # noqa: PLR0915
             "campaign_summary_json": _repo_relative(summary_json_path),
             "campaign_table_csv": _repo_relative(csv_path),
             "campaign_table_md": _repo_relative(md_table_path),
+            "campaign_table_core_csv": _repo_relative(core_csv_path),
+            "campaign_table_core_md": _repo_relative(core_md_path),
+            "campaign_table_experimental_csv": _repo_relative(experimental_csv_path),
+            "campaign_table_experimental_md": _repo_relative(experimental_md_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),

@@ -31,6 +31,9 @@ class PlannerDiagnostics:
     absolute_map_path_count: int
     runtime_sec: float
     episodes_per_second: float
+    wall_time_mean_sec: float
+    wall_time_p95_sec: float
+    slowest_scenarios: list[dict[str, Any]]
     findings: list[str]
 
 
@@ -79,6 +82,16 @@ def _mean(values: list[float]) -> float:
     if not values:
         return 0.0
     return float(sum(values) / len(values))
+
+
+def _percentile(values: list[float], q: float) -> float:
+    """Return quantile in [0, 1] with deterministic nearest-rank interpolation."""
+    if not values:
+        return 0.0
+    q_clamped = min(1.0, max(0.0, float(q)))
+    ordered = sorted(values)
+    rank = round((len(ordered) - 1) * q_clamped)
+    return float(ordered[rank])
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -151,7 +164,7 @@ def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
     raise ValueError(f"Unsafe relative episodes_path: {raw_path}")
 
 
-def _analyze_planner(
+def _analyze_planner(  # noqa: C901
     run_entry: dict[str, Any],
     row_entry: dict[str, Any] | None,
     campaign_root: Path,
@@ -206,6 +219,32 @@ def _analyze_planner(
             ),
         ).is_absolute()
     )
+    wall_times = [
+        float(entry.get("wall_time_sec", 0.0) or 0.0)
+        for entry in episodes
+        if _safe_float(entry.get("wall_time_sec")) is not None
+    ]
+    wall_time_mean_sec = _mean(wall_times)
+    wall_time_p95_sec = _percentile(wall_times, 0.95)
+    per_scenario_wall_times: dict[str, list[float]] = {}
+    for entry in episodes:
+        scenario_id = str(entry.get("scenario_id", "unknown"))
+        wall_time = _safe_float(entry.get("wall_time_sec"))
+        if wall_time is None:
+            continue
+        per_scenario_wall_times.setdefault(scenario_id, []).append(float(wall_time))
+    slowest_scenarios: list[dict[str, Any]] = []
+    for scenario_id, values in per_scenario_wall_times.items():
+        slowest_scenarios.append(
+            {
+                "scenario_id": scenario_id,
+                "episodes": len(values),
+                "mean_wall_time_sec": _mean(values),
+                "p95_wall_time_sec": _percentile(values, 0.95),
+            }
+        )
+    slowest_scenarios.sort(key=lambda item: float(item["mean_wall_time_sec"]), reverse=True)
+    slowest_scenarios = slowest_scenarios[:5]
 
     findings: list[str] = []
     if episodes_n != summary_written:
@@ -264,6 +303,9 @@ def _analyze_planner(
         absolute_map_path_count=absolute_map_path_count,
         runtime_sec=runtime_sec,
         episodes_per_second=eps_per_sec,
+        wall_time_mean_sec=wall_time_mean_sec,
+        wall_time_p95_sec=wall_time_p95_sec,
+        slowest_scenarios=slowest_scenarios,
         findings=findings,
     )
 
@@ -271,6 +313,7 @@ def _analyze_planner(
 def _build_markdown_report(payload: dict[str, Any]) -> str:
     campaign = payload.get("campaign", {})
     planners = payload.get("planners", [])
+    runtime_hotspots = payload.get("runtime_hotspots", {})
     findings = payload.get("findings", [])
     lines = [
         "# Camera-Ready Campaign Analysis",
@@ -298,6 +341,34 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
             f"{planner.get('absolute_map_path_count', 0)} | "
             f"{planner.get('runtime_sec'):.4f} | {planner.get('episodes_per_second'):.4f} |"
         )
+
+    lines.extend(["", "## Runtime Hotspots", ""])
+    slowest_planners = runtime_hotspots.get("slowest_planners", [])
+    if isinstance(slowest_planners, list) and slowest_planners:
+        lines.append("| planner | runtime(s) | wall_time_mean(s) | wall_time_p95(s) |")
+        lines.append("|---|---:|---:|---:|")
+        for item in slowest_planners:
+            lines.append(
+                "| "
+                f"{item.get('planner_key')} | {float(item.get('runtime_sec', 0.0)):.4f} | "
+                f"{float(item.get('wall_time_mean_sec', 0.0)):.4f} | "
+                f"{float(item.get('wall_time_p95_sec', 0.0)):.4f} |"
+            )
+        lines.append("")
+        for item in slowest_planners:
+            top_scenarios = item.get("top_scenarios", [])
+            if not top_scenarios:
+                continue
+            lines.append(f"- `{item.get('planner_key')}` top slow scenarios:")
+            for scenario in top_scenarios:
+                lines.append(
+                    "  - "
+                    f"`{scenario.get('scenario_id')}` mean={float(scenario.get('mean_wall_time_sec', 0.0)):.4f}s "
+                    f"p95={float(scenario.get('p95_wall_time_sec', 0.0)):.4f}s "
+                    f"(episodes={int(scenario.get('episodes', 0))})"
+                )
+    else:
+        lines.append("- No runtime hotspot data available.")
 
     lines.extend(["", "## Findings", ""])
     if findings:
@@ -343,6 +414,20 @@ def analyze_campaign(
     diagnostics_payload = [diag.__dict__ for diag in diagnostics]
     diagnostics_payload.sort(key=lambda item: str(item.get("planner_key", "")))
     findings.sort()
+    slowest_planners = []
+    for item in sorted(
+        diagnostics_payload, key=lambda x: float(x.get("runtime_sec", 0.0)), reverse=True
+    ):
+        slowest_planners.append(
+            {
+                "planner_key": item.get("planner_key"),
+                "runtime_sec": float(item.get("runtime_sec", 0.0)),
+                "wall_time_mean_sec": float(item.get("wall_time_mean_sec", 0.0)),
+                "wall_time_p95_sec": float(item.get("wall_time_p95_sec", 0.0)),
+                "top_scenarios": list(item.get("slowest_scenarios", []))[:3],
+            }
+        )
+    slowest_planners = slowest_planners[:3]
 
     return {
         "campaign": {
@@ -353,6 +438,9 @@ def analyze_campaign(
             "summary_json": str(summary_path),
         },
         "planners": diagnostics_payload,
+        "runtime_hotspots": {
+            "slowest_planners": slowest_planners,
+        },
         "findings": findings,
     }
 

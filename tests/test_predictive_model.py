@@ -1,11 +1,14 @@
 """Unit tests for predictive planner trajectory model."""
 
+from dataclasses import asdict
+
 import torch
 
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
     PredictiveTrajectoryModel,
     compute_ade_fde,
+    load_predictive_checkpoint,
     masked_trajectory_loss,
 )
 
@@ -43,3 +46,27 @@ def test_compute_ade_fde_zero_on_exact_match() -> None:
     ade, fde = compute_ade_fde(pred, target, mask)
     assert ade == 0.0
     assert fde == 0.0
+
+
+def test_load_predictive_checkpoint_ignores_unexpected_aux_head_keys(tmp_path) -> None:
+    """Checkpoint loading should ignore extra auxiliary-head keys and keep core model valid."""
+    cfg = PredictiveModelConfig(
+        max_agents=6, horizon_steps=5, hidden_dim=32, message_passing_steps=1
+    )
+    model = PredictiveTrajectoryModel(cfg)
+    payload = {
+        "config": asdict(cfg),
+        "state_dict": dict(model.state_dict()),
+    }
+    payload["state_dict"]["value_head.0.weight"] = torch.randn(8, cfg.hidden_dim)
+    payload["state_dict"]["value_head.0.bias"] = torch.randn(8)
+
+    checkpoint = tmp_path / "predictive_model_aux.pt"
+    torch.save(payload, checkpoint)
+
+    loaded, _ = load_predictive_checkpoint(checkpoint)
+
+    state = torch.randn(2, cfg.max_agents, 4)
+    mask = torch.ones(2, cfg.max_agents)
+    out = loaded(state, mask)
+    assert out["future_positions"].shape == (2, cfg.max_agents, cfg.horizon_steps, 2)

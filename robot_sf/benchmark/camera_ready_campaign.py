@@ -1132,7 +1132,21 @@ def run_campaign(  # noqa: C901, PLR0915
             },
         )
 
-        if status == "failed" and cfg.stop_on_failure:
+        if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
+            logger.warning(
+                "Campaign stop_on_failure triggered: planner key={} status={} (halting remaining planners).",
+                planner.key,
+                status,
+            )
+            if status == "partial-failure":
+                warnings.append(
+                    (
+                        "Campaign halted early: planner "
+                        f"'{planner.key}' had partial failures "
+                        f"({int(summary.get('failed_jobs', 0))} failed jobs); "
+                        "stop_on_failure=true"
+                    ),
+                )
             break
 
     planner_rows.sort(

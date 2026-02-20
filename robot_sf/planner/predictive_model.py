@@ -7,11 +7,22 @@ prediction planner adapter and training scripts.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import torch
+from loguru import logger
 from torch import Tensor, nn
+
+
+@lru_cache(maxsize=32)
+def _log_unexpected_checkpoint_keys(signature: tuple[str, ...]) -> None:
+    """Log one compatibility warning per distinct unexpected-key signature."""
+    logger.debug(
+        "Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: {}",
+        list(signature),
+    )
 
 
 @dataclass
@@ -191,11 +202,20 @@ def load_predictive_checkpoint(
     Returns:
         tuple[PredictiveTrajectoryModel, dict[str, Any]]: Instantiated model and raw payload.
     """
-    payload = torch.load(Path(path), map_location=map_location, weights_only=False)
+    payload = torch.load(Path(path), map_location=map_location, weights_only=True)
     config_data = payload.get("config", {})
     config = PredictiveModelConfig(**config_data)
     model = PredictiveTrajectoryModel(config)
-    model.load_state_dict(payload["state_dict"])
+    state_dict = payload["state_dict"]
+    load_result = model.load_state_dict(state_dict, strict=False)
+    if load_result.unexpected_keys:
+        signature = tuple(sorted(load_result.unexpected_keys))
+        _log_unexpected_checkpoint_keys(signature)
+    if load_result.missing_keys:
+        raise RuntimeError(
+            "Checkpoint is missing required PredictiveTrajectoryModel keys: "
+            f"{sorted(load_result.missing_keys)}"
+        )
     model.eval()
     return model, payload
 

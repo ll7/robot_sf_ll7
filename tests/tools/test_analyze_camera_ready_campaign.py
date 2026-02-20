@@ -83,6 +83,7 @@ def test_analyze_campaign_detects_adapter_status_mismatch(tmp_path: Path) -> Non
     findings = analysis["findings"]
     assert any("adapter impact status mismatch" in finding for finding in findings)
     assert any(item["planner_key"] == "ppo" for item in analysis["planners"])
+    assert "runtime_hotspots" in analysis
 
 
 def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> None:
@@ -138,6 +139,7 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
 
     analysis = analyze_campaign(campaign_root)
     assert analysis["findings"] == []
+    assert analysis["runtime_hotspots"]["slowest_planners"][0]["planner_key"] == "goal"
 
 
 def test_analyze_campaign_flags_absolute_map_paths(tmp_path: Path) -> None:

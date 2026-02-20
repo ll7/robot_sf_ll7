@@ -32,6 +32,16 @@ Use the GitHub CLI (`gh`) for repository interactions such as viewing/commenting
 When review feedback or PR scope identifies deferred follow-up work, always create a dedicated GitHub issue with `gh` before closing out the task.
 When referencing files in PRs, issue comments, docs, and agent responses, use repository-root-relative paths (for example, `robot_sf/nav/svg_map_parser.py`) instead of absolute local filesystem paths like `/Users/...`.
 
+## Communication Depth
+
+- Prefer concise-but-explanatory responses over terse status-only updates.
+- For benchmark and planner findings, include:
+  - what changed,
+  - why it matters,
+  - what risk/limitation remains.
+- When citing metric values, add one line interpreting the implication (for example, safety improved but success unchanged).
+- If uncertainty remains, clearly separate observed evidence from hypothesis.
+
 ## Key Codex Skills
 
 For issue management and delivery, use these local skills:

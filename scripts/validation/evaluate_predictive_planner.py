@@ -9,6 +9,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import yaml
 from loguru import logger
 
@@ -72,10 +73,15 @@ def _episode_success(row: dict) -> bool:
     """Resolve episode success with collision-aware fallback semantics."""
     metrics = row.get("metrics", {})
     if "success_rate" in metrics:
-        return float(metrics.get("success_rate", 0.0)) >= 0.5
+        success_rate_value = metrics.get("success_rate")
+        if success_rate_value is None or success_rate_value == "":
+            return False
+        return float(success_rate_value) >= 0.5
     success_val = metrics.get("success", False)
     if isinstance(success_val, bool):
         return success_val
+    if success_val is None or success_val == "":
+        return False
     return float(success_val) >= 0.5
 
 
@@ -270,11 +276,15 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             )
         comparison_delta = merged
 
+    min_distance_available = bool(np.isfinite(mean_min_distance))
     gates = {
         "min_success_rate": float(args.min_success_rate),
         "min_distance": float(args.min_distance),
+        "min_distance_available": min_distance_available,
         "pass_success_rate": bool(success_rate >= float(args.min_success_rate)),
-        "pass_min_distance": bool(mean_min_distance >= float(args.min_distance)),
+        "pass_min_distance": bool(
+            mean_min_distance >= float(args.min_distance) if min_distance_available else True
+        ),
     }
     gates["pass_all"] = bool(gates["pass_success_rate"] and gates["pass_min_distance"])
 

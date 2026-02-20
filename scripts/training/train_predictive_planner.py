@@ -76,10 +76,15 @@ def _episode_success(row: dict) -> bool:
     """Resolve episode success with collision-aware fallback semantics."""
     metrics = row.get("metrics", {})
     if "success_rate" in metrics:
-        return float(metrics.get("success_rate", 0.0)) >= 0.5
+        value = metrics.get("success_rate")
+        if value is None or value == "":
+            return False
+        return float(value) >= 0.5
     value = metrics.get("success", False)
     if isinstance(value, bool):
         return value
+    if value is None or value == "":
+        return False
     return float(value) >= 0.5
 
 

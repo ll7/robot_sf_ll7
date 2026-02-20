@@ -18,9 +18,8 @@ from waypoint_grids.projected_image_space_grid import ProjectedImageSpaceGrid
 cwd: str = os.getcwd()
 
 # then read in params for user editable, user-non-editable, episodes, and dataset
-user_config = configparser.SafeConfigParser(
-    allow_no_value=True, inline_comment_prefixes=";"
-)
+# NOTE: `SafeConfigParser` was removed in modern Python; `ConfigParser` is the replacement.
+user_config = configparser.ConfigParser(allow_no_value=True, inline_comment_prefixes=";")
 user_config.read(os.path.join(cwd, "params/user_params.ini"))
 # get global randomness seed
 seed: int = user_config["socnav_params"].getint("seed")

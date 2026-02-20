@@ -9,6 +9,7 @@ observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 
 import os
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import atan2, pi
@@ -55,8 +56,11 @@ _SOCNAV_REQUIRED_MODULES = (
     "params.central_params",
     "planners.sampling_planner",
 )
+_SOCNAV_ASSET_SETUP_DOC = "docs/socnav_assets_setup.md"
+_SOCNAV_ASSET_SETUP_CMD = "uv run python scripts/tools/prepare_socnav_assets.py"
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
+_SOCNAV_IMPORT_LOCK = threading.Lock()
 _SACADRL_STATE_ORDER = (
     "num_other_agents",
     "dist_to_goal",
@@ -737,24 +741,20 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         return missing
 
     @staticmethod
-    def _import_socnav_modules(root: Path) -> tuple[Any, Any, Any] | None:
+    def _import_socnav_modules() -> tuple[tuple[Any, Any, Any] | None, str | None]:
         """Import upstream SocNavBench modules from the provided root.
 
         Returns:
-            tuple[Any, Any, Any] | None: (central_params, sampling_planner, DotMap)
-            modules or ``None`` on failure.
+            tuple[tuple[Any, Any, Any] | None, str | None]:
+            ``((central_params, sampling_planner, DotMap), None)`` on success;
+            otherwise ``(None, error_message)`` on failure.
         """
-        root_str = str(root)
-        sys_path_inserted = False
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
-            sys_path_inserted = True
         try:
             import params.central_params as central  # type: ignore  # noqa: PLC0415
             import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
             from dotmap import DotMap  # type: ignore  # noqa: PLC0415
 
-            return central, sp, DotMap
+            return (central, sp, DotMap), None
         except (
             AttributeError,
             ImportError,
@@ -764,14 +764,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             SyntaxError,
             TypeError,
             ValueError,
-        ):  # pragma: no cover
-            return None
-        finally:
-            if sys_path_inserted:
-                try:
-                    sys.path.remove(root_str)
-                except ValueError:
-                    pass
+        ) as exc:  # pragma: no cover
+            hint = ""
+            if isinstance(exc, ModuleNotFoundError) and "skfmm" in str(exc):
+                hint = (
+                    " Missing dependency `skfmm` detected. "
+                    "Install SocNav prerequisites (for example `uv sync --extra socnav`)."
+                )
+            return None, f"{type(exc).__name__}: {exc}.{hint}"
 
     def _resolve_robot_dt(self, socnav_params: Any) -> float:
         """Resolve the robot dynamics timestep from SocNavBench params.
@@ -808,12 +808,13 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         except SystemExit as exc:
             return self._handle_socnav_failure(
                 "SocNavBench control pipeline parameters failed to load. "
-                "Ensure the SocNavBench data directories exist.",
+                "Ensure the SocNavBench data directories exist. "
+                f"See `{_SOCNAV_ASSET_SETUP_DOC}` and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
                 exc=exc,
             )
         return params
 
-    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
+    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:  # noqa: C901, PLR0912
         """Best-effort import of SocNavBench SamplingPlanner with defaults.
 
         Returns:
@@ -821,7 +822,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         env_root = os.getenv(_SOCNAV_ROOT_ENV)
         root_source = "argument" if socnav_root is not None else ("env" if env_root else "default")
-        root = self._resolve_socnav_root(socnav_root).resolve()
+        root_candidate = self._resolve_socnav_root(socnav_root)
+        if root_source != "default" and ".." in root_candidate.parts:
+            message = (
+                "SocNavBench root contains parent-directory traversal segments ('..'). "
+                f"Refusing to load from '{root_candidate}'. Provide a canonical trusted path."
+            )
+            return self._handle_socnav_failure(message)
+        root = root_candidate.resolve()
         if not root.exists():
             message = (
                 "SocNavBench root not found at "
@@ -851,27 +859,80 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             return self._handle_socnav_failure(message, not_found=True)
 
-        modules = self._import_socnav_modules(root)
-        if modules is None:
-            return None
-        central, sp, DotMap = modules
-        params = self._build_sampling_params(central, sp, DotMap)
-        if params is None:
-            return None
-        try:
-            obj_fn = self._GoalDistanceObjective()
-            self._goal_objective = obj_fn
-            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
-        except (
-            AttributeError,
-            OSError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover
-            return self._handle_socnav_failure(
-                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
-            )
+        with _SOCNAV_IMPORT_LOCK:
+            prev_cwd = Path.cwd()
+            root_str = str(root)
+            sys_path_inserted = False
+            try:
+                # Upstream SocNavBench params resolve INI paths relative to cwd at import time.
+                os.chdir(root)
+                if root_str not in sys.path:
+                    sys.path.insert(0, root_str)
+                    sys_path_inserted = True
+                modules, import_error = self._import_socnav_modules()
+                if modules is None:
+                    message = "Failed to import SocNavBench modules."
+                    if import_error:
+                        message = f"{message} {import_error}"
+                    return self._handle_socnav_failure(message)
+                central, sp, DotMap = modules
+                params = self._build_sampling_params(central, sp, DotMap)
+                if params is None:
+                    return None
+                try:
+                    obj_fn = self._GoalDistanceObjective()
+                    self._goal_objective = obj_fn
+                    return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                except AssertionError:
+                    # Retry once after resetting the upstream singleton cache only when
+                    # the upstream assertion indicates a stale/mismatched cached pipeline.
+                    try:
+                        import control_pipelines.control_pipeline_v0 as cp_v0  # type: ignore  # noqa: PLC0415
+
+                        cp_v0.ControlPipelineV0.pipeline = None
+                    except (ImportError, AttributeError) as exc:
+                        return self._handle_socnav_failure(
+                            "Failed to reset SocNavBench control pipeline singleton before retry.",
+                            exc=exc,
+                        )
+                    obj_fn = self._GoalDistanceObjective()
+                    self._goal_objective = obj_fn
+                    try:
+                        return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                    except (
+                        AssertionError,
+                        AttributeError,
+                        OSError,
+                        RuntimeError,
+                        TypeError,
+                        ValueError,
+                    ) as exc:  # pragma: no cover
+                        return self._handle_socnav_failure(
+                            "Failed to initialize SocNavBench SamplingPlanner after singleton reset: "
+                            f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
+                            f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
+                            exc=exc,
+                        )
+                except (
+                    AttributeError,
+                    OSError,
+                    RuntimeError,
+                    TypeError,
+                    ValueError,
+                ) as exc:  # pragma: no cover
+                    return self._handle_socnav_failure(
+                        "Failed to initialize SocNavBench SamplingPlanner: "
+                        f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
+                        f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
+                        exc=exc,
+                    )
+            finally:
+                if sys_path_inserted:
+                    try:
+                        sys.path.remove(root_str)
+                    except ValueError:
+                        pass
+                os.chdir(prev_cwd)
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

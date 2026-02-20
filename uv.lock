@@ -4787,6 +4787,9 @@ rllib = [
 sacadrl = [
     { name = "tensorflow" },
 ]
+socnav = [
+    { name = "scikit-fmm" },
+]
 viz = [
     { name = "matplotlib" },
     { name = "seaborn" },
@@ -4844,6 +4847,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9.4" },
     { name = "ruff", specifier = ">=0.9.7" },
     { name = "scalene", specifier = ">=1.5.48" },
+    { name = "scikit-fmm", marker = "extra == 'socnav'", specifier = ">=2024.5" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "scipy", specifier = ">=1.14.1" },
     { name = "seaborn", marker = "extra == 'analysis'", specifier = ">=0.13.2" },
@@ -4863,7 +4867,7 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.67.0" },
     { name = "wandb", specifier = ">=0.18.7" },
 ]
-provides-extras = ["dev", "gpu", "docs", "rllib", "progress", "analysis", "viz", "sacadrl", "orca"]
+provides-extras = ["dev", "gpu", "docs", "rllib", "progress", "analysis", "viz", "sacadrl", "orca", "socnav"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -5064,6 +5068,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/5e/0a97b9a88e8b00cb48b372f22ca6dfbb2a74818015cd461e6cdf689da154/scalene-2.1.3-cp314-cp314-macosx_15_0_universal2.whl", hash = "sha256:c2d43a33daf7ebaa7b82d07891cefdda33a625dc6462b0184f571673cf348a12", size = 1219165, upload-time = "2026-01-31T20:22:56.962Z" },
     { url = "https://files.pythonhosted.org/packages/04/e9/5fffd80934b2a20a634320b84e0e0914990a7d89fa244f3d607e1e512331/scalene-2.1.3-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:7c968cadadd8573148dfed4752098f9de7326e3b69b30316eb65cbb7069b2865", size = 1517511, upload-time = "2026-01-31T20:14:15.694Z" },
     { url = "https://files.pythonhosted.org/packages/53/e2/109017b2095018347d82ba8e2a9b48a1ca138702f93beaf961a2748a4eeb/scalene-2.1.3-cp314-cp314-win_amd64.whl", hash = "sha256:ae9934c5d752b543bfd3a1c4aa865c8c83d7b69ef9e98526f4651e9d8a163d5a", size = 1156098, upload-time = "2026-01-31T20:16:39.846Z" },
+]
+
+[[package]]
+name = "scikit-fmm"
+version = "2025.6.23"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/94/3b2969fc1f64a5faafad03c421ed200e717fc99c556985da0a17822f868d/scikit_fmm-2025.6.23.tar.gz", hash = "sha256:a3208f5f3881e40b7878d1121ba39b8d57f1bc38fb4e5f0d9d1c66a9b007e44f", size = 467753, upload-time = "2025-06-23T19:04:13.366Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b2/0f/61132e1b4cc9e8ac81723f3fcbe096408f957ceeaffa2b8b949b212aff12/scikit_fmm-2025.6.23-cp311-cp311-win_amd64.whl", hash = "sha256:e5fedb1b79d6def36616cce9d32f26954355c2b3e4e0c7e6b1ca28ad9ca5a0d4", size = 69025, upload-time = "2025-06-23T19:04:10.083Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/10/093e76640c8c6efae5e42203e92e86cb3e5dceaa3dcb8ac0733a1f817c64/scikit_fmm-2025.6.23-cp312-cp312-win_amd64.whl", hash = "sha256:859e5076d09f5d9b87d3d6fdc08652b714b43c5ad31523e5d58b28abdc9ced5b", size = 69261, upload-time = "2025-06-23T19:04:11.187Z" },
+    { url = "https://files.pythonhosted.org/packages/52/2c/7aac8f88a20df085aeaa5802de8c8958a02d33715652b69d5ef90bc41b8b/scikit_fmm-2025.6.23-cp313-cp313-win_amd64.whl", hash = "sha256:a5f291db66949f15a68cc3e472c73e50ceb70d5ecb49eb364f55befdcbdcbc6e", size = 68454, upload-time = "2025-06-23T19:04:12.222Z" },
 ]
 
 [[package]]

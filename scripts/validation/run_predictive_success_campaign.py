@@ -13,7 +13,8 @@ import numpy as np
 import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
+from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
 
 @dataclass
@@ -64,42 +65,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_seed_manifest(path: Path) -> dict[str, list[int]]:
-    """Load scenario->seed map from YAML."""
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(payload, dict):
-        raise TypeError(f"Seed manifest must be a mapping: {path}")
-    out: dict[str, list[int]] = {}
-    for key, value in payload.items():
-        if isinstance(value, list):
-            out[str(key)] = [int(v) for v in value]
-    return out
-
-
-def _make_subset_scenarios(
-    scenario_matrix: Path, seed_manifest: dict[str, list[int]]
-) -> list[dict]:
-    """Load scenarios and apply explicit seed sets for selected scenarios."""
-    scenarios = load_scenarios(scenario_matrix)
-    selected: list[dict] = []
-    base_dir = scenario_matrix.parent.resolve()
-    for scenario in scenarios:
-        scenario_id = str(
-            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
-        )
-        if scenario_id not in seed_manifest:
-            continue
-        scenario_copy = dict(scenario)
-        map_file = scenario_copy.get("map_file")
-        if isinstance(map_file, str):
-            map_path = Path(map_file)
-            if not map_path.is_absolute():
-                scenario_copy["map_file"] = str((base_dir / map_path).resolve())
-        scenario_copy["seeds"] = list(seed_manifest[scenario_id])
-        selected.append(scenario_copy)
-    return selected
-
-
 def _load_planner_variants(path: Path) -> list[dict]:
     """Load planner sweep variants from YAML."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -147,48 +112,7 @@ def _bootstrap_ci(values: np.ndarray, n_samples: int, seed: int) -> tuple[float,
 
 def _base_algo_cfg(checkpoint: str) -> dict:
     """Base predictive planner algorithm config."""
-    return {
-        "predictive_checkpoint_path": checkpoint,
-        "predictive_device": "cpu",
-        "predictive_max_agents": 16,
-        "predictive_horizon_steps": 8,
-        "predictive_rollout_dt": 0.2,
-        "max_linear_speed": 1.6,
-        "max_angular_speed": 1.2,
-        "goal_tolerance": 0.25,
-        "predictive_goal_weight": 5.0,
-        "predictive_collision_weight": 0.4,
-        "predictive_near_miss_weight": 0.05,
-        "predictive_velocity_weight": 0.01,
-        "predictive_turn_weight": 0.01,
-        "predictive_ttc_weight": 0.15,
-        "predictive_ttc_distance": 0.8,
-        "predictive_safe_distance": 0.35,
-        "predictive_near_distance": 0.7,
-        "predictive_progress_risk_weight": 1.2,
-        "predictive_progress_risk_distance": 1.2,
-        "predictive_hard_clearance_distance": 0.75,
-        "predictive_hard_clearance_weight": 2.5,
-        "predictive_adaptive_horizon_enabled": True,
-        "predictive_horizon_boost_steps": 4,
-        "predictive_near_field_distance": 2.4,
-        "predictive_near_field_speed_cap": 0.75,
-        "predictive_near_field_speed_samples": [0.1, 0.2, 0.35, 0.5],
-        "predictive_near_field_heading_deltas": [
-            -1.570796,
-            -1.047198,
-            -0.785398,
-            -0.523599,
-            0.0,
-            0.523599,
-            0.785398,
-            1.047198,
-            1.570796,
-        ],
-        "predictive_candidate_speeds": [0.0, 0.4, 0.7, 1.0],
-        "predictive_candidate_heading_deltas": [-0.785398, -0.392699, 0.0, 0.392699, 0.785398],
-        "occupancy_weight": 0.3,
-    }
+    return build_predictive_planner_algo_config(checkpoint_path=checkpoint, device="cpu")
 
 
 def _run_eval(
@@ -271,8 +195,8 @@ def main() -> int:
     """Execute full campaign and write machine + human-readable reports."""
     args = parse_args()
     variants = _load_planner_variants(args.planner_grid)
-    hard_manifest = _load_seed_manifest(args.hard_seed_manifest)
-    hard_scenarios = _make_subset_scenarios(args.scenario_matrix, hard_manifest)
+    hard_manifest = load_seed_manifest(args.hard_seed_manifest)
+    hard_scenarios = make_subset_scenarios(args.scenario_matrix, hard_manifest)
     if not hard_scenarios:
         raise RuntimeError("Hard-case manifest did not match any scenarios.")
 

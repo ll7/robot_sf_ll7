@@ -24,7 +24,7 @@ uv run python scripts/training/collect_predictive_planner_data.py \
   --output-npz output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz
 ```
 
-Hard-case focused data:
+Hard-case-focused data:
 
 ```bash
 uv run python scripts/training/collect_predictive_hardcase_data.py \

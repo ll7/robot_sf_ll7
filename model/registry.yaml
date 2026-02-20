@@ -40,13 +40,13 @@ models:
 - model_id: predictive_rgl_v1
   display_name: Predictive planner model (predictive_rgl_v1)
   local_path: output/tmp/predictive_planner/training/predictive_rgl_v1_20260219/predictive_model.pt
-  config_path: ''
+  config_path: null
   commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-  wandb_run_id: ''
-  wandb_run_path: ''
-  wandb_entity: ''
-  wandb_project: ''
-  wandb_file: ''
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
   tags:
   - predictive
   - rgl
@@ -58,13 +58,13 @@ models:
 - model_id: predictive_rgl_full_v1
   display_name: Predictive planner model (predictive_rgl_full_v1)
   local_path: output/tmp/predictive_planner/training/predictive_rgl_full_v1/predictive_model.pt
-  config_path: ''
+  config_path: null
   commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-  wandb_run_id: ''
-  wandb_run_path: ''
-  wandb_entity: ''
-  wandb_project: ''
-  wandb_file: ''
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
   tags:
   - predictive
   - rgl
@@ -76,13 +76,13 @@ models:
 - model_id: predictive_rgl_sweep_h256_mp4_s42
   display_name: Predictive planner model (predictive_rgl_sweep_h256_mp4_s42)
   local_path: output/tmp/predictive_planner/training/sweep_h256_mp4_s42/predictive_model.pt
-  config_path: ''
+  config_path: null
   commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-  wandb_run_id: ''
-  wandb_run_path: ''
-  wandb_entity: ''
-  wandb_project: ''
-  wandb_file: ''
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
   tags:
   - predictive
   - rgl
@@ -94,13 +94,13 @@ models:
 - model_id: predictive_rgl_sweep_h192_mp3_s7_wd5e5
   display_name: Predictive planner model (predictive_rgl_sweep_h192_mp3_s7_wd5e5)
   local_path: output/tmp/predictive_planner/training/sweep_h192_mp3_s7_wd5e5/predictive_model.pt
-  config_path: ''
+  config_path: null
   commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-  wandb_run_id: ''
-  wandb_run_path: ''
-  wandb_entity: ''
-  wandb_project: ''
-  wandb_file: ''
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
   tags:
   - predictive
   - rgl
@@ -112,7 +112,7 @@ models:
 - model_id: predictive_proxy_selected_v1
   display_name: Predictive planner model (predictive_proxy_selected_v1)
   local_path: output/tmp/predictive_planner/training/predictive_proxy_selected_v1/predictive_model.pt
-  config_path: ''
+  config_path: null
   commit: dfc4aea84e25cc83f9888c620286457bab3e1596
   wandb_run_id: geedo1po
   wandb_run_path: ll7/robot_sf/geedo1po

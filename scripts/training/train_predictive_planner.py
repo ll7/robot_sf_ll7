@@ -16,6 +16,7 @@ from loguru import logger
 from torch.utils.data import DataLoader, TensorDataset
 
 from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from robot_sf.models.registry import upsert_registry_entry
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
@@ -136,7 +137,8 @@ def _run_proxy_eval(
     epoch: int,
 ) -> dict[str, float]:
     """Run hard-case proxy benchmark on a checkpoint and return compact metrics."""
-    assert args.proxy_scenario_matrix is not None
+    if args.proxy_scenario_matrix is None:
+        raise ValueError("Proxy scenario matrix is required for proxy evaluation.")
     scenarios_or_path: Path | list[dict]
     if args.proxy_seed_manifest is not None:
         seed_manifest = _load_seed_manifest(args.proxy_seed_manifest)
@@ -153,48 +155,10 @@ def _run_proxy_eval(
     proxy_dir.mkdir(parents=True, exist_ok=True)
     algo_cfg_path = proxy_dir / f"proxy_epoch_{epoch:04d}_algo.yaml"
     jsonl_path = proxy_dir / f"proxy_epoch_{epoch:04d}.jsonl"
-    algo_cfg = {
-        "predictive_checkpoint_path": str(checkpoint_path),
-        "predictive_device": "cpu",
-        "predictive_max_agents": 16,
-        "predictive_horizon_steps": 8,
-        "predictive_rollout_dt": 0.2,
-        "max_linear_speed": 1.6,
-        "max_angular_speed": 1.2,
-        "goal_tolerance": 0.25,
-        "predictive_goal_weight": 5.0,
-        "predictive_collision_weight": 0.4,
-        "predictive_near_miss_weight": 0.05,
-        "predictive_velocity_weight": 0.01,
-        "predictive_turn_weight": 0.01,
-        "predictive_ttc_weight": 0.15,
-        "predictive_ttc_distance": 0.8,
-        "predictive_safe_distance": 0.35,
-        "predictive_near_distance": 0.7,
-        "predictive_progress_risk_weight": 1.2,
-        "predictive_progress_risk_distance": 1.2,
-        "predictive_hard_clearance_distance": 0.75,
-        "predictive_hard_clearance_weight": 2.5,
-        "predictive_adaptive_horizon_enabled": True,
-        "predictive_horizon_boost_steps": 4,
-        "predictive_near_field_distance": 2.4,
-        "predictive_near_field_speed_cap": 0.75,
-        "predictive_near_field_speed_samples": [0.1, 0.2, 0.35, 0.5],
-        "predictive_near_field_heading_deltas": [
-            -1.570796,
-            -1.047198,
-            -0.785398,
-            -0.523599,
-            0.0,
-            0.523599,
-            0.785398,
-            1.047198,
-            1.570796,
-        ],
-        "predictive_candidate_speeds": [0.0, 0.4, 0.7, 1.0],
-        "predictive_candidate_heading_deltas": [-0.785398, -0.392699, 0.0, 0.392699, 0.785398],
-        "occupancy_weight": 0.3,
-    }
+    algo_cfg = build_predictive_planner_algo_config(
+        checkpoint_path=checkpoint_path,
+        device="cpu",
+    )
     algo_cfg_path.write_text(yaml.safe_dump(algo_cfg, sort_keys=False), encoding="utf-8")
     if jsonl_path.exists():
         jsonl_path.unlink()
@@ -212,17 +176,23 @@ def _run_proxy_eval(
         benchmark_profile="experimental",
     )
     rows = [
-        json.loads(line) for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line
+        json.loads(line)
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
     ]
     if not rows:
         raise RuntimeError("Proxy evaluation produced no episode rows.")
     success_vals = [1.0 if _episode_success(row) else 0.0 for row in rows]
-    min_dist_vals = [float(row.get("metrics", {}).get("min_distance", 0.0)) for row in rows]
+    min_dist_vals = [
+        float(row.get("metrics", {}).get("min_distance"))
+        for row in rows
+        if "min_distance" in row.get("metrics", {})
+    ]
     return {
         "epoch": float(epoch),
         "episodes": float(len(rows)),
         "success_rate": float(np.mean(success_vals)),
-        "mean_min_distance": float(np.mean(min_dist_vals)),
+        "mean_min_distance": float(np.mean(min_dist_vals)) if min_dist_vals else float("nan"),
         "jsonl_path": str(jsonl_path),
         "algo_config_path": str(algo_cfg_path),
     }
@@ -279,7 +249,7 @@ def _run_epoch(
     ade_vals: list[float] = []
     fde_vals: list[float] = []
 
-    horizon_weights = torch.linspace(1.0, 1.5, steps=model.config.horizon_steps, device=device)
+    horizon_weights = torch.linspace(1.5, 1.0, steps=model.config.horizon_steps, device=device)
 
     for state_b, target_b, mask_b in loader:
         state_b = state_b.to(device)
@@ -389,7 +359,7 @@ def main() -> int:  # noqa: C901, PLR0915
         }
         history.append(row)
 
-        if val_loss < best["val_loss"] and not bool(args.select_by_proxy):
+        if val_loss < best["val_loss"]:
             best = {
                 "val_loss": val_loss,
                 "val_ade": val_ade,
@@ -409,6 +379,9 @@ def main() -> int:  # noqa: C901, PLR0915
                 extra={
                     "dataset": str(args.dataset),
                     "model_id": args.model_id,
+                    "selection_mode": "val_loss_fallback"
+                    if bool(args.select_by_proxy)
+                    else "val_loss",
                 },
             )
         if proxy_enabled and epoch % int(args.proxy_every_epochs) == 0:
@@ -430,7 +403,15 @@ def main() -> int:  # noqa: C901, PLR0915
                     "model_id": args.model_id,
                 },
             )
-            proxy_metrics = _run_proxy_eval(checkpoint_path=epoch_ckpt, args=args, epoch=epoch)
+            try:
+                proxy_metrics = _run_proxy_eval(checkpoint_path=epoch_ckpt, args=args, epoch=epoch)
+            except Exception:
+                logger.exception(
+                    "Proxy evaluation failed at epoch={} checkpoint={}",
+                    epoch,
+                    epoch_ckpt,
+                )
+                continue
             proxy_metrics["val_loss"] = float(val_loss)
             proxy_metrics["val_ade"] = float(val_ade)
             proxy_metrics["val_fde"] = float(val_fde)
@@ -480,6 +461,24 @@ def main() -> int:  # noqa: C901, PLR0915
             val_loss,
             val_ade,
             val_fde,
+        )
+
+    if not checkpoint_path.exists():
+        save_predictive_checkpoint(
+            checkpoint_path,
+            model=model,
+            optimizer=optimizer,
+            epoch=int(best["epoch"]) if best["epoch"] >= 0 else int(args.epochs),
+            metrics={
+                "val_loss": float(best["val_loss"]),
+                "val_ade": float(best["val_ade"]),
+                "val_fde": float(best["val_fde"]),
+            },
+            extra={
+                "dataset": str(args.dataset),
+                "model_id": args.model_id,
+                "selection_mode": "post_train_fallback",
+            },
         )
 
     gates = {

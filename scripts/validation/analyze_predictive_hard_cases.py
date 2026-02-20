@@ -35,9 +35,20 @@ def _episode_success(row: dict) -> bool:
 def main() -> int:
     """Read benchmark JSONL and write hard-case taxonomy markdown report."""
     args = parse_args()
-    rows = [
-        json.loads(line) for line in args.jsonl.read_text(encoding="utf-8").splitlines() if line
-    ]
+    rows: list[dict] = []
+    for line_number, line in enumerate(
+        args.jsonl.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"Malformed JSON in {args.jsonl} at line {line_number}: {exc}"
+            ) from exc
+        if isinstance(payload, dict):
+            rows.append(payload)
     failed = [row for row in rows if not _episode_success(row)]
 
     by_status = Counter(str(row.get("status", "unknown")) for row in failed)

@@ -71,11 +71,6 @@ class PredictiveTrajectoryModel(nn.Module):
             nn.ReLU(),
             nn.Linear(h, int(config.horizon_steps) * 2),
         )
-        self.value_head = nn.Sequential(
-            nn.Linear(h, h // 2),
-            nn.ReLU(),
-            nn.Linear(h // 2, 1),
-        )
 
     def _attention_weights(self, state: Tensor, mask: Tensor) -> Tensor:
         """Compute distance-based attention weights for each agent pair.
@@ -95,7 +90,7 @@ class PredictiveTrajectoryModel(nn.Module):
         return attn
 
     def forward(self, state: Tensor, mask: Tensor) -> dict[str, Tensor]:
-        """Predict future positions and a state-value estimate.
+        """Predict future pedestrian positions in the robot frame.
 
         Args:
             state: Agent features ``(B, N, 4)``.
@@ -104,7 +99,6 @@ class PredictiveTrajectoryModel(nn.Module):
         Returns:
             dict[str, Tensor]:
                 - ``future_positions``: ``(B, N, T, 2)`` absolute positions in robot frame.
-                - ``state_value``: ``(B, 1)`` pooled value estimate.
         """
         mask = mask.float().clamp(0.0, 1.0)
         h = self.encoder(state)
@@ -122,10 +116,7 @@ class PredictiveTrajectoryModel(nn.Module):
         future = state[:, :, None, :2] + torch.cumsum(delta, dim=2)
         future = future * mask[:, :, None, None]
 
-        pooled = torch.sum(h, dim=1) / torch.clamp(mask.sum(dim=1, keepdim=True), min=1.0)
-        value = self.value_head(pooled)
-
-        return {"future_positions": future, "state_value": value}
+        return {"future_positions": future}
 
 
 def masked_trajectory_loss(

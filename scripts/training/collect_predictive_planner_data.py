@@ -24,7 +24,7 @@ class Frame:
     robot_pos: np.ndarray
     robot_heading: float
     ped_positions_world: np.ndarray
-    ped_velocities_ego: np.ndarray
+    ped_velocities_world: np.ndarray
     ped_count: int
 
 
@@ -62,7 +62,7 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
         robot_pos=robot_pos,
         robot_heading=robot_heading,
         ped_positions_world=ped_positions,
-        ped_velocities_ego=ped_velocities,
+        ped_velocities_world=ped_velocities,
         ped_count=ped_count,
     )
 
@@ -132,7 +132,10 @@ def _frames_to_samples(
                 frame_t.robot_heading,
             )
             state[:c, 0:2] = pos_rel
-            state[:c, 2:4] = frame_t.ped_velocities_ego[:c]
+            state[:c, 2:4] = _vel_world_to_ego(
+                frame_t.ped_velocities_world[:c],
+                frame_t.robot_heading,
+            )
             mask[:c] = 1.0
 
             for k in range(1, horizon_steps + 1):
@@ -140,12 +143,19 @@ def _frames_to_samples(
                 ck = min(frame_k.ped_count, c)
                 if ck <= 0:
                     continue
-                tgt_rel = _world_to_ego(
+                matches = _nearest_match_indices(
+                    frame_t.ped_positions_world[:c],
                     frame_k.ped_positions_world[:ck],
-                    frame_t.robot_pos,
-                    frame_t.robot_heading,
                 )
-                target[:ck, k - 1, :] = tgt_rel
+                if not matches:
+                    continue
+                for src_idx, tgt_idx in matches.items():
+                    tgt_rel = _world_to_ego(
+                        frame_k.ped_positions_world[tgt_idx : tgt_idx + 1],
+                        frame_t.robot_pos,
+                        frame_t.robot_heading,
+                    )[0]
+                    target[src_idx, k - 1, :] = tgt_rel
 
         states.append(state)
         targets.append(target)
@@ -219,7 +229,7 @@ def main() -> int:
     """Collect dataset and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     logger.remove()
-    logger.add(sys.stderr, level="ERROR")
+    logger.add(sys.stderr, level="INFO")
     rng = np.random.default_rng(args.seed)
 
     cfg = RobotSimulationConfig()
@@ -302,3 +312,38 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+    def _vel_world_to_ego(vectors_world: np.ndarray, robot_heading: float) -> np.ndarray:
+        """Rotate world-frame vectors to ego frame (no translation)."""
+        if vectors_world.size == 0:
+            return np.zeros((0, 2), dtype=np.float32)
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        vx_ego = cos_h * vectors_world[:, 0] + sin_h * vectors_world[:, 1]
+        vy_ego = -sin_h * vectors_world[:, 0] + cos_h * vectors_world[:, 1]
+        return np.stack([vx_ego, vy_ego], axis=1).astype(np.float32)
+
+    def _nearest_match_indices(
+        source_positions: np.ndarray,
+        target_positions: np.ndarray,
+        *,
+        max_match_distance: float = 1.5,
+    ) -> dict[int, int]:
+        """Match source pedestrians to target pedestrians by nearest neighbor."""
+        if source_positions.size == 0 or target_positions.size == 0:
+            return {}
+        matches: dict[int, int] = {}
+        taken_targets: set[int] = set()
+        for src_idx in range(source_positions.shape[0]):
+            distances = np.linalg.norm(target_positions - source_positions[src_idx], axis=1)
+            sorted_target = np.argsort(distances)
+            for tgt_idx in sorted_target:
+                tgt_i = int(tgt_idx)
+                if tgt_i in taken_targets:
+                    continue
+                if float(distances[tgt_i]) > max_match_distance:
+                    break
+                matches[src_idx] = tgt_i
+                taken_targets.add(tgt_i)
+                break
+        return matches

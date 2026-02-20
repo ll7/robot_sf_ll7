@@ -20,7 +20,6 @@ def test_predictive_model_forward_shapes() -> None:
     mask = torch.ones(4, cfg.max_agents)
     out = model(state, mask)
     assert out["future_positions"].shape == (4, cfg.max_agents, cfg.horizon_steps, 2)
-    assert out["state_value"].shape == (4, 1)
 
 
 def test_masked_trajectory_loss_respects_mask() -> None:

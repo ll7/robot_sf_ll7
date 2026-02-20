@@ -30,7 +30,7 @@ This checklist captures what is done and what still needs explicit maintainer co
 
 ## Suggested PR Description Bullets
 
-- Adds prediction planner integration and risk-aware adaptive scoring/lattice.
-- Adds full training/evaluation runbook and baseline documentation with citation provenance.
+- Introduces prediction planner integration and risk-aware adaptive scoring/lattice.
+- Provides full training/evaluation runbook and baseline documentation with citation provenance.
 - Adds camera-ready benchmark config support for `prediction_planner`.
 - Leaves planner tier as `experimental` pending hard-case success improvements and artifact distribution decisions.

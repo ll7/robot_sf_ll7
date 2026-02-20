@@ -9,11 +9,11 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-import yaml
 
 from robot_sf.benchmark.map_runner import _build_env_config, _build_policy
+from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.training.scenario_loader import load_scenarios
+from scripts.validation.predictive_eval_common import load_seed_manifest
 
 
 def _json_ready(value):  # noqa: C901
@@ -59,20 +59,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_seed_manifest(path: Path) -> dict[str, list[int]]:
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(payload, dict):
-        raise TypeError(f"Seed manifest must be a mapping: {path}")
-    out: dict[str, list[int]] = {}
-    for key, value in payload.items():
-        if isinstance(value, list):
-            out[str(key)] = [int(v) for v in value]
-    return out
-
-
 def _scenario_pairs(
     scenario_matrix: Path, seed_manifest: dict[str, list[int]]
 ) -> list[tuple[dict, int]]:
+    from robot_sf.training.scenario_loader import load_scenarios
+
     scenarios = load_scenarios(scenario_matrix)
     out: list[tuple[dict, int]] = []
     for scenario in scenarios:
@@ -85,56 +76,7 @@ def _scenario_pairs(
 
 
 def _base_algo_cfg(checkpoint: Path) -> dict:
-    return {
-        "predictive_checkpoint_path": str(checkpoint),
-        "predictive_device": "cpu",
-        "predictive_max_agents": 16,
-        "predictive_horizon_steps": 8,
-        "predictive_rollout_dt": 0.2,
-        "max_linear_speed": 1.6,
-        "max_angular_speed": 1.2,
-        "goal_tolerance": 0.25,
-        "predictive_goal_weight": 6.0,
-        "predictive_collision_weight": 0.45,
-        "predictive_near_miss_weight": 0.08,
-        "predictive_velocity_weight": 0.01,
-        "predictive_turn_weight": 0.01,
-        "predictive_ttc_weight": 0.25,
-        "predictive_ttc_distance": 0.9,
-        "predictive_safe_distance": 0.35,
-        "predictive_near_distance": 0.7,
-        "predictive_progress_risk_weight": 1.8,
-        "predictive_progress_risk_distance": 1.3,
-        "predictive_hard_clearance_distance": 0.8,
-        "predictive_hard_clearance_weight": 3.0,
-        "predictive_adaptive_horizon_enabled": True,
-        "predictive_horizon_boost_steps": 6,
-        "predictive_near_field_distance": 2.6,
-        "predictive_near_field_speed_cap": 0.65,
-        "predictive_near_field_speed_samples": [0.1, 0.2, 0.35, 0.5],
-        "predictive_near_field_heading_deltas": [
-            -1.570796,
-            -1.047198,
-            -0.785398,
-            -0.523599,
-            0.0,
-            0.523599,
-            0.785398,
-            1.047198,
-            1.570796,
-        ],
-        "predictive_candidate_speeds": [0.0, 0.25, 0.5, 0.75, 1.0],
-        "predictive_candidate_heading_deltas": [
-            -0.785398,
-            -0.523599,
-            -0.261799,
-            0.0,
-            0.261799,
-            0.523599,
-            0.785398,
-        ],
-        "occupancy_weight": 0.25,
-    }
+    return build_predictive_planner_algo_config(checkpoint_path=checkpoint, device="cpu")
 
 
 def _obs_min_robot_ped_distance(obs: dict) -> float:
@@ -159,13 +101,15 @@ def main() -> int:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    seed_manifest = _load_seed_manifest(args.seed_manifest)
+    seed_manifest = load_seed_manifest(args.seed_manifest)
     pairs = _scenario_pairs(args.scenario_matrix, seed_manifest)
     if not pairs:
         raise RuntimeError("No scenario/seed pairs resolved from manifest.")
 
     algo_cfg = _base_algo_cfg(args.checkpoint)
     if args.algo_params is not None:
+        import yaml
+
         extra = yaml.safe_load(args.algo_params.read_text(encoding="utf-8")) or {}
         if not isinstance(extra, dict):
             raise TypeError(f"Algo params must be a mapping: {args.algo_params}")
@@ -183,44 +127,45 @@ def main() -> int:
             robot_kinematics="differential_drive",
         )
         env = make_robot_env(config=config, seed=int(seed), debug=False)
-
-        obs, _ = env.reset(seed=int(seed))
-        steps = []
-        done = False
-        done_info: dict = {}
-        for t in range(int(args.horizon)):
-            action_v, action_w = policy_fn(obs)
-            min_d = _obs_min_robot_ped_distance(obs)
-            obs, reward, terminated, truncated, info = env.step(
-                np.array([action_v, action_w], dtype=float)
-            )
-            meta = info.get("meta", {}) if isinstance(info, dict) else {}
-            step_row = {
-                "step": t,
-                "action_v": float(action_v),
-                "action_w": float(action_w),
-                "reward": float(reward),
-                "min_obs_robot_ped_dist": float(min_d) if np.isfinite(min_d) else None,
-                "terminated": bool(terminated),
-                "truncated": bool(truncated),
-                "is_success": bool(info.get("success") or info.get("is_success")),
-                "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
-                "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
-                "is_robot_collision": bool(meta.get("is_robot_collision", False)),
-            }
-            steps.append(step_row)
-            if terminated or truncated or step_row["is_success"]:
-                done = True
-                done_info = {
+        try:
+            obs, _ = env.reset(seed=int(seed))
+            steps = []
+            done = False
+            done_info: dict = {}
+            for t in range(int(args.horizon)):
+                action_v, action_w = policy_fn(obs)
+                min_d = _obs_min_robot_ped_distance(obs)
+                obs, reward, terminated, truncated, info = env.step(
+                    np.array([action_v, action_w], dtype=float)
+                )
+                meta = info.get("meta", {}) if isinstance(info, dict) else {}
+                step_row = {
+                    "step": t,
+                    "action_v": float(action_v),
+                    "action_w": float(action_w),
+                    "reward": float(reward),
+                    "min_obs_robot_ped_dist": float(min_d) if np.isfinite(min_d) else None,
                     "terminated": bool(terminated),
                     "truncated": bool(truncated),
-                    "success": step_row["is_success"],
-                    "meta": meta,
-                    "info": info,
-                    "stop_step": t,
+                    "is_success": bool(info.get("success") or info.get("is_success")),
+                    "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
+                    "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
+                    "is_robot_collision": bool(meta.get("is_robot_collision", False)),
                 }
-                break
-        env.close()
+                steps.append(step_row)
+                if terminated or truncated or step_row["is_success"]:
+                    done = True
+                    done_info = {
+                        "terminated": bool(terminated),
+                        "truncated": bool(truncated),
+                        "success": step_row["is_success"],
+                        "meta": meta,
+                        "info": info,
+                        "stop_step": t,
+                    }
+                    break
+        finally:
+            env.close()
 
         out_trace = args.output_dir / f"trace_{scenario_id}_{seed}.json"
         trace = {

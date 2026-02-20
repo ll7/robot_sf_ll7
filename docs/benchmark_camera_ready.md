@@ -29,6 +29,20 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
   --label full_run
 ```
 
+## Current Baseline (2026-02-20)
+
+Current promoted all-planners baseline run:
+
+- campaign id:
+  - `camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
+- root:
+  - `output/benchmarks/camera_ready/camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
+- status:
+  - `8/8 planners ok`, `1080 episodes`, runtime `386.54s`
+- predictive planner:
+  - `status=ok`, `episodes=135`, `failed_jobs=0`
+  - `success_mean=0.9778`, `collisions_mean=0.0000`, `near_misses_mean=0.0296`
+
 ## Config Presets
 
 - `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
@@ -37,6 +51,8 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
   - baseline-ready planners on full scenario suite
 - `configs/benchmarks/camera_ready_all_planners.yaml`
   - baseline + experimental planners on full scenario suite
+  - prediction planner runs first for early fail-fast signal
+  - `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
 - `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
   - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
 - `configs/algos/prediction_planner_camera_ready.yaml`
@@ -161,6 +177,25 @@ This emits:
 
 - `reports/campaign_analysis.json`
 - `reports/campaign_analysis.md`
+
+The analyzer now also emits runtime hotspot diagnostics:
+
+- top slow planners by campaign runtime
+- per-planner `wall_time_sec` mean/p95
+- top slow scenarios per hotspot planner
+
+Campaign-to-campaign comparison helper:
+
+```bash
+uv run python scripts/tools/compare_camera_ready_campaigns.py \
+  --base-campaign-root output/benchmarks/camera_ready/<base_campaign_id> \
+  --candidate-campaign-root output/benchmarks/camera_ready/<candidate_campaign_id> \
+  --output-json output/benchmarks/camera_ready/<candidate_campaign_id>/reports/campaign_comparison.json \
+  --output-md output/benchmarks/camera_ready/<candidate_campaign_id>/reports/campaign_comparison.md
+```
+
+Use this to validate quality changes (for example predictive planner success/collision deltas)
+after compatibility or config fixes.
 
 Analyzer findings now also include portability checks, including detection of
 absolute `scenario_params.map_file` paths in episodes (these should be

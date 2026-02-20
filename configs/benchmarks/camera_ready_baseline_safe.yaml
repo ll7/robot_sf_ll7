@@ -14,6 +14,7 @@ horizon: 100
 dt: 0.1
 record_forces: true
 resume: true
+stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123

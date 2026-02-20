@@ -737,12 +737,13 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         return missing
 
     @staticmethod
-    def _import_socnav_modules(root: Path) -> tuple[Any, Any, Any] | None:
+    def _import_socnav_modules(root: Path) -> tuple[tuple[Any, Any, Any] | None, str | None]:
         """Import upstream SocNavBench modules from the provided root.
 
         Returns:
-            tuple[Any, Any, Any] | None: (central_params, sampling_planner, DotMap)
-            modules or ``None`` on failure.
+            tuple[tuple[Any, Any, Any] | None, str | None]:
+            ``((central_params, sampling_planner, DotMap), None)`` on success;
+            otherwise ``(None, error_message)`` on failure.
         """
         root_str = str(root)
         sys_path_inserted = False
@@ -754,7 +755,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
             from dotmap import DotMap  # type: ignore  # noqa: PLC0415
 
-            return central, sp, DotMap
+            return (central, sp, DotMap), None
         except (
             AttributeError,
             ImportError,
@@ -764,8 +765,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             SyntaxError,
             TypeError,
             ValueError,
-        ):  # pragma: no cover
-            return None
+        ) as exc:  # pragma: no cover
+            hint = ""
+            if isinstance(exc, ModuleNotFoundError) and "skfmm" in str(exc):
+                hint = (
+                    " Missing dependency `skfmm` detected. "
+                    "Install SocNav prerequisites (for example `uv sync --extra socnav`)."
+                )
+            return None, f"{type(exc).__name__}: {exc}.{hint}"
         finally:
             if sys_path_inserted:
                 try:
@@ -851,27 +858,47 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             return self._handle_socnav_failure(message, not_found=True)
 
-        modules = self._import_socnav_modules(root)
-        if modules is None:
-            return None
-        central, sp, DotMap = modules
-        params = self._build_sampling_params(central, sp, DotMap)
-        if params is None:
-            return None
+        prev_cwd = Path.cwd()
         try:
-            obj_fn = self._GoalDistanceObjective()
-            self._goal_objective = obj_fn
-            return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
-        except (
-            AttributeError,
-            OSError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover
-            return self._handle_socnav_failure(
-                f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
-            )
+            # Upstream SocNavBench params resolve INI paths relative to cwd at import time.
+            os.chdir(root)
+            modules, import_error = self._import_socnav_modules(root)
+            if modules is None:
+                message = "Failed to import SocNavBench modules."
+                if import_error:
+                    message = f"{message} {import_error}"
+                return self._handle_socnav_failure(message)
+            central, sp, DotMap = modules
+            params = self._build_sampling_params(central, sp, DotMap)
+            if params is None:
+                return None
+            try:
+                # Upstream SocNavBench uses a class-level singleton control pipeline.
+                # In repeated benchmark episodes, params can diverge/mutate across runs,
+                # which triggers an internal equality assertion on re-init.
+                # Resetting the cache keeps per-run planner construction deterministic.
+                try:
+                    import control_pipelines.control_pipeline_v0 as cp_v0  # type: ignore  # noqa: PLC0415
+
+                    cp_v0.ControlPipelineV0.pipeline = None
+                except (ImportError, AttributeError):
+                    pass
+                obj_fn = self._GoalDistanceObjective()
+                self._goal_objective = obj_fn
+                return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+            except (
+                AssertionError,
+                AttributeError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as exc:  # pragma: no cover
+                return self._handle_socnav_failure(
+                    f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
+                )
+        finally:
+            os.chdir(prev_cwd)
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

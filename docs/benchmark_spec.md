@@ -57,6 +57,10 @@ Notes:
   reports, and policy sweep metadata).
 * ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
   in the algo config to use the heuristic fallback.
+* `socnav_bench` requires SocNavBench prerequisites (including `skfmm`); install with
+  `uv sync --extra socnav` for native upstream execution.
+* `socnav_sampling` uses the in-repo sampling adapter baseline, while `socnav_bench` is the
+  upstream SocNavBench sampling wrapper.
 
 ## Algorithm Readiness Profiles
 

@@ -206,6 +206,11 @@ the campaign config. For dependency-sensitive planners (for example SocNav
 adapters), set `socnav_missing_prereq_policy: fallback` when you want campaign
 execution to continue with degraded behavior instead of hard-fail.
 
+Current planner mapping in map-runner:
+
+- `socnav_sampling`: in-repo `SamplingPlannerAdapter` baseline (no upstream SocNavBench dependency).
+- `socnav_bench`: upstream `SocNavBenchSamplingAdapter` wrapper (requires SocNav prereqs).
+
 Decision rule for publication:
 
 - Use strict profile/config when you need publication claims without degraded

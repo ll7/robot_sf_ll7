@@ -131,6 +131,42 @@ def test_build_policy_socnav_bench_forwards_allow_fallback(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_socnav_sampling_uses_local_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure socnav_sampling maps to local SamplingPlannerAdapter, not SocNavBench wrapper."""
+
+    calls: dict[str, int] = {"local": 0, "upstream": 0}
+
+    class _DummyLocalAdapter:
+        def __init__(self, config) -> None:
+            del config
+            calls["local"] += 1
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    class _DummyUpstreamAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config, allow_fallback
+            calls["upstream"] += 1
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SamplingPlannerAdapter", _DummyLocalAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter",
+        _DummyUpstreamAdapter,
+    )
+
+    _, meta = _build_policy("socnav_sampling", {"allow_fallback": True})
+    assert calls["local"] == 1
+    assert calls["upstream"] == 0
+    assert meta["status"] == "ok"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"

@@ -31,7 +31,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
     "ppo": "policy_network_inference",
-    "socnav_sampling": "stochastic_sampling_adapter",
+    "socnav_sampling": "heuristic_sampling_adapter",
     "sacadrl": "learned_value_adapter",
     "prediction_planner": "predictive_model_based_adapter",
     "socnav_bench": "socnav_adapter",
@@ -75,7 +75,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_native_commands": False,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
-        "default_adapter_name": "SocNavBenchSamplingAdapter",
+        "default_adapter_name": "SamplingPlannerAdapter",
     },
     "sacadrl": {
         "planner_command_space": "unicycle_vw",

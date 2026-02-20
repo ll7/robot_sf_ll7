@@ -47,7 +47,7 @@ planners:
   - key: socnav_sampling
     algo: socnav_sampling
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   - key: sacadrl
     algo: sacadrl
@@ -62,4 +62,4 @@ planners:
   - key: socnav_bench
     algo: socnav_bench
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast

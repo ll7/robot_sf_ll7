@@ -96,6 +96,10 @@ orca = [
     "pyrvo2",
     "Cython>=3.0.0",
 ]
+socnav = [
+    # SocNavBench planner prerequisites used by the vendored subset.
+    "scikit-fmm>=2024.5",
+]
 
 [build-system]
 requires = ["hatchling"]

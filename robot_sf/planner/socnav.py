@@ -814,7 +814,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         return params
 
-    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:  # noqa: C901
+    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:  # noqa: C901, PLR0912
         """Best-effort import of SocNavBench SamplingPlanner with defaults.
 
         Returns:
@@ -897,7 +897,22 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                         )
                     obj_fn = self._GoalDistanceObjective()
                     self._goal_objective = obj_fn
-                    return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                    try:
+                        return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                    except (
+                        AssertionError,
+                        AttributeError,
+                        OSError,
+                        RuntimeError,
+                        TypeError,
+                        ValueError,
+                    ) as exc:  # pragma: no cover
+                        return self._handle_socnav_failure(
+                            "Failed to initialize SocNavBench SamplingPlanner after singleton reset: "
+                            f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
+                            f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
+                            exc=exc,
+                        )
                 except (
                     AttributeError,
                     OSError,

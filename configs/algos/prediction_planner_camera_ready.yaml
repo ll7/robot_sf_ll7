@@ -1,0 +1,58 @@
+# Camera-ready predictive planner config.
+# Uses registry model_id so the checkpoint path is resolved via model/registry.yaml.
+#
+# Recommended artifact prerequisites:
+# - model_id entry exists in model/registry.yaml
+# - resolved checkpoint exists locally (or is downloadable via registry metadata)
+#
+# Example:
+# uv run python scripts/classic_benchmark_full.py \
+#   --algo prediction_planner \
+#   --algo-config configs/algos/prediction_planner_camera_ready.yaml
+
+predictive_model_id: predictive_proxy_selected_v1
+predictive_device: cpu
+predictive_max_agents: 16
+predictive_horizon_steps: 8
+predictive_rollout_dt: 0.2
+
+# Motion limits.
+max_linear_speed: 1.6
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+
+# Objective terms.
+predictive_goal_weight: 6.0
+predictive_collision_weight: 0.5
+predictive_near_miss_weight: 0.10
+predictive_velocity_weight: 0.01
+predictive_turn_weight: 0.01
+predictive_ttc_weight: 0.30
+predictive_ttc_distance: 0.9
+
+# Risk-progress coupling.
+predictive_progress_risk_weight: 2.2
+predictive_progress_risk_distance: 1.3
+predictive_hard_clearance_distance: 0.8
+predictive_hard_clearance_weight: 3.0
+
+# Clearance model.
+predictive_safe_distance: 0.35
+predictive_near_distance: 0.7
+predictive_robot_radius: 0.25
+predictive_pedestrian_radius: 0.25
+predictive_speed_clearance_gain: 0.6
+
+# Adaptive horizon and lattice controls.
+predictive_adaptive_horizon_enabled: true
+predictive_horizon_boost_steps: 6
+predictive_near_field_distance: 2.6
+predictive_near_field_speed_cap: 0.65
+predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]
+predictive_near_field_heading_deltas: [-1.570796, -1.047198, -0.785398, -0.523599, 0.0, 0.523599, 0.785398, 1.047198, 1.570796]
+
+# Baseline lattice.
+predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
+predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
+
+occupancy_weight: 0.25

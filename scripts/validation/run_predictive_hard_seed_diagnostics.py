@@ -16,7 +16,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import load_scenarios
 
 
-def _json_ready(value):
+def _json_ready(value):  # noqa: C901
     """Convert nested values to JSON-serializable primitives."""
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -103,6 +103,26 @@ def _base_algo_cfg(checkpoint: Path) -> dict:
         "predictive_ttc_distance": 0.9,
         "predictive_safe_distance": 0.35,
         "predictive_near_distance": 0.7,
+        "predictive_progress_risk_weight": 1.8,
+        "predictive_progress_risk_distance": 1.3,
+        "predictive_hard_clearance_distance": 0.8,
+        "predictive_hard_clearance_weight": 3.0,
+        "predictive_adaptive_horizon_enabled": True,
+        "predictive_horizon_boost_steps": 6,
+        "predictive_near_field_distance": 2.6,
+        "predictive_near_field_speed_cap": 0.65,
+        "predictive_near_field_speed_samples": [0.1, 0.2, 0.35, 0.5],
+        "predictive_near_field_heading_deltas": [
+            -1.570796,
+            -1.047198,
+            -0.785398,
+            -0.523599,
+            0.0,
+            0.523599,
+            0.785398,
+            1.047198,
+            1.570796,
+        ],
         "predictive_candidate_speeds": [0.0, 0.25, 0.5, 0.75, 1.0],
         "predictive_candidate_heading_deltas": [
             -0.785398,
@@ -135,6 +155,7 @@ def _obs_min_robot_ped_distance(obs: dict) -> float:
 
 
 def main() -> int:
+    """Execute hard-seed diagnostics and write trace/summary artifacts."""
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

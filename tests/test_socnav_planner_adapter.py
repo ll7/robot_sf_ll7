@@ -394,6 +394,61 @@ def test_prediction_adapter_speed_clearance_gain_reduces_speed(monkeypatch):
     assert v_gain <= v_base
 
 
+def test_prediction_adapter_progress_risk_penalty_reduces_speed(monkeypatch):
+    """Progress-risk coupling should discourage fast progress through tight clearances."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.1, 0.0)], goal=(4.0, 0.0), heading=0.0)
+
+    cfg_lo = SocNavPlannerConfig(
+        predictive_progress_risk_weight=0.0,
+        predictive_progress_risk_distance=1.3,
+        predictive_ttc_weight=0.1,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_hi = SocNavPlannerConfig(
+        predictive_progress_risk_weight=4.0,
+        predictive_progress_risk_distance=1.3,
+        predictive_ttc_weight=0.1,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+
+    v_lo, _w_lo = PredictionPlannerAdapter(cfg_lo, allow_fallback=True).plan(obs)
+    v_hi, _w_hi = PredictionPlannerAdapter(cfg_hi, allow_fallback=True).plan(obs)
+    assert v_hi <= v_lo
+
+
+def test_prediction_adapter_adaptive_lattice_expands_near_field(monkeypatch):
+    """Near-field context should produce an expanded candidate lattice."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_near_field_distance=2.5,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+        predictive_near_field_speed_samples=(0.1, 0.2),
+        predictive_near_field_heading_deltas=(-np.pi / 2, 0.0, np.pi / 2),
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+
+    # One near pedestrian prediction triggers near-field expansion.
+    future = np.zeros((1, 4, 2), dtype=np.float32)
+    future[0, :, 0] = 0.8
+    mask = np.array([1.0], dtype=np.float32)
+
+    candidates = adapter._candidate_set(future_peds=future, mask=mask)
+    base_count = len(cfg.predictive_candidate_speeds) * len(cfg.predictive_candidate_heading_deltas)
+    assert len(candidates) > base_count
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

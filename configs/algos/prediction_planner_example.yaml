@@ -1,7 +1,7 @@
 # Example config for the RGL-inspired predictive planner adapter.
 # Use with map-runner: --algo prediction_planner --algo-config configs/algos/prediction_planner_example.yaml
 
-predictive_model_id: predictive_rgl_v1
+predictive_model_id: predictive_proxy_selected_v1
 # predictive_checkpoint_path: model/predictive_rgl_v1/predictive_model.pt
 predictive_device: cpu
 predictive_max_agents: 16

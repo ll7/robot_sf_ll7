@@ -54,6 +54,11 @@ planners:
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fallback
 
+  - key: prediction_planner
+    algo: prediction_planner
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+
   - key: socnav_bench
     algo: socnav_bench
     benchmark_profile: experimental

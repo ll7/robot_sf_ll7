@@ -141,13 +141,19 @@ def copy_available_assets(
         list[str]: Human-readable copy actions taken.
     """
     actions: list[str] = []
+    resolved_socnav_root = socnav_root.resolve()
     for asset in ASSET_PATHS:
         if not _required(asset, render_mode):
             continue
         src = _find_source(source_root, asset.key)
         if src is None:
             continue
+        src_resolved = src.resolve()
         dst = socnav_root / asset.relative_path
+        dst_resolved = (resolved_socnav_root / asset.relative_path).resolve()
+        if src_resolved == dst_resolved:
+            actions.append(f"skip self-copy: {asset.relative_path}")
+            continue
         if dst.exists():
             if not overwrite:
                 actions.append(f"skip existing: {asset.relative_path}")

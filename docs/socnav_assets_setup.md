@@ -113,7 +113,7 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 Expected behavior:
 
-- With complete assets, `socnav_bench` preflight does not fail due missing data.
+- With complete assets, `socnav_bench` preflight does not fail due to missing data.
 - Without required assets, run fails fast with explicit missing path errors.
 
 ## Licensing and Repository Hygiene

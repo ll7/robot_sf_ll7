@@ -60,3 +60,21 @@ def test_copy_available_assets_stages_from_source_root(tmp_path: Path) -> None:
 
     report = evaluate_assets(socnav_root, render_mode="full-render")
     assert report["ok"] is True
+
+
+def test_copy_available_assets_skips_self_copy_on_overwrite(tmp_path: Path) -> None:
+    """Overwrite mode must not delete assets when source and destination are identical."""
+    socnav_root = tmp_path / "socnavbench"
+    _mkdir(socnav_root / "wayptnav_data")
+    marker = socnav_root / "wayptnav_data" / "keep.txt"
+    marker.write_text("keep", encoding="utf-8")
+
+    actions = copy_available_assets(
+        socnav_root=socnav_root,
+        source_root=socnav_root,
+        render_mode="schematic",
+        overwrite=True,
+    )
+
+    assert "skip self-copy: wayptnav_data" in actions
+    assert marker.exists()

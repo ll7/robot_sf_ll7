@@ -193,8 +193,8 @@ def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
     assert np.isfinite(w)
 
 
-def test_load_upstream_planner_resets_control_pipeline_singleton(monkeypatch, tmp_path):
-    """Ensure upstream planner init clears cached ControlPipeline singleton."""
+def test_load_upstream_planner_preserves_control_pipeline_singleton(monkeypatch, tmp_path):
+    """Ensure upstream planner init keeps cached ControlPipeline singleton on happy path."""
     adapter = SamplingPlannerAdapter()
     root = tmp_path / "socnavbench"
     root.mkdir(parents=True)
@@ -214,19 +214,62 @@ def test_load_upstream_planner_resets_control_pipeline_singleton(monkeypatch, tm
     class FakeSP:
         @staticmethod
         def SamplingPlanner(*, obj_fn, params):
-            assert cp_mod.ControlPipelineV0.pipeline is None
+            assert cp_mod.ControlPipelineV0.pipeline is not None
             return {"obj_fn": obj_fn, "params": params}
 
     monkeypatch.setattr(
         adapter,
         "_import_socnav_modules",
-        lambda _root: ((object(), FakeSP, object()), None),
+        lambda: ((object(), FakeSP, object()), None),
     )
     monkeypatch.setattr(adapter, "_build_sampling_params", lambda _c, _sp, _d: {"k": 1})
 
     planner = adapter._load_upstream_planner(root)
 
     assert planner is not None
+    assert cp_mod.ControlPipelineV0.pipeline is not None
+
+
+def test_load_upstream_planner_resets_singleton_on_assertion_retry(monkeypatch, tmp_path):
+    """Ensure assertion-triggered planner init retries after clearing singleton cache."""
+    adapter = SamplingPlannerAdapter()
+    root = tmp_path / "socnavbench"
+    root.mkdir(parents=True)
+
+    monkeypatch.setattr(adapter, "_resolve_socnav_root", lambda _root: root)
+    monkeypatch.setattr(adapter, "_validate_socnav_root", lambda _root: [])
+    monkeypatch.setattr(adapter, "_is_trusted_socnav_root", lambda _root: True)
+
+    class FakeControlPipelineV0:
+        pipeline = object()
+
+    cp_mod = types.ModuleType("control_pipelines.control_pipeline_v0")
+    cp_mod.ControlPipelineV0 = FakeControlPipelineV0
+    monkeypatch.setitem(sys.modules, "control_pipelines", types.ModuleType("control_pipelines"))
+    monkeypatch.setitem(sys.modules, "control_pipelines.control_pipeline_v0", cp_mod)
+
+    call_count = {"n": 0}
+
+    class FakeSP:
+        @staticmethod
+        def SamplingPlanner(*, obj_fn, params):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise AssertionError("stale singleton")
+            assert cp_mod.ControlPipelineV0.pipeline is None
+            return {"obj_fn": obj_fn, "params": params}
+
+    monkeypatch.setattr(
+        adapter,
+        "_import_socnav_modules",
+        lambda: ((object(), FakeSP, object()), None),
+    )
+    monkeypatch.setattr(adapter, "_build_sampling_params", lambda _c, _sp, _d: {"k": 1})
+
+    planner = adapter._load_upstream_planner(root)
+
+    assert planner is not None
+    assert call_count["n"] == 2
     assert cp_mod.ControlPipelineV0.pipeline is None
 
 

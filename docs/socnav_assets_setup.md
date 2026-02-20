@@ -1,7 +1,7 @@
 # SocNavBench Asset Setup (License-Safe)
 
 This repository vendors only the SocNavBench planner code subset in `third_party/socnavbench`.
-It does **not** vendor external dataset assets due licensing constraints.
+It does **not** vendor external dataset assets due to licensing constraints.
 
 Use this runbook to populate local assets in `third_party/socnavbench` without committing them.
 

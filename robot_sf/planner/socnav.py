@@ -739,7 +739,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         return missing
 
     @staticmethod
-    def _import_socnav_modules(root: Path) -> tuple[tuple[Any, Any, Any] | None, str | None]:
+    def _import_socnav_modules() -> tuple[tuple[Any, Any, Any] | None, str | None]:
         """Import upstream SocNavBench modules from the provided root.
 
         Returns:
@@ -747,11 +747,6 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             ``((central_params, sampling_planner, DotMap), None)`` on success;
             otherwise ``(None, error_message)`` on failure.
         """
-        root_str = str(root)
-        sys_path_inserted = False
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
-            sys_path_inserted = True
         try:
             import params.central_params as central  # type: ignore  # noqa: PLC0415
             import planners.sampling_planner as sp  # type: ignore  # noqa: PLC0415
@@ -775,12 +770,6 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                     "Install SocNav prerequisites (for example `uv sync --extra socnav`)."
                 )
             return None, f"{type(exc).__name__}: {exc}.{hint}"
-        finally:
-            if sys_path_inserted:
-                try:
-                    sys.path.remove(root_str)
-                except ValueError:
-                    pass
 
     def _resolve_robot_dt(self, socnav_params: Any) -> float:
         """Resolve the robot dynamics timestep from SocNavBench params.
@@ -823,7 +812,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         return params
 
-    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:
+    def _load_upstream_planner(self, socnav_root: Path | None) -> Any | None:  # noqa: C901
         """Best-effort import of SocNavBench SamplingPlanner with defaults.
 
         Returns:
@@ -831,7 +820,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         env_root = os.getenv(_SOCNAV_ROOT_ENV)
         root_source = "argument" if socnav_root is not None else ("env" if env_root else "default")
-        root = self._resolve_socnav_root(socnav_root).resolve()
+        root_candidate = self._resolve_socnav_root(socnav_root)
+        if root_source != "default" and ".." in root_candidate.parts:
+            message = (
+                "SocNavBench root contains parent-directory traversal segments ('..'). "
+                f"Refusing to load from '{root_candidate}'. Provide a canonical trusted path."
+            )
+            return self._handle_socnav_failure(message)
+        root = root_candidate.resolve()
         if not root.exists():
             message = (
                 "SocNavBench root not found at "
@@ -862,10 +858,15 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             return self._handle_socnav_failure(message, not_found=True)
 
         prev_cwd = Path.cwd()
+        root_str = str(root)
+        sys_path_inserted = False
         try:
             # Upstream SocNavBench params resolve INI paths relative to cwd at import time.
             os.chdir(root)
-            modules, import_error = self._import_socnav_modules(root)
+            if root_str not in sys.path:
+                sys.path.insert(0, root_str)
+                sys_path_inserted = True
+            modules, import_error = self._import_socnav_modules()
             if modules is None:
                 message = "Failed to import SocNavBench modules."
                 if import_error:
@@ -876,21 +877,25 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             if params is None:
                 return None
             try:
-                # Upstream SocNavBench uses a class-level singleton control pipeline.
-                # In repeated benchmark episodes, params can diverge/mutate across runs,
-                # which triggers an internal equality assertion on re-init.
-                # Resetting the cache keeps per-run planner construction deterministic.
+                obj_fn = self._GoalDistanceObjective()
+                self._goal_objective = obj_fn
+                return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+            except AssertionError:
+                # Retry once after resetting the upstream singleton cache only when
+                # the upstream assertion indicates a stale/mismatched cached pipeline.
                 try:
                     import control_pipelines.control_pipeline_v0 as cp_v0  # type: ignore  # noqa: PLC0415
 
                     cp_v0.ControlPipelineV0.pipeline = None
-                except (ImportError, AttributeError):
-                    pass
+                except (ImportError, AttributeError) as exc:
+                    return self._handle_socnav_failure(
+                        "Failed to reset SocNavBench control pipeline singleton before retry.",
+                        exc=exc,
+                    )
                 obj_fn = self._GoalDistanceObjective()
                 self._goal_objective = obj_fn
                 return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
             except (
-                AssertionError,
                 AttributeError,
                 OSError,
                 RuntimeError,
@@ -904,6 +909,11 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                     exc=exc,
                 )
         finally:
+            if sys_path_inserted:
+                try:
+                    sys.path.remove(root_str)
+                except ValueError:
+                    pass
             os.chdir(prev_cwd)
 
     @staticmethod

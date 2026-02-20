@@ -39,6 +39,12 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
   - baseline + experimental planners on full scenario suite
 - `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
   - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
+- `configs/algos/prediction_planner_camera_ready.yaml`
+  - explicit `prediction_planner` camera-ready profile used by all-planners presets
+  - resolves checkpoint via `predictive_model_id` from `model/registry.yaml`
+
+`prediction_planner` is now part of all-planners campaign presets as an experimental planner.
+For reproducible runs, verify that the configured model id exists and resolves to a valid local checkpoint before launching the campaign.
 
 SNQI calibration assets used by camera-ready presets:
 

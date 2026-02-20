@@ -281,9 +281,11 @@ def test_social_force_and_variants_produce_actions():
 def test_policy_wrappers_and_factory_helpers():
     from robot_sf.planner.socnav import (
         ORCAPlannerAdapter,
+        PredictionPlannerAdapter,
         SACADRLPlannerAdapter,
         SocNavPlannerPolicy,
         make_orca_policy,
+        make_prediction_policy,
         make_sacadrl_policy,
         make_social_force_policy,
     )
@@ -296,6 +298,7 @@ def test_policy_wrappers_and_factory_helpers():
     assert isinstance(make_social_force_policy().adapter, SamplingPlannerAdapter)
     assert isinstance(make_orca_policy().adapter, ORCAPlannerAdapter)
     assert isinstance(make_sacadrl_policy().adapter, SACADRLPlannerAdapter)
+    assert isinstance(make_prediction_policy(allow_fallback=True).adapter, PredictionPlannerAdapter)
 
 
 def test_socnavbench_adapter_uses_upstream_when_available():

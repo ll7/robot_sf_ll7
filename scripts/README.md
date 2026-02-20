@@ -19,6 +19,7 @@ This directory contains all executable scripts for the Robot SF project, organiz
 ### I want to...
 
 * **Train a robot policy** → [`training_ppo.py`](#training_ppopy) or [`training/`](#training-directory)
+* **Train/evaluate predictive planner** → [`scripts/training/train_predictive_planner.py`](#predictive-planner-workflow) and [`scripts/validation/run_predictive_success_campaign.py`](#predictive-planner-workflow)
 * **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
 * **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
 * **Validate changes** → [`validation/`](#validation-directory)
@@ -39,6 +40,10 @@ scripts/
 ├── training/                          # Training workflows
 │   ├── train_expert_ppo.py           # Expert PPO training
 │   ├── train_dreamerv3_rllib.py      # RLlib DreamerV3 training
+│   ├── collect_predictive_planner_data.py # Predictive planner dataset collection
+│   ├── collect_predictive_hardcase_data.py # Hard-case predictive dataset collection
+│   ├── build_predictive_mixed_dataset.py # Merge base + hard datasets
+│   ├── train_predictive_planner.py   # Predictive trajectory model training
 │   ├── collect_expert_trajectories.py # Trajectory collection
 │   ├── pretrain_from_expert.py       # Behavioral cloning pre-training
 │   ├── train_ppo_with_pretrained_policy.py # PPO fine-tuning
@@ -51,6 +56,10 @@ scripts/
 │
 ├── validation/                        # Testing & validation
 │   ├── performance_smoke_test.py     # Performance validation
+│   ├── evaluate_predictive_planner.py # Predictive planner benchmark eval
+│   ├── analyze_predictive_hard_cases.py # Hard-case taxonomy report
+│   ├── run_predictive_hard_seed_diagnostics.py # Per-seed diagnostics traces
+│   ├── run_predictive_success_campaign.py # Checkpoint/config campaign sweep
 │   ├── run_examples_smoke.py         # Example script smoke tests
 │   ├── verify_maps.py                # Map file validation
 │   └── test_*.sh                     # Shell-based validation tests
@@ -79,6 +88,36 @@ scripts/
 ## Core Scripts
 
 ### Training Scripts
+
+### Predictive Planner Workflow
+
+#### `scripts/training/collect_predictive_planner_data.py`
+
+Collect trajectory-prediction training data from scenario rollouts.
+
+#### `scripts/training/collect_predictive_hardcase_data.py`
+
+Collect focused hard-case data using a seed manifest.
+
+#### `scripts/training/build_predictive_mixed_dataset.py`
+
+Build a mixed dataset combining base and hard-case samples.
+
+#### `scripts/training/train_predictive_planner.py`
+
+Train predictive trajectory model checkpoint(s); supports proxy hard-set evaluation and selection.
+
+#### `scripts/validation/evaluate_predictive_planner.py`
+
+Run map-runner benchmark evaluation for a checkpoint + planner config.
+
+#### `scripts/validation/run_predictive_hard_seed_diagnostics.py`
+
+Generate per-seed trace diagnostics for hard manifests.
+
+#### `scripts/validation/run_predictive_success_campaign.py`
+
+Run checkpoint/config sweep with hard/global ranking and confidence intervals.
 
 #### `training_ppo.py`
 

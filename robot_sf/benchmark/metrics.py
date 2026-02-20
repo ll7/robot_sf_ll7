@@ -463,12 +463,12 @@ def success(data: EpisodeData, *, horizon: int) -> float:
 def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
     """Normalized time to goal; 1.0 if not successful.
 
-    success definition mirrors `success` metric (no collision + reached early).
+    Success definition mirrors benchmark-facing `success_rate` semantics.
 
     Returns:
         Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
-    if success(data, horizon=horizon) == 1.0:
+    if success_rate(data, horizon=horizon) == 1.0:
         assert data.reached_goal_step is not None
         return float(data.reached_goal_step) / float(horizon)
     return 1.0
@@ -480,7 +480,7 @@ def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
     Returns:
         Normalized time-to-goal for successful episodes, NaN otherwise.
     """
-    if success(data, horizon=horizon) != 1.0:
+    if success_rate(data, horizon=horizon) != 1.0:
         return float("nan")
     assert data.reached_goal_step is not None
     return float(data.reached_goal_step) / float(horizon)
@@ -536,7 +536,7 @@ def time_to_goal_ideal_ratio(
     Returns:
         ``time_to_goal / ideal_time`` for successful episodes, NaN otherwise.
     """
-    if success(data, horizon=horizon) != 1.0:
+    if success_rate(data, horizon=horizon) != 1.0:
         return float("nan")
     actual = time_to_goal(data)
     if not math.isfinite(actual):
@@ -2249,7 +2249,8 @@ def compute_all_metrics(
         )
 
     values: dict[str, float] = {}
-    values["success"] = success(data, horizon=horizon)
+    # Use collision-count-based success semantics for benchmark-facing outputs.
+    values["success"] = success_rate(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
     values["time_to_goal_norm_success_only"] = time_to_goal_norm_success_only(data, horizon)
     values["time_to_goal_success_only_valid"] = (

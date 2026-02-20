@@ -19,6 +19,11 @@ import numpy as np
 from loguru import logger
 
 try:  # pragma: no cover - optional dependency
+    import torch
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    torch = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
     import tensorflow.compat.v1 as tf  # type: ignore
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
     tf = None  # type: ignore[assignment]
@@ -36,6 +41,10 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+from robot_sf.planner.predictive_model import (
+    PredictiveTrajectoryModel,
+    load_predictive_checkpoint,
+)
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
@@ -47,6 +56,7 @@ _SOCNAV_REQUIRED_MODULES = (
     "planners.sampling_planner",
 )
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
+_PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
 _SACADRL_STATE_ORDER = (
     "num_other_agents",
     "dist_to_goal",
@@ -394,6 +404,52 @@ class SocNavPlannerConfig:
     sacadrl_pref_speed: float = 1.0
     sacadrl_max_other_agents: int = 3
     sacadrl_sorting_method: str = "closest_first"
+    predictive_model_id: str = _PREDICTIVE_MODEL_ID
+    predictive_checkpoint_path: str | None = None
+    predictive_device: str = "cpu"
+    predictive_max_agents: int = 16
+    predictive_horizon_steps: int = 8
+    predictive_rollout_dt: float = 0.2
+    predictive_goal_weight: float = 1.0
+    predictive_collision_weight: float = 6.0
+    predictive_near_miss_weight: float = 1.5
+    predictive_velocity_weight: float = 0.05
+    predictive_turn_weight: float = 0.15
+    predictive_ttc_weight: float = 0.0
+    predictive_ttc_distance: float = 0.8
+    predictive_safe_distance: float = 0.6
+    predictive_near_distance: float = 1.0
+    predictive_robot_radius: float = 0.3
+    predictive_pedestrian_radius: float = 0.3
+    predictive_speed_clearance_gain: float = 0.0
+    predictive_progress_risk_weight: float = 1.0
+    predictive_progress_risk_distance: float = 1.2
+    predictive_hard_clearance_distance: float = 0.75
+    predictive_hard_clearance_weight: float = 2.5
+    predictive_adaptive_horizon_enabled: bool = True
+    predictive_horizon_boost_steps: int = 4
+    predictive_near_field_distance: float = 2.4
+    predictive_near_field_speed_cap: float = 0.75
+    predictive_near_field_speed_samples: tuple[float, ...] = (0.1, 0.2, 0.35, 0.5)
+    predictive_near_field_heading_deltas: tuple[float, ...] = (
+        -pi / 2,
+        -pi / 3,
+        -pi / 4,
+        -pi / 6,
+        0.0,
+        pi / 6,
+        pi / 4,
+        pi / 3,
+        pi / 2,
+    )
+    predictive_candidate_speeds: tuple[float, ...] = (0.0, 0.5, 1.0)
+    predictive_candidate_heading_deltas: tuple[float, ...] = (
+        -pi / 4,
+        -pi / 8,
+        0.0,
+        pi / 8,
+        pi / 4,
+    )
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -2365,6 +2421,583 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         return linear, angular
 
 
+class PredictionPlannerAdapter(SamplingPlannerAdapter):
+    """RGL-inspired predictive planner using a learned trajectory model + sampled rollout."""
+
+    _EPS = 1e-6
+
+    def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
+        """Initialize predictive planner adapter and deferred model loading."""
+        self.config = config or SocNavPlannerConfig()
+        self._allow_fallback = bool(allow_fallback)
+        self._model: PredictiveTrajectoryModel | None = None
+        self._load_error: Exception | None = None
+        self._fallback_warned = False
+        self._device = self._resolve_device()
+
+    def _resolve_device(self) -> str:
+        """Resolve runtime device string for predictive model inference.
+
+        Returns:
+            str: Torch device identifier.
+        """
+        requested = str(self.config.predictive_device).strip().lower()
+        if requested.startswith("cuda"):
+            if torch is not None and torch.cuda.is_available():
+                return requested
+            logger.warning(
+                "Predictive planner requested device '{}' but CUDA is unavailable; using CPU.",
+                requested,
+            )
+        return "cpu"
+
+    def _ensure_model(self) -> PredictiveTrajectoryModel | None:
+        """Load predictive model checkpoint on-demand.
+
+        Returns:
+            PredictiveTrajectoryModel | None: Model instance or None when fallback is enabled.
+        """
+        if self._model is not None:
+            return self._model
+        if self._load_error is not None:
+            return None if self._allow_fallback else self._raise_cached_error()
+        try:
+            self._model = self._build_model()
+        except Exception as exc:
+            if self._allow_fallback:
+                self._load_error = exc
+                if not self._fallback_warned:
+                    logger.warning(
+                        "Falling back to constant-velocity predictive planner behavior: {}. "
+                        "Set allow_fallback=False to fail fast.",
+                        exc,
+                    )
+                    self._fallback_warned = True
+                return None
+            raise
+        return self._model
+
+    def _raise_cached_error(self) -> None:
+        """Re-raise cached predictive-model initialization error."""
+        assert self._load_error is not None
+        raise self._load_error
+
+    def _resolve_checkpoint_path(self) -> Path:
+        """Resolve predictive model checkpoint path.
+
+        Returns:
+            Path: Checkpoint path.
+        """
+        if self.config.predictive_checkpoint_path:
+            checkpoint = Path(self.config.predictive_checkpoint_path).expanduser()
+        else:
+            checkpoint = resolve_model_path(self.config.predictive_model_id)
+        if not checkpoint.exists():
+            raise FileNotFoundError(f"Predictive planner checkpoint not found: {checkpoint}")
+        return checkpoint
+
+    def _build_model(self) -> PredictiveTrajectoryModel:
+        """Construct predictive model from a checkpoint.
+
+        Returns:
+            PredictiveTrajectoryModel: Loaded model instance.
+        """
+        if torch is None:  # pragma: no cover - dependency guard
+            raise RuntimeError(
+                "PyTorch is required for PredictionPlannerAdapter. Install torch dependency."
+            )
+        checkpoint_path = self._resolve_checkpoint_path()
+        model, _payload = load_predictive_checkpoint(checkpoint_path, map_location=self._device)
+        model.eval()
+        return model
+
+    def _normalize_pedestrians(self, ped_state: dict) -> tuple[np.ndarray, np.ndarray]:
+        """Normalize pedestrian positions and ego-frame velocities.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: ``(positions_world, velocities_ego)`` arrays.
+        """
+        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+        if ped_positions.ndim == 1:
+            ped_positions = (
+                ped_positions.reshape(-1, 2) if ped_positions.size % 2 == 0 else np.zeros((0, 2))
+            )
+        elif ped_positions.ndim != 2:
+            ped_positions = np.zeros((0, 2), dtype=float)
+        if ped_positions.ndim == 2 and ped_positions.shape[1] != 2:
+            ped_positions = (
+                ped_positions[:, :2]
+                if ped_positions.shape[1] > 2
+                else np.pad(
+                    ped_positions,
+                    ((0, 0), (0, 2 - ped_positions.shape[1])),
+                    constant_values=0.0,
+                )
+            )
+
+        ped_count = int(
+            self._as_1d_float(ped_state.get("count", [ped_positions.shape[0]]), pad=1)[0]
+        )
+        ped_count = max(0, min(ped_count, int(ped_positions.shape[0])))
+        ped_positions = ped_positions[:ped_count]
+
+        ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
+        if ped_velocities.ndim == 1:
+            ped_velocities = (
+                ped_velocities.reshape(-1, 2)
+                if ped_velocities.size % 2 == 0
+                else np.zeros((0, 2), dtype=float)
+            )
+        elif ped_velocities.ndim != 2:
+            ped_velocities = np.zeros((0, 2), dtype=float)
+        if ped_velocities.ndim == 2 and ped_velocities.shape[1] != 2:
+            ped_velocities = (
+                ped_velocities[:, :2]
+                if ped_velocities.shape[1] > 2
+                else np.pad(
+                    ped_velocities,
+                    ((0, 0), (0, 2 - ped_velocities.shape[1])),
+                    constant_values=0.0,
+                )
+            )
+        if ped_velocities.shape[0] < ped_count:
+            ped_velocities = np.pad(
+                ped_velocities,
+                ((0, ped_count - ped_velocities.shape[0]), (0, 0)),
+                constant_values=0.0,
+            )
+        ped_velocities = ped_velocities[:ped_count]
+        return ped_positions, ped_velocities
+
+    def _build_model_input(
+        self, observation: dict
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """Build predictive-model input from SocNav structured observation.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+            ``(state, mask, robot_pos, robot_heading)``.
+        """
+        robot_state, _goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        ped_positions, ped_velocities_ego = self._normalize_pedestrians(ped_state)
+
+        max_agents = max(1, int(self.config.predictive_max_agents))
+        state = np.zeros((max_agents, 4), dtype=np.float32)
+        mask = np.zeros((max_agents,), dtype=np.float32)
+        count = min(max_agents, ped_positions.shape[0])
+        if count > 0:
+            rel = ped_positions[:count] - robot_pos.reshape(1, 2)
+            cos_h = float(np.cos(robot_heading))
+            sin_h = float(np.sin(robot_heading))
+            rel_x = cos_h * rel[:, 0] + sin_h * rel[:, 1]
+            rel_y = -sin_h * rel[:, 0] + cos_h * rel[:, 1]
+            state[:count, 0] = rel_x
+            state[:count, 1] = rel_y
+            state[:count, 2:4] = ped_velocities_ego[:count]
+            mask[:count] = 1.0
+        return state, mask, robot_pos, robot_heading
+
+    def _constant_velocity_prediction(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Generate constant-velocity fallback trajectories.
+
+        Returns:
+            np.ndarray: Predicted trajectories ``(N, T, 2)`` in robot frame.
+        """
+        steps = max(1, int(self.config.predictive_horizon_steps))
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        future = np.zeros((state.shape[0], steps, 2), dtype=np.float32)
+        for t in range(steps):
+            tau = float(t + 1) * dt
+            future[:, t, 0] = state[:, 0] + tau * state[:, 2]
+            future[:, t, 1] = state[:, 1] + tau * state[:, 3]
+        future *= mask[:, None, None]
+        return future
+
+    def _predict_trajectories(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Predict future pedestrian trajectories in robot frame.
+
+        Returns:
+            np.ndarray: Predicted trajectories ``(N, T, 2)``.
+        """
+        model = self._ensure_model()
+        if model is None:
+            return self._constant_velocity_prediction(state, mask)
+        assert torch is not None
+        with torch.no_grad():
+            state_t = torch.from_numpy(state[None]).to(self._device)
+            mask_t = torch.from_numpy(mask[None]).to(self._device)
+            out = model(state_t, mask_t)
+            future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
+        return future
+
+    def _min_predicted_distance(
+        self,
+        *,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        steps: int | None = None,
+    ) -> float:
+        """Return minimum predicted ped distance to robot origin in local frame."""
+        if future_peds.size == 0:
+            return float("inf")
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return float("inf")
+        t_max = future_peds.shape[1] if steps is None else min(int(steps), future_peds.shape[1])
+        if t_max <= 0:
+            return float("inf")
+        valid = future_peds[valid_idx, :t_max, :]
+        dist = np.linalg.norm(valid, axis=2)
+        return float(np.min(dist)) if dist.size > 0 else float("inf")
+
+    def _effective_rollout_steps(self, *, future_peds: np.ndarray, mask: np.ndarray) -> int:
+        """Select evaluation horizon steps, with optional near-field boosting.
+
+        Returns:
+            int: Number of rollout steps for candidate evaluation.
+        """
+        base_steps = max(1, int(self.config.predictive_horizon_steps))
+        max_steps = max(1, int(future_peds.shape[1]))
+        if not bool(self.config.predictive_adaptive_horizon_enabled):
+            return min(base_steps, max_steps)
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_peds,
+            mask=mask,
+            steps=min(base_steps, max_steps),
+        )
+        near_field = float(self.config.predictive_near_field_distance)
+        if min_pred_dist <= near_field:
+            boosted = base_steps + max(0, int(self.config.predictive_horizon_boost_steps))
+            return min(boosted, max_steps)
+        return min(base_steps, max_steps)
+
+    def _risk_speed_cap_ratio(self, *, future_peds: np.ndarray, mask: np.ndarray) -> float:
+        """Compute a risk-aware cap on speed ratio based on near predicted pedestrians.
+
+        Returns:
+            float: Speed cap ratio in ``[0.1, 1.0]``.
+        """
+        near_field = float(self.config.predictive_near_field_distance)
+        if near_field <= 0.0:
+            return 1.0
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_peds,
+            mask=mask,
+            steps=max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1])),
+        )
+        if not np.isfinite(min_pred_dist):
+            return 1.0
+        cap = float(self.config.predictive_near_field_speed_cap)
+        cap = float(np.clip(cap, 0.1, 1.0))
+        if min_pred_dist <= near_field:
+            return cap
+        if min_pred_dist <= near_field * 1.5:
+            return min(1.0, cap + 0.15)
+        return 1.0
+
+    def _candidate_set(
+        self, *, future_peds: np.ndarray, mask: np.ndarray
+    ) -> list[tuple[float, float]]:
+        """Build a risk-adaptive candidate command lattice.
+
+        Returns:
+            list[tuple[float, float]]: Candidate ``(v, omega)`` commands.
+        """
+        cap_ratio = self._risk_speed_cap_ratio(future_peds=future_peds, mask=mask)
+        base_speed_ratios = [float(v) for v in self.config.predictive_candidate_speeds]
+        heading_deltas = [float(v) for v in self.config.predictive_candidate_heading_deltas]
+        near_field = float(self.config.predictive_near_field_distance)
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_peds,
+            mask=mask,
+            steps=max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1])),
+        )
+        if np.isfinite(min_pred_dist) and min_pred_dist <= near_field:
+            base_speed_ratios.extend(
+                float(v) for v in self.config.predictive_near_field_speed_samples
+            )
+            heading_deltas.extend(
+                float(v) for v in self.config.predictive_near_field_heading_deltas
+            )
+
+        speed_ratios = sorted({float(np.clip(v, 0.0, 1.0)) for v in base_speed_ratios})
+        heading_deltas = sorted(set(heading_deltas))
+        dt = max(float(self.config.predictive_rollout_dt), self._EPS)
+        max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
+        candidates: list[tuple[float, float]] = []
+        for ratio in speed_ratios:
+            v = float(np.clip(ratio * self.config.max_linear_speed, 0.0, max_v))
+            for delta in heading_deltas:
+                omega = float(
+                    np.clip(
+                        delta / dt,
+                        -self.config.max_angular_speed,
+                        self.config.max_angular_speed,
+                    )
+                )
+                candidates.append((v, omega))
+        candidates.append((0.0, 0.0))
+        # Keep deterministic ordering for stable benchmark outputs.
+        return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
+
+    @staticmethod
+    def _rollout_robot(
+        *,
+        v: float,
+        w: float,
+        dt: float,
+        steps: int,
+    ) -> np.ndarray:
+        """Roll out robot trajectory in its local frame under unicycle dynamics.
+
+        Returns:
+            np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
+        """
+        pos = np.zeros(2, dtype=float)
+        heading = 0.0
+        traj = np.zeros((steps, 2), dtype=float)
+        for i in range(steps):
+            heading += float(w) * dt
+            pos[0] += float(v) * np.cos(heading) * dt
+            pos[1] += float(v) * np.sin(heading) * dt
+            traj[i] = pos
+        return traj
+
+    def _goal_progress(
+        self,
+        robot_state: dict,
+        goal_state: dict,
+        v: float,
+        w: float,
+        *,
+        steps: int | None = None,
+    ) -> float:
+        """Compute progress toward the goal over the rollout horizon.
+
+        Returns:
+            float: Positive value when a candidate reduces distance to goal.
+        """
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
+        initial_dist = float(np.linalg.norm(goal - robot_pos))
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
+        local_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        x_world = cos_h * local_traj[-1, 0] - sin_h * local_traj[-1, 1]
+        y_world = sin_h * local_traj[-1, 0] + cos_h * local_traj[-1, 1]
+        final_world = robot_pos + np.array([x_world, y_world], dtype=float)
+        final_dist = float(np.linalg.norm(goal - final_world))
+        return initial_dist - final_dist
+
+    def _collision_cost(
+        self,
+        *,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int | None = None,
+    ) -> tuple[float, float]:
+        """Compute collision and near-miss penalties for a candidate action.
+
+        Returns:
+            tuple[float, float]: ``(collision_penalty, near_miss_penalty)``.
+        """
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        radius_margin = float(self.config.predictive_robot_radius) + float(
+            self.config.predictive_pedestrian_radius
+        )
+        speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
+        safe_dist = float(self.config.predictive_safe_distance) + radius_margin + speed_margin
+        near_dist = max(
+            float(self.config.predictive_near_distance) + radius_margin + speed_margin, safe_dist
+        )
+        collisions = 0.0
+        near_misses = 0.0
+        for t in range(min(steps, future_peds.shape[1])):
+            delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
+            dist = np.linalg.norm(delta, axis=1)
+            valid_dist = dist[mask > 0.5]
+            if valid_dist.size == 0:
+                continue
+            collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
+            near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+        return collisions, near_misses
+
+    def _min_clearance(
+        self,
+        *,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int,
+    ) -> float:
+        """Compute minimum predicted robot-pedestrian clearance for a candidate.
+
+        Returns:
+            float: Minimum center-to-center clearance in meters.
+        """
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=max(1, int(steps)))
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return float("inf")
+        ped = future_peds[valid_idx, : robot_traj.shape[0], :]
+        if ped.size == 0:
+            return float("inf")
+        delta = ped - robot_traj.reshape(1, robot_traj.shape[0], 2)
+        dist = np.linalg.norm(delta, axis=2)
+        return float(np.min(dist)) if dist.size > 0 else float("inf")
+
+    def _ttc_penalty(
+        self,
+        *,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int | None = None,
+    ) -> float:
+        """Compute a TTC-style penalty for near-term close approaches.
+
+        Returns:
+            float: Penalty that increases for earlier/closer predicted encounters.
+        """
+        radius_margin = float(self.config.predictive_robot_radius) + float(
+            self.config.predictive_pedestrian_radius
+        )
+        speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
+        threshold = float(self.config.predictive_ttc_distance) + radius_margin + speed_margin
+        if threshold <= 0.0:
+            return 0.0
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        penalty = 0.0
+        for t in range(min(steps, future_peds.shape[1])):
+            delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
+            dist = np.linalg.norm(delta, axis=1)
+            valid_dist = dist[mask > 0.5]
+            if valid_dist.size == 0:
+                continue
+            shortfall = np.maximum(0.0, threshold - valid_dist)
+            time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
+            penalty += float(np.sum(shortfall * time_weight))
+        return penalty
+
+    def _score_action(
+        self,
+        *,
+        observation: dict,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int,
+    ) -> float:
+        """Score candidate action by combining goal, safety, smoothness, and occupancy costs.
+
+        Returns:
+            float: Scalar cost (lower is better).
+        """
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        goal_progress = self._goal_progress(robot_state, goal_state, v, w, steps=steps)
+        collision_pen, near_pen = self._collision_cost(
+            future_peds=future_peds,
+            mask=mask,
+            v=v,
+            w=w,
+            steps=steps,
+        )
+        ttc_pen = self._ttc_penalty(
+            future_peds=future_peds,
+            mask=mask,
+            v=v,
+            w=w,
+            steps=steps,
+        )
+        min_clearance = self._min_clearance(
+            future_peds=future_peds,
+            mask=mask,
+            v=v,
+            w=w,
+            steps=steps,
+        )
+        progress_risk_shortfall = max(
+            0.0, float(self.config.predictive_progress_risk_distance) - float(min_clearance)
+        )
+        progress_risk_pen = max(0.0, goal_progress) * progress_risk_shortfall
+        hard_clearance_shortfall = max(
+            0.0, float(self.config.predictive_hard_clearance_distance) - float(min_clearance)
+        )
+
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        candidate_heading = robot_heading + w * dt
+        direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
+        _, occ_penalty = self._path_penalty(
+            robot_pos=robot_pos,
+            direction=direction,
+            observation=observation,
+            base_distance=max(float(v) * float(self.config.predictive_horizon_steps) * dt, 1e-3),
+            num_samples=max(2, int(self.config.predictive_horizon_steps)),
+        )
+
+        return (
+            -float(self.config.predictive_goal_weight) * goal_progress
+            + float(self.config.predictive_collision_weight) * collision_pen
+            + float(self.config.predictive_near_miss_weight) * near_pen
+            + float(self.config.predictive_progress_risk_weight) * progress_risk_pen
+            + float(self.config.predictive_hard_clearance_weight) * hard_clearance_shortfall
+            + float(self.config.predictive_velocity_weight) * abs(v)
+            + float(self.config.predictive_turn_weight) * abs(w)
+            + float(self.config.predictive_ttc_weight) * ttc_pen
+            + float(self.config.occupancy_weight) * occ_penalty
+        )
+
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) via predictive rollout search over learned trajectories.
+
+        Returns:
+            tuple[float, float]: Linear and angular command.
+        """
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
+        if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
+            return 0.0, 0.0
+
+        state, mask, _robot_pos, _robot_heading = self._build_model_input(observation)
+        future = self._predict_trajectories(state, mask)
+        steps = self._effective_rollout_steps(future_peds=future, mask=mask)
+
+        best = (0.0, 0.0)
+        best_cost = float("inf")
+        for v, w in self._candidate_set(future_peds=future, mask=mask):
+            cost = self._score_action(
+                observation=observation,
+                future_peds=future,
+                mask=mask,
+                v=v,
+                w=w,
+                steps=steps,
+            )
+            if cost < best_cost:
+                best_cost = cost
+                best = (v, w)
+        return best
+
+
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
     """
     Convenience constructor for social-force-like planner policy.
@@ -2406,6 +3039,23 @@ def make_sacadrl_policy(
 
     return SocNavPlannerPolicy(
         adapter=SACADRLPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    )
+
+
+def make_prediction_policy(
+    config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False
+) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for predictive planner policy.
+
+    Set ``allow_fallback=True`` to permit constant-velocity fallback behavior
+    when the predictive model checkpoint cannot be loaded.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping PredictionPlannerAdapter.
+    """
+    return SocNavPlannerPolicy(
+        adapter=PredictionPlannerAdapter(config=config, allow_fallback=allow_fallback)
     )
 
 

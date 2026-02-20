@@ -55,6 +55,8 @@ _SOCNAV_REQUIRED_MODULES = (
     "params.central_params",
     "planners.sampling_planner",
 )
+_SOCNAV_ASSET_SETUP_DOC = "docs/socnav_assets_setup.md"
+_SOCNAV_ASSET_SETUP_CMD = "uv run python scripts/tools/prepare_socnav_assets.py"
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
 _SACADRL_STATE_ORDER = (
@@ -815,7 +817,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         except SystemExit as exc:
             return self._handle_socnav_failure(
                 "SocNavBench control pipeline parameters failed to load. "
-                "Ensure the SocNavBench data directories exist.",
+                "Ensure the SocNavBench data directories exist. "
+                f"See `{_SOCNAV_ASSET_SETUP_DOC}` and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
                 exc=exc,
             )
         return params
@@ -895,7 +898,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 ValueError,
             ) as exc:  # pragma: no cover
                 return self._handle_socnav_failure(
-                    f"Failed to initialize SocNavBench SamplingPlanner: {exc}", exc=exc
+                    "Failed to initialize SocNavBench SamplingPlanner: "
+                    f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
+                    f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
+                    exc=exc,
                 )
         finally:
             os.chdir(prev_cwd)

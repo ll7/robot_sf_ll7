@@ -2,6 +2,10 @@
 
 This runbook documents the reproducible training/evaluation flow for the predictive local planner.
 
+For the full concept + architecture + implementation walkthrough, see:
+
+- `docs/training/predictive_planner_complete_tutorial.md`
+
 ## Scope
 
 - Data collection for trajectory prediction training
@@ -20,8 +24,8 @@ Base rollout data:
 
 ```bash
 uv run python scripts/training/collect_predictive_planner_data.py \
-  --scenario-matrix configs/scenarios/classic_interactions.yaml \
-  --output-npz output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz
+  --episodes 200 \
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz
 ```
 
 Hard-case-focused data:
@@ -30,16 +34,16 @@ Hard-case-focused data:
 uv run python scripts/training/collect_predictive_hardcase_data.py \
   --scenario-matrix configs/scenarios/classic_interactions.yaml \
   --seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml \
-  --output-npz output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz
 ```
 
 Mixed dataset:
 
 ```bash
 uv run python scripts/training/build_predictive_mixed_dataset.py \
-  --base-npz output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz \
-  --hard-npz output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz \
-  --output-npz output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz
+  --base-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz \
+  --hardcase-dataset output/tmp/predictive_planner/datasets/predictive_rollouts_hardcase_v1.npz \
+  --output output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz
 ```
 
 ## 2) Train predictive model

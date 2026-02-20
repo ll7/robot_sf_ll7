@@ -309,38 +309,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-    def _vel_world_to_ego(vectors_world: np.ndarray, robot_heading: float) -> np.ndarray:
-        """Rotate world-frame vectors to ego frame (no translation)."""
-        if vectors_world.size == 0:
-            return np.zeros((0, 2), dtype=np.float32)
-        cos_h = float(np.cos(robot_heading))
-        sin_h = float(np.sin(robot_heading))
-        vx_ego = cos_h * vectors_world[:, 0] + sin_h * vectors_world[:, 1]
-        vy_ego = -sin_h * vectors_world[:, 0] + cos_h * vectors_world[:, 1]
-        return np.stack([vx_ego, vy_ego], axis=1).astype(np.float32)
-
-    def _nearest_match_indices(
-        source_positions: np.ndarray,
-        target_positions: np.ndarray,
-        *,
-        max_match_distance: float = 1.5,
-    ) -> dict[int, int]:
-        """Match source pedestrians to target pedestrians by nearest neighbor."""
-        if source_positions.size == 0 or target_positions.size == 0:
-            return {}
-        matches: dict[int, int] = {}
-        taken_targets: set[int] = set()
-        for src_idx in range(source_positions.shape[0]):
-            distances = np.linalg.norm(target_positions - source_positions[src_idx], axis=1)
-            sorted_target = np.argsort(distances)
-            for tgt_idx in sorted_target:
-                tgt_i = int(tgt_idx)
-                if tgt_i in taken_targets:
-                    continue
-                if float(distances[tgt_i]) > max_match_distance:
-                    break
-                matches[src_idx] = tgt_i
-                taken_targets.add(tgt_i)
-                break
-        return matches

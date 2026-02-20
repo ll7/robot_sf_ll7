@@ -7,7 +7,12 @@ from typing import Any
 
 import yaml
 
-_DEFAULT_CONFIG_PATH = Path("configs/algos/prediction_planner_camera_ready.yaml")
+_DEFAULT_CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "configs"
+    / "algos"
+    / "prediction_planner_camera_ready.yaml"
+)
 
 
 def load_predictive_planner_algo_config(

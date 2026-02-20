@@ -536,7 +536,7 @@ def time_to_goal_ideal_ratio(
     Returns:
         ``time_to_goal / ideal_time`` for successful episodes, NaN otherwise.
     """
-    if success(data, horizon=horizon) != 1.0:
+    if success_rate(data, horizon=horizon) != 1.0:
         return float("nan")
     actual = time_to_goal(data)
     if not math.isfinite(actual):

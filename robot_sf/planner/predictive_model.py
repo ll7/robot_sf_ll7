@@ -191,7 +191,7 @@ def load_predictive_checkpoint(
     Returns:
         tuple[PredictiveTrajectoryModel, dict[str, Any]]: Instantiated model and raw payload.
     """
-    payload = torch.load(Path(path), map_location=map_location)
+    payload = torch.load(Path(path), map_location=map_location, weights_only=False)
     config_data = payload.get("config", {})
     config = PredictiveModelConfig(**config_data)
     model = PredictiveTrajectoryModel(config)

@@ -89,10 +89,15 @@ def _episode_success(row: dict) -> bool:
     """Resolve episode success with collision-aware fallback semantics."""
     metrics = row.get("metrics", {})
     if "success_rate" in metrics:
-        return float(metrics.get("success_rate", 0.0)) >= 0.5
+        value = metrics.get("success_rate")
+        if value is None or value == "":
+            return False
+        return float(value) >= 0.5
     value = metrics.get("success", False)
     if isinstance(value, bool):
         return value
+    if value is None or value == "":
+        return False
     return float(value) >= 0.5
 
 
@@ -147,12 +152,27 @@ def _run_eval(
         benchmark_profile="experimental",
     )
 
-    rows = [
-        json.loads(line) for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line
-    ]
+    rows: list[dict] = []
+    for line_number, line in enumerate(
+        jsonl_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"Malformed JSON in {jsonl_path} at line {line_number}: {exc}"
+            ) from exc
+        if isinstance(payload, dict):
+            rows.append(payload)
     success_vals = np.asarray([1.0 if _episode_success(row) else 0.0 for row in rows], dtype=float)
     min_dist_vals = np.asarray(
-        [float(row.get("metrics", {}).get("min_distance", 0.0)) for row in rows],
+        [
+            float(row.get("metrics", {}).get("min_distance"))
+            for row in rows
+            if row.get("metrics", {}).get("min_distance") is not None
+        ],
         dtype=float,
     )
     speed_vals = np.asarray(
@@ -172,7 +192,7 @@ def _run_eval(
         success_rate=float(np.mean(success_vals)) if success_vals.size > 0 else 0.0,
         success_ci_low=ci_low,
         success_ci_high=ci_high,
-        mean_min_distance=float(np.mean(min_dist_vals)) if min_dist_vals.size > 0 else 0.0,
+        mean_min_distance=float(np.mean(min_dist_vals)) if min_dist_vals.size > 0 else float("nan"),
         mean_avg_speed=float(np.mean(speed_vals)) if speed_vals.size > 0 else 0.0,
         jsonl_path=str(jsonl_path),
     )

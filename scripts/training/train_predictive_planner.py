@@ -384,6 +384,15 @@ def main() -> int:  # noqa: C901, PLR0915
                     else "val_loss",
                 },
             )
+        logger.info(
+            "epoch={} train_loss={:.4f} val_loss={:.4f} val_ade={:.3f} val_fde={:.3f}",
+            epoch,
+            train_loss,
+            val_loss,
+            val_ade,
+            val_fde,
+        )
+
         if proxy_enabled and epoch % int(args.proxy_every_epochs) == 0:
             epoch_ckpt_dir = args.output_dir / "proxy_checkpoints"
             epoch_ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -453,15 +462,6 @@ def main() -> int:  # noqa: C901, PLR0915
                         "selection_mode": "proxy",
                     },
                 )
-
-        logger.info(
-            "epoch={} train_loss={:.4f} val_loss={:.4f} val_ade={:.3f} val_fde={:.3f}",
-            epoch,
-            train_loss,
-            val_loss,
-            val_ade,
-            val_fde,
-        )
 
     if not checkpoint_path.exists():
         save_predictive_checkpoint(

@@ -102,7 +102,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Run map-runner benchmark for predictive planner and enforce quality gates."""
     args = parse_args()
     logger.remove()
-    logger.add(sys.stderr, level="WARNING")
+    logger.add(sys.stderr, level="INFO")
     if not args.checkpoint.exists():
         raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
     if not args.scenario_matrix.exists():

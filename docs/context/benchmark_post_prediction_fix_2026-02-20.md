@@ -14,6 +14,10 @@ checkpoint compatibility and tightening fail-fast campaign behavior.
 - summary:
   - `runs=8`, `successful_runs=8`, `episodes=1080`, runtime `386.54s`
 
+Note:
+- the duplicated `prediction_first` token in the campaign id is due to the launch label used for that run.
+- If deduplication is desired in future runs, adjust the launch label rather than campaign config naming.
+
 ## Quality Validation (Prediction Planner)
 
 Base campaign (pre-fix):
@@ -75,4 +79,3 @@ Observed top runtime hotspot in this run:
 - `tests/test_predictive_model.py`
 - `tests/benchmark/test_camera_ready_campaign.py`
 - `tests/tools/test_compare_camera_ready_campaigns.py`
-

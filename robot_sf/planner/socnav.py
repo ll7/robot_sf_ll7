@@ -9,6 +9,7 @@ observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 
 import os
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import atan2, pi
@@ -59,6 +60,7 @@ _SOCNAV_ASSET_SETUP_DOC = "docs/socnav_assets_setup.md"
 _SOCNAV_ASSET_SETUP_CMD = "uv run python scripts/tools/prepare_socnav_assets.py"
 _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
+_SOCNAV_IMPORT_LOCK = threading.Lock()
 _SACADRL_STATE_ORDER = (
     "num_other_agents",
     "dist_to_goal",
@@ -857,64 +859,65 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             return self._handle_socnav_failure(message, not_found=True)
 
-        prev_cwd = Path.cwd()
-        root_str = str(root)
-        sys_path_inserted = False
-        try:
-            # Upstream SocNavBench params resolve INI paths relative to cwd at import time.
-            os.chdir(root)
-            if root_str not in sys.path:
-                sys.path.insert(0, root_str)
-                sys_path_inserted = True
-            modules, import_error = self._import_socnav_modules()
-            if modules is None:
-                message = "Failed to import SocNavBench modules."
-                if import_error:
-                    message = f"{message} {import_error}"
-                return self._handle_socnav_failure(message)
-            central, sp, DotMap = modules
-            params = self._build_sampling_params(central, sp, DotMap)
-            if params is None:
-                return None
+        with _SOCNAV_IMPORT_LOCK:
+            prev_cwd = Path.cwd()
+            root_str = str(root)
+            sys_path_inserted = False
             try:
-                obj_fn = self._GoalDistanceObjective()
-                self._goal_objective = obj_fn
-                return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
-            except AssertionError:
-                # Retry once after resetting the upstream singleton cache only when
-                # the upstream assertion indicates a stale/mismatched cached pipeline.
+                # Upstream SocNavBench params resolve INI paths relative to cwd at import time.
+                os.chdir(root)
+                if root_str not in sys.path:
+                    sys.path.insert(0, root_str)
+                    sys_path_inserted = True
+                modules, import_error = self._import_socnav_modules()
+                if modules is None:
+                    message = "Failed to import SocNavBench modules."
+                    if import_error:
+                        message = f"{message} {import_error}"
+                    return self._handle_socnav_failure(message)
+                central, sp, DotMap = modules
+                params = self._build_sampling_params(central, sp, DotMap)
+                if params is None:
+                    return None
                 try:
-                    import control_pipelines.control_pipeline_v0 as cp_v0  # type: ignore  # noqa: PLC0415
+                    obj_fn = self._GoalDistanceObjective()
+                    self._goal_objective = obj_fn
+                    return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                except AssertionError:
+                    # Retry once after resetting the upstream singleton cache only when
+                    # the upstream assertion indicates a stale/mismatched cached pipeline.
+                    try:
+                        import control_pipelines.control_pipeline_v0 as cp_v0  # type: ignore  # noqa: PLC0415
 
-                    cp_v0.ControlPipelineV0.pipeline = None
-                except (ImportError, AttributeError) as exc:
+                        cp_v0.ControlPipelineV0.pipeline = None
+                    except (ImportError, AttributeError) as exc:
+                        return self._handle_socnav_failure(
+                            "Failed to reset SocNavBench control pipeline singleton before retry.",
+                            exc=exc,
+                        )
+                    obj_fn = self._GoalDistanceObjective()
+                    self._goal_objective = obj_fn
+                    return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
+                except (
+                    AttributeError,
+                    OSError,
+                    RuntimeError,
+                    TypeError,
+                    ValueError,
+                ) as exc:  # pragma: no cover
                     return self._handle_socnav_failure(
-                        "Failed to reset SocNavBench control pipeline singleton before retry.",
+                        "Failed to initialize SocNavBench SamplingPlanner: "
+                        f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
+                        f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
                         exc=exc,
                     )
-                obj_fn = self._GoalDistanceObjective()
-                self._goal_objective = obj_fn
-                return sp.SamplingPlanner(obj_fn=obj_fn, params=params)
-            except (
-                AttributeError,
-                OSError,
-                RuntimeError,
-                TypeError,
-                ValueError,
-            ) as exc:  # pragma: no cover
-                return self._handle_socnav_failure(
-                    "Failed to initialize SocNavBench SamplingPlanner: "
-                    f"{exc}. If this is an asset/data issue, see `{_SOCNAV_ASSET_SETUP_DOC}` "
-                    f"and run `{_SOCNAV_ASSET_SETUP_CMD}`.",
-                    exc=exc,
-                )
-        finally:
-            if sys_path_inserted:
-                try:
-                    sys.path.remove(root_str)
-                except ValueError:
-                    pass
-            os.chdir(prev_cwd)
+            finally:
+                if sys_path_inserted:
+                    try:
+                        sys.path.remove(root_str)
+                    except ValueError:
+                        pass
+                os.chdir(prev_cwd)
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

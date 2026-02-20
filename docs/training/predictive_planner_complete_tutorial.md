@@ -180,17 +180,16 @@ Code-style form:
 LaTeX form:
 
 $$
-\begin{aligned}
-J =\;& -w_{\text{goal}}\cdot \text{progress}
+J =
+-w_{\text{goal}}\cdot \text{progress}
 + w_{\text{col}}\cdot \text{collision}
-+ w_{\text{near}}\cdot \text{near} \\
-&+ w_{\text{ttc}}\cdot \text{ttc}
++ w_{\text{near}}\cdot \text{near}
++ w_{\text{ttc}}\cdot \text{ttc}
 + w_{\text{occ}}\cdot \text{occ}
 + w_v\cdot |v|
-+ w_{\omega}\cdot |\omega| \\
-&+ w_{\text{pr}}\cdot \text{progress\_risk}
++ w_{\omega}\cdot |\omega|
++ w_{\text{pr}}\cdot \text{progress\_risk}
 + w_{\text{hc}}\cdot \text{hard\_clearance}
-\end{aligned}
 $$
 
 where:

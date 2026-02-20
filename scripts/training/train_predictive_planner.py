@@ -130,8 +130,14 @@ def _proxy_better(current: dict[str, float], best: dict[str, float] | None) -> b
         return True
     if current["success_rate"] != best["success_rate"]:
         return current["success_rate"] > best["success_rate"]
-    if current["mean_min_distance"] != best["mean_min_distance"]:
-        return current["mean_min_distance"] > best["mean_min_distance"]
+    current_clearance = (
+        current["mean_min_distance"] if np.isfinite(current["mean_min_distance"]) else float("-inf")
+    )
+    best_clearance = (
+        best["mean_min_distance"] if np.isfinite(best["mean_min_distance"]) else float("-inf")
+    )
+    if current_clearance != best_clearance:
+        return current_clearance > best_clearance
     return current["val_loss"] < best["val_loss"]
 
 

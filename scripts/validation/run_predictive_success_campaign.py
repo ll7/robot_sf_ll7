@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -214,6 +215,17 @@ def _checkpoint_label(path_str: str) -> str:
     return p.name
 
 
+def _nan_to_none(value: object) -> object:
+    """Recursively convert NaN floats to ``None`` for JSON compatibility."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _nan_to_none(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_nan_to_none(v) for v in value]
+    return value
+
+
 def main() -> int:
     """Execute full campaign and write machine + human-readable reports."""
     args = parse_args()
@@ -284,7 +296,7 @@ def main() -> int:
     }
 
     json_path = args.output_dir / "campaign_summary.json"
-    json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    json_path.write_text(json.dumps(_nan_to_none(summary), indent=2), encoding="utf-8")
 
     md_lines = [
         "# Predictive Success Campaign",

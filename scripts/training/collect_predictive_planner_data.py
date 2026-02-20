@@ -177,7 +177,7 @@ def _frames_to_samples(
 
             for k in range(1, horizon_steps + 1):
                 frame_k = frames[t + k]
-                ck = min(frame_k.ped_count, c)
+                ck = min(frame_k.ped_count, max_agents)
                 if ck <= 0:
                     continue
                 matches = _nearest_match_indices(

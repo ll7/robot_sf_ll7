@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -104,6 +105,17 @@ def _per_scenario_index(per_scenario_summary: list[dict]) -> dict[str, dict]:
     return {str(row.get("scenario_id", "unknown")): row for row in per_scenario_summary}
 
 
+def _nan_to_none(value: object) -> object:
+    """Recursively convert NaN floats to ``None`` for JSON compatibility."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _nan_to_none(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_nan_to_none(v) for v in value]
+    return value
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Run map-runner benchmark for predictive planner and enforce quality gates."""
     args = parse_args()
@@ -170,7 +182,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     min_dist_vals = [
         float(row.get("metrics", {}).get("min_distance"))
         for row in rows
-        if "min_distance" in row.get("metrics", {})
+        if row.get("metrics", {}).get("min_distance") is not None
     ]
     avg_speed_vals = [float(row.get("metrics", {}).get("avg_speed", 0.0)) for row in rows]
 
@@ -196,7 +208,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             scenario_entry["successes"] += 1
         else:
             scenario_entry["failed_seeds"].append(int(row.get("seed", -1)))
-        if "min_distance" in row.get("metrics", {}):
+        if row.get("metrics", {}).get("min_distance") is not None:
             scenario_entry["min_distance_values"].append(
                 float(row.get("metrics", {}).get("min_distance"))
             )
@@ -243,7 +255,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             )
             bucket["episodes"] += 1
             bucket["successes"] += 1 if _episode_success(row) else 0
-            if "min_distance" in row.get("metrics", {}):
+            if row.get("metrics", {}).get("min_distance") is not None:
                 bucket["min_distance_values"].append(
                     float(row.get("metrics", {}).get("min_distance"))
                 )
@@ -306,7 +318,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "quality_gates": gates,
     }
 
-    summary_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    summary_path.write_text(json.dumps(_nan_to_none(result), indent=2), encoding="utf-8")
     logger.info("Saved evaluation summary to {}", summary_path)
 
     if not gates["pass_all"]:

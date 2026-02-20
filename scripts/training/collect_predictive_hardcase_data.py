@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -176,7 +177,7 @@ def _frames_to_samples(
 
             for k in range(1, horizon_steps + 1):
                 frame_k = frames[t + k]
-                ck = min(frame_k.ped_count, c)
+                ck = min(frame_k.ped_count, max_agents)
                 if ck <= 0:
                     continue
                 matches = _nearest_match_indices(
@@ -240,6 +241,11 @@ def main() -> int:
         scenario_id = str(
             scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
         )
+        if scenario_id == "unknown":
+            warnings.warn(
+                f"Scenario has no name/scenario_id/id and may be skipped by seed manifest: {scenario}",
+                stacklevel=1,
+            )
         for seed in seed_manifest.get(scenario_id, []):
             selected.append((scenario, int(seed)))
 

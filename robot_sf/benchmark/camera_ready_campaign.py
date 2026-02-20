@@ -1132,7 +1132,7 @@ def run_campaign(  # noqa: C901, PLR0915
             },
         )
 
-        if status == "failed" and cfg.stop_on_failure:
+        if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
             break
 
     planner_rows.sort(

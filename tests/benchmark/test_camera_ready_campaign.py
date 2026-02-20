@@ -342,3 +342,77 @@ def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp
     map_file = scenarios[0].get("map_file")
     assert isinstance(map_file, str)
     assert map_file == "maps/svg_maps/classic_crossing.svg"
+
+
+def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, monkeypatch) -> None:
+    """Campaign should stop after first partial-failure when stop_on_failure is enabled."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_stop_on_partial.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_stop_on_partial",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: true",
+                "planners:",
+                "  - key: prediction_planner",
+                "    algo: prediction_planner",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        _ = scenarios_or_path
+        _ = out_path
+        _ = schema_path
+        _ = benchmark_profile
+        _ = kwargs
+        call_order.append(algo)
+        if algo == "prediction_planner":
+            return {
+                "total_jobs": 1,
+                "written": 0,
+                "failed_jobs": 1,
+                "failures": [{"scenario_id": "mock", "seed": 111, "error": "mock"}],
+                "preflight": {
+                    "status": "ok",
+                    "learned_policy_contract": {"status": "not_applicable"},
+                },
+            }
+        raise AssertionError("run_batch must not be called for planners after partial-failure")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="stop_partial")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_rows = summary_payload["planner_rows"]
+
+    assert call_order == ["prediction_planner"]
+    assert len(planner_rows) == 1
+    assert planner_rows[0]["planner_key"] == "prediction_planner"
+    assert planner_rows[0]["status"] == "partial-failure"

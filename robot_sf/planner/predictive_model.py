@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from loguru import logger
 from torch import Tensor, nn
+
+_SEEN_UNEXPECTED_KEY_SIGNATURES: set[tuple[str, ...]] = set()
 
 
 @dataclass
@@ -195,7 +198,21 @@ def load_predictive_checkpoint(
     config_data = payload.get("config", {})
     config = PredictiveModelConfig(**config_data)
     model = PredictiveTrajectoryModel(config)
-    model.load_state_dict(payload["state_dict"])
+    state_dict = payload["state_dict"]
+    load_result = model.load_state_dict(state_dict, strict=False)
+    if load_result.unexpected_keys:
+        signature = tuple(sorted(load_result.unexpected_keys))
+        if signature not in _SEEN_UNEXPECTED_KEY_SIGNATURES:
+            _SEEN_UNEXPECTED_KEY_SIGNATURES.add(signature)
+            logger.debug(
+                "Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: {}",
+                list(signature),
+            )
+    if load_result.missing_keys:
+        raise RuntimeError(
+            "Checkpoint is missing required PredictiveTrajectoryModel keys: "
+            f"{sorted(load_result.missing_keys)}"
+        )
     model.eval()
     return model, payload
 

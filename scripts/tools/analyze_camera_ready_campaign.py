@@ -219,11 +219,11 @@ def _analyze_planner(  # noqa: C901
             ),
         ).is_absolute()
     )
-    wall_times = [
-        float(entry.get("wall_time_sec", 0.0) or 0.0)
-        for entry in episodes
-        if _safe_float(entry.get("wall_time_sec")) is not None
-    ]
+    wall_times: list[float] = []
+    for entry in episodes:
+        wall_time = _safe_float(entry.get("wall_time_sec"))
+        if wall_time is not None:
+            wall_times.append(wall_time)
     wall_time_mean_sec = _mean(wall_times)
     wall_time_p95_sec = _percentile(wall_times, 0.95)
     per_scenario_wall_times: dict[str, list[float]] = {}
@@ -232,7 +232,7 @@ def _analyze_planner(  # noqa: C901
         wall_time = _safe_float(entry.get("wall_time_sec"))
         if wall_time is None:
             continue
-        per_scenario_wall_times.setdefault(scenario_id, []).append(float(wall_time))
+        per_scenario_wall_times.setdefault(scenario_id, []).append(wall_time)
     slowest_scenarios: list[dict[str, Any]] = []
     for scenario_id, values in per_scenario_wall_times.items():
         slowest_scenarios.append(

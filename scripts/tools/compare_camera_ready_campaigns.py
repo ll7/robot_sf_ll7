@@ -72,6 +72,15 @@ def _build_markdown(payload: dict[str, Any]) -> str:
                 f"{planner_key} | {metric} | {values['base']:.4f} | {values['candidate']:.4f} | "
                 f"{values['delta']:.4f} |"
             )
+    missing_in_base = payload.get("missing_in_base", [])
+    missing_in_candidate = payload.get("missing_in_candidate", [])
+    lines.extend(["", "## Coverage Gaps", ""])
+    if missing_in_base:
+        lines.append(f"- Missing in base campaign: `{', '.join(missing_in_base)}`")
+    if missing_in_candidate:
+        lines.append(f"- Missing in candidate campaign: `{', '.join(missing_in_candidate)}`")
+    if not missing_in_base and not missing_in_candidate:
+        lines.append("- No planner coverage gaps.")
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -83,8 +92,12 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
     base_rows = _planner_rows_by_key(base_summary)
     candidate_rows = _planner_rows_by_key(candidate_summary)
 
+    common_planners = sorted(set(base_rows) & set(candidate_rows))
+    missing_in_base = sorted(set(candidate_rows) - set(base_rows))
+    missing_in_candidate = sorted(set(base_rows) - set(candidate_rows))
+
     planner_deltas: list[dict[str, Any]] = []
-    for planner_key in sorted(set(base_rows) & set(candidate_rows)):
+    for planner_key in common_planners:
         base_row = base_rows[planner_key]
         candidate_row = candidate_rows[planner_key]
         metrics: dict[str, dict[str, float]] = {}
@@ -119,7 +132,17 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
         "base_campaign_root": str(base_root),
         "candidate_campaign_root": str(candidate_root),
         "planner_deltas": planner_deltas,
+        "missing_in_base": missing_in_base,
+        "missing_in_candidate": missing_in_candidate,
     }
+
+
+def _resolve_safe_output_path(path: Path, safe_root: Path) -> Path:
+    """Resolve output path and require that it stays inside safe_root."""
+    resolved = path.resolve()
+    if not resolved.is_relative_to(safe_root):
+        raise ValueError(f"Unsafe output path outside {safe_root}: {path}")
+    return resolved
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -137,13 +160,17 @@ def main() -> int:
     payload = compare_campaigns(
         args.base_campaign_root.resolve(), args.candidate_campaign_root.resolve()
     )
-    args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_md.parent.mkdir(parents=True, exist_ok=True)
-    args.output_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    args.output_md.write_text(_build_markdown(payload), encoding="utf-8")
+    safe_root = Path.cwd().resolve()
+    output_json = _resolve_safe_output_path(args.output_json, safe_root)
+    output_md = _resolve_safe_output_path(args.output_md, safe_root)
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_md.parent.mkdir(parents=True, exist_ok=True)
+    output_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    output_md.write_text(_build_markdown(payload), encoding="utf-8")
     print(
         json.dumps(
-            {"output_json": str(args.output_json), "output_md": str(args.output_md)}, indent=2
+            {"output_json": str(output_json), "output_md": str(output_md)},
+            indent=2,
         )
     )
     return 0

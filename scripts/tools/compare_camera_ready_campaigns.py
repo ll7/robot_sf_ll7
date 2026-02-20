@@ -28,7 +28,7 @@ def _safe_float(value: Any) -> float | None:
         parsed = float(value)
     except (TypeError, ValueError):
         return None
-    if math.isnan(parsed):
+    if math.isnan(parsed) or math.isinf(parsed):
         return None
     return parsed
 
@@ -61,17 +61,30 @@ def _build_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Planner Deltas",
         "",
-        "| planner | metric | base | candidate | delta(candidate-base) |",
-        "|---|---|---:|---:|---:|",
+        "| planner | base_status | candidate_status | base_episodes | candidate_episodes | metric | base | candidate | delta(candidate-base) |",
+        "|---|---|---|---:|---:|---|---:|---:|---:|",
     ]
     for planner in payload["planner_deltas"]:
         planner_key = planner["planner_key"]
-        for metric, values in planner["metrics"].items():
-            lines.append(
-                "| "
-                f"{planner_key} | {metric} | {values['base']:.4f} | {values['candidate']:.4f} | "
-                f"{values['delta']:.4f} |"
-            )
+        base_status = planner.get("base_status", "unknown")
+        candidate_status = planner.get("candidate_status", "unknown")
+        base_episodes = int(planner.get("base_episodes", 0) or 0)
+        candidate_episodes = int(planner.get("candidate_episodes", 0) or 0)
+        metrics = planner.get("metrics", {})
+        if isinstance(metrics, dict) and metrics:
+            for metric, values in metrics.items():
+                lines.append(
+                    "| "
+                    f"{planner_key} | {base_status} | {candidate_status} | "
+                    f"{base_episodes} | {candidate_episodes} | {metric} | "
+                    f"{values['base']:.4f} | {values['candidate']:.4f} | {values['delta']:.4f} |"
+                )
+            continue
+        lines.append(
+            "| "
+            f"{planner_key} | {base_status} | {candidate_status} | "
+            f"{base_episodes} | {candidate_episodes} | N/A | N/A | N/A | N/A |"
+        )
     missing_in_base = payload.get("missing_in_base", [])
     missing_in_candidate = payload.get("missing_in_candidate", [])
     lines.extend(["", "## Coverage Gaps", ""])

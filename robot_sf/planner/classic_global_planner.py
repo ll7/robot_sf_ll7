@@ -182,8 +182,22 @@ def map_definition_to_motion_planning_grid(
 ) -> Grid:
     """Convert a MapDefinition into a python_motion_planning Grid.
 
+    This is the main entry point for converting robot_sf map definitions into
+    grid-based representations for motion planning algorithms.
+
+    Args:
+        map_def: Parsed SVG map definition containing obstacles and dimensions.
+        config: Optional configuration for grid resolution, inflation, and boundaries.
+            If None, uses default MotionPlanningGridConfig.
+
     Returns:
-        Grid representation with obstacles rasterized and optional inflation applied.
+        Grid object with obstacles marked and optionally inflated.
+
+    Example:
+        >>> from robot_sf.nav.svg_map_parser import convert_map
+        >>> map_def = convert_map("maps/svg_maps/example.svg")
+        >>> config = MotionPlanningGridConfig(cells_per_meter=2.0)
+        >>> grid = map_definition_to_motion_planning_grid(map_def, config)
     """
     cfg = config or MotionPlanningGridConfig()
     width_cells = math.ceil(map_def.width * cfg.cells_per_meter)
@@ -225,11 +239,33 @@ def map_definition_to_motion_planning_grid(
 def count_obstacle_cells(grid: Grid) -> int:
     """Count obstacle cells in a grid.
 
+    Args:
+        grid: Grid to analyze.
+
     Returns:
         Number of cells marked as `TYPES.OBSTACLE`.
+
+    Example:
+        >>> obstacle_count = count_obstacle_cells(grid)
+        >>> print(f"Grid has {obstacle_count} obstacle cells")
     """
     type_map_np = np.asarray(grid.type_map)
     return np.count_nonzero(type_map_np == TYPES.OBSTACLE)
+
+
+def _sanitize_visualization_output_path(output_path: Path | str) -> Path:
+    """Validate and normalize a visualization output path.
+
+    This helper prevents parent-directory traversal segments in relative or absolute
+    paths while preserving caller-controlled output locations.
+
+    Returns:
+        Sanitized `Path` object safe for visualization writes.
+    """
+    path_obj = Path(output_path)
+    if any(part == ".." for part in path_obj.parts):
+        raise ValueError(f"output_path contains unsupported parent traversal segments: {path_obj}")
+    return path_obj
 
 
 def visualize_grid(
@@ -238,7 +274,20 @@ def visualize_grid(
     title: str = "Grid Map",
     equal_aspect: bool = True,
 ) -> None:
-    """Visualize a grid map, optionally saving to file or showing interactively."""
+    """Visualize a grid map, optionally saving to file or showing interactively.
+
+    Args:
+        grid: Grid to visualize.
+        output_path: Path where the visualization should be saved (e.g., "output/grid.png").
+            If None or empty string, shows the plot interactively instead.
+        title: Title for the visualization window.
+        equal_aspect: Whether to use equal aspect ratio for axes.
+
+    Example:
+        >>> from pathlib import Path
+        >>> visualize_grid(grid, Path("output/plots/grid.png"), title="My Grid")
+        >>> visualize_grid(grid, None, title="My Grid")
+    """
     meters_per_cell = getattr(grid, "meters_per_cell", None)
     cells_per_meter = getattr(grid, "cells_per_meter", None)
     vis = ClassicPlanVisualizer(
@@ -249,7 +298,7 @@ def visualize_grid(
     vis.plot_grid_map(grid, equal=equal_aspect, meters_per_cell=meters_per_cell)
 
     if output_path and str(output_path).strip():
-        resolved_output = Path(output_path)
+        resolved_output = _sanitize_visualization_output_path(output_path)
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
         vis.fig.savefig(str(resolved_output))
         logger.success(f"Saved grid visualization to {resolved_output}")
@@ -271,7 +320,19 @@ def visualize_path(  # noqa: PLR0913
     linewidth: float = 2.0,
     marker: str | None = None,
 ) -> None:
-    """Visualize a planned path over a grid."""
+    """Visualize a planned path over a grid, optionally saving to disk.
+
+    Args:
+        grid: Grid to visualize.
+        path: Path waypoints in grid/map coordinates.
+        output_path: Optional path to save the figure; shows interactively when None.
+        title: Title for the visualization window.
+        equal_aspect: Whether to force equal aspect ratio.
+        path_style: Matplotlib line style for the path.
+        path_color: Matplotlib color for the path.
+        linewidth: Path line width.
+        marker: Optional marker for waypoints.
+    """
     meters_per_cell = getattr(grid, "meters_per_cell", None)
     cells_per_meter = getattr(grid, "cells_per_meter", None)
     vis = ClassicPlanVisualizer(
@@ -293,7 +354,7 @@ def visualize_path(  # noqa: PLR0913
         logger.warning("No path provided to visualize_path; rendering grid only.")
 
     if output_path and str(output_path).strip():
-        resolved_output = Path(output_path)
+        resolved_output = _sanitize_visualization_output_path(output_path)
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
         vis.fig.savefig(str(resolved_output))
         logger.success(f"Saved path visualization to {resolved_output}")
@@ -311,8 +372,13 @@ def set_start_goal_on_grid(
 ) -> Grid:
     """Set start and goal positions on the grid.
 
+    Args:
+        grid: Grid to modify.
+        start: (x, y) tuple for start position in grid coordinates.
+        goal: (x, y) tuple for goal position in grid coordinates.
+
     Returns:
-        The same `grid` instance with start/goal markers applied.
+        Grid with start and goal positions marked.
     """
     start_x, start_y = start
     goal_x, goal_y = goal
@@ -324,8 +390,21 @@ def set_start_goal_on_grid(
 def get_obstacle_statistics(grid: Grid) -> dict[str, float]:
     """Calculate basic statistics about obstacle occupancy.
 
+    TODO: Percentage for obstacles is likely not calculated correctly.
+    `INFO   | 29_osm_global_planner_test.py:55 | Planning grid: (513, 393), 0 obstacle cells (0.00%)`
+
+    Args:
+        grid: Grid to analyze.
+
     Returns:
-        Dictionary with obstacle count, total cell count, and occupancy percentage.
+        Dictionary containing:
+            - obstacle_count: Number of obstacle cells
+            - total_cells: Total number of cells in the grid
+            - obstacle_percentage: Percentage of cells that are obstacles
+
+    Example:
+        >>> stats = get_obstacle_statistics(grid)
+        >>> print(f"Grid is {stats['obstacle_percentage']:.1f}% occupied")
     """
     type_map_np = np.asarray(grid.type_map)
     obstacle_count = np.count_nonzero(type_map_np == TYPES.OBSTACLE)

@@ -274,3 +274,81 @@ def test_plan_random_path_is_reproducible_with_seed(tmp_path):
     assert path1[-1] == planner._grid_to_world(*planner._world_to_grid(*goal1))
     assert info1 is not None
     assert info2 is not None
+
+
+def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
+    """Random path search should optimize by selecting the longest feasible candidate."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter(
+        [
+            (0.0, 0.0),
+            (1.0, 1.0),  # candidate 1
+            (0.0, 0.0),
+            (2.0, 2.0),  # candidate 2
+            (0.0, 0.0),
+            (3.0, 3.0),  # candidate 3
+        ]
+    )
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        return next(sampled_points)
+
+    scores = {
+        ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 1.0}),
+        ((0.0, 0.0), (2.0, 2.0)): ([(0.0, 0.0), (2.0, 2.0)], {"length": 5.0}),
+        ((0.0, 0.0), (3.0, 3.0)): ([(0.0, 0.0), (3.0, 3.0)], {"length": 3.5}),
+    }
+
+    def fake_plan(start, goal, algorithm=None):  # type: ignore[no-untyped-def]
+        return scores[(start, goal)]
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    path, info, start, goal = planner.plan_random_path(max_attempts=3)
+
+    assert (start, goal) == ((0.0, 0.0), (2.0, 2.0))
+    assert path == [(0.0, 0.0), (2.0, 2.0)]
+    assert info == {"length": 5.0}
+
+
+def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
+    """When length ties, path with more waypoints should be selected."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter([(0.0, 0.0), (1.0, 1.0), (0.0, 0.0), (2.0, 2.0)])
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        return next(sampled_points)
+
+    scores = {
+        ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 4.0}),
+        ((0.0, 0.0), (2.0, 2.0)): ([(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)], {"length": 4.0}),
+    }
+
+    def fake_plan(start, goal, algorithm=None):  # type: ignore[no-untyped-def]
+        return scores[(start, goal)]
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    path, info, start, goal = planner.plan_random_path(max_attempts=2)
+
+    assert (start, goal) == ((0.0, 0.0), (2.0, 2.0))
+    assert path == [(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)]
+    assert info == {"length": 4.0}

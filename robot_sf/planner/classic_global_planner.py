@@ -917,6 +917,17 @@ class ClassicGlobalPlanner:
         """
         rng = random.Random(seed)
         last_error: PlanningError | None = None
+        best_candidate: (
+            tuple[
+                tuple[float, float],
+                tuple[float, float],
+                list[tuple[float, float]],
+                dict | None,
+                float,
+                int,
+            ]
+            | None
+        ) = None
 
         for attempt_idx in range(max_attempts):
             start = self.random_valid_point_on_grid(rng=rng)
@@ -926,13 +937,28 @@ class ClassicGlobalPlanner:
 
             try:
                 path_world, path_info = self.plan(start=start, goal=goal, algorithm=algorithm)
-                logger.info(
-                    "Random path planned on attempt {attempt}: {start} -> {goal}",
-                    attempt=attempt_idx + 1,
-                    start=start,
-                    goal=goal,
-                )
-                return path_world, path_info, start, goal
+                length_m = self._path_length_meters(path_world, path_info)
+                waypoint_count = len(path_world)
+                if best_candidate is None or (length_m, waypoint_count) > (
+                    best_candidate[4],
+                    best_candidate[5],
+                ):
+                    best_candidate = (
+                        start,
+                        goal,
+                        path_world,
+                        path_info,
+                        length_m,
+                        waypoint_count,
+                    )
+                    logger.debug(
+                        "Random path candidate improved at attempt {attempt}: start={start}, goal={goal}, length={length:.3f}m, waypoints={waypoints}",
+                        attempt=attempt_idx + 1,
+                        start=start,
+                        goal=goal,
+                        length=length_m,
+                        waypoints=waypoint_count,
+                    )
             except PlanningError as exc:
                 last_error = exc
                 logger.debug(
@@ -941,10 +967,38 @@ class ClassicGlobalPlanner:
                     error=exc,
                 )
 
+        if best_candidate is not None:
+            start, goal, path_world, path_info, length_m, waypoint_count = best_candidate
+            logger.info(
+                "Selected optimized random path after {attempts} attempts: {start} -> {goal} (length={length:.3f}m, waypoints={waypoints})",
+                attempts=max_attempts,
+                start=start,
+                goal=goal,
+                length=length_m,
+                waypoints=waypoint_count,
+            )
+            return path_world, path_info, start, goal
+
         msg = f"Failed to plan random path after {max_attempts} attempts"
         if last_error is not None:
             msg = f"{msg}; last error: {last_error}"
         raise PlanningError(msg)
+
+    @staticmethod
+    def _path_length_meters(path_world: list[tuple[float, float]], path_info: dict | None) -> float:
+        """Return path length in meters from metadata or direct waypoint integration."""
+        if isinstance(path_info, dict):
+            path_length = path_info.get("length")
+            if isinstance(path_length, (int, float)) and math.isfinite(path_length):
+                return float(path_length)
+        if len(path_world) < 2:
+            return 0.0
+        length = 0.0
+        for idx in range(1, len(path_world)):
+            prev_x, prev_y = path_world[idx - 1]
+            curr_x, curr_y = path_world[idx]
+            length += math.hypot(curr_x - prev_x, curr_y - prev_y)
+        return length
 
     def _scale_path_info(
         self,

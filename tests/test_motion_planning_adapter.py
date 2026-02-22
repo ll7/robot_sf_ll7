@@ -129,10 +129,22 @@ def test_visualization_helpers_reject_non_positive_dpi(tmp_path: Path) -> None:
         try:
             visualize_grid(grid, tmp_path / "invalid.png", output_dpi=invalid_dpi)
         except ValueError as exc:
-            assert "output_dpi must be > 0" in str(exc)
+            assert "output_dpi must be in range" in str(exc)
         else:
             msg = f"Expected ValueError for output_dpi={invalid_dpi}"
             raise AssertionError(msg)
+
+
+def test_visualization_helpers_reject_excessive_dpi(tmp_path: Path) -> None:
+    """Reject unreasonably high output DPI values to avoid resource exhaustion."""
+    grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
+    try:
+        visualize_grid(grid, tmp_path / "too_large.png", output_dpi=100_000)
+    except ValueError as exc:
+        assert "output_dpi must be in range" in str(exc)
+    else:
+        msg = "Expected ValueError for output_dpi=100000"
+        raise AssertionError(msg)
 
 
 def test_classic_visualizer_resolves_scale_from_grid() -> None:

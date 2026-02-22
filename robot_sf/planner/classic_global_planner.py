@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
 DEFAULT_VISUALIZATION_DPI = 300
+MAX_VISUALIZATION_DPI = 3000
 
 
 class ClassicPlanVisualizer(Visualizer):
@@ -280,8 +281,10 @@ def _normalize_output_dpi(output_dpi: int | float) -> int:
         Positive integer DPI value.
     """
     dpi_value = int(output_dpi)
-    if dpi_value <= 0:
-        raise ValueError(f"output_dpi must be > 0, got {output_dpi}")
+    if dpi_value <= 0 or dpi_value > MAX_VISUALIZATION_DPI:
+        raise ValueError(
+            f"output_dpi must be in range (0, {MAX_VISUALIZATION_DPI}], got {output_dpi}"
+        )
     return dpi_value
 
 

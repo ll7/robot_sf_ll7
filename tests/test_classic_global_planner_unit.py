@@ -104,7 +104,7 @@ def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
         captured["grid"] = grid
         captured["path"] = path
 
-    monkeypatch.setattr("robot_sf.planner.classic_global_planner.render_path", fake_render_path)
+    monkeypatch.setattr("robot_sf.planner.classic_global_planner.visualize_path", fake_render_path)
 
     path_world = [(0.5, 0.5), (1.5, 0.5)]
     expands = {"node": types.SimpleNamespace()}

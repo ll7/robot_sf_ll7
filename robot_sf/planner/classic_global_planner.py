@@ -43,6 +43,9 @@ from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
+DEFAULT_VISUALIZATION_DPI: int = 300
+MAX_VISUALIZATION_DPI: int = 3000
+
 
 class ClassicPlanVisualizer(Visualizer):
     """Visualizer that can show grid axes in world coordinates."""
@@ -268,11 +271,44 @@ def _sanitize_visualization_output_path(output_path: Path | str) -> Path:
     return path_obj
 
 
+def _normalize_output_dpi(output_dpi: int | float) -> int:
+    """Validate output DPI for saved visualizations.
+
+    Args:
+        output_dpi: Requested save DPI.
+
+    Returns:
+        Positive integer DPI value.
+
+    Raises:
+        TypeError: If `output_dpi` is not numeric.
+        ValueError: If `output_dpi` is non-finite, out of range, or not an integer value.
+    """
+    try:
+        raw_value = float(output_dpi)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"output_dpi must be numeric, got {output_dpi!r}") from exc
+
+    if not math.isfinite(raw_value):
+        raise ValueError(f"output_dpi must be finite, got {output_dpi}")
+
+    if raw_value <= 0 or raw_value > MAX_VISUALIZATION_DPI:
+        raise ValueError(
+            f"output_dpi must be in range (0, {MAX_VISUALIZATION_DPI}], got {output_dpi}"
+        )
+
+    dpi_value = int(raw_value)
+    if not math.isclose(raw_value, dpi_value):
+        raise ValueError(f"output_dpi must be an integer value, got {output_dpi}")
+    return dpi_value
+
+
 def visualize_grid(
     grid: Grid,
     output_path: Path | str | None = None,
     title: str = "Grid Map",
     equal_aspect: bool = True,
+    output_dpi: int = DEFAULT_VISUALIZATION_DPI,
 ) -> None:
     """Visualize a grid map, optionally saving to file or showing interactively.
 
@@ -282,6 +318,7 @@ def visualize_grid(
             If None or empty string, shows the plot interactively instead.
         title: Title for the visualization window.
         equal_aspect: Whether to use equal aspect ratio for axes.
+        output_dpi: Export resolution for saved figures.
 
     Example:
         >>> from pathlib import Path
@@ -299,8 +336,9 @@ def visualize_grid(
 
     if output_path and str(output_path).strip():
         resolved_output = _sanitize_visualization_output_path(output_path)
+        dpi_value = _normalize_output_dpi(output_dpi)
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
-        vis.fig.savefig(str(resolved_output))
+        vis.fig.savefig(str(resolved_output), dpi=dpi_value)
         logger.success(f"Saved grid visualization to {resolved_output}")
     else:
         ensure_interactive_backend()
@@ -319,6 +357,7 @@ def visualize_path(  # noqa: PLR0913
     path_color: str = "C4",
     linewidth: float = 2.0,
     marker: str | None = None,
+    output_dpi: int = DEFAULT_VISUALIZATION_DPI,
 ) -> None:
     """Visualize a planned path over a grid, optionally saving to disk.
 
@@ -332,6 +371,7 @@ def visualize_path(  # noqa: PLR0913
         path_color: Matplotlib color for the path.
         linewidth: Path line width.
         marker: Optional marker for waypoints.
+        output_dpi: Export resolution for saved figures.
     """
     meters_per_cell = getattr(grid, "meters_per_cell", None)
     cells_per_meter = getattr(grid, "cells_per_meter", None)
@@ -355,8 +395,9 @@ def visualize_path(  # noqa: PLR0913
 
     if output_path and str(output_path).strip():
         resolved_output = _sanitize_visualization_output_path(output_path)
+        dpi_value = _normalize_output_dpi(output_dpi)
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
-        vis.fig.savefig(str(resolved_output))
+        vis.fig.savefig(str(resolved_output), dpi=dpi_value)
         logger.success(f"Saved path visualization to {resolved_output}")
     else:
         ensure_interactive_backend()
@@ -957,6 +998,7 @@ class ClassicGlobalPlanner:
         output_path: Path | str | None = None,
         title: str = "Planning Grid",
         equal_aspect: bool = True,
+        output_dpi: int = DEFAULT_VISUALIZATION_DPI,
     ) -> None:
         """Visualize the current planning grid.
 
@@ -964,8 +1006,15 @@ class ClassicGlobalPlanner:
             output_path: Where to write the figure; shows interactively when None/empty.
             title: Title for the visualization window.
             equal_aspect: Whether to enforce equal aspect ratio.
+            output_dpi: Export resolution for saved figures.
         """
-        render_grid(self.grid, output_path=output_path, title=title, equal_aspect=equal_aspect)
+        visualize_grid(
+            self.grid,
+            output_path=output_path,
+            title=title,
+            equal_aspect=equal_aspect,
+            output_dpi=output_dpi,
+        )
 
     def visualize_path(  # noqa: PLR0913
         self,
@@ -977,6 +1026,7 @@ class ClassicGlobalPlanner:
         path_color: str = "C4",
         linewidth: float = 2.0,
         marker: str | None = "x",
+        output_dpi: int = DEFAULT_VISUALIZATION_DPI,
         path_info: dict | None = None,
         show_expands: bool = True,
     ) -> None:
@@ -991,6 +1041,7 @@ class ClassicGlobalPlanner:
             path_color: Matplotlib color for the path.
             linewidth: Line width for the rendered path.
             marker: Optional marker for waypoints.
+            output_dpi: Export resolution for saved figures.
             path_info: Optional planner metadata; defaults to the last plan result.
             show_expands: Whether to overlay expanded nodes when expand data is available.
 
@@ -1022,7 +1073,7 @@ class ClassicGlobalPlanner:
                 )
 
         path_grid = [self._world_to_grid(x, y) for x, y in path_world]
-        render_path(
+        visualize_path(
             grid,
             path_grid,
             output_path=output_path,
@@ -1032,14 +1083,13 @@ class ClassicGlobalPlanner:
             path_color=path_color,
             linewidth=linewidth,
             marker=marker,
+            output_dpi=output_dpi,
         )
 
 
-render_grid = visualize_grid
-render_path = visualize_path
-
-
 __all__ = [
+    "DEFAULT_VISUALIZATION_DPI",
+    "MAX_VISUALIZATION_DPI",
     "ClassicGlobalPlanner",
     "ClassicPlanVisualizer",
     "ClassicPlannerConfig",

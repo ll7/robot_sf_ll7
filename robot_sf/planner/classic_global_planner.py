@@ -43,8 +43,8 @@ from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
-DEFAULT_VISUALIZATION_DPI = 300
-MAX_VISUALIZATION_DPI = 3000
+DEFAULT_VISUALIZATION_DPI: int = 300
+MAX_VISUALIZATION_DPI: int = 3000
 
 
 class ClassicPlanVisualizer(Visualizer):
@@ -279,12 +279,27 @@ def _normalize_output_dpi(output_dpi: int | float) -> int:
 
     Returns:
         Positive integer DPI value.
+
+    Raises:
+        TypeError: If `output_dpi` is not numeric.
+        ValueError: If `output_dpi` is non-finite, out of range, or not an integer value.
     """
-    dpi_value = int(output_dpi)
-    if dpi_value <= 0 or dpi_value > MAX_VISUALIZATION_DPI:
+    try:
+        raw_value = float(output_dpi)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"output_dpi must be numeric, got {output_dpi!r}") from exc
+
+    if not math.isfinite(raw_value):
+        raise ValueError(f"output_dpi must be finite, got {output_dpi}")
+
+    if raw_value <= 0 or raw_value > MAX_VISUALIZATION_DPI:
         raise ValueError(
             f"output_dpi must be in range (0, {MAX_VISUALIZATION_DPI}], got {output_dpi}"
         )
+
+    dpi_value = int(raw_value)
+    if not math.isclose(raw_value, dpi_value):
+        raise ValueError(f"output_dpi must be an integer value, got {output_dpi}")
     return dpi_value
 
 
@@ -993,7 +1008,7 @@ class ClassicGlobalPlanner:
             equal_aspect: Whether to enforce equal aspect ratio.
             output_dpi: Export resolution for saved figures.
         """
-        render_grid(
+        visualize_grid(
             self.grid,
             output_path=output_path,
             title=title,
@@ -1058,7 +1073,7 @@ class ClassicGlobalPlanner:
                 )
 
         path_grid = [self._world_to_grid(x, y) for x, y in path_world]
-        render_path(
+        visualize_path(
             grid,
             path_grid,
             output_path=output_path,
@@ -1072,11 +1087,9 @@ class ClassicGlobalPlanner:
         )
 
 
-render_grid = visualize_grid
-render_path = visualize_path
-
-
 __all__ = [
+    "DEFAULT_VISUALIZATION_DPI",
+    "MAX_VISUALIZATION_DPI",
     "ClassicGlobalPlanner",
     "ClassicPlanVisualizer",
     "ClassicPlannerConfig",

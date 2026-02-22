@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 import numpy as np
+import pytest
 from matplotlib.figure import Figure
 from python_motion_planning.common import TYPES
 
@@ -106,7 +107,9 @@ def test_visualize_path_handles_empty_path(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def test_visualization_helpers_forward_output_dpi(tmp_path: Path, monkeypatch) -> None:
+def test_visualization_helpers_forward_output_dpi(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Ensure configured output DPI is forwarded to matplotlib savefig calls."""
     grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
     calls: list[int | None] = []
@@ -122,17 +125,21 @@ def test_visualization_helpers_forward_output_dpi(tmp_path: Path, monkeypatch) -
     assert calls == [450, 320]
 
 
-def test_visualization_helpers_reject_non_positive_dpi(tmp_path: Path) -> None:
-    """Reject invalid non-positive output DPI values early."""
+@pytest.mark.parametrize("invalid_dpi", [0, -1])
+@pytest.mark.parametrize("renderer", [visualize_grid, visualize_path])
+def test_visualization_helpers_reject_non_positive_dpi(
+    tmp_path: Path,
+    invalid_dpi: int,
+    renderer,
+) -> None:
+    """Reject invalid non-positive output DPI values early for both renderers."""
     grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
-    for invalid_dpi in (0, -1):
-        try:
-            visualize_grid(grid, tmp_path / "invalid.png", output_dpi=invalid_dpi)
-        except ValueError as exc:
-            assert "output_dpi must be in range" in str(exc)
+    output_path = tmp_path / f"invalid_{renderer.__name__}_{invalid_dpi}.png"
+    with pytest.raises(ValueError, match="output_dpi must be in range"):
+        if renderer is visualize_grid:
+            renderer(grid, output_path, output_dpi=invalid_dpi)
         else:
-            msg = f"Expected ValueError for output_dpi={invalid_dpi}"
-            raise AssertionError(msg)
+            renderer(grid, [(0, 0), (1, 1)], output_path, output_dpi=invalid_dpi)
 
 
 def test_visualization_helpers_reject_excessive_dpi(tmp_path: Path) -> None:
@@ -145,6 +152,14 @@ def test_visualization_helpers_reject_excessive_dpi(tmp_path: Path) -> None:
     else:
         msg = "Expected ValueError for output_dpi=100000"
         raise AssertionError(msg)
+
+
+@pytest.mark.parametrize("invalid_dpi", [0.9, float("inf"), float("nan")])
+def test_visualization_helpers_reject_invalid_float_dpi(tmp_path: Path, invalid_dpi: float) -> None:
+    """Reject float edge cases that previously produced misleading conversion behavior."""
+    grid = map_definition_to_motion_planning_grid(_map_def_with_obstacle())
+    with pytest.raises(ValueError):
+        visualize_grid(grid, tmp_path / "invalid_float.png", output_dpi=invalid_dpi)
 
 
 def test_classic_visualizer_resolves_scale_from_grid() -> None:

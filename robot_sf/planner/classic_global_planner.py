@@ -25,7 +25,7 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 from loguru import logger
@@ -508,6 +508,17 @@ class PlanningError(Exception):
     pass
 
 
+class _PathCandidate(NamedTuple):
+    """Candidate path tracked during random-path optimization."""
+
+    start: tuple[float, float]
+    goal: tuple[float, float]
+    path_world: list[tuple[float, float]]
+    path_info: dict | None
+    length_m: float
+    waypoint_count: int
+
+
 class ClassicGlobalPlanner:
     """Classic grid-based global planner using python_motion_planning.
 
@@ -917,6 +928,7 @@ class ClassicGlobalPlanner:
         """
         rng = random.Random(seed)
         last_error: PlanningError | None = None
+        best_candidate: _PathCandidate | None = None
 
         for attempt_idx in range(max_attempts):
             start = self.random_valid_point_on_grid(rng=rng)
@@ -926,13 +938,28 @@ class ClassicGlobalPlanner:
 
             try:
                 path_world, path_info = self.plan(start=start, goal=goal, algorithm=algorithm)
-                logger.info(
-                    "Random path planned on attempt {attempt}: {start} -> {goal}",
-                    attempt=attempt_idx + 1,
-                    start=start,
-                    goal=goal,
-                )
-                return path_world, path_info, start, goal
+                length_m = self._path_length_meters(path_world, path_info)
+                waypoint_count = len(path_world)
+                if best_candidate is None or (length_m, waypoint_count) > (
+                    best_candidate.length_m,
+                    best_candidate.waypoint_count,
+                ):
+                    best_candidate = _PathCandidate(
+                        start=start,
+                        goal=goal,
+                        path_world=path_world,
+                        path_info=path_info,
+                        length_m=length_m,
+                        waypoint_count=waypoint_count,
+                    )
+                    logger.debug(
+                        "Random path candidate improved at attempt {attempt}: start={start}, goal={goal}, length={length:.3f}m, waypoints={waypoints}",
+                        attempt=attempt_idx + 1,
+                        start=start,
+                        goal=goal,
+                        length=length_m,
+                        waypoints=waypoint_count,
+                    )
             except PlanningError as exc:
                 last_error = exc
                 logger.debug(
@@ -941,10 +968,56 @@ class ClassicGlobalPlanner:
                     error=exc,
                 )
 
+        if best_candidate is not None:
+            start, goal, path_world, path_info, length_m, waypoint_count = best_candidate
+            logger.info(
+                "Selected optimized random path after {attempts} attempts: {start} -> {goal} (length={length:.3f}m, waypoints={waypoints})",
+                attempts=max_attempts,
+                start=start,
+                goal=goal,
+                length=length_m,
+                waypoints=waypoint_count,
+            )
+            return path_world, path_info, start, goal
+
         msg = f"Failed to plan random path after {max_attempts} attempts"
         if last_error is not None:
             msg = f"{msg}; last error: {last_error}"
         raise PlanningError(msg)
+
+    @staticmethod
+    def _path_length_meters(path_world: list[tuple[float, float]], path_info: dict | None) -> float:
+        """Return path length in meters for random-path ranking.
+
+        Prefers `path_info["length"]` when available as a positive finite number.
+        This metadata value is expected to be pre-scaled to meters by `_scale_path_info`.
+
+        Falls back to Euclidean integration over `path_world` when metadata is
+        absent or invalid.
+
+        Args:
+            path_world: Waypoints in world coordinates (meters).
+            path_info: Optional planner metadata, possibly containing `"length"` in meters.
+
+        Returns:
+            Total path length in meters, or `0.0` when fewer than two waypoints exist.
+        """
+        if isinstance(path_info, dict):
+            path_length = path_info.get("length")
+            if (
+                isinstance(path_length, (int, float))
+                and math.isfinite(path_length)
+                and path_length > 0
+            ):
+                return float(path_length)
+        if len(path_world) < 2:
+            return 0.0
+        length = 0.0
+        for idx in range(1, len(path_world)):
+            prev_x, prev_y = path_world[idx - 1]
+            curr_x, curr_y = path_world[idx]
+            length += math.hypot(curr_x - prev_x, curr_y - prev_y)
+        return length
 
     def _scale_path_info(
         self,

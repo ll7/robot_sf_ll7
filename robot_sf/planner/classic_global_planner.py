@@ -25,7 +25,7 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 from loguru import logger
@@ -508,6 +508,17 @@ class PlanningError(Exception):
     pass
 
 
+class _PathCandidate(NamedTuple):
+    """Candidate path tracked during random-path optimization."""
+
+    start: tuple[float, float]
+    goal: tuple[float, float]
+    path_world: list[tuple[float, float]]
+    path_info: dict | None
+    length_m: float
+    waypoint_count: int
+
+
 class ClassicGlobalPlanner:
     """Classic grid-based global planner using python_motion_planning.
 
@@ -917,17 +928,7 @@ class ClassicGlobalPlanner:
         """
         rng = random.Random(seed)
         last_error: PlanningError | None = None
-        best_candidate: (
-            tuple[
-                tuple[float, float],
-                tuple[float, float],
-                list[tuple[float, float]],
-                dict | None,
-                float,
-                int,
-            ]
-            | None
-        ) = None
+        best_candidate: _PathCandidate | None = None
 
         for attempt_idx in range(max_attempts):
             start = self.random_valid_point_on_grid(rng=rng)
@@ -940,16 +941,16 @@ class ClassicGlobalPlanner:
                 length_m = self._path_length_meters(path_world, path_info)
                 waypoint_count = len(path_world)
                 if best_candidate is None or (length_m, waypoint_count) > (
-                    best_candidate[4],
-                    best_candidate[5],
+                    best_candidate.length_m,
+                    best_candidate.waypoint_count,
                 ):
-                    best_candidate = (
-                        start,
-                        goal,
-                        path_world,
-                        path_info,
-                        length_m,
-                        waypoint_count,
+                    best_candidate = _PathCandidate(
+                        start=start,
+                        goal=goal,
+                        path_world=path_world,
+                        path_info=path_info,
+                        length_m=length_m,
+                        waypoint_count=waypoint_count,
                     )
                     logger.debug(
                         "Random path candidate improved at attempt {attempt}: start={start}, goal={goal}, length={length:.3f}m, waypoints={waypoints}",
@@ -986,10 +987,28 @@ class ClassicGlobalPlanner:
 
     @staticmethod
     def _path_length_meters(path_world: list[tuple[float, float]], path_info: dict | None) -> float:
-        """Return path length in meters from metadata or direct waypoint integration."""
+        """Return path length in meters for random-path ranking.
+
+        Prefers `path_info["length"]` when available as a positive finite number.
+        This metadata value is expected to be pre-scaled to meters by `_scale_path_info`.
+
+        Falls back to Euclidean integration over `path_world` when metadata is
+        absent or invalid.
+
+        Args:
+            path_world: Waypoints in world coordinates (meters).
+            path_info: Optional planner metadata, possibly containing `"length"` in meters.
+
+        Returns:
+            Total path length in meters, or `0.0` when fewer than two waypoints exist.
+        """
         if isinstance(path_info, dict):
             path_length = path_info.get("length")
-            if isinstance(path_length, (int, float)) and math.isfinite(path_length):
+            if (
+                isinstance(path_length, (int, float))
+                and math.isfinite(path_length)
+                and path_length > 0
+            ):
                 return float(path_length)
         if len(path_world) < 2:
             return 0.0

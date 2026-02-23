@@ -299,7 +299,10 @@ def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
     )
 
     def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
-        return next(sampled_points)
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
 
     scores = {
         ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 1.0}),
@@ -334,7 +337,10 @@ def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
     sampled_points = iter([(0.0, 0.0), (1.0, 1.0), (0.0, 0.0), (2.0, 2.0)])
 
     def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
-        return next(sampled_points)
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
 
     scores = {
         ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 4.0}),

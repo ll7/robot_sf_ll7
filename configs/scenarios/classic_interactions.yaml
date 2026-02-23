@@ -12,5 +12,6 @@ includes:
   - archetypes/classic_merging.yaml
   - archetypes/classic_overtaking.yaml
   - archetypes/classic_t_intersection.yaml
+  - archetypes/classic_urban_crossing.yaml
 map_search_paths:
   - ../../maps/svg_maps

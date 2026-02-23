@@ -41,98 +41,90 @@
        x="0"
        y="0"
        width="50"
-       height="7.9333334"
+       height="6"
        fill="#000000"
        inkscape:label="obstacle"
-       id="wall_top"
-       style="stroke-width:2.81662" />
+       id="wall_top" />
     <rect
        x="0"
-       y="41.599998"
+       y="44"
        width="50"
-       height="8.3999996"
+       height="6"
        fill="#000000"
        inkscape:label="obstacle"
-       id="wall_bottom"
-       style="stroke-width:2.89828" />
+       id="wall_bottom" />
     <rect
        x="0"
        y="0"
-       width="5.5333333"
+       width="6"
        height="50"
        fill="#000000"
        inkscape:label="obstacle"
-       id="wall_left"
-       style="stroke-width:2.3523" />
+       id="wall_left" />
     <rect
-       x="44.466667"
+       x="44"
        y="0"
-       width="5.5333333"
+       width="6"
        height="50"
        fill="#000000"
        inkscape:label="obstacle"
-       id="wall_right"
-       style="stroke-width:2.3523" />
+       id="wall_right" />
     <!-- Corner buildings leaving an urban crosswalk-like center -->
     <rect
-       x="1"
-       y="1"
-       width="21.266666"
-       height="21.200001"
+       x="6"
+       y="6"
+       width="16"
+       height="16"
        fill="#000000"
        inkscape:label="obstacle"
-       id="bldg_nw"
-       style="stroke-width:1.24902" />
+       id="bldg_nw" />
     <rect
-       x="27.933334"
-       y="1"
-       width="21.066666"
-       height="21.066668"
+       x="28"
+       y="6"
+       width="16"
+       height="16"
        fill="#000000"
        inkscape:label="obstacle"
-       id="bldg_ne"
-       style="stroke-width:1.23921" />
+       id="bldg_ne" />
     <rect
-       x="1"
-       y="28.266666"
-       width="20.666666"
-       height="20.733334"
+       x="6"
+       y="28"
+       width="16"
+       height="16"
        fill="#000000"
        inkscape:label="obstacle"
-       id="bldg_sw"
-       style="stroke-width:1.21765" />
+       id="bldg_sw" />
     <rect
-       x="28.066668"
-       y="27.666666"
-       width="20.933332"
-       height="21.333334"
+       x="28"
+       y="28"
+       width="16"
+       height="16"
        fill="#000000"
        inkscape:label="obstacle"
-       id="bldg_se"
-       style="stroke-width:1.24308" />
+       id="bldg_se" />
   </g>
   <g
      id="robot"
      inkscape:label="Robot">
     <rect
-       x="6.666667"
-       y="23.133333"
+       x="7"
+       y="23"
        width="4"
        height="4"
        fill="#ffdf00"
        inkscape:label="robot_spawn_zone"
        id="robot_spawn" />
     <rect
-       x="38.866669"
-       y="23.133333"
+       x="39"
+       y="23"
        width="4"
        height="4"
        fill="#ff6c00"
        inkscape:label="robot_goal_zone"
        id="robot_goal" />
     <path
-       style="fill:none;stroke:#0300d5;stroke-width:0.772544;stroke-opacity:1"
-       d="M 12.2,25 H 37.266667"
+       style="fill:none;stroke:#0300d5;stroke-width:0.8;stroke-opacity:1"
+       d="M 11,25 H 39"
        id="robot_route"
        inkscape:label="robot_route_0_0" />
   </g>
@@ -141,8 +133,8 @@
      id="layer1"
      inkscape:label="Pedestrian">
     <path
-       style="fill:none;stroke:#c40202;stroke-width:0.849837;stroke-opacity:1"
-       d="M 25,9.2666667 V 39.6"
+       style="fill:none;stroke:#c40202;stroke-width:0.8;stroke-opacity:1"
+       d="M 25,11 V 39"
        id="ped_route_main"
        inkscape:label="ped_route" />
   </g>

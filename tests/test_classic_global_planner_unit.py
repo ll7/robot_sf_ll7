@@ -77,6 +77,26 @@ def test_scale_path_info_scales_length_and_sets_inflation(tmp_path):
     assert scaled["cost"] == 7
 
 
+def test_scale_path_info_sets_inflation_meters_none_when_inflation_disabled(tmp_path):
+    """Scaled path info should include inflation_meters=None when inflation is not used."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=2.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    grid = planner.grid
+    scaled = planner._scale_path_info({"length": 2.0}, grid, inflation=None)
+
+    assert scaled is not None
+    assert "inflation_meters" in scaled
+    assert scaled["inflation_meters"] is None
+    assert scaled["inflation_cells"] is None
+
+
 def test_config_resolves_inflation_meters_to_cells() -> None:
     """Meter-based inflation should ceil to avoid under-inflation."""
     cfg = ClassicPlannerConfig(cells_per_meter=2.0, inflate_radius_meters=0.6)

@@ -144,6 +144,23 @@ class MotionPlanningGridConfig:
     inflate_radius_meters: float | None = None
     inflate_radius_cells: int | None = None
 
+    def __post_init__(self) -> None:
+        """Validate inflation configuration eagerly when constructed."""
+        if self.inflate_radius_meters is not None and self.inflate_radius_cells is not None:
+            raise ValueError(
+                "Configure either inflate_radius_meters or inflate_radius_cells, not both."
+            )
+        if self.inflate_radius_meters is not None:
+            if not isinstance(self.inflate_radius_meters, (int, float)) or not math.isfinite(
+                self.inflate_radius_meters
+            ):
+                raise ValueError("inflate_radius_meters must be a finite number >= 0 or None")
+            if self.inflate_radius_meters < 0:
+                raise ValueError("inflate_radius_meters must be >= 0 or None")
+        if self.inflate_radius_cells is not None:
+            if not isinstance(self.inflate_radius_cells, int) or self.inflate_radius_cells < 0:
+                raise ValueError("inflate_radius_cells must be an int >= 0 or None")
+
     @property
     def meters_per_cell(self) -> float:
         """Inverse scaling factor (meters represented by a single grid cell)."""
@@ -156,12 +173,6 @@ class MotionPlanningGridConfig:
             Inflation radius in cells, or None to disable inflation.
         """
         if self.inflate_radius_meters is not None:
-            if not isinstance(self.inflate_radius_meters, (int, float)) or not math.isfinite(
-                self.inflate_radius_meters
-            ):
-                raise ValueError("inflate_radius_meters must be a finite number >= 0 or None")
-            if self.inflate_radius_meters < 0:
-                raise ValueError("inflate_radius_meters must be >= 0 or None")
             return math.ceil(self.inflate_radius_meters * self.cells_per_meter)
         return self.inflate_radius_cells
 
@@ -1118,8 +1129,9 @@ class ClassicGlobalPlanner:
         if isinstance(length_cells, (int, float)):
             scaled_info["length"] = float(length_cells) * meters_per_cell
         scaled_info["inflation_cells"] = inflation
-        if inflation is not None:
-            scaled_info["inflation_meters"] = inflation * meters_per_cell
+        scaled_info["inflation_meters"] = (
+            inflation * meters_per_cell if inflation is not None else None
+        )
         return scaled_info
 
     @staticmethod

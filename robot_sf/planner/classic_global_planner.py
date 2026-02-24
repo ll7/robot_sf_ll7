@@ -156,6 +156,12 @@ class MotionPlanningGridConfig:
             Inflation radius in cells, or None to disable inflation.
         """
         if self.inflate_radius_meters is not None:
+            if not isinstance(self.inflate_radius_meters, (int, float)) or not math.isfinite(
+                self.inflate_radius_meters
+            ):
+                raise ValueError("inflate_radius_meters must be a finite number >= 0 or None")
+            if self.inflate_radius_meters < 0:
+                raise ValueError("inflate_radius_meters must be >= 0 or None")
             return math.ceil(self.inflate_radius_meters * self.cells_per_meter)
         return self.inflate_radius_cells
 
@@ -482,7 +488,7 @@ class ClassicPlannerConfig:
     """
 
     cells_per_meter: float = 2.0
-    inflate_radius_meters: float | None = 0.0
+    inflate_radius_meters: float | None = None
     inflate_radius_cells: int | None = None
     add_boundary_obstacles: bool = True
     algorithm: str = "theta_star_v2"
@@ -515,6 +521,7 @@ class ClassicPlannerConfig:
         return self.inflate_radius_cells
 
     def _validate_cells_per_meter(self) -> None:
+        """Ensure cells_per_meter is a finite strictly positive scalar."""
         if not isinstance(self.cells_per_meter, (int, float)) or not math.isfinite(
             self.cells_per_meter
         ):
@@ -523,6 +530,7 @@ class ClassicPlannerConfig:
             raise ValueError("cells_per_meter must be greater than zero")
 
     def _validate_inflate_radius_meters(self) -> None:
+        """Allow meter inflation to be None or a finite non-negative scalar."""
         if self.inflate_radius_meters is None:
             return
         if not isinstance(self.inflate_radius_meters, (int, float)) or not math.isfinite(
@@ -533,6 +541,7 @@ class ClassicPlannerConfig:
             raise ValueError("inflate_radius_meters must be >= 0 or None")
 
     def _normalize_legacy_inflate_radius_cells(self) -> None:
+        """Normalize legacy float-int values and require non-negative int/None."""
         if self.inflate_radius_cells is None:
             return
         if isinstance(self.inflate_radius_cells, float) and self.inflate_radius_cells.is_integer():
@@ -541,11 +550,8 @@ class ClassicPlannerConfig:
             raise ValueError("inflate_radius_cells must be an int >= 0 or None")
 
     def _validate_inflate_radius_consistency(self) -> None:
+        """Enforce compatibility between legacy cell and meter inflation settings."""
         if self.inflate_radius_cells is None:
-            return
-        if self.inflate_radius_meters == 0.0:
-            # Preserve compatibility with callers still passing only `inflate_radius_cells`.
-            self.inflate_radius_meters = None
             return
         if self.inflate_radius_meters is not None:
             raise ValueError(

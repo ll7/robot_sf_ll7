@@ -6,58 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
 ### Added
-- Unified configs now support `map_id` for deterministic map selection when building environments.
-- Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
-  `scripts/training/train_dreamerv3_rllib.py`, `configs/training/rllib_dreamerv3/drive_state_rays.yaml`,
+* `ClassicGlobalPlanner.plan_random_path()` now supports `allow_inflation_fallback=False` to keep the configured inflated area instead of shrinking inflation during random path sampling.
+* Unified configs now support `map_id` for deterministic map selection when building environments.
+* Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
+`scripts/training/train_dreamerv3_rllib.py` , `configs/training/rllib_dreamerv3/drive_state_rays.yaml` , 
   deterministic observation flattening/action normalization wrappers, and a dedicated runbook.
-- Optional dependency split for training stacks: `imitation` moved to the `imitation` dependency group so BC pre-training can be installed separately from RLlib-oriented environments.
-- Added an explicit uv dependency conflict declaration between `--extra rllib` and `--group imitation` to provide actionable install errors when mixed.
-- Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
-- Optuna sqlite inspection helper (`scripts/tools/inspect_optuna_db.py`) for quick study summaries.
-- Optuna expert PPO sweep report with recommended hyperparameter ranges (`docs/training/optuna_expert_ppo_sweep_2026-02-11.md`).
-- Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
-- New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
-- Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
-- Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
-- Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
-- Safety-gated Optuna objectives for expert PPO sweeps (`constraint_collision_rate_max`,
-  optional `constraint_comfort_exposure_max`, and `constraint_handling=penalize|prune`)
+* Optional dependency split for training stacks: `imitation` moved to the `imitation` dependency group so BC pre-training can be installed separately from RLlib-oriented environments.
+* Added an explicit uv dependency conflict declaration between `--extra rllib` and `--group imitation` to provide actionable install errors when mixed.
+* Scenario split helper (`robot_sf.training.scenario_split`) and CLI (`scripts/tools/split_scenarios.py`) for train/holdout validation.
+* Optuna sqlite inspection helper (`scripts/tools/inspect_optuna_db.py`) for quick study summaries.
+* Optuna expert PPO sweep report with recommended hyperparameter ranges (`docs/training/optuna_expert_ppo_sweep_2026-02-11.md`).
+* Shared occupancy collision helpers to de-duplicate dynamic and obstacle collision checks.
+* New force flags `peds_have_static_obstacle_forces` and `peds_have_robot_repulsion` with legacy alias support.
+* Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
+* Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
+* Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
+* Safety-gated Optuna objectives for expert PPO sweeps (`constraint_collision_rate_max`, 
+  optional `constraint_comfort_exposure_max` , and `constraint_handling=penalize|prune` )
   with per-trial feasibility metadata and feasible/infeasible study summaries.
-- Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
-- Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
-- Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
-- Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
-- Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.
-- Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
-- Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
-- Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
-- Benchmark outputs now include wall collision and clearing distance metrics by default.
-- Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
-- Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
-- ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
-- Added SocNavBench subset metrics (`socnavbench_path_length`, `socnavbench_path_length_ratio`, `socnavbench_path_irregularity`).
-- Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
-- Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`, `examples/advanced/20_occupancy_grid_workflow.py`, `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
-- Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
-- Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
-- Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`, `scripts/validation/performance_research_report.py`, `tests/research/test_performance_smoke.py`, `tests/research/test_schemas.py`).
-- Multi-extractor training now auto-collects convergence/sample-efficiency metrics, baseline comparisons, and learning-curve/reward-distribution figures, emitting schema-compliant summaries (`summary.json`/`summary.md`) plus legacy `complete_results.json`.
-- New extractor report generator: `scripts/research/generate_extractor_report.py` converts multi-extractor `summary.json` into research-ready `report.md`/`report.tex` with figures, reproducibility metadata, and baseline comparisons.
-- Inkscape SVG map template (`maps/templates/map_template.svg`) and quickstart updates in `docs/SVG_MAP_EDITOR.md`.
-- Classic planner backend option in `RobotSimulationConfig` (`planner_backend="classic"` with `planner_classic_config`) plus ORCA demo consuming it (`examples/advanced/31_classic_planner_orca_demo.py`); planner attachment now supports grid-based planning without manual wiring.
-- Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
-- Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
-- Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
-- SVG map inspection helper (`scripts/validation/svg_inspect.py`) plus reusable API (`robot_sf.maps.verification.svg_inspection`) for route-only mode detection, route/zone index checks, risky path-command warnings, and obstacle-interior route checks.
-- Full classic benchmark now emits `run_meta.json` traceability metadata (repo/branch/commit, CLI invocation, matrix path, seed plan, environment), with a mirror at `artifacts/<run_id>/run_meta.json` for paper artifact workflows.
-- Full classic benchmark supports freeze-manifest validation (`--freeze-manifest`) with runtime contract checks (matrix hash/path, baselines/planner config, seed plan, metric subset, bootstrap settings, software identifiers) and structured status/mismatch reporting in `run_meta.json`.
-- Added a machine-readable freeze manifest template at `configs/benchmarks/classic_benchmark_freeze.example.yaml` and documented the pilot -> freeze -> final workflow.
-- Benchmark episodes now include canonical threshold profile metadata (`metric_parameters.threshold_profile` + signature).
-- Aggregation now validates threshold-profile consistency and rejects mixed-threshold reports.
-- Added threshold sensitivity tooling (`scripts/benchmark_threshold_sensitivity.py`) to report near-miss and comfort-threshold impacts by scenario family, including speed-aware alternatives.
-- Root `README.md` now includes an explicit attribution section documenting that this project builds on Caruso et al. (Machines 2023) and listing upstream reference repositories.
-- Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
+* Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
+* Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`,  `--policies`).
+* Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
+* Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
+* Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.
+* Example SocNav social-force algorithm config for map-based benchmarks (`configs/algos/social_force_example.yaml`).
+* Fast-pysf ground-truth planner option for scenario video rendering (`--policy fast_pysf` in `scripts/tools/render_scenario_videos.py`).
+* Policy analysis sweep script with metrics + optional videos (`scripts/tools/policy_analysis_run.py`).
+* Benchmark outputs now include wall collision and clearing distance metrics by default.
+* Vendored GA3C-CADRL (SA-CADRL) checkpoint under `model/ga3c_cadrl/` with provenance + license metadata.
+* Added `sacadrl` optional dependency extra (TensorFlow) for GA3C-CADRL baseline support.
+* ORCA planner uses the rvo2 binding when available; added `orca` optional dependency extra.
+* Added SocNavBench subset metrics (`socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`).
+* Map registry (`maps/registry.yaml`) with generator script and `map_id` support for scenario files.
+* Occupancy grid polish: ego-frame transforms applied consistently, query aggregation returns per-channel means without scaling errors, new quickstart/advanced/reward-shaping examples (`examples/quickstart/04_occupancy_grid.py`,  `examples/advanced/20_occupancy_grid_workflow.py`,  `examples/occupancy_reward_shaping.py`), and an expanded guide (API/config/troubleshooting + docs index link).
+* Telemetry visualization (feature 343): docked Pygame telemetry pane with live charts, JSONL telemetry stream under `output/telemetry/`, replay/export helpers, headless smoke script/test, and a demo (`examples/advanced/22_telemetry_pane.py`).
+* Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`,  `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
+* Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`,  `scripts/validation/performance_research_report.py`,  `tests/research/test_performance_smoke.py`,  `tests/research/test_schemas.py`).
+* Multi-extractor training now auto-collects convergence/sample-efficiency metrics, baseline comparisons, and learning-curve/reward-distribution figures, emitting schema-compliant summaries (`summary.json`/`summary.md`) plus legacy `complete_results.json`.
+* New extractor report generator: `scripts/research/generate_extractor_report.py` converts multi-extractor `summary.json` into research-ready `report.md`/`report.tex` with figures, reproducibility metadata, and baseline comparisons.
+* Inkscape SVG map template (`maps/templates/map_template.svg`) and quickstart updates in `docs/SVG_MAP_EDITOR.md`.
+* Classic planner backend option in `RobotSimulationConfig` (`planner_backend="classic"` with `planner_classic_config`) plus ORCA demo consuming it (`examples/advanced/31_classic_planner_orca_demo.py`); planner attachment now supports grid-based planning without manual wiring.
+* Scenario-level single-pedestrian overrides now support POI-based goals/trajectories, per-ped speeds, wait notes, and a preview helper (`scripts/tools/preview_scenario_trajectories.py`) documented in `docs/single_pedestrians.md`, including clean rendering and `--all` batch export.
+* Single pedestrian runtime behavior controller with waypoint advancement, wait handling, and role tags (follow/lead/accompany/join/leave) for robot-relative interactions.
+* Added Francis 2023 crowd/traffic scenario maps (crowd navigation, parallel/perpendicular traffic, circular crossing, robot crowding) and scenario entries in `configs/scenarios/francis2023.yaml`.
+* SVG map inspection helper (`scripts/validation/svg_inspect.py`) plus reusable API (`robot_sf.maps.verification.svg_inspection`) for route-only mode detection, route/zone index checks, risky path-command warnings, and obstacle-interior route checks.
+* Full classic benchmark now emits `run_meta.json` traceability metadata (repo/branch/commit, CLI invocation, matrix path, seed plan, environment), with a mirror at `artifacts/<run_id>/run_meta.json` for paper artifact workflows.
+* Full classic benchmark supports freeze-manifest validation (`--freeze-manifest`) with runtime contract checks (matrix hash/path, baselines/planner config, seed plan, metric subset, bootstrap settings, software identifiers) and structured status/mismatch reporting in `run_meta.json`.
+* Added a machine-readable freeze manifest template at `configs/benchmarks/classic_benchmark_freeze.example.yaml` and documented the pilot -> freeze -> final workflow.
+* Benchmark episodes now include canonical threshold profile metadata (`metric_parameters.threshold_profile` + signature).
+* Aggregation now validates threshold-profile consistency and rejects mixed-threshold reports.
+* Added threshold sensitivity tooling (`scripts/benchmark_threshold_sensitivity.py`) to report near-miss and comfort-threshold impacts by scenario family, including speed-aware alternatives.
+* Root `README.md` now includes an explicit attribution section documenting that this project builds on Caruso et al. (Machines 2023) and listing upstream reference repositories.
+* Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
 
@@ -65,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `robot_sf/benchmark/perf_trend.py` now treats `--history-limit 0` as "load no history reports" instead of unintentionally loading all matched files.
 * `robot_sf_bench plot-scenarios` now avoids thumbnail filename collisions for name-only matrices by applying deterministic `id -> name -> scenario_id -> hash` fallback resolution, sanitization, and collision suffixing.
 * DreamerV3 RLlib launcher now hardens Ray runtime environment setup by disabling `uv run` worker propagation, pinning worker interpreter execution, and applying packaging excludes to reduce startup fragility and upload size.
-* Dreamer observation contract now emits float32-consistent reset/step payloads (`drive_state`, `rays`) so Gymnasium space checks pass without dtype warnings.
+* Dreamer observation contract now emits float32-consistent reset/step payloads (`drive_state`,  `rays`) so Gymnasium space checks pass without dtype warnings.
 * Simulation throughput perf guard now supports cluster-aware calibration through env overrides and enforce mode instead of hard-failing heterogeneous nodes by default.
 * SVG map parsing now honors indexed spawn/goal labels to keep route ordering stable.
 * Pedestrian env now validates robot action-space compatibility and falls back to null actions on mismatch.
@@ -110,12 +112,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + Integration tests for end-to-end pipeline validation
   + Sample-efficiency target: ≤70% of baseline timesteps to convergence
   + Documentation in `docs/dev_guide.md` and `specs/001-ppo-imitation-pretrain/quickstart.md`
-  + Default imitation configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`,   `configs/training/ppo_imitation/ppo_finetune.yaml`)
+  + Default imitation configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`,    `configs/training/ppo_imitation/ppo_finetune.yaml`)
 * Canonical artifact root enforcement and tooling (Feature 243)
   + Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
   + Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests
   + Wired guard + migration into CI workflow, publishing artifacts from canonical paths only
-  + Refreshed core docs (`docs/dev_guide.md`,   `docs/coverage_guide.md`,   `docs/README.md`, root `README.md`) with policy overview, quickstart links, and updated coverage instructions
+  + Refreshed core docs (`docs/dev_guide.md`,    `docs/coverage_guide.md`,    `docs/README.md`, root `README.md`) with policy overview, quickstart links, and updated coverage instructions
   + Extended quickstart guidance to cover guard execution, artifact overrides, and validation expectations
 * Visibility-graph global planner (Feature 342)
   + Planner API with POI routing, caching, smoothing; new `use_planner` flag and clearance config in unified configs
@@ -127,10 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + Added migration guide from legacy config classes to unified config
   + Documented all configuration modules (canonical vs legacy)
   + Linked from `docs/README.md` and `docs/dev_guide.md`
-* Automated example smoke harness (`scripts/validation/run_examples_smoke.py`,   `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
+* Automated example smoke harness (`scripts/validation/run_examples_smoke.py`,    `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Fixed
-- Pedestrian route sampling now fails fast when obstacle constraints cannot be satisfied instead of silently ignoring obstacles.
+
+* Pedestrian route sampling now fails fast when obstacle constraints cannot be satisfied instead of silently ignoring obstacles.
 
 ### Changed
 
@@ -149,7 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + Removed empty `robot_sf/util/` and `robot_sf/utils/` directories
 * Example catalog reorganization and automation improvements (#245)
   + Moved benchmark and plotting scripts into dedicated `examples/benchmarks/` and `examples/plotting/` tiers
-  + Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`,   `docs/README.md`,   `docs/benchmark*.md`,   `docs/distribution_plots.md`) to reference new paths
+  + Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`,    `docs/README.md`,    `docs/benchmark*.md`,    `docs/distribution_plots.md`) to reference new paths
   + Updated `examples/examples_manifest.yaml` metadata (tags, CI flags, summaries) and added quick links from docs
   + Imitation pipeline example now auto-selects simulator backends and generates run-specific BC/PPO configs under `output/tmp/imitation_pipeline/` to keep CLI invocations aligned with script requirements
 * Visualization stack ownership clarified: the Full Classic pipeline (`robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts`) is now the canonical path that emits manifest-backed plot/video artifacts; the legacy helper API (`robot_sf.benchmark.visualization.*`) is deprecated for benchmark runs and retained only for ad-hoc JSONL plotting.
@@ -259,10 +262,10 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + Coverage excludes: tests, examples, scripts, fast-pysf submodule per omit configuration
   + Non-blocking CI design: warnings only, no build failures on coverage decreases
 * Paper Metrics Implementation (Feature 144): Comprehensive implementation of 22 social navigation metrics from paper 2306.16740v4 (Table 1):
-  + **NHT (Navigation/Hard Task) Metrics (11)**: `success_rate`,   `collision_count`,   `wall_collisions`,   `agent_collisions`,   `human_collisions`,   `timeout`,   `failure_to_progress`,   `stalled_time`,   `time_to_goal`,   `path_length`,  `success_path_length` (SPL)
-  + **SHT (Social/Human-aware Task) Metrics (14)**: velocity statistics (`velocity_min/avg/max`), acceleration statistics (`acceleration_min/avg/max`), jerk statistics (`jerk_min/avg/max`), clearing distance (`clearing_distance_min/avg`),   `space_compliance`,   `distance_to_human_min`,   `time_to_collision_min`,   `aggregated_time`
+  + **NHT (Navigation/Hard Task) Metrics (11)**: `success_rate`,    `collision_count`,    `wall_collisions`,    `agent_collisions`,    `human_collisions`,    `timeout`,    `failure_to_progress`,    `stalled_time`,    `time_to_goal`,    `path_length`,  `success_path_length` (SPL)
+  + **SHT (Social/Human-aware Task) Metrics (14)**: velocity statistics (`velocity_min/avg/max`), acceleration statistics (`acceleration_min/avg/max`), jerk statistics (`jerk_min/avg/max`), clearing distance (`clearing_distance_min/avg`),    `space_compliance`,    `distance_to_human_min`,    `time_to_collision_min`,    `aggregated_time`
   + Extended `EpisodeData` dataclass with optional `obstacles` and `other_agents_pos` fields for enhanced collision detection
-  + Internal helper functions: `_compute_ped_velocities`,   `_compute_jerk`,   `_compute_distance_matrix`
+  + Internal helper functions: `_compute_ped_velocities`,    `_compute_jerk`,    `_compute_distance_matrix`
   + Comprehensive unit test coverage (30+ tests) with edge case validation
   + All metrics documented with formulas, units, ranges, and paper references
   + Backward compatible integration with existing benchmark infrastructure
@@ -289,7 +292,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + Episode JSON schema extension to include optional `video` manifest `{path, format, filesize_bytes, frames, renderer}`.
   + End‑to‑end wiring through CLI → batch runner → worker → episode; deterministic file naming `video_<episode_id>.mp4`.
   + Tests: CLI integration (`tests/test_cli_run_video.py`) and programmatic API (`tests/unit/test_runner_video.py`), both skipped when MoviePy/ffmpeg unavailable.
-* Environment Factory Ergonomics (Feature 130): Structured `RenderOptions` / `RecordingOptions`, legacy kw mapping layer (`fps`,   `video_output_path`,   `record_video`), precedence normalization and logging diagnostics; performance guard (<10% creation mean regression) and new migration guide (`docs/dev/issues/130-improve-environment-factory/migration.md`). New example: `examples/demo_factory_options.py`.
+* Environment Factory Ergonomics (Feature 130): Structured `RenderOptions` / `RecordingOptions`, legacy kw mapping layer (`fps`,    `video_output_path`,    `record_video`), precedence normalization and logging diagnostics; performance guard (<10% creation mean regression) and new migration guide (`docs/dev/issues/130-improve-environment-factory/migration.md`). New example: `examples/demo_factory_options.py`.
 * Governance: Constitution version 1.2.0 introducing Principle XII (Preferred Logging & Observability) establishing Loguru as the canonical logging facade for library code and prohibiting unapproved `print()` usage outside sanctioned CLI/test contexts.
 * Documentation: Development guide updated with new Logging & Observability section summarizing usage guidelines (levels, performance constraints, acceptable exceptions).
 * SVG Map Validation (Feature 131): Manual bulk SVG validation script (`examples/svg_map_example.py`) supporting strict/lenient modes, summary reporting, environment override (`SVG_VALIDATE_STRICT`), and compliance spec (FR-001–FR-014). Added missing spawn/goal zones and minimal `robot_route_0_0` / `ped_route_0_0` paths to classic interaction SVG maps and large map asset now includes explicit width/height and minimal routes.
@@ -326,12 +329,12 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
 * Benchmark visual artifact integration (plots + videos manifests) for Full Classic Interaction Benchmark:
   + Post-run single-pass generation of placeholder plots and representative episode videos
   + SimulationView-first architecture with graceful synthetic fallback (current release uses synthetic until replay support added)
-  + Deterministic selection (first N episodes) and machine-readable manifests: `plot_artifacts.json`,   `video_artifacts.json`,   `performance_visuals.json`
+  + Deterministic selection (first N episodes) and machine-readable manifests: `plot_artifacts.json`,    `video_artifacts.json`,    `performance_visuals.json`
   + Renderer attribution field (`renderer`) and budget timing flags
   + Renderer toggle flag (`--renderer=auto|synthetic|sim-view`) with forced mode diagnostics
   + Replay capture adapter enabling SimulationView reconstruction (episode + step validation)
-  + Extended skip-note taxonomy: `simulation-view-missing`,   `moviepy-missing`,   `insufficient-replay`,   `render-error:<Type>`,   `disabled`,   `smoke-mode`
-  + Performance split metrics (`first_video_render_time_s`,   `first_video_encode_time_s`) plus memory sampling & over‑budget flags
+  + Extended skip-note taxonomy: `simulation-view-missing`,    `moviepy-missing`,    `insufficient-replay`,    `render-error:<Type>`,    `disabled`,    `smoke-mode`
+  + Performance split metrics (`first_video_render_time_s`,    `first_video_encode_time_s`) plus memory sampling & over‑budget flags
   + Dependency matrix + lifecycle documentation (`docs/benchmark_visuals.md`) covering fallback ladder and required optional deps (pygame, moviepy/ffmpeg, jsonschema, psutil)
 * **Social Navigation Benchmark Platform** - Complete benchmark infrastructure for reproducible social navigation research
 * **Full Classic Interaction Benchmark (Initial Implementation)**
@@ -360,7 +363,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + **Figure Orchestrator**: Publication-quality visualization pipeline
   + **Comprehensive Testing**: 108 tests including 33 new tests for benchmark functionality
 
-* Classic interactions refactor (Feature 139): Extracted small reusable visualization and formatting helpers into `robot_sf.benchmark` (`visualization.py`,   `utils.py`) and added contract tests and a dry-run smoke test. See docs/dev/issues/classic-interactions-refactor/design.md.
+* Classic interactions refactor (Feature 139): Extracted small reusable visualization and formatting helpers into `robot_sf.benchmark` (`visualization.py`,    `utils.py`) and added contract tests and a dry-run smoke test. See docs/dev/issues/classic-interactions-refactor/design.md.
 * **Complete Documentation**: Step-by-step quickstart guide with example workflows
 * **Performance Validation**: 20-25 steps/second with linear parallel scaling
 

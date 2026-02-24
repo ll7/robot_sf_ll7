@@ -141,12 +141,23 @@ class MotionPlanningGridConfig:
 
     cells_per_meter: float = 1.0
     add_boundary_obstacles: bool = True
+    inflate_radius_meters: float | None = None
     inflate_radius_cells: int | None = None
 
     @property
     def meters_per_cell(self) -> float:
         """Inverse scaling factor (meters represented by a single grid cell)."""
         return 1.0 / self.cells_per_meter
+
+    def resolved_inflate_radius_cells(self) -> int | None:
+        """Resolve configured inflation radius to grid-cell units.
+
+        Returns:
+            Inflation radius in cells, or None to disable inflation.
+        """
+        if self.inflate_radius_meters is not None:
+            return math.ceil(self.inflate_radius_meters * self.cells_per_meter)
+        return self.inflate_radius_cells
 
 
 def _world_to_grid(value: float, cells_per_meter: float) -> int:
@@ -227,8 +238,9 @@ def map_definition_to_motion_planning_grid(
             continue
         _mark_obstacle_cells(grid, poly, cfg.cells_per_meter)
 
-    if cfg.inflate_radius_cells is not None:
-        grid.inflate_obstacles(radius=cfg.inflate_radius_cells)
+    inflate_radius_cells = cfg.resolved_inflate_radius_cells()
+    if inflate_radius_cells is not None:
+        grid.inflate_obstacles(radius=inflate_radius_cells)
 
     logger.info(
         "Converted map to motion-planning grid: {w}x{h} cells ({m:.2f} m/cell)",
@@ -463,13 +475,15 @@ class ClassicPlannerConfig:
 
     Attributes:
         cells_per_meter: Grid resolution (cells per meter).
-        inflate_radius_cells: Number of cells to inflate obstacles (for robot radius).
+        inflate_radius_meters: Inflation radius in meters.
+        inflate_radius_cells: Legacy inflation radius in grid cells.
         add_boundary_obstacles: Whether to add obstacles at map boundaries.
         algorithm: Planning algorithm to use ('theta_star', 'a_star', etc.).
     """
 
     cells_per_meter: float = 2.0
-    inflate_radius_cells: int | None = 0
+    inflate_radius_meters: float | None = 0.0
+    inflate_radius_cells: int | None = None
     add_boundary_obstacles: bool = True
     algorithm: str = "theta_star_v2"
 
@@ -479,6 +493,28 @@ class ClassicPlannerConfig:
         Raises:
             ValueError: If any configuration field is invalid.
         """
+        self._validate_cells_per_meter()
+        self._validate_inflate_radius_meters()
+        self._normalize_legacy_inflate_radius_cells()
+        self._validate_inflate_radius_consistency()
+
+        if not isinstance(self.add_boundary_obstacles, bool):
+            raise ValueError("add_boundary_obstacles must be a bool")
+
+        if not isinstance(self.algorithm, str) or not self.algorithm:
+            raise ValueError("algorithm must be a non-empty string")
+
+    def resolved_inflate_radius_cells(self) -> int | None:
+        """Resolve planner inflation radius to grid-cell units.
+
+        Returns:
+            Inflation radius in cells, or None to disable inflation.
+        """
+        if self.inflate_radius_meters is not None:
+            return math.ceil(self.inflate_radius_meters * self.cells_per_meter)
+        return self.inflate_radius_cells
+
+    def _validate_cells_per_meter(self) -> None:
         if not isinstance(self.cells_per_meter, (int, float)) or not math.isfinite(
             self.cells_per_meter
         ):
@@ -486,20 +522,35 @@ class ClassicPlannerConfig:
         if self.cells_per_meter <= 0:
             raise ValueError("cells_per_meter must be greater than zero")
 
-        if self.inflate_radius_cells is not None:
-            if (
-                isinstance(self.inflate_radius_cells, float)
-                and self.inflate_radius_cells.is_integer()
-            ):
-                self.inflate_radius_cells = int(self.inflate_radius_cells)
-            if not isinstance(self.inflate_radius_cells, int) or self.inflate_radius_cells < 0:
-                raise ValueError("inflate_radius_cells must be an int >= 0 or None")
+    def _validate_inflate_radius_meters(self) -> None:
+        if self.inflate_radius_meters is None:
+            return
+        if not isinstance(self.inflate_radius_meters, (int, float)) or not math.isfinite(
+            self.inflate_radius_meters
+        ):
+            raise ValueError("inflate_radius_meters must be a finite number >= 0 or None")
+        if self.inflate_radius_meters < 0:
+            raise ValueError("inflate_radius_meters must be >= 0 or None")
 
-        if not isinstance(self.add_boundary_obstacles, bool):
-            raise ValueError("add_boundary_obstacles must be a bool")
+    def _normalize_legacy_inflate_radius_cells(self) -> None:
+        if self.inflate_radius_cells is None:
+            return
+        if isinstance(self.inflate_radius_cells, float) and self.inflate_radius_cells.is_integer():
+            self.inflate_radius_cells = int(self.inflate_radius_cells)
+        if not isinstance(self.inflate_radius_cells, int) or self.inflate_radius_cells < 0:
+            raise ValueError("inflate_radius_cells must be an int >= 0 or None")
 
-        if not isinstance(self.algorithm, str) or not self.algorithm:
-            raise ValueError("algorithm must be a non-empty string")
+    def _validate_inflate_radius_consistency(self) -> None:
+        if self.inflate_radius_cells is None:
+            return
+        if self.inflate_radius_meters == 0.0:
+            # Preserve compatibility with callers still passing only `inflate_radius_cells`.
+            self.inflate_radius_meters = None
+            return
+        if self.inflate_radius_meters is not None:
+            raise ValueError(
+                "Configure either inflate_radius_meters or inflate_radius_cells, not both."
+            )
 
 
 class PlanningError(Exception):
@@ -572,7 +623,7 @@ class ClassicGlobalPlanner:
             RuntimeError: If grid creation fails.
         """
         if self._grid is None:
-            self._grid = self._build_grid(self.config.inflate_radius_cells)
+            self._grid = self._build_grid(self.config.resolved_inflate_radius_cells())
         return self._grid
 
     def _build_grid(self, inflate_radius_cells: int | None) -> Grid:
@@ -586,6 +637,7 @@ class ClassicGlobalPlanner:
         """
         grid_config = MotionPlanningGridConfig(
             cells_per_meter=self.config.cells_per_meter,
+            inflate_radius_meters=None,
             inflate_radius_cells=inflate_radius_cells,
             add_boundary_obstacles=self.config.add_boundary_obstacles,
         )
@@ -833,7 +885,7 @@ class ClassicGlobalPlanner:
             goal_w=goal,
         )
 
-        initial_inflation = self.config.inflate_radius_cells
+        initial_inflation = self.config.resolved_inflate_radius_cells()
         attempt_radii: list[int | None]
         if not allow_inflation_fallback:
             attempt_radii = [initial_inflation]
@@ -1060,6 +1112,8 @@ class ClassicGlobalPlanner:
         if isinstance(length_cells, (int, float)):
             scaled_info["length"] = float(length_cells) * meters_per_cell
         scaled_info["inflation_cells"] = inflation
+        if inflation is not None:
+            scaled_info["inflation_meters"] = inflation * meters_per_cell
         return scaled_info
 
     @staticmethod

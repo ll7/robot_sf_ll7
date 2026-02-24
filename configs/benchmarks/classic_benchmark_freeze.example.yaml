@@ -13,7 +13,7 @@ baselines:
     - planner_backend: classic
       planner_classic_config:
         cells_per_meter: 2.0
-        inflate_radius_cells: 0
+        inflate_radius_meters: 0.0
 
 seed_plan:
   base_seed: 123

@@ -73,7 +73,21 @@ def test_scale_path_info_scales_length_and_sets_inflation(tmp_path):
 
     assert scaled["length"] == pytest.approx(2.0)  # length scales by meters_per_cell
     assert scaled["inflation_cells"] == 1
+    assert scaled["inflation_meters"] == pytest.approx(0.5)
     assert scaled["cost"] == 7
+
+
+def test_config_resolves_inflation_meters_to_cells() -> None:
+    """Meter-based inflation should ceil to avoid under-inflation."""
+    cfg = ClassicPlannerConfig(cells_per_meter=2.0, inflate_radius_meters=0.6)
+    assert cfg.resolved_inflate_radius_cells() == 2
+
+
+def test_config_supports_legacy_inflation_cells_argument() -> None:
+    """Legacy callers using inflate_radius_cells should still resolve correctly."""
+    cfg = ClassicPlannerConfig(cells_per_meter=2.0, inflate_radius_cells=2)
+    assert cfg.resolved_inflate_radius_cells() == 2
+    assert cfg.inflate_radius_meters is None
 
 
 def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):

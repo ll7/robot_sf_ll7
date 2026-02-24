@@ -310,7 +310,7 @@ def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
         ((0.0, 0.0), (3.0, 3.0)): ([(0.0, 0.0), (3.0, 3.0)], {"length": 3.5}),
     }
 
-    def fake_plan(start, goal, algorithm=None):  # type: ignore[no-untyped-def]
+    def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
         return scores[(start, goal)]
 
     monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
@@ -347,7 +347,7 @@ def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
         ((0.0, 0.0), (2.0, 2.0)): ([(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)], {"length": 4.0}),
     }
 
-    def fake_plan(start, goal, algorithm=None):  # type: ignore[no-untyped-def]
+    def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
         return scores[(start, goal)]
 
     monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
@@ -358,3 +358,38 @@ def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
     assert (start, goal) == ((0.0, 0.0), (2.0, 2.0))
     assert path == [(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)]
     assert info == {"length": 4.0}
+
+
+def test_plan_random_path_can_disable_inflation_fallback(tmp_path, monkeypatch):
+    """Random-path planning should forward fallback control to `plan`."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=2,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter([(0.0, 0.0), (1.0, 1.0)])
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
+
+    observed = {}
+
+    def fake_plan(  # type: ignore[no-untyped-def]
+        start, goal, algorithm=None, allow_inflation_fallback=True
+    ):
+        observed["allow_inflation_fallback"] = allow_inflation_fallback
+        return [start, goal], {"length": 1.0}
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    planner.plan_random_path(max_attempts=1, allow_inflation_fallback=False)
+
+    assert observed["allow_inflation_fallback"] is False

@@ -802,6 +802,7 @@ class ClassicGlobalPlanner:
         start: tuple[float, float],
         goal: tuple[float, float],
         algorithm: str | None = None,
+        allow_inflation_fallback: bool = True,
     ) -> tuple[list[tuple[float, float]], dict | None]:
         """Plan a path from start to goal with inflation fallback.
 
@@ -809,6 +810,8 @@ class ClassicGlobalPlanner:
             start: Start position (x, y) in world coordinates (meters).
             goal: Goal position (x, y) in world coordinates (meters).
             algorithm: Optional algorithm override ('theta_star', 'a_star'); defaults to config.
+            allow_inflation_fallback: When True, retries with smaller inflation radii down to 0.
+                When False, keeps the configured inflation radius for this plan call.
 
         Returns:
             tuple[list[tuple[float, float]], dict | None]:
@@ -832,7 +835,9 @@ class ClassicGlobalPlanner:
 
         initial_inflation = self.config.inflate_radius_cells
         attempt_radii: list[int | None]
-        if initial_inflation is None:
+        if not allow_inflation_fallback:
+            attempt_radii = [initial_inflation]
+        elif initial_inflation is None:
             attempt_radii = [None]
         else:
             start_radius = max(0, initial_inflation)
@@ -911,6 +916,7 @@ class ClassicGlobalPlanner:
         algorithm: str | None = None,
         seed: int | None = None,
         max_attempts: int = 20,
+        allow_inflation_fallback: bool = True,
     ) -> tuple[list[tuple[float, float]], dict | None, tuple[float, float], tuple[float, float]]:
         """Plan a path between two randomly sampled valid points.
 
@@ -918,6 +924,8 @@ class ClassicGlobalPlanner:
             algorithm: Optional algorithm override; defaults to the planner configuration.
             seed: Optional random seed for reproducibility.
             max_attempts: Maximum attempts to sample points and find a valid path.
+            allow_inflation_fallback: Forwarded to `plan()`. Set False to keep the configured
+                inflation radius unchanged while sampling random start/goal candidates.
 
         Returns:
             tuple[list[tuple[float, float]], dict | None, tuple[float, float], tuple[float, float]]:
@@ -937,7 +945,12 @@ class ClassicGlobalPlanner:
                 continue
 
             try:
-                path_world, path_info = self.plan(start=start, goal=goal, algorithm=algorithm)
+                path_world, path_info = self.plan(
+                    start=start,
+                    goal=goal,
+                    algorithm=algorithm,
+                    allow_inflation_fallback=allow_inflation_fallback,
+                )
                 length_m = self._path_length_meters(path_world, path_info)
                 waypoint_count = len(path_world)
                 if best_candidate is None or (length_m, waypoint_count) > (

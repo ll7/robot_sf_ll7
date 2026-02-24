@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- `ClassicGlobalPlanner.plan_random_path()` now supports `allow_inflation_fallback=False` to keep the configured inflated area instead of shrinking inflation during random path sampling.
 - Unified configs now support `map_id` for deterministic map selection when building environments.
 - Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
   `scripts/training/train_dreamerv3_rllib.py`, `configs/training/rllib_dreamerv3/drive_state_rays.yaml`,

@@ -257,3 +257,48 @@ def test_config_rejects_invalid_identity_fields() -> None:
             scenario_id="safe_id",
             map_file="../maps/demo.svg",
         )
+
+
+def test_evaluate_route_set_skips_short_routes_for_inefficiency() -> None:
+    """Inefficiency scoring should skip routes with fewer than two waypoints."""
+    map_def = _build_test_map()
+    short_route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(2.0, 2.0)],
+        spawn_zone=map_def.robot_spawn_zones[0],
+        goal_zone=map_def.robot_goal_zones[0],
+    )
+    candidate = CandidateRouteSet(
+        robot_routes=[short_route],
+        ped_routes=[],
+    )
+    cfg = AdversarialRouteGenerationConfig(
+        scenario_id="short_route_test",
+        map_file="maps/demo.svg",
+        objective_mode="composite",
+        ped_route_count=0,
+    )
+
+    evaluation = evaluate_route_set(candidate, map_def, cfg)
+    assert evaluation.path_inefficiency == 0.0
+
+
+def test_optimize_route_set_preserves_zero_trial_scores() -> None:
+    """Optimizer top-k extraction should keep legitimate 0.0 trial scores."""
+    map_def = _build_test_map()
+    planner = _build_planner(map_def)
+    cfg = AdversarialRouteGenerationConfig(
+        scenario_id="zero_score_test",
+        map_file="maps/demo.svg",
+        objective_mode="failure_only",
+        trial_count=6,
+        seed=19,
+        robot_route_count=1,
+        ped_route_count=0,
+        top_k=3,
+    )
+
+    result = optimize_route_set(map_def, planner, cfg)
+    assert result.top_k_scores
+    assert all(score == pytest.approx(0.0) for score in result.top_k_scores)

@@ -145,6 +145,78 @@ def _route_length(route: GlobalRoute) -> float:
     return total
 
 
+def _compute_path_inefficiency(routes: list[GlobalRoute]) -> float:
+    """Compute mean route inefficiency against straight-line baselines.
+
+    Returns:
+        float: Mean inefficiency ratio above straight-line distance.
+    """
+    ineff_values: list[float] = []
+    for route in routes:
+        if len(route.waypoints) < 2:
+            continue
+        start = route.waypoints[0]
+        goal = route.waypoints[-1]
+        straight = max(math.hypot(goal[0] - start[0], goal[1] - start[1]), 1e-6)
+        ineff_values.append(max(0.0, _route_length(route) / straight - 1.0))
+    return sum(ineff_values) / len(ineff_values) if ineff_values else 0.0
+
+
+def _compute_failure_proxy(
+    routes: list[GlobalRoute],
+    map_def: MapDefinition,
+    clearance_threshold_m: float,
+) -> float:
+    """Compute low-clearance failure proxy against map obstacles.
+
+    Returns:
+        float: Mean normalized low-clearance risk across valid routes.
+    """
+    obstacle_polys = [Polygon(obstacle.vertices) for obstacle in map_def.obstacles]
+    clearance_values: list[float] = []
+    for route in routes:
+        if len(route.waypoints) < 2:
+            continue
+        line = LineString(route.waypoints)
+        if not obstacle_polys:
+            clearance_values.append(clearance_threshold_m)
+            continue
+        min_clearance = min(line.distance(poly) for poly in obstacle_polys)
+        clearance_values.append(float(min_clearance))
+
+    if not clearance_values:
+        return 0.0
+    normalized = [
+        max(0.0, 1.0 - (clearance / clearance_threshold_m)) for clearance in clearance_values
+    ]
+    return sum(normalized) / len(normalized)
+
+
+def _compute_near_miss_stress(
+    candidate: CandidateRouteSet,
+    near_miss_threshold_m: float,
+) -> float:
+    """Compute near-miss stress via minimum robot-pedestrian route separation.
+
+    Returns:
+        float: Normalized near-miss stress in [0, 1].
+    """
+    if not candidate.robot_routes or not candidate.ped_routes:
+        return 0.0
+    robot_lines = [
+        LineString(route.waypoints) for route in candidate.robot_routes if len(route.waypoints) >= 2
+    ]
+    ped_lines = [
+        LineString(route.waypoints) for route in candidate.ped_routes if len(route.waypoints) >= 2
+    ]
+    if not robot_lines or not ped_lines:
+        return 0.0
+    min_dist = min(
+        robot_line.distance(ped_line) for robot_line in robot_lines for ped_line in ped_lines
+    )
+    return max(0.0, 1.0 - (float(min_dist) / near_miss_threshold_m))
+
+
 def _serialize_route(route: GlobalRoute) -> dict:
     """Serialize a route to YAML-compatible structure.
 
@@ -336,55 +408,13 @@ def evaluate_route_set(
     robot_lengths = [_route_length(route) for route in candidate.robot_routes]
     ped_lengths = [_route_length(route) for route in candidate.ped_routes]
     all_lengths = robot_lengths + ped_lengths
+    all_routes = [*candidate.robot_routes, *candidate.ped_routes]
     diag = max(math.hypot(map_def.width, map_def.height), 1e-6)
     delay_proxy = (sum(all_lengths) / len(all_lengths) / diag) if all_lengths else 0.0
 
-    ineff_values: list[float] = []
-    for route in [*candidate.robot_routes, *candidate.ped_routes]:
-        start = route.waypoints[0]
-        goal = route.waypoints[-1]
-        straight = max(math.hypot(goal[0] - start[0], goal[1] - start[1]), 1e-6)
-        ineff_values.append(max(0.0, _route_length(route) / straight - 1.0))
-    path_inefficiency = sum(ineff_values) / len(ineff_values) if ineff_values else 0.0
-
-    obstacle_polys = [Polygon(obstacle.vertices) for obstacle in map_def.obstacles]
-    clearance_values: list[float] = []
-    for route in [*candidate.robot_routes, *candidate.ped_routes]:
-        if len(route.waypoints) < 2:
-            continue
-        line = LineString(route.waypoints)
-        if not obstacle_polys:
-            clearance_values.append(config.clearance_threshold_m)
-            continue
-        min_clearance = min(line.distance(poly) for poly in obstacle_polys)
-        clearance_values.append(float(min_clearance))
-    failure_proxy = 0.0
-    if clearance_values:
-        normalized = [
-            max(0.0, 1.0 - (clearance / config.clearance_threshold_m))
-            for clearance in clearance_values
-        ]
-        failure_proxy = sum(normalized) / len(normalized)
-
-    near_miss_stress = 0.0
-    if candidate.robot_routes and candidate.ped_routes:
-        robot_lines = [
-            LineString(route.waypoints)
-            for route in candidate.robot_routes
-            if len(route.waypoints) >= 2
-        ]
-        ped_lines = [
-            LineString(route.waypoints)
-            for route in candidate.ped_routes
-            if len(route.waypoints) >= 2
-        ]
-        if robot_lines and ped_lines:
-            min_dist = min(
-                robot_line.distance(ped_line)
-                for robot_line in robot_lines
-                for ped_line in ped_lines
-            )
-            near_miss_stress = max(0.0, 1.0 - (float(min_dist) / config.near_miss_threshold_m))
+    path_inefficiency = _compute_path_inefficiency(all_routes)
+    failure_proxy = _compute_failure_proxy(all_routes, map_def, config.clearance_threshold_m)
+    near_miss_stress = _compute_near_miss_stress(candidate, config.near_miss_threshold_m)
 
     if config.objective_mode == "failure_only":
         score = failure_proxy
@@ -475,11 +505,18 @@ def optimize_route_set(
             f"Rejections: {rejection_counts if rejection_counts else 'none'}"
         )
 
-    valid_trials_sorted = sorted(valid_trials, key=lambda trial: trial.value or -1e6, reverse=True)
+    valid_trials_sorted = sorted(
+        valid_trials,
+        key=lambda trial: trial.value if trial.value is not None else -1e6,
+        reverse=True,
+    )
     best_trial = valid_trials_sorted[0]
     best_candidate = candidate_by_trial[best_trial.number]
     best_evaluation = evaluation_by_trial[best_trial.number]
-    top_k_scores = [float(trial.value or -1e6) for trial in valid_trials_sorted[: config.top_k]]
+    top_k_scores = [
+        float(trial.value if trial.value is not None else -1e6)
+        for trial in valid_trials_sorted[: config.top_k]
+    ]
 
     logger.info(
         "Optimized adversarial routes: best score={score:.4f}, valid_trials={valid}/{total}, mode={mode}",

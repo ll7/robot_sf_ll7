@@ -81,8 +81,11 @@ def main() -> int:
     opt_cfg = _dict_section(config, "optimization")
     output_cfg = _dict_section(config, "output")
 
-    scenario_file = Path(str(scenario_cfg.get("scenario_file", ""))).resolve()
-    if not scenario_file.exists():
+    scenario_file_raw = str(scenario_cfg.get("scenario_file", "")).strip()
+    if not scenario_file_raw:
+        raise ValueError("scenario.scenario_file must be set")
+    scenario_file = Path(scenario_file_raw).resolve()
+    if not scenario_file.is_file():
         raise ValueError(f"scenario_file does not exist: {scenario_file}")
     scenario_id = args.scenario_id or str(scenario_cfg.get("scenario_id", "")).strip()
     if not scenario_id:

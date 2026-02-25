@@ -54,10 +54,16 @@ class AdversarialRouteGenerationConfig:
 
     def _validate_identity_fields(self) -> None:
         """Ensure identifiers and map path fields are set."""
-        if not self.scenario_id.strip():
+        scenario_id = self.scenario_id.strip()
+        if not scenario_id:
             raise ValueError("scenario_id must be non-empty")
+        if "/" in scenario_id or "\\" in scenario_id or ".." in scenario_id:
+            raise ValueError("scenario_id must not contain path separators or '..'")
         if not self.map_file.strip():
             raise ValueError("map_file must be non-empty")
+        map_path = Path(self.map_file)
+        if ".." in map_path.parts:
+            raise ValueError("map_file must not contain parent-directory traversal ('..')")
 
     def _validate_mode_and_counts(self) -> None:
         """Validate objective mode and integer count fields."""
@@ -254,6 +260,7 @@ def _generate_entity_routes(
         except PlanningError:
             if context.feasibility_filter:
                 return None, "invalid_start_or_goal"
+            raise
         try:
             route = _plan_route(
                 planner,
@@ -504,7 +511,7 @@ def write_route_override_artifact(
         dict[str, Path]: Output artifact paths keyed by artifact type.
     """
     root = Path(output_root)
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
     run_dir = root / f"{result.config.scenario_id}_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=False)
 

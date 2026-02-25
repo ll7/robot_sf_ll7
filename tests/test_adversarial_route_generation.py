@@ -123,6 +123,29 @@ def test_generate_candidate_rejects_invalid_points_with_feasibility_filter(
     assert reason == "invalid_start_or_goal"
 
 
+def test_generate_candidate_raises_invalid_points_when_feasibility_filter_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validation errors should propagate when feasibility filtering is disabled."""
+    map_def = _build_test_map()
+    planner = _build_planner(map_def)
+    config = AdversarialRouteGenerationConfig(
+        scenario_id="test",
+        map_file="test.svg",
+        trial_count=2,
+        robot_route_count=1,
+        ped_route_count=0,
+        feasibility_filter=False,
+    )
+
+    def _raise_invalid(_point, grid=None):  # type: ignore[no-untyped-def]
+        raise PlanningError("point invalid")
+
+    monkeypatch.setattr(planner, "validate_point", _raise_invalid)
+    with pytest.raises(PlanningError, match="point invalid"):
+        generate_candidate_route_set(map_def, planner, config)
+
+
 def test_evaluate_route_set_modes_are_deterministic() -> None:
     """Objective mode evaluation should be deterministic for fixed input routes."""
     map_def = _build_test_map()
@@ -220,3 +243,17 @@ def test_optimize_route_set_is_deterministic_for_fixed_seed() -> None:
     }
     assert payload_a == payload_b
     assert res_a.best_evaluation.score == pytest.approx(res_b.best_evaluation.score)
+
+
+def test_config_rejects_invalid_identity_fields() -> None:
+    """Config should reject unsafe scenario/map identity fields."""
+    with pytest.raises(ValueError, match="scenario_id"):
+        AdversarialRouteGenerationConfig(
+            scenario_id="../unsafe",
+            map_file="maps/demo.svg",
+        )
+    with pytest.raises(ValueError, match="map_file"):
+        AdversarialRouteGenerationConfig(
+            scenario_id="safe_id",
+            map_file="../maps/demo.svg",
+        )

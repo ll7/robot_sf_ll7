@@ -172,3 +172,27 @@ def test_classic_visualizer_resolves_scale_from_grid() -> None:
         assert vis._resolve_meters_per_cell(grid, None) == 0.5
     finally:
         vis.close()
+
+
+def test_motion_planning_grid_config_rejects_mixed_inflation_units() -> None:
+    """MotionPlanningGridConfig should reject setting both inflation units."""
+    with pytest.raises(ValueError, match="either inflate_radius_meters or inflate_radius_cells"):
+        MotionPlanningGridConfig(inflate_radius_meters=0.5, inflate_radius_cells=1)
+
+
+@pytest.mark.parametrize("meters_value", [-0.1, float("inf"), float("nan")])
+def test_motion_planning_grid_config_rejects_invalid_meter_inflation(
+    meters_value: float,
+) -> None:
+    """Meter inflation should be finite and non-negative."""
+    with pytest.raises(ValueError, match="inflate_radius_meters"):
+        MotionPlanningGridConfig(inflate_radius_meters=meters_value)
+
+
+@pytest.mark.parametrize("cells_value", [-1, 1.2])
+def test_motion_planning_grid_config_rejects_invalid_cell_inflation(
+    cells_value: int | float,
+) -> None:
+    """Cell inflation should be a non-negative integer."""
+    with pytest.raises(ValueError, match="inflate_radius_cells"):
+        MotionPlanningGridConfig(inflate_radius_cells=cells_value)  # type: ignore[arg-type]

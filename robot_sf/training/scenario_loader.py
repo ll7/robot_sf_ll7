@@ -14,6 +14,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import (
     MapDefinition,
     MapDefinitionPool,
@@ -588,6 +589,7 @@ def build_robot_config_from_scenario(
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_map_pool(config, scenario, scenario_path)
+    _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
     return config
 
@@ -1062,7 +1064,169 @@ def _apply_map_pool(
     config.map_id = map_name
 
 
+def _resolve_route_overrides_path(path_value: str, *, scenario_path: Path) -> Path:
+    """Resolve a route override file path relative to scenario YAML.
+
+    Returns:
+        Path: Absolute route override file path.
+    """
+    candidate = Path(path_value)
+    if not candidate.is_absolute():
+        candidate = (scenario_path.parent / candidate).resolve()
+    return candidate
+
+
+def _route_zone_from_map(
+    map_def: MapDefinition,
+    *,
+    is_robot: bool,
+    spawn_id: int,
+    goal_id: int,
+    waypoints: list[tuple[float, float]],
+) -> tuple[Any, Any]:
+    """Resolve spawn/goal zone geometry for a route payload entry.
+
+    Returns:
+        tuple[Any, Any]: Spawn and goal zone geometries.
+    """
+    spawn_zones = map_def.robot_spawn_zones if is_robot else map_def.ped_spawn_zones
+    goal_zones = map_def.robot_goal_zones if is_robot else map_def.ped_goal_zones
+    routes = map_def.robot_routes if is_robot else map_def.ped_routes
+
+    if 0 <= spawn_id < len(spawn_zones):
+        spawn_zone = spawn_zones[spawn_id]
+    else:
+        spawn_zone = next(
+            (route.spawn_zone for route in routes if route.spawn_id == spawn_id),
+            (
+                (waypoints[0][0], waypoints[0][1]),
+                (waypoints[0][0] + 0.1, waypoints[0][1]),
+                (waypoints[0][0], waypoints[0][1] + 0.1),
+            ),
+        )
+    if 0 <= goal_id < len(goal_zones):
+        goal_zone = goal_zones[goal_id]
+    else:
+        goal_zone = next(
+            (route.goal_zone for route in routes if route.goal_id == goal_id),
+            (
+                (waypoints[-1][0], waypoints[-1][1]),
+                (waypoints[-1][0] + 0.1, waypoints[-1][1]),
+                (waypoints[-1][0], waypoints[-1][1] + 0.1),
+            ),
+        )
+    return spawn_zone, goal_zone
+
+
+def _coerce_route_payload(
+    map_def: MapDefinition,
+    route_entries: list[Any],
+    *,
+    is_robot: bool,
+) -> list[GlobalRoute]:
+    """Coerce a list of route payload dictionaries into GlobalRoute objects.
+
+    Returns:
+        list[GlobalRoute]: Parsed route objects for the selected entity class.
+    """
+    coerced: list[GlobalRoute] = []
+    entity_name = "robot_routes" if is_robot else "ped_routes"
+    for idx, entry in enumerate(route_entries):
+        if not isinstance(entry, Mapping):
+            raise ValueError(f"{entity_name}[{idx}] must be a mapping")
+        if "spawn_id" not in entry or "goal_id" not in entry:
+            raise ValueError(f"{entity_name}[{idx}] missing spawn_id/goal_id")
+        if "waypoints" not in entry:
+            raise ValueError(f"{entity_name}[{idx}] missing waypoints")
+        spawn_id = int(entry["spawn_id"])
+        goal_id = int(entry["goal_id"])
+        waypoints_raw = entry["waypoints"]
+        if not isinstance(waypoints_raw, list) or len(waypoints_raw) < 2:
+            raise ValueError(f"{entity_name}[{idx}].waypoints must be a list with >=2 points")
+        waypoints = [
+            _coerce_point(point, f"{entity_name}[{idx}].waypoints") for point in waypoints_raw
+        ]
+        spawn_zone, goal_zone = _route_zone_from_map(
+            map_def,
+            is_robot=is_robot,
+            spawn_id=spawn_id,
+            goal_id=goal_id,
+            waypoints=waypoints,
+        )
+        coerced.append(
+            GlobalRoute(
+                spawn_id=spawn_id,
+                goal_id=goal_id,
+                waypoints=waypoints,
+                spawn_zone=spawn_zone,
+                goal_zone=goal_zone,
+                source_label="override_adversarial",
+            )
+        )
+    return coerced
+
+
+def apply_route_overrides(
+    map_def: MapDefinition,
+    route_payload: Mapping[str, Any],
+) -> None:
+    """Apply route payload overrides to a map definition in-place."""
+    robot_entries = route_payload.get("robot_routes", [])
+    ped_entries = route_payload.get("ped_routes", [])
+    if not isinstance(robot_entries, list):
+        raise ValueError("route_payload.robot_routes must be a list")
+    if not isinstance(ped_entries, list):
+        raise ValueError("route_payload.ped_routes must be a list")
+    if robot_entries:
+        map_def.robot_routes = _coerce_route_payload(map_def, robot_entries, is_robot=True)
+    if ped_entries:
+        map_def.ped_routes = _coerce_route_payload(map_def, ped_entries, is_robot=False)
+    map_def.__post_init__()
+
+
+def _load_route_override_payload(route_overrides_path: Path) -> Mapping[str, Any]:
+    """Load route override payload from YAML artifact file.
+
+    Returns:
+        Mapping[str, Any]: Payload containing robot_routes/ped_routes lists.
+    """
+    data = yaml.safe_load(route_overrides_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, Mapping):
+        raise ValueError(f"Route override file must contain a mapping: {route_overrides_path}")
+    if "route_payload" in data:
+        payload = data["route_payload"]
+        if not isinstance(payload, Mapping):
+            raise ValueError("route_payload must be a mapping")
+        return payload
+    return data
+
+
+def _apply_route_overrides(
+    config: RobotSimulationConfig,
+    route_overrides_file: Any,
+    scenario_path: Path,
+) -> None:
+    """Apply route overrides artifact to the active scenario map."""
+    if route_overrides_file is None:
+        return
+    if not isinstance(route_overrides_file, str) or not route_overrides_file.strip():
+        raise ValueError("route_overrides_file must be a non-empty string path")
+    if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
+        raise ValueError("route_overrides_file provided but no map_pool is loaded")
+    route_overrides_path = _resolve_route_overrides_path(
+        route_overrides_file, scenario_path=scenario_path
+    )
+    if not route_overrides_path.exists():
+        raise ValueError(f"route_overrides_file does not exist: {route_overrides_path}")
+    map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    map_copy = deepcopy(map_def)
+    payload = _load_route_override_payload(route_overrides_path)
+    apply_route_overrides(map_copy, payload)
+    config.map_pool.map_defs[map_name] = map_copy
+
+
 __all__ = [
+    "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",

@@ -1,0 +1,29 @@
+scenario:
+  scenario_file: configs/scenarios/classic_interactions.yaml
+  scenario_id: classic_head_on_corridor_low
+
+planner:
+  cells_per_meter: 2.0
+  inflate_radius_meters: 0.0
+  add_boundary_obstacles: true
+  algorithm: theta_star_v2
+
+optimization:
+  objective_mode: composite
+  trial_count: 20
+  seed: 123
+  robot_route_count: 1
+  ped_route_count: 2
+  allow_inflation_fallback: false
+  feasibility_filter: true
+  top_k: 5
+  min_valid_trial_ratio: 0.1
+  near_miss_threshold_m: 1.5
+  clearance_threshold_m: 0.75
+  failure_weight: 0.45
+  delay_weight: 0.25
+  inefficiency_weight: 0.15
+  near_miss_weight: 0.15
+
+output:
+  root: output/adversarial_routes

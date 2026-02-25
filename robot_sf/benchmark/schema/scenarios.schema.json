@@ -105,6 +105,10 @@
                 "type": "string",
                 "minLength": 1
             },
+            "route_overrides_file": {
+                "type": "string",
+                "minLength": 1
+            },
             "simulation_config": {
                 "type": "object"
             },

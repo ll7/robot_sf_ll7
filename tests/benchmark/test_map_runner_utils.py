@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from robot_sf.benchmark.map_runner import (
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
+    _policy_command_to_env_action,
     _ppo_action_to_unicycle,
     _ppo_paper_gate_status,
     _preflight_policy,
@@ -701,3 +703,24 @@ def test_run_map_batch_skips_incompatible_kinematics(
     assert result["written"] == 0
     assert result["preflight"]["status"] == "skipped"
     assert "compatibility_reason" in result["preflight"]
+
+
+def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
+    """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
+
+    class HolonomicConfig:
+        command_mode = "vx_vy"
+
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]), action_space=None)
+    config = SimpleNamespace(
+        robot_config=HolonomicConfig(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+    action = _policy_command_to_env_action(env=env, config=config, command=(1.0, 2.0))
+
+    expected_heading = 0.2
+    np.testing.assert_allclose(
+        action,
+        np.array([np.cos(expected_heading), np.sin(expected_heading)], dtype=float),
+    )

@@ -1081,7 +1081,9 @@ def _policy_command_to_env_action(
         mode = str(getattr(robot_cfg, "command_mode", "vx_vy")).strip().lower()
         linear, angular = float(command[0]), float(command[1])
         if mode == "vx_vy":
-            heading = float(robot.pose[1])
+            # Preserve turning intent by projecting at midpoint heading over this step.
+            step_dt = float(getattr(config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
+            heading = float(robot.pose[1]) + (angular * max(step_dt, 0.0) * 0.5)
             vx = linear * math.cos(heading)
             vy = linear * math.sin(heading)
             return np.array([vx, vy], dtype=float)
@@ -1319,6 +1321,51 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
     )
 
 
+def _accumulate_batch_metadata(
+    rec: dict[str, Any],
+    *,
+    feasibility_totals: dict[str, float],
+) -> tuple[bool, int, int]:
+    """Aggregate adapter-impact and feasibility counters from one episode record.
+
+    Returns:
+        tuple[bool, int, int]: ``(adapter_requested_seen, native_steps, adapted_steps)`` deltas.
+    """
+    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
+    feasibility_meta = (rec.get("algorithm_metadata") or {}).get("kinematics_feasibility") or {}
+    adapter_requested_seen = False
+    adapter_native_steps = 0
+    adapter_adapted_steps = 0
+    if isinstance(impact_meta, dict):
+        adapter_requested_seen = bool(impact_meta.get("requested", False))
+        adapter_native_steps = int(impact_meta.get("native_steps", 0) or 0)
+        adapter_adapted_steps = int(impact_meta.get("adapted_steps", 0) or 0)
+    if isinstance(feasibility_meta, dict):
+        commands_evaluated = int(feasibility_meta.get("commands_evaluated", 0) or 0)
+        feasibility_totals["commands_evaluated"] += commands_evaluated
+        feasibility_totals["infeasible_native_count"] += int(
+            feasibility_meta.get("infeasible_native_count", 0) or 0
+        )
+        feasibility_totals["projected_count"] += int(
+            feasibility_meta.get("projected_count", 0) or 0
+        )
+        feasibility_totals["sum_abs_delta_linear"] += (
+            float(feasibility_meta.get("mean_abs_delta_linear", 0.0)) * commands_evaluated
+        )
+        feasibility_totals["sum_abs_delta_angular"] += (
+            float(feasibility_meta.get("mean_abs_delta_angular", 0.0)) * commands_evaluated
+        )
+        feasibility_totals["max_abs_delta_linear"] = max(
+            float(feasibility_totals["max_abs_delta_linear"]),
+            float(feasibility_meta.get("max_abs_delta_linear", 0.0) or 0.0),
+        )
+        feasibility_totals["max_abs_delta_angular"] = max(
+            float(feasibility_totals["max_abs_delta_angular"]),
+            float(feasibility_meta.get("max_abs_delta_angular", 0.0) or 0.0),
+        )
+    return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
+
+
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -1487,40 +1534,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         for scenario, seed in jobs:
             try:
                 rec = _run_map_job_worker((scenario, seed, fixed_params))
-                impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
-                feasibility_meta = (rec.get("algorithm_metadata") or {}).get(
-                    "kinematics_feasibility"
-                ) or {}
-                if isinstance(impact_meta, dict):
-                    adapter_samples_seen = adapter_samples_seen or bool(
-                        impact_meta.get("requested", False),
-                    )
-                    adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
-                    adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
-                if isinstance(feasibility_meta, dict):
-                    feasibility_totals["commands_evaluated"] += int(
-                        feasibility_meta.get("commands_evaluated", 0) or 0
-                    )
-                    feasibility_totals["infeasible_native_count"] += int(
-                        feasibility_meta.get("infeasible_native_count", 0) or 0
-                    )
-                    feasibility_totals["projected_count"] += int(
-                        feasibility_meta.get("projected_count", 0) or 0
-                    )
-                    feasibility_totals["sum_abs_delta_linear"] += float(
-                        feasibility_meta.get("mean_abs_delta_linear", 0.0)
-                    ) * int(feasibility_meta.get("commands_evaluated", 0) or 0)
-                    feasibility_totals["sum_abs_delta_angular"] += float(
-                        feasibility_meta.get("mean_abs_delta_angular", 0.0)
-                    ) * int(feasibility_meta.get("commands_evaluated", 0) or 0)
-                    feasibility_totals["max_abs_delta_linear"] = max(
-                        float(feasibility_totals["max_abs_delta_linear"]),
-                        float(feasibility_meta.get("max_abs_delta_linear", 0.0) or 0.0),
-                    )
-                    feasibility_totals["max_abs_delta_angular"] = max(
-                        float(feasibility_totals["max_abs_delta_angular"]),
-                        float(feasibility_meta.get("max_abs_delta_angular", 0.0) or 0.0),
-                    )
+                requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                    rec,
+                    feasibility_totals=feasibility_totals,
+                )
+                adapter_samples_seen = adapter_samples_seen or requested_seen
+                adapter_native_steps += native_steps
+                adapter_adapted_steps += adapted_steps
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -1541,40 +1561,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
-                    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
-                    feasibility_meta = (rec.get("algorithm_metadata") or {}).get(
-                        "kinematics_feasibility"
-                    ) or {}
-                    if isinstance(impact_meta, dict):
-                        adapter_samples_seen = adapter_samples_seen or bool(
-                            impact_meta.get("requested", False),
-                        )
-                        adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
-                        adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
-                    if isinstance(feasibility_meta, dict):
-                        feasibility_totals["commands_evaluated"] += int(
-                            feasibility_meta.get("commands_evaluated", 0) or 0
-                        )
-                        feasibility_totals["infeasible_native_count"] += int(
-                            feasibility_meta.get("infeasible_native_count", 0) or 0
-                        )
-                        feasibility_totals["projected_count"] += int(
-                            feasibility_meta.get("projected_count", 0) or 0
-                        )
-                        feasibility_totals["sum_abs_delta_linear"] += float(
-                            feasibility_meta.get("mean_abs_delta_linear", 0.0)
-                        ) * int(feasibility_meta.get("commands_evaluated", 0) or 0)
-                        feasibility_totals["sum_abs_delta_angular"] += float(
-                            feasibility_meta.get("mean_abs_delta_angular", 0.0)
-                        ) * int(feasibility_meta.get("commands_evaluated", 0) or 0)
-                        feasibility_totals["max_abs_delta_linear"] = max(
-                            float(feasibility_totals["max_abs_delta_linear"]),
-                            float(feasibility_meta.get("max_abs_delta_linear", 0.0) or 0.0),
-                        )
-                        feasibility_totals["max_abs_delta_angular"] = max(
-                            float(feasibility_totals["max_abs_delta_angular"]),
-                            float(feasibility_meta.get("max_abs_delta_angular", 0.0) or 0.0),
-                        )
+                    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                        rec,
+                        feasibility_totals=feasibility_totals,
+                    )
+                    adapter_samples_seen = adapter_samples_seen or requested_seen
+                    adapter_native_steps += native_steps
+                    adapter_adapted_steps += adapted_steps
                     _write_validated(out_path, schema, rec)
                     wrote += 1
                 except Exception as exc:  # pragma: no cover

@@ -9,6 +9,8 @@ from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
     _load_campaign_scenarios,
+    _sanitize_name,
+    _write_campaign_report,
     load_campaign_config,
     run_campaign,
 )
@@ -422,3 +424,118 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     assert len(planner_rows) == 1
     assert planner_rows[0]["planner_key"] == "prediction_planner"
     assert planner_rows[0]["status"] == "partial-failure"
+
+
+def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
+    """Markdown report tables should escape raw cell separators from planner metadata."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {"campaign_id": "c1"},
+        "warnings": [],
+        "planner_rows": [
+            {
+                "planner_key": "planner|unsafe",
+                "algo": "goal",
+                "kinematics": "holonomic|vx_vy",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "1.0",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.5",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "native",
+                "readiness_status": "ok",
+                "readiness_tier": "baseline-ready",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            }
+        ],
+    }
+    _write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "planner\\|unsafe" in report_text
+    assert "holonomic\\|vx_vy" in report_text
+
+
+def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:
+    """Planner run directories should use sanitized planner/kinematics identifiers."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_sanitize.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: sanitize_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                'kinematics_matrix: ["holonomic/../unsafe"]',
+                "planners:",
+                '  - key: "../../planner|unsafe"',
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, benchmark_profile, kwargs
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(
+            json.dumps(
+                {
+                    "episode_id": f"e-{algo}-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
+                    "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                    "algorithm_metadata": {"algorithm": algo, "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "out_path": str(out_file),
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="sanitize")
+    campaign_root = Path(result["campaign_root"])
+    runs_dir = campaign_root / "runs"
+    run_dirs = [path.name for path in runs_dir.iterdir() if path.is_dir()]
+    assert len(run_dirs) == 1
+    expected = f"{_sanitize_name('../../planner|unsafe')}__{_sanitize_name('holonomic/../unsafe')}"
+    assert run_dirs[0] == expected

@@ -156,6 +156,19 @@ def _sanitize_name(name: str) -> str:
     return normalized or "campaign"
 
 
+def _escape_markdown_cell(value: Any) -> str:
+    """Escape markdown table cell content to prevent row/column injection.
+
+    Returns:
+        Escaped single-line markdown-safe cell value.
+    """
+    text = str(value)
+    text = text.replace("\\", "\\\\")
+    text = text.replace("|", "\\|")
+    text = text.replace("\n", " ").replace("\r", " ")
+    return text
+
+
 def _load_seed_sets(path: Path) -> dict[str, list[int]]:
     """Load seed sets file into a normalized mapping.
 
@@ -495,7 +508,7 @@ def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple
         "|" + "|".join("---" for _ in headers) + "|",
     ]
     for row in rows:
-        values = [str(row.get(col, "")) for col in headers]
+        values = [_escape_markdown_cell(row.get(col, "")) for col in headers]
         lines.append("| " + " | ".join(values) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -814,10 +827,19 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('algo')} | {row.get('kinematics')} | {row.get('status')} | "
-                f"{row.get('started_at_utc')} | {row.get('runtime_sec')} | {row.get('episodes')} | "
-                f"{row.get('episodes_per_second')} | {row.get('success_mean')} | "
-                f"{row.get('collisions_mean')} | {row.get('snqi_mean')} | {row.get('projection_rate')} | {row.get('infeasible_rate')} |",
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('kinematics'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
+                f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
+                f"{_escape_markdown_cell(row.get('episodes'))} | "
+                f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
+                f"{_escape_markdown_cell(row.get('success_mean'))} | "
+                f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
+                f"{_escape_markdown_cell(row.get('snqi_mean'))} | "
+                f"{_escape_markdown_cell(row.get('projection_rate'))} | "
+                f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
             )
     else:
         lines.append("No planner rows were produced.")
@@ -833,10 +855,13 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('execution_mode')} | "
-                f"{row.get('readiness_status')} | {row.get('readiness_tier')} | "
-                f"{row.get('preflight_status')} | {row.get('learned_policy_contract_status')} | "
-                f"{row.get('status')} |"
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('execution_mode'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('learned_policy_contract_status'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} |"
             )
     if fallback_rows:
         lines.append("")
@@ -857,9 +882,11 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('algo')} | "
-                f"{row.get('socnav_prereq_policy')} | {row.get('preflight_status')} | "
-                f"{row.get('readiness_status')} |"
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} |"
             )
         comparisons = _strict_vs_fallback_comparisons(rows)
         if comparisons:
@@ -1067,8 +1094,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         if not planner.enabled:
             continue
         for kinematics in kinematics_matrix:
-            planner_key = f"{planner.key}__{kinematics}"
-            planner_dir = runs_dir / planner_key
+            planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
+            planner_dir = runs_dir / planner_run_key
             planner_dir.mkdir(parents=True, exist_ok=True)
             episodes_path = planner_dir / "episodes.jsonl"
 

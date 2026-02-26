@@ -81,10 +81,15 @@ def main() -> int:
     opt_cfg = _dict_section(config, "optimization")
     output_cfg = _dict_section(config, "output")
 
+    config_path = args.config.resolve()
+    config_dir = config_path.parent
     scenario_file_raw = str(scenario_cfg.get("scenario_file", "")).strip()
     if not scenario_file_raw:
         raise ValueError("scenario.scenario_file must be set")
-    scenario_file = Path(scenario_file_raw).resolve()
+    scenario_file = Path(scenario_file_raw)
+    if not scenario_file.is_absolute():
+        scenario_file = config_dir / scenario_file
+    scenario_file = scenario_file.resolve()
     if not scenario_file.is_file():
         raise ValueError(f"scenario_file does not exist: {scenario_file}")
     scenario_id = args.scenario_id or str(scenario_cfg.get("scenario_id", "")).strip()

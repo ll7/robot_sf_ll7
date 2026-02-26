@@ -1,5 +1,5 @@
 scenario:
-  scenario_file: configs/scenarios/classic_interactions.yaml
+  scenario_file: ../scenarios/classic_interactions.yaml
   scenario_id: classic_head_on_corridor_low
 
 planner:

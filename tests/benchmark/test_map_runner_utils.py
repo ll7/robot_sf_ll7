@@ -11,6 +11,7 @@ import pytest
 from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_config,
+    _default_robot_command_space,
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
@@ -96,6 +97,7 @@ def test_goal_policy_and_build_policy() -> None:
     assert meta["baseline_category"] == "classical"
     assert meta["policy_semantics"] == "deterministic_goal_seeking"
     assert meta["planner_kinematics"]["execution_mode"] == "native"
+    assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
     assert linear > 0.0
     assert abs(angular) <= 1.0
 
@@ -723,4 +725,16 @@ def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() ->
     np.testing.assert_allclose(
         action,
         np.array([np.cos(expected_heading), np.sin(expected_heading)], dtype=float),
+    )
+
+
+def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
+    """Runtime command mode should override algo-config command mode for holonomic metadata."""
+    assert (
+        _default_robot_command_space(
+            "holonomic",
+            {"command_mode": "unicycle_vw"},
+            robot_command_mode="vx_vy",
+        )
+        == "holonomic_vxy"
     )

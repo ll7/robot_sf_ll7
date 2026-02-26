@@ -623,6 +623,23 @@ def _coerce_non_negative_float(value: Any, *, field_name: str) -> float:
     return parsed
 
 
+def _coerce_bool(value: Any, *, field_name: str) -> bool:
+    """Coerce boolean-like override values with strict validation.
+
+    Returns:
+        bool: Parsed boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"robot_config.{field_name} must be a boolean.")
+
+
 def _robot_type_alias(raw: str) -> str:
     """Normalize scenario robot type aliases to canonical labels.
 
@@ -665,7 +682,10 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
             overrides["interaxis_length"], field_name="interaxis_length"
         )
     if "allow_backwards" in overrides:
-        kwargs["allow_backwards"] = bool(overrides["allow_backwards"])
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
     return DifferentialDriveSettings(**kwargs)
 
 
@@ -689,7 +709,10 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
     if "max_accel" in overrides:
         kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
     if "allow_backwards" in overrides:
-        kwargs["allow_backwards"] = bool(overrides["allow_backwards"])
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
     return BicycleDriveSettings(**kwargs)
 
 

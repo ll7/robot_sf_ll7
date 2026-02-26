@@ -146,3 +146,33 @@ def test_build_robot_config_rejects_unknown_robot_type() -> None:
     }
     with pytest.raises(ValueError, match="robot_config.type"):
         build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_build_robot_config_parses_allow_backwards_string_booleans() -> None:
+    """String booleans for allow_backwards should parse explicitly."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "demo",
+        "map_file": "maps/svg_maps/classic_overtaking.svg",
+        "robot_config": {
+            "type": "differential_drive",
+            "allow_backwards": "false",
+        },
+    }
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    assert bool(config.robot_config.allow_backwards) is False
+
+
+def test_build_robot_config_rejects_invalid_allow_backwards_string() -> None:
+    """Invalid boolean-like strings should raise instead of truthy coercion."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "demo",
+        "map_file": "maps/svg_maps/classic_overtaking.svg",
+        "robot_config": {
+            "type": "bicycle_drive",
+            "allow_backwards": "maybe",
+        },
+    }
+    with pytest.raises(ValueError, match="allow_backwards"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)

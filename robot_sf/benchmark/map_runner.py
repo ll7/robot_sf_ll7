@@ -82,6 +82,8 @@ _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
 def _default_robot_command_space(
     robot_kinematics: str | None,
     algo_config: dict[str, Any],
+    *,
+    robot_command_mode: str | None = None,
 ) -> str:
     """Resolve robot command-space metadata for the current run.
 
@@ -90,7 +92,12 @@ def _default_robot_command_space(
     """
     kin = str(robot_kinematics or _DEFAULT_KINEMATICS).strip().lower()
     if kin in {"holonomic", "omni", "omnidirectional"}:
-        mode = str(algo_config.get("command_mode", "vx_vy")).strip().lower()
+        mode_source = (
+            robot_command_mode
+            if robot_command_mode is not None
+            else algo_config.get("command_mode", "vx_vy")
+        )
+        mode = str(mode_source).strip().lower()
         return "holonomic_vxy" if mode == "vx_vy" else "unicycle_vw"
     return "unicycle_vw"
 
@@ -639,6 +646,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo_config: dict[str, Any],
     *,
     robot_kinematics: str | None = None,
+    robot_command_mode: str | None = None,
     adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build an action policy and algorithm metadata for map-based benchmarking.
@@ -647,6 +655,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         algo: Algorithm key to instantiate.
         algo_config: Algorithm configuration payload.
         robot_kinematics: Runtime robot kinematics label for metadata enrichment.
+        robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
         adapter_impact_eval: Whether to collect native-vs-adapter step counters.
 
     Returns:
@@ -675,9 +684,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         _init_feasibility_metadata(meta)
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
-            planner_meta["robot_command_space"] = _default_robot_command_space(
+            planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
+                robot_command_mode=robot_command_mode,
             )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -733,9 +743,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         _init_feasibility_metadata(meta)
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
-            planner_meta["robot_command_space"] = _default_robot_command_space(
+            planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
+                robot_command_mode=robot_command_mode,
             )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -820,9 +831,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     _init_feasibility_metadata(meta)
     planner_meta = meta.get("planner_kinematics")
     if isinstance(planner_meta, dict):
-        planner_meta["robot_command_space"] = _default_robot_command_space(
+        planner_meta["planner_command_space"] = _default_robot_command_space(
             robot_kinematics,
             algo_config,
+            robot_command_mode=robot_command_mode,
         )
     adapter_kinematics_model = resolve_benchmark_kinematics_model(
         robot_kinematics=robot_kinematics,
@@ -1121,6 +1133,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         config.sim_config.time_per_step_in_secs = float(dt)
 
     robot_kinematics = _robot_kinematics_label(config)
+    robot_command_mode = (
+        str(getattr(getattr(config, "robot_config", None), "command_mode", "vx_vy")).strip().lower()
+    )
     policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
@@ -1128,6 +1143,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo,
         policy_cfg,
         robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
@@ -1443,6 +1459,16 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
     policy_cfg = _parse_algo_config(algo_config_path)
+    robot_command_mode: str | None = None
+    for scenario in filtered:
+        robot_cfg = scenario.get("robot_config")
+        if not isinstance(robot_cfg, dict):
+            continue
+        raw_mode = robot_cfg.get("command_mode")
+        if raw_mode is None:
+            continue
+        robot_command_mode = str(raw_mode).strip().lower()
+        break
     ppo_paper_ready, _paper_reason = (
         _ppo_paper_gate_status(policy_cfg) if algo.strip().lower() == "ppo" else (False, None)
     )
@@ -1608,9 +1634,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     preflight["algorithm_metadata_contract"] = algo_contract
     planner_contract = algo_contract.get("planner_kinematics")
     if isinstance(planner_contract, dict):
-        planner_contract["robot_command_space"] = _default_robot_command_space(
+        planner_contract["planner_command_space"] = _default_robot_command_space(
             kinematics_tag,
             policy_cfg,
+            robot_command_mode=robot_command_mode,
         )
     total_commands = int(feasibility_totals["commands_evaluated"])
     algo_contract["kinematics_feasibility"] = {

@@ -539,3 +539,141 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
     assert len(run_dirs) == 1
     expected = f"{_sanitize_name('../../planner|unsafe')}__{_sanitize_name('holonomic/../unsafe')}"
     assert run_dirs[0] == expected
+
+
+def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeypatch) -> None:
+    """Skipped planner/kinematics combinations should not be marked as successful."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_skipped.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: skipped_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args, kwargs
+        return {
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "skipped", "compatibility_reason": "unsupported"},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="skipped")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    assert summary_payload["planner_rows"][0]["status"] == "skipped"
+    assert summary_payload["campaign"]["successful_runs"] == 0
+
+
+def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:
+    """Parity artifacts should preserve available CI values."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_ci.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: ci_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok"},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    def _fake_compute_aggregates_with_ci(*args, **kwargs):
+        del args, kwargs
+        return {
+            "mock_group": {
+                "success": {"mean": 1.0, "mean_ci": [0.8, 1.0]},
+                "collisions": {"mean": 0.0, "mean_ci": [0.0, 0.2]},
+                "snqi": {"mean": 0.7, "mean_ci": [0.6, 0.8]},
+            },
+            "_meta": {"warnings": [], "missing_algorithms": []},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci",
+        _fake_compute_aggregates_with_ci,
+    )
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="ci")
+    parity_csv = (
+        Path(result["campaign_root"]) / "reports" / "kinematics_parity_table.csv"
+    ).read_text(encoding="utf-8")
+    assert "success_ci_low" in parity_csv
+    assert "success_ci_high" in parity_csv
+    assert "collision_ci_low" in parity_csv
+    assert "collision_ci_high" in parity_csv
+    assert "snqi_ci_low" in parity_csv
+    assert "snqi_ci_high" in parity_csv

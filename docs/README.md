@@ -118,6 +118,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issues 500-504 Execution Notes](./context/issues_500_501_504_execution.md)** - Metadata enrichment, time-to-goal contract extensions, and adapter-impact probing implementation
 * **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
 * **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
+* **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
 
 ### Tooling
 

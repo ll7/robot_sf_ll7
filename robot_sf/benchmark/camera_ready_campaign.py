@@ -1147,7 +1147,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
-                if int(summary.get("failed_jobs", 0)) > 0:
+                preflight_status = str((summary.get("preflight") or {}).get("status", "")).lower()
+                if preflight_status == "skipped":
+                    status = "skipped"
+                elif int(summary.get("failed_jobs", 0)) > 0:
                     status = "partial-failure"
             except Exception as exc:
                 status = "failed"
@@ -1366,10 +1369,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 "status": str(row.get("status", "unknown")),
                 "episodes": int(row.get("episodes", 0)),
                 "success_mean": str(row.get("success_mean", "nan")),
+                "success_ci_low": str(row.get("success_ci_low", "nan")),
+                "success_ci_high": str(row.get("success_ci_high", "nan")),
                 "collisions_mean": str(row.get("collisions_mean", "nan")),
+                "collision_ci_low": str(row.get("collision_ci_low", "nan")),
+                "collision_ci_high": str(row.get("collision_ci_high", "nan")),
                 "near_misses_mean": str(row.get("near_misses_mean", "nan")),
                 "comfort_exposure_mean": str(row.get("comfort_exposure_mean", "nan")),
                 "snqi_mean": str(row.get("snqi_mean", "nan")),
+                "snqi_ci_low": str(row.get("snqi_ci_low", "nan")),
+                "snqi_ci_high": str(row.get("snqi_ci_high", "nan")),
                 "projection_rate": str(row.get("projection_rate", "0.0000")),
                 "infeasible_rate": str(row.get("infeasible_rate", "0.0000")),
             }
@@ -1389,10 +1398,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "status",
             "episodes",
             "success_mean",
+            "success_ci_low",
+            "success_ci_high",
             "collisions_mean",
+            "collision_ci_low",
+            "collision_ci_high",
             "near_misses_mean",
             "comfort_exposure_mean",
             "snqi_mean",
+            "snqi_ci_low",
+            "snqi_ci_high",
             "projection_rate",
             "infeasible_rate",
         ),
@@ -1429,9 +1444,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
-    successful_runs = sum(
-        1 for entry in run_entries if str(entry.get("status", "")).startswith(("ok", "partial"))
-    )
+    successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
 
     campaign_summary = {
         "campaign": {

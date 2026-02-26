@@ -17,7 +17,7 @@ import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from loguru import logger
@@ -136,6 +136,53 @@ class RegressionReport:
         """
         return any(finding.is_regression for finding in self.findings)
 
+    @property
+    def has_startup_regression(self) -> bool:
+        """Return whether startup metrics contain any regression."""
+        return any(
+            finding.is_regression and finding.metric in _STARTUP_METRICS
+            for finding in self.findings
+        )
+
+    @property
+    def has_steady_regression(self) -> bool:
+        """Return whether steady-state metrics contain any regression."""
+        return any(
+            finding.is_regression and finding.metric in _STEADY_METRICS for finding in self.findings
+        )
+
+    @property
+    def has_blocking_regression(self) -> bool:
+        """Return whether a regression should fail CI gating."""
+        return self.has_steady_regression
+
+    @property
+    def failure_class(self) -> Literal["none", "startup_only", "steady"]:
+        """Classify regression severity for gating/reporting."""
+        if self.has_steady_regression:
+            return "steady"
+        if self.has_startup_regression:
+            return "startup_only"
+        return "none"
+
+
+def _regression_status(findings: Sequence[RegressionFinding]) -> Literal["pass", "warn", "fail"]:
+    """Map metric regressions to top-level status.
+
+    Args:
+        findings: Per-metric regression findings from snapshot comparison.
+
+    Returns:
+        Literal["pass", "warn", "fail"]: Aggregated status classification.
+    """
+    has_startup = any(f.is_regression and f.metric in _STARTUP_METRICS for f in findings)
+    has_steady = any(f.is_regression and f.metric in _STEADY_METRICS for f in findings)
+    if has_steady:
+        return "fail"
+    if has_startup:
+        return "warn"
+    return "pass"
+
 
 def median_metrics(samples: Sequence[PhaseMetrics]) -> PhaseMetrics:
     """Compute median metrics over repeated samples.
@@ -206,7 +253,7 @@ def compare_snapshots(
                 )
             )
 
-    status = "fail" if any(finding.is_regression for finding in findings) else "pass"
+    status = _regression_status(findings)
     diagnostics = _build_diagnostics(findings)
     return RegressionReport(status=status, findings=tuple(findings), diagnostics=diagnostics)
 
@@ -301,6 +348,8 @@ def render_markdown_report(
     lines.append(
         f"Status: **{report.status.upper()}**" if report is not None else "Status: **UNKNOWN**"
     )
+    if report is not None and report.failure_class == "startup_only":
+        lines.append("Startup-only regression detected; steady-state gate not violated.")
     lines.extend(
         [
             "",
@@ -649,7 +698,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if baseline is None and args.require_baseline:
         logger.error("Baseline missing or invalid: {}", args.baseline)
         return 2
-    if report is not None and report.has_regression and args.fail_on_regression:
+    if report is not None and report.has_blocking_regression and args.fail_on_regression:
         return 1
     return 0
 
@@ -664,9 +713,19 @@ def _report_to_dict(report: RegressionReport | None) -> dict[str, Any]:
         dict[str, Any]: JSON-friendly report payload.
     """
     if report is None:
-        return {"status": "no-baseline", "findings": [], "diagnostics": []}
+        return {
+            "status": "no-baseline",
+            "failure_class": "none",
+            "has_startup_regression": False,
+            "has_steady_regression": False,
+            "findings": [],
+            "diagnostics": [],
+        }
     return {
         "status": report.status,
+        "failure_class": report.failure_class,
+        "has_startup_regression": report.has_startup_regression,
+        "has_steady_regression": report.has_steady_regression,
         "findings": [
             {
                 "phase": finding.phase,

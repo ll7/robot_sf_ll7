@@ -63,8 +63,12 @@ def test_compare_snapshots_flags_startup_regression() -> None:
         min_throughput_delta=0.5,
     )
     report = perf_cold_warm.compare_snapshots(current, baseline, thresholds)
-    assert report.status == "fail"
+    assert report.status == "warn"
+    assert report.failure_class == "startup_only"
     assert report.has_regression
+    assert report.has_startup_regression
+    assert not report.has_steady_regression
+    assert not report.has_blocking_regression
     assert any("startup overhead" in line for line in report.diagnostics)
     assert any(f.is_regression and f.metric == "env_create_sec" for f in report.findings)
 
@@ -87,7 +91,10 @@ def test_compare_snapshots_flags_steady_state_regression() -> None:
     )
     report = perf_cold_warm.compare_snapshots(current, baseline, thresholds)
     assert report.status == "fail"
+    assert report.failure_class == "steady"
     assert report.has_regression
+    assert report.has_steady_regression
+    assert report.has_blocking_regression
     assert any("steady-state stepping" in line for line in report.diagnostics)
     assert any(f.is_regression and f.metric == "steps_per_sec" for f in report.findings)
 
@@ -110,7 +117,9 @@ def test_compare_snapshots_ignores_small_noise() -> None:
     )
     report = perf_cold_warm.compare_snapshots(current, baseline, thresholds)
     assert report.status == "pass"
+    assert report.failure_class == "none"
     assert not report.has_regression
+    assert not report.has_blocking_regression
     assert report.diagnostics == ("No meaningful regressions detected.",)
 
 
@@ -178,6 +187,39 @@ def test_render_markdown_report_includes_diagnostics() -> None:
     assert "Status: **FAIL**" in rendered
     assert "### Diagnostics" in rendered
     assert "classic_crossing_low" in rendered
+
+
+def test_render_markdown_report_includes_startup_warning_note() -> None:
+    """Markdown should include explicit startup-only advisory note for warn status."""
+    baseline = perf_cold_warm.SuiteSnapshot(
+        cold=_sample(create=1.0, first=0.1, episode=2.0, sps=20.0),
+        warm=_sample(create=1.0, first=0.1, episode=2.0, sps=20.0),
+    )
+    current = perf_cold_warm.SuiteSnapshot(
+        cold=_sample(create=2.0, first=0.4, episode=2.0, sps=20.0),
+        warm=_sample(create=1.0, first=0.3, episode=2.0, sps=20.0),
+    )
+    report = perf_cold_warm.compare_snapshots(
+        current,
+        baseline,
+        perf_cold_warm.RegressionThresholds(
+            max_slowdown_pct=0.50,
+            max_throughput_drop_pct=0.50,
+            min_seconds_delta=0.15,
+            min_throughput_delta=0.5,
+        ),
+    )
+    rendered = perf_cold_warm.render_markdown_report(
+        scenario_label="classic_crossing_low",
+        episode_steps=64,
+        cold_runs=1,
+        warm_runs=2,
+        current=current,
+        baseline=baseline,
+        report=report,
+    )
+    assert "Status: **WARN**" in rendered
+    assert "Startup-only regression detected; steady-state gate not violated." in rendered
 
 
 def test_render_markdown_report_without_baseline() -> None:
@@ -313,8 +355,15 @@ def test_report_to_dict_and_diagnostics_mixed_regressions() -> None:
     )
     payload = perf_cold_warm._report_to_dict(report)
     assert payload["status"] == "fail"
+    assert payload["failure_class"] == "steady"
+    assert payload["has_startup_regression"] is True
+    assert payload["has_steady_regression"] is True
     assert len(payload["findings"]) == 2
-    assert perf_cold_warm._report_to_dict(None)["status"] == "no-baseline"
+    no_baseline = perf_cold_warm._report_to_dict(None)
+    assert no_baseline["status"] == "no-baseline"
+    assert no_baseline["failure_class"] == "none"
+    assert no_baseline["has_startup_regression"] is False
+    assert no_baseline["has_steady_regression"] is False
 
 
 def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -526,12 +575,20 @@ def test_main_non_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     monkeypatch.setattr(perf_cold_warm, "load_snapshot", lambda _path: None)
     assert perf_cold_warm.main([]) == 2
 
-    # Baseline present + regression + fail_on_regression => exit 1
+    # Baseline present + startup-only regression + fail_on_regression => exit 0 (advisory)
     baseline = perf_cold_warm.SuiteSnapshot(
-        cold=_sample(create=0.2, first=0.05, episode=0.6, sps=100.0),
-        warm=_sample(create=0.2, first=0.05, episode=0.5, sps=100.0),
+        cold=_sample(create=0.6, first=0.2, episode=1.5, sps=20.0),
+        warm=_sample(create=0.8, first=0.1, episode=1.0, sps=25.0),
     )
     monkeypatch.setattr(perf_cold_warm, "load_snapshot", lambda _path: baseline)
+    assert perf_cold_warm.main([]) == 0
+
+    # Baseline present + steady-state regression + fail_on_regression => exit 1
+    steady_regression = perf_cold_warm.SuiteSnapshot(
+        cold=_sample(create=0.5, first=0.1, episode=0.6, sps=100.0),
+        warm=_sample(create=0.5, first=0.1, episode=0.5, sps=100.0),
+    )
+    monkeypatch.setattr(perf_cold_warm, "load_snapshot", lambda _path: steady_regression)
     assert perf_cold_warm.main([]) == 1
 
     # Baseline present + no regression => exit 0

@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
+from robot_sf.benchmark.camera_ready_campaign import (
+    load_campaign_config,
+    prepare_campaign_preflight,
+    run_campaign,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -47,6 +51,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip publication bundle export even if enabled in config.",
     )
     parser.add_argument(
+        "--mode",
+        choices=("run", "preflight"),
+        default="run",
+        help="Execution mode: full run or preflight-only artifact generation.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
@@ -65,13 +75,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.add(sys.stderr, level=args.log_level)
 
     cfg = load_campaign_config(args.config)
-    result = run_campaign(
-        cfg,
-        output_root=args.output_root,
-        label=args.label,
-        skip_publication_bundle=bool(args.skip_publication_bundle),
-        invoked_command=shlex.join([sys.executable, str(Path(__file__)), *raw_argv]),
-    )
+    invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
+    if args.mode == "preflight":
+        prepared = prepare_campaign_preflight(
+            cfg,
+            output_root=args.output_root,
+            label=args.label,
+            invoked_command=invoked_command,
+        )
+        result = {
+            "campaign_id": prepared["campaign_id"],
+            "campaign_root": str(prepared["campaign_root"]),
+            "validate_config_path": str(prepared["validate_config_path"]),
+            "preview_scenarios_path": str(prepared["preview_scenarios_path"]),
+            "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
+            "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
+        }
+    else:
+        result = run_campaign(
+            cfg,
+            output_root=args.output_root,
+            label=args.label,
+            skip_publication_bundle=bool(args.skip_publication_bundle),
+            invoked_command=invoked_command,
+        )
     print(json.dumps(result, indent=2))
     return 0
 

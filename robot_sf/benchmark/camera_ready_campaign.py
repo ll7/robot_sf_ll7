@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 from loguru import logger
@@ -47,6 +48,8 @@ _REPORT_METRICS: tuple[str, ...] = (
     "jerk_mean",
     "snqi",
 )
+_PLANNER_GROUPS = {"core", "experimental"}
+_PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,8 @@ class PlannerSpec:
     horizon_override: int | None = None
     dt_override: float | None = None
     enabled: bool = True
+    planner_group: str = "experimental"
+    planner_group_explicit: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,8 @@ class CampaignConfig:
     preview_scenario_limit: int = 100
     kinematics_matrix: tuple[str, ...] = ("differential_drive",)
     holonomic_command_mode: str = "vx_vy"
+    paper_facing: bool = False
+    paper_profile_version: str | None = None
 
 
 def _repo_relative(path: Path) -> str:
@@ -144,6 +151,45 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
     return value
+
+
+def _jsonable_repo_relative(value: Any) -> Any:
+    """Convert nested values into JSON-serializable primitives with repo-relative paths.
+
+    Returns:
+        JSON-serializable value with ``Path`` objects normalized to stable repo-relative strings.
+    """
+    if isinstance(value, Path):
+        return _repo_relative(value)
+    if isinstance(value, dict):
+        return {str(key): _jsonable_repo_relative(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable_repo_relative(item) for item in value]
+    return value
+
+
+def _sanitize_csv_cell(value: Any) -> Any:
+    """Prevent spreadsheet formula execution for untrusted CSV cell values.
+
+    Returns:
+        Original value, or a quote-prefixed string for formula-like text cells.
+    """
+    if not isinstance(value, str):
+        return value
+    if value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
+def _normalized_kinematics_matrix(kinematics: tuple[str, ...]) -> tuple[str, ...]:
+    """Return normalized kinematics labels with a deterministic default fallback.
+
+    Returns:
+        Lowercase non-empty kinematics tuple, defaulting to ``("differential_drive",)``.
+    """
+    return tuple(str(value).strip().lower() for value in kinematics if str(value).strip()) or (
+        "differential_drive",
+    )
 
 
 def _sanitize_name(name: str) -> str:
@@ -323,6 +369,55 @@ def _safe_float(value: float) -> str:
     return f"{value:.4f}"
 
 
+def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
+    """Resolve execution mode from algorithm metadata payload with legacy fallbacks.
+
+    Returns:
+        Resolved execution mode string, or ``"unknown"`` when unavailable.
+    """
+    if not isinstance(algorithm_metadata_contract, dict):
+        return "unknown"
+
+    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
+    if isinstance(planner_kinematics, dict):
+        execution_mode = planner_kinematics.get("execution_mode")
+        if execution_mode is not None:
+            return str(execution_mode)
+
+    # Backward-compatible fallback for older payloads that wrote this at top-level.
+    execution_mode = algorithm_metadata_contract.get("execution_mode")
+    if execution_mode is not None:
+        return str(execution_mode)
+
+    adapter_impact = algorithm_metadata_contract.get("adapter_impact")
+    if isinstance(adapter_impact, dict):
+        execution_mode = adapter_impact.get("execution_mode")
+        if execution_mode is not None:
+            return str(execution_mode)
+
+    return "unknown"
+
+
+def _sanitize_git_remote(remote: str) -> str:
+    """Remove credentials from git remote URLs before persisting provenance metadata.
+
+    Returns:
+        Credential-free remote URL when parseable, otherwise original input.
+    """
+    if not remote or "://" not in remote:
+        return remote
+    try:
+        parsed = urlsplit(remote)
+    except ValueError:
+        return remote
+    if not parsed.hostname:
+        return remote
+    netloc = parsed.hostname
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
 def _git_context() -> dict[str, str]:
     """Collect lightweight git metadata for campaign provenance.
 
@@ -340,7 +435,7 @@ def _git_context() -> dict[str, str]:
     return {
         "commit": _git_hash_fallback(),
         "branch": _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-        "remote": _run(["git", "config", "--get", "remote.origin.url"]),
+        "remote": _sanitize_git_remote(_run(["git", "config", "--get", "remote.origin.url"])),
     }
 
 
@@ -381,6 +476,25 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
+def _validate_campaign_config(cfg: CampaignConfig) -> None:
+    """Validate campaign-level invariants after config parsing."""
+    if cfg.paper_facing:
+        if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
+            raise ValueError("paper_facing=true requires non-empty paper_profile_version")
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
+        if normalized_kinematics != _PAPER_FROZEN_KINEMATICS_V1:
+            raise ValueError(
+                "paper_facing=true currently requires kinematics_matrix=['differential_drive']",
+            )
+        for planner in cfg.planners:
+            if not planner.enabled:
+                continue
+            if not planner.planner_group_explicit:
+                raise ValueError(
+                    "paper_facing=true requires explicit planner_group for each enabled planner",
+                )
+
+
 def load_campaign_config(path: Path) -> CampaignConfig:
     """Load and validate a camera-ready benchmark campaign YAML config.
 
@@ -414,6 +528,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         algo = str(entry.get("algo") or "").strip()
         if not key or not algo:
             raise ValueError("Planner entry requires non-empty key and algo")
+        planner_group_explicit = "planner_group" in entry
+        planner_group = str(entry.get("planner_group", "experimental")).strip().lower()
+        if planner_group not in _PLANNER_GROUPS:
+            raise ValueError(
+                f"Unsupported planner_group '{planner_group}'. Expected one of: core|experimental."
+            )
         planner_specs.append(
             PlannerSpec(
                 key=key,
@@ -434,6 +554,8 @@ def load_campaign_config(path: Path) -> CampaignConfig:
                 ),
                 dt_override=(float(entry["dt"]) if entry.get("dt") is not None else None),
                 enabled=bool(entry.get("enabled", True)),
+                planner_group=planner_group,
+                planner_group_explicit=planner_group_explicit,
             ),
         )
 
@@ -455,7 +577,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
 
-    return CampaignConfig(
+    cfg = CampaignConfig(
         name=name,
         scenario_matrix_path=scenario_matrix_path,
         planners=tuple(planner_specs),
@@ -492,7 +614,15 @@ def load_campaign_config(path: Path) -> CampaignConfig:
             if str(value).strip()
         ),
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
+        paper_facing=bool(payload.get("paper_facing", False)),
+        paper_profile_version=(
+            str(payload.get("paper_profile_version")).strip()
+            if payload.get("paper_profile_version") is not None
+            else None
+        ),
     )
+    _validate_campaign_config(cfg)
+    return cfg
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -523,7 +653,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow(row)
+            writer.writerow({key: _sanitize_csv_cell(value) for key, value in row.items()})
 
 
 def _write_table_artifacts(
@@ -544,6 +674,240 @@ def _write_table_artifacts(
     _write_csv(csv_path, csv_rows)
     _write_markdown_table(md_path, rows, headers=headers)
     return csv_path, md_path
+
+
+def _build_matrix_summary_rows(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+    resolved_seeds: list[int],
+    *,
+    scenario_hash: str,
+    git_meta: dict[str, str],
+    campaign_id: str,
+    created_at_utc: str,
+) -> list[dict[str, Any]]:
+    """Build planner/kinematics matrix-definition summary rows.
+
+    Returns:
+        Deterministically ordered matrix rows for CSV/JSON artifacts.
+    """
+    matrix_path = _repo_relative(cfg.scenario_matrix_path)
+    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    repeats = len(resolved_seeds)
+    rows: list[dict[str, Any]] = []
+    normalized_kinematics = _normalized_kinematics_matrix(cfg.kinematics_matrix)
+    for planner in cfg.planners:
+        if not planner.enabled:
+            continue
+        for kinematics in normalized_kinematics:
+            rows.append(
+                {
+                    "scenario_matrix": matrix_path,
+                    "scenario_matrix_hash": scenario_hash,
+                    "scenario_count": len(scenarios),
+                    "planner_key": planner.key,
+                    "algo": planner.algo,
+                    "planner_group": planner.planner_group,
+                    "benchmark_profile": planner.benchmark_profile,
+                    "kinematics": kinematics,
+                    "seed_policy.mode": cfg.seed_policy.mode,
+                    "seed_policy.seed_set": cfg.seed_policy.seed_set,
+                    "resolved_seeds": list(resolved_seeds),
+                    "repeats": repeats,
+                    "paper_facing": bool(cfg.paper_facing),
+                    "paper_profile_version": cfg.paper_profile_version,
+                    "config_hash": config_hash,
+                    "git_commit": git_meta.get("commit", "unknown"),
+                    "campaign_id": campaign_id,
+                    "created_at_utc": created_at_utc,
+                }
+            )
+    rows.sort(
+        key=lambda row: (
+            str(row.get("planner_group", "")),
+            str(row.get("planner_key", "")),
+            str(row.get("kinematics", "")),
+        )
+    )
+    return rows
+
+
+def _write_matrix_summary_artifacts(
+    reports_dir: Path,
+    rows: list[dict[str, Any]],
+) -> tuple[Path, Path]:
+    """Write matrix-definition summary artifacts.
+
+    Returns:
+        Tuple of ``(matrix_summary_json_path, matrix_summary_csv_path)``.
+    """
+    json_path = reports_dir / "matrix_summary.json"
+    csv_path = reports_dir / "matrix_summary.csv"
+    payload = {
+        "schema_version": "benchmark-matrix-summary.v1",
+        "rows": rows,
+    }
+    _write_json(json_path, payload)
+    _write_csv(csv_path, rows)
+    return json_path, csv_path
+
+
+def prepare_campaign_preflight(
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None = None,
+    label: str | None = None,
+    invoked_command: str | None = None,
+) -> dict[str, Any]:
+    """Prepare campaign preflight artifacts and matrix-definition summary.
+
+    Returns:
+        Paths and metadata required by preflight-only workflows and full runs.
+    """
+    _validate_campaign_config(cfg)
+    ensure_canonical_tree(categories=("benchmarks",))
+    campaign_id = _campaign_id(cfg, label=label)
+    base_dir = (
+        output_root.resolve()
+        if output_root
+        else (get_artifact_category_path("benchmarks") / "camera_ready")
+    )
+    campaign_root = (base_dir / campaign_id).resolve()
+    reports_dir = campaign_root / "reports"
+    preflight_dir = campaign_root / "preflight"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    preflight_dir.mkdir(parents=True, exist_ok=True)
+
+    created_at_utc = _utc_now()
+    scenarios = _load_campaign_scenarios(cfg)
+    resolved_seeds = _resolved_seed_inventory(scenarios)
+    scenario_hash = _hash_payload(scenarios)
+    git_meta = _git_context()
+    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+
+    validate_config_path = preflight_dir / "validate_config.json"
+    preview_scenarios_path = preflight_dir / "preview_scenarios.json"
+    validate_payload = {
+        "schema_version": "benchmark-preflight-validate-config.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": created_at_utc,
+        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "scenario_count": len(scenarios),
+        "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
+        "workers": cfg.workers,
+        "horizon": cfg.horizon,
+        "dt": cfg.dt,
+        "resume": cfg.resume,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+    }
+    preview_limit = max(0, int(cfg.preview_scenario_limit))
+    preview_payload = {
+        "schema_version": "benchmark-preflight-preview-scenarios.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": created_at_utc,
+        "scenario_count": len(scenarios),
+        "preview_limit": preview_limit,
+    }
+    if len(scenarios) > preview_limit:
+        preview_payload["truncated"] = True
+        preview_payload["total_scenarios"] = len(scenarios)
+        preview_payload["scenarios"] = [
+            {
+                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
+                "map_file": scenario.get("map_file"),
+                "seeds": scenario.get("seeds"),
+                "metadata": scenario.get("metadata"),
+            }
+            for scenario in scenarios[:preview_limit]
+        ]
+    else:
+        preview_payload["truncated"] = False
+        preview_payload["scenarios"] = scenarios
+    _write_json(validate_config_path, validate_payload)
+    _write_json(preview_scenarios_path, preview_payload)
+
+    matrix_rows = _build_matrix_summary_rows(
+        cfg,
+        scenarios,
+        resolved_seeds,
+        scenario_hash=scenario_hash,
+        git_meta=git_meta,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+    )
+    matrix_summary_json_path, matrix_summary_csv_path = _write_matrix_summary_artifacts(
+        reports_dir,
+        matrix_rows,
+    )
+
+    manifest_payload: dict[str, Any] = {
+        "schema_version": CAMPAIGN_SCHEMA_VERSION,
+        "campaign_id": campaign_id,
+        "name": cfg.name,
+        "created_at_utc": created_at_utc,
+        "started_at_utc": created_at_utc,
+        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "scenario_matrix_hash": scenario_hash,
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "resolved_seeds": resolved_seeds,
+            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+        "git": git_meta,
+        "config_hash": config_hash,
+        "invoked_command": invoked_command,
+        "paper_facing": bool(cfg.paper_facing),
+        "paper_profile_version": cfg.paper_profile_version,
+        "planners": [
+            {
+                "key": planner.key,
+                "algo": planner.algo,
+                "planner_group": planner.planner_group,
+                "benchmark_profile": planner.benchmark_profile,
+                "algo_config_path": (
+                    _repo_relative(planner.algo_config_path)
+                    if planner.algo_config_path is not None
+                    else None
+                ),
+                "enabled": planner.enabled,
+            }
+            for planner in cfg.planners
+        ],
+        "kinematics_matrix": list(cfg.kinematics_matrix),
+        "holonomic_command_mode": cfg.holonomic_command_mode,
+        "artifacts": {
+            "preflight_validate_config": _repo_relative(validate_config_path),
+            "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
+            "matrix_summary_json": _repo_relative(matrix_summary_json_path),
+            "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
+        },
+    }
+    _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
+    return {
+        "campaign_id": campaign_id,
+        "campaign_root": campaign_root,
+        "reports_dir": reports_dir,
+        "preflight_dir": preflight_dir,
+        "validate_config_path": validate_config_path,
+        "preview_scenarios_path": preview_scenarios_path,
+        "matrix_summary_json_path": matrix_summary_json_path,
+        "matrix_summary_csv_path": matrix_summary_csv_path,
+        "manifest_payload": manifest_payload,
+        "created_at_utc": created_at_utc,
+        "scenarios": scenarios,
+        "resolved_seeds": resolved_seeds,
+        "scenario_hash": scenario_hash,
+        "git_meta": git_meta,
+        "config_hash": config_hash,
+    }
 
 
 def _planner_report_row(
@@ -568,10 +932,8 @@ def _planner_report_row(
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
-    execution_mode = str(
-        ((summary.get("algorithm_metadata_contract") or {}).get("execution_mode") or "unknown")
-        if isinstance(summary.get("algorithm_metadata_contract"), dict)
-        else "unknown"
+    execution_mode = _resolve_execution_mode(
+        summary.get("algorithm_metadata_contract"),
     )
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
     learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
@@ -598,6 +960,7 @@ def _planner_report_row(
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
+        "planner_group": planner.planner_group,
         "kinematics": kinematics,
         "status": status,
         "episodes": int(summary.get("written", 0)),
@@ -820,8 +1183,8 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     if rows:
         lines.extend(
             [
-                "| planner | algo | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
-                "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+                "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
+                "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             ],
         )
         for row in rows:
@@ -829,6 +1192,7 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
                 f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
                 f"{_escape_markdown_cell(row.get('kinematics'))} | "
                 f"{_escape_markdown_cell(row.get('status'))} | "
                 f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
@@ -849,13 +1213,14 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
     if rows:
         lines.append(
-            "| planner | execution mode | readiness status | tier | preflight | learned contract | run status |"
+            "| planner | planner group | execution mode | readiness status | tier | preflight | learned contract | run status |"
         )
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for row in rows:
             lines.append(
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
                 f"{_escape_markdown_cell(row.get('execution_mode'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_status'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
@@ -877,13 +1242,16 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
 
     lines.extend(["", "## SocNav Strict-vs-Fallback Disclosure", ""])
     if rows:
-        lines.append("| planner | algo | prereq policy | preflight status | readiness status |")
-        lines.append("|---|---|---|---|---|")
+        lines.append(
+            "| planner | algo | planner group | prereq policy | preflight status | readiness status |"
+        )
+        lines.append("|---|---|---|---|---|---|")
         for row in rows:
             lines.append(
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
                 f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
                 f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
                 f"{_escape_markdown_cell(row.get('preflight_status'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_status'))} |"
@@ -954,123 +1322,39 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     Returns:
         Campaign execution summary with output paths and high-level counters.
     """
-    ensure_canonical_tree(categories=("benchmarks",))
     snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
     snqi_baseline = load_optional_json(
         str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
     )
 
-    campaign_id = _campaign_id(cfg, label=label)
-    base_dir = (
-        output_root.resolve()
-        if output_root
-        else (get_artifact_category_path("benchmarks") / "camera_ready")
-    )
-    campaign_root = (base_dir / campaign_id).resolve()
-    runs_dir = campaign_root / "runs"
-    reports_dir = campaign_root / "reports"
-    preflight_dir = campaign_root / "preflight"
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    preflight_dir.mkdir(parents=True, exist_ok=True)
-
-    campaign_started_at_utc = _utc_now()
     start = time.perf_counter()
-    scenarios = _load_campaign_scenarios(cfg)
-    resolved_seeds = _resolved_seed_inventory(scenarios)
-    scenario_hash = _hash_payload(scenarios)
-    git_meta = _git_context()
-    validate_config_path = preflight_dir / "validate_config.json"
-    preview_scenarios_path = preflight_dir / "preview_scenarios.json"
+    prepared = prepare_campaign_preflight(
+        cfg,
+        output_root=output_root,
+        label=label,
+        invoked_command=invoked_command,
+    )
+    campaign_id = str(prepared["campaign_id"])
+    campaign_root = Path(prepared["campaign_root"])
+    reports_dir = Path(prepared["reports_dir"])
+    validate_config_path = Path(prepared["validate_config_path"])
+    preview_scenarios_path = Path(prepared["preview_scenarios_path"])
+    matrix_summary_json_path = Path(prepared["matrix_summary_json_path"])
+    matrix_summary_csv_path = Path(prepared["matrix_summary_csv_path"])
+    manifest_payload = dict(prepared["manifest_payload"])
+    campaign_started_at_utc = str(prepared["created_at_utc"])
+    scenarios = list(prepared["scenarios"])
+    resolved_seeds = list(prepared["resolved_seeds"])
+    scenario_hash = str(prepared["scenario_hash"])
+    git_meta = dict(prepared["git_meta"])
 
-    validate_payload = {
-        "schema_version": "benchmark-preflight-validate-config.v1",
-        "campaign_id": campaign_id,
-        "generated_at_utc": campaign_started_at_utc,
-        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-        "scenario_count": len(scenarios),
-        "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
-        "workers": cfg.workers,
-        "horizon": cfg.horizon,
-        "dt": cfg.dt,
-        "resume": cfg.resume,
-        "seed_policy": {
-            "mode": cfg.seed_policy.mode,
-            "seed_set": cfg.seed_policy.seed_set,
-            "seeds": list(cfg.seed_policy.seeds),
-            "resolved_seeds": resolved_seeds,
-            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
-        },
-    }
-    preview_limit = max(0, int(cfg.preview_scenario_limit))
-    preview_payload = {
-        "schema_version": "benchmark-preflight-preview-scenarios.v1",
-        "campaign_id": campaign_id,
-        "generated_at_utc": campaign_started_at_utc,
-        "scenario_count": len(scenarios),
-        "preview_limit": preview_limit,
-    }
-    if len(scenarios) > preview_limit:
-        preview_payload["truncated"] = True
-        preview_payload["total_scenarios"] = len(scenarios)
-        preview_payload["scenarios"] = [
-            {
-                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
-                "map_file": scenario.get("map_file"),
-                "seeds": scenario.get("seeds"),
-                "metadata": scenario.get("metadata"),
-            }
-            for scenario in scenarios[:preview_limit]
-        ]
-    else:
-        preview_payload["truncated"] = False
-        preview_payload["scenarios"] = scenarios
-    _write_json(validate_config_path, validate_payload)
-    _write_json(preview_scenarios_path, preview_payload)
-
-    manifest_payload: dict[str, Any] = {
-        "schema_version": CAMPAIGN_SCHEMA_VERSION,
-        "campaign_id": campaign_id,
-        "name": cfg.name,
-        "created_at_utc": campaign_started_at_utc,
-        "started_at_utc": campaign_started_at_utc,
-        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-        "scenario_matrix_hash": scenario_hash,
-        "seed_policy": {
-            "mode": cfg.seed_policy.mode,
-            "seed_set": cfg.seed_policy.seed_set,
-            "seeds": list(cfg.seed_policy.seeds),
-            "resolved_seeds": resolved_seeds,
-            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
-        },
-        "git": git_meta,
-        "config_hash": _config_hash(_jsonable(asdict(cfg))),
-        "invoked_command": invoked_command,
-        "planners": [
-            {
-                "key": planner.key,
-                "algo": planner.algo,
-                "benchmark_profile": planner.benchmark_profile,
-                "algo_config_path": (
-                    _repo_relative(planner.algo_config_path)
-                    if planner.algo_config_path is not None
-                    else None
-                ),
-                "enabled": planner.enabled,
-            }
-            for planner in cfg.planners
-        ],
-        "kinematics_matrix": list(cfg.kinematics_matrix),
-        "holonomic_command_mode": cfg.holonomic_command_mode,
-    }
-    _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
+    runs_dir = campaign_root / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
 
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
-    kinematics_matrix = tuple(
-        str(value).strip().lower() for value in cfg.kinematics_matrix if str(value).strip()
-    ) or ("differential_drive",)
+    kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     stop_requested = False
 
     def _scenario_with_kinematics(
@@ -1202,6 +1486,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     "planner": {
                         "key": planner.key,
                         "algo": planner.algo,
+                        "planner_group": planner.planner_group,
                         "benchmark_profile": planner.benchmark_profile,
                         "kinematics": kinematics,
                         "algo_config_path": (
@@ -1261,6 +1546,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "planner_group",
             "kinematics",
             "execution_mode",
             "readiness_status",
@@ -1283,10 +1569,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_mean",
         ),
     )
-    core_rows = [row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"]
-    experimental_rows = [
-        row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
-    ]
+    if cfg.paper_facing:
+        core_rows = [row for row in planner_rows if str(row.get("planner_group")) == "core"]
+        experimental_rows = [row for row in planner_rows if str(row.get("planner_group")) != "core"]
+    else:
+        core_rows = [
+            row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"
+        ]
+        experimental_rows = [
+            row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
+        ]
     core_csv_path, core_md_path = _write_table_artifacts(
         reports_dir,
         "campaign_table_core",
@@ -1294,6 +1586,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "planner_group",
             "kinematics",
             "readiness_tier",
             "status",
@@ -1310,6 +1603,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "planner_group",
             "kinematics",
             "readiness_tier",
             "status",
@@ -1364,6 +1658,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             {
                 "planner_key": str(row.get("planner_key", "")),
                 "algo": str(row.get("algo", "")),
+                "planner_group": str(row.get("planner_group", "experimental")),
                 "kinematics": str(row.get("kinematics", "")),
                 "execution_mode": str(row.get("execution_mode", "unknown")),
                 "status": str(row.get("status", "unknown")),
@@ -1393,6 +1688,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "planner_group",
             "kinematics",
             "execution_mode",
             "status",
@@ -1466,6 +1762,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "paper_interpretation_profile": cfg.paper_interpretation_profile,
             "kinematics_matrix": list(kinematics_matrix),
             "holonomic_command_mode": cfg.holonomic_command_mode,
+            "paper_facing": bool(cfg.paper_facing),
+            "paper_profile_version": cfg.paper_profile_version,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -1483,6 +1781,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "kinematics_parity_md": _repo_relative(parity_md_path),
             "kinematics_skipped_combinations_csv": _repo_relative(skipped_csv_path),
             "kinematics_skipped_combinations_md": _repo_relative(skipped_md_path),
+            "matrix_summary_json": _repo_relative(matrix_summary_json_path),
+            "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -1582,6 +1882,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "table_csv": str(csv_path),
         "table_md": str(md_table_path),
         "report_md": str(report_md_path),
+        "matrix_summary_json": str(matrix_summary_json_path),
+        "matrix_summary_csv": str(matrix_summary_csv_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
         "total_episodes": total_episodes,
@@ -1597,5 +1899,6 @@ __all__ = [
     "PlannerSpec",
     "SeedPolicy",
     "load_campaign_config",
+    "prepare_campaign_preflight",
     "run_campaign",
 ]

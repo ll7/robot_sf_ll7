@@ -5,13 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
+    CampaignConfig,
+    PlannerSpec,
+    SeedPolicy,
+    _jsonable_repo_relative,
     _load_campaign_scenarios,
+    _planner_report_row,
+    _sanitize_csv_cell,
+    _sanitize_git_remote,
     _sanitize_name,
     _write_campaign_report,
     load_campaign_config,
+    prepare_campaign_preflight,
     run_campaign,
 )
 from robot_sf.common.artifact_paths import get_repository_root
@@ -242,6 +252,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "campaign_table_core.md").exists()
     assert (campaign_root / "reports" / "campaign_table_experimental.csv").exists()
     assert (campaign_root / "reports" / "campaign_table_experimental.md").exists()
+    assert (campaign_root / "reports" / "matrix_summary.csv").exists()
+    assert (campaign_root / "reports" / "matrix_summary.json").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
@@ -269,6 +281,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
     assert "socnav_prereq_policy" in table_md
+    assert "planner_group" in table_md
     assert "kinematics" in table_md
     run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
     assert "seed_policy" in run_meta
@@ -280,6 +293,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
     assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
+    assert summary_payload["artifacts"]["matrix_summary_json"].endswith(
+        "reports/matrix_summary.json"
+    )
+    assert summary_payload["artifacts"]["matrix_summary_csv"].endswith("reports/matrix_summary.csv")
     assert result["publication_bundle"] is not None
 
 
@@ -460,6 +477,85 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     report_text = report_path.read_text(encoding="utf-8")
     assert "planner\\|unsafe" in report_text
     assert "holonomic\\|vx_vy" in report_text
+
+
+def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
+    """Row builder should read execution_mode from nested planner_kinematics payload."""
+    planner = PlannerSpec(key="prediction_planner", algo="prediction_planner")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {"execution_mode": "adapter"},
+            "kinematics_feasibility": {
+                "commands_evaluated": 4,
+                "projection_rate": 0.25,
+                "infeasible_rate": 0.25,
+            },
+        },
+    }
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+    )
+    assert row["execution_mode"] == "adapter"
+    assert row["readiness_status"] == "adapter"
+
+
+def test_jsonable_repo_relative_normalizes_paths_for_stable_hashing(tmp_path: Path) -> None:
+    """Hash-prep helper should normalize Path values to stable repo-relative strings."""
+    repo_root = get_repository_root().resolve()
+    payload = {
+        "scenario_matrix_path": repo_root / "configs/scenarios/classic_interactions.yaml",
+        "other_path": tmp_path / "external.yaml",
+    }
+    normalized = _jsonable_repo_relative(payload)
+    assert normalized["scenario_matrix_path"] == "configs/scenarios/classic_interactions.yaml"
+    assert str(normalized["other_path"]).endswith("/external.yaml")
+
+
+def test_sanitize_git_remote_strips_credentials() -> None:
+    """Git remote helper should remove embedded credentials from URL-form remotes."""
+    remote = "https://user:token@example.com/org/repo.git"
+    assert _sanitize_git_remote(remote) == "https://example.com/org/repo.git"
+    assert _sanitize_git_remote("git@github.com:ll7/robot_sf_ll7.git") == (
+        "git@github.com:ll7/robot_sf_ll7.git"
+    )
+
+
+def test_sanitize_csv_cell_prefixes_formula_like_values() -> None:
+    """CSV sanitizer should neutralize spreadsheet formula prefixes."""
+    assert _sanitize_csv_cell("=1+1") == "'=1+1"
+    assert _sanitize_csv_cell("@SUM(A1:A2)") == "'@SUM(A1:A2)"
+    assert _sanitize_csv_cell("safe") == "safe"
+    assert _sanitize_csv_cell(42) == 42
+
+
+def test_prepare_campaign_preflight_validates_campaign_config(tmp_path: Path) -> None:
+    """Programmatic preflight entrypoint should enforce campaign invariants."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    cfg = CampaignConfig(
+        name="invalid_preflight_cfg",
+        scenario_matrix_path=scenario_abs,
+        planners=(PlannerSpec(key="goal", algo="goal", planner_group_explicit=True),),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(111,)),
+        paper_facing=True,
+        paper_profile_version=None,
+    )
+    with pytest.raises(ValueError, match="paper_profile_version"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="invalid")
 
 
 def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:
@@ -677,3 +773,242 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
     assert "collision_ci_high" in parity_csv
     assert "snqi_ci_low" in parity_csv
     assert "snqi_ci_high" in parity_csv
+
+
+def test_load_campaign_config_accepts_planner_group_and_paper_profile(tmp_path: Path) -> None:
+    """Paper-facing config should parse planner groups and profile fields."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "paper_campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: paper_cfg",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    assert cfg.paper_facing is True
+    assert cfg.paper_profile_version == "paper-matrix-v1"
+    assert cfg.planners[0].planner_group == "core"
+
+
+def test_load_campaign_config_rejects_invalid_planner_group(tmp_path: Path) -> None:
+    """Planner group must be either core or experimental."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "invalid_group.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: invalid_group",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: invalid",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="planner_group"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_missing_paper_version(tmp_path: Path) -> None:
+    """Paper-facing config requires explicit profile version."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "missing_version.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: missing_version",
+                "paper_facing: true",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="paper_profile_version"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_non_differential_paper_kinematics(tmp_path: Path) -> None:
+    """Paper-facing profile v1 should lock differential-drive-only matrix."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "bad_kinematics.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: bad_kinematics",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive, bicycle_drive]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="kinematics_matrix"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_implicit_planner_group_for_paper(tmp_path: Path) -> None:
+    """Paper-facing configs should require explicit planner_group fields."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "implicit_group.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: implicit_group",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="explicit planner_group"):
+        load_campaign_config(config_path)
+
+
+def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> None:
+    """Preflight preparation should emit validate/preview and matrix-summary artifacts."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "paper_campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: paper_cfg",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="preflight")
+    assert Path(prepared["validate_config_path"]).exists()
+    assert Path(prepared["preview_scenarios_path"]).exists()
+    assert Path(prepared["matrix_summary_json_path"]).exists()
+    assert Path(prepared["matrix_summary_csv_path"]).exists()
+    matrix_payload = json.loads(
+        Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
+    )
+    assert matrix_payload["rows"]
+    first = matrix_payload["rows"][0]
+    assert first["planner_group"] == "core"
+    assert first["kinematics"] == "differential_drive"
+
+
+def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:
+    """Matrix summary row ordering should be deterministic by group/key/kinematics."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "paper_order.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: paper_order",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: z_exp",
+                "    algo: goal",
+                "    planner_group: experimental",
+                "  - key: a_core",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="order")
+    matrix_payload = json.loads(
+        Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
+    )
+    planner_keys = [row["planner_key"] for row in matrix_payload["rows"]]
+    assert planner_keys == ["a_core", "z_exp"]

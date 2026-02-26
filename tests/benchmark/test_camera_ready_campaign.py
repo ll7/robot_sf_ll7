@@ -244,6 +244,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.md").exists()
+    assert (campaign_root / "reports" / "kinematics_parity_table.csv").exists()
+    assert (campaign_root / "reports" / "kinematics_parity_table.md").exists()
+    assert (campaign_root / "reports" / "kinematics_skipped_combinations.csv").exists()
+    assert (campaign_root / "reports" / "kinematics_skipped_combinations.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
     assert (campaign_root / "preflight" / "validate_config.json").exists()
     assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
@@ -263,6 +267,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
     assert "socnav_prereq_policy" in table_md
+    assert "kinematics" in table_md
     run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
     assert "seed_policy" in run_meta
     assert "resolved_seeds" in run_meta["seed_policy"]
@@ -311,6 +316,7 @@ def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
     assert (
         cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
     )
+    assert cfg.kinematics_matrix == ("differential_drive",)
 
 
 def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp_path: Path):

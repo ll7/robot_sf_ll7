@@ -136,6 +136,7 @@ def main() -> int:
     logger.info("Route override artifact: {}", artifacts["artifact_path"])
     logger.info("JSON summary: {}", artifacts["json_summary_path"])
     logger.info("Markdown report: {}", artifacts["report_path"])
+    logger.info("Trajectory overlay: {}", artifacts["overlay_plot_path"])
     return 0
 
 

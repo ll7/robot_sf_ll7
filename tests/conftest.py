@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.common.artifact_paths import ensure_canonical_tree
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
 try:
     from tests.perf_utils.policy import PerformanceBudgetPolicy
@@ -240,6 +243,63 @@ _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",
     "test_runner_video.py",
 }
+
+
+@pytest.fixture
+def test_map() -> MapDefinition:
+    """Provide a compact deterministic map for adversarial-route unit tests."""
+    robot_spawn_zone = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
+    robot_goal_zone = ((8.0, 8.0), (9.0, 8.0), (8.0, 9.0))
+    ped_spawn_zone = ((1.0, 8.0), (2.0, 8.0), (1.0, 9.0))
+    ped_goal_zone = ((8.0, 1.0), (9.0, 1.0), (8.0, 2.0))
+    bounds = [
+        (0.0, 10.0, 0.0, 0.0),
+        (0.0, 10.0, 10.0, 10.0),
+        (0.0, 0.0, 0.0, 10.0),
+        (10.0, 10.0, 0.0, 10.0),
+    ]
+    robot_route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(1.5, 1.5), (8.5, 8.5)],
+        spawn_zone=robot_spawn_zone,
+        goal_zone=robot_goal_zone,
+    )
+    ped_route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(1.5, 8.5), (8.5, 1.5)],
+        spawn_zone=ped_spawn_zone,
+        goal_zone=ped_goal_zone,
+    )
+    return MapDefinition(
+        width=10.0,
+        height=10.0,
+        obstacles=[],
+        robot_spawn_zones=[robot_spawn_zone],
+        ped_spawn_zones=[ped_spawn_zone],
+        robot_goal_zones=[robot_goal_zone],
+        bounds=bounds,
+        robot_routes=[robot_route],
+        ped_goal_zones=[ped_goal_zone],
+        ped_crowded_zones=[],
+        ped_routes=[ped_route],
+        single_pedestrians=[],
+    )
+
+
+@pytest.fixture
+def test_planner(test_map: MapDefinition) -> ClassicGlobalPlanner:
+    """Provide deterministic classic planner for adversarial-route unit tests."""
+    return ClassicGlobalPlanner(
+        test_map,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_meters=0.0,
+            add_boundary_obstacles=False,
+            algorithm="a_star",
+        ),
+    )
 
 
 def _should_auto_mark_slow(path_str: str) -> bool:

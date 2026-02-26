@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import random
 from dataclasses import dataclass
@@ -10,9 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import matplotlib.pyplot as plt
 import optuna
 import yaml
 from loguru import logger
+from matplotlib import patches
 from shapely.geometry import LineString, Polygon
 
 from robot_sf.nav.global_route import GlobalRoute
@@ -51,6 +54,7 @@ class AdversarialRouteGenerationConfig:
         self._validate_identity_fields()
         self._validate_mode_and_counts()
         self._validate_thresholds()
+        self._validate_weights_sum()
 
     def _validate_identity_fields(self) -> None:
         """Ensure identifiers and map path fields are set."""
@@ -89,6 +93,21 @@ class AdversarialRouteGenerationConfig:
         if self.clearance_threshold_m <= 0:
             raise ValueError("clearance_threshold_m must be > 0")
 
+    def _validate_weights_sum(self) -> None:
+        """Validate objective component weights sum to one."""
+        total = (
+            self.failure_weight
+            + self.delay_weight
+            + self.inefficiency_weight
+            + self.near_miss_weight
+        )
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(
+                "Objective weights must sum to 1.0; "
+                f"got {total:.6f} from failure_weight/delay_weight/"
+                "inefficiency_weight/near_miss_weight."
+            )
+
 
 @dataclass(slots=True)
 class CandidateRouteSet:
@@ -113,6 +132,7 @@ class RouteEvaluation:
 class OptimizationResult:
     """Optimization outputs required for artifact/report generation."""
 
+    map_def: MapDefinition
     config: AdversarialRouteGenerationConfig
     best_candidate: CandidateRouteSet
     best_evaluation: RouteEvaluation
@@ -120,6 +140,7 @@ class OptimizationResult:
     feasibility_rejection_counts: dict[str, int]
     top_k_scores: list[float]
     valid_trial_count: int
+    valid_candidates_by_trial: dict[int, CandidateRouteSet]
 
 
 @dataclass(slots=True)
@@ -217,11 +238,11 @@ def _compute_near_miss_stress(
     return max(0.0, 1.0 - (float(min_dist) / near_miss_threshold_m))
 
 
-def _serialize_route(route: GlobalRoute) -> dict:
+def _serialize_route(route: GlobalRoute) -> dict[str, object]:
     """Serialize a route to YAML-compatible structure.
 
     Returns:
-        dict: Serialized route payload.
+        dict[str, object]: Serialized route payload.
     """
     return {
         "spawn_id": int(route.spawn_id),
@@ -230,16 +251,101 @@ def _serialize_route(route: GlobalRoute) -> dict:
     }
 
 
-def _candidate_to_payload(candidate: CandidateRouteSet) -> dict:
+def _candidate_to_payload(candidate: CandidateRouteSet) -> dict[str, object]:
     """Serialize candidate route set payload.
 
     Returns:
-        dict: Serialized robot and pedestrian route payload.
+        dict[str, object]: Serialized robot and pedestrian route payload.
     """
     return {
         "robot_routes": [_serialize_route(route) for route in candidate.robot_routes],
         "ped_routes": [_serialize_route(route) for route in candidate.ped_routes],
     }
+
+
+def _plot_map_background(ax: object, map_def: MapDefinition) -> None:
+    """Plot map bounds and obstacle polygons as a 2D background."""
+    ax.set_xlim(0.0, map_def.width)
+    ax.set_ylim(0.0, map_def.height)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_facecolor("#f8f8f8")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_title("Adversarial Route Overlay")
+
+    boundary = patches.Rectangle(
+        (0.0, 0.0),
+        map_def.width,
+        map_def.height,
+        fill=False,
+        edgecolor="#333333",
+        linewidth=1.0,
+    )
+    ax.add_patch(boundary)
+    for obstacle in map_def.obstacles:
+        patch = patches.Polygon(
+            obstacle.vertices,
+            closed=True,
+            facecolor="#aaaaaa",
+            edgecolor="#444444",
+            linewidth=0.8,
+            alpha=0.7,
+        )
+        ax.add_patch(patch)
+
+
+def _plot_route_set(
+    ax: object,
+    route_set: CandidateRouteSet,
+    *,
+    color: str,
+    alpha: float,
+    linewidth: float,
+) -> None:
+    """Plot robot and pedestrian trajectory polylines for one candidate set."""
+    for route in [*route_set.robot_routes, *route_set.ped_routes]:
+        if len(route.waypoints) < 2:
+            continue
+        xs = [point[0] for point in route.waypoints]
+        ys = [point[1] for point in route.waypoints]
+        ax.plot(xs, ys, color=color, alpha=alpha, linewidth=linewidth)
+
+
+def _write_trajectory_overlay_plot(result: OptimizationResult, run_dir: Path) -> Path:
+    """Write trajectory overlay plot with all feasible and best trial trajectories.
+
+    Returns:
+        Path: Absolute path to the written overlay PNG.
+    """
+
+    overlay_path = run_dir / "trajectories_overlay.png"
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=150)
+    try:
+        _plot_map_background(ax, result.map_def)
+        for trial_idx in sorted(result.valid_candidates_by_trial):
+            _plot_route_set(
+                ax,
+                result.valid_candidates_by_trial[trial_idx],
+                color="#666666",
+                alpha=0.22,
+                linewidth=1.0,
+            )
+        _plot_route_set(
+            ax,
+            result.best_candidate,
+            color="#000000",
+            alpha=0.95,
+            linewidth=1.7,
+        )
+        fig.tight_layout()
+        fig.savefig(overlay_path, dpi=200, bbox_inches="tight")
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to write trajectory overlay plot at {overlay_path}: {exc}"
+        ) from exc
+    finally:
+        plt.close(fig)
+    return overlay_path
 
 
 def _sample_point(
@@ -380,7 +486,8 @@ def generate_candidate_route_set(
     )
     if robot_reason:
         return None, robot_reason
-    assert robot_routes is not None
+    if robot_routes is None:
+        return None, "robot_routes_generation_returned_none"
 
     ped_routes, ped_reason = _generate_entity_routes(
         planner,
@@ -391,7 +498,8 @@ def generate_candidate_route_set(
     )
     if ped_reason:
         return None, ped_reason
-    assert ped_routes is not None
+    if ped_routes is None:
+        return None, "ped_routes_generation_returned_none"
     return CandidateRouteSet(robot_routes=robot_routes, ped_routes=ped_routes), None
 
 
@@ -447,9 +555,10 @@ def optimize_route_set(
     Returns:
         OptimizationResult: Best candidate and optimizer diagnostics.
     """
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    logging.getLogger("optuna").setLevel(logging.WARNING)
     sampler = optuna.samplers.TPESampler(seed=config.seed)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    rng = random.Random(config.seed)
     candidate_by_trial: dict[int, CandidateRouteSet] = {}
     evaluation_by_trial: dict[int, RouteEvaluation] = {}
     rejection_counts: dict[str, int] = {}
@@ -457,12 +566,14 @@ def optimize_route_set(
 
     def objective(trial: optuna.Trial) -> float:
         nonlocal failed_trials
+        # Per-trial RNG avoids shared-state races when Optuna runs trials in parallel.
+        trial_rng = random.Random(config.seed + trial.number)
         candidate, reason = generate_candidate_route_set(
             map_def,
             planner,
             config,
             trial=trial,
-            rng=rng,
+            rng=trial_rng,
         )
         if candidate is None:
             failed_trials += 1
@@ -527,6 +638,7 @@ def optimize_route_set(
     )
 
     return OptimizationResult(
+        map_def=map_def,
         config=config,
         best_candidate=best_candidate,
         best_evaluation=best_evaluation,
@@ -534,6 +646,7 @@ def optimize_route_set(
         feasibility_rejection_counts=rejection_counts,
         top_k_scores=top_k_scores,
         valid_trial_count=len(valid_trials),
+        valid_candidates_by_trial=candidate_by_trial,
     )
 
 
@@ -608,16 +721,21 @@ def write_route_override_artifact(
                 "## Replay",
                 "Add this to your scenario entry:",
                 f"- `route_overrides_file: {artifact_path.as_posix()}`",
+                "",
+                "## Visualizations",
+                "- `trajectories_overlay.png`",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
+    overlay_plot_path = _write_trajectory_overlay_plot(result, run_dir)
     return {
         "run_dir": run_dir,
         "artifact_path": artifact_path,
         "json_summary_path": json_summary_path,
         "report_path": report_path,
+        "overlay_plot_path": overlay_plot_path,
     }
 
 

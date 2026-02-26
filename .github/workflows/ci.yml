@@ -224,6 +224,16 @@ jobs:
             "${CMD[@]}"
           fi
 
+      - name: Upload cold/warm perf smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cold-warm-perf-smoke
+          path: |
+            output/benchmarks/perf/cold_warm_pr_smoke.json
+            output/benchmarks/perf/cold_warm_pr_smoke.md
+          if-no-files-found: warn
+
       - name: Telemetry tracker/perf smoke
         run: |
           echo "Running telemetry tracker smoke + perf wrapper"

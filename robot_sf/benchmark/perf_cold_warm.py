@@ -17,7 +17,7 @@ import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from loguru import logger
@@ -126,6 +126,16 @@ class RegressionReport:
     status: str
     findings: tuple[RegressionFinding, ...]
     diagnostics: tuple[str, ...]
+    has_startup_regression: bool = False
+    has_steady_regression: bool = False
+    failure_class: Literal["none", "startup_only", "steady"] = "none"
+
+    def __post_init__(self) -> None:
+        """Populate derived severity fields once from findings."""
+        has_startup, has_steady, failure_class = _classify_regressions(self.findings)
+        object.__setattr__(self, "has_startup_regression", has_startup)
+        object.__setattr__(self, "has_steady_regression", has_steady)
+        object.__setattr__(self, "failure_class", failure_class)
 
     @property
     def has_regression(self) -> bool:
@@ -135,6 +145,49 @@ class RegressionReport:
             bool: ``True`` when any finding has ``is_regression=True``.
         """
         return any(finding.is_regression for finding in self.findings)
+
+    @property
+    def has_blocking_regression(self) -> bool:
+        """Return whether a regression should fail CI gating."""
+        return self.has_steady_regression
+
+
+def _classify_regressions(
+    findings: Sequence[RegressionFinding],
+) -> tuple[bool, bool, Literal["none", "startup_only", "steady"]]:
+    """Classify regression severity by metric category.
+
+    Args:
+        findings: Per-metric regression findings from snapshot comparison.
+
+    Returns:
+        tuple[bool, bool, Literal["none", "startup_only", "steady"]]:
+            Startup flag, steady-state flag, and severity class.
+    """
+    has_startup = any(f.is_regression and f.metric in _STARTUP_METRICS for f in findings)
+    has_steady = any(f.is_regression and f.metric in _STEADY_METRICS for f in findings)
+    if has_steady:
+        return has_startup, has_steady, "steady"
+    if has_startup:
+        return has_startup, has_steady, "startup_only"
+    return has_startup, has_steady, "none"
+
+
+def _regression_status(findings: Sequence[RegressionFinding]) -> Literal["pass", "warn", "fail"]:
+    """Map metric regressions to top-level status.
+
+    Args:
+        findings: Per-metric regression findings from snapshot comparison.
+
+    Returns:
+        Literal["pass", "warn", "fail"]: Aggregated status classification.
+    """
+    _, _, failure_class = _classify_regressions(findings)
+    if failure_class == "steady":
+        return "fail"
+    if failure_class == "startup_only":
+        return "warn"
+    return "pass"
 
 
 def median_metrics(samples: Sequence[PhaseMetrics]) -> PhaseMetrics:
@@ -206,7 +259,7 @@ def compare_snapshots(
                 )
             )
 
-    status = "fail" if any(finding.is_regression for finding in findings) else "pass"
+    status = _regression_status(findings)
     diagnostics = _build_diagnostics(findings)
     return RegressionReport(status=status, findings=tuple(findings), diagnostics=diagnostics)
 
@@ -301,6 +354,8 @@ def render_markdown_report(
     lines.append(
         f"Status: **{report.status.upper()}**" if report is not None else "Status: **UNKNOWN**"
     )
+    if report is not None and report.failure_class == "startup_only":
+        lines.append("Startup-only regression detected; steady-state gate not violated.")
     lines.extend(
         [
             "",
@@ -534,7 +589,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--fail-on-regression",
         action="store_true",
-        help="Exit non-zero when regressions are detected.",
+        help="Exit non-zero when steady-state regressions are detected.",
     )
     parser.add_argument(
         "--require-baseline",
@@ -649,7 +704,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if baseline is None and args.require_baseline:
         logger.error("Baseline missing or invalid: {}", args.baseline)
         return 2
-    if report is not None and report.has_regression and args.fail_on_regression:
+    if report is not None and report.has_blocking_regression and args.fail_on_regression:
         return 1
     return 0
 
@@ -664,9 +719,19 @@ def _report_to_dict(report: RegressionReport | None) -> dict[str, Any]:
         dict[str, Any]: JSON-friendly report payload.
     """
     if report is None:
-        return {"status": "no-baseline", "findings": [], "diagnostics": []}
+        return {
+            "status": "no-baseline",
+            "failure_class": "none",
+            "has_startup_regression": False,
+            "has_steady_regression": False,
+            "findings": [],
+            "diagnostics": [],
+        }
     return {
         "status": report.status,
+        "failure_class": report.failure_class,
+        "has_startup_regression": report.has_startup_regression,
+        "has_steady_regression": report.has_steady_regression,
         "findings": [
             {
                 "phase": finding.phase,

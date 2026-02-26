@@ -773,6 +773,9 @@ The CI pipeline includes integrated performance monitoring for system package in
 - Metrics recorded during package installation steps
 - Performance data saved as artifacts for analysis
 - Automatic validation against performance targets
+- Cold/warm regression smoke on `main`: startup-only regressions (`env_create_sec`,
+  `first_step_sec`) are advisory (`WARN`), while steady-state regressions
+  (`episode_sec`, `steps_per_sec`) remain blocking (`FAIL`).
 
 **Local Testing**:
 - Use `act` tool for local CI workflow testing: `act push --container-architecture linux/amd64 --job ci --verbose`

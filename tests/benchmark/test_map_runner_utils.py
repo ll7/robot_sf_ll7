@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -10,9 +11,11 @@ import pytest
 from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_config,
+    _default_robot_command_space,
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
+    _policy_command_to_env_action,
     _ppo_action_to_unicycle,
     _ppo_paper_gate_status,
     _preflight_policy,
@@ -94,6 +97,7 @@ def test_goal_policy_and_build_policy() -> None:
     assert meta["baseline_category"] == "classical"
     assert meta["policy_semantics"] == "deterministic_goal_seeking"
     assert meta["planner_kinematics"]["execution_mode"] == "native"
+    assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
     assert linear > 0.0
     assert abs(angular) <= 1.0
 
@@ -237,6 +241,7 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
         _scenario_robot_kinematics_label({"robot_config": {"type": "bicycle_drive"}})
         == "bicycle_drive"
     )
+    assert _scenario_robot_kinematics_label({"robot_config": {"type": "holonomic"}}) == "holonomic"
     assert (
         _scenario_robot_kinematics_label({"robot_config": {"type": "skid_steer"}}) == "skid_steer"
     )
@@ -497,6 +502,10 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     algo_md = record["algorithm_metadata"]
     assert algo_md["baseline_category"] == "classical"
     assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
+    feasibility = algo_md.get("kinematics_feasibility")
+    assert isinstance(feasibility, dict)
+    assert "projection_rate" in feasibility
+    assert "infeasible_rate" in feasibility
 
 
 def test_run_map_episode_stops_immediately_on_first_success(
@@ -666,3 +675,66 @@ def test_run_map_batch_filters_and_validation(
         resume=False,
     )
     assert result["total_jobs"] == 1
+
+
+def test_run_map_batch_skips_incompatible_kinematics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Incompatible planner/kinematics combinations should be skipped with explicit reason."""
+    scenario = {
+        "name": "s1",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic"},
+    }
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._planner_kinematics_compatibility",
+        lambda **kwargs: (False, "mock incompatible combo"),
+    )
+    result = run_map_batch(
+        [scenario],
+        tmp_path / "out.jsonl",
+        schema_path=tmp_path / "schema.json",
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+    assert result["written"] == 0
+    assert result["preflight"]["status"] == "skipped"
+    assert "compatibility_reason" in result["preflight"]
+
+
+def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
+    """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
+
+    class HolonomicConfig:
+        command_mode = "vx_vy"
+
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]), action_space=None)
+    config = SimpleNamespace(
+        robot_config=HolonomicConfig(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+    action = _policy_command_to_env_action(env=env, config=config, command=(1.0, 2.0))
+
+    expected_heading = 0.2
+    np.testing.assert_allclose(
+        action,
+        np.array([np.cos(expected_heading), np.sin(expected_heading)], dtype=float),
+    )
+
+
+def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
+    """Runtime command mode should override algo-config command mode for holonomic metadata."""
+    assert (
+        _default_robot_command_space(
+            "holonomic",
+            {"command_mode": "unicycle_vw"},
+            robot_command_mode="vx_vy",
+        )
+        == "holonomic_vxy"
+    )

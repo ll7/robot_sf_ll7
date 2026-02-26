@@ -185,7 +185,11 @@ Each episode record is schema-validated against
 * `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
-  adapter markers for compatibility interpretation
+  adapter markers for compatibility interpretation. Contract now also includes
+  `planner_command_space` (`unicycle_vw|holonomic_vxy`) for kinematics-aware interpretation.
+* `algorithm_metadata.kinematics_feasibility` with command-level intervention diagnostics:
+  `commands_evaluated`, `infeasible_native_count`, `projected_count`,
+  `projection_rate`, `infeasible_rate`, `mean/max abs delta` for linear and angular commands.
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
   for threshold provenance and reproducibility
 * Git/config hashes for reproducibility

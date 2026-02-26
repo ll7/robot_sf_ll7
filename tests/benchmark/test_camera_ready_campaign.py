@@ -9,6 +9,8 @@ from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
     _load_campaign_scenarios,
+    _sanitize_name,
+    _write_campaign_report,
     load_campaign_config,
     run_campaign,
 )
@@ -244,6 +246,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.md").exists()
+    assert (campaign_root / "reports" / "kinematics_parity_table.csv").exists()
+    assert (campaign_root / "reports" / "kinematics_parity_table.md").exists()
+    assert (campaign_root / "reports" / "kinematics_skipped_combinations.csv").exists()
+    assert (campaign_root / "reports" / "kinematics_skipped_combinations.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
     assert (campaign_root / "preflight" / "validate_config.json").exists()
     assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
@@ -263,6 +269,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
     assert "socnav_prereq_policy" in table_md
+    assert "kinematics" in table_md
     run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
     assert "seed_policy" in run_meta
     assert "resolved_seeds" in run_meta["seed_policy"]
@@ -311,6 +318,7 @@ def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
     assert (
         cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
     )
+    assert cfg.kinematics_matrix == ("differential_drive",)
 
 
 def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp_path: Path):
@@ -416,3 +424,256 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     assert len(planner_rows) == 1
     assert planner_rows[0]["planner_key"] == "prediction_planner"
     assert planner_rows[0]["status"] == "partial-failure"
+
+
+def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
+    """Markdown report tables should escape raw cell separators from planner metadata."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {"campaign_id": "c1"},
+        "warnings": [],
+        "planner_rows": [
+            {
+                "planner_key": "planner|unsafe",
+                "algo": "goal",
+                "kinematics": "holonomic|vx_vy",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "1.0",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.5",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "native",
+                "readiness_status": "ok",
+                "readiness_tier": "baseline-ready",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            }
+        ],
+    }
+    _write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "planner\\|unsafe" in report_text
+    assert "holonomic\\|vx_vy" in report_text
+
+
+def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:
+    """Planner run directories should use sanitized planner/kinematics identifiers."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_sanitize.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: sanitize_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                'kinematics_matrix: ["holonomic/../unsafe"]',
+                "planners:",
+                '  - key: "../../planner|unsafe"',
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, benchmark_profile, kwargs
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(
+            json.dumps(
+                {
+                    "episode_id": f"e-{algo}-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
+                    "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                    "algorithm_metadata": {"algorithm": algo, "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "out_path": str(out_file),
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="sanitize")
+    campaign_root = Path(result["campaign_root"])
+    runs_dir = campaign_root / "runs"
+    run_dirs = [path.name for path in runs_dir.iterdir() if path.is_dir()]
+    assert len(run_dirs) == 1
+    expected = f"{_sanitize_name('../../planner|unsafe')}__{_sanitize_name('holonomic/../unsafe')}"
+    assert run_dirs[0] == expected
+
+
+def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeypatch) -> None:
+    """Skipped planner/kinematics combinations should not be marked as successful."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_skipped.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: skipped_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args, kwargs
+        return {
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "skipped", "compatibility_reason": "unsupported"},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="skipped")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    assert summary_payload["planner_rows"][0]["status"] == "skipped"
+    assert summary_payload["campaign"]["successful_runs"] == 0
+
+
+def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:
+    """Parity artifacts should preserve available CI values."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_ci.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: ci_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok"},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    def _fake_compute_aggregates_with_ci(*args, **kwargs):
+        del args, kwargs
+        return {
+            "mock_group": {
+                "success": {"mean": 1.0, "mean_ci": [0.8, 1.0]},
+                "collisions": {"mean": 0.0, "mean_ci": [0.0, 0.2]},
+                "snqi": {"mean": 0.7, "mean_ci": [0.6, 0.8]},
+            },
+            "_meta": {"warnings": [], "missing_algorithms": []},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci",
+        _fake_compute_aggregates_with_ci,
+    )
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="ci")
+    parity_csv = (
+        Path(result["campaign_root"]) / "reports" / "kinematics_parity_table.csv"
+    ).read_text(encoding="utf-8")
+    assert "success_ci_low" in parity_csv
+    assert "success_ci_high" in parity_csv
+    assert "collision_ci_low" in parity_csv
+    assert "collision_ci_high" in parity_csv
+    assert "snqi_ci_low" in parity_csv
+    assert "snqi_ci_high" in parity_csv

@@ -34,6 +34,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
@@ -76,6 +77,110 @@ _STRICT_LEARNED_POLICY_PROFILES = {"baseline-safe", "paper-baseline"}
 _PPO_ALLOWED_OBS_MODES = {"vector", "dict", "native_dict", "multi_input"}
 _PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
 _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
+
+
+def _default_robot_command_space(
+    robot_kinematics: str | None,
+    algo_config: dict[str, Any],
+    *,
+    robot_command_mode: str | None = None,
+) -> str:
+    """Resolve robot command-space metadata for the current run.
+
+    Returns:
+        str: Canonical command-space label.
+    """
+    kin = str(robot_kinematics or _DEFAULT_KINEMATICS).strip().lower()
+    if kin in {"holonomic", "omni", "omnidirectional"}:
+        mode_source = (
+            robot_command_mode
+            if robot_command_mode is not None
+            else algo_config.get("command_mode", "vx_vy")
+        )
+        mode = str(mode_source).strip().lower()
+        return "holonomic_vxy" if mode == "vx_vy" else "unicycle_vw"
+    return "unicycle_vw"
+
+
+def _init_feasibility_metadata(meta: dict[str, Any]) -> None:
+    """Initialize mutable kinematics-feasibility counters in algorithm metadata."""
+    meta["kinematics_feasibility"] = {
+        "commands_evaluated": 0,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "_sum_abs_delta_linear": 0.0,
+        "_sum_abs_delta_angular": 0.0,
+        "_max_abs_delta_linear": 0.0,
+        "_max_abs_delta_angular": 0.0,
+    }
+
+
+def _project_with_feasibility(
+    *,
+    model: KinematicsModel,
+    command: tuple[float, float],
+    meta: dict[str, Any],
+) -> tuple[float, float]:
+    """Project a command while accumulating feasibility diagnostics.
+
+    Returns:
+        tuple[float, float]: Projected command.
+    """
+    projected = model.project(command)
+    feasibility = meta.get("kinematics_feasibility")
+    if not isinstance(feasibility, dict):
+        return projected
+    feasible_native = bool(model.is_feasible(command))
+    delta_linear = abs(float(projected[0]) - float(command[0]))
+    delta_angular = abs(float(projected[1]) - float(command[1]))
+    feasibility["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0)) + 1
+    if not feasible_native:
+        feasibility["infeasible_native_count"] = (
+            int(feasibility.get("infeasible_native_count", 0)) + 1
+        )
+    if command != projected:
+        feasibility["projected_count"] = int(feasibility.get("projected_count", 0)) + 1
+    feasibility["_sum_abs_delta_linear"] = float(
+        feasibility.get("_sum_abs_delta_linear", 0.0)
+    ) + float(delta_linear)
+    feasibility["_sum_abs_delta_angular"] = float(
+        feasibility.get("_sum_abs_delta_angular", 0.0)
+    ) + float(delta_angular)
+    feasibility["_max_abs_delta_linear"] = max(
+        float(feasibility.get("_max_abs_delta_linear", 0.0)),
+        float(delta_linear),
+    )
+    feasibility["_max_abs_delta_angular"] = max(
+        float(feasibility.get("_max_abs_delta_angular", 0.0)),
+        float(delta_angular),
+    )
+    return projected
+
+
+def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
+    """Finalize per-episode feasibility rates/means and strip internal accumulators."""
+    feasibility = meta.get("kinematics_feasibility")
+    if not isinstance(feasibility, dict):
+        return
+    total = int(feasibility.get("commands_evaluated", 0))
+    infeasible = int(feasibility.get("infeasible_native_count", 0))
+    projected = int(feasibility.get("projected_count", 0))
+    sum_linear = float(feasibility.pop("_sum_abs_delta_linear", 0.0))
+    sum_angular = float(feasibility.pop("_sum_abs_delta_angular", 0.0))
+    max_linear = float(feasibility.pop("_max_abs_delta_linear", 0.0))
+    max_angular = float(feasibility.pop("_max_abs_delta_angular", 0.0))
+    if total > 0:
+        feasibility["projection_rate"] = float(projected / total)
+        feasibility["infeasible_rate"] = float(infeasible / total)
+        feasibility["mean_abs_delta_linear"] = float(sum_linear / total)
+        feasibility["mean_abs_delta_angular"] = float(sum_angular / total)
+    else:
+        feasibility["projection_rate"] = 0.0
+        feasibility["infeasible_rate"] = 0.0
+        feasibility["mean_abs_delta_linear"] = 0.0
+        feasibility["mean_abs_delta_angular"] = 0.0
+    feasibility["max_abs_delta_linear"] = max_linear
+    feasibility["max_abs_delta_angular"] = max_angular
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -308,6 +413,30 @@ def _preflight_policy(  # noqa: C901
         raise RuntimeError(message) from exc
 
 
+def _planner_kinematics_compatibility(
+    *,
+    algo: str,
+    robot_kinematics: str,
+    algo_config: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """Return explicit compatibility status for planner/kinematics combinations."""
+    algo_key = algo.strip().lower()
+    kin = robot_kinematics.strip().lower()
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa", "teb"}:
+        return (
+            False,
+            f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
+        )
+    if algo_key == "ppo" and kin in {"holonomic", "omni", "omnidirectional"}:
+        obs_mode = str(algo_config.get("obs_mode", "vector")).strip().lower()
+        if obs_mode == "image":
+            return (
+                False,
+                "ppo holonomic runs require non-image obs_mode for map-runner compatibility",
+            )
+    return True, None
+
+
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     try:
         return SocNavPlannerConfig(**cfg)
@@ -465,6 +594,7 @@ def _ppo_action_to_unicycle(
     *,
     robot_kinematics: str | None = None,
     kinematics_model: KinematicsModel | None = None,
+    project_command: bool = True,
 ) -> tuple[float, float, str]:
     """Convert PPO action dict into the unicycle command used by map environments.
 
@@ -477,7 +607,10 @@ def _ppo_action_to_unicycle(
         command_limits=cfg,
     )
     if "v" in action and "omega" in action:
-        v, omega = model.project((float(action["v"]), float(action["omega"])))
+        if project_command:
+            v, omega = model.project((float(action["v"]), float(action["omega"])))
+        else:
+            v, omega = float(action["v"]), float(action["omega"])
         return v, omega, "native"
 
     if "vx" not in action or "vy" not in action:
@@ -487,7 +620,10 @@ def _ppo_action_to_unicycle(
     vy = float(action["vy"])
     speed = float(np.hypot(vx, vy))
     if speed < 1e-9:
-        v, omega = model.project((0.0, 0.0))
+        if project_command:
+            v, omega = model.project((0.0, 0.0))
+        else:
+            v, omega = 0.0, 0.0
         return v, omega, "adapter"
 
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
@@ -498,7 +634,10 @@ def _ppo_action_to_unicycle(
     omega_kp = float(cfg.get("omega_kp", cfg.get("heading_error_gain", 1.0)))
     angular_velocity = float(np.clip(omega_kp * heading_error, -omega_max, omega_max))
 
-    v, omega = model.project((float(speed), angular_velocity))
+    if project_command:
+        v, omega = model.project((float(speed), angular_velocity))
+    else:
+        v, omega = float(speed), angular_velocity
     return v, omega, "adapter"
 
 
@@ -507,6 +646,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo_config: dict[str, Any],
     *,
     robot_kinematics: str | None = None,
+    robot_command_mode: str | None = None,
     adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build an action policy and algorithm metadata for map-based benchmarking.
@@ -515,6 +655,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         algo: Algorithm key to instantiate.
         algo_config: Algorithm configuration payload.
         robot_kinematics: Runtime robot kinematics label for metadata enrichment.
+        robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
         adapter_impact_eval: Whether to collect native-vs-adapter step counters.
 
     Returns:
@@ -531,9 +672,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             command_limits=algo_config,
         )
 
-        def _project(v: float, w: float) -> tuple[float, float]:
-            return goal_kinematics_model.project((v, w))
-
         meta.update(
             {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
         )
@@ -543,10 +681,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             execution_mode="native",
             robot_kinematics=robot_kinematics,
         )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
             linear, angular = _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
-            return _project(linear, angular)
+            return _project_with_feasibility(
+                model=goal_kinematics_model,
+                command=(linear, angular),
+                meta=meta,
+            )
 
         return _policy, meta
 
@@ -590,6 +740,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             adapter_impact_requested=adapter_impact_eval,
         )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
             command_limits=algo_config,
@@ -609,6 +767,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 algo_config,
                 robot_kinematics=robot_kinematics,
                 kinematics_model=ppo_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=ppo_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
             )
             impact = meta.get("adapter_impact")
             if isinstance(impact, dict) and bool(impact.get("requested", False)):
@@ -664,6 +828,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         execution_mode="adapter",
         robot_kinematics=robot_kinematics,
     )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=robot_command_mode,
+        )
     adapter_kinematics_model = resolve_benchmark_kinematics_model(
         robot_kinematics=robot_kinematics,
         command_limits=algo_config,
@@ -671,7 +843,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         linear, angular = adapter.plan(obs)
-        return adapter_kinematics_model.project((float(linear), float(angular)))
+        return _project_with_feasibility(
+            model=adapter_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
 
     return _policy, meta
 
@@ -825,6 +1001,8 @@ def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
         return "bicycle_drive"
     if "differential" in cls_name:
         return "differential_drive"
+    if "holonomic" in cls_name or "omni" in cls_name:
+        return "holonomic"
     return cls_name or _DEFAULT_KINEMATICS
 
 
@@ -837,7 +1015,7 @@ def _robot_max_speed(config: RobotSimulationConfig) -> float | None:
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
         return None
-    for attr in ("max_linear_speed", "max_velocity"):
+    for attr in ("max_linear_speed", "max_velocity", "max_speed"):
         value = getattr(robot_cfg, attr, None)
         if isinstance(value, (int, float)) and float(value) > 0:
             return float(value)
@@ -856,6 +1034,8 @@ def _scenario_robot_kinematics_label(scenario: dict[str, Any]) -> str:
     raw = str(robot_cfg.get("type") or robot_cfg.get("model") or "").strip().lower()
     if "bicycle" in raw:
         return "bicycle_drive"
+    if "holonomic" in raw or "omni" in raw:
+        return "holonomic"
     if "differential" in raw or raw == "":
         return _DEFAULT_KINEMATICS
     return raw
@@ -879,6 +1059,52 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
             continue
         stacked[i, : arr.shape[0]] = arr
     return stacked
+
+
+def _policy_command_to_env_action(
+    *,
+    env: Any,
+    config: RobotSimulationConfig,
+    command: tuple[float, float],
+) -> np.ndarray:
+    """Convert policy unicycle command into the robot's native environment action space.
+
+    Returns:
+        np.ndarray: Action vector compatible with ``env.step``.
+    """
+    sim_robots = getattr(env.simulator, "robots", None)
+    if not isinstance(sim_robots, list) or not sim_robots:
+        return np.array([float(command[0]), float(command[1])], dtype=float)
+    robot = sim_robots[0]
+    robot_cfg = getattr(config, "robot_config", None)
+    if robot_cfg is None:
+        return np.array([command[0], command[1]], dtype=float)
+
+    cls_name = robot_cfg.__class__.__name__.lower()
+    if "bicycle" in cls_name:
+        adapter = PlannerActionAdapter(
+            robot=robot,
+            action_space=env.action_space,
+            time_step=float(config.sim_config.time_per_step_in_secs),
+        )
+        return np.asarray(adapter.from_velocity_command(command), dtype=float)
+
+    if "holonomic" in cls_name:
+        mode = str(getattr(robot_cfg, "command_mode", "vx_vy")).strip().lower()
+        linear, angular = float(command[0]), float(command[1])
+        if mode == "vx_vy":
+            # Preserve turning intent by projecting at midpoint heading over this step.
+            step_dt = float(getattr(config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
+            heading = float(robot.pose[1]) + (angular * max(step_dt, 0.0) * 0.5)
+            vx = linear * math.cos(heading)
+            vy = linear * math.sin(heading)
+            return np.array([vx, vy], dtype=float)
+        return np.array([linear, angular], dtype=float)
+
+    current_linear, current_angular = robot.current_speed
+    d_linear = float(command[0]) - float(current_linear)
+    d_angular = float(command[1]) - float(current_angular)
+    return np.array([d_linear, d_angular], dtype=float)
 
 
 def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
@@ -907,6 +1133,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         config.sim_config.time_per_step_in_secs = float(dt)
 
     robot_kinematics = _robot_kinematics_label(config)
+    robot_command_mode = (
+        str(getattr(getattr(config, "robot_config", None), "command_mode", "vx_vy")).strip().lower()
+    )
     policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
@@ -914,6 +1143,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo,
         policy_cfg,
         robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
@@ -932,7 +1162,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     try:
         for step_idx in range(horizon_val):
             action_v, action_w = policy_fn(obs)
-            action = np.array([action_v, action_w], dtype=float)
+            action = _policy_command_to_env_action(
+                env=env,
+                config=config,
+                command=(float(action_v), float(action_w)),
+            )
             obs, _reward, terminated, truncated, info = env.step(action)
 
             robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
@@ -1032,6 +1266,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         else:
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
+    _finalize_feasibility_metadata(algo_meta)
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -1100,6 +1335,51 @@ def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
     )
+
+
+def _accumulate_batch_metadata(
+    rec: dict[str, Any],
+    *,
+    feasibility_totals: dict[str, float],
+) -> tuple[bool, int, int]:
+    """Aggregate adapter-impact and feasibility counters from one episode record.
+
+    Returns:
+        tuple[bool, int, int]: ``(adapter_requested_seen, native_steps, adapted_steps)`` deltas.
+    """
+    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
+    feasibility_meta = (rec.get("algorithm_metadata") or {}).get("kinematics_feasibility") or {}
+    adapter_requested_seen = False
+    adapter_native_steps = 0
+    adapter_adapted_steps = 0
+    if isinstance(impact_meta, dict):
+        adapter_requested_seen = bool(impact_meta.get("requested", False))
+        adapter_native_steps = int(impact_meta.get("native_steps", 0) or 0)
+        adapter_adapted_steps = int(impact_meta.get("adapted_steps", 0) or 0)
+    if isinstance(feasibility_meta, dict):
+        commands_evaluated = int(feasibility_meta.get("commands_evaluated", 0) or 0)
+        feasibility_totals["commands_evaluated"] += commands_evaluated
+        feasibility_totals["infeasible_native_count"] += int(
+            feasibility_meta.get("infeasible_native_count", 0) or 0
+        )
+        feasibility_totals["projected_count"] += int(
+            feasibility_meta.get("projected_count", 0) or 0
+        )
+        feasibility_totals["sum_abs_delta_linear"] += (
+            float(feasibility_meta.get("mean_abs_delta_linear", 0.0)) * commands_evaluated
+        )
+        feasibility_totals["sum_abs_delta_angular"] += (
+            float(feasibility_meta.get("mean_abs_delta_angular", 0.0)) * commands_evaluated
+        )
+        feasibility_totals["max_abs_delta_linear"] = max(
+            float(feasibility_totals["max_abs_delta_linear"]),
+            float(feasibility_meta.get("max_abs_delta_linear", 0.0) or 0.0),
+        )
+        feasibility_totals["max_abs_delta_angular"] = max(
+            float(feasibility_totals["max_abs_delta_angular"]),
+            float(feasibility_meta.get("max_abs_delta_angular", 0.0) or 0.0),
+        )
+    return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
@@ -1179,6 +1459,16 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
     policy_cfg = _parse_algo_config(algo_config_path)
+    robot_command_mode: str | None = None
+    for scenario in filtered:
+        robot_cfg = scenario.get("robot_config")
+        if not isinstance(robot_cfg, dict):
+            continue
+        raw_mode = robot_cfg.get("command_mode")
+        if raw_mode is None:
+            continue
+        robot_command_mode = str(raw_mode).strip().lower()
+        break
     ppo_paper_ready, _paper_reason = (
         _ppo_paper_gate_status(policy_cfg) if algo.strip().lower() == "ppo" else (False, None)
     )
@@ -1194,6 +1484,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         missing_prereq_policy=socnav_missing_prereq_policy,
         robot_kinematics=kinematics_tag,
     )
+    compatible, incompatible_reason = _planner_kinematics_compatibility(
+        algo=algo,
+        robot_kinematics=kinematics_tag,
+        algo_config=policy_cfg,
+    )
+    if not compatible:
+        preflight["status"] = "skipped"
+        preflight["compatibility_status"] = "incompatible"
+        preflight["compatibility_reason"] = incompatible_reason
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
         return {
@@ -1248,17 +1547,26 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     adapter_native_steps = 0
     adapter_adapted_steps = 0
     adapter_samples_seen = False
+    feasibility_totals = {
+        "commands_evaluated": 0,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "sum_abs_delta_linear": 0.0,
+        "sum_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0,
+    }
     if workers <= 1:
         for scenario, seed in jobs:
             try:
                 rec = _run_map_job_worker((scenario, seed, fixed_params))
-                impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
-                if isinstance(impact_meta, dict):
-                    adapter_samples_seen = adapter_samples_seen or bool(
-                        impact_meta.get("requested", False),
-                    )
-                    adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
-                    adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
+                requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                    rec,
+                    feasibility_totals=feasibility_totals,
+                )
+                adapter_samples_seen = adapter_samples_seen or requested_seen
+                adapter_native_steps += native_steps
+                adapter_adapted_steps += adapted_steps
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -1279,13 +1587,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
-                    impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
-                    if isinstance(impact_meta, dict):
-                        adapter_samples_seen = adapter_samples_seen or bool(
-                            impact_meta.get("requested", False),
-                        )
-                        adapter_native_steps += int(impact_meta.get("native_steps", 0) or 0)
-                        adapter_adapted_steps += int(impact_meta.get("adapted_steps", 0) or 0)
+                    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                        rec,
+                        feasibility_totals=feasibility_totals,
+                    )
+                    adapter_samples_seen = adapter_samples_seen or requested_seen
+                    adapter_native_steps += native_steps
+                    adapter_adapted_steps += adapted_steps
                     _write_validated(out_path, schema, rec)
                     wrote += 1
                 except Exception as exc:  # pragma: no cover
@@ -1324,6 +1632,41 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact_contract["adapter_fraction"] = 0.0
 
     preflight["algorithm_metadata_contract"] = algo_contract
+    planner_contract = algo_contract.get("planner_kinematics")
+    if isinstance(planner_contract, dict):
+        planner_contract["planner_command_space"] = _default_robot_command_space(
+            kinematics_tag,
+            policy_cfg,
+            robot_command_mode=robot_command_mode,
+        )
+    total_commands = int(feasibility_totals["commands_evaluated"])
+    algo_contract["kinematics_feasibility"] = {
+        "commands_evaluated": total_commands,
+        "infeasible_native_count": int(feasibility_totals["infeasible_native_count"]),
+        "projected_count": int(feasibility_totals["projected_count"]),
+        "projection_rate": (
+            float(feasibility_totals["projected_count"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "infeasible_rate": (
+            float(feasibility_totals["infeasible_native_count"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "mean_abs_delta_linear": (
+            float(feasibility_totals["sum_abs_delta_linear"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "mean_abs_delta_angular": (
+            float(feasibility_totals["sum_abs_delta_angular"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "max_abs_delta_linear": float(feasibility_totals["max_abs_delta_linear"]),
+        "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
+    }
 
     return {
         "total_jobs": total_jobs,

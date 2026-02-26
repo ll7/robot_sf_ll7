@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
@@ -23,6 +24,9 @@ from robot_sf.nav.map_config import (
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -588,10 +592,171 @@ def build_robot_config_from_scenario(
 
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
+    _apply_robot_overrides(config, scenario.get("robot_config", {}))
     _apply_map_pool(config, scenario, scenario_path)
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
     return config
+
+
+def _coerce_finite_float(value: Any, *, field_name: str) -> float:
+    """Parse and validate a finite float value for scenario robot_config fields.
+
+    Returns:
+        float: Parsed finite float value.
+    """
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"robot_config.{field_name} must be finite.")
+    return parsed
+
+
+def _coerce_non_negative_float(value: Any, *, field_name: str) -> float:
+    """Parse and validate a non-negative finite float for scenario robot_config fields.
+
+    Returns:
+        float: Parsed finite float value that is ``>= 0``.
+    """
+    parsed = _coerce_finite_float(value, field_name=field_name)
+    if parsed < 0.0:
+        raise ValueError(f"robot_config.{field_name} must be >= 0.")
+    return parsed
+
+
+def _coerce_bool(value: Any, *, field_name: str) -> bool:
+    """Coerce boolean-like override values with strict validation.
+
+    Returns:
+        bool: Parsed boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"robot_config.{field_name} must be a boolean.")
+
+
+def _robot_type_alias(raw: str) -> str:
+    """Normalize scenario robot type aliases to canonical labels.
+
+    Returns:
+        str: Canonical robot type label.
+    """
+    robot_type = raw.lower()
+    if robot_type in {"diff_drive", "diff", "differential"}:
+        return "differential_drive"
+    if robot_type in {"bicycle", "bike"}:
+        return "bicycle_drive"
+    if robot_type in {"omni", "omnidirectional"}:
+        return "holonomic"
+    return robot_type
+
+
+def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDriveSettings:
+    """Build differential-drive settings from scenario overrides.
+
+    Returns:
+        DifferentialDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "max_linear_speed" in overrides:
+        kwargs["max_linear_speed"] = _coerce_finite_float(
+            overrides["max_linear_speed"], field_name="max_linear_speed"
+        )
+    if "max_angular_speed" in overrides:
+        kwargs["max_angular_speed"] = _coerce_finite_float(
+            overrides["max_angular_speed"], field_name="max_angular_speed"
+        )
+    if "wheel_radius" in overrides:
+        kwargs["wheel_radius"] = _coerce_finite_float(
+            overrides["wheel_radius"], field_name="wheel_radius"
+        )
+    if "interaxis_length" in overrides:
+        kwargs["interaxis_length"] = _coerce_finite_float(
+            overrides["interaxis_length"], field_name="interaxis_length"
+        )
+    if "allow_backwards" in overrides:
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
+    return DifferentialDriveSettings(**kwargs)
+
+
+def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSettings:
+    """Build bicycle-drive settings from scenario overrides.
+
+    Returns:
+        BicycleDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "wheelbase" in overrides:
+        kwargs["wheelbase"] = _coerce_finite_float(overrides["wheelbase"], field_name="wheelbase")
+    if "max_steer" in overrides:
+        kwargs["max_steer"] = _coerce_finite_float(overrides["max_steer"], field_name="max_steer")
+    if "max_velocity" in overrides:
+        kwargs["max_velocity"] = _coerce_finite_float(
+            overrides["max_velocity"], field_name="max_velocity"
+        )
+    if "max_accel" in overrides:
+        kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
+    if "allow_backwards" in overrides:
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
+    return BicycleDriveSettings(**kwargs)
+
+
+def _holonomic_robot_settings(overrides: Mapping[str, Any]) -> HolonomicDriveSettings:
+    """Build holonomic-drive settings from scenario overrides.
+
+    Returns:
+        HolonomicDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "max_speed" in overrides:
+        kwargs["max_speed"] = _coerce_finite_float(overrides["max_speed"], field_name="max_speed")
+    if "max_angular_speed" in overrides:
+        kwargs["max_angular_speed"] = _coerce_finite_float(
+            overrides["max_angular_speed"], field_name="max_angular_speed"
+        )
+    if "command_mode" in overrides:
+        kwargs["command_mode"] = str(overrides["command_mode"]).strip().lower()
+    return HolonomicDriveSettings(**kwargs)
+
+
+def _apply_robot_overrides(
+    config: RobotSimulationConfig,
+    overrides: Mapping[str, Any] | None,
+) -> None:
+    """Apply optional scenario-level robot kinematics overrides."""
+    if not isinstance(overrides, Mapping) or not overrides:
+        return
+    raw_type = str(overrides.get("type", overrides.get("model", "differential_drive"))).strip()
+    robot_type = _robot_type_alias(raw_type)
+    if robot_type == "differential_drive":
+        config.robot_config = _differential_robot_settings(overrides)
+        return
+    if robot_type == "bicycle_drive":
+        config.robot_config = _bicycle_robot_settings(overrides)
+        return
+    if robot_type == "holonomic":
+        config.robot_config = _holonomic_robot_settings(overrides)
+        return
+    raise ValueError(
+        "robot_config.type must be one of 'differential_drive', 'bicycle_drive', or 'holonomic'."
+    )
 
 
 def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapDefinition | None:

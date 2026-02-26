@@ -32,6 +32,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
     DifferentialDriveSettings,
 )
+from robot_sf.robot.holonomic_drive import HolonomicDriveRobot, HolonomicDriveSettings
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -104,7 +105,7 @@ class EnvSettings(BaseEnvSettings):
     """
 
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
-    robot_config: DifferentialDriveSettings | BicycleDriveSettings = field(
+    robot_config: DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings = field(
         default_factory=DifferentialDriveSettings,
     )
 
@@ -121,7 +122,7 @@ class EnvSettings(BaseEnvSettings):
         if not self.lidar_config or not self.robot_config:
             raise ValueError("Please make sure all properties are initialized!")
 
-    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
+    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot | HolonomicDriveRobot:
         """Create a robot instance matching the configured drivetrain type.
 
         Instantiates the appropriate robot class (DifferentialDriveRobot or
@@ -139,6 +140,8 @@ class EnvSettings(BaseEnvSettings):
             return DifferentialDriveRobot(self.robot_config)
         elif isinstance(self.robot_config, BicycleDriveSettings):
             return BicycleDriveRobot(self.robot_config)
+        elif isinstance(self.robot_config, HolonomicDriveSettings):
+            return HolonomicDriveRobot(self.robot_config)
         else:
             raise NotImplementedError(f"unsupported robot type {type(self.robot_config)}!")
 

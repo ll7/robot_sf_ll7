@@ -102,6 +102,8 @@ class CampaignConfig:
     doi: str = "10.5281/zenodo.<record-id>"
     paper_interpretation_profile: str = "baseline-ready-core"
     preview_scenario_limit: int = 100
+    kinematics_matrix: tuple[str, ...] = ("differential_drive",)
+    holonomic_command_mode: str = "vx_vy"
 
 
 def _repo_relative(path: Path) -> str:
@@ -152,6 +154,19 @@ def _sanitize_name(name: str) -> str:
     """
     normalized = re.sub(r"[^a-zA-Z0-9_-]+", "_", name.strip().lower()).strip("_")
     return normalized or "campaign"
+
+
+def _escape_markdown_cell(value: Any) -> str:
+    """Escape markdown table cell content to prevent row/column injection.
+
+    Returns:
+        Escaped single-line markdown-safe cell value.
+    """
+    text = str(value)
+    text = text.replace("\\", "\\\\")
+    text = text.replace("|", "\\|")
+    text = text.replace("\n", " ").replace("\r", " ")
+    return text
 
 
 def _load_seed_sets(path: Path) -> dict[str, list[int]]:
@@ -471,6 +486,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:
             payload.get("paper_interpretation_profile", "baseline-ready-core")
         ),
         preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
+        kinematics_matrix=tuple(
+            str(value).strip()
+            for value in payload.get("kinematics_matrix", ["differential_drive"])
+            if str(value).strip()
+        ),
+        holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
     )
 
 
@@ -487,7 +508,7 @@ def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple
         "|" + "|".join("---" for _ in headers) + "|",
     ]
     for row in rows:
-        values = [str(row.get(col, "")) for col in headers]
+        values = [_escape_markdown_cell(row.get(col, "")) for col in headers]
         lines.append("| " + " | ".join(values) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -529,6 +550,8 @@ def _planner_report_row(
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
+    *,
+    kinematics: str,
 ) -> dict[str, Any]:
     """Build one campaign table row for a planner run.
 
@@ -575,6 +598,7 @@ def _planner_report_row(
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
+        "kinematics": kinematics,
         "status": status,
         "episodes": int(summary.get("written", 0)),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
@@ -605,6 +629,15 @@ def _planner_report_row(
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
     }
+    feasibility = (summary.get("algorithm_metadata_contract") or {}).get("kinematics_feasibility")
+    if isinstance(feasibility, dict):
+        row["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0) or 0)
+        row["projection_rate"] = _safe_float(float(feasibility.get("projection_rate", 0.0) or 0.0))
+        row["infeasible_rate"] = _safe_float(float(feasibility.get("infeasible_rate", 0.0) or 0.0))
+    else:
+        row["commands_evaluated"] = 0
+        row["projection_rate"] = _safe_float(0.0)
+        row["infeasible_rate"] = _safe_float(0.0)
     return row
 
 
@@ -758,7 +791,9 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
+def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
+    path: Path, payload: dict[str, Any]
+) -> None:
     """Write a human-readable campaign report in Markdown."""
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
@@ -785,17 +820,26 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
     if rows:
         lines.extend(
             [
-                "| planner | algo | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi |",
-                "|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+                "| planner | algo | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
+                "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             ],
         )
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('algo')} | {row.get('status')} | "
-                f"{row.get('started_at_utc')} | {row.get('runtime_sec')} | {row.get('episodes')} | "
-                f"{row.get('episodes_per_second')} | {row.get('success_mean')} | "
-                f"{row.get('collisions_mean')} | {row.get('snqi_mean')} |",
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('kinematics'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
+                f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
+                f"{_escape_markdown_cell(row.get('episodes'))} | "
+                f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
+                f"{_escape_markdown_cell(row.get('success_mean'))} | "
+                f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
+                f"{_escape_markdown_cell(row.get('snqi_mean'))} | "
+                f"{_escape_markdown_cell(row.get('projection_rate'))} | "
+                f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
             )
     else:
         lines.append("No planner rows were produced.")
@@ -811,10 +855,13 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('execution_mode')} | "
-                f"{row.get('readiness_status')} | {row.get('readiness_tier')} | "
-                f"{row.get('preflight_status')} | {row.get('learned_policy_contract_status')} | "
-                f"{row.get('status')} |"
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('execution_mode'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('learned_policy_contract_status'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} |"
             )
     if fallback_rows:
         lines.append("")
@@ -835,9 +882,11 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
         for row in rows:
             lines.append(
                 "| "
-                f"{row.get('planner_key')} | {row.get('algo')} | "
-                f"{row.get('socnav_prereq_policy')} | {row.get('preflight_status')} | "
-                f"{row.get('readiness_status')} |"
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} |"
             )
         comparisons = _strict_vs_fallback_comparisons(rows)
         if comparisons:
@@ -859,6 +908,14 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
             lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
         if isinstance(family_path, str):
             lines.append(f"- Per-family breakdown: `{family_path}`")
+    parity_path = (payload.get("artifacts") or {}).get("kinematics_parity_csv")
+    skipped_path = (payload.get("artifacts") or {}).get("kinematics_skipped_combinations_csv")
+    if isinstance(parity_path, str) or isinstance(skipped_path, str):
+        lines.extend(["", "## Kinematics Parity", ""])
+        if isinstance(parity_path, str):
+            lines.append(f"- Planner x kinematics parity table: `{parity_path}`")
+        if isinstance(skipped_path, str):
+            lines.append(f"- Skipped planner/kinematics combinations: `{skipped_path}`")
 
     lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
@@ -884,7 +941,7 @@ def _write_campaign_report(path: Path, payload: dict[str, Any]) -> None:  # noqa
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_campaign(  # noqa: C901, PLR0915
+def run_campaign(  # noqa: C901, PLR0912, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -1003,150 +1060,191 @@ def run_campaign(  # noqa: C901, PLR0915
             }
             for planner in cfg.planners
         ],
+        "kinematics_matrix": list(cfg.kinematics_matrix),
+        "holonomic_command_mode": cfg.holonomic_command_mode,
     }
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
 
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
+    kinematics_matrix = tuple(
+        str(value).strip().lower() for value in cfg.kinematics_matrix if str(value).strip()
+    ) or ("differential_drive",)
+    stop_requested = False
+
+    def _scenario_with_kinematics(
+        scenario: dict[str, Any],
+        *,
+        kinematics: str,
+    ) -> dict[str, Any]:
+        patched = dict(scenario)
+        robot_cfg = (
+            dict(scenario.get("robot_config"))
+            if isinstance(scenario.get("robot_config"), dict)
+            else {}
+        )
+        robot_cfg["type"] = kinematics
+        if kinematics == "holonomic":
+            robot_cfg.setdefault("command_mode", cfg.holonomic_command_mode)
+        patched["robot_config"] = robot_cfg
+        return patched
 
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        for kinematics in kinematics_matrix:
+            planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
+            planner_dir = runs_dir / planner_run_key
+            planner_dir.mkdir(parents=True, exist_ok=True)
+            episodes_path = planner_dir / "episodes.jsonl"
 
-        planner_dir = runs_dir / planner.key
-        planner_dir.mkdir(parents=True, exist_ok=True)
-        episodes_path = planner_dir / "episodes.jsonl"
-
-        effective_workers = (
-            planner.workers_override if planner.workers_override is not None else cfg.workers
-        )
-        effective_horizon = (
-            planner.horizon_override if planner.horizon_override is not None else cfg.horizon
-        )
-        effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
-
-        logger.info(
-            "Running campaign planner key={} algo={} profile={} workers={}",
-            planner.key,
-            planner.algo,
-            planner.benchmark_profile,
-            effective_workers,
-        )
-
-        planner_started_at_utc = _utc_now()
-        planner_start = time.perf_counter()
-        status = "ok"
-        summary: dict[str, Any]
-        aggregates: dict[str, Any] | None = None
-
-        try:
-            summary = run_batch(
-                scenarios,
-                out_path=episodes_path,
-                schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
-                horizon=effective_horizon if effective_horizon is not None else 0,
-                dt=effective_dt if effective_dt is not None else 0.0,
-                record_forces=cfg.record_forces,
-                snqi_weights=snqi_weights,
-                snqi_baseline=snqi_baseline,
-                algo=planner.algo,
-                algo_config_path=(
-                    str(planner.algo_config_path) if planner.algo_config_path is not None else None
-                ),
-                benchmark_profile=planner.benchmark_profile,
-                socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
-                adapter_impact_eval=planner.adapter_impact_eval,
-                workers=effective_workers,
-                resume=cfg.resume,
+            effective_workers = (
+                planner.workers_override if planner.workers_override is not None else cfg.workers
             )
-            if int(summary.get("failed_jobs", 0)) > 0:
-                status = "partial-failure"
-        except Exception as exc:
-            status = "failed"
-            summary = {
-                "status": "failed",
-                "error": repr(exc),
-                "total_jobs": 0,
-                "written": 0,
-                "failed_jobs": 0,
-                "failures": [],
-            }
-            warnings.append(f"Planner '{planner.key}' failed: {exc}")
+            effective_horizon = (
+                planner.horizon_override if planner.horizon_override is not None else cfg.horizon
+            )
+            effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
 
-        planner_finished_at_utc = _utc_now()
-        runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
-        episodes_written = int(summary.get("written", 0))
-        summary["status"] = status
-        summary["started_at_utc"] = planner_started_at_utc
-        summary["finished_at_utc"] = planner_finished_at_utc
-        summary["runtime_sec"] = runtime_sec
-        summary["episodes_per_second"] = (
-            (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
-        )
-        _write_json(planner_dir / "summary.json", summary)
+            logger.info(
+                "Running campaign planner key={} algo={} kinematics={} profile={} workers={}",
+                planner.key,
+                planner.algo,
+                kinematics,
+                planner.benchmark_profile,
+                effective_workers,
+            )
 
-        if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
-            records = read_jsonl(str(episodes_path))
+            planner_started_at_utc = _utc_now()
+            planner_start = time.perf_counter()
+            status = "ok"
+            summary: dict[str, Any]
+            aggregates: dict[str, Any] | None = None
+            scoped_scenarios = [
+                _scenario_with_kinematics(sc, kinematics=kinematics) for sc in scenarios
+            ]
+
             try:
-                aggregates = compute_aggregates_with_ci(
-                    records,
-                    group_by="scenario_params.algo",
-                    bootstrap_samples=cfg.bootstrap_samples,
-                    bootstrap_confidence=cfg.bootstrap_confidence,
-                    bootstrap_seed=cfg.bootstrap_seed,
-                )
-            except Exception as exc:
-                warnings.append(
-                    f"Aggregation failed for planner '{planner.key}': {exc}",
-                )
-
-        row = _planner_report_row(planner, summary, aggregates)
-        planner_rows.append(row)
-
-        run_entries.append(
-            {
-                "planner": {
-                    "key": planner.key,
-                    "algo": planner.algo,
-                    "benchmark_profile": planner.benchmark_profile,
-                    "algo_config_path": (
-                        _repo_relative(planner.algo_config_path)
+                summary = run_batch(
+                    scoped_scenarios,
+                    out_path=episodes_path,
+                    schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
+                    horizon=effective_horizon if effective_horizon is not None else 0,
+                    dt=effective_dt if effective_dt is not None else 0.0,
+                    record_forces=cfg.record_forces,
+                    snqi_weights=snqi_weights,
+                    snqi_baseline=snqi_baseline,
+                    algo=planner.algo,
+                    algo_config_path=(
+                        str(planner.algo_config_path)
                         if planner.algo_config_path is not None
                         else None
                     ),
-                    "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
-                    "adapter_impact_eval": planner.adapter_impact_eval,
-                    "workers": effective_workers,
-                    "horizon": effective_horizon,
-                    "dt": effective_dt,
-                },
-                "status": status,
-                "started_at_utc": planner_started_at_utc,
-                "finished_at_utc": planner_finished_at_utc,
-                "runtime_sec": runtime_sec,
-                "episodes_path": _repo_relative(episodes_path),
-                "summary_path": _repo_relative(planner_dir / "summary.json"),
-                "summary": summary,
-                "aggregates": aggregates,
-            },
-        )
-
-        if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
-            logger.warning(
-                "Campaign stop_on_failure triggered: planner key={} status={} (halting remaining planners).",
-                planner.key,
-                status,
-            )
-            if status == "partial-failure":
-                warnings.append(
-                    (
-                        "Campaign halted early: planner "
-                        f"'{planner.key}' had partial failures "
-                        f"({int(summary.get('failed_jobs', 0))} failed jobs); "
-                        "stop_on_failure=true"
-                    ),
+                    benchmark_profile=planner.benchmark_profile,
+                    socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
+                    adapter_impact_eval=planner.adapter_impact_eval,
+                    workers=effective_workers,
+                    resume=cfg.resume,
                 )
+                preflight_status = str((summary.get("preflight") or {}).get("status", "")).lower()
+                if preflight_status == "skipped":
+                    status = "skipped"
+                elif int(summary.get("failed_jobs", 0)) > 0:
+                    status = "partial-failure"
+            except Exception as exc:
+                status = "failed"
+                summary = {
+                    "status": "failed",
+                    "error": repr(exc),
+                    "total_jobs": 0,
+                    "written": 0,
+                    "failed_jobs": 0,
+                    "failures": [],
+                }
+                warnings.append(
+                    f"Planner '{planner.key}' failed for kinematics '{kinematics}': {exc}"
+                )
+
+            planner_finished_at_utc = _utc_now()
+            runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
+            episodes_written = int(summary.get("written", 0))
+            summary["status"] = status
+            summary["started_at_utc"] = planner_started_at_utc
+            summary["finished_at_utc"] = planner_finished_at_utc
+            summary["runtime_sec"] = runtime_sec
+            summary["episodes_per_second"] = (
+                (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+            )
+            summary["kinematics"] = kinematics
+            _write_json(planner_dir / "summary.json", summary)
+
+            if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
+                records = read_jsonl(str(episodes_path))
+                try:
+                    aggregates = compute_aggregates_with_ci(
+                        records,
+                        group_by="scenario_params.algo",
+                        bootstrap_samples=cfg.bootstrap_samples,
+                        bootstrap_confidence=cfg.bootstrap_confidence,
+                        bootstrap_seed=cfg.bootstrap_seed,
+                    )
+                except Exception as exc:
+                    warnings.append(
+                        f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
+                    )
+
+            row = _planner_report_row(planner, summary, aggregates, kinematics=kinematics)
+            planner_rows.append(row)
+
+            run_entries.append(
+                {
+                    "planner": {
+                        "key": planner.key,
+                        "algo": planner.algo,
+                        "benchmark_profile": planner.benchmark_profile,
+                        "kinematics": kinematics,
+                        "algo_config_path": (
+                            _repo_relative(planner.algo_config_path)
+                            if planner.algo_config_path is not None
+                            else None
+                        ),
+                        "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
+                        "adapter_impact_eval": planner.adapter_impact_eval,
+                        "workers": effective_workers,
+                        "horizon": effective_horizon,
+                        "dt": effective_dt,
+                    },
+                    "status": status,
+                    "started_at_utc": planner_started_at_utc,
+                    "finished_at_utc": planner_finished_at_utc,
+                    "runtime_sec": runtime_sec,
+                    "episodes_path": _repo_relative(episodes_path),
+                    "summary_path": _repo_relative(planner_dir / "summary.json"),
+                    "summary": summary,
+                    "aggregates": aggregates,
+                },
+            )
+
+            if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
+                logger.warning(
+                    "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
+                    planner.key,
+                    kinematics,
+                    status,
+                )
+                if status == "partial-failure":
+                    warnings.append(
+                        (
+                            "Campaign halted early: planner "
+                            f"'{planner.key}' ({kinematics}) had partial failures "
+                            f"({int(summary.get('failed_jobs', 0))} failed jobs); "
+                            "stop_on_failure=true"
+                        ),
+                    )
+                stop_requested = True
+                break
+        if stop_requested:
             break
 
     planner_rows.sort(
@@ -1163,6 +1261,7 @@ def run_campaign(  # noqa: C901, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "kinematics",
             "execution_mode",
             "readiness_status",
             "readiness_tier",
@@ -1171,6 +1270,9 @@ def run_campaign(  # noqa: C901, PLR0915
             "socnav_prereq_policy",
             "status",
             "episodes",
+            "commands_evaluated",
+            "projection_rate",
+            "infeasible_rate",
             "success_mean",
             "collisions_mean",
             "near_misses_mean",
@@ -1192,6 +1294,7 @@ def run_campaign(  # noqa: C901, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "kinematics",
             "readiness_tier",
             "status",
             "episodes",
@@ -1207,6 +1310,7 @@ def run_campaign(  # noqa: C901, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "kinematics",
             "readiness_tier",
             "status",
             "episodes",
@@ -1255,13 +1359,92 @@ def run_campaign(  # noqa: C901, PLR0915
             "snqi_mean",
         ),
     )
+    parity_rows = sorted(
+        [
+            {
+                "planner_key": str(row.get("planner_key", "")),
+                "algo": str(row.get("algo", "")),
+                "kinematics": str(row.get("kinematics", "")),
+                "execution_mode": str(row.get("execution_mode", "unknown")),
+                "status": str(row.get("status", "unknown")),
+                "episodes": int(row.get("episodes", 0)),
+                "success_mean": str(row.get("success_mean", "nan")),
+                "success_ci_low": str(row.get("success_ci_low", "nan")),
+                "success_ci_high": str(row.get("success_ci_high", "nan")),
+                "collisions_mean": str(row.get("collisions_mean", "nan")),
+                "collision_ci_low": str(row.get("collision_ci_low", "nan")),
+                "collision_ci_high": str(row.get("collision_ci_high", "nan")),
+                "near_misses_mean": str(row.get("near_misses_mean", "nan")),
+                "comfort_exposure_mean": str(row.get("comfort_exposure_mean", "nan")),
+                "snqi_mean": str(row.get("snqi_mean", "nan")),
+                "snqi_ci_low": str(row.get("snqi_ci_low", "nan")),
+                "snqi_ci_high": str(row.get("snqi_ci_high", "nan")),
+                "projection_rate": str(row.get("projection_rate", "0.0000")),
+                "infeasible_rate": str(row.get("infeasible_rate", "0.0000")),
+            }
+            for row in planner_rows
+        ],
+        key=lambda row: (row["algo"], row["kinematics"], row["planner_key"]),
+    )
+    parity_csv_path, parity_md_path = _write_table_artifacts(
+        reports_dir,
+        "kinematics_parity_table",
+        parity_rows,
+        headers=(
+            "planner_key",
+            "algo",
+            "kinematics",
+            "execution_mode",
+            "status",
+            "episodes",
+            "success_mean",
+            "success_ci_low",
+            "success_ci_high",
+            "collisions_mean",
+            "collision_ci_low",
+            "collision_ci_high",
+            "near_misses_mean",
+            "comfort_exposure_mean",
+            "snqi_mean",
+            "snqi_ci_low",
+            "snqi_ci_high",
+            "projection_rate",
+            "infeasible_rate",
+        ),
+    )
+    skipped_combo_rows: list[dict[str, Any]] = []
+    for entry in run_entries:
+        summary = entry.get("summary", {})
+        if not isinstance(summary, dict):
+            continue
+        preflight = summary.get("preflight")
+        if not isinstance(preflight, dict):
+            continue
+        if str(preflight.get("status", "")).lower() != "skipped":
+            continue
+        skipped_combo_rows.append(
+            {
+                "planner_key": str((entry.get("planner") or {}).get("key", "unknown")),
+                "algo": str((entry.get("planner") or {}).get("algo", "unknown")),
+                "kinematics": str((entry.get("planner") or {}).get("kinematics", "unknown")),
+                "reason": str(
+                    preflight.get("compatibility_reason")
+                    or preflight.get("error")
+                    or "unspecified skip reason"
+                ),
+            }
+        )
+    skipped_csv_path, skipped_md_path = _write_table_artifacts(
+        reports_dir,
+        "kinematics_skipped_combinations",
+        skipped_combo_rows,
+        headers=("planner_key", "algo", "kinematics", "reason"),
+    )
 
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
-    successful_runs = sum(
-        1 for entry in run_entries if str(entry.get("status", "")).startswith(("ok", "partial"))
-    )
+    successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
 
     campaign_summary = {
         "campaign": {
@@ -1281,6 +1464,8 @@ def run_campaign(  # noqa: C901, PLR0915
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
             "paper_interpretation_profile": cfg.paper_interpretation_profile,
+            "kinematics_matrix": list(kinematics_matrix),
+            "holonomic_command_mode": cfg.holonomic_command_mode,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -1294,6 +1479,10 @@ def run_campaign(  # noqa: C901, PLR0915
             "campaign_table_core_md": _repo_relative(core_md_path),
             "campaign_table_experimental_csv": _repo_relative(experimental_csv_path),
             "campaign_table_experimental_md": _repo_relative(experimental_md_path),
+            "kinematics_parity_csv": _repo_relative(parity_csv_path),
+            "kinematics_parity_md": _repo_relative(parity_md_path),
+            "kinematics_skipped_combinations_csv": _repo_relative(skipped_csv_path),
+            "kinematics_skipped_combinations_md": _repo_relative(skipped_md_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),

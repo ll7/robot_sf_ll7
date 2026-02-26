@@ -154,6 +154,50 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "kinematics_feasibility": {
+                    "type": "object",
+                    "properties": {
+                        "commands_evaluated": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "infeasible_native_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projected_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projection_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "infeasible_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "mean_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "mean_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": true

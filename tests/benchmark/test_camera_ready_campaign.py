@@ -10,9 +10,14 @@ import pytest
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
+    CampaignConfig,
     PlannerSpec,
+    SeedPolicy,
+    _jsonable_repo_relative,
     _load_campaign_scenarios,
     _planner_report_row,
+    _sanitize_csv_cell,
+    _sanitize_git_remote,
     _sanitize_name,
     _write_campaign_report,
     load_campaign_config,
@@ -501,6 +506,56 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
     )
     assert row["execution_mode"] == "adapter"
     assert row["readiness_status"] == "adapter"
+
+
+def test_jsonable_repo_relative_normalizes_paths_for_stable_hashing(tmp_path: Path) -> None:
+    """Hash-prep helper should normalize Path values to stable repo-relative strings."""
+    repo_root = get_repository_root().resolve()
+    payload = {
+        "scenario_matrix_path": repo_root / "configs/scenarios/classic_interactions.yaml",
+        "other_path": tmp_path / "external.yaml",
+    }
+    normalized = _jsonable_repo_relative(payload)
+    assert normalized["scenario_matrix_path"] == "configs/scenarios/classic_interactions.yaml"
+    assert str(normalized["other_path"]).endswith("/external.yaml")
+
+
+def test_sanitize_git_remote_strips_credentials() -> None:
+    """Git remote helper should remove embedded credentials from URL-form remotes."""
+    remote = "https://user:token@example.com/org/repo.git"
+    assert _sanitize_git_remote(remote) == "https://example.com/org/repo.git"
+    assert _sanitize_git_remote("git@github.com:ll7/robot_sf_ll7.git") == (
+        "git@github.com:ll7/robot_sf_ll7.git"
+    )
+
+
+def test_sanitize_csv_cell_prefixes_formula_like_values() -> None:
+    """CSV sanitizer should neutralize spreadsheet formula prefixes."""
+    assert _sanitize_csv_cell("=1+1") == "'=1+1"
+    assert _sanitize_csv_cell("@SUM(A1:A2)") == "'@SUM(A1:A2)"
+    assert _sanitize_csv_cell("safe") == "safe"
+    assert _sanitize_csv_cell(42) == 42
+
+
+def test_prepare_campaign_preflight_validates_campaign_config(tmp_path: Path) -> None:
+    """Programmatic preflight entrypoint should enforce campaign invariants."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    cfg = CampaignConfig(
+        name="invalid_preflight_cfg",
+        scenario_matrix_path=scenario_abs,
+        planners=(PlannerSpec(key="goal", algo="goal", planner_group_explicit=True),),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(111,)),
+        paper_facing=True,
+        paper_profile_version=None,
+    )
+    with pytest.raises(ValueError, match="paper_profile_version"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="invalid")
 
 
 def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:

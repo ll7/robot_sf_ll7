@@ -243,8 +243,16 @@ repository-relative for publication-grade portability).
 
 Core vs experimental partitions:
 
-- `campaign_table_core.{csv,md}`: rows with `readiness_tier=baseline-ready`
-- `campaign_table_experimental.{csv,md}`: non-core rows (for annex/diagnostics)
+- paper-facing profile (`paper_profile_version=paper-matrix-v1`):
+  partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
+  as part of the frozen execution contract.
+- non-paper runs:
+  partitioning remains readiness-tier based.
+- `campaign_table_core.{csv,md}`:
+  core partition rows (`planner_group=core` for paper-facing runs;
+  `readiness_tier=baseline-ready` for non-paper runs).
+- `campaign_table_experimental.{csv,md}`:
+  non-core rows (`planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
 
 Portability guarantee:
 

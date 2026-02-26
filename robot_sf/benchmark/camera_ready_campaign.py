@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 from loguru import logger
@@ -150,6 +151,45 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
     return value
+
+
+def _jsonable_repo_relative(value: Any) -> Any:
+    """Convert nested values into JSON-serializable primitives with repo-relative paths.
+
+    Returns:
+        JSON-serializable value with ``Path`` objects normalized to stable repo-relative strings.
+    """
+    if isinstance(value, Path):
+        return _repo_relative(value)
+    if isinstance(value, dict):
+        return {str(key): _jsonable_repo_relative(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable_repo_relative(item) for item in value]
+    return value
+
+
+def _sanitize_csv_cell(value: Any) -> Any:
+    """Prevent spreadsheet formula execution for untrusted CSV cell values.
+
+    Returns:
+        Original value, or a quote-prefixed string for formula-like text cells.
+    """
+    if not isinstance(value, str):
+        return value
+    if value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
+def _normalized_kinematics_matrix(kinematics: tuple[str, ...]) -> tuple[str, ...]:
+    """Return normalized kinematics labels with a deterministic default fallback.
+
+    Returns:
+        Lowercase non-empty kinematics tuple, defaulting to ``("differential_drive",)``.
+    """
+    return tuple(str(value).strip().lower() for value in kinematics if str(value).strip()) or (
+        "differential_drive",
+    )
 
 
 def _sanitize_name(name: str) -> str:
@@ -358,6 +398,26 @@ def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     return "unknown"
 
 
+def _sanitize_git_remote(remote: str) -> str:
+    """Remove credentials from git remote URLs before persisting provenance metadata.
+
+    Returns:
+        Credential-free remote URL when parseable, otherwise original input.
+    """
+    if not remote or "://" not in remote:
+        return remote
+    try:
+        parsed = urlsplit(remote)
+    except ValueError:
+        return remote
+    if not parsed.hostname:
+        return remote
+    netloc = parsed.hostname
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
 def _git_context() -> dict[str, str]:
     """Collect lightweight git metadata for campaign provenance.
 
@@ -375,7 +435,7 @@ def _git_context() -> dict[str, str]:
     return {
         "commit": _git_hash_fallback(),
         "branch": _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-        "remote": _run(["git", "config", "--get", "remote.origin.url"]),
+        "remote": _sanitize_git_remote(_run(["git", "config", "--get", "remote.origin.url"])),
     }
 
 
@@ -593,7 +653,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow(row)
+            writer.writerow({key: _sanitize_csv_cell(value) for key, value in row.items()})
 
 
 def _write_table_artifacts(
@@ -632,12 +692,10 @@ def _build_matrix_summary_rows(
         Deterministically ordered matrix rows for CSV/JSON artifacts.
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
-    config_hash = _config_hash(_jsonable(asdict(cfg)))
+    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
     repeats = len(resolved_seeds)
     rows: list[dict[str, Any]] = []
-    normalized_kinematics = tuple(
-        str(value).strip().lower() for value in cfg.kinematics_matrix if str(value).strip()
-    ) or ("differential_drive",)
+    normalized_kinematics = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     for planner in cfg.planners:
         if not planner.enabled:
             continue
@@ -706,6 +764,7 @@ def prepare_campaign_preflight(
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
     """
+    _validate_campaign_config(cfg)
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _campaign_id(cfg, label=label)
     base_dir = (
@@ -724,7 +783,7 @@ def prepare_campaign_preflight(
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     git_meta = _git_context()
-    config_hash = _config_hash(_jsonable(asdict(cfg)))
+    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
 
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
@@ -1295,9 +1354,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
-    kinematics_matrix = tuple(
-        str(value).strip().lower() for value in cfg.kinematics_matrix if str(value).strip()
-    ) or ("differential_drive",)
+    kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     stop_requested = False
 
     def _scenario_with_kinematics(
@@ -1807,11 +1864,6 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             **manifest_payload,
             "runtime_sec": runtime_sec,
             "finished_at_utc": campaign_finished_at_utc,
-            "artifacts": {
-                **(manifest_payload.get("artifacts") or {}),
-                "matrix_summary_json": _repo_relative(matrix_summary_json_path),
-                "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
-            },
         },
     )
 

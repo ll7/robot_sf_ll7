@@ -126,6 +126,16 @@ class RegressionReport:
     status: str
     findings: tuple[RegressionFinding, ...]
     diagnostics: tuple[str, ...]
+    has_startup_regression: bool = False
+    has_steady_regression: bool = False
+    failure_class: Literal["none", "startup_only", "steady"] = "none"
+
+    def __post_init__(self) -> None:
+        """Populate derived severity fields once from findings."""
+        has_startup, has_steady, failure_class = _classify_regressions(self.findings)
+        object.__setattr__(self, "has_startup_regression", has_startup)
+        object.__setattr__(self, "has_steady_regression", has_steady)
+        object.__setattr__(self, "failure_class", failure_class)
 
     @property
     def has_regression(self) -> bool:
@@ -137,33 +147,30 @@ class RegressionReport:
         return any(finding.is_regression for finding in self.findings)
 
     @property
-    def has_startup_regression(self) -> bool:
-        """Return whether startup metrics contain any regression."""
-        return any(
-            finding.is_regression and finding.metric in _STARTUP_METRICS
-            for finding in self.findings
-        )
-
-    @property
-    def has_steady_regression(self) -> bool:
-        """Return whether steady-state metrics contain any regression."""
-        return any(
-            finding.is_regression and finding.metric in _STEADY_METRICS for finding in self.findings
-        )
-
-    @property
     def has_blocking_regression(self) -> bool:
         """Return whether a regression should fail CI gating."""
         return self.has_steady_regression
 
-    @property
-    def failure_class(self) -> Literal["none", "startup_only", "steady"]:
-        """Classify regression severity for gating/reporting."""
-        if self.has_steady_regression:
-            return "steady"
-        if self.has_startup_regression:
-            return "startup_only"
-        return "none"
+
+def _classify_regressions(
+    findings: Sequence[RegressionFinding],
+) -> tuple[bool, bool, Literal["none", "startup_only", "steady"]]:
+    """Classify regression severity by metric category.
+
+    Args:
+        findings: Per-metric regression findings from snapshot comparison.
+
+    Returns:
+        tuple[bool, bool, Literal["none", "startup_only", "steady"]]:
+            Startup flag, steady-state flag, and severity class.
+    """
+    has_startup = any(f.is_regression and f.metric in _STARTUP_METRICS for f in findings)
+    has_steady = any(f.is_regression and f.metric in _STEADY_METRICS for f in findings)
+    if has_steady:
+        return has_startup, has_steady, "steady"
+    if has_startup:
+        return has_startup, has_steady, "startup_only"
+    return has_startup, has_steady, "none"
 
 
 def _regression_status(findings: Sequence[RegressionFinding]) -> Literal["pass", "warn", "fail"]:
@@ -175,11 +182,10 @@ def _regression_status(findings: Sequence[RegressionFinding]) -> Literal["pass",
     Returns:
         Literal["pass", "warn", "fail"]: Aggregated status classification.
     """
-    has_startup = any(f.is_regression and f.metric in _STARTUP_METRICS for f in findings)
-    has_steady = any(f.is_regression and f.metric in _STEADY_METRICS for f in findings)
-    if has_steady:
+    _, _, failure_class = _classify_regressions(findings)
+    if failure_class == "steady":
         return "fail"
-    if has_startup:
+    if failure_class == "startup_only":
         return "warn"
     return "pass"
 
@@ -583,7 +589,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--fail-on-regression",
         action="store_true",
-        help="Exit non-zero when regressions are detected.",
+        help="Exit non-zero when steady-state regressions are detected.",
     )
     parser.add_argument(
         "--require-baseline",

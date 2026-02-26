@@ -72,4 +72,3 @@ planners:
     algo: socnav_bench
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
-

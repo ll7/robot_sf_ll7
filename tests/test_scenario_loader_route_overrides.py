@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.training.scenario_loader import (
@@ -97,3 +98,51 @@ def test_build_robot_config_from_scenario_supports_route_overrides_file(tmp_path
     _map_name, updated_map = next(iter(config.map_pool.map_defs.items()))
     assert updated_map.robot_routes[0].waypoints == [(4.0, 4.0), (8.0, 8.0), (12.0, 12.0)]
     assert updated_map.ped_routes[0].waypoints == [(5.0, 16.0), (10.0, 10.0), (15.0, 4.0)]
+
+
+def test_build_robot_config_applies_bicycle_robot_overrides() -> None:
+    """Scenario robot_config should instantiate bicycle settings and selected fields."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "demo",
+        "map_file": "maps/svg_maps/classic_overtaking.svg",
+        "robot_config": {
+            "type": "bicycle_drive",
+            "max_velocity": 1.2,
+            "allow_backwards": True,
+        },
+    }
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    assert config.robot_config.__class__.__name__ == "BicycleDriveSettings"
+    assert float(config.robot_config.max_velocity) == 1.2
+    assert bool(config.robot_config.allow_backwards) is True
+
+
+def test_build_robot_config_applies_holonomic_overrides() -> None:
+    """Scenario robot_config should instantiate holonomic settings with command mode."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "demo",
+        "map_file": "maps/svg_maps/classic_overtaking.svg",
+        "robot_config": {
+            "type": "holonomic",
+            "max_speed": 1.5,
+            "command_mode": "unicycle_vw",
+        },
+    }
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    assert config.robot_config.__class__.__name__ == "HolonomicDriveSettings"
+    assert float(config.robot_config.max_speed) == 1.5
+    assert str(config.robot_config.command_mode) == "unicycle_vw"
+
+
+def test_build_robot_config_rejects_unknown_robot_type() -> None:
+    """Unknown robot_config type values should raise a validation error."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "demo",
+        "map_file": "maps/svg_maps/classic_overtaking.svg",
+        "robot_config": {"type": "unknown_type"},
+    }
+    with pytest.raises(ValueError, match="robot_config.type"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)

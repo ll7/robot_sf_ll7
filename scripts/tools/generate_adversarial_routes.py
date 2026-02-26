@@ -135,6 +135,8 @@ def main() -> int:
 
     result = optimize_route_set(map_def, planner, generation_config)
     output_root = Path(str(output_cfg.get("root", "output/adversarial_routes")))
+    if not output_root.is_absolute():
+        output_root = (config_path.parent / output_root).resolve()
     artifacts = write_route_override_artifact(result, output_root=output_root)
 
     logger.info("Adversarial route generation completed.")

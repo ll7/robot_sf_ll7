@@ -329,6 +329,35 @@ def _safe_float(value: float) -> str:
     return f"{value:.4f}"
 
 
+def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
+    """Resolve execution mode from algorithm metadata payload with legacy fallbacks.
+
+    Returns:
+        Resolved execution mode string, or ``"unknown"`` when unavailable.
+    """
+    if not isinstance(algorithm_metadata_contract, dict):
+        return "unknown"
+
+    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
+    if isinstance(planner_kinematics, dict):
+        execution_mode = planner_kinematics.get("execution_mode")
+        if execution_mode is not None:
+            return str(execution_mode)
+
+    # Backward-compatible fallback for older payloads that wrote this at top-level.
+    execution_mode = algorithm_metadata_contract.get("execution_mode")
+    if execution_mode is not None:
+        return str(execution_mode)
+
+    adapter_impact = algorithm_metadata_contract.get("adapter_impact")
+    if isinstance(adapter_impact, dict):
+        execution_mode = adapter_impact.get("execution_mode")
+        if execution_mode is not None:
+            return str(execution_mode)
+
+    return "unknown"
+
+
 def _git_context() -> dict[str, str]:
     """Collect lightweight git metadata for campaign provenance.
 
@@ -844,10 +873,8 @@ def _planner_report_row(
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
-    execution_mode = str(
-        ((summary.get("algorithm_metadata_contract") or {}).get("execution_mode") or "unknown")
-        if isinstance(summary.get("algorithm_metadata_contract"), dict)
-        else "unknown"
+    execution_mode = _resolve_execution_mode(
+        summary.get("algorithm_metadata_contract"),
     )
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
     learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")

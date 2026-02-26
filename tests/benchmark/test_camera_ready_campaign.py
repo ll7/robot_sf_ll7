@@ -10,7 +10,9 @@ import pytest
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
+    PlannerSpec,
     _load_campaign_scenarios,
+    _planner_report_row,
     _sanitize_name,
     _write_campaign_report,
     load_campaign_config,
@@ -470,6 +472,35 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     report_text = report_path.read_text(encoding="utf-8")
     assert "planner\\|unsafe" in report_text
     assert "holonomic\\|vx_vy" in report_text
+
+
+def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
+    """Row builder should read execution_mode from nested planner_kinematics payload."""
+    planner = PlannerSpec(key="prediction_planner", algo="prediction_planner")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {"execution_mode": "adapter"},
+            "kinematics_feasibility": {
+                "commands_evaluated": 4,
+                "projection_rate": 0.25,
+                "infeasible_rate": 0.25,
+            },
+        },
+    }
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+    )
+    assert row["execution_mode"] == "adapter"
+    assert row["readiness_status"] == "adapter"
 
 
 def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:

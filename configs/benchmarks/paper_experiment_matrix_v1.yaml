@@ -84,9 +84,3 @@ planners:
     planner_group: experimental
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fallback
-
-  - key: socnav_bench
-    algo: socnav_bench
-    planner_group: experimental
-    benchmark_profile: experimental
-    socnav_missing_prereq_policy: fail-fast

@@ -964,7 +964,7 @@ def _write_amv_coverage_artifacts(
     return json_path, md_path
 
 
-def _load_comparability_mapping(path: Path) -> dict[str, Any]:  # noqa: C901
+def _load_comparability_mapping(path: Path) -> dict[str, Any]:
     """Load and validate Alyassi comparability mapping configuration.
 
     Returns:
@@ -979,9 +979,21 @@ def _load_comparability_mapping(path: Path) -> dict[str, Any]:  # noqa: C901
     family_map = payload.get("scenario_family_mapping")
     if not isinstance(family_map, dict):
         raise ValueError("Comparability mapping requires 'scenario_family_mapping' mapping")
+    _validate_family_map(family_map)
+
     metric_map = payload.get("metric_comparability")
     if not isinstance(metric_map, dict):
         raise ValueError("Comparability mapping requires 'metric_comparability' mapping")
+    _validate_metric_map(metric_map)
+
+    extensions = payload.get("amv_specific_extensions", [])
+    if not isinstance(extensions, list):
+        raise ValueError("Comparability mapping 'amv_specific_extensions' must be a list")
+    return payload
+
+
+def _validate_family_map(family_map: dict[str, Any]) -> None:
+    """Validate scenario-family mapping payload."""
     for key, value in family_map.items():
         if (
             not isinstance(key, str)
@@ -990,6 +1002,10 @@ def _load_comparability_mapping(path: Path) -> dict[str, Any]:  # noqa: C901
             or not value.strip()
         ):
             raise ValueError("scenario_family_mapping entries must be non-empty string->string")
+
+
+def _validate_metric_map(metric_map: dict[str, Any]) -> None:
+    """Validate metric comparability mapping payload."""
     for metric, config in metric_map.items():
         if not isinstance(metric, str) or not metric.strip():
             raise ValueError("metric_comparability keys must be non-empty strings")
@@ -1000,10 +1016,22 @@ def _load_comparability_mapping(path: Path) -> dict[str, Any]:  # noqa: C901
             raise ValueError(
                 f"metric_comparability[{metric}] classification must be one of comparable|proxy|amv_specific"
             )
-    extensions = payload.get("amv_specific_extensions", [])
-    if not isinstance(extensions, list):
-        raise ValueError("Comparability mapping 'amv_specific_extensions' must be a list")
-    return payload
+
+
+def _markdown_rows_from_mapping_rows(
+    rows: list[dict[str, Any]],
+    columns: tuple[str, ...],
+) -> list[str]:
+    """Render Markdown table rows from mapping rows and column order.
+
+    Returns:
+        list[str]: Markdown table rows in ``| a | b |`` form.
+    """
+    output: list[str] = []
+    for row in rows:
+        cells = [_escape_markdown_cell(row.get(column)) for column in columns]
+        output.append("| " + " | ".join(cells) + " |")
+    return output
 
 
 def _build_comparability_summary(
@@ -1091,14 +1119,12 @@ def _write_comparability_artifacts(
         "| Robot SF Family | Scenario Count | Alyassi Category | Overlap |",
         "|---|---:|---|---|",
     ]
-    for row in summary.get("coverage_overlap_rows", []):
-        lines.append(
-            "| "
-            f"{_escape_markdown_cell(row.get('robot_sf_family'))} | "
-            f"{_escape_markdown_cell(row.get('scenario_count'))} | "
-            f"{_escape_markdown_cell(row.get('alyassi_category'))} | "
-            f"{_escape_markdown_cell(row.get('overlap'))} |"
+    lines.extend(
+        _markdown_rows_from_mapping_rows(
+            list(summary.get("coverage_overlap_rows", [])),
+            ("robot_sf_family", "scenario_count", "alyassi_category", "overlap"),
         )
+    )
     lines.extend(
         [
             "",
@@ -1108,14 +1134,12 @@ def _write_comparability_artifacts(
             "|---|---|---|---|",
         ]
     )
-    for row in summary.get("metric_comparability_rows", []):
-        lines.append(
-            "| "
-            f"{_escape_markdown_cell(row.get('metric'))} | "
-            f"{_escape_markdown_cell(row.get('classification'))} | "
-            f"{_escape_markdown_cell(row.get('alyassi_metric'))} | "
-            f"{_escape_markdown_cell(row.get('rationale'))} |"
+    lines.extend(
+        _markdown_rows_from_mapping_rows(
+            list(summary.get("metric_comparability_rows", [])),
+            ("metric", "classification", "alyassi_metric", "rationale"),
         )
+    )
     lines.extend(["", "## AMV-Specific Extensions", ""])
     extensions = summary.get("amv_specific_extensions", [])
     if extensions:
@@ -1269,7 +1293,7 @@ def prepare_campaign_preflight(
                 reports_dir,
                 comparability_summary,
             )
-        except Exception:
+        except (ValueError, FileNotFoundError, yaml.YAMLError):
             if cfg.paper_facing:
                 raise
 
@@ -1301,14 +1325,10 @@ def prepare_campaign_preflight(
             _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
         ),
         "comparability_mapping_version": (
-            comparability_summary.get("mapping_version")
-            if isinstance(comparability_summary, dict)
-            else None
+            comparability_summary.get("mapping_version") if comparability_summary else None
         ),
         "comparability_mapping_hash": (
-            comparability_summary.get("mapping_hash")
-            if isinstance(comparability_summary, dict)
-            else None
+            comparability_summary.get("mapping_hash") if comparability_summary else None
         ),
         "planners": [
             {
@@ -1826,15 +1846,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     amv_coverage_json_path = Path(prepared["amv_coverage_json_path"])
     amv_coverage_md_path = Path(prepared["amv_coverage_md_path"])
     comparability_json_path = (
-        Path(prepared["comparability_json_path"])
-        if prepared.get("comparability_json_path") is not None
-        else None
+        Path(path) if (path := prepared.get("comparability_json_path")) else None
     )
-    comparability_md_path = (
-        Path(prepared["comparability_md_path"])
-        if prepared.get("comparability_md_path") is not None
-        else None
-    )
+    comparability_md_path = Path(path) if (path := prepared.get("comparability_md_path")) else None
     manifest_payload = dict(prepared["manifest_payload"])
     campaign_started_at_utc = str(prepared["created_at_utc"])
     scenarios = list(prepared["scenarios"])

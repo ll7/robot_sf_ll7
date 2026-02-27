@@ -26,6 +26,17 @@ from loguru import logger
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.snqi.campaign_contract import (
+    SnqiContractThresholds,
+    calibrate_weights,
+    collect_episodes_from_campaign_runs,
+    compute_baseline_stats_from_episodes,
+    compute_component_dominance,
+    evaluate_snqi_contract,
+    resolve_weight_mapping,
+    sanitize_baseline_stats,
+)
+from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, load_optional_json
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
@@ -52,6 +63,7 @@ _PLANNER_GROUPS = {"core", "experimental"}
 _PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
+_SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 
 
 @dataclass(frozen=True)
@@ -95,6 +107,20 @@ class PlannerSpec:
 
 
 @dataclass(frozen=True)
+class SnqiContractConfig:
+    """SNQI paper-facing behavior contract configuration."""
+
+    enabled: bool = True
+    enforcement: str = "warn"
+    rank_alignment_warn_threshold: float = 0.5
+    rank_alignment_fail_threshold: float = 0.3
+    outcome_separation_warn_threshold: float = 0.05
+    outcome_separation_fail_threshold: float = 0.0
+    calibration_seed: int = 123
+    calibration_trials: int = 3000
+
+
+@dataclass(frozen=True)
 class CampaignConfig:
     """Top-level camera-ready benchmark campaign config."""
 
@@ -127,6 +153,7 @@ class CampaignConfig:
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     comparability_mapping_path: Path | None = None
+    snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
 
 
 def _repo_relative(path: Path) -> str:
@@ -492,7 +519,7 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
-def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
+def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
     enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
@@ -502,6 +529,34 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
         for value in values:
             if not str(value).strip():
                 raise ValueError(f"AMV required dimension '{key}' contains an empty value")
+    if cfg.snqi_contract.enforcement not in _SNQI_CONTRACT_ENFORCEMENT:
+        known = ", ".join(sorted(_SNQI_CONTRACT_ENFORCEMENT))
+        raise ValueError(
+            f"Unsupported snqi_contract.enforcement '{cfg.snqi_contract.enforcement}'. {known}"
+        )
+    threshold_values = {
+        "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
+        "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
+        "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
+        "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+    }
+    for field_name, value in threshold_values.items():
+        if not math.isfinite(value):
+            raise ValueError(f"snqi_contract.{field_name} must be a finite float")
+    if (
+        cfg.snqi_contract.rank_alignment_fail_threshold
+        > cfg.snqi_contract.rank_alignment_warn_threshold
+    ):
+        raise ValueError(
+            "snqi_contract.rank_alignment_fail_threshold must be <= rank_alignment_warn_threshold"
+        )
+    if (
+        cfg.snqi_contract.outcome_separation_fail_threshold
+        > cfg.snqi_contract.outcome_separation_warn_threshold
+    ):
+        raise ValueError(
+            "snqi_contract.outcome_separation_fail_threshold must be <= outcome_separation_warn_threshold"
+        )
 
     if cfg.paper_facing:
         if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
@@ -615,6 +670,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             comparability_mapping_path = default_mapping_path
 
     amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
+    snqi_contract_raw = (
+        payload.get("snqi_contract") if isinstance(payload.get("snqi_contract"), dict) else {}
+    )
     required_raw = (
         amv_raw.get("required_dimensions")
         if isinstance(amv_raw.get("required_dimensions"), dict)
@@ -689,6 +747,26 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             required_dimensions=required_dimensions,
         ),
         comparability_mapping_path=comparability_mapping_path,
+        snqi_contract=SnqiContractConfig(
+            enabled=bool(snqi_contract_raw.get("enabled", True)),
+            enforcement=(
+                str(snqi_contract_raw.get("enforcement", "warn")).strip().lower() or "warn"
+            ),
+            rank_alignment_warn_threshold=float(
+                snqi_contract_raw.get("rank_alignment_warn_threshold", 0.5)
+            ),
+            rank_alignment_fail_threshold=float(
+                snqi_contract_raw.get("rank_alignment_fail_threshold", 0.3)
+            ),
+            outcome_separation_warn_threshold=float(
+                snqi_contract_raw.get("outcome_separation_warn_threshold", 0.05)
+            ),
+            outcome_separation_fail_threshold=float(
+                snqi_contract_raw.get("outcome_separation_fail_threshold", 0.0)
+            ),
+            calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
+            calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
+        ),
     )
     _validate_campaign_config(cfg)
     return cfg
@@ -1151,6 +1229,64 @@ def _write_comparability_artifacts(
     return json_path, md_path
 
 
+def _write_snqi_diagnostics_artifacts(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> tuple[Path, Path, Path]:
+    """Write SNQI diagnostics JSON/Markdown and sensitivity CSV artifacts.
+
+    Returns:
+        Tuple of ``(json_path, markdown_path, csv_path)``.
+    """
+    json_path = reports_dir / "snqi_diagnostics.json"
+    md_path = reports_dir / "snqi_diagnostics.md"
+    csv_path = reports_dir / "snqi_sensitivity.csv"
+    _write_json(json_path, payload)
+
+    lines = [
+        "# SNQI Diagnostics",
+        "",
+        f"- Contract status: `{payload.get('contract_status', 'unknown')}`",
+        f"- Rank alignment (Spearman): `{payload.get('rank_alignment_spearman', 0.0):.4f}`",
+        f"- Outcome separation: `{payload.get('outcome_separation', 0.0):.4f}`",
+        f"- Objective score: `{payload.get('objective_score', 0.0):.4f}`",
+        "",
+        "## Baseline Normalization",
+        "",
+        f"- Source: `{payload.get('baseline_source', 'unknown')}`",
+        f"- Degeneracy adjustments: `{payload.get('baseline_adjustments', 0)}`",
+        "",
+        "## Component Dominance (mean absolute contribution)",
+        "",
+        "| Component | Mean |",
+        "|---|---:|",
+    ]
+    dominance = payload.get("component_dominance")
+    if isinstance(dominance, dict):
+        for key, value in sorted(dominance.items()):
+            lines.append(f"| {_escape_markdown_cell(key)} | {float(value):.6f} |")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    calibrated = payload.get("calibrated_weights")
+    headers = ("component", "configured_weight", "calibrated_weight", "delta")
+    rows: list[dict[str, Any]] = []
+    if isinstance(calibrated, dict):
+        configured = payload.get("configured_weights", {})
+        for name in WEIGHT_NAMES:
+            configured_value = float((configured or {}).get(name, 1.0))
+            calibrated_value = float(calibrated.get(name, configured_value))
+            rows.append(
+                {
+                    "component": name,
+                    "configured_weight": configured_value,
+                    "calibrated_weight": calibrated_value,
+                    "delta": calibrated_value - configured_value,
+                }
+            )
+    _write_csv(csv_path, [{key: row.get(key) for key in headers} for row in rows])
+    return json_path, md_path, csv_path
+
+
 def prepare_campaign_preflight(
     cfg: CampaignConfig,
     *,
@@ -1216,6 +1352,22 @@ def prepare_campaign_preflight(
             _repo_relative(cfg.comparability_mapping_path)
             if cfg.comparability_mapping_path is not None
             else None
+        ),
+        "snqi_contract": {
+            "enabled": bool(cfg.snqi_contract.enabled),
+            "enforcement": cfg.snqi_contract.enforcement,
+            "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
+            "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
+            "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
+            "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+            "calibration_seed": cfg.snqi_contract.calibration_seed,
+            "calibration_trials": cfg.snqi_contract.calibration_trials,
+        },
+        "snqi_weights_path": (
+            _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
+        ),
+        "snqi_baseline_path": (
+            _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
         ),
     }
     preview_limit = max(0, int(cfg.preview_scenario_limit))
@@ -1330,6 +1482,15 @@ def prepare_campaign_preflight(
         "comparability_mapping_hash": (
             comparability_summary.get("mapping_hash") if comparability_summary else None
         ),
+        "snqi_weights_path": (
+            _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
+        ),
+        "snqi_baseline_path": (
+            _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
+        ),
+        "snqi_contract_enabled": bool(cfg.snqi_contract.enabled),
+        "snqi_contract_enforcement": cfg.snqi_contract.enforcement,
+        "snqi_contract_status": "not_evaluated",
         "planners": [
             {
                 "key": planner.key,
@@ -1363,6 +1524,9 @@ def prepare_campaign_preflight(
             "comparability_md": (
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
+            "snqi_diagnostics_json": None,
+            "snqi_diagnostics_md": None,
+            "snqi_sensitivity_csv": None,
         },
     }
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
@@ -1786,6 +1950,26 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         lines.append(
             f"- Mapping version: `{campaign.get('comparability_mapping_version', 'unknown')}`"
         )
+    snqi_diag_json = (payload.get("artifacts") or {}).get("snqi_diagnostics_json")
+    snqi_diag_md = (payload.get("artifacts") or {}).get("snqi_diagnostics_md")
+    snqi_sensitivity = (payload.get("artifacts") or {}).get("snqi_sensitivity_csv")
+    if isinstance(snqi_diag_json, str) or isinstance(snqi_diag_md, str):
+        lines.extend(["", "## SNQI Contract", ""])
+        lines.append(f"- Contract status: `{campaign.get('snqi_contract_status', 'unknown')}`")
+        lines.append(
+            f"- Rank alignment (Spearman): `{campaign.get('snqi_contract_rank_alignment_spearman', 'nan')}`"
+        )
+        lines.append(
+            f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
+        )
+        lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
+        lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
+        if isinstance(snqi_diag_json, str):
+            lines.append(f"- Diagnostics JSON: `{snqi_diag_json}`")
+        if isinstance(snqi_diag_md, str):
+            lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
+        if isinstance(snqi_sensitivity, str):
+            lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
 
     lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
@@ -2257,6 +2441,91 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
     )
     doi_url = f"https://doi.org/{cfg.doi}"
+    episodes = collect_episodes_from_campaign_runs(run_entries, repo_root=get_repository_root())
+    configured_weights = resolve_weight_mapping(snqi_weights)
+    if snqi_baseline is None:
+        baseline_source = "derived_from_campaign_episodes"
+        baseline_for_eval, baseline_warnings = compute_baseline_stats_from_episodes(episodes)
+        baseline_adjustments = len(baseline_warnings)
+        warnings.extend(baseline_warnings)
+    else:
+        baseline_source = "config_file"
+        baseline_for_eval, baseline_warnings = sanitize_baseline_stats(snqi_baseline)
+        baseline_adjustments = len(baseline_warnings)
+        warnings.extend(baseline_warnings)
+
+    thresholds = SnqiContractThresholds(
+        rank_alignment_warn=cfg.snqi_contract.rank_alignment_warn_threshold,
+        rank_alignment_fail=cfg.snqi_contract.rank_alignment_fail_threshold,
+        outcome_separation_warn=cfg.snqi_contract.outcome_separation_warn_threshold,
+        outcome_separation_fail=cfg.snqi_contract.outcome_separation_fail_threshold,
+    )
+    contract_eval = evaluate_snqi_contract(
+        planner_rows,
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+        thresholds=thresholds,
+    )
+    calibration = calibrate_weights(
+        planner_rows,
+        episodes,
+        baseline=baseline_for_eval,
+        seed=cfg.snqi_contract.calibration_seed,
+        trials=cfg.snqi_contract.calibration_trials,
+    )
+    component_dominance = compute_component_dominance(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    snqi_diagnostics_payload = {
+        "schema_version": "benchmark-snqi-diagnostics.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": campaign_finished_at_utc,
+        "contract_enabled": bool(cfg.snqi_contract.enabled),
+        "contract_enforcement": cfg.snqi_contract.enforcement,
+        "contract_status": contract_eval.status,
+        "rank_alignment_spearman": contract_eval.rank_alignment_spearman,
+        "outcome_separation": contract_eval.outcome_separation,
+        "objective_score": contract_eval.objective_score,
+        "thresholds": {
+            "rank_alignment_warn": cfg.snqi_contract.rank_alignment_warn_threshold,
+            "rank_alignment_fail": cfg.snqi_contract.rank_alignment_fail_threshold,
+            "outcome_separation_warn": cfg.snqi_contract.outcome_separation_warn_threshold,
+            "outcome_separation_fail": cfg.snqi_contract.outcome_separation_fail_threshold,
+        },
+        "baseline_source": baseline_source,
+        "baseline_adjustments": baseline_adjustments,
+        "baseline_for_eval": baseline_for_eval,
+        "configured_weights": configured_weights,
+        "calibrated_weights": calibration.get("weights"),
+        "calibration": calibration,
+        "component_dominance": component_dominance,
+    }
+    snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
+        _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
+    )
+    snqi_hard_fail = (
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and cfg.snqi_contract.enforcement == "error"
+        and contract_eval.status == "fail"
+    )
+    if snqi_hard_fail:
+        warnings.append(
+            "SNQI contract status=fail with snqi_contract.enforcement=error; campaign marked with hard contract warning."
+        )
+    elif (
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and cfg.snqi_contract.enforcement == "warn"
+        and contract_eval.status in {"warn", "fail"}
+    ):
+        warnings.append(
+            "SNQI contract status="
+            f"{contract_eval.status} with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
+        )
 
     campaign_summary = {
         "campaign": {
@@ -2295,6 +2564,15 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "release_url": release_url,
             "release_asset_url": release_asset_url,
             "doi_url": doi_url,
+            "snqi_weights_version": (
+                cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+            ),
+            "snqi_baseline_version": (
+                cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
+            ),
+            "snqi_contract_status": contract_eval.status,
+            "snqi_contract_rank_alignment_spearman": contract_eval.rank_alignment_spearman,
+            "snqi_contract_outcome_separation": contract_eval.outcome_separation,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -2333,11 +2611,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "release_url": release_url,
             "release_asset_url": release_asset_url,
             "doi_url": doi_url,
+            "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
+            "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
+            "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
         },
     }
 
     publication_payload: dict[str, Any] | None = None
-    if cfg.export_publication_bundle and not skip_publication_bundle:
+    if cfg.export_publication_bundle and not skip_publication_bundle and not snqi_hard_fail:
         publication_dir = get_artifact_category_path("benchmarks") / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
@@ -2394,6 +2675,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
         },
+        "snqi_artifacts": {
+            "diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
+            "diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
+            "sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+        },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
         "finished_at_utc": campaign_finished_at_utc,
@@ -2415,8 +2701,23 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             **manifest_payload,
             "runtime_sec": runtime_sec,
             "finished_at_utc": campaign_finished_at_utc,
+            "snqi_contract_status": contract_eval.status,
+            "artifacts": {
+                **dict(manifest_payload.get("artifacts") or {}),
+                "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
+                "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
+                "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+            },
         },
     )
+
+    if snqi_hard_fail:
+        raise RuntimeError(
+            "SNQI contract failed with enforcement=error; "
+            f"rank_alignment={contract_eval.rank_alignment_spearman:.4f}, "
+            f"outcome_separation={contract_eval.outcome_separation:.4f}. "
+            f"See diagnostics: {_repo_relative(snqi_diagnostics_json_path)}"
+        )
 
     logger.info(
         "Camera-ready campaign finished id={} runs={} episodes={} out={}",
@@ -2433,6 +2734,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "table_csv": str(csv_path),
         "table_md": str(md_table_path),
         "report_md": str(report_md_path),
+        "snqi_diagnostics_json": str(snqi_diagnostics_json_path),
+        "snqi_diagnostics_md": str(snqi_diagnostics_md_path),
+        "snqi_sensitivity_csv": str(snqi_sensitivity_csv_path),
         "matrix_summary_json": str(matrix_summary_json_path),
         "matrix_summary_csv": str(matrix_summary_csv_path),
         "total_runs": len(run_entries),
@@ -2450,6 +2754,7 @@ __all__ = [
     "CampaignConfig",
     "PlannerSpec",
     "SeedPolicy",
+    "SnqiContractConfig",
     "load_campaign_config",
     "prepare_campaign_preflight",
     "run_campaign",

@@ -1,17 +1,18 @@
 scenarios:
-- name: classic_realworld_bottleneck_medium
+- name: classic_realworld_double_bottleneck_high
   map_file: ../../../maps/svg_maps/classic_realworld_bottleneck.svg
   simulation_config:
-    max_episode_steps: 600
-    ped_density: 0.05
+    max_episode_steps: 700
+    ped_density: 0.12
   robot_config: {}
   metadata:
     archetype: bottleneck
-    label: real-world narrow hallway bottleneck
-    density: medium
+    label: real-world-inspired double sequential bottleneck
+    density: high
+    density_advisory: high_density_stress
     flow: bi
     groups: 0.0
   seeds:
-  - 101
-  - 102
-  - 103
+  - 201
+  - 202
+  - 203

@@ -79,6 +79,8 @@ SNQI calibration assets used by camera-ready presets:
 
 - `configs/benchmarks/snqi_weights_camera_ready_v1.json`
 - `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
+- `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
+- `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
 
 ## Produced Artifacts
 
@@ -107,6 +109,9 @@ Expected tree:
     amv_coverage_summary.md
     comparability_matrix.json
     comparability_matrix.md
+    snqi_diagnostics.json
+    snqi_diagnostics.md
+    snqi_sensitivity.csv
     campaign_summary.json
     campaign_table.csv
     campaign_table.md
@@ -138,6 +143,7 @@ Release publication runbook:
 - matrix definition summary rows (`reports/matrix_summary.{json,csv}`)
 - AMV scope coverage summary (`reports/amv_coverage_summary.{json,md}`)
 - Alyassi comparability summary (`reports/comparability_matrix.{json,md}`)
+- SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
 - warning list
 - publication bundle paths (if export enabled)
 - interpretation profile metadata (`paper_interpretation_profile`)
@@ -212,6 +218,21 @@ This emits:
 
 - `reports/campaign_analysis.json`
 - `reports/campaign_analysis.md`
+
+SNQI contract analyzer helper:
+
+```bash
+uv run python scripts/tools/analyze_snqi_contract.py \
+  --campaign-root output/benchmarks/camera_ready/<campaign_id> \
+  --weights configs/benchmarks/snqi_weights_camera_ready_v2.json \
+  --baseline configs/benchmarks/snqi_baseline_camera_ready_v2.json
+```
+
+This emits:
+
+- `reports/snqi_diagnostics.json`
+- `reports/snqi_diagnostics.md`
+- `reports/snqi_sensitivity.csv`
 
 The analyzer now also emits runtime hotspot diagnostics:
 

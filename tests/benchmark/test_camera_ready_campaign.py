@@ -74,6 +74,77 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert list(cfg.seed_policy.seeds) == [101]
 
 
+def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None:
+    """Config loader should parse SNQI contract thresholds and validation fields."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_contract_cfg",
+                f"scenario_matrix: {matrix_path.as_posix()}",
+                "snqi_contract:",
+                "  enabled: true",
+                "  enforcement: warn",
+                "  rank_alignment_warn_threshold: 0.6",
+                "  rank_alignment_fail_threshold: 0.4",
+                "  outcome_separation_warn_threshold: 0.1",
+                "  outcome_separation_fail_threshold: 0.0",
+                "  calibration_seed: 77",
+                "  calibration_trials: 1234",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    assert cfg.snqi_contract.enabled is True
+    assert cfg.snqi_contract.enforcement == "warn"
+    assert cfg.snqi_contract.rank_alignment_warn_threshold == pytest.approx(0.6)
+    assert cfg.snqi_contract.rank_alignment_fail_threshold == pytest.approx(0.4)
+    assert cfg.snqi_contract.outcome_separation_warn_threshold == pytest.approx(0.1)
+    assert cfg.snqi_contract.outcome_separation_fail_threshold == pytest.approx(0.0)
+    assert cfg.snqi_contract.calibration_seed == 77
+    assert cfg.snqi_contract.calibration_trials == 1234
+
+
+def test_load_campaign_config_rejects_invalid_snqi_contract_thresholds(tmp_path: Path) -> None:
+    """Config loader should reject inverted SNQI contract fail/warn thresholds."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_invalid.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_contract_invalid",
+                f"scenario_matrix: {matrix_path.as_posix()}",
+                "snqi_contract:",
+                "  rank_alignment_warn_threshold: 0.4",
+                "  rank_alignment_fail_threshold: 0.6",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="rank_alignment_fail_threshold"):
+        load_campaign_config(config_path)
+
+
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915
     """Campaign runner should emit summary artifacts and publication metadata."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
@@ -258,6 +329,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "amv_coverage_summary.md").exists()
     assert (campaign_root / "reports" / "comparability_matrix.json").exists()
     assert (campaign_root / "reports" / "comparability_matrix.md").exists()
+    assert (campaign_root / "reports" / "snqi_diagnostics.json").exists()
+    assert (campaign_root / "reports" / "snqi_diagnostics.md").exists()
+    assert (campaign_root / "reports" / "snqi_sensitivity.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
@@ -307,6 +381,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert summary_payload["artifacts"]["comparability_json"].endswith(
         "reports/comparability_matrix.json"
     )
+    assert summary_payload["artifacts"]["snqi_diagnostics_json"].endswith(
+        "reports/snqi_diagnostics.json"
+    )
+    assert summary_payload["campaign"]["snqi_contract_status"] in {"pass", "warn", "fail"}
+    assert "snqi_weights_version" in summary_payload["campaign"]
+    assert "snqi_baseline_version" in summary_payload["campaign"]
     assert "release_url" in summary_payload["campaign"]
     assert "release_asset_url" in summary_payload["campaign"]
     assert "doi_url" in summary_payload["campaign"]

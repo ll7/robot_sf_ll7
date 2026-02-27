@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ from robot_sf.benchmark.utils import load_optional_json
 from robot_sf.common.artifact_paths import get_repository_root
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--campaign-root", type=Path, required=True)
     parser.add_argument("--weights", type=Path, default=None)
@@ -36,7 +37,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output-json", type=Path, default=None)
     parser.add_argument("--output-md", type=Path, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
@@ -74,9 +75,9 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run SNQI diagnostics for one campaign and write report artifacts."""
-    args = _parse_args()
+    args = _parse_args(argv)
     campaign_root = args.campaign_root.resolve()
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():
@@ -187,4 +188,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -780,6 +780,92 @@ def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeyp
     assert summary_payload["campaign"]["successful_runs"] == 0
 
 
+def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypatch) -> None:
+    """paper_facing + snqi_contract.enforcement=error should raise on failing contract."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_snqi_error.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_error_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "snqi_contract:",
+                "  enabled: true",
+                "  enforcement: error",
+                "  rank_alignment_warn_threshold: 1.2",
+                "  rank_alignment_fail_threshold: 1.1",
+                "  outcome_separation_warn_threshold: 1.2",
+                "  outcome_separation_fail_threshold: 1.1",
+                "  calibration_seed: 123",
+                "  calibration_trials: 10",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "metrics": {
+                        "success": 0.0,
+                        "collisions": 1.0,
+                        "near_misses": 2.0,
+                        "time_to_goal_norm": 1.0,
+                        "comfort_exposure": 0.8,
+                        "force_exceed_events": 3.0,
+                        "jerk_mean": 0.9,
+                    },
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    with pytest.raises(RuntimeError, match="SNQI contract failed with enforcement=error"):
+        run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_error")
+
+
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:
     """Parity artifacts should preserve available CI values."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

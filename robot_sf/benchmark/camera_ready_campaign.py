@@ -2691,6 +2691,19 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         },
     )
 
+    if (
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and cfg.snqi_contract.enforcement == "error"
+        and contract_eval.status == "fail"
+    ):
+        raise RuntimeError(
+            "SNQI contract failed with enforcement=error; "
+            f"rank_alignment={contract_eval.rank_alignment_spearman:.4f}, "
+            f"outcome_separation={contract_eval.outcome_separation:.4f}. "
+            f"See diagnostics: {_repo_relative(snqi_diagnostics_json_path)}"
+        )
+
     logger.info(
         "Camera-ready campaign finished id={} runs={} episodes={} out={}",
         campaign_id,

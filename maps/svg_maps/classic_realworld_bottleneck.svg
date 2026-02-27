@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Real-world bottleneck benchmark (derived from Francis 2023 narrow hallway) -->
+<svg
+  width="30"
+  height="6"
+  viewBox="0 0 30 6"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g inkscape:label="obstacles">
+    <rect x="0" y="0" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="5" width="30" height="1" fill="#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="1" height="6" fill="#000000" inkscape:label="obstacle" />
+    <rect x="29" y="0" width="1" height="6" fill="#000000" inkscape:label="obstacle" />
+  </g>
+  <g inkscape:label="robot">
+    <rect x="3" y="2" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
+    <rect x="26" y="2" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
+    <path d="M 7 3 L 25.5 3" stroke="#0300d5" stroke-width="0.3" fill="none" inkscape:label="robot_route_0_0" />
+  </g>
+  <g inkscape:label="pedestrians">
+    <circle cx="27" cy="4" r="0.5" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_start" />
+    <circle cx="27" cy="4" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
+    <circle cx="3" cy="4" r="0.5" fill="none" stroke="#3a5edb" stroke-width="0.2"
+      inkscape:label="single_ped_h1_goal" />
+    <circle cx="3" cy="4" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
+  </g>
+</svg>

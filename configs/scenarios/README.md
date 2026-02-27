@@ -88,3 +88,5 @@ uv run python scripts/tools/policy_analysis_run.py \
 - `archetypes/classic_urban_crossing.yaml` adds a corner-building urban crossing layout
   to complement open-plaza crossing maps. This increases benchmark relevance for
   real-world constrained intersection flows.
+- `archetypes/classic_realworld_bottleneck.yaml` adds a narrow-hallway bottleneck
+  derived from a real-world interaction layout to improve constrained-flow coverage.

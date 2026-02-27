@@ -92,6 +92,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
             "amv_coverage_json": str(prepared["amv_coverage_json_path"]),
             "amv_coverage_md": str(prepared["amv_coverage_md_path"]),
+            "comparability_json": (
+                str(prepared["comparability_json_path"])
+                if prepared.get("comparability_json_path") is not None
+                else None
+            ),
+            "comparability_md": (
+                str(prepared["comparability_md_path"])
+                if prepared.get("comparability_md_path") is not None
+                else None
+            ),
         }
     else:
         result = run_campaign(

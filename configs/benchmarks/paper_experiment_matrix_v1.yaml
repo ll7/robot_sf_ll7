@@ -2,6 +2,7 @@ name: paper_experiment_matrix_v1
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
 
 amv_profile:
   name: amv-paper-v1

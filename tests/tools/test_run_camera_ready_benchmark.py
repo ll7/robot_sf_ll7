@@ -55,6 +55,16 @@ def test_main_preflight_mode_emits_preflight_payload(
             / "cid"
             / "reports"
             / "amv_coverage_summary.md",
+            "comparability_json_path": tmp_path
+            / "out"
+            / "cid"
+            / "reports"
+            / "comparability_matrix.json",
+            "comparability_md_path": tmp_path
+            / "out"
+            / "cid"
+            / "reports"
+            / "comparability_matrix.md",
         }
 
     def _fake_run_campaign(*args, **kwargs):
@@ -88,6 +98,8 @@ def test_main_preflight_mode_emits_preflight_payload(
         "matrix_summary_csv",
         "amv_coverage_json",
         "amv_coverage_md",
+        "comparability_json",
+        "comparability_md",
     }
 
 

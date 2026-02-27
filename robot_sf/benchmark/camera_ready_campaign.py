@@ -126,6 +126,7 @@ class CampaignConfig:
     paper_facing: bool = False
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
+    comparability_mapping_path: Path | None = None
 
 
 def _repo_relative(path: Path) -> str:
@@ -522,9 +523,11 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
                 raise ValueError(
                     "paper_facing=true requires explicit planner_group for each enabled planner",
                 )
+        if cfg.comparability_mapping_path is None:
+            raise ValueError("paper_facing=true requires comparability_mapping path")
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901
+def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
     """Load and validate a camera-ready benchmark campaign YAML config.
 
     Returns:
@@ -605,6 +608,17 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901
 
     snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
+    comparability_mapping_path = _resolve_path(
+        payload.get("comparability_mapping"),
+        base_dir=config_path.parent,
+    )
+    if comparability_mapping_path is None:
+        default_mapping_path = (
+            get_repository_root() / "configs/benchmarks/alyassi_comparability_map_v1.yaml"
+        ).resolve()
+        if default_mapping_path.exists():
+            comparability_mapping_path = default_mapping_path
+
     amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
     required_raw = (
         amv_raw.get("required_dimensions")
@@ -679,6 +693,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901
             ),
             required_dimensions=required_dimensions,
         ),
+        comparability_mapping_path=comparability_mapping_path,
     )
     _validate_campaign_config(cfg)
     return cfg
@@ -954,6 +969,169 @@ def _write_amv_coverage_artifacts(
     return json_path, md_path
 
 
+def _load_comparability_mapping(path: Path) -> dict[str, Any]:  # noqa: C901
+    """Load and validate Alyassi comparability mapping configuration.
+
+    Returns:
+        dict[str, Any]: Parsed and validated comparability mapping payload.
+    """
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Comparability mapping must be a mapping: {path}")
+    mapping_version = payload.get("mapping_version")
+    if not isinstance(mapping_version, str) or not mapping_version.strip():
+        raise ValueError("Comparability mapping requires non-empty 'mapping_version'")
+    family_map = payload.get("scenario_family_mapping")
+    if not isinstance(family_map, dict):
+        raise ValueError("Comparability mapping requires 'scenario_family_mapping' mapping")
+    metric_map = payload.get("metric_comparability")
+    if not isinstance(metric_map, dict):
+        raise ValueError("Comparability mapping requires 'metric_comparability' mapping")
+    for key, value in family_map.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("scenario_family_mapping entries must be non-empty string->string")
+    for metric, config in metric_map.items():
+        if not isinstance(metric, str) or not metric.strip():
+            raise ValueError("metric_comparability keys must be non-empty strings")
+        if not isinstance(config, dict):
+            raise ValueError(f"metric_comparability[{metric}] must be a mapping")
+        classification = config.get("classification")
+        if classification not in {"comparable", "proxy", "amv_specific"}:
+            raise ValueError(
+                f"metric_comparability[{metric}] classification must be one of comparable|proxy|amv_specific"
+            )
+    extensions = payload.get("amv_specific_extensions", [])
+    if not isinstance(extensions, list):
+        raise ValueError("Comparability mapping 'amv_specific_extensions' must be a list")
+    return payload
+
+
+def _build_comparability_summary(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+) -> tuple[dict[str, Any], Path]:
+    """Build comparability report payload from mapping and scenario taxonomy.
+
+    Returns:
+        tuple[dict[str, Any], Path]: Summary payload and resolved mapping path.
+    """
+    mapping_path = cfg.comparability_mapping_path
+    if mapping_path is None:
+        raise ValueError("No comparability mapping configured for campaign")
+    mapping = _load_comparability_mapping(mapping_path)
+    family_map = mapping["scenario_family_mapping"]
+    metric_map = mapping["metric_comparability"]
+
+    family_counts: dict[str, int] = {}
+    for scenario in scenarios:
+        family = _scenario_family_from_scenario(scenario)
+        family_counts[family] = family_counts.get(family, 0) + 1
+
+    overlap_rows: list[dict[str, Any]] = []
+    for family, count in sorted(family_counts.items()):
+        mapped = family_map.get(family)
+        overlap_rows.append(
+            {
+                "robot_sf_family": family,
+                "scenario_count": count,
+                "alyassi_category": mapped or "unmapped",
+                "overlap": "overlap" if mapped else "amv_extension",
+            }
+        )
+
+    metric_rows: list[dict[str, Any]] = []
+    for metric, config in sorted(metric_map.items()):
+        metric_rows.append(
+            {
+                "metric": metric,
+                "classification": str(config.get("classification", "")),
+                "alyassi_metric": str(config.get("alyassi_metric", "n/a")),
+                "rationale": str(config.get("rationale", "")),
+            }
+        )
+
+    payload = {
+        "schema_version": "benchmark-comparability-summary.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "mapping_path": _repo_relative(mapping_path),
+        "mapping_version": str(mapping.get("mapping_version")),
+        "mapping_hash": _hash_payload(mapping),
+        "coverage_overlap_rows": overlap_rows,
+        "amv_specific_extensions": list(mapping.get("amv_specific_extensions", [])),
+        "metric_comparability_rows": metric_rows,
+    }
+    return payload, mapping_path
+
+
+def _write_comparability_artifacts(
+    reports_dir: Path,
+    summary: dict[str, Any],
+) -> tuple[Path, Path]:
+    """Write comparability summary JSON + Markdown artifacts.
+
+    Returns:
+        tuple[Path, Path]: Output paths ``(json_path, markdown_path)``.
+    """
+    json_path = reports_dir / "comparability_matrix.json"
+    md_path = reports_dir / "comparability_matrix.md"
+    _write_json(json_path, summary)
+    lines = [
+        "# Alyassi Comparability Summary",
+        "",
+        f"- Mapping path: `{summary.get('mapping_path', 'unknown')}`",
+        f"- Mapping version: `{summary.get('mapping_version', 'unknown')}`",
+        f"- Mapping hash: `{summary.get('mapping_hash', 'unknown')}`",
+        "",
+        "## Coverage Overlap Matrix",
+        "",
+        "| Robot SF Family | Scenario Count | Alyassi Category | Overlap |",
+        "|---|---:|---|---|",
+    ]
+    for row in summary.get("coverage_overlap_rows", []):
+        lines.append(
+            "| "
+            f"{_escape_markdown_cell(row.get('robot_sf_family'))} | "
+            f"{_escape_markdown_cell(row.get('scenario_count'))} | "
+            f"{_escape_markdown_cell(row.get('alyassi_category'))} | "
+            f"{_escape_markdown_cell(row.get('overlap'))} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Metric Comparability",
+            "",
+            "| Metric | Classification | Alyassi Metric | Rationale |",
+            "|---|---|---|---|",
+        ]
+    )
+    for row in summary.get("metric_comparability_rows", []):
+        lines.append(
+            "| "
+            f"{_escape_markdown_cell(row.get('metric'))} | "
+            f"{_escape_markdown_cell(row.get('classification'))} | "
+            f"{_escape_markdown_cell(row.get('alyassi_metric'))} | "
+            f"{_escape_markdown_cell(row.get('rationale'))} |"
+        )
+    lines.extend(["", "## AMV-Specific Extensions", ""])
+    extensions = summary.get("amv_specific_extensions", [])
+    if extensions:
+        for extension in extensions:
+            lines.append(f"- {_escape_markdown_cell(extension)}")
+    else:
+        lines.append("- none")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, md_path
+
+
 def prepare_campaign_preflight(
     cfg: CampaignConfig,
     *,
@@ -1015,6 +1193,11 @@ def prepare_campaign_preflight(
                 key: list(values) for key, values in cfg.amv_profile.required_dimensions.items()
             },
         },
+        "comparability_mapping": (
+            _repo_relative(cfg.comparability_mapping_path)
+            if cfg.comparability_mapping_path is not None
+            else None
+        ),
     }
     preview_limit = max(0, int(cfg.preview_scenario_limit))
     preview_payload = {
@@ -1075,6 +1258,26 @@ def prepare_campaign_preflight(
             "(coverage_enforcement=error)."
         )
 
+    comparability_summary: dict[str, Any] | None = None
+    comparability_json_path: Path | None = None
+    comparability_md_path: Path | None = None
+    comparability_mapping_path: Path | None = None
+    if cfg.comparability_mapping_path is not None:
+        try:
+            comparability_summary, comparability_mapping_path = _build_comparability_summary(
+                cfg,
+                scenarios,
+                campaign_id=campaign_id,
+                generated_at_utc=created_at_utc,
+            )
+            comparability_json_path, comparability_md_path = _write_comparability_artifacts(
+                reports_dir,
+                comparability_summary,
+            )
+        except Exception:
+            if cfg.paper_facing:
+                raise
+
     manifest_payload: dict[str, Any] = {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign_id": campaign_id,
@@ -1099,6 +1302,19 @@ def prepare_campaign_preflight(
         "amv_contract_version": cfg.amv_profile.contract_version,
         "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
         "amv_coverage_status": amv_summary.get("status", "unknown"),
+        "comparability_mapping_path": (
+            _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
+        ),
+        "comparability_mapping_version": (
+            comparability_summary.get("mapping_version")
+            if isinstance(comparability_summary, dict)
+            else None
+        ),
+        "comparability_mapping_hash": (
+            comparability_summary.get("mapping_hash")
+            if isinstance(comparability_summary, dict)
+            else None
+        ),
         "planners": [
             {
                 "key": planner.key,
@@ -1126,6 +1342,12 @@ def prepare_campaign_preflight(
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
             "amv_coverage_json": _repo_relative(amv_coverage_json_path),
             "amv_coverage_md": _repo_relative(amv_coverage_md_path),
+            "comparability_json": (
+                _repo_relative(comparability_json_path) if comparability_json_path else None
+            ),
+            "comparability_md": (
+                _repo_relative(comparability_md_path) if comparability_md_path else None
+            ),
         },
     }
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
@@ -1140,6 +1362,8 @@ def prepare_campaign_preflight(
         "matrix_summary_csv_path": matrix_summary_csv_path,
         "amv_coverage_json_path": amv_coverage_json_path,
         "amv_coverage_md_path": amv_coverage_md_path,
+        "comparability_json_path": comparability_json_path,
+        "comparability_md_path": comparability_md_path,
         "manifest_payload": manifest_payload,
         "created_at_utc": created_at_utc,
         "scenarios": scenarios,
@@ -1536,6 +1760,18 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             f"- Coverage status: `{campaign.get('amv_coverage_status', 'unknown')}` "
             f"(enforcement: `{campaign.get('amv_coverage_enforcement', 'warn')}`)"
         )
+    comparability_json = (payload.get("artifacts") or {}).get("comparability_json")
+    comparability_md = (payload.get("artifacts") or {}).get("comparability_md")
+    if isinstance(comparability_json, str) or isinstance(comparability_md, str):
+        lines.extend(["", "## Alyassi Comparability", ""])
+        if isinstance(comparability_json, str):
+            lines.append(f"- Comparability JSON: `{comparability_json}`")
+        if isinstance(comparability_md, str):
+            lines.append(f"- Comparability Markdown: `{comparability_md}`")
+        lines.append(
+            f"- Mapping version: `{campaign.get('comparability_mapping_version', 'unknown')}`"
+        )
+
     lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
         for warning in warnings:
@@ -1594,6 +1830,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     matrix_summary_csv_path = Path(prepared["matrix_summary_csv_path"])
     amv_coverage_json_path = Path(prepared["amv_coverage_json_path"])
     amv_coverage_md_path = Path(prepared["amv_coverage_md_path"])
+    comparability_json_path = (
+        Path(prepared["comparability_json_path"])
+        if prepared.get("comparability_json_path") is not None
+        else None
+    )
+    comparability_md_path = (
+        Path(prepared["comparability_md_path"])
+        if prepared.get("comparability_md_path") is not None
+        else None
+    )
     manifest_payload = dict(prepared["manifest_payload"])
     campaign_started_at_utc = str(prepared["created_at_utc"])
     scenarios = list(prepared["scenarios"])
@@ -2023,6 +2269,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "amv_coverage_status": str(
                 (manifest_payload or {}).get("amv_coverage_status", "unknown")
             ),
+            "comparability_mapping_path": manifest_payload.get("comparability_mapping_path"),
+            "comparability_mapping_version": manifest_payload.get("comparability_mapping_version"),
+            "comparability_mapping_hash": manifest_payload.get("comparability_mapping_hash"),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -2044,6 +2293,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
             "amv_coverage_json": _repo_relative(amv_coverage_json_path),
             "amv_coverage_md": _repo_relative(amv_coverage_md_path),
+            "comparability_json": (
+                _repo_relative(comparability_json_path) if comparability_json_path else None
+            ),
+            "comparability_md": (
+                _repo_relative(comparability_md_path) if comparability_md_path else None
+            ),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -2105,6 +2360,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "preview_scenarios": _repo_relative(preview_scenarios_path),
             "amv_coverage_json": _repo_relative(amv_coverage_json_path),
             "amv_coverage_md": _repo_relative(amv_coverage_md_path),
+            "comparability_json": (
+                _repo_relative(comparability_json_path) if comparability_json_path else None
+            ),
+            "comparability_md": (
+                _repo_relative(comparability_md_path) if comparability_md_path else None
+            ),
         },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,

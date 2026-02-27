@@ -256,6 +256,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "matrix_summary.json").exists()
     assert (campaign_root / "reports" / "amv_coverage_summary.json").exists()
     assert (campaign_root / "reports" / "amv_coverage_summary.md").exists()
+    assert (campaign_root / "reports" / "comparability_matrix.json").exists()
+    assert (campaign_root / "reports" / "comparability_matrix.md").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
@@ -301,6 +303,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert summary_payload["artifacts"]["matrix_summary_csv"].endswith("reports/matrix_summary.csv")
     assert summary_payload["artifacts"]["amv_coverage_json"].endswith(
         "reports/amv_coverage_summary.json"
+    )
+    assert summary_payload["artifacts"]["comparability_json"].endswith(
+        "reports/comparability_matrix.json"
     )
     assert result["publication_bundle"] is not None
 
@@ -797,6 +802,7 @@ def test_load_campaign_config_accepts_planner_group_and_paper_profile(tmp_path: 
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "planners:",
                 "  - key: goal",
@@ -888,6 +894,7 @@ def test_load_campaign_config_rejects_non_differential_paper_kinematics(tmp_path
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive, bicycle_drive]",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "planners:",
                 "  - key: goal",
@@ -919,6 +926,7 @@ def test_load_campaign_config_rejects_implicit_planner_group_for_paper(tmp_path:
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "planners:",
                 "  - key: goal",
@@ -949,6 +957,7 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -994,6 +1003,7 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -1019,8 +1029,8 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
     assert planner_keys == ["a_core", "z_exp"]
 
 
-def test_prepare_campaign_preflight_writes_amv_coverage_artifacts(tmp_path: Path) -> None:
-    """Preflight should emit AMV coverage artifacts."""
+def test_prepare_campaign_preflight_writes_amv_and_comparability_artifacts(tmp_path: Path) -> None:
+    """Preflight should emit AMV coverage and comparability artifacts."""
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text(
         "\n".join(
@@ -1049,6 +1059,7 @@ def test_prepare_campaign_preflight_writes_amv_coverage_artifacts(tmp_path: Path
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
                 f"scenario_matrix: {scenario_path.as_posix()}",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "amv_profile:",
                 "  coverage_enforcement: warn",
                 "  required_dimensions:",
@@ -1070,10 +1081,14 @@ def test_prepare_campaign_preflight_writes_amv_coverage_artifacts(tmp_path: Path
     prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="amv")
     assert Path(prepared["amv_coverage_json_path"]).exists()
     assert Path(prepared["amv_coverage_md_path"]).exists()
+    assert Path(prepared["comparability_json_path"]).exists()
+    assert Path(prepared["comparability_md_path"]).exists()
 
     manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
     assert manifest["amv_coverage_status"] == "pass"
+    assert manifest["comparability_mapping_version"] == "alyassi-comparability-v1"
     assert manifest["artifacts"]["amv_coverage_json"].endswith("reports/amv_coverage_summary.json")
+    assert manifest["artifacts"]["comparability_json"].endswith("reports/comparability_matrix.json")
 
 
 def test_prepare_campaign_preflight_enforces_amv_coverage_error_mode(tmp_path: Path) -> None:
@@ -1135,3 +1150,38 @@ def test_load_campaign_config_rejects_invalid_amv_coverage_enforcement(tmp_path:
     )
     with pytest.raises(ValueError, match="coverage_enforcement"):
         load_campaign_config(config_path)
+
+
+def test_prepare_campaign_preflight_rejects_invalid_comparability_mapping_for_paper(
+    tmp_path: Path,
+) -> None:
+    """Paper-facing preflight should fail fast on invalid comparability mapping schema."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    bad_mapping = tmp_path / "bad_mapping.yaml"
+    bad_mapping.write_text("mapping_version: x\n", encoding="utf-8")
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: invalid_mapping",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"comparability_mapping: {bad_mapping.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    with pytest.raises(ValueError, match="scenario_family_mapping"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="bad_map")

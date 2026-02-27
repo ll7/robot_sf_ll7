@@ -58,8 +58,18 @@ def _load_json(path: Path) -> dict[str, object]:
     return payload
 
 
-def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path]:
-    """Validate campaign publication artifacts and return core paths."""
+def _resolve_publication_path(publication: dict[str, object], key: str, repo_root: Path) -> Path:
+    """Resolve and validate one required publication path field."""
+    raw_value = publication.get(key)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise ValueError(
+            f"publication_bundle.{key} must be a non-empty string path in campaign_summary.json."
+        )
+    return repo_root / raw_value
+
+
+def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path, dict[str, object]]:
+    """Validate campaign publication artifacts and return core paths plus campaign summary."""
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():
         raise FileNotFoundError(f"Missing campaign summary: {summary_path}")
@@ -73,9 +83,9 @@ def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path]:
         )
 
     repo_root = get_repository_root().resolve()
-    archive_path = repo_root / str(publication.get("archive_path", ""))
-    checksums_path = repo_root / str(publication.get("checksums_path", ""))
-    manifest_path = repo_root / str(publication.get("manifest_path", ""))
+    archive_path = _resolve_publication_path(publication, "archive_path", repo_root)
+    checksums_path = _resolve_publication_path(publication, "checksums_path", repo_root)
+    manifest_path = _resolve_publication_path(publication, "manifest_path", repo_root)
 
     for path in (archive_path, checksums_path, manifest_path):
         if not path.exists():
@@ -89,7 +99,7 @@ def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path]:
     if not checksum_lines:
         raise ValueError(f"Checksums file is empty: {checksums_path}")
 
-    return archive_path, checksums_path, manifest_path
+    return archive_path, checksums_path, manifest_path, summary
 
 
 def _build_release_payload(
@@ -100,9 +110,9 @@ def _build_release_payload(
     archive_path: Path,
     checksums_path: Path,
     manifest_path: Path,
+    summary: dict[str, object],
 ) -> dict[str, object]:
     """Build release publication metadata and command plan."""
-    summary = _load_json(campaign_root / "reports" / "campaign_summary.json")
     campaign = summary.get("campaign") if isinstance(summary.get("campaign"), dict) else {}
     repository_url = str(campaign.get("repository_url", f"https://github.com/{repo}"))
     doi = str(campaign.get("doi", "10.5281/zenodo.<record-id>"))
@@ -128,7 +138,7 @@ def _build_release_payload(
         "checksums_path": str(checksums_path),
         "manifest_path": str(manifest_path),
         "release_url": f"{repository_url.rstrip('/')}/releases/tag/{tag}",
-        "release_asset_url_template": (
+        "release_asset_url": (
             f"{repository_url.rstrip('/')}/releases/download/{tag}/{archive_path.name}"
         ),
         "doi": doi,
@@ -143,7 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     campaign_root = args.campaign_root.resolve()
-    archive_path, checksums_path, manifest_path = _validate_prerequisites(campaign_root)
+    archive_path, checksums_path, manifest_path, summary = _validate_prerequisites(campaign_root)
     payload = _build_release_payload(
         campaign_root=campaign_root,
         repo=str(args.repo),
@@ -151,6 +161,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         archive_path=archive_path,
         checksums_path=checksums_path,
         manifest_path=manifest_path,
+        summary=summary,
     )
 
     if args.output_json is not None:

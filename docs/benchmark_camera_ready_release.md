@@ -49,14 +49,14 @@ uv run python scripts/tools/publish_camera_ready_release.py \
 - `checksums.sha256` is non-empty and references bundle files.
 - Release page contains archive + checksums + manifest assets.
 - Campaign summary contains URL placeholders:
-  - `release_url_template`
-  - `release_asset_url_template`
-  - `doi_url_template`
+  - `release_url`
+  - `release_asset_url`
+  - `doi_url`
 
 ## Paper Ingestion Links
 
 After upload, reference:
 
 - release URL from `release_url`
-- archive URL from `release_asset_url_template`
+- archive URL from `release_asset_url`
 - DOI URL from `doi_url`

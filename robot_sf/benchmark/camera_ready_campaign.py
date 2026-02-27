@@ -2243,11 +2243,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
     repository_url = cfg.repository_url.rstrip("/")
-    release_url_template = f"{repository_url}/releases/tag/{release_tag_value}"
-    asset_url_template = (
+    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
+    release_asset_url = (
         f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
     )
-    doi_url_template = f"https://doi.org/{cfg.doi}"
+    doi_url = f"https://doi.org/{cfg.doi}"
 
     campaign_summary = {
         "campaign": {
@@ -2283,9 +2283,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "repository_url": cfg.repository_url,
             "release_tag": release_tag_value,
             "doi": cfg.doi,
-            "release_url_template": release_url_template,
-            "release_asset_url_template": asset_url_template,
-            "doi_url_template": doi_url_template,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -2321,9 +2321,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "scenario_family_breakdown_md": _repo_relative(family_md_path),
             "campaign_report_md": _repo_relative(report_md_path),
             "expected_release_archive": expected_archive_name,
-            "release_url_template": release_url_template,
-            "release_asset_url_template": asset_url_template,
-            "doi_url_template": doi_url_template,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
         },
     }
 

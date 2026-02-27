@@ -59,6 +59,7 @@ def test_publish_camera_ready_release_dry_run_outputs_plan(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["release_url"].endswith("/releases/tag/v1.0.0")
+    assert payload["release_asset_url"].endswith("/releases/download/v1.0.0/bundle.tar.gz")
     assert payload["doi_url"] == "https://doi.org/10.5281/zenodo.1234567"
     assert payload["upload_command"][0:3] == ["gh", "release", "upload"]
 
@@ -116,4 +117,29 @@ def test_publish_camera_ready_release_rejects_missing_checksums(
     with pytest.raises(FileNotFoundError, match="checksums"):
         publish_camera_ready_release.main(
             ["--campaign-root", str(campaign_root), "--tag", "v1.0.2"]
+        )
+
+
+def test_publish_camera_ready_release_rejects_empty_publication_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Validation should reject empty publication artifact path fields."""
+    campaign_root = tmp_path / "output" / "benchmarks" / "camera_ready" / "campaign_1"
+    _write(
+        campaign_root / "reports" / "campaign_summary.json",
+        json.dumps(
+            {
+                "publication_bundle": {
+                    "archive_path": "",
+                    "checksums_path": "output/benchmarks/publication/bundle/checksums.sha256",
+                    "manifest_path": "output/benchmarks/publication/bundle/publication_manifest.json",
+                }
+            }
+        ),
+    )
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="archive_path"):
+        publish_camera_ready_release.main(
+            ["--campaign-root", str(campaign_root), "--tag", "v1.0.3"]
         )

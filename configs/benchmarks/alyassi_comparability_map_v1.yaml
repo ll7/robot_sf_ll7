@@ -1,0 +1,39 @@
+mapping_version: alyassi-comparability-v1
+
+scenario_family_mapping:
+  classic_head_on_corridor: corridor
+  classic_bottleneck: bottleneck
+  classic_doorway: doorway
+  classic_t_intersection: intersection
+  classic_crossing: intersection
+  classic_urban_crossing: intersection
+  classic_merging: merge
+  classic_overtaking: overtaking
+  classic_group_crossing: crossing
+
+amv_specific_extensions:
+  - shared-space micromobility interactions
+  - delivery robot curb-side handoff approach
+  - mixed sidewalk and bike-lane transitions
+
+metric_comparability:
+  success:
+    classification: comparable
+    alyassi_metric: success_rate
+    rationale: Both benchmarks report episode-level success completion.
+  collisions:
+    classification: comparable
+    alyassi_metric: collision_rate
+    rationale: Collision rate is directly comparable at episode granularity.
+  near_misses:
+    classification: proxy
+    alyassi_metric: safety-distance violations
+    rationale: Near misses approximate low-clearance safety stress but are not identical.
+  comfort_exposure:
+    classification: proxy
+    alyassi_metric: comfort/smoothness terms
+    rationale: Comfort exposure overlaps with smoothness-focused safety comfort metrics.
+  snqi:
+    classification: amv_specific
+    alyassi_metric: n/a
+    rationale: SNQI is a robot_sf composite quality index used as an AMV extension metric.

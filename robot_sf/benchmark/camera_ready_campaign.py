@@ -2249,6 +2249,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
+    release_tag_value = cfg.release_tag
+    expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
+    repository_url = cfg.repository_url.rstrip("/")
+    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
+    release_asset_url = (
+        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+    )
+    doi_url = f"https://doi.org/{cfg.doi}"
 
     campaign_summary = {
         "campaign": {
@@ -2281,6 +2289,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "comparability_mapping_path": manifest_payload.get("comparability_mapping_path"),
             "comparability_mapping_version": manifest_payload.get("comparability_mapping_version"),
             "comparability_mapping_hash": manifest_payload.get("comparability_mapping_hash"),
+            "repository_url": cfg.repository_url,
+            "release_tag": release_tag_value,
+            "doi": cfg.doi,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -2315,6 +2329,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "scenario_family_breakdown_csv": _repo_relative(family_csv_path),
             "scenario_family_breakdown_md": _repo_relative(family_md_path),
             "campaign_report_md": _repo_relative(report_md_path),
+            "expected_release_archive": expected_archive_name,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
         },
     }
 

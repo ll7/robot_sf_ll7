@@ -307,6 +307,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert summary_payload["artifacts"]["comparability_json"].endswith(
         "reports/comparability_matrix.json"
     )
+    assert "release_url" in summary_payload["campaign"]
+    assert "release_asset_url" in summary_payload["campaign"]
+    assert "doi_url" in summary_payload["campaign"]
     assert result["publication_bundle"] is not None
 
 

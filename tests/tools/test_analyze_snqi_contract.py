@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.tools import analyze_snqi_contract
 
 
@@ -89,3 +91,26 @@ def test_analyze_snqi_contract_writes_expected_outputs(tmp_path: Path, capsys) -
     assert diagnostics["schema_version"] == "benchmark-snqi-diagnostics.v1"
     assert "configured_weights" in diagnostics
     assert "calibrated_weights" in diagnostics
+
+
+def test_analyze_snqi_contract_rejects_inverted_thresholds(tmp_path: Path) -> None:
+    """CLI should reject warn thresholds that are not above fail thresholds."""
+    campaign_root = tmp_path / "campaign"
+    reports_dir = campaign_root / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "campaign_summary.json").write_text(
+        json.dumps({"planner_rows": [], "runs": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        analyze_snqi_contract.main(
+            [
+                "--campaign-root",
+                str(campaign_root),
+                "--rank-warn-threshold",
+                "0.1",
+                "--rank-fail-threshold",
+                "0.2",
+            ]
+        )

@@ -131,11 +131,11 @@ def compute_baseline_stats_from_episodes(
     episodes: Sequence[Mapping[str, Any]],
     *,
     metric_names: Sequence[str] = _STARTUP_METRIC_NAMES,
-) -> dict[str, dict[str, float]]:
+) -> tuple[dict[str, dict[str, float]], list[str]]:
     """Compute robust median/p95 baseline stats from episode metrics.
 
     Returns:
-        Sanitized baseline mapping keyed by metric name.
+        Tuple of sanitized baseline mapping and adjustment warnings.
     """
     values_by_metric: dict[str, list[float]] = {name: [] for name in metric_names}
     for episode in episodes:
@@ -155,8 +155,8 @@ def compute_baseline_stats_from_episodes(
             med = 0.0
             p95 = 1.0
         baseline[metric] = {"med": med, "p95": p95}
-    sanitized, _warnings = sanitize_baseline_stats(baseline, metric_names=metric_names)
-    return sanitized
+    sanitized, warnings = sanitize_baseline_stats(baseline, metric_names=metric_names)
+    return sanitized, warnings
 
 
 def _rank(values: Sequence[float]) -> list[float]:
@@ -232,7 +232,7 @@ def _episode_score(
     return compute_snqi(metrics, weights, baseline)
 
 
-def evaluate_snqi_contract(  # noqa: C901
+def evaluate_snqi_contract(  # noqa: C901, PLR0912
     planner_rows: Sequence[Mapping[str, Any]],
     episodes: Sequence[Mapping[str, Any]],
     *,
@@ -249,7 +249,10 @@ def evaluate_snqi_contract(  # noqa: C901
     for row in planner_rows:
         if not _is_finite(row.get("success_mean")) or not _is_finite(row.get("collisions_mean")):
             continue
-        planner_target[_planner_key(row)] = _target_quality(row)
+        target = _target_quality(row)
+        if not _is_finite(target):
+            continue
+        planner_target[_planner_key(row)] = target
 
     score_sum: dict[str, float] = {}
     score_count: dict[str, int] = {}
@@ -261,12 +264,18 @@ def evaluate_snqi_contract(  # noqa: C901
         if not isinstance(metrics, Mapping):
             continue
         score = _episode_score(metrics, weights=weights, baseline=baseline)
+        if not _is_finite(score):
+            continue
+        success_raw = metrics.get("success")
+        collisions_raw = metrics.get("collisions")
+        if not _is_finite(success_raw) or not _is_finite(collisions_raw):
+            continue
         key = _episode_planner_key(episode)
         score_sum[key] = score_sum.get(key, 0.0) + score
         score_count[key] = score_count.get(key, 0) + 1
 
-        success = float(metrics.get("success", 0.0) or 0.0)
-        collisions = float(metrics.get("collisions", 0.0) or 0.0)
+        success = float(success_raw)
+        collisions = float(collisions_raw)
         is_positive = success >= 1.0 and collisions <= 0.0
         if is_positive:
             positive_scores.append(score)
@@ -342,8 +351,7 @@ def compute_component_dominance(
             weights.get("w_success", 1.0) * float(metrics.get("success", 0.0) or 0.0)
         )
         accum["time_penalty"] += abs(
-            weights.get("w_time", 1.0)
-            * normalize_metric("time_to_goal_norm", metrics.get("time_to_goal_norm", 0.0), baseline)
+            weights.get("w_time", 1.0) * float(metrics.get("time_to_goal_norm", 0.0) or 0.0)
         )
         accum["collisions_penalty"] += abs(
             weights.get("w_collisions", 1.0)

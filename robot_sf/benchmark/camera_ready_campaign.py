@@ -2436,9 +2436,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     configured_weights = resolve_weight_mapping(snqi_weights)
     if snqi_baseline is None:
         baseline_source = "derived_from_campaign_episodes"
-        baseline_for_eval = compute_baseline_stats_from_episodes(episodes)
-        baseline_adjustments = 0
-        baseline_warnings: list[str] = []
+        baseline_for_eval, baseline_warnings = compute_baseline_stats_from_episodes(episodes)
+        baseline_adjustments = len(baseline_warnings)
+        warnings.extend(baseline_warnings)
     else:
         baseline_source = "config_file"
         baseline_for_eval, baseline_warnings = sanitize_baseline_stats(snqi_baseline)
@@ -2497,14 +2497,25 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
         _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
     )
-    if (
+    snqi_hard_fail = (
         cfg.paper_facing
         and cfg.snqi_contract.enabled
         and cfg.snqi_contract.enforcement == "error"
         and contract_eval.status == "fail"
-    ):
+    )
+    if snqi_hard_fail:
         warnings.append(
             "SNQI contract status=fail with snqi_contract.enforcement=error; campaign marked with hard contract warning."
+        )
+    elif (
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and cfg.snqi_contract.enforcement == "warn"
+        and contract_eval.status in {"warn", "fail"}
+    ):
+        warnings.append(
+            "SNQI contract status="
+            f"{contract_eval.status} with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
         )
 
     campaign_summary = {
@@ -2691,12 +2702,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         },
     )
 
-    if (
-        cfg.paper_facing
-        and cfg.snqi_contract.enabled
-        and cfg.snqi_contract.enforcement == "error"
-        and contract_eval.status == "fail"
-    ):
+    if snqi_hard_fail:
         raise RuntimeError(
             "SNQI contract failed with enforcement=error; "
             f"rank_alignment={contract_eval.rank_alignment_spearman:.4f}, "

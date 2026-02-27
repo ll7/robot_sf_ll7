@@ -384,6 +384,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert summary_payload["artifacts"]["snqi_diagnostics_json"].endswith(
         "reports/snqi_diagnostics.json"
     )
+    assert summary_payload["artifacts"]["snqi_diagnostics_md"].endswith(
+        "reports/snqi_diagnostics.md"
+    )
+    assert summary_payload["artifacts"]["snqi_sensitivity_csv"].endswith(
+        "reports/snqi_sensitivity.csv"
+    )
     assert summary_payload["campaign"]["snqi_contract_status"] in {"pass", "warn", "fail"}
     assert "snqi_weights_version" in summary_payload["campaign"]
     assert "snqi_baseline_version" in summary_payload["campaign"]
@@ -864,6 +870,99 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
 
     with pytest.raises(RuntimeError, match="SNQI contract failed with enforcement=error"):
         run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_error")
+    campaign_dirs = sorted((tmp_path / "campaign_out").glob("snqi_error_campaign_snqi_error_*"))
+    assert campaign_dirs
+    latest_campaign_dir = campaign_dirs[-1]
+    assert (latest_campaign_dir / "reports" / "snqi_diagnostics.json").exists()
+    assert (latest_campaign_dir / "reports" / "snqi_diagnostics.md").exists()
+    assert (latest_campaign_dir / "reports" / "snqi_sensitivity.csv").exists()
+
+
+def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypatch) -> None:
+    """Warn-mode SNQI contract outcomes should be visible in campaign warnings."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_snqi_warn.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_warn_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "snqi_contract:",
+                "  enabled: true",
+                "  enforcement: warn",
+                "  rank_alignment_warn_threshold: 1.2",
+                "  rank_alignment_fail_threshold: 1.1",
+                "  outcome_separation_warn_threshold: 1.2",
+                "  outcome_separation_fail_threshold: 1.1",
+                "  calibration_seed: 123",
+                "  calibration_trials: 10",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "metrics": {
+                        "success": 0.0,
+                        "collisions": 1.0,
+                        "near_misses": 2.0,
+                        "time_to_goal_norm": 1.0,
+                        "comfort_exposure": 0.8,
+                        "force_exceed_events": 3.0,
+                        "jerk_mean": 0.9,
+                    },
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_warn")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    assert any("snqi_contract.enforcement=warn" in item for item in summary_payload["warnings"])
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

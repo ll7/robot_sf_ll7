@@ -5,6 +5,7 @@ from __future__ import annotations
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     calibrate_weights,
+    compute_baseline_stats_from_episodes,
     evaluate_snqi_contract,
     sanitize_baseline_stats,
 )
@@ -130,3 +131,22 @@ def test_calibrate_weights_is_deterministic_for_fixed_seed() -> None:
     )
     assert first["weights"] == second["weights"]
     assert first["metrics"] == second["metrics"]
+
+
+def test_compute_baseline_stats_from_episodes_propagates_adjustment_warnings() -> None:
+    """Episode-derived baseline builder should return degeneracy adjustment warnings."""
+    baseline, warnings = compute_baseline_stats_from_episodes(
+        [
+            {
+                "metrics": {
+                    "time_to_goal_norm": 0.0,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "force_exceed_events": 0.0,
+                    "jerk_mean": 0.0,
+                }
+            }
+        ]
+    )
+    assert baseline["collisions"]["p95"] > baseline["collisions"]["med"]
+    assert warnings

@@ -37,7 +37,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-json", type=Path, default=None)
     parser.add_argument("--output-md", type=Path, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.rank_warn_threshold <= args.rank_fail_threshold:
+        parser.error("--rank-warn-threshold must be greater than --rank-fail-threshold")
+    if args.outcome_warn_threshold <= args.outcome_fail_threshold:
+        parser.error("--outcome-warn-threshold must be greater than --outcome-fail-threshold")
+    return args
 
 
 def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
@@ -69,9 +74,8 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
     for component in sorted((configured or {}).keys()):
         configured_value = float((configured or {}).get(component, 0.0))
         calibrated_value = float((calibrated or {}).get(component, configured_value))
-        rows.append(
-            f"{component},{configured_value:.10f},{calibrated_value:.10f},{(calibrated_value - configured_value):.10f}"
-        )
+        delta = calibrated_value - configured_value
+        rows.append(f"{component},{configured_value:.10f},{calibrated_value:.10f},{delta:.10f}")
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 
@@ -98,9 +102,9 @@ def main(argv: list[str] | None = None) -> int:
     configured_weights = resolve_weight_mapping(raw_weights)
     episodes = collect_episodes_from_campaign_runs(run_entries, repo_root=get_repository_root())
     if raw_baseline is None:
-        baseline = compute_baseline_stats_from_episodes(episodes)
+        baseline, warnings = compute_baseline_stats_from_episodes(episodes)
         baseline_source = "derived_from_campaign_episodes"
-        baseline_adjustments = 0
+        baseline_adjustments = len(warnings)
     else:
         baseline, warnings = sanitize_baseline_stats(raw_baseline)
         baseline_source = "input_file"

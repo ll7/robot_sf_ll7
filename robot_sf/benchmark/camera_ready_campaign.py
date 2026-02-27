@@ -494,16 +494,11 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
 
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
     """Validate campaign-level invariants after config parsing."""
-    enforcement = str(cfg.amv_profile.coverage_enforcement).strip().lower()
+    enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
         known = ", ".join(sorted(_AMV_COVERAGE_ENFORCEMENT))
         raise ValueError(f"Unsupported amv_profile.coverage_enforcement '{enforcement}'. {known}")
     for key, values in cfg.amv_profile.required_dimensions.items():
-        if key not in _AMV_DIMENSIONS:
-            known = ", ".join(_AMV_DIMENSIONS)
-            raise ValueError(
-                f"Unsupported AMV required dimension '{key}'. Expected one of: {known}"
-            )
         for value in values:
             if not str(value).strip():
                 raise ValueError(f"AMV required dimension '{key}' contains an empty value")
@@ -905,7 +900,7 @@ def _build_amv_coverage_summary(
         for dimension in _AMV_DIMENSIONS
     }
     has_missing = any(missing_values for missing_values in missing.values())
-    enforcement = str(cfg.amv_profile.coverage_enforcement).strip().lower()
+    enforcement = cfg.amv_profile.coverage_enforcement
     status = "pass"
     if has_missing:
         status = "fail" if enforcement == "error" else "warn"
@@ -1251,7 +1246,7 @@ def prepare_campaign_preflight(
     if (
         cfg.paper_facing
         and amv_summary.get("status") == "fail"
-        and str(cfg.amv_profile.coverage_enforcement).strip().lower() == "error"
+        and cfg.amv_profile.coverage_enforcement == "error"
     ):
         raise ValueError(
             "AMV coverage contract validation failed: missing required AMV dimensions "

@@ -45,6 +45,16 @@ def test_main_preflight_mode_emits_preflight_payload(
             / "reports"
             / "matrix_summary.json",
             "matrix_summary_csv_path": tmp_path / "out" / "cid" / "reports" / "matrix_summary.csv",
+            "amv_coverage_json_path": tmp_path
+            / "out"
+            / "cid"
+            / "reports"
+            / "amv_coverage_summary.json",
+            "amv_coverage_md_path": tmp_path
+            / "out"
+            / "cid"
+            / "reports"
+            / "amv_coverage_summary.md",
         }
 
     def _fake_run_campaign(*args, **kwargs):
@@ -76,6 +86,8 @@ def test_main_preflight_mode_emits_preflight_payload(
         "preview_scenarios_path",
         "matrix_summary_json",
         "matrix_summary_csv",
+        "amv_coverage_json",
+        "amv_coverage_md",
     }
 
 

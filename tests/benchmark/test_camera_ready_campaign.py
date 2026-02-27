@@ -254,6 +254,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "campaign_table_experimental.md").exists()
     assert (campaign_root / "reports" / "matrix_summary.csv").exists()
     assert (campaign_root / "reports" / "matrix_summary.json").exists()
+    assert (campaign_root / "reports" / "amv_coverage_summary.json").exists()
+    assert (campaign_root / "reports" / "amv_coverage_summary.md").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.csv").exists()
     assert (campaign_root / "reports" / "scenario_breakdown.md").exists()
     assert (campaign_root / "reports" / "scenario_family_breakdown.csv").exists()
@@ -297,6 +299,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         "reports/matrix_summary.json"
     )
     assert summary_payload["artifacts"]["matrix_summary_csv"].endswith("reports/matrix_summary.csv")
+    assert summary_payload["artifacts"]["amv_coverage_json"].endswith(
+        "reports/amv_coverage_summary.json"
+    )
     assert result["publication_bundle"] is not None
 
 
@@ -1012,3 +1017,121 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
     )
     planner_keys = [row["planner_key"] for row in matrix_payload["rows"]]
     assert planner_keys == ["a_core", "z_exp"]
+
+
+def test_prepare_campaign_preflight_writes_amv_coverage_artifacts(tmp_path: Path) -> None:
+    """Preflight should emit AMV coverage artifacts."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: amv_ok",
+                "  map_file: maps/svg_maps/classic_crossing.svg",
+                "  seeds: [111]",
+                "  metadata:",
+                "    archetype: classic_crossing",
+                "  amv:",
+                "    use_case: delivery_robot",
+                "    context: sidewalk",
+                "    speed_regime: walking_speed",
+                "    maneuver_type: crossing",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: amv_contract",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "amv_profile:",
+                "  coverage_enforcement: warn",
+                "  required_dimensions:",
+                "    use_case: [delivery_robot]",
+                "    context: [sidewalk]",
+                "    speed_regime: [walking_speed]",
+                "    maneuver_type: [crossing]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="amv")
+    assert Path(prepared["amv_coverage_json_path"]).exists()
+    assert Path(prepared["amv_coverage_md_path"]).exists()
+
+    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    assert manifest["amv_coverage_status"] == "pass"
+    assert manifest["artifacts"]["amv_coverage_json"].endswith("reports/amv_coverage_summary.json")
+
+
+def test_prepare_campaign_preflight_enforces_amv_coverage_error_mode(tmp_path: Path) -> None:
+    """Missing AMV dimensions should fail preflight when enforcement is error."""
+    scenario_path = tmp_path / "scenarios_missing_amv.yaml"
+    scenario_path.write_text(
+        "- name: amv_missing\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_error.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: amv_error_contract",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "amv_profile:",
+                "  coverage_enforcement: error",
+                "  required_dimensions:",
+                "    use_case: [delivery_robot]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    with pytest.raises(ValueError, match="AMV coverage contract validation failed"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="amv_error")
+
+
+def test_load_campaign_config_rejects_invalid_amv_coverage_enforcement(tmp_path: Path) -> None:
+    """AMV profile should reject unsupported enforcement values."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_bad_amv.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: bad_amv_cfg",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "amv_profile:",
+                "  coverage_enforcement: maybe",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="coverage_enforcement"):
+        load_campaign_config(config_path)

@@ -8,6 +8,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     calibrate_weights,
     compute_baseline_stats_from_episodes,
+    compute_component_dominance,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
@@ -165,3 +166,33 @@ def test_resolve_weight_mapping_rejects_non_mapping_weights_key() -> None:
     """Weight resolver should reject non-mapping nested ``weights`` payloads."""
     with pytest.raises(ValueError, match="weights"):
         resolve_weight_mapping({"weights": 1.0})  # type: ignore[arg-type]
+
+
+def test_compute_component_dominance_handles_non_finite_metrics() -> None:
+    """Component dominance should not propagate NaN/inf values."""
+    dominance = compute_component_dominance(
+        [
+            {
+                "metrics": {
+                    "success": float("nan"),
+                    "time_to_goal_norm": float("inf"),
+                    "collisions": float("-inf"),
+                    "near_misses": None,
+                    "comfort_exposure": float("nan"),
+                    "force_exceed_events": float("inf"),
+                    "jerk_mean": float("nan"),
+                }
+            }
+        ],
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    assert all(value == 0.0 for value in dominance.values())

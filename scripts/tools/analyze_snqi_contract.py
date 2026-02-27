@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-md", type=Path, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
     args = parser.parse_args(argv)
+    for name in (
+        "rank_warn_threshold",
+        "rank_fail_threshold",
+        "outcome_warn_threshold",
+        "outcome_fail_threshold",
+    ):
+        if not math.isfinite(getattr(args, name)):
+            parser.error(f"--{name.replace('_', '-')} must be a finite number")
     if args.rank_warn_threshold <= args.rank_fail_threshold:
         parser.error("--rank-warn-threshold must be greater than --rank-fail-threshold")
     if args.outcome_warn_threshold <= args.outcome_fail_threshold:
@@ -88,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         raise FileNotFoundError(f"Missing campaign summary: {summary_path}")
 
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    campaign_meta = summary.get("campaign") if isinstance(summary.get("campaign"), dict) else {}
     planner_rows = (
         summary.get("planner_rows") if isinstance(summary.get("planner_rows"), list) else []
     )
@@ -138,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",
+        "campaign_id": str(campaign_meta.get("campaign_id", "unknown")),
+        "generated_at_utc": str(campaign_meta.get("finished_at_utc", "unknown")),
         "campaign_root": str(campaign_root),
         "contract_status": evaluation.status,
         "rank_alignment_spearman": evaluation.rank_alignment_spearman,
@@ -151,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         "baseline_source": baseline_source,
         "baseline_adjustments": baseline_adjustments,
-        "baseline": baseline,
+        "baseline_for_eval": baseline,
         "configured_weights": configured_weights,
         "calibrated_weights": calibration.get("weights", {}),
         "calibration": calibration,

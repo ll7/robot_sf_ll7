@@ -145,6 +145,39 @@ def test_load_campaign_config_rejects_invalid_snqi_contract_thresholds(tmp_path:
         load_campaign_config(config_path)
 
 
+def test_load_campaign_config_rejects_non_finite_snqi_thresholds(tmp_path: Path) -> None:
+    """Config loader should reject non-finite SNQI threshold values."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_snqi_non_finite.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_contract_non_finite",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "snqi_contract:",
+                "  rank_alignment_warn_threshold: .nan",
+                "  rank_alignment_fail_threshold: 0.4",
+                "  outcome_separation_warn_threshold: 0.1",
+                "  outcome_separation_fail_threshold: 0.0",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="must be a finite float"):
+        load_campaign_config(config_path)
+
+
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915
     """Campaign runner should emit summary artifacts and publication metadata."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

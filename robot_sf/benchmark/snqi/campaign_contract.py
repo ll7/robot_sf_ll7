@@ -352,32 +352,37 @@ def compute_component_dominance(
         if not isinstance(metrics, Mapping):
             continue
         count += 1
-        accum["success_reward"] += abs(
-            weights.get("w_success", 1.0) * float(metrics.get("success", 0.0) or 0.0)
-        )
-        accum["time_penalty"] += abs(
-            weights.get("w_time", 1.0) * float(metrics.get("time_to_goal_norm", 0.0) or 0.0)
-        )
+        success_raw = metrics.get("success")
+        time_to_goal_raw = metrics.get("time_to_goal_norm")
+        comfort_raw = metrics.get("comfort_exposure")
+        collisions_raw = metrics.get("collisions")
+        near_misses_raw = metrics.get("near_misses")
+        force_exceed_raw = metrics.get("force_exceed_events")
+        jerk_raw = metrics.get("jerk_mean")
+
+        success = float(success_raw) if _is_finite(success_raw) else 0.0
+        time_to_goal = float(time_to_goal_raw) if _is_finite(time_to_goal_raw) else 0.0
+        comfort = float(comfort_raw) if _is_finite(comfort_raw) else 0.0
+        collisions = collisions_raw if _is_finite(collisions_raw) else 0.0
+        near_misses = near_misses_raw if _is_finite(near_misses_raw) else 0.0
+        force_exceed = force_exceed_raw if _is_finite(force_exceed_raw) else 0.0
+        jerk = jerk_raw if _is_finite(jerk_raw) else 0.0
+
+        accum["success_reward"] += abs(weights.get("w_success", 1.0) * success)
+        accum["time_penalty"] += abs(weights.get("w_time", 1.0) * time_to_goal)
         accum["collisions_penalty"] += abs(
-            weights.get("w_collisions", 1.0)
-            * normalize_metric("collisions", metrics.get("collisions", 0.0), baseline)
+            weights.get("w_collisions", 1.0) * normalize_metric("collisions", collisions, baseline)
         )
         accum["near_penalty"] += abs(
-            weights.get("w_near", 1.0)
-            * normalize_metric("near_misses", metrics.get("near_misses", 0.0), baseline)
+            weights.get("w_near", 1.0) * normalize_metric("near_misses", near_misses, baseline)
         )
-        accum["comfort_penalty"] += abs(
-            weights.get("w_comfort", 1.0) * float(metrics.get("comfort_exposure", 0.0) or 0.0)
-        )
+        accum["comfort_penalty"] += abs(weights.get("w_comfort", 1.0) * comfort)
         accum["force_exceed_penalty"] += abs(
             weights.get("w_force_exceed", 1.0)
-            * normalize_metric(
-                "force_exceed_events", metrics.get("force_exceed_events", 0.0), baseline
-            )
+            * normalize_metric("force_exceed_events", force_exceed, baseline)
         )
         accum["jerk_penalty"] += abs(
-            weights.get("w_jerk", 1.0)
-            * normalize_metric("jerk_mean", metrics.get("jerk_mean", 0.0), baseline)
+            weights.get("w_jerk", 1.0) * normalize_metric("jerk_mean", jerk, baseline)
         )
     if count <= 0:
         return dict.fromkeys(accum, 0.0)

@@ -89,8 +89,11 @@ def test_analyze_snqi_contract_writes_expected_outputs(tmp_path: Path, capsys) -
 
     diagnostics = json.loads(diagnostics_json.read_text(encoding="utf-8"))
     assert diagnostics["schema_version"] == "benchmark-snqi-diagnostics.v1"
+    assert "campaign_id" in diagnostics
+    assert "generated_at_utc" in diagnostics
     assert "configured_weights" in diagnostics
     assert "calibrated_weights" in diagnostics
+    assert "baseline_for_eval" in diagnostics
 
 
 def test_analyze_snqi_contract_rejects_inverted_thresholds(tmp_path: Path) -> None:
@@ -112,5 +115,26 @@ def test_analyze_snqi_contract_rejects_inverted_thresholds(tmp_path: Path) -> No
                 "0.1",
                 "--rank-fail-threshold",
                 "0.2",
+            ]
+        )
+
+
+def test_analyze_snqi_contract_rejects_non_finite_thresholds(tmp_path: Path) -> None:
+    """CLI should reject NaN/inf threshold values."""
+    campaign_root = tmp_path / "campaign"
+    reports_dir = campaign_root / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "campaign_summary.json").write_text(
+        json.dumps({"planner_rows": [], "runs": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        analyze_snqi_contract.main(
+            [
+                "--campaign-root",
+                str(campaign_root),
+                "--rank-warn-threshold",
+                "nan",
             ]
         )

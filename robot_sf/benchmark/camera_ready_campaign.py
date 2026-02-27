@@ -519,7 +519,7 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
-def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
+def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
     enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
@@ -534,6 +534,15 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
         raise ValueError(
             f"Unsupported snqi_contract.enforcement '{cfg.snqi_contract.enforcement}'. {known}"
         )
+    threshold_values = {
+        "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
+        "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
+        "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
+        "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+    }
+    for field_name, value in threshold_values.items():
+        if not math.isfinite(value):
+            raise ValueError(f"snqi_contract.{field_name} must be a finite float")
     if (
         cfg.snqi_contract.rank_alignment_fail_threshold
         > cfg.snqi_contract.rank_alignment_warn_threshold

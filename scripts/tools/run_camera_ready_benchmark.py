@@ -90,6 +90,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "preview_scenarios_path": str(prepared["preview_scenarios_path"]),
             "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
             "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
+            "amv_coverage_json": str(prepared["amv_coverage_json_path"]),
+            "amv_coverage_md": str(prepared["amv_coverage_md_path"]),
         }
     else:
         result = run_campaign(

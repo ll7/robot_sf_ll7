@@ -14,7 +14,7 @@ import math
 import re
 import subprocess
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +50,20 @@ _REPORT_METRICS: tuple[str, ...] = (
 )
 _PLANNER_GROUPS = {"core", "experimental"}
 _PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
+_AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
+_AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
+
+
+@dataclass(frozen=True)
+class AmvProfileConfig:
+    """AMV paper-profile scope contract settings."""
+
+    name: str = "amv-paper-v1"
+    contract_version: str = "1"
+    coverage_enforcement: str = "warn"
+    required_dimensions: dict[str, tuple[str, ...]] = field(
+        default_factory=lambda: dict.fromkeys(_AMV_DIMENSIONS, ())
+    )
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,7 @@ class CampaignConfig:
     holonomic_command_mode: str = "vx_vy"
     paper_facing: bool = False
     paper_profile_version: str | None = None
+    amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
 
 
 def _repo_relative(path: Path) -> str:
@@ -476,8 +491,22 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
-def _validate_campaign_config(cfg: CampaignConfig) -> None:
+def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901
     """Validate campaign-level invariants after config parsing."""
+    enforcement = str(cfg.amv_profile.coverage_enforcement).strip().lower()
+    if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
+        known = ", ".join(sorted(_AMV_COVERAGE_ENFORCEMENT))
+        raise ValueError(f"Unsupported amv_profile.coverage_enforcement '{enforcement}'. {known}")
+    for key, values in cfg.amv_profile.required_dimensions.items():
+        if key not in _AMV_DIMENSIONS:
+            known = ", ".join(_AMV_DIMENSIONS)
+            raise ValueError(
+                f"Unsupported AMV required dimension '{key}'. Expected one of: {known}"
+            )
+        for value in values:
+            if not str(value).strip():
+                raise ValueError(f"AMV required dimension '{key}' contains an empty value")
+
     if cfg.paper_facing:
         if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
             raise ValueError("paper_facing=true requires non-empty paper_profile_version")
@@ -495,7 +524,7 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:
                 )
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:
+def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901
     """Load and validate a camera-ready benchmark campaign YAML config.
 
     Returns:
@@ -576,6 +605,28 @@ def load_campaign_config(path: Path) -> CampaignConfig:
 
     snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
+    amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
+    required_raw = (
+        amv_raw.get("required_dimensions")
+        if isinstance(amv_raw.get("required_dimensions"), dict)
+        else {}
+    )
+    for key in required_raw:
+        if key not in _AMV_DIMENSIONS:
+            known = ", ".join(_AMV_DIMENSIONS)
+            raise ValueError(
+                f"Unsupported amv_profile.required_dimensions key '{key}'. Expected: {known}"
+            )
+    required_dimensions: dict[str, tuple[str, ...]] = {}
+    for dimension in _AMV_DIMENSIONS:
+        values = required_raw.get(dimension, [])
+        if isinstance(values, (str, int, float)):
+            normalized = (str(values).strip(),) if str(values).strip() else ()
+        elif isinstance(values, list):
+            normalized = tuple(str(value).strip() for value in values if str(value).strip())
+        else:
+            normalized = ()
+        required_dimensions[dimension] = normalized
 
     cfg = CampaignConfig(
         name=name,
@@ -619,6 +670,14 @@ def load_campaign_config(path: Path) -> CampaignConfig:
             str(payload.get("paper_profile_version")).strip()
             if payload.get("paper_profile_version") is not None
             else None
+        ),
+        amv_profile=AmvProfileConfig(
+            name=str(amv_raw.get("name", "amv-paper-v1")).strip() or "amv-paper-v1",
+            contract_version=str(amv_raw.get("contract_version", "1")).strip() or "1",
+            coverage_enforcement=(
+                str(amv_raw.get("coverage_enforcement", "warn")).strip().lower() or "warn"
+            ),
+            required_dimensions=required_dimensions,
         ),
     )
     _validate_campaign_config(cfg)
@@ -752,6 +811,149 @@ def _write_matrix_summary_artifacts(
     return json_path, csv_path
 
 
+def _scenario_family_from_scenario(scenario: dict[str, Any]) -> str:
+    """Resolve scenario-family/archetype label from scenario metadata.
+
+    Returns:
+        str: Best-effort scenario-family label.
+    """
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    for key in ("archetype", "scenario_family", "family"):
+        value = metadata.get(key) or scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key in ("scenario_id", "name", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
+def _extract_amv_taxonomy(scenario: dict[str, Any]) -> dict[str, str]:
+    """Extract AMV taxonomy fields from one scenario definition.
+
+    Returns:
+        dict[str, str]: AMV taxonomy values keyed by dimension name.
+    """
+    amv = scenario.get("amv")
+    if not isinstance(amv, dict):
+        metadata = scenario.get("metadata")
+        if isinstance(metadata, dict) and isinstance(metadata.get("amv"), dict):
+            amv = metadata["amv"]
+        else:
+            amv = {}
+    resolved: dict[str, str] = {}
+    for dimension in _AMV_DIMENSIONS:
+        value = amv.get(dimension)
+        if isinstance(value, str) and value.strip():
+            resolved[dimension] = value.strip()
+    return resolved
+
+
+def _build_amv_coverage_summary(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+) -> dict[str, Any]:
+    """Build AMV scope coverage summary for preflight/report artifacts.
+
+    Returns:
+        dict[str, Any]: JSON-serializable AMV coverage summary payload.
+    """
+    observed_by_dimension: dict[str, set[str]] = {dimension: set() for dimension in _AMV_DIMENSIONS}
+    by_scenario: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        taxonomy = _extract_amv_taxonomy(scenario)
+        for dimension, value in taxonomy.items():
+            observed_by_dimension[dimension].add(value)
+        by_scenario.append(
+            {
+                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
+                "scenario_family": _scenario_family_from_scenario(scenario),
+                "amv": taxonomy,
+            }
+        )
+
+    required = {
+        dimension: sorted(
+            str(v).strip() for v in cfg.amv_profile.required_dimensions.get(dimension, ()) if v
+        )
+        for dimension in _AMV_DIMENSIONS
+    }
+    observed = {dimension: sorted(values) for dimension, values in observed_by_dimension.items()}
+    missing = {
+        dimension: [value for value in required[dimension] if value not in observed[dimension]]
+        for dimension in _AMV_DIMENSIONS
+    }
+    has_missing = any(missing_values for missing_values in missing.values())
+    enforcement = str(cfg.amv_profile.coverage_enforcement).strip().lower()
+    status = "pass"
+    if has_missing:
+        status = "fail" if enforcement == "error" else "warn"
+
+    return {
+        "schema_version": "benchmark-amv-coverage-summary.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "profile_name": cfg.amv_profile.name,
+        "contract_version": cfg.amv_profile.contract_version,
+        "coverage_enforcement": enforcement,
+        "status": status,
+        "required_dimensions": required,
+        "observed_dimensions": observed,
+        "missing_dimensions": missing,
+        "scenario_count": len(scenarios),
+        "scenario_rows": by_scenario,
+    }
+
+
+def _write_amv_coverage_artifacts(
+    reports_dir: Path,
+    summary: dict[str, Any],
+) -> tuple[Path, Path]:
+    """Write AMV coverage summary JSON + Markdown artifacts.
+
+    Returns:
+        tuple[Path, Path]: Output paths ``(json_path, markdown_path)``.
+    """
+    json_path = reports_dir / "amv_coverage_summary.json"
+    md_path = reports_dir / "amv_coverage_summary.md"
+    _write_json(json_path, summary)
+
+    lines = [
+        "# AMV Coverage Summary",
+        "",
+        f"- Status: `{summary.get('status', 'unknown')}`",
+        f"- Profile: `{summary.get('profile_name', 'unknown')}`",
+        f"- Contract version: `{summary.get('contract_version', 'unknown')}`",
+        f"- Enforcement: `{summary.get('coverage_enforcement', 'warn')}`",
+        f"- Scenario count: `{summary.get('scenario_count', 0)}`",
+        "",
+        "| Dimension | Required | Observed | Missing |",
+        "|---|---|---|---|",
+    ]
+    required = summary.get("required_dimensions", {})
+    observed = summary.get("observed_dimensions", {})
+    missing = summary.get("missing_dimensions", {})
+    for dimension in _AMV_DIMENSIONS:
+        required_values = ", ".join(required.get(dimension, [])) or "-"
+        observed_values = ", ".join(observed.get(dimension, [])) or "-"
+        missing_values = ", ".join(missing.get(dimension, [])) or "-"
+        lines.append(
+            "| "
+            f"{_escape_markdown_cell(dimension)} | "
+            f"{_escape_markdown_cell(required_values)} | "
+            f"{_escape_markdown_cell(observed_values)} | "
+            f"{_escape_markdown_cell(missing_values)} |"
+        )
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, md_path
+
+
 def prepare_campaign_preflight(
     cfg: CampaignConfig,
     *,
@@ -805,6 +1007,14 @@ def prepare_campaign_preflight(
             "resolved_seeds": resolved_seeds,
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
+        "amv_profile": {
+            "name": cfg.amv_profile.name,
+            "contract_version": cfg.amv_profile.contract_version,
+            "coverage_enforcement": cfg.amv_profile.coverage_enforcement,
+            "required_dimensions": {
+                key: list(values) for key, values in cfg.amv_profile.required_dimensions.items()
+            },
+        },
     }
     preview_limit = max(0, int(cfg.preview_scenario_limit))
     preview_payload = {
@@ -845,6 +1055,25 @@ def prepare_campaign_preflight(
         reports_dir,
         matrix_rows,
     )
+    amv_summary = _build_amv_coverage_summary(
+        cfg,
+        scenarios,
+        campaign_id=campaign_id,
+        generated_at_utc=created_at_utc,
+    )
+    amv_coverage_json_path, amv_coverage_md_path = _write_amv_coverage_artifacts(
+        reports_dir,
+        amv_summary,
+    )
+    if (
+        cfg.paper_facing
+        and amv_summary.get("status") == "fail"
+        and str(cfg.amv_profile.coverage_enforcement).strip().lower() == "error"
+    ):
+        raise ValueError(
+            "AMV coverage contract validation failed: missing required AMV dimensions "
+            "(coverage_enforcement=error)."
+        )
 
     manifest_payload: dict[str, Any] = {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
@@ -866,6 +1095,10 @@ def prepare_campaign_preflight(
         "invoked_command": invoked_command,
         "paper_facing": bool(cfg.paper_facing),
         "paper_profile_version": cfg.paper_profile_version,
+        "amv_profile_name": cfg.amv_profile.name,
+        "amv_contract_version": cfg.amv_profile.contract_version,
+        "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
+        "amv_coverage_status": amv_summary.get("status", "unknown"),
         "planners": [
             {
                 "key": planner.key,
@@ -883,11 +1116,16 @@ def prepare_campaign_preflight(
         ],
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
+        "repository_url": cfg.repository_url,
+        "release_tag": cfg.release_tag,
+        "doi": cfg.doi,
         "artifacts": {
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "matrix_summary_json": _repo_relative(matrix_summary_json_path),
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
+            "amv_coverage_json": _repo_relative(amv_coverage_json_path),
+            "amv_coverage_md": _repo_relative(amv_coverage_md_path),
         },
     }
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
@@ -900,6 +1138,8 @@ def prepare_campaign_preflight(
         "preview_scenarios_path": preview_scenarios_path,
         "matrix_summary_json_path": matrix_summary_json_path,
         "matrix_summary_csv_path": matrix_summary_csv_path,
+        "amv_coverage_json_path": amv_coverage_json_path,
+        "amv_coverage_md_path": amv_coverage_md_path,
         "manifest_payload": manifest_payload,
         "created_at_utc": created_at_utc,
         "scenarios": scenarios,
@@ -1284,7 +1524,18 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             lines.append(f"- Planner x kinematics parity table: `{parity_path}`")
         if isinstance(skipped_path, str):
             lines.append(f"- Skipped planner/kinematics combinations: `{skipped_path}`")
-
+    amv_json = (payload.get("artifacts") or {}).get("amv_coverage_json")
+    amv_md = (payload.get("artifacts") or {}).get("amv_coverage_md")
+    if isinstance(amv_json, str) or isinstance(amv_md, str):
+        lines.extend(["", "## AMV Coverage Contract", ""])
+        if isinstance(amv_json, str):
+            lines.append(f"- Coverage JSON: `{amv_json}`")
+        if isinstance(amv_md, str):
+            lines.append(f"- Coverage Markdown: `{amv_md}`")
+        lines.append(
+            f"- Coverage status: `{campaign.get('amv_coverage_status', 'unknown')}` "
+            f"(enforcement: `{campaign.get('amv_coverage_enforcement', 'warn')}`)"
+        )
     lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
         for warning in warnings:
@@ -1341,6 +1592,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     preview_scenarios_path = Path(prepared["preview_scenarios_path"])
     matrix_summary_json_path = Path(prepared["matrix_summary_json_path"])
     matrix_summary_csv_path = Path(prepared["matrix_summary_csv_path"])
+    amv_coverage_json_path = Path(prepared["amv_coverage_json_path"])
+    amv_coverage_md_path = Path(prepared["amv_coverage_md_path"])
     manifest_payload = dict(prepared["manifest_payload"])
     campaign_started_at_utc = str(prepared["created_at_utc"])
     scenarios = list(prepared["scenarios"])
@@ -1764,6 +2017,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "holonomic_command_mode": cfg.holonomic_command_mode,
             "paper_facing": bool(cfg.paper_facing),
             "paper_profile_version": cfg.paper_profile_version,
+            "amv_profile_name": cfg.amv_profile.name,
+            "amv_contract_version": cfg.amv_profile.contract_version,
+            "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
+            "amv_coverage_status": str(
+                (manifest_payload or {}).get("amv_coverage_status", "unknown")
+            ),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -1783,6 +2042,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "kinematics_skipped_combinations_md": _repo_relative(skipped_md_path),
             "matrix_summary_json": _repo_relative(matrix_summary_json_path),
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
+            "amv_coverage_json": _repo_relative(amv_coverage_json_path),
+            "amv_coverage_md": _repo_relative(amv_coverage_md_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -1842,6 +2103,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "preflight_artifacts": {
             "validate_config": _repo_relative(validate_config_path),
             "preview_scenarios": _repo_relative(preview_scenarios_path),
+            "amv_coverage_json": _repo_relative(amv_coverage_json_path),
+            "amv_coverage_md": _repo_relative(amv_coverage_md_path),
         },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
@@ -1895,6 +2158,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
 
 __all__ = [
     "CAMPAIGN_SCHEMA_VERSION",
+    "AmvProfileConfig",
     "CampaignConfig",
     "PlannerSpec",
     "SeedPolicy",

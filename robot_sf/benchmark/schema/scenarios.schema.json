@@ -154,6 +154,28 @@
             "metadata": {
                 "type": "object"
             },
+            "amv": {
+                "type": "object",
+                "properties": {
+                    "use_case": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "context": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "speed_regime": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "maneuver_type": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "additionalProperties": true
+            },
             "seeds": {
                 "type": "array",
                 "items": {

@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_adjustments = len(warnings)
     else:
         baseline, warnings = sanitize_baseline_stats(raw_baseline)
-        baseline_source = "input_file"
+        baseline_source = "config_file"
         baseline_adjustments = len(warnings)
 
     thresholds = SnqiContractThresholds(

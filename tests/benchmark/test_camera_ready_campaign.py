@@ -303,6 +303,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
 
     monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
     monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.export_publication_bundle",
+        lambda *args, **kwargs: pytest.fail(
+            "Publication export should be skipped when snqi_contract hard-fails."
+        ),
+    )
+    monkeypatch.setattr(
         "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci",
         _fake_compute_aggregates_with_ci,
     )
@@ -876,6 +882,10 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
     assert (latest_campaign_dir / "reports" / "snqi_diagnostics.json").exists()
     assert (latest_campaign_dir / "reports" / "snqi_diagnostics.md").exists()
     assert (latest_campaign_dir / "reports" / "snqi_sensitivity.csv").exists()
+    summary_payload = json.loads(
+        (latest_campaign_dir / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    assert "publication_bundle" not in summary_payload
 
 
 def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypatch) -> None:

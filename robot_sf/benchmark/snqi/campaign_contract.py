@@ -80,8 +80,13 @@ def resolve_weight_mapping(raw: Mapping[str, Any] | None) -> dict[str, float]:
     """
     if raw is None:
         return default_weight_mapping()
-    if "weights" in raw and isinstance(raw.get("weights"), Mapping):
-        source: Mapping[str, Any] = raw["weights"]
+    if not isinstance(raw, Mapping):
+        raise ValueError("SNQI weights payload must be a mapping or contain a 'weights' mapping.")
+    if "weights" in raw:
+        weights_payload = raw.get("weights")
+        if not isinstance(weights_payload, Mapping):
+            raise ValueError("SNQI weights payload key 'weights' must be a mapping when provided.")
+        source: Mapping[str, Any] = weights_payload
     else:
         source = raw
     resolved = default_weight_mapping()
@@ -472,19 +477,20 @@ def collect_episodes_from_campaign_runs(
         path = (repo_root / episodes_path).resolve()
         if not path.exists():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except Exception:
-                continue
-            if not isinstance(payload, dict):
-                continue
-            payload["planner_key"] = planner_key
-            payload["kinematics"] = kinematics
-            episodes.append(payload)
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                payload["planner_key"] = planner_key
+                payload["kinematics"] = kinematics
+                episodes.append(payload)
     return episodes
 
 

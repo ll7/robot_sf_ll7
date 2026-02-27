@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     calibrate_weights,
     compute_baseline_stats_from_episodes,
     evaluate_snqi_contract,
+    resolve_weight_mapping,
     sanitize_baseline_stats,
 )
 
@@ -150,3 +153,15 @@ def test_compute_baseline_stats_from_episodes_propagates_adjustment_warnings() -
     )
     assert baseline["collisions"]["p95"] > baseline["collisions"]["med"]
     assert warnings
+
+
+def test_resolve_weight_mapping_rejects_non_mapping_payload() -> None:
+    """Weight resolver should reject non-mapping top-level payloads."""
+    with pytest.raises(ValueError, match="mapping"):
+        resolve_weight_mapping(["not", "a", "mapping"])  # type: ignore[arg-type]
+
+
+def test_resolve_weight_mapping_rejects_non_mapping_weights_key() -> None:
+    """Weight resolver should reject non-mapping nested ``weights`` payloads."""
+    with pytest.raises(ValueError, match="weights"):
+        resolve_weight_mapping({"weights": 1.0})  # type: ignore[arg-type]

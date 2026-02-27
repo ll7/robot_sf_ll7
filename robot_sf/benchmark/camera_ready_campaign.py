@@ -2609,7 +2609,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     }
 
     publication_payload: dict[str, Any] | None = None
-    if cfg.export_publication_bundle and not skip_publication_bundle:
+    if cfg.export_publication_bundle and not skip_publication_bundle and not snqi_hard_fail:
         publication_dir = get_artifact_category_path("benchmarks") / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:

@@ -152,6 +152,19 @@ def test_summarize_records_does_not_count_waypoint_only_success() -> None:
     assert summary["success_rate"] == pytest.approx(0.0)
 
 
+def test_summarize_records_counts_all_non_success_non_collision_as_failures() -> None:
+    """Failure count should include all non-success/collision termination outcomes."""
+    records = [
+        {"status": "success", "termination_reason": "success", "metrics": {"success": 1}},
+        {"status": "collision", "termination_reason": "collision", "metrics": {"success": 0}},
+        {"status": "failure", "termination_reason": "max_steps", "metrics": {"success": 0}},
+        {"status": "failure", "termination_reason": "terminated", "metrics": {"success": 0}},
+        {"status": "failure", "termination_reason": "error", "metrics": {"success": 0}},
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+    assert summary["failures"] == 3
+
+
 def test_build_error_episode_record_marks_prediction_planner_as_adapter() -> None:
     """Error records should keep prediction_planner execution mode as adapter."""
     record = policy_analysis_run._build_error_episode_record(

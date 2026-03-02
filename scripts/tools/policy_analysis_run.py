@@ -625,7 +625,7 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     # cannot report "success=1.0" while all episodes terminated as collisions.
     successes = int(reason_counts.get("success", 0))
     collisions = int(reason_counts.get("collision", 0))
-    timeouts = int(reason_counts.get("max_steps", 0)) + int(reason_counts.get("truncated", 0))
+    failures = max(0, len(records) - successes - collisions)
     reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
     metric_means: dict[str, float] = {}
     for metric in _SUMMARY_METRICS:
@@ -646,7 +646,7 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "episodes": len(records),
         "success_rate": successes / len(records),
         "collision_rate": collisions / len(records),
-        "failures": timeouts,
+        "failures": failures,
         "termination_reason_counts": reason_counts,
         "termination_reason_rates": reason_rates,
         "metric_means": metric_means,

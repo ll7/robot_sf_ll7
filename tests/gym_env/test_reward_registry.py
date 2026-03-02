@@ -140,6 +140,21 @@ def test_simple_ped_and_punish_action_rewards_cover_collision_and_action_branche
     assert penalized < unpenalized
 
 
+def test_simple_ped_reward_ignores_legacy_robot_goal_flag_without_route_complete() -> None:
+    """Legacy robot-goal flag alone must not trigger route-complete penalty."""
+    base_meta = {
+        "max_sim_steps": 100,
+        "distance_to_robot": 1.5,
+        "is_pedestrian_collision": False,
+        "is_obstacle_collision": False,
+        "is_robot_collision": False,
+        "is_route_complete": False,
+    }
+    legacy_meta = dict(base_meta)
+    legacy_meta["is_robot_at_goal"] = True
+    assert simple_ped_reward(legacy_meta) == simple_ped_reward(base_meta)
+
+
 def test_build_reward_function_accepts_new_aliases_and_rejects_unknown() -> None:
     """Registry should resolve new aliases and reject unsupported names."""
     assert callable(build_reward_function("route_completion"))

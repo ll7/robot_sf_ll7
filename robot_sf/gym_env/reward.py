@@ -131,7 +131,7 @@ def simple_ped_reward(
         reward += robot_coll_reward
 
     # If the robot completed the route, apply penalty.
-    if meta.get("is_route_complete") or meta.get("is_robot_at_goal"):
+    if meta.get("is_route_complete"):
         reward += robot_route_complete_penalty
 
     return float(reward)

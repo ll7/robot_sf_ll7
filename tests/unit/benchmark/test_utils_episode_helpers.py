@@ -14,6 +14,7 @@ from robot_sf.benchmark.utils import (
     format_episode_summary_table,
     format_overlay_text,
     index_existing,
+    validate_episode_success_integrity,
 )
 
 
@@ -27,8 +28,13 @@ class TestDetermineEpisodeOutcome:
 
     def test_success_outcome(self):
         """Test success outcome detection."""
-        info = {"collision": False, "success": True}
+        info = {"collision": False, "meta": {"is_route_complete": True}}
         assert determine_episode_outcome(info) == "success"
+
+    def test_waypoint_only_is_not_success(self):
+        """Waypoint completion alone must not count as success."""
+        info = {"collision": False, "success": True, "meta": {"is_waypoint_complete": True}}
+        assert determine_episode_outcome(info) == "done"
 
     def test_timeout_outcome(self):
         """Test timeout outcome detection."""
@@ -48,6 +54,39 @@ class TestDetermineEpisodeOutcome:
         """Test collision takes priority over other outcomes."""
         info = {"collision": True, "success": True, "timeout": True}
         assert determine_episode_outcome(info) == "collision"
+
+
+class TestValidateEpisodeSuccessIntegrity:
+    """Test contradictory success/collision integrity checks."""
+
+    def test_collision_reason_with_success_metric_is_flagged(self):
+        """A collision termination with success=1.0 should be reported."""
+        record = {
+            "termination_reason": "collision",
+            "metrics": {"success": 1.0, "collisions": 0.0},
+            "outcome": {"route_complete": False, "collision_event": True, "timeout_event": False},
+        }
+        violations = validate_episode_success_integrity(record)
+        assert violations
+
+    def test_success_reason_with_collision_metric_is_flagged(self):
+        """A success termination with non-zero collisions should be reported."""
+        record = {
+            "termination_reason": "success",
+            "metrics": {"success": 1.0, "collisions": 1.0},
+            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+        }
+        violations = validate_episode_success_integrity(record)
+        assert violations
+
+    def test_consistent_record_has_no_violations(self):
+        """Consistent success/collision combinations should pass integrity checks."""
+        record = {
+            "termination_reason": "success",
+            "metrics": {"success": 1.0, "collisions": 0.0},
+            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+        }
+        assert validate_episode_success_integrity(record) == []
 
 
 class TestFormatOverlayText:

@@ -46,10 +46,19 @@ from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     TERMINATION_REASONS,
+    build_outcome_payload,
+    collision_event,
+    outcome_contradictions,
     resolve_termination_reason,
+    route_complete_success,
     status_from_termination_reason,
 )
-from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, compute_episode_id
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
+    validate_episode_success_integrity,
+)
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -66,6 +75,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
     make_orca_policy,
+    make_prediction_policy,
     make_sacadrl_policy,
     make_social_force_policy,
 )
@@ -85,6 +95,7 @@ if TYPE_CHECKING:
 _POLICY_CHOICES = (
     "goal",
     "ppo",
+    "prediction_planner",
     "socnav_sampling",
     "socnav_social_force",
     "socnav_orca",
@@ -436,6 +447,8 @@ def _build_socnav_policy(
     socnav_allow_fallback: bool,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
+    if policy_name == "prediction_planner":
+        return make_prediction_policy(allow_fallback=socnav_allow_fallback)
     if policy_name == "socnav_sampling":
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
@@ -598,14 +611,16 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             "termination_reason_counts": {},
             "termination_reason_rates": {},
         }
-    successes = sum(1 for r in records if r.get("metrics", {}).get("success"))
-    collisions = sum(1 for r in records if int(r.get("metrics", {}).get("collisions", 0)) > 0)
-    timeouts = sum(1 for r in records if r.get("status") == "failure")
     reason_counts = dict.fromkeys(_TERMINATION_REASON_CHOICES, 0)
     for rec in records:
         reason = str(rec.get("termination_reason", "")).strip()
         if reason in reason_counts:
             reason_counts[reason] += 1
+    # Keep rate metrics aligned with canonical termination reasons so summary
+    # cannot report "success=1.0" while all episodes terminated as collisions.
+    successes = int(reason_counts.get("success", 0))
+    collisions = int(reason_counts.get("collision", 0))
+    timeouts = sum(1 for r in records if r.get("status") == "failure")
     reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
     metric_means: dict[str, float] = {}
     for metric in _SUMMARY_METRICS:
@@ -892,6 +907,9 @@ def _finalize_run(
 
 
 def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    violations = validate_episode_success_integrity(record)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
@@ -1232,9 +1250,10 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         ped_positions.append(peds)
         ped_forces.append(forces_arr)
 
-        if reached_goal_step is None and bool(info.get("success") or info.get("is_success")):
+        route_complete = route_complete_success(info)
+        if reached_goal_step is None and route_complete:
             reached_goal_step = step_idx
-        if terminated or truncated:
+        if route_complete or terminated or truncated:
             break
 
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -1321,10 +1340,15 @@ def _build_episode_record(  # noqa: PLR0913
         )
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
-    success = bool(
-        last_info.get("success") or last_info.get("is_success") or metrics.get("success")
+    meta = last_info.get("meta")
+    route_complete = bool(meta.get("is_route_complete")) if isinstance(meta, dict) else False
+    success = bool(route_complete)
+    collision = collision_event(last_info)
+    timeout = bool(
+        (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))
+        or truncated
+        or reached_max_steps
     )
-    collision = bool(last_info.get("collision") or metrics.get("collisions"))
     termination_reason = resolve_termination_reason(
         terminated=terminated,
         truncated=truncated,
@@ -1333,8 +1357,23 @@ def _build_episode_record(  # noqa: PLR0913
         reached_max_steps=reached_max_steps,
     )
     status = status_from_termination_reason(termination_reason)
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=timeout,
+    )
 
     scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError(
+            f"Episode integrity contradictions for scenario '{scenario_id}', seed={seed}: "
+            + "; ".join(contradictions)
+        )
     scenario_params = dict(scenario)
     scenario_params.setdefault("id", scenario_id)
     scenario_params.setdefault("algo", policy_name)
@@ -1357,6 +1396,8 @@ def _build_episode_record(  # noqa: PLR0913
         "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status,
         "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
         "termination_flags": {
             "terminated": bool(terminated),
             "truncated": bool(truncated),
@@ -1403,6 +1444,7 @@ def _build_error_episode_record(
         metadata={"algorithm": policy_name, "status": "error"},
         execution_mode="adapter" if policy_name.startswith("socnav_") else "native",
     )
+    outcome = build_outcome_payload(route_complete=False, collision=False, timeout=False)
     return {
         "version": "v1",
         "episode_id": compute_episode_id(scenario_params, seed),
@@ -1417,6 +1459,8 @@ def _build_error_episode_record(
         "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status_from_termination_reason(termination_reason),
         "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": []},
         "termination_flags": {
             "terminated": False,
             "truncated": False,

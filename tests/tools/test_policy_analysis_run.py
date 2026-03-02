@@ -121,3 +121,32 @@ def test_summarize_records_includes_reason_counts() -> None:
     assert reason_counts["max_steps"] == 1
     assert reason_rates["success"] == pytest.approx(1 / 3)
     assert reason_rates["collision"] == pytest.approx(1 / 3)
+
+
+def test_summarize_records_prefers_termination_reason_for_rates() -> None:
+    """Success/collision rates should follow termination_reason, not raw metrics."""
+    records = [
+        {
+            "status": "collision",
+            "termination_reason": "collision",
+            "metrics": {"success": 1, "collisions": 0},
+        }
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+
+    assert summary["success_rate"] == pytest.approx(0.0)
+    assert summary["collision_rate"] == pytest.approx(1.0)
+    assert summary["termination_reason_counts"]["collision"] == 1
+
+
+def test_summarize_records_does_not_count_waypoint_only_success() -> None:
+    """Waypoint-level success must not be treated as route completion success."""
+    records = [
+        {
+            "status": "failure",
+            "termination_reason": "max_steps",
+            "metrics": {"success": 0},
+        }
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+    assert summary["success_rate"] == pytest.approx(0.0)

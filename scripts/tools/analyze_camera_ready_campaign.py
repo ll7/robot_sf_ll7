@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.utils import validate_episode_success_integrity
+
 
 @dataclass(frozen=True)
 class PlannerDiagnostics:
@@ -104,6 +106,14 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [
         json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
+
+
+def _count_success_integrity_violations(episodes: list[dict[str, Any]]) -> int:
+    """Count contradictory success/collision episode records."""
+    count = 0
+    for entry in episodes:
+        count += len(validate_episode_success_integrity(entry))
+    return count
 
 
 def _get_repository_root() -> Path:
@@ -284,6 +294,11 @@ def _analyze_planner(  # noqa: C901
     if absolute_map_path_count > 0:
         findings.append(
             f"non-portable provenance: {absolute_map_path_count} episodes use absolute map_file paths",
+        )
+    integrity_violations = _count_success_integrity_violations(episodes)
+    if integrity_violations > 0:
+        findings.append(
+            f"episode integrity violations: {integrity_violations} contradictory success/collision records",
         )
 
     return PlannerDiagnostics(

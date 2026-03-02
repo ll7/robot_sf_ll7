@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
+from robot_sf.benchmark.termination_reason import (
+    collision_event,
+    outcome_contradictions,
+    route_complete_success,
+)
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
 if TYPE_CHECKING:
@@ -133,22 +138,44 @@ def determine_episode_outcome(info: dict[str, Any]) -> str:
 
     Returns:
         Outcome string: 'collision', 'success', 'timeout', or 'done'.
+        Success is defined as full-route completion.
 
     Examples:
         >>> determine_episode_outcome({"collision": True})
         'collision'
-        >>> determine_episode_outcome({"success": True})
+        >>> determine_episode_outcome({"meta": {"is_route_complete": True}})
         'success'
         >>> determine_episode_outcome({})
         'done'
     """
-    if info.get("collision"):
+    if collision_event(info):
         return "collision"
-    if info.get("success"):
+    if route_complete_success(info):
         return "success"
     if info.get("timeout"):
         return "timeout"
     return "done"
+
+
+def validate_episode_success_integrity(record: dict[str, Any]) -> list[str]:
+    """Return integrity violations for contradictory success/collision outcomes.
+
+    Contradictions checked:
+    - termination_reason='collision' with success metric equal to 1.0
+    - termination_reason in {'success', 'success_reached'} with any collision metric > 0
+    """
+    metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
+    if not isinstance(metrics, dict):
+        return []
+
+    outcome = record.get("outcome", {})
+    if not isinstance(outcome, dict):
+        return ["missing or invalid outcome payload"]
+    return outcome_contradictions(
+        termination_reason=str(record.get("termination_reason", "")).strip(),
+        outcome=outcome,
+        metrics=metrics,
+    )
 
 
 def format_overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:

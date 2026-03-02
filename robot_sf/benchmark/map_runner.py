@@ -25,11 +25,20 @@ from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.termination_reason import (
+    build_outcome_payload,
+    collision_event,
+    outcome_contradictions,
+    resolve_termination_reason,
+    route_complete_success,
+    status_from_termination_reason,
+)
 from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
     index_existing,
+    validate_episode_success_integrity,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
@@ -59,8 +68,6 @@ _SOCNAV_ALGO_KEYS = {
     "orca",
     "sacadrl",
     "prediction_planner",
-    "predictive",
-    "prediction",
     "sa_cadrl",
     "socnav_bench",
 }
@@ -806,7 +813,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"prediction_planner", "predictive", "prediction"}:
+    elif algo_key == "prediction_planner":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key in {"socnav_bench"}:
@@ -1155,7 +1162,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
     reached_goal_step: int | None = None
-    termination_reason = "horizon"
+    termination_reason = "max_steps"
+    collision_seen = False
+    timeout_seen = False
 
     map_def = None
     goal_vec = np.zeros(2, dtype=float)
@@ -1186,19 +1195,28 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_positions.append(peds)
             ped_forces.append(forces_arr)
 
-            step_success = bool(info.get("success") or info.get("is_success"))
+            meta = info.get("meta", {}) if isinstance(info, dict) else {}
+            step_success = route_complete_success(info)
+            step_collision = collision_event(info)
+            step_timeout = bool(meta.get("is_timesteps_exceeded", False))
+            collision_seen = collision_seen or step_collision
+            timeout_seen = timeout_seen or step_timeout
             if reached_goal_step is None and step_success:
                 reached_goal_step = step_idx
-            # Freeze episode once success is first achieved to avoid later collisions
-            # flipping benchmark success labels as horizon changes.
             if step_success:
-                termination_reason = "success_reached"
+                termination_reason = resolve_termination_reason(
+                    terminated=True,
+                    truncated=False,
+                    success=True,
+                    collision=step_collision,
+                )
                 break
             if terminated or truncated:
-                termination_reason = str(
-                    info.get("done_reason")
-                    or info.get("termination_reason")
-                    or ("terminated" if terminated else "truncated")
+                termination_reason = resolve_termination_reason(
+                    terminated=bool(terminated),
+                    truncated=bool(truncated),
+                    success=step_success,
+                    collision=step_collision,
                 )
                 break
         if getattr(env, "simulator", None) is not None:
@@ -1288,9 +1306,24 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
     timing = {"steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0}
-    status = "success" if metrics.get("success") else "failure"
-    if metrics.get("collisions"):
-        status = "collision"
+    route_complete = reached_goal_step is not None
+    timeout_event = timeout_seen or termination_reason in {"truncated", "max_steps"}
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision_seen,
+        timeout=timeout_event,
+    )
+    status = status_from_termination_reason(termination_reason)
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError(
+            f"Episode integrity contradictions for scenario '{scenario_id}', seed={seed}: "
+            + "; ".join(contradictions)
+        )
     record = {
         "version": "v1",
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -1309,12 +1342,17 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "wall_time_sec": wall_time,
         "timing": timing,
         "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
     }
     ensure_metric_parameters(record)
     return record
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    violations = validate_episode_success_integrity(record)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")

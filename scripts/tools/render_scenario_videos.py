@@ -47,7 +47,11 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import load_trained_policy
-from robot_sf.benchmark.termination_reason import resolve_termination_reason
+from robot_sf.benchmark.termination_reason import (
+    collision_event,
+    resolve_termination_reason,
+    route_complete_success,
+)
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -775,8 +779,8 @@ def _run_episode(  # noqa: PLR0913
             robot_speed=robot_speed,
             max_steps=max_steps,
         )
-        success = bool(last_info.get("success") or last_info.get("is_success"))
-        collision = bool(last_info.get("collision"))
+        success = route_complete_success(last_info)
+        collision = collision_event(last_info)
         stop_reason = _resolve_stop_reason(
             terminated=terminated,
             truncated=truncated,

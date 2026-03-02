@@ -30,6 +30,12 @@ from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_in
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.termination_reason import (
+    build_outcome_payload,
+    outcome_contradictions,
+    resolve_termination_reason,
+    status_from_termination_reason,
+)
 from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
@@ -811,7 +817,8 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         except Exception:
             # Rendering is best-effort; ignore to keep rollout running
             pass
-        if reached_goal_step is None and bool(info.get("success")):
+        step_meta = info.get("meta", {}) if isinstance(info, dict) else {}
+        if reached_goal_step is None and bool(step_meta.get("is_route_complete")):
             reached_goal_step = step_idx
         if terminated or truncated:
             break
@@ -849,6 +856,15 @@ def _make_stub_episode_record(
         dict[str, Any]: Synthetic benchmark episode record.
     """
     now = time.time()
+    metrics = {
+        "collision_rate": 0.0,
+        "success_rate": 1.0,
+        # Keep deterministic synthetic defaults stable across runs.
+        "time_to_goal": float(horizon) * _STUB_DT_SECONDS,
+        "path_efficiency": _STUB_PATH_EFFICIENCY,
+        "avg_speed": _STUB_AVG_SPEED,
+    }
+    termination_reason, outcome, contradictions = _termination_payload_from_metrics(metrics)
     record: dict[str, Any] = {
         "version": "v1",
         "episode_id": episode_id,
@@ -856,15 +872,11 @@ def _make_stub_episode_record(
         "seed": job.seed,
         "archetype": job.archetype,
         "density": job.density,
-        "status": "success",
-        "metrics": {
-            "collision_rate": 0.0,
-            "success_rate": 1.0,
-            # Keep deterministic synthetic defaults stable across runs.
-            "time_to_goal": float(horizon) * _STUB_DT_SECONDS,
-            "path_efficiency": _STUB_PATH_EFFICIENCY,
-            "avg_speed": _STUB_AVG_SPEED,
-        },
+        "status": status_from_termination_reason(termination_reason),
+        "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
+        "metrics": metrics,
         "steps": min(horizon, _STUB_MAX_STEPS),
         "horizon": horizon,
         "wall_time_sec": 0.0,
@@ -944,6 +956,43 @@ def _status_from_metrics(metrics: dict[str, float]) -> str:
     if collision_rate:
         status = "collision"
     return status
+
+
+def _termination_payload_from_metrics(
+    metrics: dict[str, float],
+) -> tuple[str, dict[str, bool], list[str]]:
+    """Derive canonical termination/outcome payload from metrics.
+
+    Returns:
+        tuple[str, dict[str, bool], list[str]]: ``(termination_reason, outcome, contradictions)``.
+    """
+    route_complete = bool(
+        float(metrics.get("success", metrics.get("success_rate", 0.0)) or 0.0) > 0.0
+    )
+    collision = bool(
+        float(metrics.get("collisions", metrics.get("collision_rate", 0.0)) or 0.0) > 0.0
+    )
+    ended = route_complete or collision
+    termination_reason = resolve_termination_reason(
+        terminated=ended,
+        truncated=False,
+        success=route_complete,
+        collision=collision,
+        reached_max_steps=not ended,
+    )
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=not ended,
+    )
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(contradictions))
+    return termination_reason, outcome, contradictions
 
 
 def _orchestrate_real_episode(
@@ -1081,6 +1130,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     steps_taken = int(runtime["steps_taken"])
     wall_time = float(runtime["wall_time"])
     start_time = float(runtime["start_time"])
+    termination_reason, outcome, contradictions = _termination_payload_from_metrics(metrics)
     record: dict[str, Any] = {
         "version": "v1",
         "episode_id": episode_id,
@@ -1088,7 +1138,10 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         "seed": job.seed,
         "archetype": job.archetype,
         "density": job.density,
-        "status": _status_from_metrics(metrics),
+        "status": status_from_termination_reason(termination_reason),
+        "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
         "metrics": metrics,
         "steps": steps_taken,
         "horizon": horizon,

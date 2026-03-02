@@ -12,6 +12,7 @@ import numpy as np
 
 from robot_sf.benchmark.map_runner import _build_env_config, _build_policy
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
+from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from scripts.validation.predictive_eval_common import load_seed_manifest
 
@@ -139,6 +140,7 @@ def main() -> int:
                     np.array([action_v, action_w], dtype=float)
                 )
                 meta = info.get("meta", {}) if isinstance(info, dict) else {}
+                route_complete = route_complete_success(info if isinstance(info, dict) else {})
                 step_row = {
                     "step": t,
                     "action_v": float(action_v),
@@ -147,7 +149,7 @@ def main() -> int:
                     "min_obs_robot_ped_dist": float(min_d) if np.isfinite(min_d) else None,
                     "terminated": bool(terminated),
                     "truncated": bool(truncated),
-                    "is_success": bool(info.get("success") or info.get("is_success")),
+                    "is_success": route_complete,
                     "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
                     "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
                     "is_robot_collision": bool(meta.get("is_robot_collision", False)),

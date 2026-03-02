@@ -260,6 +260,16 @@ _SOCIAL_QUALITY_V1_WEIGHTS: dict[str, float] = {
 
 
 def _float(meta: Mapping[str, object], key: str, default: float = 0.0) -> float:
+    """Return ``meta[key]`` as a finite float, otherwise ``default``.
+
+    Args:
+        meta: Reward metadata mapping.
+        key: Metadata key to read.
+        default: Fallback value when missing, invalid, or non-finite.
+
+    Returns:
+        Finite float value for the selected key.
+    """
     value = meta.get(key, default)
     try:
         result = float(value)
@@ -271,10 +281,28 @@ def _float(meta: Mapping[str, object], key: str, default: float = 0.0) -> float:
 
 
 def _bounded(value: float, lo: float, hi: float) -> float:
+    """Clip a scalar to ``[lo, hi]`` and return it as ``float``.
+
+    Args:
+        value: Candidate scalar value.
+        lo: Lower clip bound.
+        hi: Upper clip bound.
+
+    Returns:
+        Clipped float in the configured range.
+    """
     return float(np.clip(float(value), float(lo), float(hi)))
 
 
 def _ttc_risk_from_meta(meta: Mapping[str, object]) -> float:
+    """Compute bounded TTC risk from metadata using inverse TTC or near-miss fallback.
+
+    Args:
+        meta: Reward metadata mapping; reads ``time_to_collision`` and ``near_misses``.
+
+    Returns:
+        Risk proxy in ``[0, 1]`` where larger values indicate higher collision risk.
+    """
     # Prefer explicit TTC if available; otherwise fall back to near-miss proxy.
     ttc = _float(meta, "time_to_collision", float("inf"))
     if np.isfinite(ttc) and ttc > 0.0:
@@ -284,6 +312,14 @@ def _ttc_risk_from_meta(meta: Mapping[str, object]) -> float:
 
 
 def _progress_term(meta: Mapping[str, object]) -> float:
+    """Return bounded goal-progress delta from consecutive distance estimates.
+
+    Args:
+        meta: Reward metadata mapping with distance-to-goal fields.
+
+    Returns:
+        Progress term in ``[-1, 1]`` as ``prev_distance_to_goal - distance_to_goal``.
+    """
     prev_dist = _float(meta, "prev_distance_to_goal", 0.0)
     dist = _float(meta, "distance_to_goal", prev_dist)
     return _bounded(prev_dist - dist, -1.0, 1.0)
@@ -294,6 +330,18 @@ def _reward_with_terms(
     *,
     weights: Mapping[str, float],
 ) -> float:
+    """Compute weighted reward terms and write decomposition back into metadata.
+
+    Args:
+        meta: Mutable reward metadata dictionary.
+        weights: Per-term scalar weights keyed by reward term name.
+
+    Returns:
+        Weighted scalar reward total.
+
+    Side effects:
+        Mutates ``meta`` by setting ``reward_terms`` and ``reward_total``.
+    """
     collision_flag = bool(
         meta.get("is_pedestrian_collision")
         or meta.get("is_robot_collision")
@@ -387,6 +435,8 @@ def build_reward_function(
         "alyassi",
         "alyassi_composite",
         "route_completion_v2",
+        "route_completion",
         "social_quality_v1",
+        "social_quality",
     )
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")

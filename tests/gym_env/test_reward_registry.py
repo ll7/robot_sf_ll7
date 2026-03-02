@@ -15,7 +15,14 @@ from robot_sf.gym_env.reward import (
 )
 
 
-def _meta(*, collision: bool, success: bool, step: int = 50, max_steps: int = 100) -> dict:
+def _meta(
+    *,
+    collision: bool,
+    success: bool,
+    waypoint: bool,
+    step: int = 50,
+    max_steps: int = 100,
+) -> dict:
     return {
         "step_of_episode": step,
         "max_sim_steps": max_steps,
@@ -23,25 +30,25 @@ def _meta(*, collision: bool, success: bool, step: int = 50, max_steps: int = 10
         "is_robot_collision": False,
         "is_obstacle_collision": False,
         "is_route_complete": success,
-        "is_waypoint_complete": success,
+        "is_waypoint_complete": waypoint,
     }
 
 
 def test_snqi_step_reward_penalizes_collision():
     """SNQI step reward should be lower when a collision occurs."""
-    reward_clean = snqi_step_reward(_meta(collision=False, success=False))
-    reward_collision = snqi_step_reward(_meta(collision=True, success=False))
+    reward_clean = snqi_step_reward(_meta(collision=False, success=False, waypoint=False))
+    reward_collision = snqi_step_reward(_meta(collision=True, success=False, waypoint=False))
     assert reward_collision < reward_clean
 
 
 def test_snqi_step_reward_collision_overrides_success_signal():
     """Collision should force success=0 in step-level SNQI projection."""
     reward_collision_success = snqi_step_reward(
-        _meta(collision=True, success=True),
+        _meta(collision=True, success=True, waypoint=True),
         terminal_bonus=5.0,
     )
     reward_collision_failure = snqi_step_reward(
-        _meta(collision=True, success=False),
+        _meta(collision=True, success=False, waypoint=False),
         terminal_bonus=5.0,
     )
     assert math.isclose(reward_collision_success, reward_collision_failure)
@@ -50,15 +57,15 @@ def test_snqi_step_reward_collision_overrides_success_signal():
 def test_build_reward_function_supports_snqi_step_name():
     """Named reward lookup should return a callable SNQI reward."""
     reward_fn = build_reward_function("snqi_step", reward_kwargs={"terminal_bonus": 0.5})
-    value = reward_fn(_meta(collision=False, success=True))
+    value = reward_fn(_meta(collision=False, success=True, waypoint=True))
     assert math.isfinite(value)
 
 
 def test_snqi_step_reward_consumes_extended_proxy_terms():
     """Additional SNQI proxy terms should affect the step reward score."""
-    base = snqi_step_reward(_meta(collision=False, success=False))
+    base = snqi_step_reward(_meta(collision=False, success=False, waypoint=False))
     enriched_meta = {
-        **_meta(collision=False, success=False),
+        **_meta(collision=False, success=False, waypoint=False),
         "near_misses": 2.0,
         "force_exceed_events": 3.0,
         "jerk_mean": 1.5,
@@ -167,3 +174,10 @@ def test_build_reward_function_accepts_new_aliases_and_rejects_unknown() -> None
         assert "Unknown reward_name" in str(exc)
     else:
         raise AssertionError("expected ValueError for unknown reward name")
+
+
+def test_route_completion_reward_ignores_waypoint_only_completion() -> None:
+    """Waypoint completion without route completion must not trigger terminal bonus."""
+    base = _meta(collision=False, success=False, waypoint=False)
+    waypoint_only = _meta(collision=False, success=False, waypoint=True)
+    assert route_completion_v2_reward(base) == route_completion_v2_reward(waypoint_only)

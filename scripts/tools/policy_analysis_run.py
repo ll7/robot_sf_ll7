@@ -1225,6 +1225,8 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
     reached_goal_step: int | None = None
+    route_complete_flag = False
+    loop_exhausted = True
 
     start_time = time.time()
     terminated = False
@@ -1258,11 +1260,22 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         route_complete = route_complete_success(info)
         if reached_goal_step is None and route_complete:
             reached_goal_step = step_idx
-        if route_complete or terminated or truncated:
+            route_complete_flag = True
+            loop_exhausted = False
+            break
+        if terminated or truncated:
+            loop_exhausted = False
             break
 
     wall_time = float(max(1e-9, time.time() - start_time))
-    reached_max_steps = not terminated and not truncated and bool(robot_positions)
+    reached_max_steps = bool(
+        not route_complete_flag
+        and not terminated
+        and not truncated
+        and loop_exhausted
+        and max_steps > 0
+        and len(robot_positions) >= max_steps
+    )
     return EpisodeRuntimeOutcome(
         trajectory=EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
         reached_goal_step=reached_goal_step,

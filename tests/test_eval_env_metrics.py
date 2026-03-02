@@ -75,7 +75,7 @@ def test_update():
     meta = {
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
-        "is_robot_at_goal": True,
+        "is_waypoint_complete": True,
         "is_timesteps_exceeded": False,
         "is_route_complete": True,
     }
@@ -90,7 +90,7 @@ def test_on_next_intermediate_outcome():
     meta = {
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
-        "is_robot_at_goal": True,
+        "is_waypoint_complete": True,
         "is_timesteps_exceeded": False,
     }
     metrics._on_next_intermediate_outcome(meta)

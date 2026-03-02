@@ -158,7 +158,7 @@ class EnvMetrics:
         is_end_of_interm_goal = (
             meta["is_pedestrian_collision"]
             or meta["is_obstacle_collision"]
-            or meta["is_robot_at_goal"]
+            or meta.get("is_waypoint_complete", False)
             or meta["is_timesteps_exceeded"]
         )
         is_end_of_route = (
@@ -183,7 +183,7 @@ class EnvMetrics:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
         elif meta["is_obstacle_collision"]:
             outcome = EnvOutcome.OBSTACLE_COLLISION
-        elif meta["is_robot_at_goal"]:
+        elif meta.get("is_waypoint_complete", False):
             outcome = EnvOutcome.REACHED_GOAL
         elif meta["is_timesteps_exceeded"]:
             outcome = EnvOutcome.TIMEOUT
@@ -471,7 +471,7 @@ class PedEnvMetrics:
             "is_obstacle_collision",
             "is_robot_collision",
             "is_timesteps_exceeded",
-            "is_robot_at_goal",
+            "is_waypoint_complete",
             "is_route_complete",
             "is_robot_obstacle_collision",
             "is_robot_pedestrian_collision",
@@ -507,8 +507,6 @@ class PedEnvMetrics:
             return EnvOutcome.TIMEOUT
 
         # Finally check goal conditions (lowest priority)
-        if meta.get("is_robot_at_goal", False):
-            return EnvOutcome.REACHED_GOAL
         if meta.get("is_route_complete", False):
             return EnvOutcome.REACHED_GOAL
 

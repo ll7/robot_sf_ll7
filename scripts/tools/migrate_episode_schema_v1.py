@@ -54,14 +54,18 @@ def _to_int(value: Any, default: int = 0) -> int:
         return int(default)
 
 
-def _metric_scalar(metrics: Any, key: str, default: float = 0.0) -> float:
-    """Return one numeric metric value from a mapping-like object."""
+def _metric_scalar(metrics: Any, *keys: str, default: float = 0.0) -> float:
+    """Return the first parseable numeric metric among candidate keys."""
     if not isinstance(metrics, dict):
         return float(default)
-    try:
-        return float(metrics.get(key, default))
-    except (TypeError, ValueError):
-        return float(default)
+    for key in keys:
+        if key not in metrics:
+            continue
+        try:
+            return float(metrics.get(key))
+        except (TypeError, ValueError):
+            continue
+    return float(default)
 
 
 def _scenario_id(record: dict[str, Any]) -> str:
@@ -90,8 +94,24 @@ def _infer_outcome(record: dict[str, Any], termination_reason: str) -> dict[str,
             }
 
     metrics = record.get("metrics")
-    collision_metric = _metric_scalar(metrics, "collisions", 0.0) > 0.0
-    success_metric = _metric_scalar(metrics, "success", 0.0) > 0.0
+    collision_metric = (
+        _metric_scalar(
+            metrics,
+            "collisions",
+            "collision_rate",
+            default=0.0,
+        )
+        > 0.0
+    )
+    success_metric = (
+        _metric_scalar(
+            metrics,
+            "success",
+            "success_rate",
+            default=0.0,
+        )
+        > 0.0
+    )
 
     status = str(record.get("status", "")).strip().lower()
     collision = bool(termination_reason == "collision" or status == "collision" or collision_metric)
@@ -109,15 +129,17 @@ def _infer_outcome(record: dict[str, Any], termination_reason: str) -> dict[str,
 def _infer_termination_reason(record: dict[str, Any], outcome: dict[str, bool]) -> str:
     """Infer a schema-compliant termination reason for migrated legacy records."""
     existing = record.get("termination_reason")
-    if isinstance(existing, str) and existing in {
-        "success",
-        "collision",
-        "terminated",
-        "truncated",
-        "max_steps",
-        "error",
-    }:
-        return existing
+    if isinstance(existing, str):
+        normalized = existing.strip().lower()
+        if normalized in {
+            "success",
+            "collision",
+            "terminated",
+            "truncated",
+            "max_steps",
+            "error",
+        }:
+            return normalized
 
     status = str(record.get("status", "")).strip().lower()
     if status == "collision":

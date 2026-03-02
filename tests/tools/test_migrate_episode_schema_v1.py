@@ -51,3 +51,28 @@ def test_migrate_record_preserves_existing_contract_fields() -> None:
     assert migrated["termination_reason"] == "success"
     assert migrated["outcome"]["route_complete"] is True
     assert migrated["integrity"]["contradictions"] == ["keep-me"]
+
+
+def test_migrate_record_uses_metric_aliases_for_outcome_inference() -> None:
+    """Legacy success/collision alias metrics should drive outcome inference."""
+    record = {
+        "scenario_id": "s2",
+        "seed": 3,
+        "metrics": {"success_rate": 0.8, "collision_rate": 0.0},
+    }
+    migrated = migrate_episode_schema_v1._migrate_record(record)
+    assert migrated["termination_reason"] == "success"
+    assert migrated["outcome"]["route_complete"] is True
+    assert migrated["outcome"]["collision_event"] is False
+
+
+def test_migrate_record_normalizes_existing_termination_reason_token() -> None:
+    """Whitespace/casing in explicit termination_reason should be normalized."""
+    record = {
+        "scenario_id": "s3",
+        "seed": 9,
+        "metrics": {"success": 0.0, "collisions": 1.0},
+        "termination_reason": " Collision ",
+    }
+    migrated = migrate_episode_schema_v1._migrate_record(record)
+    assert migrated["termination_reason"] == "collision"

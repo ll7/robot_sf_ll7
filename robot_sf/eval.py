@@ -471,8 +471,8 @@ class PedEnvMetrics:
             "is_obstacle_collision",
             "is_robot_collision",
             "is_timesteps_exceeded",
-            "is_waypoint_complete",
             "is_route_complete",
+            "is_robot_at_goal",
             "is_robot_obstacle_collision",
             "is_robot_pedestrian_collision",
         ]
@@ -508,6 +508,8 @@ class PedEnvMetrics:
 
         # Finally check goal conditions (lowest priority)
         if meta.get("is_route_complete", False):
+            return EnvOutcome.REACHED_GOAL
+        if meta.get("is_robot_at_goal", False):
             return EnvOutcome.REACHED_GOAL
 
         raise NotImplementedError("unknown environment outcome")

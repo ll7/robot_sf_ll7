@@ -257,7 +257,14 @@
         },
         "termination_reason": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+                "success",
+                "collision",
+                "terminated",
+                "truncated",
+                "max_steps",
+                "error"
+            ]
         },
         "outcome": {
             "type": "object",

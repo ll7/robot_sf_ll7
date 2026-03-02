@@ -131,7 +131,7 @@ def simple_ped_reward(
         reward += robot_coll_reward
 
     # If the robot completed the route, apply penalty.
-    if meta.get("is_route_complete"):
+    if meta.get("is_route_complete") or meta.get("is_robot_at_goal"):
         reward += robot_route_complete_penalty
 
     return float(reward)
@@ -324,6 +324,10 @@ def route_completion_v2_reward(
 ) -> float:
     """Route-completion-first reward profile with bounded social/smoothness shaping.
 
+    Note:
+        Mutates ``meta`` in place by writing ``reward_terms`` and ``reward_total``
+        for per-step decomposition logging.
+
     Returns:
         float: Scalar reward with per-term decomposition written into ``meta``.
     """
@@ -339,6 +343,10 @@ def social_quality_v1_reward(
     weights: Mapping[str, float] | None = None,
 ) -> float:
     """Social-quality-focused reward profile that remains route-completion compatible.
+
+    Note:
+        Mutates ``meta`` in place by writing ``reward_terms`` and ``reward_total``
+        for per-step decomposition logging.
 
     Returns:
         float: Scalar reward with per-term decomposition written into ``meta``.

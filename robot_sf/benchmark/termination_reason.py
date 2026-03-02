@@ -59,20 +59,35 @@ def build_outcome_payload(
     }
 
 
-def _metric_scalar(metrics: Mapping[str, Any], *keys: str) -> float:
+def metric_scalar(
+    metrics: Mapping[str, Any] | None,
+    *keys: str,
+    default: float = 0.0,
+) -> float:
     """Return a numeric metric from the first available key.
 
     Returns:
-        float: Parsed metric value or ``0.0`` when missing/invalid.
+        float: Parsed metric value or ``default`` when missing/invalid.
     """
+    if metrics is None:
+        return float(default)
     for key in keys:
         if key not in metrics:
             continue
         try:
-            return float(metrics.get(key) or 0.0)
+            return float(metrics.get(key) or default)
         except (TypeError, ValueError):
-            return 0.0
-    return 0.0
+            return float(default)
+    return float(default)
+
+
+def _metric_scalar(metrics: Mapping[str, Any], *keys: str) -> float:
+    """Backward-compatible internal alias for metric parsing.
+
+    Returns:
+        float: Parsed metric value or ``0.0`` when missing/invalid.
+    """
+    return metric_scalar(metrics, *keys, default=0.0)
 
 
 def outcome_contradictions(

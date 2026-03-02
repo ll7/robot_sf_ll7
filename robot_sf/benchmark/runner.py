@@ -57,6 +57,7 @@ from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
+    metric_scalar,
     outcome_contradictions,
     resolve_termination_reason,
     status_from_termination_reason,
@@ -969,8 +970,8 @@ def run_episode(  # noqa: PLR0913
 
     # Compute metrics
     metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
-    route_complete = reached_goal_step is not None
-    collision = bool(float(metrics.get("collisions", 0.0) or 0.0) > 0.0)
+    collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
+    route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
     ended = route_complete or collision
     termination_reason = resolve_termination_reason(
         terminated=ended,

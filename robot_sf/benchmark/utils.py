@@ -162,7 +162,7 @@ def validate_episode_success_integrity(record: dict[str, Any]) -> list[str]:
 
     Contradictions checked:
     - termination_reason='collision' with success metric equal to 1.0
-    - termination_reason in {'success', 'success_reached'} with any collision metric > 0
+    - termination_reason='success' with any collision metric > 0
     """
     metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
     if not isinstance(metrics, dict):

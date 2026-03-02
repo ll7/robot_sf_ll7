@@ -620,7 +620,7 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     # cannot report "success=1.0" while all episodes terminated as collisions.
     successes = int(reason_counts.get("success", 0))
     collisions = int(reason_counts.get("collision", 0))
-    timeouts = sum(1 for r in records if r.get("status") == "failure")
+    timeouts = int(reason_counts.get("max_steps", 0)) + int(reason_counts.get("truncated", 0))
     reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
     metric_means: dict[str, float] = {}
     for metric in _SUMMARY_METRICS:

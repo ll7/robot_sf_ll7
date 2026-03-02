@@ -32,6 +32,7 @@ from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
+    metric_scalar,
     outcome_contradictions,
     resolve_termination_reason,
     status_from_termination_reason,
@@ -966,12 +967,8 @@ def _termination_payload_from_metrics(
     Returns:
         tuple[str, dict[str, bool], list[str]]: ``(termination_reason, outcome, contradictions)``.
     """
-    route_complete = bool(
-        float(metrics.get("success", metrics.get("success_rate", 0.0)) or 0.0) > 0.0
-    )
-    collision = bool(
-        float(metrics.get("collisions", metrics.get("collision_rate", 0.0)) or 0.0) > 0.0
-    )
+    route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
+    collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     ended = route_complete or collision
     termination_reason = resolve_termination_reason(
         terminated=ended,

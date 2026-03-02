@@ -144,6 +144,8 @@ def test_env_rate_properties_and_vector_aggregation():
     assert 0.0 <= vec.obstacle_collision_rate <= 1.0
     assert 0.0 <= vec.pedestrian_collision_rate <= 1.0
 
+    before_m1 = len(m1.route_outcomes)
+    before_m2 = len(m2.route_outcomes)
     vec.update(
         [
             {
@@ -162,6 +164,10 @@ def test_env_rate_properties_and_vector_aggregation():
             },
         ]
     )
+    assert len(m1.route_outcomes) == before_m1 + 1
+    assert len(m2.route_outcomes) == before_m2 + 1
+    assert m1.route_outcomes[-1] == EnvOutcome.TIMEOUT
+    assert m2.route_outcomes[-1] == EnvOutcome.PEDESTRIAN_COLLISION
 
 
 def test_ped_outcome_priority_and_vector_rates():
@@ -213,7 +219,8 @@ def test_ped_outcome_priority_and_vector_rates():
     assert 0.0 <= ped.robot_pedestrian_collision_rate <= 1.0
     assert ped.route_end_distance >= 0.0
 
-    vec = PedVecEnvMetrics(metrics=[ped, PedEnvMetrics()])
+    ped2 = PedEnvMetrics()
+    vec = PedVecEnvMetrics(metrics=[ped, ped2])
     assert 0.0 <= vec.timeout_rate <= 1.0
     assert 0.0 <= vec.obstacle_collision_rate <= 1.0
     assert 0.0 <= vec.pedestrian_collision_rate <= 1.0
@@ -222,6 +229,8 @@ def test_ped_outcome_priority_and_vector_rates():
     assert 0.0 <= vec.robot_obstacle_collision_rate <= 1.0
     assert 0.0 <= vec.robot_pedestrian_collision_rate <= 1.0
     assert vec.route_end_distance >= 0.0
+    before_p1 = len(ped.route_outcomes)
+    before_p2 = len(ped2.route_outcomes)
     vec.update(
         [
             {
@@ -246,3 +255,7 @@ def test_ped_outcome_priority_and_vector_rates():
             },
         ]
     )
+    assert len(ped.route_outcomes) == before_p1 + 1
+    assert len(ped2.route_outcomes) == before_p2 + 1
+    assert ped.route_outcomes[-1] == EnvOutcome.TIMEOUT
+    assert ped2.route_outcomes[-1] == EnvOutcome.TIMEOUT

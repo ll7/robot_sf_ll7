@@ -267,6 +267,12 @@ def test_analyze_campaign_flags_success_collision_integrity_violations(tmp_path:
             {
                 "status": "collision",
                 "termination_reason": "collision",
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": True,
+                    "timeout_event": False,
+                },
+                "integrity": {"contradictions": []},
                 "metrics": {"success": 1.0, "collisions": 0.0, "snqi": -0.2},
                 "algorithm_metadata": {"adapter_impact": {"status": "complete"}},
             }

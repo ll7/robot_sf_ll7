@@ -8,7 +8,7 @@ scenarios:
   metadata:
     archetype: bottleneck
     label: real-world-inspired double sequential bottleneck
-    density: low
+    density: high
     density_advisory: zero_baseline_route_spawn
     flow: bi
     groups: 0.0

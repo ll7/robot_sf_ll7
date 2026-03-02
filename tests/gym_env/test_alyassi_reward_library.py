@@ -26,7 +26,7 @@ def _base_meta() -> dict[str, object]:
         "is_robot_collision": False,
         "is_obstacle_collision": False,
         "is_route_complete": False,
-        "is_robot_at_goal": False,
+        "is_waypoint_complete": False,
         "near_misses": 0.0,
         "comfort_exposure": 0.0,
         "force_exceed_events": 0.0,
@@ -38,7 +38,7 @@ def _base_meta() -> dict[str, object]:
 def test_alyassi_reward_terminal_goal_bonus_is_positive() -> None:
     """Goal completion should produce a positive total reward signal."""
     meta = _base_meta()
-    meta["is_robot_at_goal"] = True
+    meta["is_route_complete"] = True
     value = alyassi_reward(meta)
     assert value > 0.0
 

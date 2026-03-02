@@ -88,6 +88,13 @@ class ExpertTrainingConfig:
             ExpertTrainingConfig: Constructed configuration instance.
         """
 
+        resolved_env_factory_kwargs = dict(env_factory_kwargs or {})
+        if (
+            "reward_func" not in resolved_env_factory_kwargs
+            and "reward_name" not in resolved_env_factory_kwargs
+        ):
+            resolved_env_factory_kwargs["reward_name"] = "route_completion_v2"
+
         return cls(
             scenario_config=scenario_config,
             seeds=ensure_seed_tuple(seeds),
@@ -106,7 +113,7 @@ class ExpertTrainingConfig:
             policy_net_arch=tuple(int(dim) for dim in policy_net_arch),
             tracking=dict(tracking or {}),
             env_overrides=dict(env_overrides or {}),
-            env_factory_kwargs=dict(env_factory_kwargs or {}),
+            env_factory_kwargs=resolved_env_factory_kwargs,
             num_envs=num_envs,
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,

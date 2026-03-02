@@ -123,7 +123,7 @@ def _goal_component(meta: Mapping[str, object], terminal_success_bonus: float) -
     Returns:
         Goal component score.
     """
-    success = _b(meta, "is_route_complete") or _b(meta, "is_robot_at_goal")
+    success = _b(meta, "is_route_complete")
     sparse = terminal_success_bonus if success else 0.0
 
     curr = meta.get("distance_to_goal")

@@ -16,7 +16,7 @@ def _meta(*, collision: bool, success: bool, step: int = 50, max_steps: int = 10
         "is_robot_collision": False,
         "is_obstacle_collision": False,
         "is_route_complete": success,
-        "is_robot_at_goal": success,
+        "is_waypoint_complete": success,
     }
 
 

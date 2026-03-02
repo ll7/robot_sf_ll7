@@ -477,7 +477,11 @@ def _build_socnav_policy(
 
 def _policy_uses_adapter(policy_name: str) -> bool:
     """Return whether policy execution uses adapter command translation."""
-    return policy_name == "prediction_planner" or policy_name.startswith("socnav_")
+    return (
+        policy_name == "prediction_planner"
+        or policy_name.startswith("socnav_")
+        or policy_name.startswith("fast_pysf")
+    )
 
 
 def _apply_socnav_grid_overrides(
@@ -1360,8 +1364,8 @@ def _build_episode_record(  # noqa: PLR0913
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     meta = last_info.get("meta")
     collision = collision_event(last_info)
-    route_complete = bool(meta.get("is_route_complete")) if isinstance(meta, dict) else False
-    success = bool(route_complete and not collision)
+    route_complete_signal = route_complete_success(last_info)
+    success = bool(route_complete_signal and not collision)
     route_complete = success
     timeout = bool(
         (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))

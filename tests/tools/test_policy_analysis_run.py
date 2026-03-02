@@ -180,6 +180,20 @@ def test_build_error_episode_record_marks_prediction_planner_as_adapter() -> Non
     assert planner_meta.get("execution_mode") == "adapter"
 
 
+def test_build_error_episode_record_marks_fast_pysf_planner_as_adapter() -> None:
+    """Error records should keep fast_pysf planners execution mode as adapter."""
+    record = policy_analysis_run._build_error_episode_record(
+        {"id": "s1"},
+        seed=43,
+        policy_name="fast_pysf_planner",
+        max_steps=100,
+        ts_start="2026-03-02T00:00:00+00:00",
+        error=RuntimeError("boom"),
+    )
+    planner_meta = record.get("algorithm_metadata", {}).get("planner_kinematics", {})
+    assert planner_meta.get("execution_mode") == "adapter"
+
+
 def test_build_episode_record_collision_overrides_route_complete_flag(monkeypatch) -> None:
     """Collision on a route-complete step should not produce contradictory outcome payload."""
 

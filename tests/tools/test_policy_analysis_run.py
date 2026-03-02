@@ -150,3 +150,17 @@ def test_summarize_records_does_not_count_waypoint_only_success() -> None:
     ]
     summary = policy_analysis_run._summarize_records(records)
     assert summary["success_rate"] == pytest.approx(0.0)
+
+
+def test_build_error_episode_record_marks_prediction_planner_as_adapter() -> None:
+    """Error records should keep prediction_planner execution mode as adapter."""
+    record = policy_analysis_run._build_error_episode_record(
+        {"id": "s1"},
+        seed=42,
+        policy_name="prediction_planner",
+        max_steps=100,
+        ts_start="2026-03-02T00:00:00+00:00",
+        error=RuntimeError("boom"),
+    )
+    planner_meta = record.get("algorithm_metadata", {}).get("planner_kinematics", {})
+    assert planner_meta.get("execution_mode") == "adapter"

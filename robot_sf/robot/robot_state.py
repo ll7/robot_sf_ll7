@@ -6,7 +6,7 @@ timeout condition, simulation time elapsed, and timestep count.
 """
 
 from dataclasses import dataclass, field
-from math import ceil
+from math import ceil, dist
 from typing import Union
 
 from robot_sf.nav.navigation import RouteNavigator
@@ -50,6 +50,8 @@ class RobotState:
     is_collision_with_obst: bool = field(init=False, default=False)
     is_collision_with_robot: bool = field(init=False, default=False)
     is_timeout: bool = field(init=False, default=False)
+    distance_to_goal: float = field(init=False, default=0.0)
+    prev_distance_to_goal: float = field(init=False, default=0.0)
     sim_time_elapsed: float = field(init=False, default=0.0)
     timestep: int = field(init=False, default=0)
 
@@ -98,6 +100,9 @@ class RobotState:
         self.is_collision_with_obst = False
         self.is_collision_with_robot = False
         self.is_timeout = False
+        current_distance = self._distance_to_goal()
+        self.distance_to_goal = current_distance
+        self.prev_distance_to_goal = current_distance
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
@@ -116,7 +121,26 @@ class RobotState:
         self.is_collision_with_obst = self.occupancy.is_obstacle_collision
         self.is_collision_with_robot = self.occupancy.is_dynamic_collision
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
+        self.prev_distance_to_goal = float(self.distance_to_goal)
+        self.distance_to_goal = self._distance_to_goal()
         return self.sensors.next_obs()
+
+    def _distance_to_goal(self) -> float:
+        """Compute distance from current navigation position to final waypoint.
+
+        Returns:
+            float: Euclidean distance to the route destination, or ``0.0`` when
+            waypoints/position are unavailable.
+        """
+        waypoints = getattr(self.nav, "waypoints", None)
+        pos = getattr(self.nav, "pos", None)
+        if not waypoints or pos is None:
+            return 0.0
+        try:
+            goal = waypoints[-1]
+            return float(dist(pos, goal))
+        except (TypeError, ValueError):
+            return 0.0
 
     def meta_dict(self) -> dict:
         """
@@ -137,6 +161,8 @@ class RobotState:
             "is_obstacle_collision": self.is_collision_with_obst,
             "is_waypoint_complete": self.is_waypoint_complete,
             "is_route_complete": self.is_route_complete,
+            "distance_to_goal": self.distance_to_goal,
+            "prev_distance_to_goal": self.prev_distance_to_goal,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps,
         }

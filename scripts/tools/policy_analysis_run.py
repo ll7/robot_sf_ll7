@@ -475,6 +475,11 @@ def _build_socnav_policy(
     return None
 
 
+def _policy_uses_adapter(policy_name: str) -> bool:
+    """Return whether policy execution uses adapter command translation."""
+    return policy_name == "prediction_planner" or policy_name.startswith("socnav_")
+
+
 def _apply_socnav_grid_overrides(
     config: Any,
     *,
@@ -1442,7 +1447,7 @@ def _build_error_episode_record(
     algo_metadata = enrich_algorithm_metadata(
         algo=policy_name,
         metadata={"algorithm": policy_name, "status": "error"},
-        execution_mode="adapter" if policy_name.startswith("socnav_") else "native",
+        execution_mode="adapter" if _policy_uses_adapter(policy_name) else "native",
     )
     outcome = build_outcome_payload(route_complete=False, collision=False, timeout=False)
     return {

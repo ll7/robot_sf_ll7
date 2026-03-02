@@ -6,6 +6,7 @@ import argparse
 import subprocess
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 from loguru import logger
 
@@ -177,3 +178,52 @@ def test_build_error_episode_record_marks_prediction_planner_as_adapter() -> Non
     )
     planner_meta = record.get("algorithm_metadata", {}).get("planner_kinematics", {})
     assert planner_meta.get("execution_mode") == "adapter"
+
+
+def test_build_episode_record_collision_overrides_route_complete_flag(monkeypatch) -> None:
+    """Collision on a route-complete step should not produce contradictory outcome payload."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 1.0, "time_to_goal_norm": 1.0},
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+    record = policy_analysis_run._build_episode_record(
+        {"id": "s1"},
+        seed=7,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=1,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": True, "is_obstacle_collision": True}},
+        reached_max_steps=False,
+    )
+    assert record["termination_reason"] == "collision"
+    assert record["outcome"]["collision_event"] is True
+    assert record["outcome"]["route_complete"] is False

@@ -674,6 +674,93 @@ def test_run_map_episode_stops_immediately_on_route_complete(
     assert record["termination_reason"] == "success"
 
 
+def test_run_map_episode_collision_wins_over_route_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Collision + route-complete in same terminal step must resolve as collision."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.step_calls = 0
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            self.step_calls += 1
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            info = {
+                "meta": {
+                    "is_waypoint_complete": True,
+                    "is_route_complete": True,
+                    "is_obstacle_collision": True,
+                }
+            }
+            return obs, 0.0, True, False, info
+
+        def close(self) -> None:
+            return None
+
+    map_def = _minimal_map_def()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_env = _DummyEnv(map_def)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: dummy_env,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 1.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    record = _run_map_episode(
+        scenario,
+        seed=1,
+        horizon=50,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+    assert record["termination_reason"] == "collision"
+    assert record["outcome"]["collision_event"] is True
+    assert record["outcome"]["route_complete"] is False
+
+
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise serial batch execution and resume skipping."""
     scenario = {"name": "s1", "metadata": {"supported": True}}

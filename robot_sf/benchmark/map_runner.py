@@ -1196,8 +1196,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_forces.append(forces_arr)
 
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
-            step_success = route_complete_success(info)
             step_collision = collision_event(info)
+            step_route_complete = route_complete_success(info)
+            step_success = step_route_complete and not step_collision
             step_timeout = bool(meta.get("is_timesteps_exceeded", False))
             collision_seen = collision_seen or step_collision
             timeout_seen = timeout_seen or step_timeout

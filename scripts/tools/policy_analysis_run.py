@@ -1346,9 +1346,10 @@ def _build_episode_record(  # noqa: PLR0913
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     meta = last_info.get("meta")
-    route_complete = bool(meta.get("is_route_complete")) if isinstance(meta, dict) else False
-    success = bool(route_complete)
     collision = collision_event(last_info)
+    route_complete = bool(meta.get("is_route_complete")) if isinstance(meta, dict) else False
+    success = bool(route_complete and not collision)
+    route_complete = success
     timeout = bool(
         (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))
         or truncated

@@ -5,6 +5,7 @@
 
 includes:
   - archetypes/classic_bottleneck.yaml
+  - archetypes/classic_realworld_bottleneck.yaml
   - archetypes/classic_crossing.yaml
   - archetypes/classic_doorway.yaml
   - archetypes/classic_group_crossing.yaml

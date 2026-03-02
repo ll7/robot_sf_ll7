@@ -9,7 +9,10 @@
         "episode_id",
         "scenario_id",
         "seed",
-        "metrics"
+        "metrics",
+        "termination_reason",
+        "outcome",
+        "integrity"
     ],
     "properties": {
         "version": {
@@ -251,6 +254,52 @@
                     "object"
                 ]
             }
+        },
+        "termination_reason": {
+            "type": "string",
+            "enum": [
+                "success",
+                "collision",
+                "terminated",
+                "truncated",
+                "max_steps",
+                "error"
+            ]
+        },
+        "outcome": {
+            "type": "object",
+            "required": [
+                "route_complete",
+                "collision_event",
+                "timeout_event"
+            ],
+            "properties": {
+                "route_complete": {
+                    "type": "boolean"
+                },
+                "collision_event": {
+                    "type": "boolean"
+                },
+                "timeout_event": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
+        "integrity": {
+            "type": "object",
+            "required": [
+                "contradictions"
+            ],
+            "properties": {
+                "contradictions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": true
         },
         "config_hash": {
             "type": "string"

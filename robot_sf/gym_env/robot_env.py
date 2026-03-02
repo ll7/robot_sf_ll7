@@ -35,7 +35,7 @@ from robot_sf.gym_env.env_util import (
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
-from robot_sf.gym_env.reward import simple_reward
+from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
@@ -226,6 +226,7 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         Dictionary containing step, meta, collision, success, and is_success flags.
+        Success is defined strictly as full route completion.
     """
 
     collision = bool(
@@ -233,13 +234,13 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
         or meta.get("is_obstacle_collision")
         or meta.get("is_robot_collision")
     )
-    success = bool(meta.get("is_route_complete") or meta.get("is_robot_at_goal"))
+    success = bool(meta.get("is_route_complete"))
     return {
         "step": meta.get("step"),
         "meta": meta,
         "collision": collision,
         "success": success,
-        "is_success": success,  # backward-compat key used by some scripts
+        "is_success": success,
     }
 
 
@@ -404,7 +405,8 @@ class RobotEnv(BaseEnv):
 
         Args:
             env_config: Environment settings describing maps, sensors, and simulator behavior.
-            reward_func: Optional callable used to compute rewards; defaults to ``simple_reward``.
+            reward_func: Optional callable used to compute rewards; defaults to
+                ``route_completion_v2_reward``.
             debug: Enables ``SimulationView`` visualization and rendering hooks.
             recording_enabled: When ``True``, record ``VisualizableSimState`` snapshots.
             record_video: Save simulator frames as a video via ``SimulationView``.
@@ -443,9 +445,9 @@ class RobotEnv(BaseEnv):
         # Assign the reward function; ensure a valid callable even if None passed via factory
         if reward_func is None:  # defensive: factory allows Optional
             logger.debug(
-                "No reward_func provided to RobotEnv; falling back to simple_reward for safety.",
+                "No reward_func provided to RobotEnv; falling back to route_completion_v2_reward.",
             )
-        self.reward_func = reward_func or simple_reward
+        self.reward_func = reward_func or route_completion_v2_reward
 
         # BaseEnv has already created self.simulator; avoid redundant initialization.
         # Initialize collision detectors and sensor data processors using existing simulator.
@@ -721,6 +723,9 @@ class RobotEnv(BaseEnv):
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
         reward = self.reward_func(reward_dict)
+        if "reward_terms" not in reward_dict:
+            reward_dict["reward_terms"] = {"scalar_reward": float(reward)}
+        reward_dict["reward_total"] = float(reward)
         # Update last_action for next step
         self.last_action = action
 

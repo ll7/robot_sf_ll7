@@ -95,11 +95,25 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
     rows = [
         {
             "status": "success",
+            "termination_reason": "success",
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
             "metrics": {"success": True, "collisions": 0, "snqi": -0.3},
             "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
         },
         {
             "status": "failure",
+            "termination_reason": "collision",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
             "metrics": {"success": False, "collisions": 1, "snqi": -0.1},
             "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
         },
@@ -239,3 +253,62 @@ def test_analyze_campaign_rejects_unsafe_episode_paths(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unsafe relative episodes_path"):
         analyze_campaign(campaign_root)
+
+
+def test_analyze_campaign_flags_success_collision_integrity_violations(tmp_path: Path) -> None:
+    """Analyzer flags contradictory success/collision records."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    episodes_path = campaign_root / "runs" / "orca" / "episodes.jsonl"
+
+    _write_jsonl(
+        episodes_path,
+        [
+            {
+                "status": "collision",
+                "termination_reason": "collision",
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": True,
+                    "timeout_event": False,
+                },
+                "integrity": {"contradictions": []},
+                "metrics": {"success": 1.0, "collisions": 0.0, "snqi": -0.2},
+                "algorithm_metadata": {"adapter_impact": {"status": "complete"}},
+            }
+        ],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "test_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 1.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "orca",
+                    "success_mean": "1.0000",
+                    "collision_mean": "0.0000",
+                    "snqi_mean": "-0.2000",
+                }
+            ],
+            "runs": [
+                {
+                    "planner": {"key": "orca", "algo": "orca"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/orca/episodes.jsonl",
+                    "summary": {
+                        "written": 1,
+                        "episodes_per_second": 1.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "complete"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+    assert any("episode integrity violations" in finding for finding in analysis["findings"])

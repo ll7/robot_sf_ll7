@@ -102,10 +102,12 @@ class _FakeRobotState:
     def meta_dict(self) -> dict:
         return {
             "step": self._step_counter,
+            "episode": 1,
+            "step_of_episode": self.timestep,
             "is_pedestrian_collision": False,
             "is_robot_collision": False,
             "is_obstacle_collision": False,
-            "is_robot_at_goal": False,
+            "is_waypoint_complete": False,
             "is_route_complete": False,
             "is_timesteps_exceeded": False,
             "max_sim_steps": 100,

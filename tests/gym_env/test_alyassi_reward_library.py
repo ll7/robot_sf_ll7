@@ -26,7 +26,7 @@ def _base_meta() -> dict[str, object]:
         "is_robot_collision": False,
         "is_obstacle_collision": False,
         "is_route_complete": False,
-        "is_robot_at_goal": False,
+        "is_waypoint_complete": False,
         "near_misses": 0.0,
         "comfort_exposure": 0.0,
         "force_exceed_events": 0.0,
@@ -38,7 +38,7 @@ def _base_meta() -> dict[str, object]:
 def test_alyassi_reward_terminal_goal_bonus_is_positive() -> None:
     """Goal completion should produce a positive total reward signal."""
     meta = _base_meta()
-    meta["is_robot_at_goal"] = True
+    meta["is_route_complete"] = True
     value = alyassi_reward(meta)
     assert value > 0.0
 
@@ -141,3 +141,27 @@ def test_alyassi_efficiency_ignores_non_numeric_speed_metadata() -> None:
     meta["speed"] = "unknown"
     scores = alyassi_component_scores(meta, step_cost=0.05, speed_target=0.7)
     assert scores["efficiency"] == -0.05
+
+
+def test_alyassi_component_scores_handle_invalid_numeric_fields() -> None:
+    """Invalid numeric metadata should safely fall back without raising."""
+    meta = _base_meta()
+    meta["distance_to_goal"] = "bad"
+    meta["prev_distance_to_goal"] = object()
+    meta["min_ped_distance"] = "bad"
+    meta["angular_velocity"] = "bad"
+    meta["companion_distance_error"] = "bad"
+    meta["human_preference_score"] = object()
+    meta["policy_entropy_bonus"] = object()
+    scores = alyassi_component_scores(meta)
+    assert isinstance(scores, dict)
+    assert "goal" in scores
+    assert "collision" in scores
+
+
+def test_alyassi_collision_component_near_miss_penalty_branch() -> None:
+    """Near-miss proximity branch should penalize close-but-non-collision states."""
+    meta = _base_meta()
+    meta["min_ped_distance"] = 0.1
+    scores = alyassi_component_scores(meta, near_miss_dist=0.5)
+    assert scores["collision"] < 0.0

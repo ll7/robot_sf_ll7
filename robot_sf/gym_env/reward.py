@@ -56,7 +56,7 @@ def simple_reward(
     max_episode_step_discount: float = -0.1,
     ped_coll_penalty: float = -5,
     obst_coll_penalty: float = -2,
-    reach_waypoint_reward: float = 1,
+    reach_route_reward: float = 1,
 ) -> float:
     """Calculate the reward for the robot's current state.
 
@@ -65,7 +65,7 @@ def simple_reward(
         max_episode_step_discount: Per-step discount divided by ``max_sim_steps``.
         ped_coll_penalty: Penalty applied when colliding with pedestrians/robots.
         obst_coll_penalty: Penalty applied when colliding with obstacles.
-        reach_waypoint_reward: Reward granted when the robot reaches its goal.
+        reach_route_reward: Reward granted when the robot completes its route.
 
     Returns:
         float: Scalar reward for the timestep.
@@ -82,9 +82,9 @@ def simple_reward(
     if meta["is_obstacle_collision"]:
         reward += obst_coll_penalty
 
-    # If the robot has reached its goal, apply reward
-    if meta["is_robot_at_goal"]:
-        reward += reach_waypoint_reward
+    # Success is route completion only.
+    if meta.get("is_route_complete"):
+        reward += reach_route_reward
 
     return float(reward)
 
@@ -95,7 +95,7 @@ def simple_ped_reward(
     ped_coll_penalty: float = -5,
     obst_coll_penalty: float = -5,
     robot_coll_reward: float = 5,
-    robot_at_goal_penalty: float = -1,
+    robot_route_complete_penalty: float = -1,
 ) -> float:
     """Calculate the reward for the pedestrian's current state.
 
@@ -105,7 +105,7 @@ def simple_ped_reward(
         ped_coll_penalty: Penalty applied when the ego pedestrian collides with others.
         obst_coll_penalty: Penalty applied when colliding with obstacles.
         robot_coll_reward: Bonus granted when colliding with the robot.
-        robot_at_goal_penalty: Penalty applied if the robot reaches its goal.
+        robot_route_complete_penalty: Penalty applied if the robot completes its route.
 
     Returns:
         float: Scalar reward for the timestep.
@@ -130,9 +130,9 @@ def simple_ped_reward(
     if meta["is_robot_collision"]:
         reward += robot_coll_reward
 
-    # If the robot has reached its goal, apply penalty
-    if meta["is_robot_at_goal"]:
-        reward += robot_at_goal_penalty
+    # If the robot completed the route, apply penalty.
+    if meta.get("is_route_complete"):
+        reward += robot_route_complete_penalty
 
     return float(reward)
 
@@ -142,7 +142,7 @@ def punish_action_reward(
     max_episode_step_discount: float = -0.1,
     ped_coll_penalty: float = -5,
     obst_coll_penalty: float = -2,
-    reach_waypoint_reward: float = 1,
+    reach_route_reward: float = 1,
     punish_action: bool = True,
     punish_action_penalty: float = -0.1,
 ) -> float:
@@ -153,7 +153,7 @@ def punish_action_reward(
         max_episode_step_discount: Per-step discount divided by ``max_sim_steps``.
         ped_coll_penalty: Penalty applied when colliding with pedestrians/robots.
         obst_coll_penalty: Penalty applied when colliding with obstacles.
-        reach_waypoint_reward: Reward granted when the robot reaches its goal.
+        reach_route_reward: Reward granted when the robot completes its route.
         punish_action: Whether to penalize deviations from the previous action.
         punish_action_penalty: Scaling factor for the action difference penalty.
 
@@ -167,7 +167,7 @@ def punish_action_reward(
         max_episode_step_discount,
         ped_coll_penalty,
         obst_coll_penalty,
-        reach_waypoint_reward,
+        reach_route_reward,
     )
 
     # punish the robot taking a different action from the last action
@@ -212,7 +212,7 @@ def snqi_step_reward(
         or bool(meta.get("is_obstacle_collision"))
         else 0.0
     )
-    goal_reached = bool(meta.get("is_route_complete") or meta.get("is_robot_at_goal"))
+    goal_reached = bool(meta.get("is_route_complete"))
     # Mirror benchmark semantics: collisions invalidate success.
     success = 1.0 if goal_reached and collision == 0.0 else 0.0
     time_to_goal_norm = min(1.0, max(0.0, step / max_steps))
@@ -236,6 +236,175 @@ def snqi_step_reward(
     return reward
 
 
+_ROUTE_COMPLETION_V2_WEIGHTS: dict[str, float] = {
+    "progress": 2.5,
+    "living": -0.01,
+    "collision": -5.0,
+    "near_miss": -0.8,
+    "ttc_risk": -0.6,
+    "comfort": -0.4,
+    "smoothness": -0.15,
+    "terminal_bonus": 2.0,
+}
+
+_SOCIAL_QUALITY_V1_WEIGHTS: dict[str, float] = {
+    "progress": 1.0,
+    "living": -0.02,
+    "collision": -6.0,
+    "near_miss": -1.2,
+    "ttc_risk": -0.9,
+    "comfort": -0.9,
+    "smoothness": -0.2,
+    "terminal_bonus": 1.5,
+}
+
+
+def _float(meta: Mapping[str, object], key: str, default: float = 0.0) -> float:
+    """Return ``meta[key]`` as a finite float, otherwise ``default``.
+
+    Args:
+        meta: Reward metadata mapping.
+        key: Metadata key to read.
+        default: Fallback value when missing, invalid, or non-finite.
+
+    Returns:
+        Finite float value for the selected key.
+    """
+    value = meta.get(key, default)
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not np.isfinite(result):
+        return float(default)
+    return result
+
+
+def _bounded(value: float, lo: float, hi: float) -> float:
+    """Clip a scalar to ``[lo, hi]`` and return it as ``float``.
+
+    Args:
+        value: Candidate scalar value.
+        lo: Lower clip bound.
+        hi: Upper clip bound.
+
+    Returns:
+        Clipped float in the configured range.
+    """
+    return float(np.clip(float(value), float(lo), float(hi)))
+
+
+def _ttc_risk_from_meta(meta: Mapping[str, object]) -> float:
+    """Compute bounded TTC risk from metadata using inverse TTC or near-miss fallback.
+
+    Args:
+        meta: Reward metadata mapping; reads ``time_to_collision`` and ``near_misses``.
+
+    Returns:
+        Risk proxy in ``[0, 1]`` where larger values indicate higher collision risk.
+    """
+    # Prefer explicit TTC if available; otherwise fall back to near-miss proxy.
+    ttc = _float(meta, "time_to_collision", float("inf"))
+    if np.isfinite(ttc) and ttc > 0.0:
+        return _bounded(1.0 / max(ttc, 1e-3), 0.0, 1.0)
+    near_misses = _float(meta, "near_misses", 0.0)
+    return _bounded(near_misses, 0.0, 1.0)
+
+
+def _progress_term(meta: Mapping[str, object]) -> float:
+    """Return bounded goal-progress delta from consecutive distance estimates.
+
+    Args:
+        meta: Reward metadata mapping with distance-to-goal fields.
+
+    Returns:
+        Progress term in ``[-1, 1]`` as ``prev_distance_to_goal - distance_to_goal``.
+    """
+    prev_dist = _float(meta, "prev_distance_to_goal", 0.0)
+    dist = _float(meta, "distance_to_goal", prev_dist)
+    return _bounded(prev_dist - dist, -1.0, 1.0)
+
+
+def _reward_with_terms(
+    meta: dict[str, object],
+    *,
+    weights: Mapping[str, float],
+) -> float:
+    """Compute weighted reward terms and write decomposition back into metadata.
+
+    Args:
+        meta: Mutable reward metadata dictionary.
+        weights: Per-term scalar weights keyed by reward term name.
+
+    Returns:
+        Weighted scalar reward total.
+
+    Side effects:
+        Mutates ``meta`` by setting ``reward_terms`` and ``reward_total``.
+    """
+    collision_flag = bool(
+        meta.get("is_pedestrian_collision")
+        or meta.get("is_robot_collision")
+        or meta.get("is_obstacle_collision")
+    )
+    route_complete = bool(meta.get("is_route_complete"))
+    terms = {
+        "progress": _progress_term(meta),
+        "living": 1.0,
+        "collision": 1.0 if collision_flag else 0.0,
+        "near_miss": _bounded(_float(meta, "near_misses", 0.0), 0.0, 1.0),
+        "ttc_risk": _ttc_risk_from_meta(meta),
+        "comfort": _bounded(_float(meta, "comfort_exposure", 0.0), 0.0, 1.0),
+        "smoothness": _bounded(_float(meta, "jerk_mean", 0.0), 0.0, 5.0) / 5.0,
+        "terminal_bonus": 1.0 if route_complete and not collision_flag else 0.0,
+    }
+    weighted_terms = {name: float(weights.get(name, 0.0)) * value for name, value in terms.items()}
+    total = float(sum(weighted_terms.values()))
+    meta["reward_terms"] = weighted_terms
+    meta["reward_total"] = total
+    return total
+
+
+def route_completion_v2_reward(
+    meta: dict,
+    *,
+    weights: Mapping[str, float] | None = None,
+) -> float:
+    """Route-completion-first reward profile with bounded social/smoothness shaping.
+
+    Note:
+        Mutates ``meta`` in place by writing ``reward_terms`` and ``reward_total``
+        for per-step decomposition logging.
+
+    Returns:
+        float: Scalar reward with per-term decomposition written into ``meta``.
+    """
+    weight_map = dict(_ROUTE_COMPLETION_V2_WEIGHTS)
+    if weights:
+        weight_map.update({k: float(v) for k, v in weights.items()})
+    return _reward_with_terms(meta, weights=weight_map)
+
+
+def social_quality_v1_reward(
+    meta: dict,
+    *,
+    weights: Mapping[str, float] | None = None,
+) -> float:
+    """Social-quality-focused reward profile that remains route-completion compatible.
+
+    Note:
+        Mutates ``meta`` in place by writing ``reward_terms`` and ``reward_total``
+        for per-step decomposition logging.
+
+    Returns:
+        float: Scalar reward with per-term decomposition written into ``meta``.
+    """
+    weight_map = dict(_SOCIAL_QUALITY_V1_WEIGHTS)
+    if weights:
+        weight_map.update({k: float(v) for k, v in weights.items()})
+    return _reward_with_terms(meta, weights=weight_map)
+
+
 def build_reward_function(
     reward_name: str,
     reward_kwargs: Mapping[str, object] | None = None,
@@ -255,5 +424,19 @@ def build_reward_function(
         return partial(snqi_step_reward, **kwargs)
     if normalized in {"alyassi", "alyassi_reward", "alyassi_composite"}:
         return partial(alyassi_reward, **kwargs)
-    supported = ("simple", "punish_action", "snqi_step", "alyassi", "alyassi_composite")
+    if normalized in {"route_completion_v2", "route_completion"}:
+        return partial(route_completion_v2_reward, **kwargs)
+    if normalized in {"social_quality_v1", "social_quality"}:
+        return partial(social_quality_v1_reward, **kwargs)
+    supported = (
+        "simple",
+        "punish_action",
+        "snqi_step",
+        "alyassi",
+        "alyassi_composite",
+        "route_completion_v2",
+        "route_completion",
+        "social_quality_v1",
+        "social_quality",
+    )
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")

@@ -388,6 +388,13 @@ def test_episode_schema_accepts_ped_force_metrics():
         "scenario_id": "sc-demo",
         "seed": 123,
         "metrics": metrics,
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
         "timing": {"steps_per_second": 1.0},
     }
     schema_path = (

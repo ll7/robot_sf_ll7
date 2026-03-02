@@ -45,6 +45,9 @@ class TestSchemaConsolidationIntegration:
         assert "scenario_id" in required_fields
         assert "seed" in required_fields
         assert "metrics" in required_fields
+        assert "termination_reason" in required_fields
+        assert "outcome" in required_fields
+        assert "integrity" in required_fields
 
     def test_schema_validation_works_for_valid_episode_data(self):
         """Test that schema validation works for valid episode data (FR-005)."""
@@ -61,6 +64,13 @@ class TestSchemaConsolidationIntegration:
             "scenario_id": "test-scenario-001",
             "seed": 42,
             "metrics": {"total_reward": 100.5, "steps": 50, "success_rate": 1.0},
+            "termination_reason": "success",
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
         }
 
         # Should not raise an exception
@@ -98,8 +108,8 @@ class TestSchemaConsolidationIntegration:
         # Should be "1.0.0" for this schema (current implementation)
         assert version == "1.0.0"
 
-    def test_backward_compatibility_maintained(self):
-        """Test that backward compatibility is maintained (FR-003)."""
+    def test_legacy_episode_format_is_rejected(self):
+        """Legacy episode payloads missing outcome/integrity should be rejected."""
         import jsonschema
 
         from robot_sf.benchmark.schema_loader import load_schema
@@ -115,8 +125,8 @@ class TestSchemaConsolidationIntegration:
             "metrics": {"total_reward": 75.0, "steps": 30},
         }
 
-        # Should still validate (backward compatibility)
-        jsonschema.validate(instance=old_format_episode, schema=schema)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(instance=old_format_episode, schema=schema)
 
     def test_schema_file_exists_in_canonical_location(self):
         """Test that canonical schema file exists (FR-001)."""

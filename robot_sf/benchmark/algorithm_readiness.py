@@ -59,7 +59,7 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="prediction_planner",
         tier="experimental",
-        aliases=("prediction_planner", "predictive", "prediction"),
+        aliases=("prediction_planner",),
         note="RGL-inspired predictive planner; requires trained checkpoint.",
     ),
     AlgorithmReadiness(

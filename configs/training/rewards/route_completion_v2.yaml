@@ -1,0 +1,16 @@
+profile: route_completion_v2
+version: 1
+reward_name: route_completion_v2
+reward_kwargs:
+  weights:
+    progress: 2.5
+    living: -0.01
+    collision: -5.0
+    near_miss: -0.8
+    ttc_risk: -0.6
+    comfort: -0.4
+    smoothness: -0.15
+    terminal_bonus: 2.0
+notes:
+  - Canonical route-completion-first reward profile.
+  - Success is route completion only (no waypoint success).

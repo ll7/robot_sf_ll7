@@ -20,6 +20,7 @@ uv run python scripts/training/train_expert_ppo.py \
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib
 import json
 import os
@@ -468,6 +469,7 @@ class TrainingOutputs:
     tensorboard_log: Path | None
     best_checkpoint: BestCheckpointSummary | None
     snqi_context: TrainingSNQIContext
+    eval_timeline: list[dict[str, float | int]]
 
 
 def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path | None:
@@ -823,6 +825,10 @@ def _execute_training(
             scenario_id=scenario_ctx.scenario_label,
             snqi_context=snqi_context,
         )
+        eval_timeline = _timeline_from_episode_records(
+            eval_steps=eval_steps,
+            episode_records=episode_records,
+        )
         return TrainingOutputs(
             metrics_raw=metrics_raw,
             episode_records=episode_records,
@@ -831,6 +837,7 @@ def _execute_training(
             tensorboard_log=tensorboard_log,
             best_checkpoint=None,
             snqi_context=snqi_context,
+            eval_timeline=eval_timeline,
         )
 
     model, vec_env, tensorboard_log = _init_training_model(
@@ -858,7 +865,7 @@ def _execute_training(
         eval_schedule = [start_timesteps]
     else:
         eval_schedule = [step for step in eval_steps if step > start_timesteps]
-    metrics_raw, episode_records, best_checkpoint = _train_with_schedule(
+    metrics_raw, episode_records, best_checkpoint, eval_timeline = _train_with_schedule(
         model,
         config=config,
         scenario_definitions=scenario_definitions,
@@ -882,6 +889,7 @@ def _execute_training(
         tensorboard_log=tensorboard_log,
         best_checkpoint=best_checkpoint,
         snqi_context=snqi_context,
+        eval_timeline=eval_timeline,
     )
 
 
@@ -919,6 +927,75 @@ def _summarize_eval_metrics(metrics: MetricSamples) -> dict[str, float]:
         if values:
             summary[name] = float(np.mean(values))
     return summary
+
+
+def _timeline_from_episode_records(
+    *,
+    eval_steps: Sequence[int],
+    episode_records: Sequence[Mapping[str, object]],
+) -> list[dict[str, float | int]]:
+    """Build canonical eval timeline rows from per-episode evaluation records."""
+    timeline: list[dict[str, float | int]] = []
+    for eval_step in eval_steps:
+        grouped: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
+        for record in episode_records:
+            if int(record.get("eval_step", -1)) != int(eval_step):
+                continue
+            metrics_raw = record.get("metrics", {})
+            if not isinstance(metrics_raw, Mapping):
+                continue
+            for key in _EVAL_METRIC_KEYS:
+                grouped[key].append(float(metrics_raw.get(key, float("nan"))))
+        summary = _summarize_eval_metrics(grouped)
+        if summary:
+            timeline.append(_build_eval_timeline_entry(summary, eval_step=int(eval_step)))
+    return timeline
+
+
+def _build_eval_timeline_entry(
+    summary: Mapping[str, float],
+    *,
+    eval_step: int,
+) -> dict[str, float | int]:
+    """Build one canonical eval-checkpoint row for local artifacts and W&B logging."""
+    entry: dict[str, float | int] = {"eval_step": int(eval_step)}
+    for key in _EVAL_METRIC_KEYS:
+        entry[key] = float(summary.get(key, float("nan")))
+    return entry
+
+
+def _write_eval_timeline(
+    *,
+    run_id: str,
+    timeline: Sequence[Mapping[str, float | int]],
+) -> Path:
+    """Write canonical evaluation timeline rows as JSON and CSV artifacts.
+
+    Returns:
+        Path to the JSON timeline artifact.
+    """
+    timeline_dir = get_imitation_report_dir() / "eval_timeline"
+    timeline_dir.mkdir(parents=True, exist_ok=True)
+    json_path = timeline_dir / f"{run_id}.json"
+    csv_path = timeline_dir / f"{run_id}.csv"
+    sorted_rows = sorted(
+        (
+            {
+                "eval_step": int(row.get("eval_step", 0)),
+                **{key: float(row.get(key, float("nan"))) for key in _EVAL_METRIC_KEYS},
+            }
+            for row in timeline
+        ),
+        key=lambda row: int(row["eval_step"]),
+    )
+    json_path.write_text(json.dumps(sorted_rows, indent=2, sort_keys=True), encoding="utf-8")
+    fieldnames = ["eval_step", *_EVAL_METRIC_KEYS]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in sorted_rows:
+            writer.writerow(row)
+    return json_path
 
 
 def _finalize_best_checkpoint(
@@ -962,17 +1039,21 @@ def _record_eval_metrics(model: PPO, metrics: MetricSamples, *, eval_step: int) 
 
 def _log_eval_to_wandb(
     wandb_run: object | None,
-    metrics: MetricSamples,
+    entry: Mapping[str, float | int],
     *,
     eval_step: int,
 ) -> None:
-    """Send evaluation aggregates to W&B when enabled."""
+    """Send one canonical eval-checkpoint row to W&B when enabled."""
     if wandb_run is None:
         return
-    payload = {f"eval/{name}": float(np.mean(values)) for name, values in metrics.items() if values}
-    if payload:
-        payload["eval/step"] = eval_step
-        wandb_run.log(payload, step=eval_step)
+    payload = {
+        f"eval/{key}": float(value)
+        for key, value in entry.items()
+        if key != "eval_step" and isinstance(value, int | float)
+    }
+    payload["eval/step"] = int(eval_step)
+    payload["eval/checkpoint"] = 1
+    wandb_run.log(payload, step=int(eval_step))
 
 
 def _train_with_schedule(  # noqa: PLR0913
@@ -988,10 +1069,16 @@ def _train_with_schedule(  # noqa: PLR0913
     wandb_callback: object | None,
     start_timesteps: int = 0,
     checkpoint_dir: Path | None = None,
-) -> tuple[MetricSamples, list[dict[str, object]], BestCheckpointSummary | None]:
+) -> tuple[
+    MetricSamples,
+    list[dict[str, object]],
+    BestCheckpointSummary | None,
+    list[dict[str, float | int]],
+]:
     """Train PPO in chunks and evaluate at scheduled checkpoints."""
     episode_records: list[dict[str, object]] = []
     metrics_raw: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
+    eval_timeline: list[dict[str, float | int]] = []
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
     if wandb_callback is not None:
@@ -1022,12 +1109,14 @@ def _train_with_schedule(  # noqa: PLR0913
         for key, values in step_metrics.items():
             metrics_raw[key].extend(values)
         _record_eval_metrics(model, step_metrics, eval_step=eval_step)
-        _log_eval_to_wandb(wandb_run, step_metrics, eval_step=eval_step)
+        summary = _summarize_eval_metrics(step_metrics)
+        eval_entry = _build_eval_timeline_entry(summary, eval_step=eval_step)
+        eval_timeline.append(eval_entry)
+        _log_eval_to_wandb(wandb_run, eval_entry, eval_step=eval_step)
         if checkpoint_dir is not None:
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
-        summary = _summarize_eval_metrics(step_metrics)
         tracker.update(summary, eval_step=eval_step)
         episode_records.extend(eval_records)
         timesteps_done = eval_step
@@ -1037,7 +1126,7 @@ def _train_with_schedule(  # noqa: PLR0913
         config=config,
         checkpoint_dir=checkpoint_dir,
     )
-    return metrics_raw, episode_records, best_summary
+    return metrics_raw, episode_records, best_summary, eval_timeline
 
 
 def _init_training_model(
@@ -1610,6 +1699,7 @@ def run_expert_training(
 
     episode_log_path = common.get_imitation_report_dir() / "episodes" / f"{run_id}.jsonl"
     _write_episode_log(episode_log_path, outputs.episode_records)
+    eval_timeline_path = _write_eval_timeline(run_id=run_id, timeline=outputs.eval_timeline)
 
     wall_clock_seconds = max(0.0, time.perf_counter() - start_time)
     wall_clock_hours = wall_clock_seconds / 3600.0
@@ -1625,6 +1715,7 @@ def run_expert_training(
         seeds=config.seeds,
         metrics=aggregates,
         episode_log_path=episode_log_path,
+        eval_timeline_path=eval_timeline_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
         scenario_coverage=scenario_coverage,

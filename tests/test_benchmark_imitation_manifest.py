@@ -159,6 +159,7 @@ def test_training_run_manifest_writes_to_runs_folder(
     assert output_path.parent.name == "runs"
     assert payload["run_id"] == artifact.run_id
     assert payload["episode_log_path"].startswith("benchmarks/ppo_imitation/")
+    assert payload["eval_timeline_path"] is None
     assert payload["status"] == TrainingRunStatus.COMPLETED.value
     assert payload["scenario_coverage"] == {"scenario_a": 3, "scenario_b": 1}
     assert payload["notes"] == ["warm start converged"]

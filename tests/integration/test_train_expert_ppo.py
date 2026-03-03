@@ -46,6 +46,10 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert run_manifest_path.exists()
     training_payload = json.loads(run_manifest_path.read_text(encoding="utf-8"))
     assert training_payload["run_type"] == common.TrainingRunType.EXPERT_TRAINING.value
+    assert isinstance(training_payload.get("eval_timeline_path"), str)
+    assert training_payload["eval_timeline_path"].startswith(
+        "benchmarks/ppo_imitation/eval_timeline/"
+    )
     notes = training_payload.get("notes", [])
     assert any(str(note).startswith("snqi_formula=") for note in notes)
     assert any(str(note).startswith("snqi_weights_source=") for note in notes)
@@ -53,3 +57,5 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
 
     log_dir = common.get_imitation_report_dir()
     assert any(log_dir.glob("episodes/*.jsonl"))
+    assert any(log_dir.glob("eval_timeline/*.json"))
+    assert any(log_dir.glob("eval_timeline/*.csv"))

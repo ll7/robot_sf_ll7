@@ -1,24 +1,45 @@
 version: 1
 models:
-- model_id: ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448
-  display_name: PPO diffdrive reverse no-holdout 15M (2026-01-23)
-  local_path: model/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip
-  config_path: configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml
-  commit: 9cce22c89411c0a8ae52051dfa28a0a4055f3f07
-  wandb_run_id: jx7e1sjx
-  wandb_run_path: ll7/robot_sf/jx7e1sjx
-  wandb_entity: null
-  wandb_project: null
+- model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
+  display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
+  local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip
+  config_path: configs/training/ppo_imitation/expert_ppo.yaml
+  commit: null
+  wandb_run_id: asym0xo2
+  wandb_run_path: ll7/robot_sf/asym0xo2
+  wandb_entity: ll7
+  wandb_project: robot_sf
   wandb_file: model.zip
   tags:
   - ppo
-  - socnav
+  - br06
+  - v2-semantics
+  - all-maps
   - diffdrive
-  - reverse
-  - no-holdout
   - grid-obs
   notes:
-  - Fill wandb_run_path or wandb_entity/project if you want automatic download.
+  - Run ended at ~7.1M steps (W&B state=killed), not full 15M budget.
+  - Training analysis: model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md
+- model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433
+  display_name: PPO expert BR-06 v2 all-maps (2026-03-03 candidate)
+  local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260303T074433/model.zip
+  config_path: configs/training/ppo_imitation/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
+  commit: 436368d78f351b7a30fcbe873fd82b380f0b30a8
+  wandb_run_id: c4s6142g
+  wandb_run_path: ll7/robot_sf/c4s6142g
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v2-semantics
+  - candidate
+  - all-maps
+  notes:
+  - Full 15M run finished.
+  - Not promoted: high collision on classic scenarios and one integrity-contradiction error episode.
+  - Analysis: model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md
 - model_id: ga3c_cadrl_iros18
   display_name: GA3C-CADRL (IROS18) checkpoint
   local_path: model/ga3c_cadrl/IROS18/network_01900000.meta

@@ -1,9 +1,9 @@
-# PPO baseline config pinned to the 15M grid+sociNav expert policy.
+# PPO baseline config pinned to the BR-06 v2 PPO expert policy.
 #
 # Intended for benchmark/evaluation runs where PPO should use the same
 # occupancy-grid observation setup as the 15M training artifact.
 
-model_path: output/model_cache/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/model.zip  # Download or retrain this checkpoint (see model/ppo_expert_grid_socnav_403_diffdrive_reverse_no_holdout_15m_20260123T153448/README.md); otherwise fallback_to_goal=true will silently degrade benchmark results.
+model_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip  # Source run: ll7/robot_sf/asym0xo2 (see model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md).
 
 # Device selection for SB3
 device: auto

@@ -1,0 +1,15 @@
+profile: route_completion_v3
+version: 1
+reward_name: route_completion_v3
+reward_kwargs:
+  weights:
+    progress: 2.2
+    living: -0.01
+    collision: -10.0
+    near_miss: -1.0
+    ttc_risk: -0.8
+    comfort: -0.5
+    smoothness: -0.2
+    timeout: -3.0
+    stagnation: -1.2
+    terminal_bonus: 3.0

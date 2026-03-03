@@ -3,7 +3,7 @@
 # Intended for benchmark/evaluation runs where PPO should use the same
 # occupancy-grid observation setup as the 15M training artifact.
 
-model_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip  # Source run: ll7/robot_sf/asym0xo2 (see model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md).
+model_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260303T074433/model.zip  # Source run: ll7/robot_sf/c4s6142g (see model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md).
 
 # Device selection for SB3
 device: auto

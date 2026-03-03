@@ -530,7 +530,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=common.ensure_seed_tuple(data.get("seeds", [])),
-        randomize_seeds=bool(data.get("randomize_seeds", False)),
+        randomize_seeds=bool(data.get("randomize_seeds", True)),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
         convergence=convergence,
@@ -649,7 +649,7 @@ def _resolve_ppo_hyperparams(config: ExpertTrainingConfig) -> dict[str, object]:
 
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
     """Return True when training/evaluation should avoid deterministic seeding."""
-    return bool(getattr(config, "randomize_seeds", False))
+    return bool(getattr(config, "randomize_seeds", True))
 
 
 def _resolve_tensorboard_logdir(run_id: str) -> Path:

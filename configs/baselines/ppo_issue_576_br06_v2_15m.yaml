@@ -1,0 +1,35 @@
+# PPO baseline config for Issue 576 BR-06 retraining v2 artifact.
+# This file is intentionally fail-closed for paper-baseline gating until
+# measured_success_rate is updated from benchmark/policy-analysis results.
+
+model_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps/model.zip
+
+# Device selection for SB3
+device: auto
+# Use deterministic=True for evaluation/benchmarking
+deterministic: true
+
+# Observation handling
+obs_mode: dict
+
+# Action formatting
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+
+# Robustness: if model fails to predict (e.g., shape mismatch),
+# fall back to a simple goal-seeking action so runs continue.
+fallback_to_goal: true
+
+# Paper-baseline contract metadata used by map-runner gating.
+profile: paper
+provenance:
+  training_config: configs/training/ppo_imitation/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
+  training_commit: TO_FILL_AFTER_TRAINING
+  dataset_version: classic_interactions_francis2023_v1
+  checkpoint_id: TO_FILL_AFTER_TRAINING
+  normalization_id: route_completion_v2
+  deterministic_seed_set: "123,231,777,992,1337"
+quality_gate:
+  min_success_rate: 0.90
+  measured_success_rate: 0.0

@@ -83,6 +83,10 @@ class EpisodeData:
     other_agents_pos : (T,J,2) array | None
         Other robot positions for multi-agent scenarios (default: None).
         Used by agent_collisions (AC) metric.
+    robot_radius : float
+        Robot footprint radius in meters for clearance-based robot-pedestrian metrics.
+    ped_radius : float
+        Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics.
     """
 
     robot_pos: np.ndarray
@@ -98,6 +102,8 @@ class EpisodeData:
     # Optional fields for paper metrics (2306.16740v4)
     obstacles: np.ndarray | None = None
     other_agents_pos: np.ndarray | None = None
+    robot_radius: float = 1.0
+    ped_radius: float = 0.4
 
 
 def has_force_data(data: EpisodeData) -> bool:
@@ -249,6 +255,21 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
         return np.empty((data.robot_pos.shape[0], 0))
     diffs = data.peds_pos - data.robot_pos[:, None, :]
     return np.linalg.norm(diffs, axis=2)
+
+
+def _compute_clearance_matrix(data: EpisodeData) -> np.ndarray:
+    """Compute robot-pedestrian surface clearance matrix.
+
+    Clearance is center-to-center distance minus ``robot_radius + ped_radius``.
+    Values below zero indicate geometric overlap/contact.
+
+    Returns:
+        (T,K) array with per-timestep robot-pedestrian clearances in meters.
+    """
+    center_dists = _compute_distance_matrix(data)
+    if center_dists.size == 0:
+        return center_dists
+    return center_dists - float(data.robot_radius + data.ped_radius)
 
 
 def _rolling_nanmean(samples: np.ndarray, *, window: int) -> np.ndarray:
@@ -552,7 +573,7 @@ def time_to_goal_ideal_ratio(
 
 
 def collisions(data: EpisodeData) -> float:
-    """Count timesteps where min pedestrian distance < D_COLL.
+    """Count timesteps with negative robot-pedestrian clearance.
 
     If no pedestrians are present (K=0) returns 0.0.
 
@@ -561,14 +582,13 @@ def collisions(data: EpisodeData) -> float:
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
-    min_d = dists.min(axis=1)
-    return float(np.count_nonzero(min_d < D_COLL))
+    clearances = _compute_clearance_matrix(data)  # (T,K)
+    min_clearance = clearances.min(axis=1)
+    return float(np.count_nonzero(min_clearance < 0.0))
 
 
 def near_misses(data: EpisodeData) -> float:
-    """Count timesteps with d_coll <= min distance < d_near.
+    """Count timesteps with small positive robot-pedestrian clearance.
 
     If no pedestrians present returns 0.0.
 
@@ -577,43 +597,40 @@ def near_misses(data: EpisodeData) -> float:
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)
-    min_d = dists.min(axis=1)
-    mask = (min_d >= D_COLL) & (min_d < D_NEAR)
+    clearances = _compute_clearance_matrix(data)  # (T,K)
+    min_clearance = clearances.min(axis=1)
+    mask = (min_clearance >= 0.0) & (min_clearance < D_NEAR)
     return float(np.count_nonzero(mask))
 
 
 def min_distance(data: EpisodeData) -> float:
-    """Return global minimum distance to any pedestrian.
+    """Return global minimum robot-pedestrian clearance.
 
     Returns NaN when there are no pedestrians.
 
     Returns:
-        Minimum distance in meters, or NaN if no pedestrians.
+        Minimum clearance in meters, or NaN if no pedestrians.
     """
     if data.peds_pos.shape[1] == 0:
         return float("nan")
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)
-    return float(dists.min())
+    clearances = _compute_clearance_matrix(data)
+    return float(clearances.min())
 
 
 def mean_distance(data: EpisodeData) -> float:
-    """Return mean over time of the minimum robot–pedestrian distance.
+    """Return mean over time of minimum robot-pedestrian clearance.
 
-    At each timestep t, compute d_t = min_k ||peds_pos[t, k] - robot_pos[t]||.
+    At each timestep t, compute clearance_t = min_k clearance(robot, ped_k).
     Return mean_t d_t. Returns NaN if there are no pedestrians.
 
     Returns:
-        Mean minimum distance in meters, or NaN if no pedestrians.
+        Mean minimum clearance in meters, or NaN if no pedestrians.
     """
     # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
     if data.peds_pos.shape[1] == 0:
         return float("nan")
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
-    min_per_t = dists.min(axis=1)  # (T,)
+    clearances = _compute_clearance_matrix(data)  # (T,K)
+    min_per_t = clearances.min(axis=1)  # (T,)
     return float(np.mean(min_per_t))
 
 
@@ -1280,11 +1297,12 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     ---------------
     Section 3.2, Table 1: "Human Collisions (HC)" metric
     """
+    _ = threshold  # Threshold kept for API stability; collision is clearance < 0.
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    dists = _compute_distance_matrix(data)
-    min_d = dists.min(axis=1)
-    return float(np.count_nonzero(min_d < threshold))
+    clearances = _compute_clearance_matrix(data)
+    min_clearance = clearances.min(axis=1)
+    return float(np.count_nonzero(min_clearance < 0.0))
 
 
 def timeout(data: EpisodeData, *, horizon: int) -> float:

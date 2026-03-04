@@ -30,8 +30,8 @@ When invoking commands with `uv run`, include `--group imitation`.
 Train a high-quality expert policy using standard PPO training:
 
 ```bash
-# Train expert using configs/training/ppo_imitation/expert_ppo.yaml
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+# Train expert using a config-first PPO profile
+uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 ```
 
 **What happens:**
@@ -298,7 +298,7 @@ Comprehensive integration tests in `tests/integration/test_ppo_pretraining_pipel
 
 ```bash
 # 1. Train expert
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 
 # 2. Collect trajectories
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200

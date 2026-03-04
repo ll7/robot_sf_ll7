@@ -102,6 +102,7 @@ class TrainingRunArtifact:
     wall_clock_hours: float
     status: TrainingRunStatus
     eval_timeline_path: Path | None = None
+    perf_summary_path: Path | None = None
     scenario_coverage: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 

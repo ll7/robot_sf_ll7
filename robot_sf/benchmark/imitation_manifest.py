@@ -189,6 +189,11 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
             if artifact.eval_timeline_path is not None
             else None
         ),
+        "perf_summary_path": (
+            _path_to_manifest(artifact.perf_summary_path)
+            if artifact.perf_summary_path is not None
+            else None
+        ),
         "wall_clock_hours": artifact.wall_clock_hours,
         "status": artifact.status.value,
         "scenario_coverage": {

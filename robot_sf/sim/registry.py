@@ -32,10 +32,15 @@ def register_backend(key: str, factory: SimulatorFactory, *, override: bool = Fa
     k = key.strip()
     if not k:
         raise ValueError("Backend key must be a non-empty string")
-    if k in _REGISTRY and not override:
+    already_registered = k in _REGISTRY
+    if already_registered and not override:
         raise KeyError(f"Backend '{k}' already registered; pass override=True to replace")
     _REGISTRY[k] = factory
-    logger.info("Registered simulator backend: {}", k)
+    if override and already_registered:
+        # Subprocess workers re-import this module; keep these re-registration logs quiet.
+        logger.debug("Re-registered simulator backend (override): {}", k)
+    else:
+        logger.info("Registered simulator backend: {}", k)
 
 
 def get_backend(key: str) -> SimulatorFactory:

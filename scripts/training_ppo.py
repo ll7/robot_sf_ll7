@@ -1,45 +1,27 @@
-"""TODO docstring. Document this module."""
+"""Deprecated PPO training entrypoint.
 
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
+This script intentionally hard-fails to prevent accidental usage of the legacy,
+non-config-driven workflow. Use the structured training entrypoint instead:
 
-from robot_sf.feature_extractor import DynamicsExtractor
-from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.robot_env import RobotEnv
-from robot_sf.tb_logging import DrivingMetricsCallback
+    uv run python scripts/training/train_expert_ppo.py --config <config.yaml>
+"""
+
+from __future__ import annotations
+
+import sys
 
 
-def training():
-    """TODO docstring. Document this function."""
-    n_envs = 22
-    ped_densities = [0.01, 0.02, 0.04, 0.08]
-    difficulty = 2
-
-    def make_env():
-        """TODO docstring. Document this function."""
-        config = EnvSettings()
-        config.sim_config.ped_density_by_difficulty = ped_densities
-        config.sim_config.difficulty = difficulty
-        return RobotEnv(config)
-
-    env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
-
-    policy_kwargs = {"features_extractor_class": DynamicsExtractor}
-    model = PPO(
-        "MultiInputPolicy",
-        env,
-        tensorboard_log="./tmp/tensorboard_logs/ppo_logs/",
-        policy_kwargs=policy_kwargs,
+def main() -> int:
+    """Print migration guidance and return a non-zero exit code."""
+    message = (
+        "scripts/training_ppo.py is deprecated and disabled to prevent accidental "
+        "legacy training runs.\n"
+        "Use: uv run python scripts/training/train_expert_ppo.py "
+        "--config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
     )
-    save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
-    collect_metrics_callback = DrivingMetricsCallback(n_envs)
-    combined_callback = CallbackList([save_model_callback, collect_metrics_callback])
-
-    model.learn(total_timesteps=10_000_000, progress_bar=True, callback=combined_callback)
-    model.save("./model/ppo_model")
+    print(message, file=sys.stderr)
+    return 2
 
 
-if __name__ == "__main__":
-    training()
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())

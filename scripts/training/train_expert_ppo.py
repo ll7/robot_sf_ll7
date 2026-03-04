@@ -12,7 +12,7 @@ training.
 Example usage:
 ```bash
 uv run python scripts/training/train_expert_ppo.py \
-    --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
+    --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
     --log-level WARNING
 ```
 """
@@ -138,6 +138,7 @@ _EVAL_METRIC_KEYS = (
     "eval_avg_step_reward",
 )
 _SUPPORTED_BEST_METRICS = set(_EVAL_METRIC_KEYS)
+_FREQUENCY_EPISODES_DEPRECATION_WARNED = False
 
 
 def _preconfigure_loguru_level_from_argv() -> None:
@@ -470,6 +471,8 @@ class TrainingOutputs:
     best_checkpoint: BestCheckpointSummary | None
     snqi_context: TrainingSNQIContext
     eval_timeline: list[dict[str, float | int]]
+    startup_sec: float
+    per_checkpoint_perf: list[dict[str, float | int]]
 
 
 def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path | None:
@@ -527,6 +530,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
     )
+    _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
 
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
@@ -563,6 +567,51 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         socnav_orca_neighbor_dist=(
             float(socnav_orca_neighbor_dist) if socnav_orca_neighbor_dist is not None else None
         ),
+    )
+
+
+def _warn_frequency_episodes_deprecated(frequency_episodes: int) -> None:
+    """Warn once that frequency_episodes is ignored in favor of step_schedule."""
+    global _FREQUENCY_EPISODES_DEPRECATION_WARNED
+    if _FREQUENCY_EPISODES_DEPRECATION_WARNED:
+        return
+    logger.warning(
+        "evaluation.frequency_episodes={} is currently ignored; "
+        "evaluation.step_schedule controls checkpoint cadence.",
+        frequency_episodes,
+    )
+    _FREQUENCY_EPISODES_DEPRECATION_WARNED = True
+
+
+def _resolved_reward_name(env_factory_kwargs: Mapping[str, object]) -> str:
+    """Resolve named reward profile for startup logs."""
+    if "reward_func" in env_factory_kwargs:
+        return "custom_callable"
+    reward_name = env_factory_kwargs.get("reward_name")
+    if reward_name is None:
+        return "route_completion_v2 (default)"
+    return str(reward_name)
+
+
+def _log_startup_summary(
+    *,
+    config: ExpertTrainingConfig,
+    config_path: Path | None,
+    num_envs: int,
+    worker_mode: str,
+) -> None:
+    """Emit one structured startup summary for run-critical resolved config."""
+    logger.info(
+        "Training startup summary: policy_id={} config_path={} scenario_config={} "
+        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} randomize_seeds={}",
+        config.policy_id,
+        str(config_path) if config_path is not None else "<none>",
+        config.scenario_config,
+        config.total_timesteps,
+        _resolved_reward_name(config.env_factory_kwargs),
+        num_envs,
+        worker_mode,
+        _randomize_seeds(config),
     )
 
 
@@ -802,8 +851,18 @@ def _execute_training(
     run_id: str,
     dry_run: bool,
     resume_from: Path | None,
+    config_path: Path | None,
 ) -> TrainingOutputs:
     """Run training (or dry-run) and return raw metrics + episode records."""
+    startup_t0 = time.perf_counter()
+    num_envs = _resolve_num_envs(config)
+    worker_mode = _resolve_worker_mode(config, num_envs)
+    _log_startup_summary(
+        config=config,
+        config_path=config_path,
+        num_envs=num_envs,
+        worker_mode=worker_mode,
+    )
     snqi_context = resolve_training_snqi_context(
         weights_path=config.snqi_weights_path,
         baseline_path=config.snqi_baseline_path,
@@ -838,9 +897,11 @@ def _execute_training(
             best_checkpoint=None,
             snqi_context=snqi_context,
             eval_timeline=eval_timeline,
+            startup_sec=max(0.0, time.perf_counter() - startup_t0),
+            per_checkpoint_perf=[],
         )
 
-    model, vec_env, tensorboard_log = _init_training_model(
+    model, vec_env, tensorboard_log, num_envs, worker_mode = _init_training_model(
         config,
         scenario=scenario_ctx.selected_scenario,
         scenario_definitions=scenario_definitions,
@@ -855,6 +916,7 @@ def _execute_training(
         config=config,
         tensorboard_log=tensorboard_log,
     )
+    startup_sec = max(0.0, time.perf_counter() - startup_t0)
     start_timesteps = int(getattr(model, "num_timesteps", 0) or 0)
     if start_timesteps >= max(eval_steps or [0]):
         logger.warning(
@@ -865,18 +927,22 @@ def _execute_training(
         eval_schedule = [start_timesteps]
     else:
         eval_schedule = [step for step in eval_steps if step > start_timesteps]
-    metrics_raw, episode_records, best_checkpoint, eval_timeline = _train_with_schedule(
-        model,
-        config=config,
-        scenario_definitions=scenario_definitions,
-        scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
-        hold_out_scenarios=config.evaluation.hold_out_scenarios,
-        eval_steps=eval_schedule,
-        snqi_context=snqi_context,
-        wandb_run=wandb_run,
-        wandb_callback=wandb_callback,
-        start_timesteps=start_timesteps,
-        checkpoint_dir=common.get_expert_policy_dir() / "checkpoints" / config.policy_id,
+    metrics_raw, episode_records, best_checkpoint, eval_timeline, per_checkpoint_perf = (
+        _train_with_schedule(
+            model,
+            config=config,
+            scenario_definitions=scenario_definitions,
+            scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
+            hold_out_scenarios=config.evaluation.hold_out_scenarios,
+            eval_steps=eval_schedule,
+            snqi_context=snqi_context,
+            wandb_run=wandb_run,
+            wandb_callback=wandb_callback,
+            start_timesteps=start_timesteps,
+            checkpoint_dir=common.get_expert_policy_dir() / "checkpoints" / config.policy_id,
+            startup_sec=startup_sec,
+            num_envs=num_envs,
+        )
     )
     if wandb_run is not None:  # pragma: no cover - optional dependency
         wandb_run.finish()
@@ -890,6 +956,8 @@ def _execute_training(
         best_checkpoint=best_checkpoint,
         snqi_context=snqi_context,
         eval_timeline=eval_timeline,
+        startup_sec=startup_sec,
+        per_checkpoint_perf=per_checkpoint_perf,
     )
 
 
@@ -998,6 +1066,31 @@ def _write_eval_timeline(
     return json_path
 
 
+def _write_perf_summary(
+    *,
+    run_id: str,
+    startup_sec: float,
+    per_checkpoint_perf: Sequence[Mapping[str, float | int]],
+    total_wall_clock_sec: float,
+) -> Path:
+    """Write machine-readable performance summary for the training run."""
+    perf_dir = get_imitation_report_dir() / "perf"
+    perf_dir.mkdir(parents=True, exist_ok=True)
+    json_path = perf_dir / f"{run_id}.json"
+    eval_secs = [float(row.get("eval_wall_sec", 0.0)) for row in per_checkpoint_perf]
+    train_speeds = [float(row.get("train_env_steps_per_sec", 0.0)) for row in per_checkpoint_perf]
+    payload = {
+        "run_id": run_id,
+        "startup_sec": float(startup_sec),
+        "total_wall_clock_sec": float(total_wall_clock_sec),
+        "train_env_steps_per_sec_mean": float(np.mean(train_speeds)) if train_speeds else 0.0,
+        "eval_sec_per_checkpoint": float(np.mean(eval_secs)) if eval_secs else 0.0,
+        "per_checkpoint_perf": list(per_checkpoint_perf),
+    }
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return json_path
+
+
 def _finalize_best_checkpoint(
     tracker: _BestCheckpointTracker,
     *,
@@ -1056,6 +1149,30 @@ def _log_eval_to_wandb(
     wandb_run.log(payload, step=int(eval_step))
 
 
+def _log_perf_to_wandb(
+    wandb_run: object | None,
+    *,
+    eval_step: int,
+    startup_sec: float,
+    train_wall_sec: float,
+    eval_wall_sec: float,
+    train_env_steps_per_sec: float,
+) -> None:
+    """Send stable per-checkpoint performance metrics to W&B."""
+    if wandb_run is None:
+        return
+    wandb_run.log(
+        {
+            "perf/startup_sec": float(startup_sec),
+            "perf/train_wall_sec": float(train_wall_sec),
+            "perf/eval_wall_sec": float(eval_wall_sec),
+            "perf/train_env_steps_per_sec": float(train_env_steps_per_sec),
+            "perf/checkpoint": 1,
+        },
+        step=int(eval_step),
+    )
+
+
 def _train_with_schedule(  # noqa: PLR0913
     model: PPO,
     *,
@@ -1069,16 +1186,20 @@ def _train_with_schedule(  # noqa: PLR0913
     wandb_callback: object | None,
     start_timesteps: int = 0,
     checkpoint_dir: Path | None = None,
+    startup_sec: float = 0.0,
+    num_envs: int = 1,
 ) -> tuple[
     MetricSamples,
     list[dict[str, object]],
     BestCheckpointSummary | None,
+    list[dict[str, float | int]],
     list[dict[str, float | int]],
 ]:
     """Train PPO in chunks and evaluate at scheduled checkpoints."""
     episode_records: list[dict[str, object]] = []
     metrics_raw: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     eval_timeline: list[dict[str, float | int]] = []
+    perf_timeline: list[dict[str, float | int]] = []
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
     if wandb_callback is not None:
@@ -1093,9 +1214,16 @@ def _train_with_schedule(  # noqa: PLR0913
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
+        train_t0 = time.perf_counter()
         if train_steps > 0:
             logger.info("Training PPO segment steps={} (total={})", train_steps, eval_step)
             model.learn(total_timesteps=train_steps, reset_num_timesteps=False, callback=cb)
+        train_wall_sec = max(0.0, time.perf_counter() - train_t0)
+        effective_steps = float(max(train_steps, 0) * max(1, num_envs))
+        train_env_steps_per_sec = (
+            float(effective_steps / train_wall_sec) if train_wall_sec > 0.0 else 0.0
+        )
+        eval_t0 = time.perf_counter()
         step_metrics, eval_records = _evaluate_policy(
             model,
             config,
@@ -1106,6 +1234,7 @@ def _train_with_schedule(  # noqa: PLR0913
             snqi_context=snqi_context,
             eval_step=eval_step,
         )
+        eval_wall_sec = max(0.0, time.perf_counter() - eval_t0)
         for key, values in step_metrics.items():
             metrics_raw[key].extend(values)
         _record_eval_metrics(model, step_metrics, eval_step=eval_step)
@@ -1113,6 +1242,24 @@ def _train_with_schedule(  # noqa: PLR0913
         eval_entry = _build_eval_timeline_entry(summary, eval_step=eval_step)
         eval_timeline.append(eval_entry)
         _log_eval_to_wandb(wandb_run, eval_entry, eval_step=eval_step)
+        _log_perf_to_wandb(
+            wandb_run,
+            eval_step=eval_step,
+            startup_sec=startup_sec,
+            train_wall_sec=train_wall_sec,
+            eval_wall_sec=eval_wall_sec,
+            train_env_steps_per_sec=train_env_steps_per_sec,
+        )
+        perf_timeline.append(
+            {
+                "eval_step": int(eval_step),
+                "train_steps": int(train_steps),
+                "num_envs": int(num_envs),
+                "train_wall_sec": float(train_wall_sec),
+                "eval_wall_sec": float(eval_wall_sec),
+                "train_env_steps_per_sec": float(train_env_steps_per_sec),
+            }
+        )
         if checkpoint_dir is not None:
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
@@ -1126,7 +1273,7 @@ def _train_with_schedule(  # noqa: PLR0913
         config=config,
         checkpoint_dir=checkpoint_dir,
     )
-    return metrics_raw, episode_records, best_summary, eval_timeline
+    return metrics_raw, episode_records, best_summary, eval_timeline, perf_timeline
 
 
 def _init_training_model(
@@ -1138,7 +1285,7 @@ def _init_training_model(
     run_id: str,
     tensorboard_log: Path | None,
     resume_from: Path | None,
-) -> tuple[PPO, DummyVecEnv | SubprocVecEnv, Path | None]:
+) -> tuple[PPO, DummyVecEnv | SubprocVecEnv, Path | None, int, str]:
     """Initialize PPO and the vectorized training environment.
 
     If ``resume_from`` is provided, load the checkpoint and continue training.
@@ -1197,7 +1344,7 @@ def _init_training_model(
         base_seed,
     )
 
-    return model, vec_env, tensorboard_log
+    return model, vec_env, tensorboard_log, num_envs, worker_mode
 
 
 def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
@@ -1547,6 +1694,17 @@ def _build_training_notes(
         notes.append("randomize_seeds=true")
     if outputs.tensorboard_log is not None:
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
+    notes.append(f"startup_sec={outputs.startup_sec:.3f}")
+    if outputs.per_checkpoint_perf:
+        mean_train_speed = float(
+            np.mean(
+                [
+                    float(row.get("train_env_steps_per_sec", 0.0))
+                    for row in outputs.per_checkpoint_perf
+                ]
+            )
+        )
+        notes.append(f"train_env_steps_per_sec_mean={mean_train_speed:.3f}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
     notes.append("snqi_formula=robot_sf.benchmark.snqi.compute_snqi")
@@ -1631,6 +1789,7 @@ def run_expert_training(
         run_id=run_id,
         dry_run=dry_run,
         resume_from=resume_from,
+        config_path=config_path,
     )
 
     aggregates = _aggregate_metrics(outputs.metrics_raw)
@@ -1702,6 +1861,12 @@ def run_expert_training(
     eval_timeline_path = _write_eval_timeline(run_id=run_id, timeline=outputs.eval_timeline)
 
     wall_clock_seconds = max(0.0, time.perf_counter() - start_time)
+    perf_summary_path = _write_perf_summary(
+        run_id=run_id,
+        startup_sec=outputs.startup_sec,
+        per_checkpoint_perf=outputs.per_checkpoint_perf,
+        total_wall_clock_sec=wall_clock_seconds,
+    )
     wall_clock_hours = wall_clock_seconds / 3600.0
     input_artifacts = [str(config.scenario_config)]
     if config.snqi_weights_path is not None:
@@ -1716,6 +1881,7 @@ def run_expert_training(
         metrics=aggregates,
         episode_log_path=episode_log_path,
         eval_timeline_path=eval_timeline_path,
+        perf_summary_path=perf_summary_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
         scenario_coverage=scenario_coverage,

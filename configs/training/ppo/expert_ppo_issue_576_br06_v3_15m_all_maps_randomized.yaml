@@ -48,6 +48,7 @@ convergence:
   collision_rate: 0.05
   plateau_window: 2000
 evaluation:
+  # Deprecated/ignored by train_expert_ppo.py; cadence is controlled by step_schedule.
   frequency_episodes: 10
   evaluation_episodes: 100
   hold_out_scenarios: []

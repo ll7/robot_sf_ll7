@@ -51,14 +51,12 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
 mkdir -p "${WORKDIR}" "${SCRATCH_RESULTS}"
 LOG_PATH="${WORKDIR}/results"
 mkdir -p "${LOG_PATH}"
+export ROBOT_SF_ARTIFACT_ROOT="${LOG_PATH}"
 
 cd "${PROJECT_ROOT}"
 
 # TODO: stage large datasets to ${WORKDIR} if GPFS throughput becomes a bottleneck.
 
-srun python scripts/training_ppo.py \
-  --config configs/scenarios/classic_interactions.yaml \
-  --output-dir "${LOG_PATH}" \
-  --num-envs 1 \
-  --device cuda \
-  --total-timesteps 200000
+srun python scripts/training/train_expert_ppo.py \
+  --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
+  --log-level INFO

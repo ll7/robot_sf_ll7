@@ -119,17 +119,6 @@ Generate per-seed trace diagnostics for hard manifests.
 
 Run checkpoint/config sweep with hard/global ranking and confidence intervals.
 
-#### `training_ppo.py` (deprecated)
-
-**Purpose**: Legacy PPO entry point (disabled; migration guard)  
-**Usage**:
-
-```bash
-uv run python scripts/training_ppo.py
-```
-
-**Details**: Exits with migration guidance. Use `scripts/training/train_expert_ppo.py --config ...`.
-
 #### `training_a2c.py`
 
 **Purpose**: A2C algorithm training  

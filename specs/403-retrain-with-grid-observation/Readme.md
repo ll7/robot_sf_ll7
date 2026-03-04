@@ -29,7 +29,7 @@ decisions, ideas, and open questions.
 ## Scope
 - Observation-space definition and training/evaluation protocol.
 - Decide on grid configuration, frame, and action limits.
-- Decide on training pipeline (legacy `scripts/training_ppo.py` vs structured imitation pipeline).
+- Decide on training pipeline (structured `scripts/training/train_expert_ppo.py` config profile).
 - Define metrics, evaluation cadence, and artifact outputs for publication.
 
 ## Assumptions
@@ -48,7 +48,7 @@ decisions, ideas, and open questions.
 - Occupancy grid guide: `docs/dev/occupancy/Update_or_extend_occupancy.md`.
 - SocNav structured observation doc: `docs/dev/issues/socnav_structured_observation.md`.
 - Training pipelines:
-  - Legacy: `scripts/training_ppo.py` (fast but less reproducible).
+  - Structured: `scripts/training/train_expert_ppo.py --config ...` (reproducible, canonical).
   - Structured: `scripts/training/train_expert_ppo.py` + configs under `configs/training/ppo_imitation/`.
 - Example grid usage: `examples/quickstart/04_occupancy_grid.py`, `examples/occupancy_reward_shaping.py`.
 - Combined scenario config: `configs/scenarios/classic_interactions_francis2023.yaml`.

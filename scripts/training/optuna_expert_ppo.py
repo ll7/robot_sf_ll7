@@ -630,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.add(sys.stderr, level=log_level)
         _configure_optuna_verbosity(log_level)
 
-        from train_expert_ppo import (
+        from train_ppo import (
             _resolve_num_envs,
             load_expert_training_config,
             run_expert_training,

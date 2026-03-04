@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from scripts.training import train_expert_ppo
+from scripts.training import train_ppo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,11 +18,11 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
     def _fake_warning(msg: str, *_args) -> None:
         calls.append(msg)
 
-    monkeypatch.setattr(train_expert_ppo.logger, "warning", _fake_warning)
-    monkeypatch.setattr(train_expert_ppo, "_FREQUENCY_EPISODES_DEPRECATION_WARNED", False)
+    monkeypatch.setattr(train_ppo.logger, "warning", _fake_warning)
+    monkeypatch.setattr(train_ppo, "_FREQUENCY_EPISODES_DEPRECATION_WARNED", False)
 
-    train_expert_ppo._warn_frequency_episodes_deprecated(10)
-    train_expert_ppo._warn_frequency_episodes_deprecated(20)
+    train_ppo._warn_frequency_episodes_deprecated(10)
+    train_ppo._warn_frequency_episodes_deprecated(20)
 
     assert len(calls) == 1
     assert "ignored" in calls[0]
@@ -31,7 +31,7 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
 def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) -> None:
     """Perf summary writer should produce machine-readable aggregate keys."""
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
-    path = train_expert_ppo._write_perf_summary(
+    path = train_ppo._write_perf_summary(
         run_id="demo_run",
         startup_sec=1.2,
         per_checkpoint_perf=[

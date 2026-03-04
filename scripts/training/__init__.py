@@ -13,16 +13,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-EXPERT_TRAINING_ENTRYPOINT = "scripts.training.train_ppo:main"
+PPO_TRAINING_ENTRYPOINT = "scripts.training.train_ppo:main"
 DREAMERV3_RLLIB_ENTRYPOINT = "scripts.training.train_dreamerv3_rllib:main"
 
 TRAINING_ENTRYPOINTS: Mapping[str, str] = {
-    "train_expert_ppo": EXPERT_TRAINING_ENTRYPOINT,
+    "train_ppo": PPO_TRAINING_ENTRYPOINT,
     "train_dreamerv3_rllib": DREAMERV3_RLLIB_ENTRYPOINT,
 }
 
 __all__ = [
     "DREAMERV3_RLLIB_ENTRYPOINT",
-    "EXPERT_TRAINING_ENTRYPOINT",
+    "PPO_TRAINING_ENTRYPOINT",
     "TRAINING_ENTRYPOINTS",
 ]

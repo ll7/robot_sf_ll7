@@ -2195,6 +2195,9 @@ METRIC_NAMES: list[str] = [
     "time_to_goal_ideal_ratio",
     "time_to_goal_ideal_ratio_valid",
     "collisions",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "total_collision_count",
     "near_misses",
     "min_distance",
     "mean_distance",
@@ -2285,6 +2288,9 @@ def compute_all_metrics(
         1.0 if math.isfinite(values["time_to_goal_ideal_ratio"]) else 0.0
     )
     values["collisions"] = collisions(data)
+    values["ped_collision_count"] = human_collisions(data)
+    values["obstacle_collision_count"] = wall_collisions(data)
+    values["total_collision_count"] = collision_count(data)
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
     values["mean_distance"] = mean_distance(data)
@@ -2304,7 +2310,7 @@ def compute_all_metrics(
     values["energy"] = energy(data)
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
-    values["wall_collisions"] = wall_collisions(data)
+    values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)
     if experimental_ped_impact:
@@ -2343,7 +2349,14 @@ def post_process_metrics(
     if snqi_weights is not None:
         snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
         metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
-    for count_key in ("collisions", "near_misses", "force_exceed_events"):
+    for count_key in (
+        "collisions",
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "total_collision_count",
+        "near_misses",
+        "force_exceed_events",
+    ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])

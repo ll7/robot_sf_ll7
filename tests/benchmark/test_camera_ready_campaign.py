@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1295,6 +1296,68 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     first = matrix_payload["rows"][0]
     assert first["planner_group"] == "core"
     assert first["kinematics"] == "differential_drive"
+
+
+def test_prepare_campaign_preflight_emits_route_clearance_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight should include informational route-clearance warnings with exact distances."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    map_path = (get_repository_root() / "maps/svg_maps/classic_crossing.svg").resolve()
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: clearance_warn",
+                f"  map_file: {map_path.as_posix()}",
+                "  seeds: [111]",
+                "  robot_config:",
+                "    radius: 0.8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: clearance_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    # Force a deterministic low-clearance condition independent of map geometry.
+    fake_map_def = SimpleNamespace(
+        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        lambda _path: fake_map_def,
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="clearance")
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+
+    warnings = validate_payload.get("route_clearance_warnings")
+    assert isinstance(warnings, list)
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert warning["scenario"] == "clearance_warn"
+    assert warning["warning_threshold_m"] == 0.5
+    assert "min_center_distance_m" in warning
+    assert "min_clearance_margin_m" in warning
+    assert validate_payload["route_clearance_warning_count"] == 1
 
 
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:

@@ -73,6 +73,9 @@ def test_metrics_keys_all_collisions():
         assert name in values
     # Collisions every timestep -> collisions == T
     assert values["collisions"] == 5
+    assert values["ped_collision_count"] == 5
+    assert values["obstacle_collision_count"] == 0
+    assert values["total_collision_count"] == 5
     # Near misses zero because all are strict collisions
     assert values["near_misses"] == 0
     # Min clearance equals negative overlap amount (robot_radius + ped_radius = 1.4m).
@@ -690,6 +693,19 @@ def test_collision_count():
     result = collision_count(ep)
     assert result >= 0.0
     assert np.isfinite(result)
+
+
+def test_collision_split_metrics_are_consistent() -> None:
+    """Collision split metrics should be internally consistent."""
+    ep = _make_episode(T=5, K=1)
+    # Human collisions on every step.
+    ep.peds_pos[:, 0, :] = ep.robot_pos + 0.01
+    # Wall collisions on every step.
+    ep.obstacles = np.array([[0.01, 0.01]])
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["ped_collision_count"] == 5
+    assert vals["obstacle_collision_count"] == 5
+    assert vals["total_collision_count"] == 10
 
 
 def test_wall_collisions():

@@ -22,6 +22,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 from loguru import logger
+from shapely.geometry import LineString, Polygon
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
@@ -43,6 +44,7 @@ from robot_sf.common.artifact_paths import (
     get_artifact_category_path,
     get_repository_root,
 )
+from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.training.scenario_loader import load_scenarios
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
@@ -52,6 +54,9 @@ DEFAULT_SEED_SETS_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
     "collisions",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "total_collision_count",
     "near_misses",
     "time_to_goal_norm",
     "path_efficiency",
@@ -64,6 +69,7 @@ _PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
+_ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
 
 
 @dataclass(frozen=True)
@@ -365,6 +371,146 @@ def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
             except (TypeError, ValueError):
                 continue
     return sorted(seeds)
+
+
+def _resolve_map_path_for_scenario(scenario: dict[str, Any]) -> Path | None:
+    """Resolve a scenario map path into an existing absolute path.
+
+    Returns:
+        Resolved map path when available, otherwise ``None``.
+    """
+    map_file = scenario.get("map_file")
+    if not isinstance(map_file, str) or not map_file.strip():
+        return None
+    repo_root = get_repository_root().resolve()
+    map_path = Path(map_file)
+    candidate = map_path if map_path.is_absolute() else (repo_root / map_path)
+    candidate = candidate.resolve()
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _scenario_robot_radius_m(scenario: dict[str, Any], *, default: float = 1.0) -> float:
+    """Extract scenario robot radius for clearance checks.
+
+    Returns:
+        Positive finite radius in meters.
+    """
+    robot_config = scenario.get("robot_config")
+    if isinstance(robot_config, dict):
+        raw = robot_config.get("radius")
+        try:
+            radius = float(raw)
+        except (TypeError, ValueError):
+            radius = default
+    else:
+        radius = default
+    if not math.isfinite(radius) or radius <= 0.0:
+        return float(default)
+    return float(radius)
+
+
+def _valid_obstacle_polygons(map_def: Any) -> list[Polygon]:
+    """Return valid obstacle polygons from a map definition."""
+    obstacles = getattr(map_def, "obstacles", None)
+    if not isinstance(obstacles, list):
+        return []
+    polygons: list[Polygon] = []
+    for obstacle in obstacles:
+        vertices = getattr(obstacle, "vertices", None)
+        if not isinstance(vertices, list) or len(vertices) < 3:
+            continue
+        poly = Polygon(vertices)
+        if poly.is_valid and not poly.is_empty:
+            polygons.append(poly)
+    return polygons
+
+
+def _valid_route_lines(map_def: Any) -> list[LineString]:
+    """Return valid robot route centerlines from a map definition."""
+    routes = getattr(map_def, "robot_routes", None)
+    if not isinstance(routes, list):
+        return []
+    lines: list[LineString] = []
+    for route in routes:
+        waypoints = getattr(route, "waypoints", None)
+        if not isinstance(waypoints, list) or len(waypoints) < 2:
+            continue
+        line = LineString(waypoints)
+        if line.is_valid and not line.is_empty:
+            lines.append(line)
+    return lines
+
+
+def _map_route_clearance_center_min_m(map_def: Any) -> float | None:
+    """Compute minimum centerline distance from robot routes to obstacle polygons.
+
+    Returns:
+        Minimum route-to-obstacle center distance in meters, or ``None`` when unavailable.
+    """
+    obstacle_polygons = _valid_obstacle_polygons(map_def)
+    route_lines = _valid_route_lines(map_def)
+    if not obstacle_polygons or not route_lines:
+        return None
+
+    min_distance: float | None = None
+    for line in route_lines:
+        for poly in obstacle_polygons:
+            distance = float(line.distance(poly))
+            if min_distance is None or distance < min_distance:
+                min_distance = distance
+    return min_distance
+
+
+def _build_route_clearance_warnings(
+    scenarios: list[dict[str, Any]],
+    *,
+    margin_warn_threshold_m: float = _ROUTE_CLEARANCE_WARN_THRESHOLD_M,
+) -> list[dict[str, Any]]:
+    """Build informational preflight warnings for low route-obstacle clearance margins.
+
+    Returns:
+        List of warning dictionaries for scenarios with margin below ``margin_warn_threshold_m``.
+    """
+    warnings: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        map_path = _resolve_map_path_for_scenario(scenario)
+        if map_path is None:
+            continue
+        try:
+            map_def = convert_map(str(map_path))
+        except (OSError, ValueError, RuntimeError):
+            logger.debug(
+                "Skipping route-clearance preflight for scenario '{}' due to map parse failure.",
+                scenario.get("name", "unknown"),
+                exc_info=True,
+            )
+            continue
+        min_center_distance = _map_route_clearance_center_min_m(map_def)
+        if min_center_distance is None or not math.isfinite(min_center_distance):
+            continue
+        robot_radius_m = _scenario_robot_radius_m(scenario)
+        min_margin_m = float(min_center_distance - robot_radius_m)
+        if min_margin_m >= float(margin_warn_threshold_m):
+            continue
+        warnings.append(
+            {
+                "scenario": str(
+                    scenario.get("name")
+                    or scenario.get("scenario_id")
+                    or scenario.get("id")
+                    or "unknown"
+                ),
+                "map_file": str(scenario.get("map_file", "")),
+                "robot_radius_m": round(robot_radius_m, 6),
+                "min_center_distance_m": round(float(min_center_distance), 6),
+                "min_clearance_margin_m": round(min_margin_m, 6),
+                "warning_threshold_m": float(margin_warn_threshold_m),
+            }
+        )
+    warnings.sort(key=lambda item: (item.get("scenario", ""), item.get("map_file", "")))
+    return warnings
 
 
 def _metric_mean(block: dict[str, Any], metric: str) -> float:
@@ -1315,6 +1461,7 @@ def prepare_campaign_preflight(
 
     created_at_utc = _utc_now()
     scenarios = _load_campaign_scenarios(cfg)
+    route_clearance_warnings = _build_route_clearance_warnings(scenarios)
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     git_meta = _git_context()
@@ -1369,6 +1516,8 @@ def prepare_campaign_preflight(
         "snqi_baseline_path": (
             _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
         ),
+        "route_clearance_warnings": route_clearance_warnings,
+        "route_clearance_warning_count": len(route_clearance_warnings),
     }
     preview_limit = max(0, int(cfg.preview_scenario_limit))
     preview_payload = {
@@ -1377,6 +1526,8 @@ def prepare_campaign_preflight(
         "generated_at_utc": created_at_utc,
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
+        "route_clearance_warnings": route_clearance_warnings,
+        "route_clearance_warning_count": len(route_clearance_warnings),
     }
     if len(scenarios) > preview_limit:
         preview_payload["truncated"] = True
@@ -1482,6 +1633,7 @@ def prepare_campaign_preflight(
         "comparability_mapping_hash": (
             comparability_summary.get("mapping_hash") if comparability_summary else None
         ),
+        "route_clearance_warning_count": len(route_clearance_warnings),
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -1614,6 +1766,13 @@ def _planner_report_row(
         "failed_jobs": int(summary.get("failed_jobs", 0)),
         "success_mean": _safe_float(_metric_mean(metric_block, "success")),
         "collisions_mean": _safe_float(_metric_mean(metric_block, "collisions")),
+        "ped_collision_count_mean": _safe_float(_metric_mean(metric_block, "ped_collision_count")),
+        "obstacle_collision_count_mean": _safe_float(
+            _metric_mean(metric_block, "obstacle_collision_count")
+        ),
+        "total_collision_count_mean": _safe_float(
+            _metric_mean(metric_block, "total_collision_count")
+        ),
         "near_misses_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
         "time_to_goal_norm_mean": _safe_float(_metric_mean(metric_block, "time_to_goal_norm")),
         "path_efficiency_mean": _safe_float(_metric_mean(metric_block, "path_efficiency")),
@@ -2253,6 +2412,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "infeasible_rate",
             "success_mean",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "near_misses_mean",
             "time_to_goal_norm_mean",
             "path_efficiency_mean",
@@ -2285,6 +2447,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "episodes",
             "success_mean",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "snqi_mean",
         ),
     )
@@ -2302,6 +2467,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "episodes",
             "success_mean",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "snqi_mean",
         ),
     )
@@ -2318,6 +2486,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "episodes",
             "success_mean",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "near_misses_mean",
             "time_to_goal_norm_mean",
             "path_efficiency_mean",
@@ -2337,6 +2508,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "episodes",
             "success_mean",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "near_misses_mean",
             "time_to_goal_norm_mean",
             "path_efficiency_mean",
@@ -2359,6 +2533,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 "success_ci_low": str(row.get("success_ci_low", "nan")),
                 "success_ci_high": str(row.get("success_ci_high", "nan")),
                 "collisions_mean": str(row.get("collisions_mean", "nan")),
+                "ped_collision_count_mean": str(row.get("ped_collision_count_mean", "nan")),
+                "obstacle_collision_count_mean": str(
+                    row.get("obstacle_collision_count_mean", "nan")
+                ),
+                "total_collision_count_mean": str(row.get("total_collision_count_mean", "nan")),
                 "collision_ci_low": str(row.get("collision_ci_low", "nan")),
                 "collision_ci_high": str(row.get("collision_ci_high", "nan")),
                 "near_misses_mean": str(row.get("near_misses_mean", "nan")),
@@ -2389,6 +2568,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "success_ci_low",
             "success_ci_high",
             "collisions_mean",
+            "ped_collision_count_mean",
+            "obstacle_collision_count_mean",
+            "total_collision_count_mean",
             "collision_ci_low",
             "collision_ci_high",
             "near_misses_mean",

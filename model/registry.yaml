@@ -1,5 +1,26 @@
 version: 1
 models:
+- model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+  display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, promoted)
+  local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+  config_path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+  commit: 9fb131b6d7ff062887caab33ca8713ae05167ebe
+  wandb_run_id: b60iopxt
+  wandb_run_path: ll7/robot_sf/b60iopxt
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v3-semantics
+  - promoted
+  - all-maps
+  - randomized-seeds
+  notes:
+  - Full 15M run finished under route-complete success semantics.
+  - Full policy sweep: output/benchmarks/20260304_184717_policy_analysis_ppo/report.md
+  - Analysis: model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md
 - model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
   display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
   local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip
@@ -14,10 +35,12 @@ models:
   - ppo
   - br06
   - v2-semantics
+  - deprecated
   - all-maps
   - diffdrive
   - grid-obs
   notes:
+  - Deprecated and replaced by ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200.
   - Run ended at ~7.1M steps (W&B state=killed), not full 15M budget.
   - Training analysis: model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md
 - model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433

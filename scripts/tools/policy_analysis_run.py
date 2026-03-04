@@ -1639,6 +1639,12 @@ def _run_episode(  # noqa: PLR0913
             if video_meta:
                 video_meta["termination_reason"] = record.get("termination_reason")
                 record["video"] = video_meta
+        if record is not None:
+            _apply_video_termination_suffix(
+                video_path=episode_video,
+                termination_reason=str(record.get("termination_reason", "")),
+                record=record,
+            )
 
 
 def _close_env(env) -> None:
@@ -1648,6 +1654,45 @@ def _close_env(env) -> None:
             getattr(env, method)()
         except Exception as exc:
             logger.warning("Failed to call env.{}(): {}", method, exc)
+
+
+def _video_with_termination_suffix(video_path: Path, termination_reason: str) -> Path:
+    """Return the target video path with a termination suffix appended to the stem."""
+    suffix = re.sub(r"[^\w.-]+", "_", str(termination_reason).strip()).strip("._")
+    if not suffix:
+        suffix = "unknown"
+    return video_path.with_name(f"{video_path.stem}_{suffix}{video_path.suffix}")
+
+
+def _apply_video_termination_suffix(
+    *,
+    video_path: Path | None,
+    termination_reason: str | None,
+    record: dict[str, Any],
+) -> None:
+    """Rename episode video to include termination reason and keep record metadata in sync."""
+    if video_path is None or not video_path.exists():
+        return
+    reason = str(termination_reason or "").strip()
+    if not reason:
+        return
+    target = _video_with_termination_suffix(video_path, reason)
+    if target == video_path:
+        return
+    try:
+        if target.exists():
+            target.unlink()
+        video_path.rename(target)
+    except Exception as exc:
+        logger.warning(
+            "Failed to append termination suffix to video {}: {}",
+            video_path,
+            exc,
+        )
+        return
+    video_meta = record.get("video")
+    if isinstance(video_meta, dict):
+        video_meta["path"] = str(target)
 
 
 @dataclass

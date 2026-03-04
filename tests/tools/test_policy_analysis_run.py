@@ -166,6 +166,38 @@ def test_summarize_records_counts_all_non_success_non_collision_as_failures() ->
     assert summary["failures"] == 3
 
 
+def test_apply_video_termination_suffix_renames_file_and_updates_metadata(tmp_path: Path) -> None:
+    """Episode videos should be renamed with a termination suffix for fast visual triage."""
+    src = tmp_path / "scenario_seed123_ppo.mp4"
+    src.write_bytes(b"video")
+    record = {"video": {"path": str(src)}}
+
+    policy_analysis_run._apply_video_termination_suffix(
+        video_path=src,
+        termination_reason="collision",
+        record=record,
+    )
+
+    target = tmp_path / "scenario_seed123_ppo_collision.mp4"
+    assert target.exists()
+    assert not src.exists()
+    assert record["video"]["path"] == str(target)
+
+
+def test_apply_video_termination_suffix_noop_when_video_missing(tmp_path: Path) -> None:
+    """Missing videos should be ignored without mutating record metadata."""
+    src = tmp_path / "missing.mp4"
+    record = {"video": {"path": str(src)}}
+
+    policy_analysis_run._apply_video_termination_suffix(
+        video_path=src,
+        termination_reason="success",
+        record=record,
+    )
+
+    assert record["video"]["path"] == str(src)
+
+
 def test_build_error_episode_record_marks_prediction_planner_as_adapter() -> None:
     """Error records should keep prediction_planner execution mode as adapter."""
     record = policy_analysis_run._build_error_episode_record(

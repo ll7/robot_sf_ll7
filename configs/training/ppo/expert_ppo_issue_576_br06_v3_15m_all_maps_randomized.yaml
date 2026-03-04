@@ -49,7 +49,7 @@ convergence:
   plateau_window: 2000
 evaluation:
   frequency_episodes: 10
-  evaluation_episodes: 10
+  evaluation_episodes: 100
   hold_out_scenarios: []
   step_schedule:
     - until_step: 3000000

@@ -23,7 +23,7 @@ models:
 - model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433
   display_name: PPO expert BR-06 v2 all-maps (2026-03-03 candidate)
   local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260303T074433/model.zip
-  config_path: configs/training/ppo_imitation/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
+  config_path: configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
   commit: 436368d78f351b7a30fcbe873fd82b380f0b30a8
   wandb_run_id: c4s6142g
   wandb_run_path: ll7/robot_sf/c4s6142g

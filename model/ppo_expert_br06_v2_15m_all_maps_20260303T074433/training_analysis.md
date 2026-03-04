@@ -2,7 +2,7 @@
 
 ## Scope
 - Model: `ppo_expert_br06_v2_15m_all_maps_20260303T074433` (W&B `c4s6142g`)
-- Training config: `configs/training/ppo_imitation/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml`
+- Training config: `configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml`
 - Evaluation command: `policy_analysis_run.py --policy ppo --all --seed-set eval --max-seeds 3 --videos`
 - Artifacts:
   - `episodes.jsonl`

@@ -24,7 +24,7 @@ fallback_to_goal: true
 # Paper-baseline contract metadata used by map-runner gating.
 profile: paper
 provenance:
-  training_config: configs/training/ppo_imitation/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
+  training_config: configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
   training_commit: TO_FILL_AFTER_TRAINING
   dataset_version: classic_interactions_francis2023_v1
   checkpoint_id: TO_FILL_AFTER_TRAINING

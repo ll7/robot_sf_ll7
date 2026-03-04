@@ -31,7 +31,7 @@ Train a high-quality expert policy using standard PPO training:
 
 ```bash
 # Train expert using a config-first PPO profile
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 ```
 
 **What happens:**
@@ -191,7 +191,7 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
 
 ### Expert PPO overrides
 
-`train_expert_ppo.py` also supports two optional fields in the expert config:
+`train_ppo.py` also supports two optional fields in the expert config:
 
 - `ppo_hyperparams`: Overrides Stable-Baselines3 PPO kwargs (e.g., `learning_rate`,
   `n_steps`, `batch_size`, `n_epochs`, `ent_coef`, `clip_range`, `target_kl`).
@@ -298,7 +298,7 @@ Comprehensive integration tests in `tests/integration/test_ppo_pretraining_pipel
 
 ```bash
 # 1. Train expert
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 
 # 2. Collect trajectories
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200

@@ -18,7 +18,7 @@ This directory contains all executable scripts for the Robot SF project, organiz
 
 ### I want to...
 
-* **Train a robot policy** → [`training/train_expert_ppo.py`](#training-directory)
+* **Train a robot policy** → [`training/train_ppo.py`](#training-directory)
 * **Train/evaluate predictive planner** → [`scripts/training/train_predictive_planner.py`](#predictive-planner-workflow) and [`scripts/validation/run_predictive_success_campaign.py`](#predictive-planner-workflow)
 * **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
 * **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
@@ -38,7 +38,7 @@ scripts/
 ├── README_SNQI_WEIGHTS.md             # SNQI weight documentation
 │
 ├── training/                          # Training workflows
-│   ├── train_expert_ppo.py           # Expert PPO training
+│   ├── train_ppo.py           # Expert PPO training
 │   ├── train_dreamerv3_rllib.py      # RLlib DreamerV3 training
 │   ├── collect_predictive_planner_data.py # Predictive planner dataset collection
 │   ├── collect_predictive_hardcase_data.py # Hard-case predictive dataset collection
@@ -335,13 +335,13 @@ uv sync --group imitation
 # Use `uv run --group imitation ...` for pretrain_from_expert commands
 ```
 
-### `training/train_expert_ppo.py`
+### `training/train_ppo.py`
 
 **Purpose**: Expert PPO training workflow entry point  
 **Usage**:
 
 ```bash
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 ```
 
 **Details**: Loads unified config, orchestrates PPO expert training, evaluates policy, persists manifests
@@ -933,7 +933,7 @@ Most scripts support standard flags:
 
 ```bash
 # Canonical PPO training
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 
 # Or imitation learning pipeline
 uv run python examples/advanced/16_imitation_learning_pipeline.py

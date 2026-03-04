@@ -44,6 +44,6 @@ cd "${PROJECT_ROOT}"
 
 # TODO: copy large datasets to ${WORKDIR} if they cause GPFS contention.
 
-srun python scripts/training/train_expert_ppo.py \
+srun python scripts/training/train_ppo.py \
   --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
   --log-level INFO

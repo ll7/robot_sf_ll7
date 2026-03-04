@@ -86,7 +86,7 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.tools.render_scenario_videos import _defensive_obs_adapter
-from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
+from scripts.training.train_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence

@@ -140,7 +140,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"PPO model file not found: {mp}",
                 f"Place model at '{mp}' or check available models in model/ directory. "
-                "Download from releases or train with scripts/training/train_expert_ppo.py --config ...",
+                "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
         try:
             # Avoid printing system info in CI/test logs
@@ -161,7 +161,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"Failed to load PPO model from {mp}: {e}",
                 "Check model compatibility with current stable_baselines3 version. "
-                "Re-train if needed using scripts/training/train_expert_ppo.py --config ...",
+                "Re-train if needed using scripts/training/train_ppo.py --config ...",
             )
 
     def reset(self, *, seed: int | None = None) -> None:

@@ -29,7 +29,7 @@ decisions, ideas, and open questions.
 ## Scope
 - Observation-space definition and training/evaluation protocol.
 - Decide on grid configuration, frame, and action limits.
-- Decide on training pipeline (structured `scripts/training/train_expert_ppo.py` config profile).
+- Decide on training pipeline (structured `scripts/training/train_ppo.py` config profile).
 - Define metrics, evaluation cadence, and artifact outputs for publication.
 
 ## Assumptions
@@ -41,15 +41,15 @@ decisions, ideas, and open questions.
   is controlled separately via `sim_config.prf_config.is_active`. Neither is explicitly
   specified in benchmark docs.
 - PPO baseline adapter now supports grid observations via `GridSocNavExtractor`
-  (resolved; integrated through PPO policy kwargs in `train_expert_ppo.py`).
+  (resolved; integrated through PPO policy kwargs in `train_ppo.py`).
 
 ## Inputs
 - Benchmark plan decisions: `docs/dev/benchmark_plan_2026-01-14.md` (observation/action contract).
 - Occupancy grid guide: `docs/dev/occupancy/Update_or_extend_occupancy.md`.
 - SocNav structured observation doc: `docs/dev/issues/socnav_structured_observation.md`.
 - Training pipelines:
-  - Structured: `scripts/training/train_expert_ppo.py --config ...` (reproducible, canonical).
-  - Structured: `scripts/training/train_expert_ppo.py` + configs under `configs/training/ppo_imitation/`.
+  - Structured: `scripts/training/train_ppo.py --config ...` (reproducible, canonical).
+  - Structured: `scripts/training/train_ppo.py` + configs under `configs/training/ppo_imitation/`.
 - Example grid usage: `examples/quickstart/04_occupancy_grid.py`, `examples/occupancy_reward_shaping.py`.
 - Combined scenario config: `configs/scenarios/classic_interactions_francis2023.yaml`.
 
@@ -69,7 +69,7 @@ decisions, ideas, and open questions.
   **ped‑robot repulsion** (`sim_config.prf_config.is_active`) for benchmark runs.
 
 ### Phase 1: Training Protocol (publication-grade)
-- Training pipeline: use `train_expert_ppo.py` + scenario‑sampling wrapper (Option A).
+- Training pipeline: use `train_ppo.py` + scenario‑sampling wrapper (Option A).
 - **Seeds**: 5 seeds (expand to 10 if 95% CI half‑width on success > 0.10).
 - **Evaluation cadence**: 0.5M‑step evals until 3M steps, then 1M‑step evals later.
 - **Hold‑out evaluation**: yes, use the approved split to test generalization.
@@ -89,7 +89,7 @@ Proposed policy:
 from this description with no hidden assumptions.
 
 **Entry point (preferred):**
-- `scripts/training/train_expert_ppo.py` with a dedicated YAML config.
+- `scripts/training/train_ppo.py` with a dedicated YAML config.
   - Proposed config: `configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml`.
   - Runbook: `docs/training/issue_403_grid_training.md`.
 
@@ -109,7 +109,7 @@ from this description with no hidden assumptions.
 **Hyperparameters:** start with baseline config; track overrides in the run manifest.
 
 **Important limitation (current code):**
-- `train_expert_ppo.py` selects a **single scenario** via `select_scenario(...)`.
+- `train_ppo.py` selects a **single scenario** via `select_scenario(...)`.
   To train across multiple scenarios, we must extend the pipeline or create a
   wrapper that samples scenarios per episode.
 
@@ -153,7 +153,7 @@ Validation rules:
 2) **Headless run**
    - Ensure `SDL_VIDEODRIVER=dummy` if any visualization is triggered.
 3) **Launch training**
-   - `uv run python scripts/training/train_expert_ppo.py --config <new_config.yaml>`
+   - `uv run python scripts/training/train_ppo.py --config <new_config.yaml>`
 4) **Monitoring**
    - Track evaluation outputs + manifests under `output/`.
    - Enable TensorBoard + W&B in PPO config (disable W&B if offline).

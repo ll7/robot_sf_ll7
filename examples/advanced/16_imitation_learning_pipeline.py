@@ -40,7 +40,7 @@ generated automatically under output/tmp for each run, so no manual edits are ne
 **Related**:
 - Full documentation: docs/imitation_learning_pipeline.md
 - Quickstart guide: specs/001-ppo-imitation-pretrain/quickstart.md
-- Individual scripts: scripts/training/train_expert_ppo.py, collect_expert_trajectories.py, etc.
+- Individual scripts: scripts/training/train_ppo.py, collect_expert_trajectories.py, etc.
 """
 
 import argparse
@@ -816,7 +816,7 @@ def main():  # noqa: C901,PLR0912,PLR0915
                 "uv",
                 "run",
                 "python",
-                "scripts/training/train_expert_ppo.py",
+                "scripts/training/train_ppo.py",
                 "--config",
                 str(expert_config_path),
             ]

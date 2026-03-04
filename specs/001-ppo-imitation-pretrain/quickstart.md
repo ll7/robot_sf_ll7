@@ -24,7 +24,7 @@ uv run python -c "from stable_baselines3 import PPO; from imitation.algorithms i
 
 ### Run Expert Training
 ```bash
-uv run python scripts/training/train_expert_ppo.py \
+uv run python scripts/training/train_ppo.py \
   --config configs/training/ppo_imitation/expert_ppo.yaml
 ```
 

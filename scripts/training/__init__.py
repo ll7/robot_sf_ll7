@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-EXPERT_TRAINING_ENTRYPOINT = "scripts.training.train_expert_ppo:main"
+EXPERT_TRAINING_ENTRYPOINT = "scripts.training.train_ppo:main"
 DREAMERV3_RLLIB_ENTRYPOINT = "scripts.training.train_dreamerv3_rllib:main"
 
 TRAINING_ENTRYPOINTS: Mapping[str, str] = {

@@ -159,7 +159,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 
 ### Data flow and integration
 
-- **Training loop**: `scripts/training/train_expert_ppo.py` →
+- **Training loop**: `scripts/training/train_ppo.py` →
   factory functions → vectorized environments → StableBaselines3
 - **RLlib workflow**: `scripts/training/train_dreamerv3_rllib.py` →
   factory functions → RLlib env registration → DreamerV3
@@ -967,7 +967,7 @@ uv run python examples/demo_refactored_environments.py
 
 ### Training scripts
 ```bash
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 uv run python scripts/hparam_opt.py
 uv run python scripts/evaluate.py
 ```
@@ -1000,7 +1000,7 @@ Use `uv run --group imitation ...` for BC pre-training commands.
 uv run python examples/advanced/16_imitation_learning_pipeline.py
 
 # Or run individual steps manually:
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
 uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml

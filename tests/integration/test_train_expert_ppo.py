@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from robot_sf import common
-from scripts.training.train_expert_ppo import (
+from scripts.training.train_ppo import (
     load_expert_training_config,
     run_expert_training,
 )

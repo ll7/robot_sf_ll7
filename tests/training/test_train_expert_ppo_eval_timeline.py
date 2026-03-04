@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from scripts.training.train_expert_ppo import _timeline_from_episode_records, _write_eval_timeline
+from scripts.training.train_ppo import _timeline_from_episode_records, _write_eval_timeline
 
 if TYPE_CHECKING:
     from pathlib import Path

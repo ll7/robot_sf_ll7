@@ -1,7 +1,7 @@
 """Optuna study runner for expert PPO training.
 
 This script sweeps PPO hyperparameters for the expert imitation pipeline using the
-same configuration format as ``train_expert_ppo.py``. Trials run shorter training
+same configuration format as ``train_ppo.py``. Trials run shorter training
 loops by default so the study can iterate quickly; adjust the CLI flags for full
 length sweeps.
 """

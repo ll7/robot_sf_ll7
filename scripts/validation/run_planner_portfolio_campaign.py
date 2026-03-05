@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import math
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,8 +31,12 @@ class EvalResult:
     success_rate: float
     success_ci_low: float
     success_ci_high: float
+    collision_reason_rate: float
+    max_steps_rate: float
+    termination_counts: dict[str, int]
     mean_min_distance: float
     mean_avg_speed: float
+    runtime_sec: float
     jsonl_path: str
 
 
@@ -141,6 +146,7 @@ def _run_eval(
     output_dir: Path,
     args: argparse.Namespace,
 ) -> EvalResult:
+    started = time.perf_counter()
     cfg_hash = hashlib.sha1(
         json.dumps({"algo": algo, "cfg": algo_cfg}, sort_keys=True).encode("utf-8")
     ).hexdigest()[:10]
@@ -173,6 +179,24 @@ def _run_eval(
             rows.append(payload)
 
     success_vals = np.asarray([1.0 if _episode_success(row) else 0.0 for row in rows], dtype=float)
+    collision_vals = np.asarray(
+        [
+            1.0 if str(row.get("termination_reason", "")).strip().lower() == "collision" else 0.0
+            for row in rows
+        ],
+        dtype=float,
+    )
+    max_steps_vals = np.asarray(
+        [
+            1.0 if str(row.get("termination_reason", "")).strip().lower() == "max_steps" else 0.0
+            for row in rows
+        ],
+        dtype=float,
+    )
+    termination_counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("termination_reason", "unknown")).strip().lower() or "unknown"
+        termination_counts[key] = int(termination_counts.get(key, 0)) + 1
     min_dist_vals = np.asarray(
         [
             float(row.get("metrics", {}).get("min_distance"))
@@ -199,8 +223,12 @@ def _run_eval(
         success_rate=float(np.mean(success_vals)) if success_vals.size > 0 else 0.0,
         success_ci_low=ci_low,
         success_ci_high=ci_high,
+        collision_reason_rate=float(np.mean(collision_vals)) if collision_vals.size > 0 else 0.0,
+        max_steps_rate=float(np.mean(max_steps_vals)) if max_steps_vals.size > 0 else 0.0,
+        termination_counts=termination_counts,
         mean_min_distance=float(np.mean(min_dist_vals)) if min_dist_vals.size > 0 else float("nan"),
         mean_avg_speed=float(np.mean(speed_vals)) if speed_vals.size > 0 else 0.0,
+        runtime_sec=float(max(time.perf_counter() - started, 0.0)),
         jsonl_path=str(jsonl_path),
     )
 
@@ -211,6 +239,50 @@ def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, f
         global_res.mean_min_distance if np.isfinite(global_res.mean_min_distance) else float("-inf")
     )
     return (hard.success_rate, global_res.success_rate, hard_clear, global_clear)
+
+
+def _write_progress_report(
+    *,
+    output_dir: Path,
+    scenario_matrix: str,
+    hard_seed_manifest: str,
+    portfolio_grid: str,
+    ranked: list[dict[str, Any]],
+) -> tuple[Path, Path]:
+    progress = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "scenario_matrix": scenario_matrix,
+        "hard_seed_manifest": hard_seed_manifest,
+        "portfolio_grid": portfolio_grid,
+        "num_candidates_completed": len(ranked),
+        "best_so_far": ranked[0] if ranked else None,
+        "ranked": ranked,
+    }
+    json_path = output_dir / "campaign_progress.json"
+    json_path.write_text(json.dumps(_nan_to_none(progress), indent=2), encoding="utf-8")
+
+    lines = [
+        "# Planner Portfolio Progress",
+        "",
+        f"- Generated: `{progress['generated_at']}`",
+        f"- Scenario matrix: `{scenario_matrix}`",
+        f"- Hard manifest: `{hard_seed_manifest}`",
+        f"- Grid: `{portfolio_grid}`",
+        f"- Candidates completed: `{len(ranked)}`",
+        "",
+        "| Rank | Candidate | Algo | Hard SR | Global SR | Hard Coll | Global Coll | Hard MaxSteps | Global MaxSteps |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for i, row in enumerate(ranked, start=1):
+        lines.append(
+            f"| {i} | {row['candidate']} | {row['algo']} | "
+            f"{row['hard']['success_rate']:.4f} | {row['global']['success_rate']:.4f} | "
+            f"{row['hard']['collision_reason_rate']:.4f} | {row['global']['collision_reason_rate']:.4f} | "
+            f"{row['hard']['max_steps_rate']:.4f} | {row['global']['max_steps_rate']:.4f} |"
+        )
+    md_path = output_dir / "campaign_progress.md"
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, md_path
 
 
 def main() -> int:
@@ -270,6 +342,14 @@ def main() -> int:
                 "ranking_key": list(_rank_key(hard_res, global_res)),
             }
         )
+        ranked_progress = sorted(results, key=lambda r: tuple(r["ranking_key"]), reverse=True)
+        _write_progress_report(
+            output_dir=args.output_dir,
+            scenario_matrix=str(args.scenario_matrix),
+            hard_seed_manifest=str(args.hard_seed_manifest),
+            portfolio_grid=str(args.portfolio_grid),
+            ranked=ranked_progress,
+        )
 
     ranked = sorted(results, key=lambda r: tuple(r["ranking_key"]), reverse=True)
     best = ranked[0]
@@ -306,19 +386,25 @@ def main() -> int:
         f"- Algorithm: `{best['algo']}`",
         f"- Hard success: `{best['hard']['success_rate']:.4f}`",
         f"- Global success: `{best['global']['success_rate']:.4f}`",
+        f"- Hard collision reason rate: `{best['hard']['collision_reason_rate']:.4f}`",
+        f"- Global collision reason rate: `{best['global']['collision_reason_rate']:.4f}`",
+        f"- Hard max-steps rate: `{best['hard']['max_steps_rate']:.4f}`",
+        f"- Global max-steps rate: `{best['global']['max_steps_rate']:.4f}`",
         f"- Hard mean min-distance: `{best['hard']['mean_min_distance']:.4f}`",
         f"- Global mean min-distance: `{best['global']['mean_min_distance']:.4f}`",
         "",
         "## Ranking",
         "",
-        "| Rank | Candidate | Algo | Hard SR | Global SR | Hard MinDist | Global MinDist |",
-        "|---:|---|---|---:|---:|---:|---:|",
+        "| Rank | Candidate | Algo | Hard SR | Global SR | Hard Coll | Global Coll | Hard MaxSteps | Global MaxSteps | Hard MinDist | Global MinDist |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
 
     for i, row in enumerate(ranked, start=1):
         md_lines.append(
             f"| {i} | {row['candidate']} | {row['algo']} | "
             f"{row['hard']['success_rate']:.4f} | {row['global']['success_rate']:.4f} | "
+            f"{row['hard']['collision_reason_rate']:.4f} | {row['global']['collision_reason_rate']:.4f} | "
+            f"{row['hard']['max_steps_rate']:.4f} | {row['global']['max_steps_rate']:.4f} | "
             f"{row['hard']['mean_min_distance']:.4f} | {row['global']['mean_min_distance']:.4f} |"
         )
 

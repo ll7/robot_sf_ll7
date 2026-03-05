@@ -1,0 +1,29 @@
+# Risk-aware dynamic-window baseline (non-learning).
+max_linear_speed: 1.2
+max_angular_speed: 1.2
+rollout_dt: 0.2
+rollout_steps: 8
+goal_tolerance: 0.25
+
+linear_candidates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+angular_candidates: [-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2]
+
+goal_progress_weight: 4.0
+heading_weight: 0.8
+ped_clearance_weight: 1.6
+obstacle_clearance_weight: 1.2
+smoothness_weight: 0.15
+ttc_weight: 0.3
+
+safe_distance: 0.35
+near_distance: 0.7
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+
+near_field_distance: 2.5
+density_norm_count: 8.0
+near_field_speed_cap: 0.6
+progress_escape_enabled: true
+progress_escape_distance: 1.0
+progress_escape_speed: 0.55
+progress_escape_heading_gain: 1.6

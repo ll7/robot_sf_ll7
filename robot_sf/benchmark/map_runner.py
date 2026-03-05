@@ -44,7 +44,13 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.hybrid_portfolio import (
+    HybridPortfolioAdapter,
+    build_hybrid_portfolio_build_config,
+)
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
+from robot_sf.planner.mppi_social import MPPISocialPlannerAdapter, build_mppi_social_config
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -70,6 +76,7 @@ _SOCNAV_ALGO_KEYS = {
     "prediction_planner",
     "sa_cadrl",
     "socnav_bench",
+    "hybrid_portfolio",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -707,6 +714,76 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         return _policy, meta
 
+    if algo_key == "risk_dwa":
+        adapter = RiskDWAPlannerAdapter(config=build_risk_dwa_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "mppi_social":
+        adapter = MPPISocialPlannerAdapter(config=build_mppi_social_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="MPPISocialPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
     socnav_cfg = _build_socnav_config(algo_config)
 
     if algo_key in {"socnav_sampling", "sampling"}:
@@ -816,6 +893,18 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key == "prediction_planner":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key == "hybrid_portfolio":
+        allow_fallback = bool(algo_config.get("allow_fallback", True))
+        hybrid_cfg = build_hybrid_portfolio_build_config(algo_config)
+        adapter = HybridPortfolioAdapter(
+            hybrid_config=hybrid_cfg.hybrid,
+            risk_dwa=RiskDWAPlannerAdapter(config=hybrid_cfg.risk_dwa),
+            mppi=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
+            orca=ORCAPlannerAdapter(config=hybrid_cfg.socnav, allow_fallback=allow_fallback),
+            prediction=PredictionPlannerAdapter(
+                config=hybrid_cfg.socnav, allow_fallback=allow_fallback
+            ),
+        )
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

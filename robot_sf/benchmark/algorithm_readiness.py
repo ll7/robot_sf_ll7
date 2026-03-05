@@ -63,6 +63,24 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="RGL-inspired predictive planner; requires trained checkpoint.",
     ),
     AlgorithmReadiness(
+        canonical_name="risk_dwa",
+        tier="experimental",
+        aliases=("risk_dwa",),
+        note="Risk-aware dynamic-window planner (non-learning).",
+    ),
+    AlgorithmReadiness(
+        canonical_name="mppi_social",
+        tier="experimental",
+        aliases=("mppi_social",),
+        note="Sampling-based MPPI/CEM social local planner.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="hybrid_portfolio",
+        tier="experimental",
+        aliases=("hybrid_portfolio",),
+        note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+    ),
+    AlgorithmReadiness(
         canonical_name="socnav_bench",
         tier="experimental",
         aliases=("socnav_bench",),

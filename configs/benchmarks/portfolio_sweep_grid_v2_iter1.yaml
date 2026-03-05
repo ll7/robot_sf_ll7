@@ -1,0 +1,58 @@
+# Portfolio campaign sweep grid v2 (iteration 1).
+# Focus: reduce max_steps-heavy failures observed in v1 while keeping collision risk bounded.
+variants:
+  - name: prediction_anchor_v1
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+
+  - name: prediction_fast_commit
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 7.5
+      predictive_collision_weight: 0.4
+      predictive_ttc_weight: 0.22
+      predictive_progress_risk_weight: 2.8
+      predictive_hard_clearance_weight: 2.5
+      predictive_near_field_speed_cap: 0.85
+      predictive_near_field_speed_samples: [0.15, 0.3, 0.45, 0.65, 0.85]
+      predictive_candidate_speeds: [0.0, 0.35, 0.7, 1.05, 1.35]
+      predictive_horizon_boost_steps: 8
+
+  - name: prediction_safe_progress
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 6.8
+      predictive_collision_weight: 0.6
+      predictive_ttc_weight: 0.4
+      predictive_progress_risk_weight: 2.5
+      predictive_hard_clearance_weight: 3.6
+      predictive_near_field_speed_cap: 0.75
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5, 0.7]
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.8, 1.1]
+      predictive_horizon_boost_steps: 8
+
+  - name: mppi_goal_drive
+    algo: mppi_social
+    algo_config_path: ../algos/mppi_social_camera_ready.yaml
+    params:
+      sample_count: 144
+      iterations: 4
+      near_field_speed_cap: 0.65
+      goal_progress_weight: 5.5
+      heading_weight: 1.2
+      ttc_weight: 0.35
+      clearance_weight: 1.8
+
+  - name: hybrid_predictive_bias
+    algo: hybrid_portfolio
+    algo_config_path: ../algos/hybrid_portfolio_camera_ready.yaml
+    params:
+      hybrid:
+        emergency_clearance: 0.5
+        caution_clearance: 0.9
+        dense_ped_count: 7
+        near_field_distance: 2.7
+        hysteresis_steps: 5
+        fallback_on_exception: true

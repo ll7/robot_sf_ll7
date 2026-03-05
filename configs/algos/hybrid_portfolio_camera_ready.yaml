@@ -1,0 +1,64 @@
+# Hybrid planner: risk_dwa + mppi + ORCA + prediction planner.
+allow_fallback: true
+
+# ORCA / prediction planner shared keys (SocNavPlannerConfig-compatible):
+max_linear_speed: 1.2
+max_angular_speed: 1.2
+predictive_model_id: predictive_proxy_selected_v2
+predictive_horizon_steps: 8
+predictive_rollout_dt: 0.2
+predictive_goal_weight: 6.0
+predictive_collision_weight: 0.5
+predictive_near_miss_weight: 0.1
+predictive_ttc_weight: 0.30
+predictive_ttc_distance: 0.9
+predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
+predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
+
+orca_neighbor_dist: 10.0
+orca_max_neighbors: 10
+orca_time_horizon: 6.0
+orca_time_horizon_obst: 3.0
+
+hybrid:
+  emergency_clearance: 0.55
+  caution_clearance: 0.9
+  dense_ped_count: 10
+  near_field_distance: 2.5
+  hysteresis_steps: 6
+  fallback_on_exception: true
+
+risk_dwa:
+  max_linear_speed: 1.2
+  max_angular_speed: 1.2
+  rollout_dt: 0.2
+  rollout_steps: 8
+  linear_candidates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  angular_candidates: [-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2]
+  goal_progress_weight: 5.8
+  heading_weight: 1.0
+  ped_clearance_weight: 1.6
+  ttc_weight: 0.25
+  near_field_speed_cap: 0.7
+  progress_escape_enabled: true
+  progress_escape_speed: 0.55
+  progress_escape_heading_gain: 1.6
+
+mppi_social:
+  random_seed: 42
+  max_linear_speed: 1.2
+  max_angular_speed: 1.2
+  horizon_steps: 10
+  rollout_dt: 0.2
+  sample_count: 96
+  iterations: 3
+  elite_fraction: 0.2
+  goal_progress_weight: 5.8
+  heading_weight: 1.3
+  clearance_weight: 1.8
+  ttc_weight: 0.28
+  near_field_speed_cap: 0.72
+  progress_escape_enabled: true
+  progress_escape_speed: 0.55
+  progress_escape_heading_gain: 1.6
+  prediction_backend: constant_velocity

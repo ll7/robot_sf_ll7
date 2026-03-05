@@ -449,6 +449,57 @@ def test_prediction_adapter_adaptive_lattice_expands_near_field(monkeypatch):
     assert len(candidates) > base_count
 
 
+def test_prediction_adapter_progress_escape_injects_motion_in_clear_space(monkeypatch):
+    """Progress-escape should avoid stationary commands when far from goal and safe."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.4,
+        predictive_progress_escape_clearance_margin=0.1,
+    )
+    obs = _make_obs(goal=(4.0, 0.0), heading=0.0)
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v >= 0.39
+
+
+def test_prediction_adapter_progress_escape_respects_clearance_gate(monkeypatch):
+    """Progress-escape should not force motion when predicted clearance is too low."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.5,
+        predictive_hard_clearance_distance=0.75,
+        predictive_progress_escape_clearance_margin=0.2,
+        predictive_near_field_distance=0.0,
+        predictive_near_field_speed_samples=(),
+        predictive_near_field_heading_deltas=(0.0,),
+    )
+    obs = _make_obs_with_peds([(0.2, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    monkeypatch.setattr(
+        PredictionPlannerAdapter,
+        "_min_predicted_distance",
+        lambda self, **_kwargs: 0.1,
+    )
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v <= 1e-6
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

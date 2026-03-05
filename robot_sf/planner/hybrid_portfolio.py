@@ -89,8 +89,14 @@ class HybridPortfolioAdapter:
         ):
             # In dense regimes, prefer predictive head when available.
             return "prediction"
-        # Optional exploratory head where available in open space.
-        return "mppi" if self.mppi is not None else "risk_dwa"
+        # Prefer deterministic Risk-DWA for open-space cruise; MPPI only in very open scenes.
+        if (
+            self.mppi is not None
+            and ped_count == 0
+            and min_clearance >= float(self.config.caution_clearance) * 2.0
+        ):
+            return "mppi"
+        return "risk_dwa"
 
     def _switch_head(self, desired: str) -> None:
         emergency = desired == "orca"

@@ -454,6 +454,11 @@ class SocNavPlannerConfig:
         pi / 8,
         pi / 4,
     )
+    predictive_progress_escape_enabled: bool = False
+    predictive_progress_escape_distance: float = 1.2
+    predictive_progress_escape_min_speed_ratio: float = 0.35
+    predictive_progress_escape_heading_gain: float = 1.4
+    predictive_progress_escape_clearance_margin: float = 0.2
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -3073,6 +3078,45 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if cost < best_cost:
                 best_cost = cost
                 best = (v, w)
+
+        if bool(self.config.predictive_progress_escape_enabled):
+            goal_dist = float(np.linalg.norm(goal - robot_pos))
+            if goal_dist > float(self.config.predictive_progress_escape_distance):
+                clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
+                    self.config.predictive_progress_escape_clearance_margin
+                )
+                min_pred_dist = self._min_predicted_distance(
+                    future_peds=future,
+                    mask=mask,
+                    steps=min(max(steps, 1), future.shape[1]),
+                )
+                if min_pred_dist >= clearance_gate:
+                    cap_ratio = self._risk_speed_cap_ratio(future_peds=future, mask=mask)
+                    max_v = float(self.config.max_linear_speed) * float(
+                        np.clip(cap_ratio, 0.1, 1.0)
+                    )
+                    min_v = float(self.config.max_linear_speed) * float(
+                        np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
+                    )
+                    if best[0] < min_v:
+                        robot_heading = float(
+                            self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]
+                        )
+                        goal_heading = float(
+                            np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0])
+                        )
+                        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+                        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
+                        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
+                        forced_w = float(
+                            np.clip(
+                                float(self.config.predictive_progress_escape_heading_gain)
+                                * float(heading_err),
+                                -float(self.config.max_angular_speed),
+                                float(self.config.max_angular_speed),
+                            )
+                        )
+                        best = (forced_v, forced_w)
         return best
 
 

@@ -426,7 +426,7 @@ def _validate_and_log_config(config: Any) -> None:
     validate_config(config, strict=True)
     resolved = get_resolved_config_dict(config)
     # Log resolved config for reproducibility (T031)
-    logger.info(
+    logger.debug(
         "Resolved config: type={} backend={} sensors={}",
         type(config).__name__,
         resolved.get("backend", "fast-pysf"),
@@ -593,7 +593,7 @@ def make_robot_env(  # noqa: PLR0913
         render_options=render_options,
         recording_options=recording_options,
     )
-    logger.info(
+    logger.debug(
         "Creating robot env debug={debug} record_video={record} video_path={path} fps={fps}",
         debug=debug,
         record=eff_record_video,

@@ -4,11 +4,10 @@ Quick pointers for agents and automation working in the Robot SF repo. This inde
 entry points, contracts, and where to change behavior.
 
 ## Training Entry Points
-- `scripts/training/train_expert_ppo.py` - primary structured PPO training (expert + evaluation).
+- `scripts/training/train_ppo.py` - primary structured PPO training (expert + evaluation).
 - `scripts/training/collect_expert_trajectories.py` - dataset collection for imitation pipelines.
 - `scripts/training/pretrain_from_expert.py` - behavioral cloning pretrain from expert data.
 - `scripts/training/train_ppo_with_pretrained_policy.py` - PPO fine-tuning from pretrain.
-- `scripts/training_ppo.py` - legacy single-policy PPO entry point.
 - `scripts/training_ped_ppo.py` - legacy pedestrian PPO entry point.
 - `examples/advanced/16_imitation_learning_pipeline.py` - end-to-end pipeline walkthrough.
 

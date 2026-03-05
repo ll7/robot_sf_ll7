@@ -86,7 +86,7 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.tools.render_scenario_videos import _defensive_obs_adapter
-from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
+from scripts.training.train_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -1244,14 +1244,15 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         if videos:
             env.render()
 
-        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        # Snapshot simulator state arrays to avoid aliasing mutable backend buffers.
+        robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
+        peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
         if record_forces:
             forces = getattr(env.simulator, "last_ped_forces", None)
             if forces is None:
                 forces_arr = np.zeros_like(peds, dtype=float)
             else:
-                forces_arr = np.asarray(forces, dtype=float)
+                forces_arr = np.array(forces, dtype=float, copy=True)
                 if forces_arr.shape != peds.shape:
                     forces_arr = np.zeros_like(peds, dtype=float)
         else:
@@ -1304,6 +1305,8 @@ def _build_episode_record(  # noqa: PLR0913
     max_steps: int,
     dt: float,
     robot_max_speed: float | None,
+    robot_radius: float,
+    ped_radius: float,
     ts_start: str,
     video_path: Path | None,
     terminated: bool,
@@ -1337,6 +1340,8 @@ def _build_episode_record(  # noqa: PLR0913
             goal=goal_vec,
             dt=float(dt),
             reached_goal_step=reached_goal_step,
+            robot_radius=float(robot_radius),
+            ped_radius=float(ped_radius),
         )
         metrics_raw = compute_all_metrics(
             ep,
@@ -1363,7 +1368,10 @@ def _build_episode_record(  # noqa: PLR0913
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     meta = last_info.get("meta")
-    collision = collision_event(last_info)
+    # Canonical episode collision: event-stream collision OR metric-level collision evidence.
+    # This keeps success/outcome semantics aligned with benchmark metrics.
+    metric_collisions = float(metrics.get("collisions", 0.0) or 0.0)
+    collision = bool(collision_event(last_info) or metric_collisions > 0.0)
     route_complete_signal = route_complete_success(last_info)
     success = bool(route_complete_signal and not collision)
     route_complete = success
@@ -1550,12 +1558,17 @@ def _run_episode(  # noqa: PLR0913
     ts_start = datetime.now(_TIMESTAMP_TZ).isoformat()
     cfg_robot = getattr(config, "robot_config", None)
     robot_max_speed = None
+    robot_radius = 1.0
+    ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
     if cfg_robot is not None:
         for attr in ("max_linear_speed", "max_velocity"):
             value = getattr(cfg_robot, attr, None)
             if isinstance(value, (int, float)) and float(value) > 0.0:
                 robot_max_speed = float(value)
                 break
+        radius_val = getattr(cfg_robot, "radius", None)
+        if isinstance(radius_val, (int, float)) and float(radius_val) > 0.0:
+            robot_radius = float(radius_val)
     record: dict[str, Any] | None = None
     try:
         obs = _reset_env(
@@ -1591,6 +1604,8 @@ def _run_episode(  # noqa: PLR0913
             max_steps=max_steps,
             dt=config.sim_config.time_per_step_in_secs,
             robot_max_speed=robot_max_speed,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
             ts_start=ts_start,
             video_path=episode_video,
             terminated=runtime.terminated,
@@ -1624,6 +1639,12 @@ def _run_episode(  # noqa: PLR0913
             if video_meta:
                 video_meta["termination_reason"] = record.get("termination_reason")
                 record["video"] = video_meta
+        if record is not None:
+            _apply_video_termination_suffix(
+                video_path=episode_video,
+                termination_reason=str(record.get("termination_reason", "")),
+                record=record,
+            )
 
 
 def _close_env(env) -> None:
@@ -1633,6 +1654,45 @@ def _close_env(env) -> None:
             getattr(env, method)()
         except Exception as exc:
             logger.warning("Failed to call env.{}(): {}", method, exc)
+
+
+def _video_with_termination_suffix(video_path: Path, termination_reason: str) -> Path:
+    """Return the target video path with a termination suffix appended to the stem."""
+    suffix = re.sub(r"[^\w.-]+", "_", str(termination_reason).strip()).strip("._")
+    if not suffix:
+        suffix = "unknown"
+    return video_path.with_name(f"{video_path.stem}_{suffix}{video_path.suffix}")
+
+
+def _apply_video_termination_suffix(
+    *,
+    video_path: Path | None,
+    termination_reason: str | None,
+    record: dict[str, Any],
+) -> None:
+    """Rename episode video to include termination reason and keep record metadata in sync."""
+    if video_path is None or not video_path.exists():
+        return
+    reason = str(termination_reason or "").strip()
+    if not reason:
+        return
+    target = _video_with_termination_suffix(video_path, reason)
+    if target == video_path:
+        return
+    try:
+        if target.exists():
+            target.unlink()
+        video_path.rename(target)
+    except Exception as exc:
+        logger.warning(
+            "Failed to append termination suffix to video {}: {}",
+            video_path,
+            exc,
+        )
+        return
+    video_meta = record.get("video")
+    if isinstance(video_meta, dict):
+        video_meta["path"] = str(target)
 
 
 @dataclass

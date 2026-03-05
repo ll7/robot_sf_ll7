@@ -38,13 +38,12 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 mkdir -p "${WORKDIR}" "${SCRATCH_RESULTS}"
 LOG_PATH="${WORKDIR}/results"
 mkdir -p "${LOG_PATH}"
+export ROBOT_SF_ARTIFACT_ROOT="${LOG_PATH}"
 
 cd "${PROJECT_ROOT}"
 
 # TODO: copy large datasets to ${WORKDIR} if they cause GPFS contention.
 
-srun python scripts/training_ppo.py \
-  --config configs/scenarios/classic_interactions.yaml \
-  --output-dir "${LOG_PATH}" \
-  --num-envs 1 \
-  --total-timesteps 200000
+srun python scripts/training/train_ppo.py \
+  --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
+  --log-level INFO

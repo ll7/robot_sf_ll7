@@ -63,6 +63,17 @@ If the model is not present locally and W&B metadata is configured in
 - The YAML registry is the source of truth for automation and should contain
   the W&B run metadata when available.
 
+## PPO Expert Model
+
+Current PPO expert model id in `model/registry.yaml`:
+
+- `ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`
+
+Deprecated legacy entries kept for traceability:
+
+- `ppo_expert_br06_v2_15m_all_maps_20260302T152332` (killed early, deprecated)
+- `ppo_expert_br06_v2_15m_all_maps_20260303T074433`
+
 ## Predictive Planner Models
 
 Current predictive planner model ids in `model/registry.yaml` include:

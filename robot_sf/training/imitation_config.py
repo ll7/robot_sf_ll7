@@ -42,7 +42,7 @@ class ExpertTrainingConfig:
     best_checkpoint_metric: str = "eval_episode_return"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
-    randomize_seeds: bool = False
+    randomize_seeds: bool = True
     scenario_id: str | None = None
     feature_extractor: str = "default"
     feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)
@@ -61,7 +61,7 @@ class ExpertTrainingConfig:
         *,
         scenario_config: Path,
         seeds: tuple[int, ...] | list[int],
-        randomize_seeds: bool = False,
+        randomize_seeds: bool = True,
         total_timesteps: int,
         policy_id: str,
         convergence: ConvergenceCriteria,

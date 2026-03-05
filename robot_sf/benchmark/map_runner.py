@@ -1178,14 +1178,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             )
             obs, _reward, terminated, truncated, info = env.step(action)
 
-            robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-            peds = np.asarray(env.simulator.ped_pos, dtype=float)
+            # Snapshot mutable simulator buffers; do not keep view aliases across steps.
+            robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
+            peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
             if record_forces:
                 forces = getattr(env.simulator, "last_ped_forces", None)
                 if forces is None:
                     forces_arr = np.zeros_like(peds, dtype=float)
                 else:
-                    forces_arr = np.asarray(forces, dtype=float)
+                    forces_arr = np.array(forces, dtype=float, copy=True)
                     if forces_arr.shape != peds.shape:
                         forces_arr = np.zeros_like(peds, dtype=float)
             else:
@@ -1259,6 +1260,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
+            robot_radius=float(getattr(config.robot_config, "radius", 1.0)),
+            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
         metrics_raw = compute_all_metrics(
             ep,

@@ -511,7 +511,7 @@ class RobotEnv(BaseEnv):
         )
         if env_config.use_occupancy_grid and env_config.grid_config is not None:
             grid = OccupancyGrid(config=env_config.grid_config)
-            logger.info(
+            logger.debug(
                 "Occupancy grid initialized (observe={observe}, visualize={visualize}): shape={shape}, resolution={resolution:.3f}m",
                 observe=self.include_grid_in_observation,
                 visualize=env_config.show_occupancy_grid,

@@ -2483,7 +2483,15 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
 
 
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
-    """RGL-inspired predictive planner using a learned trajectory model + sampled rollout."""
+    """Predictive local planner with deterministic sampled-rollout search.
+
+    The planner predicts pedestrian futures, builds a finite control lattice
+    ``(v, omega)``, rolls out each candidate over a short horizon, and selects
+    the minimum-cost command.
+
+    Reference:
+    - `docs/training/predictive_planner_complete_tutorial.md`
+    """
 
     _EPS = 1e-6
 
@@ -2735,7 +2743,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return min(base_steps, max_steps)
 
     def _risk_speed_cap_ratio(self, *, future_peds: np.ndarray, mask: np.ndarray) -> float:
-        """Compute a risk-aware cap on speed ratio based on near predicted pedestrians.
+        """Compute a near-field risk speed cap ratio.
+
+        ``near-field risk`` means predicted pedestrian proximity below
+        ``predictive_near_field_distance`` over the short prediction horizon.
+        The returned ratio shrinks max candidate speed in dense/conflict states.
 
         Returns:
             float: Speed cap ratio in ``[0.1, 1.0]``.
@@ -2762,6 +2774,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self, *, future_peds: np.ndarray, mask: np.ndarray
     ) -> list[tuple[float, float]]:
         """Build a risk-adaptive candidate command lattice.
+
+        Here, ``lattice`` means a deterministic finite grid of controls formed
+        from discrete speed ratios and heading deltas. In near-field risk
+        states, the lattice is enriched with extra low-speed/turning options
+        and evaluated under a speed cap from ``_risk_speed_cap_ratio``.
 
         Returns:
             list[tuple[float, float]]: Candidate ``(v, omega)`` commands.

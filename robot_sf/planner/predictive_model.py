@@ -134,6 +134,7 @@ def masked_trajectory_loss(
     predicted: Tensor,
     target: Tensor,
     mask: Tensor,
+    target_mask: Tensor | None = None,
     *,
     horizon_weights: Tensor | None = None,
 ) -> Tensor:
@@ -147,13 +148,22 @@ def masked_trajectory_loss(
         w = horizon_weights.view(1, 1, -1, 1)
         errors = errors * w
 
-    slot_mask = mask[:, :, None, None].float().clamp(0.0, 1.0)
-    errors = errors * slot_mask
-    denom = torch.clamp(slot_mask.sum(), min=1.0)
+    if target_mask is None:
+        valid = mask[:, :, None].float().clamp(0.0, 1.0)
+    else:
+        valid = target_mask.float().clamp(0.0, 1.0)
+    valid_xy = valid[:, :, :, None]
+    errors = errors * valid_xy
+    denom = torch.clamp(valid_xy.sum(), min=1.0)
     return errors.sum() / denom
 
 
-def compute_ade_fde(predicted: Tensor, target: Tensor, mask: Tensor) -> tuple[float, float]:
+def compute_ade_fde(
+    predicted: Tensor,
+    target: Tensor,
+    mask: Tensor,
+    target_mask: Tensor | None = None,
+) -> tuple[float, float]:
     """Return average and final displacement error on valid trajectories.
 
     Returns:
@@ -161,9 +171,13 @@ def compute_ade_fde(predicted: Tensor, target: Tensor, mask: Tensor) -> tuple[fl
     """
     with torch.no_grad():
         diff = torch.linalg.norm(predicted - target, dim=-1)
-        valid = mask[:, :, None].float().clamp(0.0, 1.0)
+        if target_mask is None:
+            valid = mask[:, :, None].float().clamp(0.0, 1.0)
+        else:
+            valid = target_mask.float().clamp(0.0, 1.0)
         ade = (diff * valid).sum() / torch.clamp(valid.sum(), min=1.0)
-        fde = (diff[:, :, -1] * mask.float()).sum() / torch.clamp(mask.sum(), min=1.0)
+        fde_valid = valid[:, :, -1]
+        fde = (diff[:, :, -1] * fde_valid).sum() / torch.clamp(fde_valid.sum(), min=1.0)
     return float(ade.item()), float(fde.item())
 
 

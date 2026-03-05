@@ -228,6 +228,7 @@ def _prepare_loaders(
     state: np.ndarray,
     target: np.ndarray,
     mask: np.ndarray,
+    target_mask: np.ndarray,
     val_split: float,
     batch_size: int,
     seed: int,
@@ -249,6 +250,7 @@ def _prepare_loaders(
             torch.from_numpy(state[sel]).float(),
             torch.from_numpy(target[sel]).float(),
             torch.from_numpy(mask[sel]).float(),
+            torch.from_numpy(target_mask[sel]).float(),
         )
 
     train_loader = DataLoader(_ds(train_idx), batch_size=batch_size, shuffle=True, drop_last=False)
@@ -276,10 +278,11 @@ def _run_epoch(
 
     horizon_weights = torch.linspace(1.5, 1.0, steps=model.config.horizon_steps, device=device)
 
-    for state_b, target_b, mask_b in loader:
+    for state_b, target_b, mask_b, target_mask_b in loader:
         state_b = state_b.to(device)
         target_b = target_b.to(device)
         mask_b = mask_b.to(device)
+        target_mask_b = target_mask_b.to(device)
 
         if training:
             assert optimizer is not None
@@ -288,13 +291,24 @@ def _run_epoch(
         with torch.set_grad_enabled(training):
             out = model(state_b, mask_b)
             pred = out["future_positions"]
-            loss = masked_trajectory_loss(pred, target_b, mask_b, horizon_weights=horizon_weights)
+            loss = masked_trajectory_loss(
+                pred,
+                target_b,
+                mask_b,
+                target_mask_b,
+                horizon_weights=horizon_weights,
+            )
             if training:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
 
-        ade, fde = compute_ade_fde(pred.detach(), target_b.detach(), mask_b.detach())
+        ade, fde = compute_ade_fde(
+            pred.detach(),
+            target_b.detach(),
+            mask_b.detach(),
+            target_mask_b.detach(),
+        )
         losses.append(float(loss.item()))
         ade_vals.append(ade)
         fde_vals.append(fde)
@@ -377,6 +391,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     state = np.asarray(raw["state"], dtype=np.float32)
     target = np.asarray(raw["target"], dtype=np.float32)
     mask = np.asarray(raw["mask"], dtype=np.float32)
+    target_mask = (
+        np.asarray(raw["target_mask"], dtype=np.float32)
+        if "target_mask" in raw
+        else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
+    )
 
     if state.ndim != 3 or state.shape[-1] != 4:
         raise ValueError("Expected state shape (N, max_agents, 4)")
@@ -387,6 +406,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         state=state,
         target=target,
         mask=mask,
+        target_mask=target_mask,
         val_split=float(args.val_split),
         batch_size=int(args.batch_size),
         seed=int(args.seed),
@@ -629,6 +649,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "workers": int(args.proxy_workers),
             "history": proxy_history,
             "best_proxy": best_proxy,
+        },
+        "dataset_stats": {
+            "num_samples": int(state.shape[0]),
+            "active_agent_ratio": float(np.mean(mask)),
+            "active_target_ratio": float(np.mean(target_mask)),
         },
         "history": history,
     }

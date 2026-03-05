@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -48,22 +49,50 @@ def _resolve(path_raw: str | Path, *, base: Path) -> Path:
     return path
 
 
-def _run(cmd: list[str]) -> None:
+def _run(cmd: list[str], *, log_level: str = "INFO") -> None:
     logger.info("Running: {}", " ".join(cmd))
-    subprocess.run(cmd, check=True)
+    env = dict(os.environ)
+    env.setdefault("LOGURU_LEVEL", str(log_level).upper())
+    subprocess.run(cmd, check=True, env=env)
 
 
-def _run_capture_json(cmd: list[str]) -> dict[str, Any]:
+def _run_capture_json(
+    cmd: list[str],
+    *,
+    log_level: str = "INFO",
+    allow_failure: bool = False,
+) -> dict[str, Any]:
     logger.info("Running: {}", " ".join(cmd))
-    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    env = dict(os.environ)
+    env.setdefault("LOGURU_LEVEL", str(log_level).upper())
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True, env=env)
+    if result.returncode != 0:
+        if not allow_failure:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                cmd,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
+        return {
+            "status": "failed",
+            "return_code": int(result.returncode),
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }
     out = (result.stdout or "").strip()
     if not out:
-        return {}
+        return {"status": "ok", "return_code": 0}
     try:
-        return json.loads(out)
+        payload = json.loads(out)
+        if isinstance(payload, dict):
+            payload.setdefault("status", "ok")
+            payload.setdefault("return_code", 0)
+            return payload
+        return {"status": "ok", "return_code": 0, "payload": payload}
     except json.JSONDecodeError:
         logger.warning("Command did not emit JSON payload; ignoring stdout")
-        return {}
+        return {"status": "ok", "return_code": 0, "stdout": out}
 
 
 def _build_random_seed_manifest(
@@ -205,7 +234,8 @@ def main() -> int:  # noqa: C901, PLR0915
             str(float(base_collection.get("max_speed", 1.2))),
             "--output",
             str(paths.base_dataset),
-        ]
+        ],
+        log_level=args.log_level,
     )
 
     # 2) Collect hardcase dataset from fixed manifest.
@@ -230,7 +260,8 @@ def main() -> int:  # noqa: C901, PLR0915
             str(float(hardcase_cfg.get("max_speed", 1.2))),
             "--output",
             str(paths.hardcase_dataset),
-        ]
+        ],
+        log_level=args.log_level,
     )
 
     # 3) Build mixed dataset.
@@ -251,7 +282,8 @@ def main() -> int:  # noqa: C901, PLR0915
             str(int(mixing_cfg.get("shuffle_seed", 42))),
             "--output",
             str(paths.mixed_dataset),
-        ]
+        ],
+        log_level=args.log_level,
     )
 
     # 4) Train with proxy + W&B.
@@ -329,7 +361,7 @@ def main() -> int:  # noqa: C901, PLR0915
             train_cmd.append("--wandb-tags")
             train_cmd.extend([str(tag) for tag in tags])
 
-    _run(train_cmd)
+    _run(train_cmd, log_level=args.log_level)
 
     # 5) Final evaluations and campaign summary.
     eval_cfg = cfg.get("evaluation", {})
@@ -354,7 +386,9 @@ def main() -> int:  # noqa: C901, PLR0915
             str(paths.eval_dir),
             "--tag",
             "final_eval",
-        ]
+        ],
+        log_level=args.log_level,
+        allow_failure=True,
     )
 
     diag_payload = _run_capture_json(
@@ -371,36 +405,57 @@ def main() -> int:  # noqa: C901, PLR0915
             str(int(eval_cfg.get("horizon", 120))),
             "--output-dir",
             str(paths.diagnostics_dir),
-        ]
+        ],
+        log_level=args.log_level,
+        allow_failure=True,
     )
-
-    _run(
-        [
-            sys.executable,
-            "scripts/validation/run_predictive_success_campaign.py",
-            "--checkpoints",
-            str(paths.checkpoint),
-            "--scenario-matrix",
-            str(scenario_matrix),
-            "--hard-seed-manifest",
-            str(hard_seed_manifest),
-            "--planner-grid",
-            str(planner_grid),
-            "--workers",
-            str(int(eval_cfg.get("campaign_workers", 2))),
-            "--horizon",
-            str(int(eval_cfg.get("horizon", 120))),
-            "--dt",
-            str(float(eval_cfg.get("dt", 0.1))),
-            "--output-dir",
-            str(paths.campaign_dir),
-        ]
-    )
+    campaign_status: dict[str, Any] = {"status": "ok", "return_code": 0}
+    try:
+        _run(
+            [
+                sys.executable,
+                "scripts/validation/run_predictive_success_campaign.py",
+                "--checkpoints",
+                str(paths.checkpoint),
+                "--scenario-matrix",
+                str(scenario_matrix),
+                "--hard-seed-manifest",
+                str(hard_seed_manifest),
+                "--planner-grid",
+                str(planner_grid),
+                "--workers",
+                str(int(eval_cfg.get("campaign_workers", 2))),
+                "--horizon",
+                str(int(eval_cfg.get("horizon", 120))),
+                "--dt",
+                str(float(eval_cfg.get("dt", 0.1))),
+                "--output-dir",
+                str(paths.campaign_dir),
+            ],
+            log_level=args.log_level,
+        )
+    except subprocess.CalledProcessError as exc:
+        campaign_status = {
+            "status": "failed",
+            "return_code": int(exc.returncode),
+            "command": [str(part) for part in exc.cmd] if exc.cmd else [],
+        }
 
     campaign_summary_path = paths.campaign_dir / "campaign_summary.json"
     campaign_summary = {}
     if campaign_summary_path.exists():
         campaign_summary = json.loads(campaign_summary_path.read_text(encoding="utf-8"))
+
+    stage_status = {
+        "evaluation_ok": bool(int(eval_payload.get("return_code", 1)) == 0),
+        "hard_seed_diagnostics_ok": bool(int(diag_payload.get("return_code", 1)) == 0),
+        "campaign_ok": bool(int(campaign_status.get("return_code", 1)) == 0),
+    }
+    stage_status["all_ok"] = bool(
+        stage_status["evaluation_ok"]
+        and stage_status["hard_seed_diagnostics_ok"]
+        and stage_status["campaign_ok"]
+    )
 
     final_summary = {
         "run_id": run_id,
@@ -420,8 +475,10 @@ def main() -> int:  # noqa: C901, PLR0915
             "diagnostics_dir": str(paths.diagnostics_dir),
             "campaign_dir": str(paths.campaign_dir),
         },
+        "stage_status": stage_status,
         "evaluation": eval_payload,
         "hard_seed_diagnostics": diag_payload,
+        "campaign": campaign_status,
         "success_campaign": campaign_summary,
     }
     paths.final_summary.write_text(json.dumps(final_summary, indent=2), encoding="utf-8")
@@ -437,6 +494,13 @@ def main() -> int:  # noqa: C901, PLR0915
         f"- Config: `{config_path}`",
         f"- Scenario matrix: `{scenario_matrix}`",
         f"- Checkpoint: `{paths.checkpoint}`",
+        "",
+        "## Stage Status",
+        "",
+        f"- evaluation_ok: `{stage_status['evaluation_ok']}`",
+        f"- hard_seed_diagnostics_ok: `{stage_status['hard_seed_diagnostics_ok']}`",
+        f"- campaign_ok: `{stage_status['campaign_ok']}`",
+        f"- all_ok: `{stage_status['all_ok']}`",
         "",
         "## Final Campaign Snapshot",
         "",
@@ -455,13 +519,18 @@ def main() -> int:  # noqa: C901, PLR0915
     ]
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    logger.success("Pipeline complete. Final summary: {}", paths.final_summary)
+    if stage_status["all_ok"]:
+        logger.success("Pipeline complete. Final summary: {}", paths.final_summary)
+    else:
+        logger.warning(
+            "Pipeline completed with failing stage gates. Summary: {}", paths.final_summary
+        )
     print(
         json.dumps(
             {"run_root": str(paths.root), "final_summary": str(paths.final_summary)}, indent=2
         )
     )
-    return 0
+    return 0 if stage_status["all_ok"] else 2
 
 
 if __name__ == "__main__":

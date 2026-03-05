@@ -63,6 +63,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="RGL-inspired predictive planner; requires trained checkpoint.",
     ),
     AlgorithmReadiness(
+        canonical_name="predictive_mppi",
+        tier="experimental",
+        aliases=("predictive_mppi",),
+        note="Learned-prediction sequence optimizer over short action horizons.",
+    ),
+    AlgorithmReadiness(
         canonical_name="risk_dwa",
         tier="experimental",
         aliases=("risk_dwa",),

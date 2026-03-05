@@ -28,10 +28,29 @@ class Frame:
     ped_count: int
 
 
+def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
+    """Return robot/goal/pedestrian observation blocks for nested or flat payloads."""
+    robot = obs.get("robot")
+    goal = obs.get("goal")
+    peds = obs.get("pedestrians")
+    if isinstance(robot, dict) and isinstance(goal, dict) and isinstance(peds, dict):
+        return robot, goal, peds
+    robot = {
+        "position": obs.get("robot_position", [0.0, 0.0]),
+        "heading": obs.get("robot_heading", [0.0]),
+    }
+    goal = {"current": obs.get("goal_current", [0.0, 0.0])}
+    peds = {
+        "positions": obs.get("pedestrians_positions", []),
+        "velocities": obs.get("pedestrians_velocities", []),
+        "count": obs.get("pedestrians_count", [0]),
+    }
+    return robot, goal, peds
+
+
 def _goal_policy(obs: dict, max_speed: float) -> np.ndarray:
     """Simple goal-seeking policy used during data collection rollouts."""
-    robot = obs.get("robot", {})
-    goal = obs.get("goal", {})
+    robot, goal, _peds = _extract_socnav_blocks(obs)
     pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
     tgt = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
@@ -49,8 +68,7 @@ def _goal_policy(obs: dict, max_speed: float) -> np.ndarray:
 
 def _extract_frame(obs: dict, max_agents: int) -> Frame:
     """Convert observation payload to a compact frame container."""
-    robot = obs.get("robot", {})
-    peds = obs.get("pedestrians", {})
+    robot, _goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
 

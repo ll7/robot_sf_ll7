@@ -45,6 +45,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
@@ -61,6 +62,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -726,6 +728,80 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             metadata=meta,
             execution_mode="adapter",
             adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "stream_gap":
+        adapter = StreamGapPlannerAdapter(config=build_stream_gap_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="StreamGapPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "gap_prediction":
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = GapAwarePredictionAdapter(
+            config=build_gap_prediction_config(algo_config),
+            allow_fallback=allow_fallback,
+        )
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="GapAwarePredictionAdapter",
             robot_kinematics=robot_kinematics,
         )
         _init_feasibility_metadata(meta)

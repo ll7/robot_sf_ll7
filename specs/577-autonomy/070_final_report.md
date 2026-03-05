@@ -21,15 +21,18 @@ Deliver best-performing planner under v2 semantics with full reproducibility evi
   - Failure taxonomy extracted for both runs:
     - `output/tmp/planner_portfolio/campaign_full_v1/failure_taxonomy.json`
     - `output/tmp/planner_portfolio/campaign_iter1_v2/failure_taxonomy.json`
+  - Guarded PPO compare completed:
+    - `output/tmp/planner_portfolio/guarded_ppo_compare/hard_summary.json`
+    - `output/tmp/planner_portfolio/guarded_ppo_compare/global_summary.json`
 
 ## Latest measured champion
-- Candidate: `prediction_balanced_guard` (from `portfolio_sweep_grid_v3_iter2.yaml`)
+- Candidate: `guarded_ppo_v3` (from `configs/algos/guarded_ppo_camera_ready.yaml`)
 - Performance:
-  - hard success: `0.143`
-  - global success: `0.106` (up from iter1 champion `0.091`)
-  - hard/global min distance: `1.370 / 1.377`
-  - global collisions: `5` (down from iter1 champion `12`)
-- Decision: keep as current challenger-champion for next tuning loop.
+  - hard success: `0.143` (same as plain PPO)
+  - global success: `0.242` (vs plain PPO `0.227`)
+  - global mean min distance: `0.851` (vs plain PPO `0.788`)
+  - pedestrian collisions: `1` (vs plain PPO `7`)
+- Decision: keep as current branch champion for next tuning loop.
 
 ## New evidence from latest loop (iter5 + sensitivity)
 - Iter5 focused hybrid sweep (`output/tmp/planner_portfolio/campaign_iter5_v5_hybrid_focus`):
@@ -61,19 +64,29 @@ Deliver best-performing planner under v2 semantics with full reproducibility evi
   - It is materially slower than the predictive anchor and converts too many episodes into timeouts.
   - Decision: keep in-tree as an experimental family, but stop spending primary tuning budget on it until the predictor or action horizon changes substantially.
 
+## Guarded PPO result
+- `guarded_ppo` keeps PPO as the primary action source and only intervenes when a short-horizon rollout predicts unsafe pedestrian or obstacle clearance.
+- Global benchmark delta vs plain PPO v3:
+  - success: `15/66 -> 16/66`
+  - collision terminations: `27 -> 23`
+  - max-steps terminations: `24 -> 27`
+  - pedestrian collision count: `7 -> 1`
+- Interpretation:
+  - This is a credible improvement, not noise. The guard trades some aggressive progress for much better safety and still finishes one additional episode overall.
+  - The remaining problem is targeted conservatism: `classic_bottleneck_medium` regresses from `3/3` success to `1/3`.
+  - A lighter guard recovered that bottleneck scenario but gave back the collision reduction, so the current default remains the better global tradeoff.
+
 ## Risk and limitation snapshot
 - Success remains far below BR-07 target (`>=0.8`), so this is still early-stage.
 - Dominant failure mode is timeout (`max_steps`), not obstacle collision.
 - Persistent hardest regimes are bottleneck and dense crossing scenarios.
 
 ## Next concrete steps
-1. Run scenario-focused grid on bottleneck/crossing only:
-   - preserve `balanced_guard` defaults and tune per-scenario risk-pressure knobs.
-2. Add adaptive horizon policy experiments:
-   - fixed budget is too restrictive in dense cases; test dynamic horizon escalation under near-field risk.
-3. Add per-scenario targeted tuning slices for:
-   - `classic_bottleneck_*`
-   - `classic_realworld_double_bottleneck_high`
-   - `classic_crossing_*`
-4. Add video/frames extraction loop for `prediction_fast_commit` and `balanced_guard` failures to classify timeout subtypes.
-5. Repeat top-2 candidates with a second seed-repeat pass before any promotion.
+1. Tune guarded PPO specifically for bottleneck regressions:
+   - keep doorway safety win while reducing `classic_bottleneck_medium` over-blocking.
+2. Generate video evidence for plain PPO vs guarded PPO on the changed scenarios:
+   - `classic_doorway_low`
+   - `classic_doorway_high`
+   - `classic_bottleneck_medium`
+3. Repeat guarded PPO benchmark with a second seed-repeat pass before any promotion.
+4. Only after guarded PPO stabilizes, return to predictor/model-side work for a non-policy champion path.

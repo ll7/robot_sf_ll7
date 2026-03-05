@@ -45,6 +45,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Learned PPO baseline (paper profile requires provenance + quality gate).",
     ),
     AlgorithmReadiness(
+        canonical_name="guarded_ppo",
+        tier="experimental",
+        aliases=("guarded_ppo",),
+        note="PPO baseline with short-horizon safety veto and local fallback.",
+    ),
+    AlgorithmReadiness(
         canonical_name="socnav_sampling",
         tier="experimental",
         aliases=("socnav_sampling", "sampling"),

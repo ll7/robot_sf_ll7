@@ -15,7 +15,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.baselines.ppo import PPOPlanner
+from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
@@ -46,6 +46,11 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
+from robot_sf.planner.guarded_ppo import (
+    GuardedPPOAdapter,
+    build_guarded_ppo_config,
+    build_guarded_ppo_fallback,
+)
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
@@ -1003,6 +1008,96 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta["paper_ready"] = bool(paper_ready)
         if paper_reason:
             meta["paper_gate_reason"] = paper_reason
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key in {"guarded_ppo"}:
+        ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
+        ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}
+        ppo_planner = PPOPlanner(ppo_config, seed=None)
+        guard_adapter = GuardedPPOAdapter(
+            config=build_guarded_ppo_config(algo_config),
+            fallback_adapter=build_guarded_ppo_fallback(algo_config),
+        )
+        planner_cfg = getattr(ppo_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            ppo_obs_mode = str(planner_cfg.get("obs_mode", "vector")).strip().lower()
+        else:
+            ppo_obs_mode = str(getattr(planner_cfg, "obs_mode", "vector")).strip().lower()
+        if hasattr(ppo_planner, "get_metadata"):
+            planner_meta = ppo_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="guarded_ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        meta["guard_stats"] = {
+            "ppo_clear": 0,
+            "ppo_safe": 0,
+            "fallback_safe": 0,
+            "stop_safe": 0,
+            "fallback_best_effort": 0,
+            "stop_best_effort": 0,
+            "goal_reached": 0,
+        }
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        ppo_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
+                ppo_obs = obs
+            else:
+                ppo_obs = _obs_to_ppo_format(obs)
+            action = ppo_planner.step(ppo_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"Guarded PPO planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=ppo_kinematics_model,
+                project_command=False,
+            )
+            chosen, decision = guard_adapter.choose_command(
+                obs,
+                (float(linear), float(angular)),
+            )
+            linear, angular = _project_with_feasibility(
+                model=ppo_kinematics_model,
+                command=(float(chosen[0]), float(chosen[1])),
+                meta=meta,
+            )
+            guard_stats = meta.get("guard_stats")
+            if isinstance(guard_stats, dict):
+                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            impact = meta.get("adapter_impact")
+            if isinstance(impact, dict) and bool(impact.get("requested", False)):
+                if conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"}:
+                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+                else:
+                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+                impact["status"] = "collecting"
+            return linear, angular
+
+        _policy._planner_close = ppo_planner.close
+        meta.setdefault("algorithm", "guarded_ppo")
+        meta.setdefault("status", "ok")
+        meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
     elif algo_key in {"orca"}:

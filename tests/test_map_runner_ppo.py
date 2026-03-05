@@ -137,6 +137,40 @@ def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
     assert dummy.last_obs is obs
 
 
+class _DummyGuardedPPOAdapter:
+    """Test double for guarded PPO arbitration."""
+
+    def __init__(self, config=None, *, fallback_adapter=None):
+        self.config = config
+        self.fallback_adapter = fallback_adapter
+        self.last_command = None
+
+    def choose_command(self, obs, ppo_command):
+        self.last_command = (obs, ppo_command)
+        return (0.1, -0.2), "fallback_safe"
+
+
+def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch):
+    """Guarded PPO should route PPO output through the guard and record intervention counts."""
+    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    monkeypatch.setattr(map_runner, "GuardedPPOAdapter", _DummyGuardedPPOAdapter)
+    monkeypatch.setattr(map_runner, "build_guarded_ppo_fallback", lambda cfg: object())
+    policy, meta = map_runner._build_policy(
+        "guarded_ppo",
+        {
+            "obs_mode": "dict",
+            "test_action": {"v": 0.7, "omega": 0.3},
+        },
+    )
+
+    action_v, action_w = policy(_sample_obs())
+    assert action_v == pytest.approx(0.1)
+    assert action_w == pytest.approx(-0.2)
+    guard_stats = meta.get("guard_stats")
+    assert isinstance(guard_stats, dict)
+    assert guard_stats["fallback_safe"] == 1
+
+
 def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():
     """Ensure padded pedestrian channels are sliced by count and dt comes from sim metadata."""
     obs = _sample_obs()

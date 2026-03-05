@@ -1,6 +1,7 @@
 # 050 Planner Family Results
 
 ## Families
+- guarded_ppo
 - prediction_planner
 - risk_dwa
 - mppi_social
@@ -60,3 +61,8 @@
   - `predictive_mppi current_safe`: hard success `0.000`, termination `6 max_steps / 1 collision`, mean min distance `1.528`
   - `predictive_mppi relaxed_progress`: hard success `0.000`, termination `6 max_steps / 1 collision`, mean min distance `1.523`
 - Interpretation: sequence optimization over the learned predictor can suppress some immediate collisions, but it currently pays for that with severe timeout inflation and high runtime. It is not competitive with the predictive anchor and should remain experimental only.
+
+- 2026-03-05 guarded PPO compare (`output/tmp/planner_portfolio/guarded_ppo_compare/{hard_summary,global_summary}.json`):
+  - plain `ppo_v3`: hard/global success `0.143 / 0.227`, global termination mix `15 success / 27 collision / 24 max_steps`, pedestrian collisions `7`
+  - `guarded_ppo_v3`: hard/global success `0.143 / 0.242`, global termination mix `16 success / 23 collision / 27 max_steps`, pedestrian collisions `1`
+- Interpretation: guarded PPO is the first new family in this branch that improves the strongest existing policy rather than only competing with the weaker predictive family. The gain is modest in success (`+1` episode globally) but substantial in pedestrian-collision reduction (`7 -> 1`), which makes it the current best tradeoff.

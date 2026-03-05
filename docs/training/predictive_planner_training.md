@@ -5,6 +5,13 @@ This runbook documents the reproducible training/evaluation flow for the predict
 For the full concept + architecture + implementation walkthrough, see:
 
 - `docs/training/predictive_planner_complete_tutorial.md`
+- See especially:
+  - Section 6 for dataset semantics (`state/target/mask/target_mask`),
+  - Section 8 for deterministic prediction behavior,
+  - Sections 9-10 for benchmark integration and steering building blocks,
+  - Section 11 for pipeline exit-code meaning (`0` vs `2`),
+  - Section 12 for FAQ + consequences (MCTS vs sampled rollout, probabilities,
+    training-stop reasons, zero-loss diagnosis, and recommended full-profile length).
 
 ## Scope
 

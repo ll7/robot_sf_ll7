@@ -12,13 +12,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_paths_from_config_resolves_root_relative_to_config_dir(tmp_path: Path) -> None:
-    """Resolve output root relative to config directory and run id."""
+def test_paths_from_config_resolves_root_relative_to_output_base(tmp_path: Path) -> None:
+    """Resolve output root relative to output base directory and run id."""
     cfg = {"output": {"root": "output/tmp/predictive_planner/pipeline"}}
     run_id = "predictive_test_run"
 
-    paths = pipeline._paths_from_config(cfg, run_id=run_id, base_dir=tmp_path)
-
+    paths = pipeline._paths_from_config(
+        cfg,
+        run_id=run_id,
+        base_dir=tmp_path,
+        output_base_dir=tmp_path,
+    )
     assert paths.root == (tmp_path / "output/tmp/predictive_planner/pipeline" / run_id).resolve()
     assert paths.base_dataset.name == "predictive_rollouts_base.npz"
     assert paths.checkpoint.name == "predictive_model.pt"

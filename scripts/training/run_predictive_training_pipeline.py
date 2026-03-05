@@ -122,11 +122,20 @@ def _build_random_seed_manifest(
     return output_path
 
 
-def _paths_from_config(cfg: dict[str, Any], *, run_id: str, base_dir: Path) -> PipelinePaths:
+def _paths_from_config(
+    cfg: dict[str, Any],
+    *,
+    run_id: str,
+    base_dir: Path,
+    output_base_dir: Path,
+) -> PipelinePaths:
     out_cfg = cfg.get("output", {})
     if not isinstance(out_cfg, dict):
         raise TypeError("output must be a mapping")
-    root = _resolve(out_cfg.get("root", "output/tmp/predictive_planner/pipeline"), base=base_dir)
+    root = _resolve(
+        out_cfg.get("root", "output/tmp/predictive_planner/pipeline"),
+        base=output_base_dir,
+    )
     run_root = root / run_id
     datasets_dir = run_root / "datasets"
     train_dir = run_root / "training"
@@ -182,7 +191,13 @@ def main() -> int:  # noqa: C901, PLR0915
     run_stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     run_id = args.run_id or f"{run_prefix}_{run_stamp}"
 
-    paths = _paths_from_config(cfg, run_id=run_id, base_dir=base_dir)
+    # Keep scenario/config references config-relative, but write outputs under repo cwd.
+    paths = _paths_from_config(
+        cfg,
+        run_id=run_id,
+        base_dir=base_dir,
+        output_base_dir=Path.cwd().resolve(),
+    )
     paths.root.mkdir(parents=True, exist_ok=True)
     logger.info("Pipeline run root: {}", paths.root)
 

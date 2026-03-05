@@ -383,9 +383,17 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
-    """Verify SocNav config fallback and seed list parsing."""
-    cfg = _build_socnav_config({"invalid_key": 123})
+    """Verify SocNav config ignores unknown keys but preserves known ones."""
+    cfg = _build_socnav_config(
+        {
+            "invalid_key": 123,
+            "predictive_goal_weight": 7.25,
+            "predictive_allow_reverse_candidates": True,
+        }
+    )
     assert hasattr(cfg, "social_force_desired_speed")
+    assert cfg.predictive_goal_weight == 7.25
+    assert cfg.predictive_allow_reverse_candidates is True
 
     seed_path = tmp_path / "seeds.yaml"
     seed_path.write_text("suite_a: [1, 2]\ninvalid: 3\n", encoding="utf-8")

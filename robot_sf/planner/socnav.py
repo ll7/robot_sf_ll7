@@ -454,6 +454,9 @@ class SocNavPlannerConfig:
         pi / 8,
         pi / 4,
     )
+    predictive_allow_reverse_candidates: bool = False
+    predictive_reverse_candidate_speeds: tuple[float, ...] = (-0.15, -0.3)
+    predictive_reverse_near_field_only: bool = True
     predictive_progress_escape_enabled: bool = False
     predictive_progress_escape_distance: float = 1.2
     predictive_progress_escape_min_speed_ratio: float = 0.35
@@ -2805,13 +2808,27 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 float(v) for v in self.config.predictive_near_field_heading_deltas
             )
 
-        speed_ratios = sorted({float(np.clip(v, 0.0, 1.0)) for v in base_speed_ratios})
+        if bool(self.config.predictive_allow_reverse_candidates):
+            reverse_ratios = [float(v) for v in self.config.predictive_reverse_candidate_speeds]
+            reverse_allowed = not bool(self.config.predictive_reverse_near_field_only)
+            reverse_allowed = reverse_allowed or (
+                np.isfinite(min_pred_dist) and min_pred_dist <= near_field * 1.25
+            )
+            if reverse_allowed:
+                base_speed_ratios.extend(reverse_ratios)
+
+        speed_ratios = sorted({float(np.clip(v, -1.0, 1.0)) for v in base_speed_ratios})
         heading_deltas = sorted(set(heading_deltas))
         dt = max(float(self.config.predictive_rollout_dt), self._EPS)
+        min_v = (
+            -float(self.config.max_linear_speed)
+            if bool(self.config.predictive_allow_reverse_candidates)
+            else 0.0
+        )
         max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
         candidates: list[tuple[float, float]] = []
         for ratio in speed_ratios:
-            v = float(np.clip(ratio * self.config.max_linear_speed, 0.0, max_v))
+            v = float(np.clip(ratio * self.config.max_linear_speed, min_v, max_v))
             for delta in heading_deltas:
                 omega = float(
                     np.clip(
@@ -3032,7 +3049,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             robot_pos=robot_pos,
             direction=direction,
             observation=observation,
-            base_distance=max(float(v) * float(self.config.predictive_horizon_steps) * dt, 1e-3),
+            base_distance=max(
+                abs(float(v)) * float(self.config.predictive_horizon_steps) * dt, 1e-3
+            ),
             num_samples=max(2, int(self.config.predictive_horizon_steps)),
         )
 

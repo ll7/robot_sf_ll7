@@ -6,6 +6,7 @@ import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -452,10 +453,11 @@ def _planner_kinematics_compatibility(
 
 
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
-    try:
-        return SocNavPlannerConfig(**cfg)
-    except TypeError:
+    if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
+    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    filtered = {key: value for key, value in cfg.items() if key in allowed}
+    return SocNavPlannerConfig(**filtered)
 
 
 def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float, float]:

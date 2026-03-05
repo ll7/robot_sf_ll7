@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -60,6 +62,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--proxy-dt", type=float, default=0.1)
     parser.add_argument("--proxy-workers", type=int, default=1)
     parser.add_argument("--select-by-proxy", action="store_true")
+    parser.add_argument("--wandb-enabled", action="store_true")
+    parser.add_argument("--wandb-project", type=str, default="robot_sf")
+    parser.add_argument("--wandb-entity", type=str, default="")
+    parser.add_argument("--wandb-group", type=str, default="predictive-training")
+    parser.add_argument("--wandb-job-type", type=str, default="train")
+    parser.add_argument("--wandb-name", type=str, default="")
+    parser.add_argument("--wandb-tags", nargs="*", default=())
+    parser.add_argument(
+        "--wandb-mode",
+        type=str,
+        default=os.environ.get("WANDB_MODE", "online"),
+    )
     return parser.parse_args()
 
 
@@ -288,7 +302,68 @@ def _run_epoch(
     return float(np.mean(losses)), float(np.mean(ade_vals)), float(np.mean(fde_vals))
 
 
-def main() -> int:  # noqa: C901, PLR0915
+def _serialize_for_wandb(value: Any) -> Any:
+    """Recursively convert dataclasses/paths into W&B-serializable primitives."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _serialize_for_wandb(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_for_wandb(v) for v in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _init_wandb(args: argparse.Namespace, cfg: PredictiveModelConfig):
+    """Initialize W&B run when enabled, otherwise return ``None``."""
+    if not bool(args.wandb_enabled):
+        return None
+    try:
+        import wandb  # type: ignore
+    except Exception as exc:  # pragma: no cover - dependency/runtime dependent
+        raise RuntimeError(
+            "W&B logging requested, but wandb is unavailable. Install extras and retry."
+        ) from exc
+
+    output_dir = Path(args.output_dir).resolve()
+    wandb_dir = output_dir / "wandb"
+    wandb_dir.mkdir(parents=True, exist_ok=True)
+    run_name = str(args.wandb_name).strip() or str(args.model_id)
+    entity = str(args.wandb_entity).strip() or None
+    tags = [str(tag) for tag in args.wandb_tags if str(tag).strip()]
+    config_payload = {
+        "model_id": str(args.model_id),
+        "dataset": str(args.dataset),
+        "output_dir": str(args.output_dir),
+        "epochs": int(args.epochs),
+        "batch_size": int(args.batch_size),
+        "lr": float(args.lr),
+        "weight_decay": float(args.weight_decay),
+        "val_split": float(args.val_split),
+        "seed": int(args.seed),
+        "select_by_proxy": bool(args.select_by_proxy),
+        "proxy_scenario_matrix": str(args.proxy_scenario_matrix)
+        if args.proxy_scenario_matrix
+        else "",
+        "proxy_seed_manifest": str(args.proxy_seed_manifest) if args.proxy_seed_manifest else "",
+        "proxy_every_epochs": int(args.proxy_every_epochs),
+        "model_config": asdict(cfg),
+    }
+    return wandb.init(
+        project=str(args.wandb_project),
+        entity=entity,
+        group=str(args.wandb_group),
+        job_type=str(args.wandb_job_type),
+        name=run_name,
+        mode=str(args.wandb_mode),
+        dir=str(wandb_dir),
+        tags=tags,
+        config=_serialize_for_wandb(config_payload),
+    )
+
+
+def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Train predictive trajectory model and persist checkpoint + metrics."""
     args = parse_args()
 
@@ -334,6 +409,7 @@ def main() -> int:  # noqa: C901, PLR0915
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = args.output_dir / "predictive_model.pt"
+    wandb_run = _init_wandb(args, cfg)
     history: list[dict[str, float]] = []
     proxy_history: list[dict[str, float | str]] = []
     best = {
@@ -403,6 +479,22 @@ def main() -> int:  # noqa: C901, PLR0915
             val_ade,
             val_fde,
         )
+        if wandb_run is not None:
+            wandb_run.log(
+                {
+                    "epoch": int(epoch),
+                    "train/loss": float(train_loss),
+                    "train/ade": float(train_ade),
+                    "train/fde": float(train_fde),
+                    "val/loss": float(val_loss),
+                    "val/ade": float(val_ade),
+                    "val/fde": float(val_fde),
+                    "best/val_loss": float(best["val_loss"]),
+                    "best/val_ade": float(best["val_ade"]),
+                    "best/val_fde": float(best["val_fde"]),
+                },
+                step=int(epoch),
+            )
 
         if proxy_enabled and epoch % int(args.proxy_every_epochs) == 0:
             epoch_ckpt_dir = args.output_dir / "proxy_checkpoints"
@@ -442,6 +534,16 @@ def main() -> int:  # noqa: C901, PLR0915
                 proxy_metrics["success_rate"],
                 proxy_metrics["mean_min_distance"],
             )
+            if wandb_run is not None:
+                wandb_run.log(
+                    {
+                        "epoch": int(epoch),
+                        "proxy/success_rate": float(proxy_metrics["success_rate"]),
+                        "proxy/mean_min_distance": float(proxy_metrics["mean_min_distance"]),
+                        "proxy/episodes": float(proxy_metrics["episodes"]),
+                    },
+                    step=int(epoch),
+                )
             if bool(args.select_by_proxy) and _proxy_better(proxy_metrics, best_proxy):
                 best_proxy = {
                     "success_rate": float(proxy_metrics["success_rate"]),
@@ -534,6 +636,14 @@ def main() -> int:  # noqa: C901, PLR0915
     summary_path = args.output_dir / "training_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Saved training summary to {}", summary_path)
+    if wandb_run is not None:
+        wandb_run.summary["training_summary_path"] = str(summary_path)
+        wandb_run.summary["checkpoint_path"] = str(checkpoint_path)
+        wandb_run.summary["best_epoch"] = int(best["epoch"])
+        wandb_run.summary["best_val_loss"] = float(best["val_loss"])
+        wandb_run.summary["best_val_ade"] = float(best["val_ade"])
+        wandb_run.summary["best_val_fde"] = float(best["val_fde"])
+        wandb_run.summary["quality_gate_pass"] = bool(gates["pass_all"])
 
     if bool(args.register_model):
         rel_checkpoint = checkpoint_path
@@ -565,8 +675,12 @@ def main() -> int:  # noqa: C901, PLR0915
 
     if not gates["pass_all"]:
         logger.error("Quality gates failed: {}", gates)
+        if wandb_run is not None:
+            wandb_run.finish(exit_code=2)
         return 2
     logger.success("Quality gates passed: {}", gates)
+    if wandb_run is not None:
+        wandb_run.finish()
     return 0
 
 

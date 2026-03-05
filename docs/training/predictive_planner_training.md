@@ -18,7 +18,25 @@ For the full concept + architecture + implementation walkthrough, see:
 - SocNav scenario matrix available (for example `configs/scenarios/classic_interactions.yaml`)
 - Write permissions for `output/tmp/predictive_planner/`
 
-## 1) Collect training data
+## Canonical config-first run (recommended)
+
+Run the full predictive pipeline (all maps + randomized seeds + W&B logging + final summary):
+
+```bash
+uv run python scripts/training/run_predictive_training_pipeline.py \
+  --config configs/training/predictive/predictive_br07_all_maps_randomized.yaml \
+  --log-level INFO
+```
+
+This single command performs:
+- base dataset collection over all scenarios with randomized seeds,
+- hard-case dataset collection,
+- mixed dataset creation,
+- predictive model training with proxy selection and W&B logging,
+- final evaluation, hard-seed diagnostics, and success campaign,
+- final performance summary artifact under the run directory.
+
+## 1) Collect training data (manual path)
 
 Base rollout data:
 
@@ -109,3 +127,4 @@ At minimum:
 
 - Keep algorithm configs explicit (full YAML) for A/B comparisons.
 - Always archive campaign summary/report artifacts from `output/tmp/predictive_planner/campaigns/`.
+- Prefer the config-first pipeline command above for paper-facing comparable runs.

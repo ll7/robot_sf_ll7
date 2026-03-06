@@ -37,9 +37,7 @@ Related issues:
 ## Safety-aware anchor note
 
 ### SoNIC
-- Current paper citekey: `yaoSoNICSafeSocial2025`
-- Current role: conceptual safety-aware comparison anchor.
-- Open ambiguity:
-  - verified canonical code/project artifact has not been fixed yet;
-  - reported `arXiv:2511.07820` should not be assumed to be the same work without verification.
-- Therefore, SoNIC should remain a conceptual comparison anchor until the paper+project ladder is verified.
+- Paper citekey: `yaoSoNICSafeSocial2025`
+- Public repo: <https://github.com/tasl-lab/SoNIC-Social-Nav.git>
+- Local clone: `/Users/lennart/git/robot_sf_ll7/output/repos/SoNIC-Social-Nav`
+- Intended role: external safety-aware comparison anchor for guarded-PPO formalization work.

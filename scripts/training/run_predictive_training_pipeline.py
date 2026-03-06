@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -54,6 +55,14 @@ def _run(cmd: list[str], *, log_level: str = "INFO") -> None:
     env = dict(os.environ)
     env.setdefault("LOGURU_LEVEL", str(log_level).upper())
     subprocess.run(cmd, check=True, env=env)
+
+
+def _git_hash() -> str:
+    """Return current git commit hash when available."""
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() or "unknown"
+    except Exception:
+        return "unknown"
 
 
 def _run_capture_json(
@@ -182,6 +191,8 @@ def main() -> int:  # noqa: C901, PLR0915
 
     config_path = args.config.resolve()
     cfg = _read_yaml(config_path)
+    config_text = config_path.read_text(encoding="utf-8")
+    config_hash = hashlib.sha1(config_text.encode("utf-8")).hexdigest()
     base_dir = config_path.parent.resolve()
 
     exp_cfg = cfg.get("experiment", {})
@@ -476,6 +487,8 @@ def main() -> int:  # noqa: C901, PLR0915
         "run_id": run_id,
         "generated_at": datetime.now(UTC).isoformat(),
         "config_path": str(config_path),
+        "config_hash": config_hash,
+        "git_commit": _git_hash(),
         "scenario_matrix": str(scenario_matrix),
         "hard_seed_manifest": str(hard_seed_manifest),
         "planner_grid": str(planner_grid),

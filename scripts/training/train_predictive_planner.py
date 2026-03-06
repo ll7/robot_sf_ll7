@@ -30,6 +30,60 @@ from robot_sf.planner.predictive_model import (
 from robot_sf.training.scenario_loader import load_scenarios
 
 
+def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
+    """Return True when array spread is effectively zero."""
+    if arr.size == 0:
+        return True
+    return float(np.nanmax(arr) - np.nanmin(arr)) <= float(tol)
+
+
+def _dataset_diagnostics(
+    *,
+    state: np.ndarray,
+    target: np.ndarray,
+    mask: np.ndarray,
+    target_mask: np.ndarray,
+) -> dict[str, Any]:
+    """Compute dataset integrity diagnostics used for fail-fast validation."""
+    flat_target = target.reshape(-1, target.shape[-1])
+    valid_target = target_mask > 0.0
+    disp = np.linalg.norm(target[:, :, -1, :] - target[:, :, 0, :], axis=-1)
+    disp_valid = disp[target_mask[:, :, 0] > 0.0] if target_mask.ndim == 3 else disp.reshape(-1)
+
+    diagnostics = {
+        "num_samples": int(state.shape[0]),
+        "max_agents": int(state.shape[1]),
+        "horizon_steps": int(target.shape[2]),
+        "active_agent_ratio": float(np.mean(mask)),
+        "active_target_ratio": float(np.mean(target_mask)),
+        "target_std": float(np.std(flat_target)),
+        "target_near_constant": bool(_is_near_constant(flat_target)),
+        "displacement_mean": float(np.mean(disp_valid)) if disp_valid.size > 0 else 0.0,
+        "displacement_p95": float(np.percentile(disp_valid, 95)) if disp_valid.size > 0 else 0.0,
+        "valid_target_entries": int(np.count_nonzero(valid_target)),
+        "fail_reasons": [],
+        "warnings": [],
+    }
+
+    fail_reasons: list[str] = []
+    warnings: list[str] = []
+    if diagnostics["num_samples"] < 64:
+        fail_reasons.append("num_samples_below_64")
+    if diagnostics["active_target_ratio"] <= 0.02:
+        fail_reasons.append("active_target_ratio_too_low")
+    if diagnostics["target_std"] <= 1e-6 or diagnostics["target_near_constant"]:
+        fail_reasons.append("target_values_near_constant")
+    if diagnostics["displacement_mean"] <= 1e-3:
+        fail_reasons.append("trajectory_displacement_near_zero")
+    if diagnostics["displacement_p95"] <= 1e-2:
+        warnings.append("very_low_trajectory_spread")
+
+    diagnostics["fail_reasons"] = fail_reasons
+    diagnostics["warnings"] = warnings
+    diagnostics["is_degenerate"] = bool(fail_reasons)
+    return diagnostics
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI args for predictive model training."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -73,6 +127,11 @@ def parse_args() -> argparse.Namespace:
         "--wandb-mode",
         type=str,
         default=os.environ.get("WANDB_MODE", "online"),
+    )
+    parser.add_argument(
+        "--allow-degenerate-dataset",
+        action="store_true",
+        help="Allow training to continue even when dataset diagnostics detect degeneration.",
     )
     return parser.parse_args()
 
@@ -402,6 +461,24 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     if target.ndim != 4 or target.shape[-1] != 2:
         raise ValueError("Expected target shape (N, max_agents, horizon, 2)")
 
+    diagnostics = _dataset_diagnostics(
+        state=state,
+        target=target,
+        mask=mask,
+        target_mask=target_mask,
+    )
+    diagnostics_path = args.output_dir / "dataset_diagnostics.json"
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    diagnostics_path.write_text(json.dumps(diagnostics, indent=2), encoding="utf-8")
+    if diagnostics["warnings"]:
+        logger.warning("Dataset diagnostics warnings: {}", diagnostics["warnings"])
+    if diagnostics["is_degenerate"] and not bool(args.allow_degenerate_dataset):
+        raise RuntimeError(
+            "Dataset diagnostics flagged degeneracy: "
+            f"{diagnostics['fail_reasons']}. "
+            "Pass --allow-degenerate-dataset to bypass for debugging only."
+        )
+
     train_loader, val_loader = _prepare_loaders(
         state=state,
         target=target,
@@ -655,6 +732,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "active_agent_ratio": float(np.mean(mask)),
             "active_target_ratio": float(np.mean(target_mask)),
         },
+        "dataset_diagnostics_path": str(diagnostics_path),
+        "dataset_diagnostics": diagnostics,
         "history": history,
     }
 
@@ -663,6 +742,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     logger.info("Saved training summary to {}", summary_path)
     if wandb_run is not None:
         wandb_run.summary["training_summary_path"] = str(summary_path)
+        wandb_run.summary["dataset_diagnostics_path"] = str(diagnostics_path)
+        wandb_run.summary["dataset_is_degenerate"] = bool(diagnostics["is_degenerate"])
         wandb_run.summary["checkpoint_path"] = str(checkpoint_path)
         wandb_run.summary["best_epoch"] = int(best["epoch"])
         wandb_run.summary["best_val_loss"] = float(best["val_loss"])

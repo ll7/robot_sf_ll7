@@ -16,6 +16,7 @@ from robot_sf.training.imitation_config import (
 )
 from scripts.training.train_ppo import (
     _reapply_resumed_ppo_hyperparams,
+    _resolve_resume_checkpoint,
     load_expert_training_config,
     run_expert_training,
 )
@@ -137,6 +138,41 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
 
 
+def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:
+    """Loader should preserve portable registry-backed resume model ids."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "warmstart_model_id.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_warmstart_model_id_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "resume_model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    assert config.resume_from is None
+    assert config.resume_model_id == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+
+
 def test_reapply_resumed_ppo_hyperparams_uses_yaml_values() -> None:
     """Warm-start runs should honor config PPO overrides after checkpoint load."""
     config = ExpertTrainingConfig(
@@ -197,3 +233,42 @@ def test_reapply_resumed_ppo_hyperparams_uses_yaml_values() -> None:
     assert model.gae_lambda == 0.93
     assert model.rollout_buffer.gamma == 0.98
     assert model.rollout_buffer.gae_lambda == 0.93
+
+
+def test_resolve_resume_checkpoint_prefers_model_registry(monkeypatch) -> None:
+    """Registry-backed resume ids should resolve to a downloadable local path."""
+    expected = Path("/tmp/downloaded/model.zip")
+    called: dict[str, object] = {}
+
+    def _fake_resolve(model_id: str, *, allow_download: bool = True):
+        called["model_id"] = model_id
+        called["allow_download"] = allow_download
+        return expected
+
+    monkeypatch.setattr("scripts.training.train_ppo.resolve_model_path", _fake_resolve)
+    config = ExpertTrainingConfig(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(123,),
+        total_timesteps=1000,
+        policy_id="ppo_resume_registry_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=100,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=10,
+            evaluation_episodes=4,
+            hold_out_scenarios=(),
+            step_schedule=((1000, 1000),),
+        ),
+        resume_model_id="ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+    )
+
+    resolved = _resolve_resume_checkpoint(config=config, resume_from=None)
+
+    assert resolved == expected
+    assert called == {
+        "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "allow_download": True,
+    }

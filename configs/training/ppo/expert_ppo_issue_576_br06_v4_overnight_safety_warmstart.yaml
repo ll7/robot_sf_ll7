@@ -5,7 +5,7 @@
 # - bias reward shaping toward safer, less stall-prone behavior
 policy_id: ppo_expert_br06_v4_overnight_safety_warmstart
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
-resume_from: ../../../output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: 8
 worker_mode: subproc
 seeds:
@@ -15,8 +15,11 @@ seeds:
   - 992
   - 1337
 randomize_seeds: true
-# Important: when resuming, total_timesteps is the final post-resume target,
-# not the number of extra timesteps to add.
+# Important:
+# - resume_model_id resolves through model/registry.yaml and downloads from W&B
+#   if the checkpoint is not cached locally.
+# - total_timesteps is the final post-resume target, not the number of extra
+#   timesteps to add.
 total_timesteps: 30000000
 feature_extractor: grid_socnav
 feature_extractor_kwargs:

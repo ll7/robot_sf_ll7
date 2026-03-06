@@ -56,6 +56,7 @@ from robot_sf.common.artifact_paths import get_artifact_category_path, get_imita
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
@@ -618,6 +619,9 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
             data.get("resume_from"),
             field_name="resume_from",
         ),
+        resume_model_id=(
+            str(data.get("resume_model_id")).strip() if data.get("resume_model_id") else None
+        ),
     )
 
 
@@ -664,9 +668,31 @@ def _log_startup_summary(
         num_envs,
         worker_mode,
         _randomize_seeds(config),
-        str(config.resume_from) if config.resume_from is not None else "<none>",
+        (
+            str(config.resume_from)
+            if config.resume_from is not None
+            else f"model_id:{config.resume_model_id}"
+            if config.resume_model_id
+            else "<none>"
+        ),
         sorted(config.scenario_sampling.keys()),
     )
+
+
+def _resolve_resume_checkpoint(
+    *,
+    config: ExpertTrainingConfig,
+    resume_from: Path | None,
+) -> Path | None:
+    """Resolve a resume checkpoint path from CLI/config path or registry model_id."""
+
+    if resume_from is not None:
+        return Path(resume_from).expanduser()
+    if config.resume_from is not None:
+        return Path(config.resume_from).expanduser()
+    if config.resume_model_id:
+        return resolve_model_path(config.resume_model_id, allow_download=True)
+    return None
 
 
 def _make_training_env(  # noqa: PLR0913
@@ -1480,8 +1506,9 @@ def _init_training_model(
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_kwargs = _resolve_policy_kwargs(config)
-    if resume_from is not None:
-        resume_path = Path(resume_from).expanduser()
+    resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
+    if resolved_resume is not None:
+        resume_path = resolved_resume
         if not resume_path.exists():
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         logger.info("Resuming PPO from {}", resume_path)
@@ -1944,7 +1971,7 @@ def run_expert_training(
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
     eval_steps = _build_eval_steps(config.total_timesteps, config.evaluation.step_schedule)
-    resolved_resume_from = resume_from if resume_from is not None else config.resume_from
+    resolved_resume_from = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
 
     outputs = _execute_training(
         config=config,

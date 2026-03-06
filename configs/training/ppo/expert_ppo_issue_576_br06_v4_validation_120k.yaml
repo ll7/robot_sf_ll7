@@ -4,14 +4,17 @@
 # overnight v4 config.
 policy_id: ppo_expert_br06_v4_validation_120k
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
-resume_from: ../../../output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: 4
 worker_mode: subproc
 seeds:
   - 123
 randomize_seeds: true
-# Important: when resuming, total_timesteps is the final post-resume target,
-# not the number of extra timesteps to add.
+# Important:
+# - resume_model_id resolves through model/registry.yaml and downloads from W&B
+#   if the checkpoint is not cached locally.
+# - total_timesteps is the final post-resume target, not the number of extra
+#   timesteps to add.
 total_timesteps: 15360000
 feature_extractor: grid_socnav
 feature_extractor_kwargs:

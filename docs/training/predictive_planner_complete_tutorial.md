@@ -531,8 +531,8 @@ Train:
 ```bash
 uv run python scripts/training/train_predictive_planner.py \
   --dataset output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz \
-  --output-dir output/tmp/predictive_planner/training/predictive_proxy_selected_v1 \
-  --model-id predictive_proxy_selected_v1 \
+  --output-dir output/tmp/predictive_planner/training/predictive_proxy_selected_v2 \
+  --model-id predictive_proxy_selected_v2 \
   --select-by-proxy \
   --proxy-scenario-matrix configs/scenarios/classic_interactions.yaml \
   --proxy-seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml
@@ -542,7 +542,7 @@ Evaluate:
 
 ```bash
 uv run python scripts/validation/evaluate_predictive_planner.py \
-  --checkpoint output/tmp/predictive_planner/training/predictive_proxy_selected_v1/predictive_model.pt \
+  --checkpoint output/tmp/predictive_planner/training/predictive_proxy_selected_v2_full/predictive_model.pt \
   --scenario-matrix configs/scenarios/classic_interactions.yaml
 ```
 
@@ -550,7 +550,7 @@ Campaign:
 
 ```bash
 uv run python scripts/validation/run_predictive_success_campaign.py \
-  --checkpoints output/tmp/predictive_planner/training/predictive_proxy_selected_v1/predictive_model.pt \
+  --checkpoints output/tmp/predictive_planner/training/predictive_proxy_selected_v2_full/predictive_model.pt \
   --scenario-matrix configs/scenarios/classic_interactions.yaml \
   --hard-seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml \
   --planner-grid configs/benchmarks/predictive_sweep_planner_grid_v1.yaml
@@ -637,6 +637,14 @@ Consequence:
 - Loss and ADE/FDE use `target_mask`; invalid future points do not silently bias
   training toward trivial zero predictions.
 
+Important velocity detail:
+- `vx_rel, vy_rel` are currently **ego-frame rotated pedestrian velocities**.
+- They are not full translational relative velocity (`v_ped - v_robot`) in world frame.
+
+Consequence:
+- Robot pose/heading is reflected via frame transform, but robot translational speed is not
+  explicitly subtracted in predictor inputs.
+
 ### Q3) Is the model stochastic? Do we predict a distribution?
 
 No. Current predictor is deterministic: one `future_positions` tensor per step.
@@ -710,6 +718,18 @@ Consequence:
   and audit dataset ratios (`active_agent_ratio`, `active_target_ratio`) before
   running long jobs.
 
+Latest validated failure mode (important):
+- Some env paths emit flattened observation keys (for example `pedestrians_positions`)
+  instead of nested `obs["pedestrians"]`.
+- If collectors parse only nested keys, `ped_count` can silently become `0`, yielding:
+  - `active_agent_ratio = 0.0`
+  - `active_target_ratio = 0.0`
+  - train/val/proxy metrics all `0.0`.
+
+Current status:
+- Collectors support both nested and flattened observation formats.
+- Keep the ratio checks as mandatory guardrails for every long run.
+
 ### Q9) Why did a run warn “completed with failing stage gates”?
 
 Because at least one post-training stage returned non-zero (typically eval
@@ -740,6 +760,12 @@ Consequence:
 - Provides strong capacity without unbounded runtime; further gains should come
   from structured sweeps, not only longer epochs.
 
+Recent local full-profile validation:
+- Full profile completed with non-zero learning metrics and stable convergence behavior.
+- Example terminal range: `train_loss ~ 0.006-0.010`, `val_ade ~ 0.07-0.10`, `val_fde ~ 0.12-0.18`.
+- Post-training evaluation gate can still fail due to planner-level success thresholds even when
+  trajectory-prediction training quality gates pass.
+
 ### Q12) Why not train much longer by default?
 
 Longer epochs increase wall time and proxy-eval cost, and can overfit while
@@ -748,3 +774,19 @@ providing little hard-case gain after plateau.
 Consequence:
 - Prefer evidence-driven extension (curves + hard-case metrics) over blindly
   increasing epochs.
+
+### Q13) Should we include ego robot state directly in the GNN?
+
+Short answer: likely yes, as a controlled v2 experiment.
+
+Current baseline:
+- Keep the existing predictor/planner path stable for reproducibility.
+
+Planned v2 direction:
+- Add ego-conditioned predictor inputs/features, for example:
+  - ego node/features `(x=0, y=0, vx, vy, heading_rate, goal_dir)`
+  - optional one-step action hint `(v, w)`.
+- Evaluate first on hard-seed suite (ADE/FDE + success/collision), then full benchmark.
+
+Tracking:
+- See issue `#593`: `prediction_planner: add v2 ego-conditioned predictor and staged benchmark comparison`.

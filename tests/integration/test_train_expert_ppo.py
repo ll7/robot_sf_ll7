@@ -177,6 +177,42 @@ def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:
     assert config.resume_model_id == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
 
 
+def test_load_expert_training_config_supports_resume_source_step(tmp_path) -> None:
+    """Loader should preserve pinned source checkpoint steps for reproducible warm starts."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "warmstart_model_id_step.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_warmstart_model_id_step_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "resume_model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+                "resume_source_step": 15240000,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    assert config.resume_model_id == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+    assert config.resume_source_step == 15240000
+
+
 def test_reapply_resumed_ppo_hyperparams_uses_yaml_values() -> None:
     """Warm-start runs should honor config PPO overrides after checkpoint load."""
     config = ExpertTrainingConfig(

@@ -197,16 +197,19 @@ def _run_eval(
     for row in rows:
         key = str(row.get("termination_reason", "unknown")).strip().lower() or "unknown"
         termination_counts[key] = int(termination_counts.get(key, 0)) + 1
+    metrics_payloads = [
+        row.get("metrics") if isinstance(row.get("metrics"), dict) else {} for row in rows
+    ]
     min_dist_vals = np.asarray(
         [
-            float(row.get("metrics", {}).get("min_distance"))
-            for row in rows
-            if row.get("metrics", {}).get("min_distance") is not None
+            float(metrics["min_distance"])
+            for metrics in metrics_payloads
+            if metrics.get("min_distance") is not None
         ],
         dtype=float,
     )
     speed_vals = np.asarray(
-        [float(row.get("metrics", {}).get("avg_speed", 0.0)) for row in rows],
+        [float(metrics.get("avg_speed", 0.0)) for metrics in metrics_payloads],
         dtype=float,
     )
     ci_low, ci_high = _bootstrap_ci(

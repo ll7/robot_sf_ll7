@@ -55,3 +55,19 @@ def test_build_random_seed_manifest_generates_all_scenarios(monkeypatch, tmp_pat
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
     assert payload["classic_crossing_low"] == [100, 101, 102]
     assert payload["classic_doorway_high"] == [100100, 100101, 100102]
+
+
+def test_run_capture_json_anchors_subprocess_to_repo_root(monkeypatch) -> None:
+    """Subprocess helpers should execute repo-relative commands from the repository root."""
+    called: dict[str, object] = {}
+
+    def _fake_run(cmd, **kwargs):
+        called["cmd"] = cmd
+        called["cwd"] = kwargs.get("cwd")
+        called["env"] = kwargs.get("env")
+        return type("Result", (), {"returncode": 0, "stdout": "{}", "stderr": ""})()
+
+    monkeypatch.setattr(pipeline.subprocess, "run", _fake_run)
+    payload = pipeline._run_capture_json(["python", "scripts/example.py"])
+    assert payload["status"] == "ok"
+    assert called["cwd"] == pipeline._REPO_ROOT

@@ -59,8 +59,7 @@ class HybridPortfolioAdapter:
         self._active_head = "risk_dwa"
         self._hold_remaining = 0
 
-    @staticmethod
-    def _extract_ped_clearance(observation: dict[str, Any]) -> tuple[int, float]:
+    def _extract_ped_clearance(self, observation: dict[str, Any]) -> tuple[int, float]:
         """Return `(near_count, min_clearance)` around the robot."""
         robot = observation.get("robot") if isinstance(observation.get("robot"), dict) else {}
         ped = (
@@ -78,7 +77,8 @@ class HybridPortfolioAdapter:
         dists = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
         if dists.size == 0:
             return 0, float("inf")
-        return int(dists.size), float(np.min(dists))
+        near_count = int(np.count_nonzero(dists <= float(self.config.near_field_distance)))
+        return near_count, float(np.min(dists))
 
     def _desired_head(self, observation: dict[str, Any]) -> str:
         ped_count, min_clearance = self._extract_ped_clearance(observation)

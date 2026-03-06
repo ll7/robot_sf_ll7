@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 
 import pytest
 
 from robot_sf.models import registry
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class _FakeFile:
@@ -155,4 +152,172 @@ def test_find_latest_wandb_model_raises_when_no_run_matches(monkeypatch) -> None
             group="issue-576",
             job_type="expert-ppo",
             name_prefix="ppo_prefix",
+        )
+
+
+def test_load_registry_skips_invalid_entries_and_reads_models(tmp_path: Path) -> None:
+    """Registry loader should skip malformed rows and keep valid model ids."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - ignored
+  - local_path: output/model_cache/missing/model.zip
+  - model_id: valid_model
+    local_path: output/model_cache/valid/model.zip
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = registry.load_registry(registry_path)
+    assert list(loaded) == ["valid_model"]
+
+
+def test_load_registry_rejects_duplicate_model_ids(tmp_path: Path) -> None:
+    """Duplicate model ids should fail fast instead of silently overriding."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: duplicated
+    local_path: output/model_cache/a/model.zip
+  - model_id: duplicated
+    local_path: output/model_cache/b/model.zip
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate model_id"):
+        registry.load_registry(registry_path)
+
+
+def test_get_registry_entry_raises_for_unknown_model(tmp_path: Path) -> None:
+    """Unknown model ids should raise a clear KeyError."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text("version: 1\nmodels: []\n", encoding="utf-8")
+    with pytest.raises(KeyError, match="Unknown model_id"):
+        registry.get_registry_entry("missing", registry_path)
+
+
+def test_resolve_model_path_prefers_existing_local_path(tmp_path: Path) -> None:
+    """Local registry artifacts should be returned without invoking W&B download."""
+    local_model = tmp_path / "weights" / "model.zip"
+    local_model.parent.mkdir(parents=True)
+    local_model.write_text("checkpoint", encoding="utf-8")
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        f"version: 1\nmodels:\n  - model_id: local_model\n    local_path: {local_model.as_posix()}\n",
+        encoding="utf-8",
+    )
+
+    resolved = registry.resolve_model_path("local_model", registry_path=registry_path)
+    assert resolved == local_model
+
+
+def test_resolve_model_path_rejects_missing_local_path_when_download_disabled(
+    tmp_path: Path,
+) -> None:
+    """Missing local artifacts should fail cleanly when downloads are disabled."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        "version: 1\nmodels:\n  - model_id: local_model\n    local_path: missing/model.zip\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(FileNotFoundError, match="downloads are disabled"):
+        registry.resolve_model_path(
+            "local_model",
+            registry_path=registry_path,
+            allow_download=False,
+        )
+
+
+def test_download_from_wandb_uses_cached_path(monkeypatch, tmp_path: Path) -> None:
+    """Cached W&B downloads should be reused without hitting the API."""
+    cache_dir = tmp_path / "cache"
+    cached = cache_dir / "demo" / "model.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_text("checkpoint", encoding="utf-8")
+
+    api_called = {"value": False}
+
+    class _Api:
+        def run(self, path: str):
+            api_called["value"] = True
+            raise AssertionError(path)
+
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=_Api))
+    resolved = registry._download_from_wandb(
+        {"model_id": "demo", "wandb_run_path": "ll7/robot_sf/demo", "wandb_file": "model.zip"},
+        cache_dir=cache_dir,
+    )
+    assert resolved == cached
+    assert api_called["value"] is False
+
+
+def test_download_from_wandb_builds_run_path_from_split_fields(monkeypatch, tmp_path: Path) -> None:
+    """Download helper should support registry rows with separate entity/project/run id fields."""
+    downloaded = tmp_path / "cache" / "demo" / "model.zip"
+
+    class _RunFile:
+        def download(self, *, root: str, replace: bool):
+            assert replace is True
+            path = Path(root) / "model.zip"
+            path.write_text("checkpoint", encoding="utf-8")
+            return path
+
+    class _Run:
+        def file(self, name: str):
+            assert name == "model.zip"
+            return _RunFile()
+
+    class _Api:
+        def run(self, path: str):
+            assert path == "ll7/robot_sf/demo"
+            return _Run()
+
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=_Api))
+    resolved = registry._download_from_wandb(
+        {
+            "model_id": "demo",
+            "wandb_entity": "ll7",
+            "wandb_project": "robot_sf",
+            "wandb_run_id": "demo",
+        },
+        cache_dir=tmp_path / "cache",
+    )
+    assert resolved == downloaded
+
+
+def test_download_from_wandb_rejects_missing_run_metadata(tmp_path: Path) -> None:
+    """Download helper should fail clearly when the registry row lacks W&B location metadata."""
+    with pytest.raises(ValueError, match="missing wandb_run_path"):
+        registry._download_from_wandb({"model_id": "demo"}, cache_dir=tmp_path / "cache")
+
+
+def test_upsert_registry_entry_appends_and_replaces(tmp_path: Path) -> None:
+    """Upsert should create the registry file, then replace matching rows in place."""
+    registry_path = tmp_path / "registry.yaml"
+
+    first = {"model_id": "demo", "local_path": "output/model_cache/demo/model.zip"}
+    registry.upsert_registry_entry(first, registry_path=registry_path)
+    loaded_first = registry.load_registry(registry_path)
+    assert loaded_first["demo"]["local_path"] == "output/model_cache/demo/model.zip"
+
+    replacement = {"model_id": "demo", "local_path": "output/model_cache/demo/model_v2.zip"}
+    registry.upsert_registry_entry(replacement, registry_path=registry_path)
+    loaded_second = registry.load_registry(registry_path)
+    assert list(loaded_second) == ["demo"]
+    assert loaded_second["demo"]["local_path"] == "output/model_cache/demo/model_v2.zip"
+
+
+def test_upsert_registry_entry_requires_model_id(tmp_path: Path) -> None:
+    """Upsert should reject entries without a model id."""
+    with pytest.raises(ValueError, match="must include a model_id"):
+        registry.upsert_registry_entry(
+            {"local_path": "output/model_cache/demo/model.zip"},
+            registry_path=tmp_path / "registry.yaml",
         )

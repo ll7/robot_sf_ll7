@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import yaml
 
 from scripts.validation import run_planner_portfolio_campaign as campaign
@@ -115,3 +117,50 @@ def test_write_progress_report_writes_json_and_md(tmp_path) -> None:
     assert json_path.exists()
     assert md_path.exists()
     assert "Hard MaxSteps" in md_path.read_text(encoding="utf-8")
+
+
+def test_aggregate_rows_tolerates_missing_metrics_payloads(tmp_path) -> None:
+    """Missing or null metrics payloads should not crash candidate aggregation."""
+    output_dir = tmp_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _fake_run_map_batch(*args, **kwargs):
+        jsonl_path = args[1]
+        jsonl_path.write_text(
+            "\n".join(
+                [
+                    '{"termination_reason":"success","metrics":{"success":1.0,"min_distance":1.2,"avg_speed":0.7}}',
+                    '{"termination_reason":"max_steps","metrics":null}',
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    original = campaign.run_map_batch
+    campaign.run_map_batch = _fake_run_map_batch
+    try:
+        result = campaign._run_eval(
+            scenarios_or_path=Path("configs/scenarios/classic_interactions.yaml"),
+            suite_name="global",
+            candidate_name="cand",
+            algo="risk_dwa",
+            algo_cfg={},
+            output_dir=output_dir,
+            args=type(
+                "Args",
+                (),
+                {
+                    "horizon": 120,
+                    "dt": 0.1,
+                    "workers": 1,
+                    "bootstrap_samples": 10,
+                    "bootstrap_seed": 123,
+                },
+            )(),
+        )
+    finally:
+        campaign.run_map_batch = original
+
+    assert result.episodes == 2
+    assert result.success_rate == 0.5

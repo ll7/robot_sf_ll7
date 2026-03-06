@@ -19,6 +19,8 @@ from loguru import logger
 
 from robot_sf.training.scenario_loader import load_scenarios
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 @dataclass
 class PipelinePaths:
@@ -54,13 +56,16 @@ def _run(cmd: list[str], *, log_level: str = "INFO") -> None:
     logger.info("Running: {}", " ".join(cmd))
     env = dict(os.environ)
     env.setdefault("LOGURU_LEVEL", str(log_level).upper())
-    subprocess.run(cmd, check=True, env=env)
+    subprocess.run(cmd, check=True, env=env, cwd=_REPO_ROOT)
 
 
 def _git_hash() -> str:
     """Return current git commit hash when available."""
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() or "unknown"
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=_REPO_ROOT).strip()
+            or "unknown"
+        )
     except Exception:
         return "unknown"
 
@@ -74,7 +79,14 @@ def _run_capture_json(
     logger.info("Running: {}", " ".join(cmd))
     env = dict(os.environ)
     env.setdefault("LOGURU_LEVEL", str(log_level).upper())
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True, env=env)
+    result = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=_REPO_ROOT,
+    )
     if result.returncode != 0:
         if not allow_failure:
             raise subprocess.CalledProcessError(
@@ -470,7 +482,13 @@ def main() -> int:  # noqa: C901, PLR0915
     campaign_summary_path = paths.campaign_dir / "campaign_summary.json"
     campaign_summary = {}
     if campaign_summary_path.exists():
-        campaign_summary = json.loads(campaign_summary_path.read_text(encoding="utf-8"))
+        loaded_summary = json.loads(campaign_summary_path.read_text(encoding="utf-8"))
+        if (
+            int(campaign_status.get("return_code", 1)) == 0
+            and loaded_summary.get("run_id") == run_id
+            and str(loaded_summary.get("status", "")).lower() == "success"
+        ):
+            campaign_summary = loaded_summary
 
     stage_status = {
         "evaluation_ok": bool(int(eval_payload.get("return_code", 1)) == 0),

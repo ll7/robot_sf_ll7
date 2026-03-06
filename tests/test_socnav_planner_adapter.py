@@ -525,6 +525,31 @@ def test_prediction_adapter_progress_escape_respects_clearance_gate(monkeypatch)
     assert v <= 1e-6
 
 
+def test_prediction_adapter_progress_escape_keeps_lower_cost_rollout(monkeypatch):
+    """Progress-escape should not replace a safer rollout with a worse scored command."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0, 0.2),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.5,
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    monkeypatch.setattr(
+        adapter,
+        "_score_action",
+        lambda **kwargs: 0.1 if kwargs["v"] == 0.2 else 1.0,
+    )
+    v, w = adapter.plan(_make_obs(goal=(4.0, 0.0), heading=0.0))
+    assert (v, w) == (0.2, 0.0)
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

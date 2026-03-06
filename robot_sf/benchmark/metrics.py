@@ -604,33 +604,49 @@ def near_misses(data: EpisodeData) -> float:
 
 
 def min_distance(data: EpisodeData) -> float:
-    """Return global minimum robot-pedestrian clearance.
+    """Return global minimum robot-pedestrian center distance.
 
     Returns NaN when there are no pedestrians.
 
     Returns:
-        Minimum clearance in meters, or NaN if no pedestrians.
+        Minimum center-to-center distance in meters, or NaN if no pedestrians.
     """
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    dists = _compute_distance_matrix(data)
+    return float(dists.min())
+
+
+def mean_distance(data: EpisodeData) -> float:
+    """Return mean over time of minimum robot-pedestrian center distance.
+
+    At each timestep t, compute distance_t = min_k ||robot - ped_k||.
+    Return mean_t d_t. Returns NaN if there are no pedestrians.
+
+    Returns:
+        Mean minimum center distance in meters, or NaN if no pedestrians.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    dists = _compute_distance_matrix(data)  # (T,K)
+    min_per_t = dists.min(axis=1)  # (T,)
+    return float(np.mean(min_per_t))
+
+
+def min_clearance(data: EpisodeData) -> float:
+    """Return global minimum robot-pedestrian surface clearance."""
     if data.peds_pos.shape[1] == 0:
         return float("nan")
     clearances = _compute_clearance_matrix(data)
     return float(clearances.min())
 
 
-def mean_distance(data: EpisodeData) -> float:
-    """Return mean over time of minimum robot-pedestrian clearance.
-
-    At each timestep t, compute clearance_t = min_k clearance(robot, ped_k).
-    Return mean_t d_t. Returns NaN if there are no pedestrians.
-
-    Returns:
-        Mean minimum clearance in meters, or NaN if no pedestrians.
-    """
-    # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
+def mean_clearance(data: EpisodeData) -> float:
+    """Return mean over time of minimum robot-pedestrian surface clearance."""
     if data.peds_pos.shape[1] == 0:
         return float("nan")
-    clearances = _compute_clearance_matrix(data)  # (T,K)
-    min_per_t = clearances.min(axis=1)  # (T,)
+    clearances = _compute_clearance_matrix(data)
+    min_per_t = clearances.min(axis=1)
     return float(np.mean(min_per_t))
 
 
@@ -2287,13 +2303,18 @@ def compute_all_metrics(
     values["time_to_goal_ideal_ratio_valid"] = (
         1.0 if math.isfinite(values["time_to_goal_ideal_ratio"]) else 0.0
     )
-    values["collisions"] = collisions(data)
-    values["ped_collision_count"] = human_collisions(data)
-    values["obstacle_collision_count"] = wall_collisions(data)
-    values["total_collision_count"] = collision_count(data)
+    ped_collision_count = human_collisions(data)
+    obstacle_collision_count = wall_collisions(data)
+    total_collision_count = ped_collision_count + obstacle_collision_count
+    values["collisions"] = ped_collision_count
+    values["ped_collision_count"] = ped_collision_count
+    values["obstacle_collision_count"] = obstacle_collision_count
+    values["total_collision_count"] = total_collision_count
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
     values["mean_distance"] = mean_distance(data)
+    values["min_clearance"] = min_clearance(data)
+    values["mean_clearance"] = mean_clearance(data)
     values["robot_ped_within_5m_frac"] = robot_ped_within_5m_frac(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values["socnavbench_path_length"] = socnavbench_path_length(data)

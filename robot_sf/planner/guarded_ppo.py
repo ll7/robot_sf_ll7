@@ -64,6 +64,22 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         ped_velocities_raw = ped_state.get("velocities")
         ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
         ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
+        ped_count_raw = ped_state.get("count")
+        ped_count = int(ped_count_raw) if isinstance(ped_count_raw, int | np.integer) else None
+        if (
+            ped_pos.ndim == 1
+            and ped_count is not None
+            and ped_count > 0
+            and ped_pos.size >= ped_count * 2
+        ):
+            ped_pos = ped_pos.reshape(-1, 2)[:ped_count]
+        if (
+            ped_vel.ndim == 1
+            and ped_count is not None
+            and ped_count > 0
+            and ped_vel.size >= ped_count * 2
+        ):
+            ped_vel = ped_vel.reshape(-1, 2)[:ped_count]
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
             ped_pos = np.zeros((0, 2), dtype=float)
         if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2 or ped_vel.shape[0] != ped_pos.shape[0]:
@@ -199,10 +215,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         else:
             current_min_dist = float("inf")
 
-        if current_min_dist > float(self.config.near_field_distance):
-            return (float(ppo_command[0]), float(ppo_command[1])), "ppo_clear"
-
         ppo_eval = self._evaluate_command(observation, ppo_command)
+        if current_min_dist > float(self.config.near_field_distance) and bool(ppo_eval["safe"]):
+            return (float(ppo_command[0]), float(ppo_command[1])), "ppo_clear"
         if bool(ppo_eval["safe"]):
             return (float(ppo_command[0]), float(ppo_command[1])), "ppo_safe"
 

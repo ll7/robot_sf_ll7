@@ -158,6 +158,46 @@ def test_guarded_ppo_handles_malformed_pedestrian_payloads_and_config_builders()
     assert fallback is not None
 
 
+def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:
+    """Flattened compatibility payloads should be reshaped using pedestrian count."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(None),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+    )
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = guard._extract_state(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [1.0, 0.0], "next": [1.0, 0.0]},
+            "pedestrians": {
+                "count": 2,
+                "positions": [1.0, 2.0, 3.0, 4.0],
+                "velocities": [0.1, 0.2, 0.3, 0.4],
+            },
+        }
+    )
+    assert ped_pos.shape == (2, 2)
+    assert ped_vel.shape == (2, 2)
+    assert ped_pos.tolist() == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_guarded_ppo_clear_path_still_checks_obstacle_safety() -> None:
+    """Clear-path PPO should not bypass obstacle safety evaluation."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config({"guard_near_field_distance": 0.5}),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+    )
+    evaluations = iter(
+        [
+            {"safe": False, "min_ped_clear": float("inf")},
+            {"safe": True, "min_ped_clear": float("inf")},
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    command, decision = guard.choose_command(_obs(ped_positions=[(2.0, 2.0)]), (0.3, 0.1))
+    assert command == (0.0, 0.0)
+    assert decision == "fallback_safe"
+
+
 def test_guarded_ppo_obstacle_clearance_helper_branches() -> None:
     """Obstacle clearance helper should handle invalid payloads and distance queries."""
     guard = GuardedPPOAdapter(

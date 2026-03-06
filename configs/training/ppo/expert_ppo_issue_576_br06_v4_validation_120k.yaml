@@ -5,6 +5,7 @@
 policy_id: ppo_expert_br06_v4_validation_120k
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
 resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+resume_source_step: 15240000
 num_envs: 4
 worker_mode: subproc
 seeds:

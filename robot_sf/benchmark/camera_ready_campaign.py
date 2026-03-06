@@ -443,14 +443,39 @@ def _valid_route_lines(map_def: Any) -> list[LineString]:
     return lines
 
 
-def _map_route_clearance_center_min_m(map_def: Any) -> float | None:
-    """Compute minimum centerline distance from robot routes to obstacle polygons.
+def _scenario_route_lines(map_def: Any, scenario: dict[str, Any]) -> tuple[list[LineString], str]:
+    """Return route lines applicable to one scenario and the warning scope."""
+    routes = getattr(map_def, "robot_routes", None)
+    if not isinstance(routes, list):
+        return [], "scenario"
+    spawn_id = scenario.get("robot_spawn_id")
+    goal_id = scenario.get("robot_goal_id")
+    if isinstance(spawn_id, int) and isinstance(goal_id, int):
+        lines: list[LineString] = []
+        for route in routes:
+            if (
+                getattr(route, "spawn_id", None) != spawn_id
+                or getattr(route, "goal_id", None) != goal_id
+            ):
+                continue
+            waypoints = getattr(route, "waypoints", None)
+            if isinstance(waypoints, list) and len(waypoints) >= 2:
+                line = LineString(waypoints)
+                if line.is_valid and not line.is_empty:
+                    lines.append(line)
+        return lines, "scenario"
+    route_lines = _valid_route_lines(map_def)
+    scope = "scenario" if len(route_lines) <= 1 else "map"
+    return route_lines, scope
+
+
+def _map_route_clearance_center_min_m(route_lines: list[LineString], map_def: Any) -> float | None:
+    """Compute minimum centerline distance from route lines to obstacle polygons.
 
     Returns:
         Minimum route-to-obstacle center distance in meters, or ``None`` when unavailable.
     """
     obstacle_polygons = _valid_obstacle_polygons(map_def)
-    route_lines = _valid_route_lines(map_def)
     if not obstacle_polygons or not route_lines:
         return None
 
@@ -487,7 +512,8 @@ def _build_route_clearance_warnings(
                 exc_info=True,
             )
             continue
-        min_center_distance = _map_route_clearance_center_min_m(map_def)
+        route_lines, warning_scope = _scenario_route_lines(map_def, scenario)
+        min_center_distance = _map_route_clearance_center_min_m(route_lines, map_def)
         if min_center_distance is None or not math.isfinite(min_center_distance):
             continue
         robot_radius_m = _scenario_robot_radius_m(scenario)
@@ -507,6 +533,7 @@ def _build_route_clearance_warnings(
                 "min_center_distance_m": round(float(min_center_distance), 6),
                 "min_clearance_margin_m": round(min_margin_m, 6),
                 "warning_threshold_m": float(margin_warn_threshold_m),
+                "warning_scope": warning_scope,
             }
         )
     warnings.sort(key=lambda item: (item.get("scenario", ""), item.get("map_file", "")))
@@ -1633,6 +1660,7 @@ def prepare_campaign_preflight(
         "comparability_mapping_hash": (
             comparability_summary.get("mapping_hash") if comparability_summary else None
         ),
+        "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None

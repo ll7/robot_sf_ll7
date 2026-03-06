@@ -160,6 +160,25 @@ def test_risk_dwa_progress_escape_breaks_stall() -> None:
     assert abs(w) <= cfg.max_angular_speed
 
 
+def test_risk_dwa_progress_escape_keeps_scored_best_command(monkeypatch) -> None:
+    """Progress-escape should not override a better-scored rollout command."""
+    cfg = RiskDWAPlannerConfig(
+        linear_candidates=(0.0, 0.2),
+        angular_candidates=(0.0,),
+        progress_escape_enabled=True,
+        progress_escape_speed=0.8,
+        progress_escape_distance=1.0,
+    )
+    planner = RiskDWAPlannerAdapter(cfg)
+    monkeypatch.setattr(
+        planner,
+        "_rollout_score",
+        lambda **kwargs: 10.0 if kwargs["command"] == (0.2, 0.0) else -5.0,
+    )
+    v, w = planner.plan(_obs(goal=(3.0, 0.0)))
+    assert (v, w) == (0.2, 0.0)
+
+
 def test_mppi_is_deterministic_for_fixed_seed() -> None:
     """Two planners with same seed should produce identical action on same observation."""
     cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
@@ -244,6 +263,30 @@ def test_hybrid_prefers_prediction_mppi_and_hysteresis() -> None:
     assert hybrid.plan(_obs())[0] == 0.5
     # Open scene with no pedestrians and enough clearance can use MPPI once hold is released.
     assert hybrid.plan(_obs())[0] in {0.5, 1.0}
+
+
+def test_hybrid_far_pedestrians_do_not_trigger_dense_head_switch() -> None:
+    """Pedestrians outside near-field distance should not count toward dense switching."""
+    risk = _DummyHead("risk")
+    orca = _DummyHead("orca")
+    pred = _DummyHead("pred")
+    mppi = _DummyHead("mppi")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(
+            emergency_clearance=0.4,
+            caution_clearance=1.0,
+            dense_ped_count=2,
+            near_field_distance=1.0,
+            hysteresis_steps=0,
+        ),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=mppi,
+    )
+    cmd = hybrid.plan(_obs(ped_positions=[(4.0, 0.0), (5.0, 0.0)]))
+    assert cmd[0] == 0.5
+    assert mppi.calls == 1
 
 
 def test_hybrid_fallback_on_exception_and_config_defaults() -> None:

@@ -1,0 +1,29 @@
+model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+device: auto
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: true
+guard_rollout_dt: 0.2
+guard_rollout_steps: 6
+guard_near_field_distance: 1.8
+guard_hard_ped_clearance: 0.56
+guard_first_step_ped_clearance: 0.70
+guard_hard_obstacle_clearance: 0.30
+guard_min_ttc: 0.68
+fallback_risk_dwa:
+  max_linear_speed: 0.9
+  max_angular_speed: 1.2
+  rollout_dt: 0.2
+  rollout_steps: 8
+  near_field_distance: 2.5
+  near_field_speed_cap: 0.55
+  goal_progress_weight: 4.5
+  heading_weight: 0.8
+  ped_clearance_weight: 2.0
+  obstacle_clearance_weight: 1.2
+  smoothness_weight: 0.15
+  ttc_weight: 0.35
+  progress_escape_enabled: false

@@ -1,0 +1,90 @@
+variants:
+  - name: prediction_balanced_guard_v4
+    algo: prediction_planner
+    algo_config_path: ../../configs/algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 7.2
+      predictive_collision_weight: 0.58
+      predictive_ttc_weight: 0.34
+      predictive_progress_risk_weight: 2.6
+      predictive_hard_clearance_weight: 3.1
+      predictive_near_field_speed_cap: 0.78
+      predictive_candidate_speeds: [0.0, 0.3, 0.6, 0.9, 1.2]
+      predictive_horizon_boost_steps: 8
+
+  - name: risk_dwa_camera_ready_v4
+    algo: risk_dwa
+    algo_config_path: ../../configs/algos/risk_dwa_camera_ready.yaml
+
+  - name: risk_dwa_progressive_fast
+    algo: risk_dwa
+    algo_config_path: ../../configs/algos/risk_dwa_camera_ready.yaml
+    params:
+      goal_progress_weight: 7.5
+      heading_weight: 1.5
+      ped_clearance_weight: 1.1
+      obstacle_clearance_weight: 0.9
+      ttc_weight: 0.15
+      near_field_speed_cap: 0.9
+      progress_escape_speed: 0.8
+      progress_escape_heading_gain: 1.8
+      linear_candidates: [0.0, 0.35, 0.7, 1.05, 1.2]
+      angular_candidates: [-1.6, -1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2, 1.6]
+
+  - name: mppi_social_camera_ready_v4
+    algo: mppi_social
+    algo_config_path: ../../configs/algos/mppi_social_camera_ready.yaml
+
+  - name: mppi_social_progressive_fast
+    algo: mppi_social
+    algo_config_path: ../../configs/algos/mppi_social_camera_ready.yaml
+    params:
+      sample_count: 112
+      iterations: 3
+      horizon_steps: 10
+      goal_progress_weight: 7.0
+      heading_weight: 1.7
+      clearance_weight: 1.2
+      obstacle_weight: 1.0
+      ttc_weight: 0.12
+      near_distance: 0.55
+      near_field_speed_cap: 0.9
+      progress_escape_speed: 0.85
+      progress_escape_heading_gain: 1.8
+
+  - name: hybrid_camera_ready_v4
+    algo: hybrid_portfolio
+    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+
+  - name: hybrid_prediction_dominant
+    algo: hybrid_portfolio
+    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    params:
+      hybrid:
+        emergency_clearance: 0.55
+        caution_clearance: 1.25
+        dense_ped_count: 4
+        hysteresis_steps: 7
+        fallback_on_exception: true
+
+  - name: hybrid_mppi_open_space
+    algo: hybrid_portfolio
+    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    params:
+      hybrid:
+        emergency_clearance: 0.5
+        caution_clearance: 0.8
+        dense_ped_count: 50
+        hysteresis_steps: 5
+        fallback_on_exception: true
+      mppi_social:
+        sample_count: 112
+        iterations: 3
+        horizon_steps: 10
+        goal_progress_weight: 7.0
+        heading_weight: 1.7
+        clearance_weight: 1.2
+        obstacle_weight: 1.0
+        ttc_weight: 0.12
+        near_field_speed_cap: 0.9
+        progress_escape_speed: 0.85

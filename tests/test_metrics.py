@@ -78,10 +78,11 @@ def test_metrics_keys_all_collisions():
     assert values["total_collision_count"] == 5
     # Near misses zero because all are strict collisions
     assert values["near_misses"] == 0
-    # Min clearance equals negative overlap amount (robot_radius + ped_radius = 1.4m).
-    assert values["min_distance"] == pytest.approx(-1.4)
-    # Mean clearance follows min clearance in this fully-overlapping case.
-    assert values["mean_distance"] == pytest.approx(-1.4)
+    # Min distance is center-to-center; clearances are tracked separately.
+    assert values["min_distance"] == pytest.approx(0.0)
+    assert values["mean_distance"] == pytest.approx(0.0)
+    assert values["min_clearance"] == pytest.approx(-1.4)
+    assert values["mean_clearance"] == pytest.approx(-1.4)
 
 
 def test_metrics_partial_success_flag_present():
@@ -106,10 +107,10 @@ def test_near_miss_region_only():
     assert values["collisions"] == 0
     # Near miss each timestep because min clearance 0.1 inside [0.0, 0.5).
     assert values["near_misses"] == T
-    # Min clearance = 1.5 - (1.0 + 0.4) = 0.1.
-    assert np.isclose(values["min_distance"], 0.1)
-    # Mean clearance also 0.1 (constant over time)
-    assert np.isclose(values["mean_distance"], 0.1)
+    assert np.isclose(values["min_distance"], 1.5)
+    assert np.isclose(values["mean_distance"], 1.5)
+    assert np.isclose(values["min_clearance"], 0.1)
+    assert np.isclose(values["mean_clearance"], 0.1)
 
 
 def test_mixed_collision_and_near_miss():
@@ -123,10 +124,10 @@ def test_mixed_collision_and_near_miss():
     values = compute_all_metrics(ep, horizon=10)
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
-    # Minimum clearance at the first step: 1.2 - (1.0 + 0.4) = -0.2.
-    assert np.isclose(values["min_distance"], -0.2)
-    # Mean of per-timestep clearances: (-0.2 - 0.1 + 0.1 + 0.2)/4 = 0.0
-    assert np.isclose(values["mean_distance"], 0.0)
+    assert np.isclose(values["min_distance"], 1.2)
+    assert np.isclose(values["mean_distance"], 1.4)
+    assert np.isclose(values["min_clearance"], -0.2)
+    assert np.isclose(values["mean_clearance"], 0.0)
 
 
 def test_success_and_time_to_goal_norm_success_case():
@@ -1030,8 +1031,7 @@ def test_distance_to_human_min():
     ep.peds_pos[:, 0, :] = np.array([1.0, 0.0])
     ep.peds_pos[:, 1, :] = np.array([2.0, 0.0])
     result = distance_to_human_min(ep)
-    # Clearance-based min distance: 1.0m center distance - (1.0 + 0.4)m radii sum.
-    assert np.isclose(result, -0.4, atol=0.01)
+    assert np.isclose(result, 1.0, atol=0.01)
 
 
 def test_time_to_collision_min():

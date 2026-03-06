@@ -305,7 +305,19 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                         float(self.config.max_angular_speed),
                     )
                 )
-                best_cmd = (escape_v, escape_w)
+                escape_score = self._rollout_score(
+                    robot_pos=robot_pos,
+                    heading=heading,
+                    goal=goal,
+                    command=(escape_v, escape_w),
+                    ped_pos=ped_pos,
+                    ped_vel=ped_vel,
+                    observation=observation,
+                    current_speed=current_speed,
+                )
+                if escape_score > best_score:
+                    best_score = escape_score
+                    best_cmd = (escape_v, escape_w)
 
         return best_cmd
 

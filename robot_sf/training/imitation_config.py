@@ -57,6 +57,7 @@ class ExpertTrainingConfig:
     socnav_orca_neighbor_dist: float | None = None
     resume_from: Path | None = None
     resume_model_id: str | None = None
+    resume_source_step: int | None = None
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -87,6 +88,7 @@ class ExpertTrainingConfig:
         socnav_orca_neighbor_dist: float | None = None,
         resume_from: Path | None = None,
         resume_model_id: str | None = None,
+        resume_source_step: int | None = None,
     ) -> ExpertTrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -127,6 +129,9 @@ class ExpertTrainingConfig:
             socnav_orca_neighbor_dist=socnav_orca_neighbor_dist,
             resume_from=resume_from.resolve() if resume_from else None,
             resume_model_id=str(resume_model_id).strip() if resume_model_id else None,
+            resume_source_step=(
+                int(resume_source_step) if resume_source_step is not None else None
+            ),
         )
 
 

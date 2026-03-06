@@ -652,6 +652,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
     reached_goal_step: int | None,
     goal: np.ndarray,
     horizon: int,
+    robot_radius: float,
+    ped_radius: float,
 ) -> dict[str, float]:
     """Compute episode metrics for the classic benchmark pipeline.
 
@@ -692,8 +694,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
-        robot_radius=float(getattr(cfg, "robot_radius", 1.0)),
-        ped_radius=float(getattr(cfg, "ped_radius", 0.4)),
+        robot_radius=float(robot_radius),
+        ped_radius=float(ped_radius),
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
@@ -1045,6 +1047,9 @@ def _orchestrate_real_episode(
             episode_id=episode_id,
             scenario_id=job.scenario_id,
         ).warning("Pedestrian forces unavailable; force-based metrics will be NaN.")
+    env_config = getattr(env, "config", None)
+    robot_cfg = getattr(env_config, "robot_config", None)
+    sim_cfg = getattr(env_config, "sim_config", None)
     metrics_raw = _compute_episode_metrics(
         job,
         scenario,
@@ -1058,6 +1063,8 @@ def _orchestrate_real_episode(
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
         horizon=horizon,
+        robot_radius=float(getattr(robot_cfg, "radius", 1.0)),
+        ped_radius=float(getattr(sim_cfg, "ped_radius", 0.4)),
     )
     wall_time = time.time() - start_time
     return {

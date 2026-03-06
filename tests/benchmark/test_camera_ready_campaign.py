@@ -1355,9 +1355,14 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     warning = warnings[0]
     assert warning["scenario"] == "clearance_warn"
     assert warning["warning_threshold_m"] == 0.5
+    assert warning["warning_scope"] == "scenario"
     assert "min_center_distance_m" in warning
     assert "min_clearance_margin_m" in warning
     assert validate_payload["route_clearance_warning_count"] == 1
+
+    manifest_payload = prepared["manifest_payload"]
+    assert manifest_payload["route_clearance_warning_count"] == 1
+    assert manifest_payload["route_clearance_warnings"] == warnings
 
 
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:

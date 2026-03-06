@@ -369,7 +369,7 @@ def _stagnation_term(meta: Mapping[str, object]) -> float:
     progress = _progress_term(meta)
     if progress > 0.0:
         return 0.0
-    return _bounded(-progress, 0.0, 1.0)
+    return _bounded(max(1e-6, -progress), 0.0, 1.0)
 
 
 def _reward_with_terms(

@@ -672,6 +672,9 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         resume_model_id=(
             str(data.get("resume_model_id")).strip() if data.get("resume_model_id") else None
         ),
+        resume_source_step=(
+            int(data["resume_source_step"]) if data.get("resume_source_step") is not None else None
+        ),
     )
 
 
@@ -1569,7 +1572,8 @@ def _train_with_schedule(  # noqa: PLR0913
             logger.info("Training PPO segment steps={} (total={})", train_steps, eval_step)
             model.learn(total_timesteps=train_steps, reset_num_timesteps=False, callback=cb)
         train_wall_sec = max(0.0, time.perf_counter() - train_t0)
-        effective_steps = float(max(train_steps, 0) * max(1, num_envs))
+        # `train_steps` already counts aggregate VecEnv transitions in SB3.
+        effective_steps = float(max(train_steps, 0))
         train_env_steps_per_sec = (
             float(effective_steps / train_wall_sec) if train_wall_sec > 0.0 else 0.0
         )
@@ -1676,6 +1680,14 @@ def _init_training_model(
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         logger.info("Resuming PPO from {}", resume_path)
         model = PPO.load(str(resume_path), env=vec_env)
+        if config.resume_source_step is not None:
+            actual_step = int(getattr(model, "num_timesteps", 0) or 0)
+            expected_step = int(config.resume_source_step)
+            if actual_step != expected_step:
+                raise ValueError(
+                    "Resume checkpoint step mismatch: "
+                    f"expected {expected_step}, got {actual_step} from {resume_path}"
+                )
         _reapply_resumed_ppo_hyperparams(model, config)
         sb3_log_dir = str(tensorboard_log) if tensorboard_log is not None else None
         sb3_formats = ["stdout", "tensorboard"] if sb3_log_dir is not None else ["stdout"]

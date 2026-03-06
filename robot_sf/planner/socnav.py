@@ -3135,7 +3135,18 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                                 float(self.config.max_angular_speed),
                             )
                         )
-                        best = (forced_v, forced_w)
+                        forced = (forced_v, forced_w)
+                        forced_cost = self._score_action(
+                            observation=observation,
+                            future_peds=future,
+                            mask=mask,
+                            v=forced[0],
+                            w=forced[1],
+                            steps=steps,
+                        )
+                        if forced_cost < best_cost:
+                            best_cost = forced_cost
+                            best = forced
         return best
 
 

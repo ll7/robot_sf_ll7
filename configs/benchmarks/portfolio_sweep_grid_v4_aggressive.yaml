@@ -1,7 +1,7 @@
 variants:
   - name: prediction_balanced_guard_v4
     algo: prediction_planner
-    algo_config_path: ../../configs/algos/prediction_planner_camera_ready.yaml
+    algo_config_path: configs/algos/prediction_planner_camera_ready.yaml
     params:
       predictive_goal_weight: 7.2
       predictive_collision_weight: 0.58
@@ -14,11 +14,11 @@ variants:
 
   - name: risk_dwa_camera_ready_v4
     algo: risk_dwa
-    algo_config_path: ../../configs/algos/risk_dwa_camera_ready.yaml
+    algo_config_path: configs/algos/risk_dwa_camera_ready.yaml
 
   - name: risk_dwa_progressive_fast
     algo: risk_dwa
-    algo_config_path: ../../configs/algos/risk_dwa_camera_ready.yaml
+    algo_config_path: configs/algos/risk_dwa_camera_ready.yaml
     params:
       goal_progress_weight: 7.5
       heading_weight: 1.5
@@ -33,11 +33,11 @@ variants:
 
   - name: mppi_social_camera_ready_v4
     algo: mppi_social
-    algo_config_path: ../../configs/algos/mppi_social_camera_ready.yaml
+    algo_config_path: configs/algos/mppi_social_camera_ready.yaml
 
   - name: mppi_social_progressive_fast
     algo: mppi_social
-    algo_config_path: ../../configs/algos/mppi_social_camera_ready.yaml
+    algo_config_path: configs/algos/mppi_social_camera_ready.yaml
     params:
       sample_count: 112
       iterations: 3

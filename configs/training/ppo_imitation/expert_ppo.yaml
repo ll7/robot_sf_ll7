@@ -19,6 +19,8 @@ evaluation:
   hold_out_scenarios:
     - classic_crossing_medium
     - classic_bottleneck_high
+  step_schedule:
+    - every_steps: 20000
 # Optional canonical SNQI inputs used for eval metric logging.
 # snqi_weights: ../../model/snqi_canonical_weights_v1.json
 # snqi_baseline: ../../output/benchmarks/classic_social_navigation/baseline_stats.json

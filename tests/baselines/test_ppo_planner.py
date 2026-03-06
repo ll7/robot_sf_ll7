@@ -153,3 +153,23 @@ def test_fallback_actions_and_metadata():
     meta = planner.get_metadata()
     assert meta["algorithm"] == "ppo"
     assert meta["fallback_reason"] == "prediction_failed"
+
+
+def test_load_model_resolves_registry_model_id(monkeypatch, tmp_path):
+    """Registry-backed model ids should resolve before PPO.load is called."""
+    resolved_model = tmp_path / "model.zip"
+    resolved_model.write_text("checkpoint", encoding="utf-8")
+    called = {}
+
+    def _fake_resolve(model_id: str):
+        called["model_id"] = model_id
+        return resolved_model
+
+    monkeypatch.setattr("robot_sf.baselines.ppo.resolve_model_path", _fake_resolve)
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.PPO",
+        SimpleNamespace(load=lambda path, **kwargs: {"path": path, **kwargs}),
+    )
+    planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
+    assert called["model_id"] == "ppo_demo"
+    assert planner._model["path"] == str(resolved_model)

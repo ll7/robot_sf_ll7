@@ -1,7 +1,7 @@
 variants:
   - name: prediction_balanced_guard_v5
     algo: prediction_planner
-    algo_config_path: ../../configs/algos/prediction_planner_camera_ready.yaml
+    algo_config_path: configs/algos/prediction_planner_camera_ready.yaml
     params:
       predictive_goal_weight: 7.2
       predictive_collision_weight: 0.58
@@ -14,7 +14,7 @@ variants:
 
   - name: prediction_safe_progress_v5
     algo: prediction_planner
-    algo_config_path: ../../configs/algos/prediction_planner_camera_ready.yaml
+    algo_config_path: configs/algos/prediction_planner_camera_ready.yaml
     params:
       predictive_goal_weight: 6.8
       predictive_collision_weight: 0.6
@@ -28,7 +28,7 @@ variants:
 
   - name: hybrid_prediction_dominant_v5
     algo: hybrid_portfolio
-    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    algo_config_path: configs/algos/hybrid_portfolio_camera_ready.yaml
     params:
       hybrid:
         emergency_clearance: 0.52

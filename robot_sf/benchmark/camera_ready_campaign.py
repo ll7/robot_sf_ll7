@@ -506,10 +506,9 @@ def _build_route_clearance_warnings(
         try:
             map_def = convert_map(str(map_path))
         except (OSError, ValueError, RuntimeError):
-            logger.debug(
+            logger.opt(exception=True).debug(
                 "Skipping route-clearance preflight for scenario '{}' due to map parse failure.",
                 scenario.get("name", "unknown"),
-                exc_info=True,
             )
             continue
         route_lines, warning_scope = _scenario_route_lines(map_def, scenario)

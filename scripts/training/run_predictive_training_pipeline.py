@@ -39,6 +39,7 @@ class PipelinePaths:
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
+    """Read YAML from ``path`` and return a mapping; raise ``TypeError`` for non-mappings."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Config must be a mapping: {path}")
@@ -46,6 +47,7 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 
 def _resolve(path_raw: str | Path, *, base: Path) -> Path:
+    """Resolve ``path_raw`` against ``base`` and return an absolute ``Path``."""
     path = Path(path_raw)
     if not path.is_absolute():
         path = (base / path).resolve()

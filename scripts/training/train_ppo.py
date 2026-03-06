@@ -627,12 +627,16 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         step_schedule=step_schedule,
     )
     _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
+    if not evaluation.step_schedule:
+        raise ValueError(
+            "evaluation.step_schedule is required; frequency_episodes alone is not supported."
+        )
 
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=common.ensure_seed_tuple(data.get("seeds", [])),
-        randomize_seeds=bool(data.get("randomize_seeds", True)),
+        randomize_seeds=bool(data.get("randomize_seeds", False)),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
         convergence=convergence,
@@ -928,7 +932,7 @@ def _reapply_resumed_ppo_hyperparams(model: PPO, config: ExpertTrainingConfig) -
 
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
     """Return True when training/evaluation should avoid deterministic seeding."""
-    return bool(getattr(config, "randomize_seeds", True))
+    return bool(getattr(config, "randomize_seeds", False))
 
 
 def _resolve_tensorboard_logdir(run_id: str) -> Path:

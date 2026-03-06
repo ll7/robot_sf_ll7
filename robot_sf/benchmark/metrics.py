@@ -2213,10 +2213,13 @@ METRIC_NAMES: list[str] = [
     "collisions",
     "ped_collision_count",
     "obstacle_collision_count",
+    "agent_collision_count",
     "total_collision_count",
     "near_misses",
     "min_distance",
     "mean_distance",
+    "min_clearance",
+    "mean_clearance",
     "robot_ped_within_5m_frac",
     "path_efficiency",
     "socnavbench_path_length",
@@ -2305,10 +2308,12 @@ def compute_all_metrics(
     )
     ped_collision_count = human_collisions(data)
     obstacle_collision_count = wall_collisions(data)
-    total_collision_count = ped_collision_count + obstacle_collision_count
-    values["collisions"] = ped_collision_count
+    agent_collision_count = agent_collisions(data)
+    total_collision_count = ped_collision_count + obstacle_collision_count + agent_collision_count
+    values["collisions"] = total_collision_count
     values["ped_collision_count"] = ped_collision_count
     values["obstacle_collision_count"] = obstacle_collision_count
+    values["agent_collision_count"] = agent_collision_count
     values["total_collision_count"] = total_collision_count
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
@@ -2374,6 +2379,7 @@ def post_process_metrics(
         "collisions",
         "ped_collision_count",
         "obstacle_collision_count",
+        "agent_collision_count",
         "total_collision_count",
         "near_misses",
         "force_exceed_events",
@@ -2441,7 +2447,9 @@ __all__ = [
     "jerk_max",
     "jerk_mean",
     "jerk_min",
+    "mean_clearance",
     "mean_distance",
+    "min_clearance",
     "min_distance",
     "near_misses",
     "path_efficiency",

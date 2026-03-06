@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
 
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.models import resolve_model_path
 
 
 @dataclass
@@ -49,6 +50,7 @@ class PPOPlannerConfig:
 
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
+    model_id: str | None = None
 
     # Device handling: "auto" | "cpu" | "cuda" | "cuda:0" etc.
     device: str = "auto"
@@ -125,7 +127,11 @@ class PPOPlanner:
             self._status = "fallback"
             self._fallback_reason = "sb3_missing"
             return
-        mp = Path(self.config.model_path)
+        mp = (
+            resolve_model_path(self.config.model_id)
+            if self.config.model_id
+            else Path(self.config.model_path)
+        )
         if not mp.exists():
             if self.config.fallback_to_goal:
                 warn_soft_degrade(

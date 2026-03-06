@@ -81,10 +81,10 @@ class HybridPortfolioAdapter:
         return near_count, float(np.min(dists))
 
     def _desired_head(self, observation: dict[str, Any]) -> str:
-        ped_count, min_clearance = self._extract_ped_clearance(observation)
+        near_count, min_clearance = self._extract_ped_clearance(observation)
         if min_clearance <= float(self.config.emergency_clearance):
             return "orca"
-        if ped_count >= int(self.config.dense_ped_count) or min_clearance <= float(
+        if near_count >= int(self.config.dense_ped_count) or min_clearance <= float(
             self.config.caution_clearance
         ):
             # In dense regimes, prefer predictive head when available.
@@ -92,7 +92,7 @@ class HybridPortfolioAdapter:
         # Prefer deterministic Risk-DWA for open-space cruise; MPPI only in very open scenes.
         if (
             self.mppi is not None
-            and ped_count == 0
+            and near_count == 0
             and min_clearance >= float(self.config.caution_clearance) * 2.0
         ):
             return "mppi"

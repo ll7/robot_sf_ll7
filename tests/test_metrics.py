@@ -130,6 +130,18 @@ def test_mixed_collision_and_near_miss():
     assert np.isclose(values["mean_clearance"], 0.0)
 
 
+def test_metrics_include_agent_collisions_in_total_collision_count():
+    """Other-agent collisions should contribute to total collisions and collision summaries."""
+    ep = _make_episode(T=4, K=0)
+    ep.other_agents_pos = np.zeros((4, 1, 2), dtype=float)
+    values = compute_all_metrics(ep, horizon=10)
+    assert values["collisions"] == 4
+    assert values["ped_collision_count"] == 0
+    assert values["obstacle_collision_count"] == 0
+    assert values["agent_collision_count"] == 4
+    assert values["total_collision_count"] == 4
+
+
 def test_success_and_time_to_goal_norm_success_case():
     # Robot moves linearly to goal without collisions
     """TODO docstring. Document this function."""

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
 
 from robot_sf import common
@@ -140,6 +141,67 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
         "classic_crossing_medium": 2.0,
     }
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
+
+
+def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path) -> None:
+    """Omitted randomize_seeds should keep deterministic seed handling."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "deterministic_default.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_deterministic_default_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is False
+
+
+def test_load_expert_training_config_requires_step_schedule(tmp_path) -> None:
+    """Configs without step_schedule should fail instead of silently changing cadence."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "missing_schedule.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_missing_schedule_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="evaluation.step_schedule is required"):
+        load_expert_training_config(config_path)
 
 
 def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:

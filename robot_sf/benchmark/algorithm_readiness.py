@@ -17,6 +17,7 @@ class AlgorithmReadiness:
     tier: AlgorithmTier
     aliases: tuple[str, ...]
     note: str
+    requires_explicit_opt_in: bool = False
 
 
 _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
@@ -45,6 +46,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Learned PPO baseline (paper profile requires provenance + quality gate).",
     ),
     AlgorithmReadiness(
+        canonical_name="guarded_ppo",
+        tier="experimental",
+        aliases=("guarded_ppo",),
+        note="PPO baseline with short-horizon safety veto and local fallback.",
+    ),
+    AlgorithmReadiness(
         canonical_name="socnav_sampling",
         tier="experimental",
         aliases=("socnav_sampling", "sampling"),
@@ -61,6 +68,48 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("prediction_planner",),
         note="RGL-inspired predictive planner; requires trained checkpoint.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="predictive_mppi",
+        tier="experimental",
+        aliases=("predictive_mppi",),
+        note="Learned-prediction sequence optimizer over short action horizons.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="risk_dwa",
+        tier="experimental",
+        aliases=("risk_dwa",),
+        note="Risk-aware dynamic-window planner (non-learning).",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="mppi_social",
+        tier="experimental",
+        aliases=("mppi_social",),
+        note="Sampling-based MPPI/CEM social local planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="hybrid_portfolio",
+        tier="experimental",
+        aliases=("hybrid_portfolio",),
+        note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="stream_gap",
+        tier="experimental",
+        aliases=("stream_gap",),
+        note="Gap-acceptance local planner for crossing/bottleneck experiments.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="gap_prediction",
+        tier="experimental",
+        aliases=("gap_prediction",),
+        note="Predictive planner with stream-gap veto layer.",
+        requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
         canonical_name="socnav_bench",
@@ -103,6 +152,7 @@ def require_algorithm_allowed(
     algo: str,
     benchmark_profile: BenchmarkProfile,
     ppo_paper_ready: bool,
+    allow_testing_algorithms: bool = False,
 ) -> AlgorithmReadiness | None:
     """Validate algorithm selection against profile gating.
 
@@ -140,6 +190,12 @@ def require_algorithm_allowed(
             raise ValueError(
                 f"Algorithm '{algo}' is {spec.tier} and blocked by profile 'paper-baseline'.",
             )
+
+    if spec.requires_explicit_opt_in and not allow_testing_algorithms:
+        raise ValueError(
+            f"Algorithm '{algo}' is marked experimental-testing and blocked by default. "
+            "Set 'allow_testing_algorithms: true' in the algo config for exploratory runs.",
+        )
 
     return spec
 

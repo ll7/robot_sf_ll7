@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.training.train_expert_ppo import _normalize_wandb_tags
+from scripts.training.train_ppo import _normalize_wandb_tags
 
 
 def test_normalize_wandb_tags_keeps_single_string_as_single_tag() -> None:

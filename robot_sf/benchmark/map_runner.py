@@ -6,6 +6,7 @@ import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,7 +15,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.baselines.ppo import PPOPlanner
+from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
@@ -44,7 +45,23 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
+from robot_sf.planner.guarded_ppo import (
+    GuardedPPOAdapter,
+    build_guarded_ppo_config,
+    build_guarded_ppo_fallback,
+)
+from robot_sf.planner.hybrid_portfolio import (
+    HybridPortfolioAdapter,
+    build_hybrid_portfolio_build_config,
+)
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
+from robot_sf.planner.mppi_social import MPPISocialPlannerAdapter, build_mppi_social_config
+from robot_sf.planner.predictive_mppi import (
+    PredictiveMPPIAdapter,
+    build_predictive_mppi_config,
+)
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -54,6 +71,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -70,6 +88,7 @@ _SOCNAV_ALGO_KEYS = {
     "prediction_planner",
     "sa_cadrl",
     "socnav_bench",
+    "hybrid_portfolio",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -445,10 +464,11 @@ def _planner_kinematics_compatibility(
 
 
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
-    try:
-        return SocNavPlannerConfig(**cfg)
-    except TypeError:
+    if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
+    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    filtered = {key: value for key, value in cfg.items() if key in allowed}
+    return SocNavPlannerConfig(**filtered)
 
 
 def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float, float]:
@@ -707,6 +727,189 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         return _policy, meta
 
+    if algo_key == "risk_dwa":
+        adapter = RiskDWAPlannerAdapter(config=build_risk_dwa_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "stream_gap":
+        adapter = StreamGapPlannerAdapter(config=build_stream_gap_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="StreamGapPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "gap_prediction":
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = GapAwarePredictionAdapter(
+            config=build_gap_prediction_config(algo_config),
+            allow_fallback=allow_fallback,
+        )
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="GapAwarePredictionAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "mppi_social":
+        adapter = MPPISocialPlannerAdapter(config=build_mppi_social_config(algo_config))
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="MPPISocialPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
+    if algo_key == "predictive_mppi":
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        adapter = PredictiveMPPIAdapter(
+            config=build_predictive_mppi_config(algo_config),
+            allow_fallback=allow_fallback,
+        )
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="adapter",
+            adapter_name="PredictiveMPPIAdapter",
+            robot_kinematics=robot_kinematics,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            linear, angular = adapter.plan(obs)
+            return _project_with_feasibility(
+                model=adapter_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+
+        return _policy, meta
+
     socnav_cfg = _build_socnav_config(algo_config)
 
     if algo_key in {"socnav_sampling", "sampling"}:
@@ -807,6 +1010,96 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta["paper_gate_reason"] = paper_reason
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
+    elif algo_key in {"guarded_ppo"}:
+        ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
+        ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}
+        ppo_planner = PPOPlanner(ppo_config, seed=None)
+        guard_adapter = GuardedPPOAdapter(
+            config=build_guarded_ppo_config(algo_config),
+            fallback_adapter=build_guarded_ppo_fallback(algo_config),
+        )
+        planner_cfg = getattr(ppo_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            ppo_obs_mode = str(planner_cfg.get("obs_mode", "vector")).strip().lower()
+        else:
+            ppo_obs_mode = str(getattr(planner_cfg, "obs_mode", "vector")).strip().lower()
+        if hasattr(ppo_planner, "get_metadata"):
+            planner_meta = ppo_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="guarded_ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        meta["guard_stats"] = {
+            "ppo_clear": 0,
+            "ppo_safe": 0,
+            "fallback_safe": 0,
+            "stop_safe": 0,
+            "fallback_best_effort": 0,
+            "stop_best_effort": 0,
+            "goal_reached": 0,
+        }
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=robot_command_mode,
+            )
+        ppo_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
+                ppo_obs = obs
+            else:
+                ppo_obs = _obs_to_ppo_format(obs)
+            action = ppo_planner.step(ppo_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"Guarded PPO planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=ppo_kinematics_model,
+                project_command=False,
+            )
+            chosen, decision = guard_adapter.choose_command(
+                obs,
+                (float(linear), float(angular)),
+            )
+            linear, angular = _project_with_feasibility(
+                model=ppo_kinematics_model,
+                command=(float(chosen[0]), float(chosen[1])),
+                meta=meta,
+            )
+            guard_stats = meta.get("guard_stats")
+            if isinstance(guard_stats, dict):
+                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            impact = meta.get("adapter_impact")
+            if isinstance(impact, dict) and bool(impact.get("requested", False)):
+                if conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"}:
+                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+                else:
+                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+                impact["status"] = "collecting"
+            return linear, angular
+
+        _policy._planner_close = ppo_planner.close
+        meta.setdefault("algorithm", "guarded_ppo")
+        meta.setdefault("status", "ok")
+        meta.setdefault("config", algo_config)
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -816,6 +1109,18 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key == "prediction_planner":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key == "hybrid_portfolio":
+        allow_fallback = bool(algo_config.get("allow_fallback", True))
+        hybrid_cfg = build_hybrid_portfolio_build_config(algo_config)
+        adapter = HybridPortfolioAdapter(
+            hybrid_config=hybrid_cfg.hybrid,
+            risk_dwa=RiskDWAPlannerAdapter(config=hybrid_cfg.risk_dwa),
+            mppi=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
+            orca=ORCAPlannerAdapter(config=hybrid_cfg.socnav, allow_fallback=allow_fallback),
+            prediction=PredictionPlannerAdapter(
+                config=hybrid_cfg.socnav, allow_fallback=allow_fallback
+            ),
+        )
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -1178,14 +1483,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             )
             obs, _reward, terminated, truncated, info = env.step(action)
 
-            robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-            peds = np.asarray(env.simulator.ped_pos, dtype=float)
+            # Snapshot mutable simulator buffers; do not keep view aliases across steps.
+            robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
+            peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
             if record_forces:
                 forces = getattr(env.simulator, "last_ped_forces", None)
                 if forces is None:
                     forces_arr = np.zeros_like(peds, dtype=float)
                 else:
-                    forces_arr = np.asarray(forces, dtype=float)
+                    forces_arr = np.array(forces, dtype=float, copy=True)
                     if forces_arr.shape != peds.shape:
                         forces_arr = np.zeros_like(peds, dtype=float)
             else:
@@ -1249,6 +1555,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if robot_pos_arr.size == 0:
         metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
     else:
+        robot_config = getattr(config, "robot_config", None)
         ep = EpisodeData(
             robot_pos=robot_pos_arr,
             robot_vel=robot_vel_arr,
@@ -1259,6 +1566,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
+            robot_radius=float(getattr(robot_config, "radius", 1.0)),
+            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
         metrics_raw = compute_all_metrics(
             ep,
@@ -1515,6 +1824,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo=algo,
         benchmark_profile=benchmark_profile,
         ppo_paper_ready=ppo_paper_ready,
+        allow_testing_algorithms=bool(policy_cfg.get("allow_testing_algorithms", False)),
     )
     policy_cfg, preflight = _preflight_policy(
         algo=algo,

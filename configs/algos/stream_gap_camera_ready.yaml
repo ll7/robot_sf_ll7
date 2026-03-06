@@ -1,0 +1,23 @@
+# Gap-acceptance planner for lateral stream crossing and doorway/bottleneck entry.
+allow_testing_algorithms: true
+max_linear_speed: 1.2
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+heading_gain: 1.7
+turn_in_place_angle: 0.75
+
+forward_lookahead: 4.5
+rear_margin: 0.5
+corridor_half_width: 0.9
+emergency_clearance: 0.55
+
+sample_dt: 0.2
+sample_horizon: 4.0
+safe_gap_time: 1.0
+approach_gap_time: 0.8
+
+wait_speed: 0.0
+creep_speed: 0.15
+approach_speed: 0.4
+commit_speed: 1.0
+commit_hold_steps: 6

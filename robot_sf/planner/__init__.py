@@ -23,6 +23,7 @@ from robot_sf.planner.classic_planner_adapter import (
     attach_classic_global_planner,
 )
 from robot_sf.planner.poi_sampler import POISampler
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
 from robot_sf.planner.visibility_planner import (
     PlannerConfig,
     PlanningFailedError,
@@ -42,6 +43,8 @@ __all__ = [
     "PlannerConfig",
     "PlanningError",
     "PlanningFailedError",
+    "RiskDWAPlannerAdapter",
+    "RiskDWAPlannerConfig",
     "VisibilityPlanner",
     "attach_classic_global_planner",
     "plot_global_plan",

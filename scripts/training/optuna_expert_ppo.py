@@ -1,7 +1,7 @@
 """Optuna study runner for expert PPO training.
 
 This script sweeps PPO hyperparameters for the expert imitation pipeline using the
-same configuration format as ``train_expert_ppo.py``. Trials run shorter training
+same configuration format as ``train_ppo.py``. Trials run shorter training
 loops by default so the study can iterate quickly; adjust the CLI flags for full
 length sweeps.
 """
@@ -630,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.add(sys.stderr, level=log_level)
         _configure_optuna_verbosity(log_level)
 
-        from train_expert_ppo import (
+        from train_ppo import (
             _resolve_num_envs,
             load_expert_training_config,
             run_expert_training,

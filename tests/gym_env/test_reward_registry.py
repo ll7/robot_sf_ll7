@@ -9,6 +9,7 @@ from robot_sf.gym_env.reward import (
     build_reward_function,
     punish_action_reward,
     route_completion_v2_reward,
+    route_completion_v3_reward,
     simple_ped_reward,
     snqi_step_reward,
     social_quality_v1_reward,
@@ -181,3 +182,74 @@ def test_route_completion_reward_ignores_waypoint_only_completion() -> None:
     base = _meta(collision=False, success=False, waypoint=False)
     waypoint_only = _meta(collision=False, success=False, waypoint=True)
     assert route_completion_v2_reward(base) == route_completion_v2_reward(waypoint_only)
+
+
+def test_route_completion_v3_reward_enforces_failure_ordering() -> None:
+    """Route-complete reward must outrank timeout, and timeout must outrank collision."""
+    success_meta = {
+        "prev_distance_to_goal": 3.0,
+        "distance_to_goal": 2.5,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": True,
+        "is_timesteps_exceeded": False,
+    }
+    timeout_meta = dict(success_meta)
+    timeout_meta["is_route_complete"] = False
+    timeout_meta["is_timesteps_exceeded"] = True
+    collision_meta = dict(timeout_meta)
+    collision_meta["is_timesteps_exceeded"] = False
+    collision_meta["is_obstacle_collision"] = True
+
+    success_reward = route_completion_v3_reward(success_meta)
+    timeout_reward = route_completion_v3_reward(timeout_meta)
+    collision_reward = route_completion_v3_reward(collision_meta)
+
+    assert success_reward > timeout_reward
+    assert timeout_reward > collision_reward
+
+
+def test_route_completion_v3_reward_penalizes_stagnation() -> None:
+    """Non-positive progress should incur stagnation penalty in v3 profile."""
+    moving_meta = {
+        "prev_distance_to_goal": 3.0,
+        "distance_to_goal": 2.6,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": False,
+        "is_timesteps_exceeded": False,
+    }
+    stagnant_meta = dict(moving_meta)
+    stagnant_meta["distance_to_goal"] = stagnant_meta["prev_distance_to_goal"]
+
+    moving = route_completion_v3_reward(moving_meta)
+    stagnant = route_completion_v3_reward(stagnant_meta)
+
+    assert stagnant < moving
+
+
+def test_route_completion_v3_reward_penalizes_exact_zero_progress_stall() -> None:
+    """Exact zero progress should still incur a stagnation term."""
+    meta = {
+        "prev_distance_to_goal": 3.0,
+        "distance_to_goal": 3.0,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": False,
+        "is_timesteps_exceeded": False,
+    }
+    value = route_completion_v3_reward(meta, weights={"stagnation": -2.0})
+    reward_terms = meta["reward_terms"]
+    assert isinstance(reward_terms, dict)
+    assert float(reward_terms["stagnation"]) < 0.0
+    assert math.isfinite(value)
+
+
+def test_build_reward_function_supports_route_completion_v3() -> None:
+    """Registry should resolve route_completion_v3 by name."""
+    reward_fn = build_reward_function("route_completion_v3")
+    value = reward_fn(_meta(collision=False, success=False, waypoint=False))
+    assert math.isfinite(value)

@@ -25,13 +25,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_npz(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load (state, target, mask) arrays from dataset npz."""
+def _load_npz(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Load (state, target, mask, target_mask) arrays from dataset npz."""
     raw = np.load(path)
+    target = np.asarray(raw["target"], dtype=np.float32)
+    mask = np.asarray(raw["mask"], dtype=np.float32)
+    target_mask = (
+        np.asarray(raw["target_mask"], dtype=np.float32)
+        if "target_mask" in raw
+        else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
+    )
     return (
         np.asarray(raw["state"], dtype=np.float32),
-        np.asarray(raw["target"], dtype=np.float32),
-        np.asarray(raw["mask"], dtype=np.float32),
+        target,
+        mask,
+        target_mask,
     )
 
 
@@ -41,13 +49,14 @@ def main() -> int:
     if int(args.hardcase_repeat) < 1:
         raise ValueError("--hardcase-repeat must be >= 1")
 
-    base_state, base_target, base_mask = _load_npz(args.base_dataset)
-    hard_state, hard_target, hard_mask = _load_npz(args.hardcase_dataset)
+    base_state, base_target, base_mask, base_target_mask = _load_npz(args.base_dataset)
+    hard_state, hard_target, hard_mask, hard_target_mask = _load_npz(args.hardcase_dataset)
 
     for arr_base, arr_hard, name in [
         (base_state, hard_state, "state"),
         (base_target, hard_target, "target"),
         (base_mask, hard_mask, "mask"),
+        (base_target_mask, hard_target_mask, "target_mask"),
     ]:
         if arr_base.shape[1:] != arr_hard.shape[1:]:
             raise ValueError(
@@ -58,6 +67,10 @@ def main() -> int:
     state = np.concatenate([base_state, np.repeat(hard_state, hard_rep, axis=0)], axis=0)
     target = np.concatenate([base_target, np.repeat(hard_target, hard_rep, axis=0)], axis=0)
     mask = np.concatenate([base_mask, np.repeat(hard_mask, hard_rep, axis=0)], axis=0)
+    target_mask = np.concatenate(
+        [base_target_mask, np.repeat(hard_target_mask, hard_rep, axis=0)],
+        axis=0,
+    )
 
     rng = np.random.default_rng(int(args.shuffle_seed))
     idx = np.arange(state.shape[0])
@@ -65,9 +78,16 @@ def main() -> int:
     state = state[idx]
     target = target[idx]
     mask = mask[idx]
+    target_mask = target_mask[idx]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(args.output, state=state, target=target, mask=mask)
+    np.savez_compressed(
+        args.output,
+        state=state,
+        target=target,
+        mask=mask,
+        target_mask=target_mask,
+    )
 
     summary = {
         "base_dataset": str(args.base_dataset),
@@ -76,6 +96,8 @@ def main() -> int:
         "num_base_samples": int(base_state.shape[0]),
         "num_hardcase_samples": int(hard_state.shape[0]),
         "num_output_samples": int(state.shape[0]),
+        "active_agent_ratio": float(np.mean(mask)),
+        "active_target_ratio": float(np.mean(target_mask)),
         "shuffle_seed": int(args.shuffle_seed),
         "output": str(args.output),
     }

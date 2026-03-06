@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,20 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+
+
+@dataclass(frozen=True)
+class WandbLatestModel:
+    """Selection metadata for a latest-model query against W&B."""
+
+    run_id: str
+    run_path: str
+    run_name: str
+    job_type: str | None
+    group: str | None
+    state: str | None
+    created_at: str | None
+    file_name: str
 
 
 def load_registry(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
@@ -87,6 +103,121 @@ def resolve_model_path(
         raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
     return _download_from_wandb(entry, cache_dir=cache_dir)
+
+
+def resolve_latest_wandb_model(  # noqa: PLR0913
+    *,
+    entity: str,
+    project: str,
+    group: str | None = None,
+    job_type: str | None = None,
+    name_prefix: str | None = None,
+    tags: tuple[str, ...] = (),
+    file_name: str = "model.zip",
+    allowed_states: tuple[str, ...] = ("finished", "running"),
+    cache_dir: str | Path | None = None,
+) -> tuple[Path, WandbLatestModel]:
+    """Download the newest matching W&B model file and return local path plus selection.
+
+    Returns:
+        tuple[Path, WandbLatestModel]: Downloaded local checkpoint path and the W&B run selection
+        metadata used to resolve it.
+    """
+
+    selection = find_latest_wandb_model(
+        entity=entity,
+        project=project,
+        group=group,
+        job_type=job_type,
+        name_prefix=name_prefix,
+        tags=tags,
+        file_name=file_name,
+        allowed_states=allowed_states,
+    )
+    path = _download_from_wandb(
+        {
+            "model_id": selection.run_name or selection.run_id,
+            "wandb_run_path": selection.run_path,
+            "wandb_file": selection.file_name,
+        },
+        cache_dir=cache_dir,
+    )
+    return path, selection
+
+
+def find_latest_wandb_model(
+    *,
+    entity: str,
+    project: str,
+    group: str | None = None,
+    job_type: str | None = None,
+    name_prefix: str | None = None,
+    tags: tuple[str, ...] = (),
+    file_name: str = "model.zip",
+    allowed_states: tuple[str, ...] = ("finished", "running"),
+) -> WandbLatestModel:
+    """Return the newest W&B run that matches the requested filters and file name."""
+
+    if wandb is None:  # pragma: no cover - optional dependency
+        raise RuntimeError("W&B not available; cannot query latest model artifact.")
+
+    api = wandb.Api()
+    runs = api.runs(f"{entity}/{project}")
+    normalized_tags = {str(tag).strip() for tag in tags if str(tag).strip()}
+    normalized_states = {
+        str(state).strip().lower() for state in allowed_states if str(state).strip()
+    }
+    candidates: list[tuple[datetime, WandbLatestModel]] = []
+    for run in runs:
+        state = str(getattr(run, "state", "") or "").strip().lower()
+        if normalized_states and state not in normalized_states:
+            continue
+        run_group = str(getattr(run, "group", "") or "").strip() or None
+        if group is not None and run_group != group:
+            continue
+        run_job_type = str(getattr(run, "job_type", "") or "").strip() or None
+        if job_type is not None and run_job_type != job_type:
+            continue
+        run_name = str(getattr(run, "name", "") or "").strip()
+        if name_prefix is not None and not run_name.startswith(name_prefix):
+            continue
+        run_tags = {str(tag).strip() for tag in (getattr(run, "tags", None) or ())}
+        if normalized_tags and not normalized_tags.issubset(run_tags):
+            continue
+        if file_name not in {str(item.name) for item in run.files()}:
+            continue
+        created_at_raw = getattr(run, "created_at", None)
+        created_at = (
+            datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            if created_at_raw
+            else datetime.min.replace(tzinfo=UTC)
+        )
+        candidates.append(
+            (
+                created_at,
+                WandbLatestModel(
+                    run_id=str(getattr(run, "id", "") or ""),
+                    run_path=f"{entity}/{project}/{getattr(run, 'id', '')}",
+                    run_name=run_name,
+                    job_type=run_job_type,
+                    group=run_group,
+                    state=state or None,
+                    created_at=str(created_at_raw) if created_at_raw else None,
+                    file_name=file_name,
+                ),
+            )
+        )
+
+    if not candidates:
+        raise FileNotFoundError(
+            "No W&B run matched latest-model query: "
+            f"entity={entity} project={project} group={group} job_type={job_type} "
+            f"name_prefix={name_prefix} tags={sorted(normalized_tags)} "
+            f"file_name={file_name} allowed_states={sorted(normalized_states)}"
+        )
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates[-1][1]
 
 
 def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:

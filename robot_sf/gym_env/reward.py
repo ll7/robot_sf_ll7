@@ -247,6 +247,19 @@ _ROUTE_COMPLETION_V2_WEIGHTS: dict[str, float] = {
     "terminal_bonus": 2.0,
 }
 
+_ROUTE_COMPLETION_V3_WEIGHTS: dict[str, float] = {
+    "progress": 2.2,
+    "living": -0.01,
+    "collision": -10.0,
+    "near_miss": -1.0,
+    "ttc_risk": -0.8,
+    "comfort": -0.5,
+    "smoothness": -0.2,
+    "timeout": -3.0,
+    "stagnation": -1.2,
+    "terminal_bonus": 3.0,
+}
+
 _SOCIAL_QUALITY_V1_WEIGHTS: dict[str, float] = {
     "progress": 1.0,
     "living": -0.02,
@@ -325,6 +338,40 @@ def _progress_term(meta: Mapping[str, object]) -> float:
     return _bounded(prev_dist - dist, -1.0, 1.0)
 
 
+def _timeout_term(meta: Mapping[str, object]) -> float:
+    """Return 1.0 only for timeout failures without success/collision events.
+
+    Args:
+        meta: Reward metadata mapping.
+
+    Returns:
+        Timeout indicator in ``{0.0, 1.0}``.
+    """
+    timeout = bool(meta.get("is_timesteps_exceeded"))
+    collision = bool(
+        meta.get("is_pedestrian_collision")
+        or meta.get("is_robot_collision")
+        or meta.get("is_obstacle_collision")
+    )
+    route_complete = bool(meta.get("is_route_complete"))
+    return 1.0 if timeout and not collision and not route_complete else 0.0
+
+
+def _stagnation_term(meta: Mapping[str, object]) -> float:
+    """Return a bounded stagnation proxy from non-positive route progress.
+
+    Args:
+        meta: Reward metadata mapping with goal-distance fields.
+
+    Returns:
+        Scalar in ``[0, 1]`` where larger values indicate stronger stagnation.
+    """
+    progress = _progress_term(meta)
+    if progress > 0.0:
+        return 0.0
+    return _bounded(max(1e-6, -progress), 0.0, 1.0)
+
+
 def _reward_with_terms(
     meta: dict[str, object],
     *,
@@ -356,6 +403,8 @@ def _reward_with_terms(
         "ttc_risk": _ttc_risk_from_meta(meta),
         "comfort": _bounded(_float(meta, "comfort_exposure", 0.0), 0.0, 1.0),
         "smoothness": _bounded(_float(meta, "jerk_mean", 0.0), 0.0, 5.0) / 5.0,
+        "timeout": _timeout_term(meta),
+        "stagnation": _stagnation_term(meta),
         "terminal_bonus": 1.0 if route_complete and not collision_flag else 0.0,
     }
     weighted_terms = {name: float(weights.get(name, 0.0)) * value for name, value in terms.items()}
@@ -380,6 +429,26 @@ def route_completion_v2_reward(
         float: Scalar reward with per-term decomposition written into ``meta``.
     """
     weight_map = dict(_ROUTE_COMPLETION_V2_WEIGHTS)
+    if weights:
+        weight_map.update({k: float(v) for k, v in weights.items()})
+    return _reward_with_terms(meta, weights=weight_map)
+
+
+def route_completion_v3_reward(
+    meta: dict,
+    *,
+    weights: Mapping[str, float] | None = None,
+) -> float:
+    """Route-completion profile with explicit timeout and stagnation penalties.
+
+    Note:
+        Mutates ``meta`` in place by writing ``reward_terms`` and ``reward_total``
+        for per-step decomposition logging.
+
+    Returns:
+        float: Scalar reward with per-term decomposition written into ``meta``.
+    """
+    weight_map = dict(_ROUTE_COMPLETION_V3_WEIGHTS)
     if weights:
         weight_map.update({k: float(v) for k, v in weights.items()})
     return _reward_with_terms(meta, weights=weight_map)
@@ -426,6 +495,8 @@ def build_reward_function(
         return partial(alyassi_reward, **kwargs)
     if normalized in {"route_completion_v2", "route_completion"}:
         return partial(route_completion_v2_reward, **kwargs)
+    if normalized in {"route_completion_v3"}:
+        return partial(route_completion_v3_reward, **kwargs)
     if normalized in {"social_quality_v1", "social_quality"}:
         return partial(social_quality_v1_reward, **kwargs)
     supported = (
@@ -436,6 +507,7 @@ def build_reward_function(
         "alyassi_composite",
         "route_completion_v2",
         "route_completion",
+        "route_completion_v3",
         "social_quality_v1",
         "social_quality",
     )

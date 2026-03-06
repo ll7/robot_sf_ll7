@@ -66,7 +66,7 @@ Remediation: Place SVG map at 'maps/svg_maps/my_map.svg' or check available maps
 RuntimeError: PPO model file not found: model/ppo_model.zip
 
 Remediation: Place model at 'model/ppo_model.zip' or check available models in model/ directory.
-Download from releases or train with scripts/training_ppo.py
+Download from releases or train with scripts/training/train_ppo.py --config ...
 ```
 
 ### Soft-Degrade Warnings (Optional Components)

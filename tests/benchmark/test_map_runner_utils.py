@@ -12,13 +12,17 @@ from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_config,
     _default_robot_command_space,
+    _extract_ppo_pedestrians,
+    _finalize_feasibility_metadata,
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
+    _planner_kinematics_compatibility,
     _policy_command_to_env_action,
     _ppo_action_to_unicycle,
     _ppo_paper_gate_status,
     _preflight_policy,
+    _project_with_feasibility,
     _resolve_seed_list,
     _robot_kinematics_label,
     _robot_max_speed,
@@ -274,6 +278,158 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
     assert adapted[2] == "adapter"
 
 
+def test_map_runner_feasibility_helpers_accumulate_and_finalize() -> None:
+    """Feasibility helpers should tolerate missing meta and compute summary stats."""
+    passthrough = _project_with_feasibility(
+        model=_KinematicsStub((0.5, 0.1)),
+        command=(0.5, 0.1),
+        meta={},
+    )
+    assert passthrough == (0.5, 0.1)
+
+    meta = {
+        "kinematics_feasibility": {
+            "commands_evaluated": 0,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "_sum_abs_delta_linear": 0.0,
+            "_sum_abs_delta_angular": 0.0,
+            "_max_abs_delta_linear": 0.0,
+            "_max_abs_delta_angular": 0.0,
+        }
+    }
+    projected = _project_with_feasibility(
+        model=_KinematicsStub((0.2, -0.1), feasible=False),
+        command=(0.5, 0.3),
+        meta=meta,
+    )
+    assert projected == (0.2, -0.1)
+    _finalize_feasibility_metadata(meta)
+    feasibility = meta["kinematics_feasibility"]
+    assert feasibility["commands_evaluated"] == 1
+    assert feasibility["infeasible_native_count"] == 1
+    assert feasibility["projected_count"] == 1
+    assert feasibility["projection_rate"] == pytest.approx(1.0)
+    assert feasibility["infeasible_rate"] == pytest.approx(1.0)
+    assert feasibility["max_abs_delta_linear"] > 0.0
+
+    empty_meta = {"kinematics_feasibility": {}}
+    _finalize_feasibility_metadata(empty_meta)
+    assert empty_meta["kinematics_feasibility"]["projection_rate"] == 0.0
+
+
+def test_map_runner_paper_gate_and_compatibility_branches() -> None:
+    """Exercise paper-gate validation and planner/kinematics compatibility branches."""
+    ok, reason = _ppo_paper_gate_status({"profile": "experimental"})
+    assert ok is False and reason is None
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": "bad", "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is False and "numeric" in str(reason)
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": 0.9, "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is False and "quality gate failed" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="rvo",
+        robot_kinematics="holonomic",
+        algo_config={},
+    )
+    assert compatible is False and "disabled" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="ppo",
+        robot_kinematics="holonomic",
+        algo_config={"obs_mode": "image"},
+    )
+    assert compatible is False and "non-image" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="ppo",
+        robot_kinematics="differential_drive",
+        algo_config={"obs_mode": "image"},
+    )
+    assert compatible is True and reason is None
+
+
+def test_extract_ppo_pedestrians_respects_count_and_radius() -> None:
+    """Pedestrian extraction should slice by count and pad malformed velocity payloads."""
+    ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(
+        {
+            "positions": [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+            "velocities": [[0.5, 0.0]],
+            "count": [2],
+            "radius": [0.4],
+        }
+    )
+    assert ped_pos.shape == (2, 2)
+    assert ped_vel.shape == (2, 2)
+    assert ped_vel[1].tolist() == [0.0, 0.0]
+    assert ped_radius == pytest.approx(0.4)
+
+
+def test_build_policy_for_portfolio_adapters_tracks_feasibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter-backed planner policies should expose feasibility metadata and callable output."""
+
+    class _GapPredictionStub:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            return 0.2, 0.0
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.GapAwarePredictionAdapter",
+        _GapPredictionStub,
+    )
+
+    for algo_name in ("risk_dwa", "stream_gap", "gap_prediction", "mppi_social"):
+        policy, meta = _build_policy(
+            algo_name,
+            {"max_linear_speed": 0.8, "max_angular_speed": 0.5},
+            robot_kinematics="differential_drive",
+        )
+        linear, angular = policy(
+            {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
+                "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+                "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
+            }
+        )
+        assert np.isfinite(linear)
+        assert np.isfinite(angular)
+        feasibility = meta.get("kinematics_feasibility")
+        assert isinstance(feasibility, dict)
+        assert feasibility["commands_evaluated"] >= 1
+
+
 def test_ppo_action_to_unicycle_uses_kinematics_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -383,9 +539,17 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
-    """Verify SocNav config fallback and seed list parsing."""
-    cfg = _build_socnav_config({"invalid_key": 123})
+    """Verify SocNav config ignores unknown keys but preserves known ones."""
+    cfg = _build_socnav_config(
+        {
+            "invalid_key": 123,
+            "predictive_goal_weight": 7.25,
+            "predictive_allow_reverse_candidates": True,
+        }
+    )
     assert hasattr(cfg, "social_force_desired_speed")
+    assert cfg.predictive_goal_weight == 7.25
+    assert cfg.predictive_allow_reverse_candidates is True
 
     seed_path = tmp_path / "seeds.yaml"
     seed_path.write_text("suite_a: [1, 2]\ninvalid: 3\n", encoding="utf-8")

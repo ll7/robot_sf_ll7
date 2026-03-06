@@ -43,13 +43,13 @@
 
 **Goal**: Deliver a reproducible expert PPO training workflow with evaluation reports and manifests.
 
-**Independent Test**: Run `uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml` and verify that a manifest plus evaluation metrics meeting convergence thresholds is written to `output/`.
+**Independent Test**: Run `uv run python scripts/training/train_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml` and verify that a manifest plus evaluation metrics meeting convergence thresholds is written to `output/`.
 
 ### Implementation for User Story 1
 
-- [x] T009 [US1] Add integration smoke test for expert training workflow in tests/integration/test_train_expert_ppo.py
+- [x] T009 [US1] Add integration smoke test for expert training workflow in tests/integration/test_train_ppo.py
 - [x] T010 [US1] Define expert PPO configuration defaults in configs/training/ppo_imitation/expert_ppo.yaml
-- [x] T011 [US1] Implement expert PPO training script with evaluation callbacks in scripts/training/train_expert_ppo.py
+- [x] T011 [US1] Implement expert PPO training script with evaluation callbacks in scripts/training/train_ppo.py
 - [x] T012 [US1] Emit expert policy manifest and metrics using imitation helpers in robot_sf/benchmark/imitation_manifest.py
 - [x] T013 [US1] Register expert training entry point in scripts/training/__init__.py for discoverability
 

@@ -31,7 +31,7 @@ export MKL_NUM_THREADS=1
 echo "Artifact root: $ROBOT_SF_ARTIFACT_ROOT"
 echo "W&B mode: $WANDB_MODE"
 
-uv run python scripts/training/train_expert_ppo.py \
+uv run python scripts/training/train_ppo.py \
   --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml
 
 echo "Job finished at $(date)"

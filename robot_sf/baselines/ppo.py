@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
 
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.models import resolve_model_path
 
 
 @dataclass
@@ -49,6 +50,7 @@ class PPOPlannerConfig:
 
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
+    model_id: str | None = None
 
     # Device handling: "auto" | "cpu" | "cuda" | "cuda:0" etc.
     device: str = "auto"
@@ -125,7 +127,24 @@ class PPOPlanner:
             self._status = "fallback"
             self._fallback_reason = "sb3_missing"
             return
-        mp = Path(self.config.model_path)
+        try:
+            mp = (
+                resolve_model_path(self.config.model_id)
+                if self.config.model_id
+                else Path(self.config.model_path)
+            )
+        except (KeyError, RuntimeError, ValueError) as exc:
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO model",
+                    f"Failed to resolve model: {exc}",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "model_resolution_failed"
+                return
+            raise
         if not mp.exists():
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
@@ -140,7 +159,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"PPO model file not found: {mp}",
                 f"Place model at '{mp}' or check available models in model/ directory. "
-                "Download from releases or train with scripts/training_ppo.py",
+                "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
         try:
             # Avoid printing system info in CI/test logs
@@ -161,7 +180,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"Failed to load PPO model from {mp}: {e}",
                 "Check model compatibility with current stable_baselines3 version. "
-                "Re-train if needed using scripts/training_ppo.py",
+                "Re-train if needed using scripts/training/train_ppo.py --config ...",
             )
 
     def reset(self, *, seed: int | None = None) -> None:

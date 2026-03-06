@@ -28,16 +28,35 @@ class Frame:
     ped_count: int
 
 
+def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
+    """Return robot/goal/pedestrian observation blocks for nested or flat payloads."""
+    robot = obs.get("robot")
+    goal = obs.get("goal")
+    peds = obs.get("pedestrians")
+    if isinstance(robot, dict) and isinstance(goal, dict) and isinstance(peds, dict):
+        return robot, goal, peds
+    robot = {
+        "position": obs.get("robot_position", [0.0, 0.0]),
+        "heading": obs.get("robot_heading", [0.0]),
+    }
+    goal = {"current": obs.get("goal_current", [0.0, 0.0])}
+    peds = {
+        "positions": obs.get("pedestrians_positions", []),
+        "velocities": obs.get("pedestrians_velocities", []),
+        "count": obs.get("pedestrians_count", [0]),
+    }
+    return robot, goal, peds
+
+
 def _extract_frame(obs: dict, max_agents: int) -> Frame:
     """Convert observation payload to a compact frame container."""
-    robot = obs.get("robot", {})
-    peds = obs.get("pedestrians", {})
+    robot, _goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
 
     ped_positions = np.asarray(peds.get("positions", []), dtype=np.float32)
     ped_velocities = np.asarray(peds.get("velocities", []), dtype=np.float32)
-    ped_count = int(np.asarray(peds.get("count", [0]), dtype=np.float32).reshape(-1)[0])
+    ped_count_raw = np.asarray(peds.get("count", [0]), dtype=np.float32).reshape(-1)
 
     if ped_positions.ndim == 1:
         ped_positions = (
@@ -52,6 +71,10 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
             else np.zeros((0, 2), dtype=np.float32)
         )
 
+    ped_count = int(ped_count_raw[0]) if ped_count_raw.size > 0 else 0
+    if ped_count <= 0 and ped_positions.shape[0] > 0:
+        # Some observation payloads omit/zero pedestrian count; infer from positions.
+        ped_count = int(ped_positions.shape[0])
     ped_count = max(0, min(ped_count, ped_positions.shape[0], max_agents))
     ped_positions = ped_positions[:ped_count]
     if ped_velocities.shape[0] < ped_count:
@@ -69,8 +92,7 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
 
 def _goal_policy(obs: dict, max_speed: float) -> np.ndarray:
     """Simple goal-seeking policy used during data collection rollouts."""
-    robot = obs.get("robot", {})
-    goal = obs.get("goal", {})
+    robot, goal, _peds = _extract_socnav_blocks(obs)
     pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
     tgt = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
@@ -142,18 +164,20 @@ def _frames_to_samples(
     *,
     max_agents: int,
     horizon_steps: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
     if len(frames) <= horizon_steps:
         return (
             np.zeros((0, max_agents, 4), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps, 2), dtype=np.float32),
             np.zeros((0, max_agents), dtype=np.float32),
+            np.zeros((0, max_agents, horizon_steps), dtype=np.float32),
         )
 
     states: list[np.ndarray] = []
     targets: list[np.ndarray] = []
     masks: list[np.ndarray] = []
+    target_masks: list[np.ndarray] = []
 
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
@@ -161,6 +185,7 @@ def _frames_to_samples(
         state = np.zeros((max_agents, 4), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
+        target_mask = np.zeros((max_agents, horizon_steps), dtype=np.float32)
 
         if c > 0:
             pos_rel = _world_to_ego(
@@ -193,12 +218,14 @@ def _frames_to_samples(
                         frame_t.robot_heading,
                     )[0]
                     target[src_idx, k - 1, :] = tgt_rel
+                    target_mask[src_idx, k - 1] = 1.0
 
         states.append(state)
         targets.append(target)
         masks.append(mask)
+        target_masks.append(target_mask)
 
-    return np.stack(states), np.stack(targets), np.stack(masks)
+    return np.stack(states), np.stack(targets), np.stack(masks), np.stack(target_masks)
 
 
 def parse_args() -> argparse.Namespace:
@@ -229,8 +256,7 @@ def parse_args() -> argparse.Namespace:
 
 def _goal_distance(obs: dict) -> float:
     """Return current robot-to-goal distance."""
-    robot = obs.get("robot", {})
-    goal = obs.get("goal", {})
+    robot, goal, _peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     goal_pos = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
     return float(np.linalg.norm(goal_pos - robot_pos))
@@ -281,6 +307,7 @@ def main() -> int:
     all_states: list[np.ndarray] = []
     all_targets: list[np.ndarray] = []
     all_masks: list[np.ndarray] = []
+    all_target_masks: list[np.ndarray] = []
 
     skipped_resets = 0
     for episode in range(args.episodes):
@@ -302,7 +329,7 @@ def main() -> int:
             if terminated or truncated:
                 break
 
-        states, targets, masks = _frames_to_samples(
+        states, targets, masks, target_masks = _frames_to_samples(
             episode_frames,
             max_agents=args.max_agents,
             horizon_steps=args.horizon_steps,
@@ -311,6 +338,7 @@ def main() -> int:
             all_states.append(states)
             all_targets.append(targets)
             all_masks.append(masks)
+            all_target_masks.append(target_masks)
 
         if (episode + 1) % 10 == 0:
             logger.info("Collected episode {}/{}", episode + 1, args.episodes)
@@ -323,6 +351,7 @@ def main() -> int:
     states_cat = np.concatenate(all_states, axis=0)
     targets_cat = np.concatenate(all_targets, axis=0)
     masks_cat = np.concatenate(all_masks, axis=0)
+    target_masks_cat = np.concatenate(all_target_masks, axis=0)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -330,6 +359,7 @@ def main() -> int:
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,
+        target_mask=target_masks_cat,
     )
 
     summary = {
@@ -338,6 +368,8 @@ def main() -> int:
         "max_agents": int(args.max_agents),
         "horizon_steps": int(args.horizon_steps),
         "num_samples": int(states_cat.shape[0]),
+        "active_agent_ratio": float(np.mean(masks_cat)),
+        "active_target_ratio": float(np.mean(target_masks_cat)),
         "skipped_reset_failures": int(skipped_resets),
         "dataset": str(args.output),
     }

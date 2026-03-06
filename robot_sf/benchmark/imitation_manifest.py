@@ -184,6 +184,16 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
         "seeds": list(artifact.seeds),
         "metrics": _serialize_metrics_map(artifact.metrics),
         "episode_log_path": _path_to_manifest(artifact.episode_log_path),
+        "eval_timeline_path": (
+            _path_to_manifest(artifact.eval_timeline_path)
+            if artifact.eval_timeline_path is not None
+            else None
+        ),
+        "perf_summary_path": (
+            _path_to_manifest(artifact.perf_summary_path)
+            if artifact.perf_summary_path is not None
+            else None
+        ),
         "wall_clock_hours": artifact.wall_clock_hours,
         "status": artifact.status.value,
         "scenario_coverage": {

@@ -575,7 +575,7 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
         return np.full_like(ped_pos, np.nan)
 
     if arr.shape == ped_pos.shape:
-        return arr
+        return np.array(arr, dtype=float, copy=True)
 
     out = np.full_like(ped_pos, np.nan)
     copy_len = min(arr.shape[0], ped_pos.shape[0])
@@ -652,6 +652,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
     reached_goal_step: int | None,
     goal: np.ndarray,
     horizon: int,
+    robot_radius: float,
+    ped_radius: float,
 ) -> dict[str, float]:
     """Compute episode metrics for the classic benchmark pipeline.
 
@@ -692,6 +694,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
+        robot_radius=float(robot_radius),
+        ped_radius=float(ped_radius),
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
@@ -787,9 +791,10 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         action_arr = _simple_goal_policy(env.simulator)
         obs, _reward, terminated, truncated, info = env.step(action_arr)
         _ = obs
-        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        # Snapshot mutable backend buffers to preserve per-step trajectory history.
+        robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
         heading = float(env.simulator.robot_poses[0][1])
-        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
         forces = _extract_ped_forces(env.simulator, peds)
         robot_positions.append(robot_pos)
         ped_positions.append(peds)
@@ -1042,6 +1047,9 @@ def _orchestrate_real_episode(
             episode_id=episode_id,
             scenario_id=job.scenario_id,
         ).warning("Pedestrian forces unavailable; force-based metrics will be NaN.")
+    env_config = getattr(env, "config", None)
+    robot_cfg = getattr(env_config, "robot_config", None)
+    sim_cfg = getattr(env_config, "sim_config", None)
     metrics_raw = _compute_episode_metrics(
         job,
         scenario,
@@ -1055,6 +1063,8 @@ def _orchestrate_real_episode(
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
         horizon=horizon,
+        robot_radius=float(getattr(robot_cfg, "radius", 1.0)),
+        ped_radius=float(getattr(sim_cfg, "ped_radius", 0.4)),
     )
     wall_time = time.time() - start_time
     return {

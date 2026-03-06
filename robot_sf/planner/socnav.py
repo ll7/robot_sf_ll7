@@ -454,6 +454,14 @@ class SocNavPlannerConfig:
         pi / 8,
         pi / 4,
     )
+    predictive_allow_reverse_candidates: bool = False
+    predictive_reverse_candidate_speeds: tuple[float, ...] = (-0.15, -0.3)
+    predictive_reverse_near_field_only: bool = True
+    predictive_progress_escape_enabled: bool = False
+    predictive_progress_escape_distance: float = 1.2
+    predictive_progress_escape_min_speed_ratio: float = 0.35
+    predictive_progress_escape_heading_gain: float = 1.4
+    predictive_progress_escape_clearance_margin: float = 0.2
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -2483,7 +2491,15 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
 
 
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
-    """RGL-inspired predictive planner using a learned trajectory model + sampled rollout."""
+    """Predictive local planner with deterministic sampled-rollout search.
+
+    The planner predicts pedestrian futures, builds a finite control lattice
+    ``(v, omega)``, rolls out each candidate over a short horizon, and selects
+    the minimum-cost command.
+
+    Reference:
+    - `docs/training/predictive_planner_complete_tutorial.md`
+    """
 
     _EPS = 1e-6
 
@@ -2735,7 +2751,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return min(base_steps, max_steps)
 
     def _risk_speed_cap_ratio(self, *, future_peds: np.ndarray, mask: np.ndarray) -> float:
-        """Compute a risk-aware cap on speed ratio based on near predicted pedestrians.
+        """Compute a near-field risk speed cap ratio.
+
+        ``near-field risk`` means predicted pedestrian proximity below
+        ``predictive_near_field_distance`` over the short prediction horizon.
+        The returned ratio shrinks max candidate speed in dense/conflict states.
 
         Returns:
             float: Speed cap ratio in ``[0.1, 1.0]``.
@@ -2763,6 +2783,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     ) -> list[tuple[float, float]]:
         """Build a risk-adaptive candidate command lattice.
 
+        Here, ``lattice`` means a deterministic finite grid of controls formed
+        from discrete speed ratios and heading deltas. In near-field risk
+        states, the lattice is enriched with extra low-speed/turning options
+        and evaluated under a speed cap from ``_risk_speed_cap_ratio``.
+
         Returns:
             list[tuple[float, float]]: Candidate ``(v, omega)`` commands.
         """
@@ -2783,13 +2808,27 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 float(v) for v in self.config.predictive_near_field_heading_deltas
             )
 
-        speed_ratios = sorted({float(np.clip(v, 0.0, 1.0)) for v in base_speed_ratios})
+        if bool(self.config.predictive_allow_reverse_candidates):
+            reverse_ratios = [float(v) for v in self.config.predictive_reverse_candidate_speeds]
+            reverse_allowed = not bool(self.config.predictive_reverse_near_field_only)
+            reverse_allowed = reverse_allowed or (
+                np.isfinite(min_pred_dist) and min_pred_dist <= near_field * 1.25
+            )
+            if reverse_allowed:
+                base_speed_ratios.extend(reverse_ratios)
+
+        speed_ratios = sorted({float(np.clip(v, -1.0, 1.0)) for v in base_speed_ratios})
         heading_deltas = sorted(set(heading_deltas))
         dt = max(float(self.config.predictive_rollout_dt), self._EPS)
+        min_v = (
+            -float(self.config.max_linear_speed)
+            if bool(self.config.predictive_allow_reverse_candidates)
+            else 0.0
+        )
         max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
         candidates: list[tuple[float, float]] = []
         for ratio in speed_ratios:
-            v = float(np.clip(ratio * self.config.max_linear_speed, 0.0, max_v))
+            v = float(np.clip(ratio * self.config.max_linear_speed, min_v, max_v))
             for delta in heading_deltas:
                 omega = float(
                     np.clip(
@@ -3010,7 +3049,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             robot_pos=robot_pos,
             direction=direction,
             observation=observation,
-            base_distance=max(float(v) * float(self.config.predictive_horizon_steps) * dt, 1e-3),
+            base_distance=max(
+                abs(float(v)) * float(self.config.predictive_horizon_steps) * dt, 1e-3
+            ),
             num_samples=max(2, int(self.config.predictive_horizon_steps)),
         )
 
@@ -3056,6 +3097,56 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if cost < best_cost:
                 best_cost = cost
                 best = (v, w)
+
+        if bool(self.config.predictive_progress_escape_enabled):
+            goal_dist = float(np.linalg.norm(goal - robot_pos))
+            if goal_dist > float(self.config.predictive_progress_escape_distance):
+                clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
+                    self.config.predictive_progress_escape_clearance_margin
+                )
+                min_pred_dist = self._min_predicted_distance(
+                    future_peds=future,
+                    mask=mask,
+                    steps=min(max(steps, 1), future.shape[1]),
+                )
+                if min_pred_dist >= clearance_gate:
+                    cap_ratio = self._risk_speed_cap_ratio(future_peds=future, mask=mask)
+                    max_v = float(self.config.max_linear_speed) * float(
+                        np.clip(cap_ratio, 0.1, 1.0)
+                    )
+                    min_v = float(self.config.max_linear_speed) * float(
+                        np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
+                    )
+                    if best[0] < min_v:
+                        robot_heading = float(
+                            self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]
+                        )
+                        goal_heading = float(
+                            np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0])
+                        )
+                        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+                        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
+                        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
+                        forced_w = float(
+                            np.clip(
+                                float(self.config.predictive_progress_escape_heading_gain)
+                                * float(heading_err),
+                                -float(self.config.max_angular_speed),
+                                float(self.config.max_angular_speed),
+                            )
+                        )
+                        forced = (forced_v, forced_w)
+                        forced_cost = self._score_action(
+                            observation=observation,
+                            future_peds=future,
+                            mask=mask,
+                            v=forced[0],
+                            w=forced[1],
+                            steps=steps,
+                        )
+                        if forced_cost < best_cost:
+                            best_cost = forced_cost
+                            best = forced
         return best
 
 

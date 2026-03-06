@@ -1,0 +1,70 @@
+# Portfolio campaign sweep grid v3 (iteration 2).
+# Goal: keep iter1 success gains while reducing collision spikes.
+variants:
+  - name: prediction_fast_commit_anchor
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 7.5
+      predictive_collision_weight: 0.4
+      predictive_ttc_weight: 0.22
+      predictive_progress_risk_weight: 2.8
+      predictive_hard_clearance_weight: 2.5
+      predictive_near_field_speed_cap: 0.85
+      predictive_near_field_speed_samples: [0.15, 0.3, 0.45, 0.65, 0.85]
+      predictive_candidate_speeds: [0.0, 0.35, 0.7, 1.05, 1.35]
+      predictive_horizon_boost_steps: 8
+
+  - name: prediction_balanced_guard
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 7.2
+      predictive_collision_weight: 0.58
+      predictive_ttc_weight: 0.34
+      predictive_progress_risk_weight: 2.6
+      predictive_hard_clearance_weight: 3.1
+      predictive_near_field_speed_cap: 0.78
+      predictive_near_field_speed_samples: [0.12, 0.25, 0.4, 0.58, 0.78]
+      predictive_candidate_speeds: [0.0, 0.3, 0.6, 0.9, 1.2]
+      predictive_horizon_boost_steps: 8
+
+  - name: prediction_ttc_shield
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 7.0
+      predictive_collision_weight: 0.65
+      predictive_ttc_weight: 0.48
+      predictive_progress_risk_weight: 2.4
+      predictive_hard_clearance_weight: 3.4
+      predictive_near_field_speed_cap: 0.72
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5, 0.68]
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.8, 1.1]
+      predictive_horizon_boost_steps: 10
+
+  - name: prediction_safe_progress_anchor
+    algo: prediction_planner
+    algo_config_path: ../algos/prediction_planner_camera_ready.yaml
+    params:
+      predictive_goal_weight: 6.8
+      predictive_collision_weight: 0.6
+      predictive_ttc_weight: 0.4
+      predictive_progress_risk_weight: 2.5
+      predictive_hard_clearance_weight: 3.6
+      predictive_near_field_speed_cap: 0.75
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5, 0.7]
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.8, 1.1]
+      predictive_horizon_boost_steps: 8
+
+  - name: hybrid_predictive_shield
+    algo: hybrid_portfolio
+    algo_config_path: ../algos/hybrid_portfolio_camera_ready.yaml
+    params:
+      hybrid:
+        emergency_clearance: 0.6
+        caution_clearance: 1.05
+        dense_ped_count: 6
+        near_field_distance: 2.8
+        hysteresis_steps: 7
+        fallback_on_exception: true

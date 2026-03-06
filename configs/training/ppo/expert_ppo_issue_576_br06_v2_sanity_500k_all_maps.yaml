@@ -1,0 +1,64 @@
+# Issue 576 (BR-06): PPO expert retraining v2 sanity config.
+# Use this for fast pipeline validation before launching the 15M full run.
+policy_id: ppo_expert_br06_v2_sanity_500k_all_maps
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+num_envs: auto
+worker_mode: auto
+seeds:
+  - 123
+total_timesteps: 500000
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  socnav_hidden_dims: [128, 128]
+  dropout_rate: 0.1
+policy_net_arch: [256, 256]
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  reward_name: route_completion_v2
+  peds_have_obstacle_forces: true
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+evaluation:
+  # Deprecated/ignored by train_ppo.py; cadence is controlled by step_schedule.
+  frequency_episodes: 10
+  evaluation_episodes: 10
+  hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 100000
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-576-br06
+    job_type: expert-ppo-sanity-v2
+    tags:
+      - issue-576
+      - br-06
+      - ppo
+      - sanity
+      - route-completion-v2

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -132,7 +133,7 @@ def _run_eval(
     output_dir: Path,
 ) -> EvalResult:
     """Run one evaluation and return aggregated metrics."""
-    safe_ckpt = Path(checkpoint).stem.replace(".", "_")
+    safe_ckpt = _checkpoint_token(checkpoint)
     tag = f"{suite_name}__{variant_name}__{safe_ckpt}"
     algo_cfg_path = output_dir / f"{tag}_algo.yaml"
     jsonl_path = output_dir / f"{tag}.jsonl"
@@ -205,6 +206,12 @@ def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, f
         hard.mean_min_distance if np.isfinite(hard.mean_min_distance) else float("-inf")
     )
     return (hard.success_rate, hard_clearance, global_res.success_rate)
+
+
+def _checkpoint_token(checkpoint: str) -> str:
+    """Return collision-resistant token for checkpoint artifact naming."""
+    ckpt_hash = hashlib.sha1(str(Path(checkpoint).resolve()).encode("utf-8")).hexdigest()[:10]
+    return f"{Path(checkpoint).stem.replace('.', '_')}_{ckpt_hash}"
 
 
 def _checkpoint_label(path_str: str) -> str:

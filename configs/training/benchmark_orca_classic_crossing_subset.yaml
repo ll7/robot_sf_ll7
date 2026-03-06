@@ -19,6 +19,8 @@ evaluation:
   frequency_episodes: 1
   evaluation_episodes: 1
   hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 1
 # SocNav ORCA optional overrides (kept empty by default).
 # socnav_orca:
 #   time_horizon: 5.0

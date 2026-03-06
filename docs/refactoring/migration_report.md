@@ -135,7 +135,7 @@ Analyzed 57 Python files
 - Old environment creation: ['RobotEnv(']
 - Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
 
-### scripts/training_ppo.py
+### legacy PPO training script (removed)
 - Old imports: ['from robot_sf.gym_env.robot_env import RobotEnv', 'EnvSettings']
 - Old environment creation: ['RobotEnv(']
 - Old config usage: ['EnvSettings(']

@@ -1,0 +1,37 @@
+# MPPI/CEM social planner baseline (non-learning by default).
+allow_testing_algorithms: true
+random_seed: 42
+max_linear_speed: 1.2
+max_angular_speed: 1.2
+
+horizon_steps: 10
+rollout_dt: 0.2
+sample_count: 96
+iterations: 3
+elite_fraction: 0.2
+
+init_linear_std: 0.35
+init_angular_std: 0.7
+min_linear_std: 0.06
+min_angular_std: 0.1
+
+goal_tolerance: 0.25
+near_field_distance: 2.5
+near_field_speed_cap: 0.55
+density_norm_count: 8.0
+
+goal_progress_weight: 4.0
+heading_weight: 1.0
+clearance_weight: 2.0
+obstacle_weight: 1.4
+smoothness_weight: 0.2
+ttc_weight: 0.35
+
+near_distance: 0.7
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+prediction_backend: constant_velocity
+progress_escape_enabled: true
+progress_escape_distance: 1.0
+progress_escape_speed: 0.55
+progress_escape_heading_gain: 1.6

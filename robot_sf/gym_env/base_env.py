@@ -70,7 +70,7 @@ class BaseEnv(Env):
         # Set video FPS if not provided
         if video_fps is None:
             video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
-            logger.info(f"Video FPS not provided, setting to {video_fps}")
+            logger.debug(f"Video FPS not provided, setting to {video_fps}")
 
         # Extract map definition; respect explicit map_id when provided.
         map_id = getattr(env_config, "map_id", None)

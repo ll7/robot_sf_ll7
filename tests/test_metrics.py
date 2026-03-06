@@ -14,6 +14,7 @@ from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
+    human_collisions,
     post_process_metrics,
     snqi,
     time_to_goal,
@@ -73,12 +74,16 @@ def test_metrics_keys_all_collisions():
         assert name in values
     # Collisions every timestep -> collisions == T
     assert values["collisions"] == 5
+    assert values["ped_collision_count"] == 5
+    assert values["obstacle_collision_count"] == 0
+    assert values["total_collision_count"] == 5
     # Near misses zero because all are strict collisions
     assert values["near_misses"] == 0
-    # Min distance exactly zero
-    assert values["min_distance"] == 0.0
-    # Mean distance also zero in this constructed case
-    assert values["mean_distance"] == 0.0
+    # Min distance is center-to-center; clearances are tracked separately.
+    assert values["min_distance"] == pytest.approx(0.0)
+    assert values["mean_distance"] == pytest.approx(0.0)
+    assert values["min_clearance"] == pytest.approx(-1.4)
+    assert values["mean_clearance"] == pytest.approx(-1.4)
 
 
 def test_metrics_partial_success_flag_present():
@@ -89,39 +94,61 @@ def test_metrics_partial_success_flag_present():
 
 
 def test_near_miss_region_only():
-    # Craft positions so robot at origin; pedestrians at 0.3m (>0.25 collision) and 0.45m
+    # Craft positions so robot at origin; pedestrians are close but non-overlapping.
     """TODO docstring. Document this function."""
     T, K = 4, 2
     ep = _make_episode(T=T, K=K)
     # Robot stays at origin
-    # Place ped 0 at (0.3,0), ped 1 at (0.45,0) constant over time
-    ep.peds_pos[:, 0, 0] = 0.3
-    ep.peds_pos[:, 1, 0] = 0.45
+    # With robot_radius=1.0 and ped_radius=0.4, center distance must be >1.4 to avoid collision.
+    # Values in (1.4, 1.9) map to near misses (clearance in [0.0, 0.5)).
+    ep.peds_pos[:, 0, 0] = 1.5
+    ep.peds_pos[:, 1, 0] = 1.8
     values = compute_all_metrics(ep, horizon=10)
     # No collisions
     assert values["collisions"] == 0
-    # Near miss each timestep because min dist 0.3 inside [0.25,0.5)
+    # Near miss each timestep because min clearance 0.1 inside [0.0, 0.5).
     assert values["near_misses"] == T
-    # Min distance 0.3
-    assert np.isclose(values["min_distance"], 0.3)
-    # Mean distance also 0.3 (constant over time)
-    assert np.isclose(values["mean_distance"], 0.3)
+    assert np.isclose(values["min_distance"], 1.5)
+    assert np.isclose(values["mean_distance"], 1.5)
+    assert np.isclose(values["min_clearance"], 0.1)
+    assert np.isclose(values["mean_clearance"], 0.1)
 
 
 def test_mixed_collision_and_near_miss():
-    # First two timesteps collision (<0.25), next two near-miss (0.3)
+    # First two timesteps overlap (collision), next two are positive-clearance near-misses.
     """TODO docstring. Document this function."""
     T = 4
     ep = _make_episode(T=T, K=1)
-    dists = [0.1, 0.2, 0.3, 0.3]
+    dists = [0.1, 0.2, 1.5, 1.6]
     for t, d in enumerate(dists):
         ep.peds_pos[t, 0, 0] = d
     values = compute_all_metrics(ep, horizon=10)
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
     assert np.isclose(values["min_distance"], 0.1)
-    # Mean of per-timestep minimum distances: (0.1 + 0.2 + 0.3 + 0.3)/4 = 0.225
-    assert np.isclose(values["mean_distance"], 0.225)
+    assert np.isclose(values["mean_distance"], 0.85)
+    assert np.isclose(values["min_clearance"], -1.3)
+    assert np.isclose(values["mean_clearance"], -0.55)
+
+
+def test_metrics_include_agent_collisions_in_total_collision_count():
+    """Other-agent collisions should contribute to total collisions and collision summaries."""
+    ep = _make_episode(T=4, K=0)
+    ep.other_agents_pos = np.zeros((4, 1, 2), dtype=float)
+    values = compute_all_metrics(ep, horizon=10)
+    assert values["collisions"] == 4
+    assert values["ped_collision_count"] == 0
+    assert values["obstacle_collision_count"] == 0
+    assert values["agent_collision_count"] == 4
+    assert values["total_collision_count"] == 4
+
+
+def test_human_collisions_honors_custom_threshold():
+    """Custom center-distance thresholds should translate into clearance thresholds."""
+    ep = _make_episode(T=3, K=1)
+    ep.peds_pos[:, 0, 0] = 1.6
+    assert human_collisions(ep) == 0.0
+    assert human_collisions(ep, threshold=1.7) == 3.0
 
 
 def test_success_and_time_to_goal_norm_success_case():
@@ -688,6 +715,19 @@ def test_collision_count():
     result = collision_count(ep)
     assert result >= 0.0
     assert np.isfinite(result)
+
+
+def test_collision_split_metrics_are_consistent() -> None:
+    """Collision split metrics should be internally consistent."""
+    ep = _make_episode(T=5, K=1)
+    # Human collisions on every step.
+    ep.peds_pos[:, 0, :] = ep.robot_pos + 0.01
+    # Wall collisions on every step.
+    ep.obstacles = np.array([[0.01, 0.01]])
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["ped_collision_count"] == 5
+    assert vals["obstacle_collision_count"] == 5
+    assert vals["total_collision_count"] == 10
 
 
 def test_wall_collisions():

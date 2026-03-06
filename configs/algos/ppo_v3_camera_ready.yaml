@@ -1,0 +1,8 @@
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+device: auto
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: true

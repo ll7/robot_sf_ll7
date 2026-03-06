@@ -54,11 +54,11 @@ variants:
 
   - name: hybrid_camera_ready_v4
     algo: hybrid_portfolio
-    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    algo_config_path: configs/algos/hybrid_portfolio_camera_ready.yaml
 
   - name: hybrid_prediction_dominant
     algo: hybrid_portfolio
-    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    algo_config_path: configs/algos/hybrid_portfolio_camera_ready.yaml
     params:
       hybrid:
         emergency_clearance: 0.55
@@ -69,7 +69,7 @@ variants:
 
   - name: hybrid_mppi_open_space
     algo: hybrid_portfolio
-    algo_config_path: ../../configs/algos/hybrid_portfolio_camera_ready.yaml
+    algo_config_path: configs/algos/hybrid_portfolio_camera_ready.yaml
     params:
       hybrid:
         emergency_clearance: 0.5

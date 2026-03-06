@@ -1313,12 +1313,12 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     ---------------
     Section 3.2, Table 1: "Human Collisions (HC)" metric
     """
-    _ = threshold  # Threshold kept for API stability; collision is clearance < 0.
     if data.peds_pos.shape[1] == 0:
         return 0.0
     clearances = _compute_clearance_matrix(data)
     min_clearance = clearances.min(axis=1)
-    return float(np.count_nonzero(min_clearance < 0.0))
+    clearance_threshold = float(threshold) - float(data.robot_radius + data.ped_radius)
+    return float(np.count_nonzero(min_clearance < clearance_threshold))
 
 
 def timeout(data: EpisodeData, *, horizon: int) -> float:

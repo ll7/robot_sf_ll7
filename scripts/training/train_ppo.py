@@ -1067,7 +1067,7 @@ def _build_direct_wandb_training_payload(
     start_timesteps: int,
     run_start_time: float,
 ) -> dict[str, float | int]:
-    """Build a direct W&B payload for core PPO training metrics."""
+    """Build a direct W&B payload for core PPO training metrics after PPO.train()."""
     payload: dict[str, float | int] = {
         "time/total_timesteps": int(total_timesteps),
         "time/iterations": int(rollout_iterations),
@@ -1083,12 +1083,11 @@ def _build_direct_wandb_training_payload(
     if rollout_length_mean is not None:
         payload["rollout/ep_len_mean"] = rollout_length_mean
 
-    payload.update(_extract_direct_wandb_train_metrics(model))
     return payload
 
 
 class _DirectWandbTrainingMetricsCallback(BaseCallback):
-    """Mirror core PPO training scalars straight to W&B at rollout cadence."""
+    """Track rollout iterations for direct W&B logging after PPO.train()."""
 
     def __init__(
         self,
@@ -1110,6 +1109,9 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self._rollout_iterations += 1
+
+    def log_after_train(self) -> None:
+        """Log rollout/time and freshly-recorded train metrics after PPO.train() completes."""
         total_timesteps = int(getattr(self.model, "num_timesteps", self.num_timesteps) or 0)
         payload = _build_direct_wandb_training_payload(
             model=self.model,
@@ -1118,6 +1120,7 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
             start_timesteps=self._start_timesteps,
             run_start_time=self._run_start_time,
         )
+        payload.update(_extract_direct_wandb_train_metrics(self.model))
         if payload:
             self._wandb_run.log(payload, step=total_timesteps)
 
@@ -1550,13 +1553,13 @@ def _train_with_schedule(  # noqa: PLR0913
     perf_timeline: list[dict[str, float | int]] = []
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
+    direct_wandb_callback: _DirectWandbTrainingMetricsCallback | None = None
     if wandb_run is not None:
-        callbacks.append(
-            _DirectWandbTrainingMetricsCallback(
-                wandb_run=wandb_run,
-                start_timesteps=timesteps_done,
-            )
+        direct_wandb_callback = _DirectWandbTrainingMetricsCallback(
+            wandb_run=wandb_run,
+            start_timesteps=timesteps_done,
         )
+        callbacks.append(direct_wandb_callback)
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
     if wandb_run is not None:
@@ -1575,6 +1578,8 @@ def _train_with_schedule(  # noqa: PLR0913
         if train_steps > 0:
             logger.info("Training PPO segment steps={} (total={})", train_steps, eval_step)
             model.learn(total_timesteps=train_steps, reset_num_timesteps=False, callback=cb)
+            if direct_wandb_callback is not None:
+                direct_wandb_callback.log_after_train()
         train_wall_sec = max(0.0, time.perf_counter() - train_t0)
         # `train_steps` already counts aggregate VecEnv transitions in SB3.
         effective_steps = float(max(train_steps, 0))

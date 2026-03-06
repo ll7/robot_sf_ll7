@@ -395,20 +395,13 @@ def test_extract_direct_wandb_train_metrics_filters_missing_and_non_numeric() ->
     }
 
 
-def test_build_direct_wandb_training_payload_includes_rollout_train_and_time(monkeypatch) -> None:
-    """Payload builder should expose immediate PPO metrics without waiting for eval."""
+def test_build_direct_wandb_training_payload_includes_rollout_and_time(monkeypatch) -> None:
+    """Payload builder should expose rollout/time metrics before train-loss extraction."""
     model = SimpleNamespace(
         ep_info_buffer=[
             {"r": 10.0, "l": 100},
             {"r": 14.0, "l": 80},
         ],
-        logger=SimpleNamespace(
-            name_to_value={
-                "train/value_loss": 1.5,
-                "train/policy_gradient_loss": -0.2,
-                "train/entropy_loss": -0.01,
-            }
-        ),
     )
     monkeypatch.setattr("scripts.training.train_ppo._wandb_training_clock", lambda: 25.0)
 
@@ -426,14 +419,11 @@ def test_build_direct_wandb_training_payload_includes_rollout_train_and_time(mon
         "time/fps": 80_000.0,
         "rollout/ep_rew_mean": 12.0,
         "rollout/ep_len_mean": 90.0,
-        "train/value_loss": 1.5,
-        "train/policy_gradient_loss": -0.2,
-        "train/entropy_loss": -0.01,
     }
 
 
-def test_direct_wandb_training_callback_logs_payload(monkeypatch) -> None:
-    """Rollout callback should emit direct W&B metrics at training cadence."""
+def test_direct_wandb_training_callback_logs_after_train(monkeypatch) -> None:
+    """Callback should emit direct W&B metrics only after train-loss values are available."""
     logged: list[tuple[dict[str, float | int], int]] = []
 
     class _WandbRunStub:
@@ -459,6 +449,9 @@ def test_direct_wandb_training_callback_logs_payload(monkeypatch) -> None:
     monkeypatch.setattr("scripts.training.train_ppo._wandb_training_clock", lambda: 42.0)
 
     callback.on_rollout_end()
+    assert logged == []
+
+    callback.log_after_train()
 
     assert logged == [
         (

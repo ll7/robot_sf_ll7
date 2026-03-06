@@ -127,11 +127,24 @@ class PPOPlanner:
             self._status = "fallback"
             self._fallback_reason = "sb3_missing"
             return
-        mp = (
-            resolve_model_path(self.config.model_id)
-            if self.config.model_id
-            else Path(self.config.model_path)
-        )
+        try:
+            mp = (
+                resolve_model_path(self.config.model_id)
+                if self.config.model_id
+                else Path(self.config.model_path)
+            )
+        except (KeyError, RuntimeError, ValueError) as exc:
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO model",
+                    f"Failed to resolve model: {exc}",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "model_resolution_failed"
+                return
+            raise
         if not mp.exists():
             if self.config.fallback_to_goal:
                 warn_soft_degrade(

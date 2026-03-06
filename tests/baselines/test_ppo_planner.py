@@ -173,3 +173,14 @@ def test_load_model_resolves_registry_model_id(monkeypatch, tmp_path):
     planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
     assert called["model_id"] == "ppo_demo"
     assert planner._model["path"] == str(resolved_model)
+
+
+def test_load_model_resolution_failure_falls_back(monkeypatch):
+    """Registry resolution failures should trigger fallback_to_goal when enabled."""
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.resolve_model_path",
+        lambda _model_id: (_ for _ in ()).throw(KeyError("missing")),
+    )
+    planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
+    assert planner.get_metadata()["status"] == "fallback"
+    assert planner.get_metadata()["fallback_reason"] == "model_resolution_failed"

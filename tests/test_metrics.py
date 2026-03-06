@@ -14,6 +14,7 @@ from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
+    human_collisions,
     post_process_metrics,
     snqi,
     time_to_goal,
@@ -118,16 +119,16 @@ def test_mixed_collision_and_near_miss():
     """TODO docstring. Document this function."""
     T = 4
     ep = _make_episode(T=T, K=1)
-    dists = [1.2, 1.3, 1.5, 1.6]
+    dists = [0.1, 0.2, 1.5, 1.6]
     for t, d in enumerate(dists):
         ep.peds_pos[t, 0, 0] = d
     values = compute_all_metrics(ep, horizon=10)
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
-    assert np.isclose(values["min_distance"], 1.2)
-    assert np.isclose(values["mean_distance"], 1.4)
-    assert np.isclose(values["min_clearance"], -0.2)
-    assert np.isclose(values["mean_clearance"], 0.0)
+    assert np.isclose(values["min_distance"], 0.1)
+    assert np.isclose(values["mean_distance"], 0.85)
+    assert np.isclose(values["min_clearance"], -1.3)
+    assert np.isclose(values["mean_clearance"], -0.55)
 
 
 def test_metrics_include_agent_collisions_in_total_collision_count():
@@ -140,6 +141,14 @@ def test_metrics_include_agent_collisions_in_total_collision_count():
     assert values["obstacle_collision_count"] == 0
     assert values["agent_collision_count"] == 4
     assert values["total_collision_count"] == 4
+
+
+def test_human_collisions_honors_custom_threshold():
+    """Custom center-distance thresholds should translate into clearance thresholds."""
+    ep = _make_episode(T=3, K=1)
+    ep.peds_pos[:, 0, 0] = 1.6
+    assert human_collisions(ep) == 0.0
+    assert human_collisions(ep, threshold=1.7) == 3.0
 
 
 def test_success_and_time_to_goal_norm_success_case():

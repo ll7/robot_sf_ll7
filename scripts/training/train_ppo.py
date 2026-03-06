@@ -40,6 +40,7 @@ from loguru import logger
 try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import CallbackList
+    from stable_baselines3.common.logger import configure as configure_sb3_logger
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
     raise RuntimeError(
@@ -139,6 +140,50 @@ _EVAL_METRIC_KEYS = (
 )
 _SUPPORTED_BEST_METRICS = set(_EVAL_METRIC_KEYS)
 _FREQUENCY_EPISODES_DEPRECATION_WARNED = False
+
+
+def _constant_schedule(value: float) -> Callable[[float], float]:
+    """Return a constant SB3-compatible schedule callback."""
+
+    scalar = float(value)
+
+    def _schedule(_progress_remaining: float) -> float:
+        return scalar
+
+    return _schedule
+
+
+def _apply_model_attr_if_present(
+    model: PPO,
+    params: Mapping[str, object],
+    *,
+    key: str,
+    attr_name: str,
+    coerce: Callable[[object], object],
+) -> None:
+    """Set one model attribute from config params when that key is present."""
+
+    if key not in params:
+        return
+    setattr(model, attr_name, coerce(params[key]))
+
+
+def _apply_schedule_attr_if_present(
+    model: PPO,
+    params: Mapping[str, object],
+    *,
+    key: str,
+    value_attr: str | None,
+    schedule_attr: str,
+) -> None:
+    """Set a scalar attribute plus its constant schedule callback when present."""
+
+    if key not in params:
+        return
+    value = float(params[key])
+    if value_attr is not None:
+        setattr(model, value_attr, value)
+    setattr(model, schedule_attr, _constant_schedule(value))
 
 
 def _preconfigure_loguru_level_from_argv() -> None:
@@ -559,6 +604,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         tracking=dict(data.get("tracking", {}) or {}),
         env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
+        scenario_sampling=dict(data.get("scenario_sampling", {}) or {}),
         num_envs=_parse_num_envs(data.get("num_envs")),
         worker_mode=str(data.get("worker_mode", "auto")),
         socnav_orca_time_horizon=(
@@ -566,6 +612,11 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         ),
         socnav_orca_neighbor_dist=(
             float(socnav_orca_neighbor_dist) if socnav_orca_neighbor_dist is not None else None
+        ),
+        resume_from=_resolve_optional_path(
+            path,
+            data.get("resume_from"),
+            field_name="resume_from",
         ),
     )
 
@@ -603,7 +654,8 @@ def _log_startup_summary(
     """Emit one structured startup summary for run-critical resolved config."""
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
-        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} randomize_seeds={}",
+        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} "
+        "randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
@@ -612,6 +664,8 @@ def _log_startup_summary(
         num_envs,
         worker_mode,
         _randomize_seeds(config),
+        str(config.resume_from) if config.resume_from is not None else "<none>",
+        sorted(config.scenario_sampling.keys()),
     )
 
 
@@ -626,6 +680,7 @@ def _make_training_env(  # noqa: PLR0913
     algorithm_name: str,
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
+    scenario_sampling: Mapping[str, object],
 ) -> Callable[[], Any]:
     """Create a training environment factory (seeded when provided)."""
 
@@ -652,9 +707,25 @@ def _make_training_env(  # noqa: PLR0913
 
         sampler = ScenarioSampler(
             scenario_definitions,
-            exclude_scenarios=tuple(exclude_scenarios),
+            include_scenarios=tuple(
+                str(name)
+                for name in scenario_sampling.get("include_scenarios", ())  # type: ignore[union-attr]
+            ),
+            exclude_scenarios=tuple(exclude_scenarios)
+            + tuple(
+                str(name)
+                for name in scenario_sampling.get("exclude_scenarios", ())  # type: ignore[union-attr]
+            ),
+            weights=(
+                {
+                    str(key): float(value)
+                    for key, value in dict(scenario_sampling.get("weights", {})).items()  # type: ignore[union-attr]
+                }
+                if isinstance(scenario_sampling.get("weights"), Mapping)
+                else None
+            ),
             seed=seed,
-            strategy="random",
+            strategy=str(scenario_sampling.get("strategy", "random")),  # type: ignore[union-attr]
         )
         return ScenarioSwitchingEnv(
             scenario_sampler=sampler,
@@ -696,6 +767,84 @@ def _resolve_ppo_hyperparams(config: ExpertTrainingConfig) -> dict[str, object]:
         if key in params:
             params[key] = coerce(params[key])
     return params
+
+
+def _reapply_resumed_ppo_hyperparams(model: PPO, config: ExpertTrainingConfig) -> None:
+    """Reapply config-level PPO hyperparameters after loading a checkpoint.
+
+    Stable-Baselines3 restores optimizer and algorithm settings from the checkpoint.
+    For warm-start runs we still want the YAML config to remain authoritative, so
+    the supported overrides are written back onto the loaded model before learning.
+    """
+
+    params = _resolve_ppo_hyperparams(config)
+    _apply_schedule_attr_if_present(
+        model,
+        params,
+        key="learning_rate",
+        value_attr="learning_rate",
+        schedule_attr="lr_schedule",
+    )
+    _apply_schedule_attr_if_present(
+        model,
+        params,
+        key="clip_range",
+        value_attr=None,
+        schedule_attr="clip_range",
+    )
+    for key, attr_name, coerce in (
+        ("batch_size", "batch_size", int),
+        ("n_epochs", "n_epochs", int),
+        ("ent_coef", "ent_coef", float),
+        ("target_kl", "target_kl", lambda value: value),
+        ("gamma", "gamma", float),
+        ("gae_lambda", "gae_lambda", float),
+        ("vf_coef", "vf_coef", float),
+        ("max_grad_norm", "max_grad_norm", float),
+    ):
+        _apply_model_attr_if_present(
+            model,
+            params,
+            key=key,
+            attr_name=attr_name,
+            coerce=coerce,
+        )
+
+    rollout_buffer = getattr(model, "rollout_buffer", None)
+    if rollout_buffer is not None:
+        _apply_model_attr_if_present(
+            rollout_buffer,
+            params,
+            key="gamma",
+            attr_name="gamma",
+            coerce=float,
+        )
+        _apply_model_attr_if_present(
+            rollout_buffer,
+            params,
+            key="gae_lambda",
+            attr_name="gae_lambda",
+            coerce=float,
+        )
+
+    if "n_steps" in params and int(params["n_steps"]) != int(getattr(model, "n_steps", 0) or 0):
+        logger.warning(
+            "Resume checkpoint keeps n_steps={} from the saved model; "
+            "config requested n_steps={} but rollout buffer rebuild is not automated.",
+            getattr(model, "n_steps", "<unknown>"),
+            int(params["n_steps"]),
+        )
+
+    logger.info(
+        "Reapplied PPO hyperparameters after resume: learning_rate={} batch_size={} "
+        "n_epochs={} ent_coef={} clip_range={} target_kl={}",
+        getattr(model, "learning_rate", "<unchanged>"),
+        getattr(model, "batch_size", "<unchanged>"),
+        getattr(model, "n_epochs", "<unchanged>"),
+        getattr(model, "ent_coef", "<unchanged>"),
+        float(params["clip_range"]) if "clip_range" in params else "<unchanged>",
+        getattr(model, "target_kl", "<unchanged>"),
+    )
 
 
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
@@ -830,9 +979,21 @@ def _resolve_scenario_context(
 
     sampler = ScenarioSampler(
         scenario_definitions,
-        exclude_scenarios=tuple(config.evaluation.hold_out_scenarios),
+        include_scenarios=tuple(
+            str(name) for name in config.scenario_sampling.get("include_scenarios", ())
+        ),
+        exclude_scenarios=tuple(config.evaluation.hold_out_scenarios)
+        + tuple(str(name) for name in config.scenario_sampling.get("exclude_scenarios", ())),
+        weights=(
+            {
+                str(key): float(value)
+                for key, value in dict(config.scenario_sampling.get("weights", {})).items()
+            }
+            if isinstance(config.scenario_sampling.get("weights"), Mapping)
+            else None
+        ),
         seed=None if _randomize_seeds(config) else int(config.seeds[0]) if config.seeds else None,
-        strategy="cycle",
+        strategy=str(config.scenario_sampling.get("profile_strategy", "cycle")),
     )
     return ScenarioContext(
         selected_scenario=None,
@@ -1310,6 +1471,7 @@ def _init_training_model(
             algorithm_name=config.policy_id,
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
+            scenario_sampling=config.scenario_sampling,
         )
         for seed in env_seeds
     ]
@@ -1324,8 +1486,10 @@ def _init_training_model(
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         logger.info("Resuming PPO from {}", resume_path)
         model = PPO.load(str(resume_path), env=vec_env)
-        if tensorboard_log is not None:
-            model.tensorboard_log = str(tensorboard_log)
+        _reapply_resumed_ppo_hyperparams(model, config)
+        sb3_log_dir = str(tensorboard_log) if tensorboard_log is not None else None
+        sb3_formats = ["stdout", "tensorboard"] if sb3_log_dir is not None else ["stdout"]
+        model.set_logger(configure_sb3_logger(sb3_log_dir, sb3_formats))
     else:
         ppo_kwargs = _resolve_ppo_hyperparams(config)
         model = PPO(
@@ -1780,6 +1944,7 @@ def run_expert_training(
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
     eval_steps = _build_eval_steps(config.total_timesteps, config.evaluation.step_schedule)
+    resolved_resume_from = resume_from if resume_from is not None else config.resume_from
 
     outputs = _execute_training(
         config=config,
@@ -1788,7 +1953,7 @@ def run_expert_training(
         eval_steps=eval_steps,
         run_id=run_id,
         dry_run=dry_run,
-        resume_from=resume_from,
+        resume_from=resolved_resume_from,
         config_path=config_path,
     )
 
@@ -1980,7 +2145,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         config_path = Path(args.config).resolve()
         config = load_expert_training_config(config_path)
-        resume_from = Path(args.resume_from).expanduser() if args.resume_from else None
+        resume_from = (
+            Path(args.resume_from).expanduser() if args.resume_from else config.resume_from
+        )
         run_expert_training(
             config,
             config_path=config_path,

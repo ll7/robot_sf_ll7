@@ -50,10 +50,12 @@ class ExpertTrainingConfig:
     tracking: dict[str, object] = field(default_factory=dict)
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
+    scenario_sampling: dict[str, object] = field(default_factory=dict)
     num_envs: int | None = None
     worker_mode: str = "auto"
     socnav_orca_time_horizon: float | None = None
     socnav_orca_neighbor_dist: float | None = None
+    resume_from: Path | None = None
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -77,10 +79,12 @@ class ExpertTrainingConfig:
         tracking: dict[str, object] | None = None,
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
+        scenario_sampling: dict[str, object] | None = None,
         num_envs: int | None = None,
         worker_mode: str = "auto",
         socnav_orca_time_horizon: float | None = None,
         socnav_orca_neighbor_dist: float | None = None,
+        resume_from: Path | None = None,
     ) -> ExpertTrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -114,10 +118,12 @@ class ExpertTrainingConfig:
             tracking=dict(tracking or {}),
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=resolved_env_factory_kwargs,
+            scenario_sampling=dict(scenario_sampling or {}),
             num_envs=num_envs,
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,
             socnav_orca_neighbor_dist=socnav_orca_neighbor_dist,
+            resume_from=resume_from.resolve() if resume_from else None,
         )
 
 

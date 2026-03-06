@@ -153,6 +153,46 @@ def _wandb_training_clock() -> float:
     return time.perf_counter()
 
 
+class _DirectWandbMetricsCallback(BaseCallback):
+    """Mirror core SB3 training metrics directly to W&B.
+
+    This avoids long periods with only system charts when TensorBoard sync is
+    delayed or when resumed runs attach the logger after model construction.
+    """
+
+    def __init__(self, wandb_run: object, *, log_every_steps: int = 10_000) -> None:
+        super().__init__()
+        self._wandb_run = wandb_run
+        self._log_every_steps = max(1, int(log_every_steps))
+        self._last_logged_step = -1
+
+    def _on_step(self) -> bool:
+        if int(self.num_timesteps) - self._last_logged_step < self._log_every_steps:
+            return True
+        values = getattr(self.logger, "name_to_value", {}) or {}
+        payload: dict[str, float | int] = {
+            "time/total_timesteps": int(self.num_timesteps),
+        }
+        for key in (
+            "rollout/ep_rew_mean",
+            "rollout/ep_len_mean",
+            "train/value_loss",
+            "train/policy_gradient_loss",
+            "train/entropy_loss",
+            "train/loss",
+            "train/explained_variance",
+            "time/fps",
+            "time/iterations",
+        ):
+            value = values.get(key)
+            if isinstance(value, int | float):
+                payload[key] = float(value)
+        if len(payload) > 1:
+            self._wandb_run.log(payload, step=int(self.num_timesteps))
+            self._last_logged_step = int(self.num_timesteps)
+        return True
+
+
 def _constant_schedule(value: float) -> Callable[[float], float]:
     """Return a constant SB3-compatible schedule callback."""
 
@@ -1512,6 +1552,8 @@ def _train_with_schedule(  # noqa: PLR0913
         )
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
+    if wandb_run is not None:
+        callbacks.append(_DirectWandbMetricsCallback(wandb_run))
     cb = CallbackList(callbacks) if callbacks else None
     metric_name, higher_is_better = _resolve_best_checkpoint_metric(config.best_checkpoint_metric)
     tracker = _BestCheckpointTracker(

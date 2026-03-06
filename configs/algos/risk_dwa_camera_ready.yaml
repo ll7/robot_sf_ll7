@@ -1,4 +1,5 @@
 # Risk-aware dynamic-window baseline (non-learning).
+allow_testing_algorithms: true
 max_linear_speed: 1.2
 max_angular_speed: 1.2
 rollout_dt: 0.2

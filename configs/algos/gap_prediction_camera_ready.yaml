@@ -1,5 +1,6 @@
 # Gap-aware predictive planner.
 # Root keys configure the predictive head; `stream_gap` configures the veto layer.
+allow_testing_algorithms: true
 
 predictive_model_id: predictive_proxy_selected_v1
 predictive_device: cpu

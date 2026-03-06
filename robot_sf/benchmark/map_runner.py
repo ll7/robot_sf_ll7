@@ -1824,6 +1824,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo=algo,
         benchmark_profile=benchmark_profile,
         ppo_paper_ready=ppo_paper_ready,
+        allow_testing_algorithms=bool(policy_cfg.get("allow_testing_algorithms", False)),
     )
     policy_cfg, preflight = _preflight_policy(
         algo=algo,

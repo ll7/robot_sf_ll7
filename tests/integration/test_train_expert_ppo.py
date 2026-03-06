@@ -16,6 +16,7 @@ from robot_sf.training.imitation_config import (
 )
 from scripts.training.train_ppo import (
     _build_direct_wandb_training_payload,
+    _DirectWandbMetricsCallback,
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _reapply_resumed_ppo_hyperparams,
@@ -376,3 +377,36 @@ def test_direct_wandb_training_callback_logs_payload(monkeypatch) -> None:
             15_250_000,
         )
     ]
+
+
+def test_direct_wandb_metrics_callback_logs_core_training_series() -> None:
+    """Direct W&B callback should mirror key SB3 metrics without waiting for eval checkpoints."""
+
+    class _Run:
+        def __init__(self) -> None:
+            self.payloads: list[tuple[dict[str, float | int], int]] = []
+
+        def log(self, payload, step):
+            self.payloads.append((dict(payload), int(step)))
+
+    run = _Run()
+    callback = _DirectWandbMetricsCallback(run, log_every_steps=100)
+    callback.model = SimpleNamespace(
+        logger=SimpleNamespace(
+            name_to_value={
+                "rollout/ep_rew_mean": 12.5,
+                "rollout/ep_len_mean": 90.0,
+                "train/value_loss": 0.2,
+                "time/fps": 430,
+            }
+        )
+    )
+    callback.num_timesteps = 150
+
+    assert callback._on_step() is True
+    assert len(run.payloads) == 1
+    payload, step = run.payloads[0]
+    assert step == 150
+    assert payload["time/total_timesteps"] == 150
+    assert payload["rollout/ep_rew_mean"] == 12.5
+    assert payload["train/value_loss"] == 0.2

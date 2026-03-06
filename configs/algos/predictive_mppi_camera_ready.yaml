@@ -1,6 +1,7 @@
 # Predictive MPPI planner.
 # Uses the learned pedestrian predictor from the predictive planner, but scores
 # short action sequences via CEM/MPPI instead of a one-step control lattice.
+allow_testing_algorithms: true
 
 predictive_model_id: predictive_proxy_selected_v1
 predictive_device: cpu

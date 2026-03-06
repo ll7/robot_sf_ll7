@@ -1,4 +1,5 @@
 # Gap-acceptance planner for lateral stream crossing and doorway/bottleneck entry.
+allow_testing_algorithms: true
 max_linear_speed: 1.2
 max_angular_speed: 1.2
 goal_tolerance: 0.25

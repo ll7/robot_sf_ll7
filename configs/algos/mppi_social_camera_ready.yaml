@@ -1,4 +1,5 @@
 # MPPI/CEM social planner baseline (non-learning by default).
+allow_testing_algorithms: true
 random_seed: 42
 max_linear_speed: 1.2
 max_angular_speed: 1.2

@@ -194,6 +194,37 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
     assert summary["preflight"]["status"] == "fallback"
 
 
+def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypatch) -> None:
+    """Experimental testing-only planners must fail closed unless explicitly enabled."""
+    _patch_lightweight_batch(monkeypatch)
+    out_path = tmp_path / "episodes.jsonl"
+
+    with pytest.raises(ValueError, match="experimental-testing"):
+        map_runner.run_map_batch(
+            [_scenario()],
+            out_path,
+            schema_path=SCHEMA_PATH,
+            algo="risk_dwa",
+            benchmark_profile="experimental",
+            resume=False,
+        )
+
+    algo_cfg_path = tmp_path / "risk_dwa_testing.yaml"
+    algo_cfg_path.write_text("allow_testing_algorithms: true\n", encoding="utf-8")
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        algo="risk_dwa",
+        algo_config_path=str(algo_cfg_path),
+        benchmark_profile="experimental",
+        resume=False,
+    )
+
+    assert summary["written"] == 1
+    assert summary["algorithm_readiness"]["tier"] == "experimental"
+
+
 def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:
     """Adapter-impact mode should be represented in summary metadata contract."""
     _patch_lightweight_batch(monkeypatch)

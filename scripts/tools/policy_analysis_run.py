@@ -118,6 +118,9 @@ _SUMMARY_METRICS = (
     "curvature_mean",
     "curvature_mean_eps0p1",
     "low_speed_frac",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "collisions",
 )
 
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
@@ -654,6 +657,9 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "termination_reason_counts": reason_counts,
         "termination_reason_rates": reason_rates,
         "metric_means": metric_means,
+        "ped_collision_rate": float(metric_means.get("ped_collision_count", 0.0)),
+        "obstacle_collision_rate": float(metric_means.get("obstacle_collision_count", 0.0)),
+        "total_collision_rate": float(metric_means.get("collisions", 0.0)),
     }
 
 
@@ -743,6 +749,9 @@ def _write_report(  # noqa: C901
         f"- Episodes: {summary.get('episodes', 0)}",
         f"- Success rate: {summary.get('success_rate', 0.0):.3f}",
         f"- Collision rate: {summary.get('collision_rate', 0.0):.3f}",
+        f"- Ped collision rate: {summary.get('ped_collision_rate', 0.0):.3f}",
+        f"- Obstacle collision rate: {summary.get('obstacle_collision_rate', 0.0):.3f}",
+        f"- Total collision count mean: {summary.get('total_collision_rate', 0.0):.3f}",
         "",
         "## Termination reasons",
     ]

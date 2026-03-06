@@ -1,4 +1,5 @@
 # Hybrid planner: risk_dwa + mppi + ORCA + prediction planner.
+allow_testing_algorithms: true
 allow_fallback: true
 
 # ORCA / prediction planner shared keys (SocNavPlannerConfig-compatible):

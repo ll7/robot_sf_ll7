@@ -15,6 +15,9 @@ from robot_sf.training.imitation_config import (
     ExpertTrainingConfig,
 )
 from scripts.training.train_ppo import (
+    _build_direct_wandb_training_payload,
+    _DirectWandbTrainingMetricsCallback,
+    _extract_direct_wandb_train_metrics,
     _reapply_resumed_ppo_hyperparams,
     _resolve_resume_checkpoint,
     load_expert_training_config,
@@ -272,3 +275,104 @@ def test_resolve_resume_checkpoint_prefers_model_registry(monkeypatch) -> None:
         "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
         "allow_download": True,
     }
+
+
+def test_extract_direct_wandb_train_metrics_filters_missing_and_non_numeric() -> None:
+    """Direct W&B export should keep only finite scalar train metrics."""
+    model = SimpleNamespace(
+        logger=SimpleNamespace(
+            name_to_value={
+                "train/value_loss": 1.25,
+                "train/policy_gradient_loss": "0.5",
+                "train/entropy_loss": float("nan"),
+                "train/ignored": 99.0,
+            }
+        )
+    )
+
+    assert _extract_direct_wandb_train_metrics(model) == {
+        "train/value_loss": 1.25,
+        "train/policy_gradient_loss": 0.5,
+    }
+
+
+def test_build_direct_wandb_training_payload_includes_rollout_train_and_time(monkeypatch) -> None:
+    """Payload builder should expose immediate PPO metrics without waiting for eval."""
+    model = SimpleNamespace(
+        ep_info_buffer=[
+            {"r": 10.0, "l": 100},
+            {"r": 14.0, "l": 80},
+        ],
+        logger=SimpleNamespace(
+            name_to_value={
+                "train/value_loss": 1.5,
+                "train/policy_gradient_loss": -0.2,
+                "train/entropy_loss": -0.01,
+            }
+        ),
+    )
+    monkeypatch.setattr("scripts.training.train_ppo._wandb_training_clock", lambda: 25.0)
+
+    payload = _build_direct_wandb_training_payload(
+        model=model,
+        total_timesteps=15_400_000,
+        rollout_iterations=3,
+        start_timesteps=15_000_000,
+        run_start_time=20.0,
+    )
+
+    assert payload == {
+        "time/total_timesteps": 15_400_000,
+        "time/iterations": 3,
+        "time/fps": 80_000.0,
+        "rollout/ep_rew_mean": 12.0,
+        "rollout/ep_len_mean": 90.0,
+        "train/value_loss": 1.5,
+        "train/policy_gradient_loss": -0.2,
+        "train/entropy_loss": -0.01,
+    }
+
+
+def test_direct_wandb_training_callback_logs_payload(monkeypatch) -> None:
+    """Rollout callback should emit direct W&B metrics at training cadence."""
+    logged: list[tuple[dict[str, float | int], int]] = []
+
+    class _WandbRunStub:
+        def log(self, payload: dict[str, float | int], *, step: int) -> None:
+            logged.append((payload, step))
+
+    callback = _DirectWandbTrainingMetricsCallback(
+        wandb_run=_WandbRunStub(),
+        start_timesteps=15_000_000,
+        run_start_time=40.0,
+    )
+    callback.model = SimpleNamespace(
+        num_timesteps=15_250_000,
+        ep_info_buffer=[{"r": 8.0, "l": 60}],
+        logger=SimpleNamespace(
+            name_to_value={
+                "train/value_loss": 0.75,
+                "train/policy_gradient_loss": -0.1,
+                "train/entropy_loss": -0.02,
+            }
+        ),
+    )
+    monkeypatch.setattr("scripts.training.train_ppo._wandb_training_clock", lambda: 42.0)
+
+    callback.on_rollout_end()
+
+    assert logged == [
+        (
+            {
+                "time/total_timesteps": 15_250_000,
+                "time/iterations": 1,
+                "time/fps": 125_000.0,
+                "rollout/ep_rew_mean": 8.0,
+                "rollout/ep_len_mean": 60.0,
+                "train/value_loss": 0.75,
+                "train/policy_gradient_loss": -0.1,
+                "train/entropy_loss": -0.02,
+            },
+            15_250_000,
+        )
+    ]

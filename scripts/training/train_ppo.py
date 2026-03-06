@@ -39,7 +39,7 @@ from loguru import logger
 
 try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
-    from stable_baselines3.common.callbacks import CallbackList
+    from stable_baselines3.common.callbacks import BaseCallback, CallbackList
     from stable_baselines3.common.logger import configure as configure_sb3_logger
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
@@ -141,6 +141,16 @@ _EVAL_METRIC_KEYS = (
 )
 _SUPPORTED_BEST_METRICS = set(_EVAL_METRIC_KEYS)
 _FREQUENCY_EPISODES_DEPRECATION_WARNED = False
+_DIRECT_WANDB_TRAIN_METRIC_KEYS = (
+    "train/value_loss",
+    "train/policy_gradient_loss",
+    "train/entropy_loss",
+)
+
+
+def _wandb_training_clock() -> float:
+    """Return the monotonic clock used for direct W&B training metrics."""
+    return time.perf_counter()
 
 
 def _constant_schedule(value: float) -> Callable[[float], float]:
@@ -961,6 +971,110 @@ def _normalize_wandb_tags(raw_tags: object) -> list[str] | None:
     return None
 
 
+def _extract_episode_info_mean(ep_info_buffer: object, key: str) -> float | None:
+    """Return the mean numeric value for one episode-info key when available."""
+    if not isinstance(ep_info_buffer, Sequence):
+        return None
+    values: list[float] = []
+    for item in ep_info_buffer:
+        if not isinstance(item, Mapping):
+            continue
+        raw_value = item.get(key)
+        if raw_value is None:
+            continue
+        try:
+            numeric_value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(numeric_value):
+            values.append(numeric_value)
+    if not values:
+        return None
+    return float(np.mean(values))
+
+
+def _extract_direct_wandb_train_metrics(model: PPO) -> dict[str, float]:
+    """Extract the latest scalar train metrics recorded by the SB3 logger."""
+    logger_values = getattr(getattr(model, "logger", None), "name_to_value", None)
+    if not isinstance(logger_values, Mapping):
+        return {}
+    metrics: dict[str, float] = {}
+    for key in _DIRECT_WANDB_TRAIN_METRIC_KEYS:
+        raw_value = logger_values.get(key)
+        if raw_value is None:
+            continue
+        try:
+            numeric_value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(numeric_value):
+            metrics[key] = numeric_value
+    return metrics
+
+
+def _build_direct_wandb_training_payload(
+    *,
+    model: PPO,
+    total_timesteps: int,
+    rollout_iterations: int,
+    start_timesteps: int,
+    run_start_time: float,
+) -> dict[str, float | int]:
+    """Build a direct W&B payload for core PPO training metrics."""
+    payload: dict[str, float | int] = {
+        "time/total_timesteps": int(total_timesteps),
+        "time/iterations": int(rollout_iterations),
+    }
+    elapsed = max(0.0, _wandb_training_clock() - run_start_time)
+    completed_timesteps = max(0, int(total_timesteps) - int(start_timesteps))
+    payload["time/fps"] = float(completed_timesteps / elapsed) if elapsed > 0.0 else 0.0
+
+    rollout_reward_mean = _extract_episode_info_mean(getattr(model, "ep_info_buffer", None), "r")
+    if rollout_reward_mean is not None:
+        payload["rollout/ep_rew_mean"] = rollout_reward_mean
+    rollout_length_mean = _extract_episode_info_mean(getattr(model, "ep_info_buffer", None), "l")
+    if rollout_length_mean is not None:
+        payload["rollout/ep_len_mean"] = rollout_length_mean
+
+    payload.update(_extract_direct_wandb_train_metrics(model))
+    return payload
+
+
+class _DirectWandbTrainingMetricsCallback(BaseCallback):
+    """Mirror core PPO training scalars straight to W&B at rollout cadence."""
+
+    def __init__(
+        self,
+        *,
+        wandb_run: object,
+        start_timesteps: int = 0,
+        run_start_time: float | None = None,
+    ) -> None:
+        super().__init__(verbose=0)
+        self._wandb_run = wandb_run
+        self._start_timesteps = int(max(0, start_timesteps))
+        self._rollout_iterations = 0
+        self._run_start_time = (
+            float(run_start_time) if run_start_time is not None else _wandb_training_clock()
+        )
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        self._rollout_iterations += 1
+        total_timesteps = int(getattr(self.model, "num_timesteps", self.num_timesteps) or 0)
+        payload = _build_direct_wandb_training_payload(
+            model=self.model,
+            total_timesteps=total_timesteps,
+            rollout_iterations=self._rollout_iterations,
+            start_timesteps=self._start_timesteps,
+            run_start_time=self._run_start_time,
+        )
+        if payload:
+            self._wandb_run.log(payload, step=total_timesteps)
+
+
 def _build_eval_steps(
     total_timesteps: int, schedule: tuple[tuple[int | None, int], ...]
 ) -> list[int]:
@@ -1389,6 +1503,13 @@ def _train_with_schedule(  # noqa: PLR0913
     perf_timeline: list[dict[str, float | int]] = []
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
+    if wandb_run is not None:
+        callbacks.append(
+            _DirectWandbTrainingMetricsCallback(
+                wandb_run=wandb_run,
+                start_timesteps=timesteps_done,
+            )
+        )
     if wandb_callback is not None:
         callbacks.append(wandb_callback)
     cb = CallbackList(callbacks) if callbacks else None

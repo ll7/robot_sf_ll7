@@ -137,6 +137,22 @@ def test_predictive_mppi_falls_back_to_stop_for_immediate_conflict() -> None:
     assert abs(angular) <= cfg.max_angular_speed
 
 
+def test_predictive_mppi_prefers_obstacle_channel_for_clearance(monkeypatch) -> None:
+    """Obstacle clearance should use the obstacles channel before combined occupancy."""
+    cfg = build_predictive_mppi_config({"obstacle_threshold": 0.5})
+    planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
+    planner._predictor = _StubPredictor(np.zeros((0, 8, 2), dtype=np.float32))
+
+    grid = np.zeros((2, 5, 5), dtype=float)
+    grid[0, 2, 2] = 1.0  # combined channel occupied by pedestrians
+    meta = {"resolution": [0.5], "channel_indices": [1, 0, -1, 0]}
+    monkeypatch.setattr(planner, "_extract_grid_payload", lambda observation: (grid, meta))
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
+
+    clearance = planner._min_obstacle_clearance(np.asarray([0.0, 0.0], dtype=float), _obs())
+    assert clearance == float("inf")
+
+
 def test_build_predictive_mppi_config_preserves_root_and_predictive_fields() -> None:
     """Builder should preserve both MPPI-root and predictive-root configuration values."""
     cfg = build_predictive_mppi_config(

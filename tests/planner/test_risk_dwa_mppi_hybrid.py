@@ -98,6 +98,26 @@ def test_risk_dwa_handles_malformed_pedestrians_and_density_scaling() -> None:
     )
 
 
+def test_risk_dwa_reshapes_flattened_pedestrians_using_count() -> None:
+    """Flattened compatibility payloads should be reshaped instead of dropped."""
+    planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig())
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = planner._extract_robot_goal_ped(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+            "pedestrians": {
+                "positions": [0.5, 0.0, 1.0, 0.0, 5.0, 5.0],
+                "velocities": [0.1, 0.0, 0.2, 0.0, 0.3, 0.0],
+                "count": [2.0],
+            },
+        }
+    )
+    assert ped_pos.shape == (2, 2)
+    assert ped_vel.shape == (2, 2)
+    np.testing.assert_allclose(ped_pos, np.asarray([[0.5, 0.0], [1.0, 0.0]], dtype=float))
+    np.testing.assert_allclose(ped_vel, np.asarray([[0.1, 0.0], [0.2, 0.0]], dtype=float))
+
+
 def test_risk_dwa_obstacle_and_ttc_branches(monkeypatch) -> None:
     """Obstacle clearance and TTC helper branches should cover payload edge cases."""
     planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig())

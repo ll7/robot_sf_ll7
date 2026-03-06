@@ -127,7 +127,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         if payload is None:
             return float("inf")
         grid, meta = payload
-        channel = self._preferred_channel(meta)
+        channel = self._grid_channel_index(meta, "obstacles")
+        if channel < 0:
+            channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
 

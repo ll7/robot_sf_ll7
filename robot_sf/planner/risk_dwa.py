@@ -97,10 +97,20 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_velocities_raw = ped_state.get("velocities")
         ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
         ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
+        count_raw = self._as_1d_float(ped_state.get("count", [0.0]), pad=1)
+        ped_count = max(int(count_raw[0]), 0)
+        if ped_pos.ndim == 1 and ped_pos.size % 2 == 0:
+            ped_pos = ped_pos.reshape(-1, 2)
+        if ped_vel.ndim == 1 and ped_vel.size % 2 == 0:
+            ped_vel = ped_vel.reshape(-1, 2)
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
             ped_pos = np.zeros((0, 2), dtype=float)
+        elif ped_count > 0:
+            ped_pos = ped_pos[:ped_count]
         if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2:
             ped_vel = np.zeros_like(ped_pos)
+        elif ped_count > 0:
+            ped_vel = ped_vel[:ped_count]
         if ped_vel.shape[0] != ped_pos.shape[0]:
             ped_vel = np.zeros_like(ped_pos)
 

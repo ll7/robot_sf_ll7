@@ -60,6 +60,7 @@ scripts/
 │   ├── analyze_predictive_hard_cases.py # Hard-case taxonomy report
 │   ├── run_predictive_hard_seed_diagnostics.py # Per-seed diagnostics traces
 │   ├── run_predictive_success_campaign.py # Checkpoint/config campaign sweep
+│   ├── run_planner_portfolio_campaign.py # Multi-planner campaign sweep
 │   ├── run_examples_smoke.py         # Example script smoke tests
 │   ├── verify_maps.py                # Map file validation
 │   └── test_*.sh                     # Shell-based validation tests
@@ -118,6 +119,10 @@ Generate per-seed trace diagnostics for hard manifests.
 #### `scripts/validation/run_predictive_success_campaign.py`
 
 Run checkpoint/config sweep with hard/global ranking and confidence intervals.
+
+#### `scripts/validation/run_planner_portfolio_campaign.py`
+
+Run side-by-side campaign sweeps across multiple planner families (predictive and non-predictive).
 
 #### `training_a2c.py`
 

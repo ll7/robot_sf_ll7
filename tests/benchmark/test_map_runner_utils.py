@@ -393,8 +393,23 @@ def test_extract_ppo_pedestrians_respects_count_and_radius() -> None:
     assert ped_radius == pytest.approx(0.4)
 
 
-def test_build_policy_for_portfolio_adapters_tracks_feasibility() -> None:
+def test_build_policy_for_portfolio_adapters_tracks_feasibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Adapter-backed planner policies should expose feasibility metadata and callable output."""
+
+    class _GapPredictionStub:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            return 0.2, 0.0
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.GapAwarePredictionAdapter",
+        _GapPredictionStub,
+    )
+
     for algo_name in ("risk_dwa", "stream_gap", "gap_prediction", "mppi_social"):
         policy, meta = _build_policy(
             algo_name,

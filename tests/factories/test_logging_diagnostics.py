@@ -44,7 +44,7 @@ def test_creation_logs_robot():
     """TODO docstring. Document this function."""
     with capture_logs() as logs:
         make_robot_env()
-    assert any(entry.startswith("INFO:Creating robot env") for entry in logs)
+    assert any(entry.startswith("DEBUG:Creating robot env") for entry in logs)
 
 
 def test_creation_logs_image():
@@ -84,6 +84,6 @@ def test_precedence_warning_and_creation_log(tmp_path):
     rec = RecordingOptions(record=False)
     with capture_logs() as logs:
         make_robot_env(record_video=True, recording_options=rec, video_path=str(tmp_path / "v.mp4"))
-    # Creation info + precedence warning
-    assert any(entry.startswith("INFO:Creating robot env") for entry in logs)
+    # Creation debug log + precedence warning
+    assert any(entry.startswith("DEBUG:Creating robot env") for entry in logs)
     assert any("precedence" in entry for entry in logs if entry.startswith("WARNING:"))

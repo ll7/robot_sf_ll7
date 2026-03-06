@@ -1555,6 +1555,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if robot_pos_arr.size == 0:
         metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
     else:
+        robot_config = getattr(config, "robot_config", None)
         ep = EpisodeData(
             robot_pos=robot_pos_arr,
             robot_vel=robot_vel_arr,
@@ -1565,7 +1566,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
-            robot_radius=float(getattr(config.robot_config, "radius", 1.0)),
+            robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
         metrics_raw = compute_all_metrics(

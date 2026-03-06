@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    PredictionPlannerAdapter,
     SamplingPlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
@@ -361,11 +362,9 @@ def test_social_force_and_variants_produce_actions():
 def test_policy_wrappers_and_factory_helpers():
     from robot_sf.planner.socnav import (
         ORCAPlannerAdapter,
-        PredictionPlannerAdapter,
         SACADRLPlannerAdapter,
         SocNavPlannerPolicy,
         make_orca_policy,
-        make_prediction_policy,
         make_sacadrl_policy,
         make_social_force_policy,
     )
@@ -378,6 +377,36 @@ def test_policy_wrappers_and_factory_helpers():
     assert isinstance(make_social_force_policy().adapter, SamplingPlannerAdapter)
     assert isinstance(make_orca_policy().adapter, ORCAPlannerAdapter)
     assert isinstance(make_sacadrl_policy().adapter, SACADRLPlannerAdapter)
+
+
+def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
+    from robot_sf.planner.socnav import make_prediction_policy
+
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(predictive_max_agents=4, predictive_ego_conditioning=False)
+    )
+    obs = _base_observation()
+    obs["robot"]["speed"] = np.array([0.5, -0.2], dtype=float)
+    obs["goal"]["current"] = np.array([3.0, 4.0], dtype=float)
+    obs["pedestrians"] = {
+        "positions": np.array([[1.0, 0.0], [2.0, 1.0]], dtype=float),
+        "velocities": np.array([[0.1, 0.0], [0.0, -0.1]], dtype=float),
+        "count": np.array([2], dtype=float),
+        "radius": np.array([0.3], dtype=float),
+    }
+
+    class _FakeModel:
+        config = type("Cfg", (), {"input_dim": 9})()
+
+    adapter._model = _FakeModel()
+    state, mask, robot_pos, robot_heading = adapter._build_model_input(obs)
+
+    assert state.shape == (4, 9)
+    assert np.allclose(mask[:2], np.array([1.0, 1.0], dtype=np.float32))
+    assert np.allclose(state[:2, 4], 0.5)
+    assert np.allclose(state[:2, 5], -0.2)
+    assert np.allclose(robot_pos, np.array([0.0, 0.0]))
+    assert robot_heading == 0.0
     assert isinstance(make_prediction_policy(allow_fallback=True).adapter, PredictionPlannerAdapter)
 
 

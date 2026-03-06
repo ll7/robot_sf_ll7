@@ -360,7 +360,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             str(float(base_collection.get("max_speed", 1.2))),
             "--output",
             str(paths.base_dataset),
-        ],
+        ]
+        + (["--ego-conditioning"] if bool(base_collection.get("ego_conditioning", False)) else []),
         log_level=args.log_level,
     )
     base_dataset_manifest = _write_dataset_manifest(
@@ -371,7 +372,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         config_path=config_path,
         config_hash=config_hash,
         git_commit=git_commit,
-        extra={"seed_manifest": str(base_manifest)},
+        extra={
+            "seed_manifest": str(base_manifest),
+            "ego_conditioning": bool(base_collection.get("ego_conditioning", False)),
+        },
     )
 
     # 2) Collect hardcase dataset from fixed manifest.
@@ -396,7 +400,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             str(float(hardcase_cfg.get("max_speed", 1.2))),
             "--output",
             str(paths.hardcase_dataset),
-        ],
+        ]
+        + (["--ego-conditioning"] if bool(hardcase_cfg.get("ego_conditioning", False)) else []),
         log_level=args.log_level,
     )
     hardcase_dataset_manifest = _write_dataset_manifest(
@@ -407,7 +412,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         config_path=config_path,
         config_hash=config_hash,
         git_commit=git_commit,
-        extra={"seed_manifest": str(hard_seed_manifest)},
+        extra={
+            "seed_manifest": str(hard_seed_manifest),
+            "ego_conditioning": bool(hardcase_cfg.get("ego_conditioning", False)),
+        },
     )
 
     # 3) Build mixed dataset.

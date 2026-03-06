@@ -572,8 +572,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
     )
 
-    if state.ndim != 3 or state.shape[-1] != 4:
-        raise ValueError("Expected state shape (N, max_agents, 4)")
+    if state.ndim != 3 or state.shape[-1] < 4:
+        raise ValueError("Expected state shape (N, max_agents, F) with F >= 4")
     if target.ndim != 4 or target.shape[-1] != 2:
         raise ValueError("Expected target shape (N, max_agents, horizon, 2)")
 
@@ -608,6 +608,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     cfg = PredictiveModelConfig(
         max_agents=int(state.shape[1]),
         horizon_steps=int(target.shape[2]),
+        input_dim=int(state.shape[2]),
         hidden_dim=int(args.hidden_dim),
         message_passing_steps=int(args.message_passing_steps),
     )

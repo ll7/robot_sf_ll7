@@ -25,6 +25,22 @@ def test_predictive_model_forward_shapes() -> None:
     assert out["future_positions"].shape == (4, cfg.max_agents, cfg.horizon_steps, 2)
 
 
+def test_predictive_model_forward_accepts_ego_conditioned_state() -> None:
+    """Model should accept wider ego-conditioned agent features when configured."""
+    cfg = PredictiveModelConfig(
+        max_agents=5,
+        horizon_steps=4,
+        input_dim=9,
+        hidden_dim=24,
+        message_passing_steps=1,
+    )
+    model = PredictiveTrajectoryModel(cfg)
+    state = torch.randn(3, cfg.max_agents, cfg.input_dim)
+    mask = torch.ones(3, cfg.max_agents)
+    out = model(state, mask)
+    assert out["future_positions"].shape == (3, cfg.max_agents, cfg.horizon_steps, 2)
+
+
 def test_masked_trajectory_loss_respects_mask() -> None:
     """Loss should ignore masked-out trajectory slots."""
     pred = torch.zeros(1, 2, 3, 2)

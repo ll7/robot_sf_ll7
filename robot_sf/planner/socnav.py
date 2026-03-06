@@ -413,6 +413,7 @@ class SocNavPlannerConfig:
     predictive_device: str = "cpu"
     predictive_max_agents: int = 16
     predictive_horizon_steps: int = 8
+    predictive_ego_conditioning: bool = False
     predictive_rollout_dt: float = 0.2
     predictive_goal_weight: float = 1.0
     predictive_collision_weight: float = 6.0
@@ -2655,13 +2656,20 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             tuple[np.ndarray, np.ndarray, np.ndarray, float]:
             ``(state, mask, robot_pos, robot_heading)``.
         """
-        robot_state, _goal_state, ped_state = self._socnav_fields(observation)
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        robot_speed = self._as_1d_float(robot_state.get("speed", [0.0, 0.0]), pad=2)[:2]
         ped_positions, ped_velocities_ego = self._normalize_pedestrians(ped_state)
 
         max_agents = max(1, int(self.config.predictive_max_agents))
-        state = np.zeros((max_agents, 4), dtype=np.float32)
+        expected_dim = 4
+        if bool(self.config.predictive_ego_conditioning):
+            expected_dim = 9
+        model = self._ensure_model()
+        if model is not None:
+            expected_dim = int(getattr(model.config, "input_dim", expected_dim))
+        state = np.zeros((max_agents, expected_dim), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         count = min(max_agents, ped_positions.shape[0])
         if count > 0:
@@ -2673,6 +2681,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             state[:count, 0] = rel_x
             state[:count, 1] = rel_y
             state[:count, 2:4] = ped_velocities_ego[:count]
+            if expected_dim >= 9:
+                goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+                goal_rel_world = goal_current - robot_pos
+                goal_rel = np.array(
+                    [
+                        cos_h * goal_rel_world[0] + sin_h * goal_rel_world[1],
+                        -sin_h * goal_rel_world[0] + cos_h * goal_rel_world[1],
+                    ],
+                    dtype=np.float32,
+                )
+                goal_dist = float(np.linalg.norm(goal_rel))
+                goal_dir = goal_rel / max(goal_dist, 1e-6)
+                state[:count, 4] = float(robot_speed[0]) if robot_speed.size > 0 else 0.0
+                state[:count, 5] = float(robot_speed[1]) if robot_speed.size > 1 else 0.0
+                state[:count, 6] = float(goal_dir[0])
+                state[:count, 7] = float(goal_dir[1])
+                state[:count, 8] = goal_dist
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 

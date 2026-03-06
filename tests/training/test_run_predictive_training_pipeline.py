@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import numpy as np
 import yaml
 
 from scripts.training import run_predictive_training_pipeline as pipeline
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_paths_from_config_resolves_root_relative_to_output_base(tmp_path: Path) -> None:
@@ -123,3 +120,133 @@ def test_dataset_npz_diagnostics_counts_empty_rows(tmp_path: Path) -> None:
     payload = pipeline._dataset_npz_diagnostics(dataset_path)
     assert payload["empty_agent_rows"] == 1
     assert payload["empty_target_rows"] == 1
+
+
+def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_path: Path) -> None:
+    """Pipeline should pass ego-conditioning to both base and hardcase collectors when enabled."""
+    config_path = tmp_path / "predictive.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_ego_smoke"},
+                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {
+                    "seeds_per_scenario": 1,
+                    "random_seed_base": 7,
+                    "ego_conditioning": True,
+                },
+                "hardcase_collection": {
+                    "ego_conditioning": True,
+                },
+                "mixing": {},
+                "training": {},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
+    monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
+    monkeypatch.setattr(
+        pipeline,
+        "_build_random_seed_manifest",
+        lambda **kwargs: (
+            Path(kwargs["output_path"]).write_text("scenario: [1]\n", encoding="utf-8")
+            or Path(kwargs["output_path"])
+        ),
+    )
+
+    def _fake_dataset(path: Path, *, state_dim: int) -> None:
+        np.savez(
+            path,
+            state=np.zeros((2, 3, state_dim), dtype=np.float32),
+            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+            mask=np.ones((2, 3), dtype=np.float32),
+            target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        )
+        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
+
+    invoked: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        invoked.append(list(cmd))
+        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            state_dim = 9 if "--ego-conditioning" in cmd else 4
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output, state_dim=state_dim)
+            return
+        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output, state_dim=9)
+            return
+        if any("train_predictive_planner.py" in part for part in cmd):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "training_summary.json").write_text(
+                json.dumps(
+                    {
+                        "best_checkpoint": str(out_dir / "predictive_model.pt"),
+                        "selection": {"selected_epoch": 1},
+                        "selected_checkpoint_reason": "proxy",
+                        "source_dataset_ids": ["a", "b"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
+            return
+        if any("evaluate_predictive_planner.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "final_eval_summary.json").write_text(
+                json.dumps({"quality_gates": {"pass_all": True}, "integrity": {"pass": True}}),
+                encoding="utf-8",
+            )
+            return
+        if any("run_predictive_hard_seed_diagnostics.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "summary.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+            return
+        if any("run_predictive_success_campaign.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "campaign_summary.json").write_text(
+                json.dumps({"integrity": {"pass": True}}),
+                encoding="utf-8",
+            )
+            return
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(pipeline, "_run", _fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_run_capture_json",
+        lambda _cmd, **_kwargs: {"status": "ok", "returncode": 0},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(config=config_path, run_id=None, log_level="INFO"),
+    )
+
+    code = pipeline.main()
+    assert code in {0, 2}
+    collector_cmds = [
+        cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
+    ]
+    assert len(collector_cmds) == 2
+    assert all("--ego-conditioning" in cmd for cmd in collector_cmds)

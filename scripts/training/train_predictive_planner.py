@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,9 @@ from robot_sf.planner.predictive_model import (
     save_predictive_checkpoint,
 )
 from robot_sf.training.scenario_loader import load_scenarios
+
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
 
 
 def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
@@ -109,6 +113,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-val-ade", type=float, default=1.2)
     parser.add_argument("--max-val-fde", type=float, default=2.0)
     parser.add_argument("--register-model", action="store_true")
+    parser.add_argument("--checkpoint-only-register", type=Path, default=None)
+    parser.add_argument("--training-summary", type=Path, default=None)
     parser.add_argument("--proxy-scenario-matrix", type=Path, default=None)
     parser.add_argument("--proxy-seed-manifest", type=Path, default=None)
     parser.add_argument("--proxy-every-epochs", type=int, default=0)
@@ -436,9 +442,119 @@ def _init_wandb(args: argparse.Namespace, cfg: PredictiveModelConfig):
     )
 
 
+def _selection_decision(
+    *,
+    select_by_proxy: bool,
+    best: dict[str, float],
+    best_proxy: dict[str, float] | None,
+) -> dict[str, Any]:
+    """Build deterministic checkpoint-selection metadata."""
+    if bool(select_by_proxy) and best_proxy is not None:
+        return {
+            "selection_mode": "proxy",
+            "selected_checkpoint_reason": (
+                "Selected by proxy campaign ranking: success_rate, then mean_min_distance, "
+                "then validation loss."
+            ),
+            "selected_epoch": int(best["epoch"]),
+            "proxy_metrics": dict(best_proxy),
+            "validation_metrics": {
+                "val_loss": float(best["val_loss"]),
+                "val_ade": float(best["val_ade"]),
+                "val_fde": float(best["val_fde"]),
+            },
+        }
+    return {
+        "selection_mode": "val_loss",
+        "selected_checkpoint_reason": "Selected by minimum validation loss.",
+        "selected_epoch": int(best["epoch"]),
+        "proxy_metrics": None,
+        "validation_metrics": {
+            "val_loss": float(best["val_loss"]),
+            "val_ade": float(best["val_ade"]),
+            "val_fde": float(best["val_fde"]),
+        },
+    }
+
+
+def _register_model_entry(
+    *,
+    model_id: str,
+    checkpoint_path: Path,
+    dataset: Path,
+    summary_path: Path,
+    selection: dict[str, Any],
+) -> None:
+    """Upsert registry metadata for a promoted predictive checkpoint."""
+    rel_checkpoint = checkpoint_path
+    try:
+        rel_checkpoint = checkpoint_path.relative_to(Path.cwd())
+    except ValueError:
+        rel_checkpoint = checkpoint_path
+
+    upsert_registry_entry(
+        {
+            "model_id": model_id,
+            "display_name": f"Predictive planner model ({model_id})",
+            "local_path": str(rel_checkpoint),
+            "config_path": "",
+            "commit": _git_commit(),
+            "wandb_run_id": "",
+            "wandb_run_path": "",
+            "wandb_entity": "",
+            "wandb_project": "",
+            "wandb_file": "",
+            "tags": ["predictive", "rgl", "planner", "trajectory", "benchmark-reset-v2"],
+            "notes": [
+                f"Dataset: {dataset}",
+                f"Training summary: {summary_path}",
+                f"Selection mode: {selection['selection_mode']}",
+                "Promoted by scripts/training/train_predictive_planner.py",
+            ],
+        }
+    )
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Train predictive trajectory model and persist checkpoint + metrics."""
     args = parse_args()
+
+    if args.checkpoint_only_register is not None:
+        if args.training_summary is None:
+            raise ValueError("--training-summary is required with --checkpoint-only-register")
+        if not bool(args.register_model):
+            raise ValueError("--register-model is required with --checkpoint-only-register")
+        if not args.checkpoint_only_register.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint_only_register}")
+        if not args.training_summary.exists():
+            raise FileNotFoundError(f"Training summary not found: {args.training_summary}")
+        summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
+        if not isinstance(summary, dict):
+            raise TypeError(f"Expected JSON object at {args.training_summary}")
+        gates = summary.get("quality_gates", {})
+        if not isinstance(gates, dict) or not bool(gates.get("pass_all", False)):
+            raise RuntimeError("Refusing to register predictive model with failing training gates.")
+        selection = summary.get("selection", {})
+        if not isinstance(selection, dict):
+            selection = {}
+        _register_model_entry(
+            model_id=str(args.model_id),
+            checkpoint_path=args.checkpoint_only_register,
+            dataset=args.dataset,
+            summary_path=args.training_summary,
+            selection=selection,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "return_code": 0,
+                    "model_id": str(args.model_id),
+                    "checkpoint": str(args.checkpoint_only_register),
+                }
+            )
+        )
+        return 0
 
     if not args.dataset.exists():
         raise FileNotFoundError(f"Dataset not found: {args.dataset}")
@@ -698,14 +814,27 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "pass_val_fde": bool(best["val_fde"] <= float(args.max_val_fde)),
     }
     gates["pass_all"] = bool(gates["pass_val_ade"] and gates["pass_val_fde"])
+    selection = _selection_decision(
+        select_by_proxy=bool(args.select_by_proxy),
+        best=best,
+        best_proxy=best_proxy,
+    )
 
     summary = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_training_summary",
+        "generated_at": datetime.now(UTC).isoformat(),
         "model_id": args.model_id,
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),
         "device": str(device),
         "config": asdict(cfg),
         "best": best,
+        "best_checkpoint": {
+            "path": str(checkpoint_path),
+            "epoch": int(best["epoch"]),
+        },
         "quality_gates": gates,
         "epochs": int(args.epochs),
         "batch_size": int(args.batch_size),
@@ -713,7 +842,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "weight_decay": float(args.weight_decay),
         "seed": int(args.seed),
         "git_commit": _git_commit(),
-        "selection_mode": "proxy" if bool(args.select_by_proxy) else "val_loss",
+        "selection_mode": selection["selection_mode"],
+        "selection": selection,
+        "selected_checkpoint_reason": selection["selected_checkpoint_reason"],
+        "source_dataset_ids": [f"{_TRAINING_FAMILY}:{Path(args.dataset).stem}"],
         "proxy": {
             "enabled": bool(proxy_enabled),
             "scenario_matrix": str(args.proxy_scenario_matrix)
@@ -751,40 +883,21 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         wandb_run.summary["best_val_fde"] = float(best["val_fde"])
         wandb_run.summary["quality_gate_pass"] = bool(gates["pass_all"])
 
-    if bool(args.register_model):
-        rel_checkpoint = checkpoint_path
-        try:
-            rel_checkpoint = checkpoint_path.relative_to(Path.cwd())
-        except ValueError:
-            rel_checkpoint = checkpoint_path
-
-        upsert_registry_entry(
-            {
-                "model_id": args.model_id,
-                "display_name": f"Predictive planner model ({args.model_id})",
-                "local_path": str(rel_checkpoint),
-                "config_path": "",
-                "commit": _git_commit(),
-                "wandb_run_id": "",
-                "wandb_run_path": "",
-                "wandb_entity": "",
-                "wandb_project": "",
-                "wandb_file": "",
-                "tags": ["predictive", "rgl", "planner", "trajectory"],
-                "notes": [
-                    f"Dataset: {args.dataset}",
-                    "Generated by scripts/training/train_predictive_planner.py",
-                ],
-            }
-        )
-        logger.info("Updated model registry entry '{}'", args.model_id)
-
     if not gates["pass_all"]:
         logger.error("Quality gates failed: {}", gates)
         if wandb_run is not None:
             wandb_run.finish(exit_code=2)
         return 2
     logger.success("Quality gates passed: {}", gates)
+    if bool(args.register_model):
+        _register_model_entry(
+            model_id=str(args.model_id),
+            checkpoint_path=checkpoint_path,
+            dataset=args.dataset,
+            summary_path=summary_path,
+            selection=selection,
+        )
+        logger.info("Updated model registry entry '{}'", args.model_id)
     if wandb_run is not None:
         wandb_run.finish()
     return 0

@@ -18,6 +18,9 @@ from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
+
 
 @dataclass
 class EvalResult:
@@ -289,6 +292,9 @@ def main() -> int:
 
     top = ranked[0]
     summary = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_success_campaign",
         "generated_at": datetime.now(UTC).isoformat(),
         "scenario_matrix": str(args.scenario_matrix),
         "hard_seed_manifest": str(args.hard_seed_manifest),

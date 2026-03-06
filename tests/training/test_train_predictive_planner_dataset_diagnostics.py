@@ -43,3 +43,15 @@ def test_dataset_diagnostics_accepts_spread_trajectories() -> None:
         target_mask=target_mask,
     )
     assert diag["is_degenerate"] is False
+
+
+def test_selection_decision_prefers_proxy_when_enabled() -> None:
+    """Proxy-enabled selection metadata should report proxy as the selection mode."""
+    selection = trainer._selection_decision(
+        select_by_proxy=True,
+        best={"epoch": 12.0, "val_loss": 0.2, "val_ade": 0.4, "val_fde": 0.7},
+        best_proxy={"success_rate": 0.8, "mean_min_distance": 0.9, "val_loss": 0.2, "epoch": 12.0},
+    )
+    assert selection["selection_mode"] == "proxy"
+    assert selection["selected_epoch"] == 12
+    assert selection["proxy_metrics"]["success_rate"] == 0.8

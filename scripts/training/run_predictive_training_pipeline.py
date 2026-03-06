@@ -14,12 +14,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from loguru import logger
 
 from robot_sf.training.scenario_loader import load_scenarios
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
 
 
 @dataclass
@@ -70,6 +73,88 @@ def _git_hash() -> str:
         )
     except Exception:
         return "unknown"
+
+
+def _sha1_file(path: Path) -> str:
+    """Return SHA1 hash for a file."""
+    digest = hashlib.sha1()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON mapping from disk."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError(f"Expected JSON object at {path}")
+    return payload
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON with stable formatting."""
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _dataset_npz_diagnostics(path: Path) -> dict[str, Any]:
+    """Compute dataset-level diagnostics from a predictive rollout NPZ."""
+    raw = np.load(path)
+    state = np.asarray(raw["state"], dtype=np.float32)
+    target = np.asarray(raw["target"], dtype=np.float32)
+    mask = np.asarray(raw["mask"], dtype=np.float32)
+    target_mask = (
+        np.asarray(raw["target_mask"], dtype=np.float32)
+        if "target_mask" in raw
+        else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
+    )
+    agent_rows = np.sum(mask, axis=1)
+    target_rows = np.sum(target_mask, axis=(1, 2))
+    return {
+        "num_samples": int(state.shape[0]),
+        "max_agents": int(state.shape[1]),
+        "horizon_steps": int(target.shape[2]),
+        "active_agent_ratio": float(np.mean(mask)),
+        "active_target_ratio": float(np.mean(target_mask)),
+        "invalid_mask_count": int(np.count_nonzero(mask <= 0.0)),
+        "invalid_target_mask_count": int(np.count_nonzero(target_mask <= 0.0)),
+        "empty_agent_rows": int(np.count_nonzero(agent_rows <= 0.0)),
+        "empty_target_rows": int(np.count_nonzero(target_rows <= 0.0)),
+    }
+
+
+def _write_dataset_manifest(
+    *,
+    dataset_path: Path,
+    summary_path: Path,
+    role: str,
+    run_id: str,
+    config_path: Path,
+    config_hash: str,
+    git_commit: str,
+    extra: dict[str, Any] | None = None,
+) -> Path:
+    """Write a reproducible dataset manifest next to a generated dataset."""
+    summary = _read_json(summary_path)
+    manifest = {
+        "dataset_id": f"{run_id}:{role}",
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": role,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "config_path": str(config_path),
+        "config_hash": config_hash,
+        "git_commit": git_commit,
+        "dataset_path": str(dataset_path),
+        "dataset_sha1": _sha1_file(dataset_path),
+        "summary_path": str(summary_path),
+        "summary": summary,
+        "diagnostics": _dataset_npz_diagnostics(dataset_path),
+        "extra": extra or {},
+    }
+    manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+    _write_json(manifest_path, manifest)
+    return manifest_path
 
 
 def _run_capture_json(
@@ -197,7 +282,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:  # noqa: C901, PLR0915
+def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Execute full predictive training pipeline from one YAML config."""
     args = _parse_args()
     logger.remove()
@@ -207,6 +292,7 @@ def main() -> int:  # noqa: C901, PLR0915
     cfg = _read_yaml(config_path)
     config_text = config_path.read_text(encoding="utf-8")
     config_hash = hashlib.sha1(config_text.encode("utf-8")).hexdigest()
+    git_commit = _git_hash()
     base_dir = config_path.parent.resolve()
 
     exp_cfg = cfg.get("experiment", {})
@@ -277,6 +363,16 @@ def main() -> int:  # noqa: C901, PLR0915
         ],
         log_level=args.log_level,
     )
+    base_dataset_manifest = _write_dataset_manifest(
+        dataset_path=paths.base_dataset,
+        summary_path=paths.base_dataset.with_suffix(".json"),
+        role="predictive_base_dataset",
+        run_id=run_id,
+        config_path=config_path,
+        config_hash=config_hash,
+        git_commit=git_commit,
+        extra={"seed_manifest": str(base_manifest)},
+    )
 
     # 2) Collect hardcase dataset from fixed manifest.
     hardcase_cfg = cfg.get("hardcase_collection", {})
@@ -303,6 +399,16 @@ def main() -> int:  # noqa: C901, PLR0915
         ],
         log_level=args.log_level,
     )
+    hardcase_dataset_manifest = _write_dataset_manifest(
+        dataset_path=paths.hardcase_dataset,
+        summary_path=paths.hardcase_dataset.with_suffix(".json"),
+        role="predictive_hardcase_dataset",
+        run_id=run_id,
+        config_path=config_path,
+        config_hash=config_hash,
+        git_commit=git_commit,
+        extra={"seed_manifest": str(hard_seed_manifest)},
+    )
 
     # 3) Build mixed dataset.
     mixing_cfg = cfg.get("mixing", {})
@@ -324,6 +430,19 @@ def main() -> int:  # noqa: C901, PLR0915
             str(paths.mixed_dataset),
         ],
         log_level=args.log_level,
+    )
+    mixed_dataset_manifest = _write_dataset_manifest(
+        dataset_path=paths.mixed_dataset,
+        summary_path=paths.mixed_dataset.with_suffix(".json"),
+        role="predictive_mixed_dataset",
+        run_id=run_id,
+        config_path=config_path,
+        config_hash=config_hash,
+        git_commit=git_commit,
+        extra={
+            "base_dataset": str(paths.base_dataset),
+            "hardcase_dataset": str(paths.hardcase_dataset),
+        },
     )
 
     # 4) Train with proxy + W&B.
@@ -376,7 +495,6 @@ def main() -> int:  # noqa: C901, PLR0915
         "--proxy-workers",
         str(int(train_cfg.get("proxy_workers", 1))),
         "--select-by-proxy",
-        "--register-model",
     ]
     if bool(wandb_cfg.get("enabled", True)):
         train_cmd.extend(
@@ -402,6 +520,8 @@ def main() -> int:  # noqa: C901, PLR0915
             train_cmd.extend([str(tag) for tag in tags])
 
     _run(train_cmd, log_level=args.log_level)
+    training_summary_path = paths.train_dir / "training_summary.json"
+    training_summary = _read_json(training_summary_path)
 
     # 5) Final evaluations and campaign summary.
     eval_cfg = cfg.get("evaluation", {})
@@ -503,15 +623,55 @@ def main() -> int:  # noqa: C901, PLR0915
         and stage_status["campaign_ok"]
     )
 
+    promoted_model: dict[str, Any] = {
+        "attempted": False,
+        "promoted": False,
+        "model_id": str(train_cfg.get("model_id", "")),
+        "checkpoint": str(paths.checkpoint),
+    }
+    if stage_status["all_ok"]:
+        promoted_model["attempted"] = True
+        register_payload = _run_capture_json(
+            [
+                sys.executable,
+                "scripts/training/train_predictive_planner.py",
+                "--dataset",
+                str(paths.mixed_dataset),
+                "--output-dir",
+                str(paths.train_dir),
+                "--model-id",
+                str(train_cfg.get("model_id", f"predictive_proxy_selected_v2_{run_stamp}")),
+                "--epochs",
+                "0",
+                "--checkpoint-only-register",
+                str(paths.checkpoint),
+                "--training-summary",
+                str(training_summary_path),
+                "--register-model",
+            ],
+            log_level=args.log_level,
+            allow_failure=True,
+        )
+        promoted_model["register_payload"] = register_payload
+        promoted_model["promoted"] = int(register_payload.get("return_code", 1)) == 0
+
     final_summary = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_pipeline_summary",
         "run_id": run_id,
         "generated_at": datetime.now(UTC).isoformat(),
         "config_path": str(config_path),
         "config_hash": config_hash,
-        "git_commit": _git_hash(),
+        "git_commit": git_commit,
         "scenario_matrix": str(scenario_matrix),
         "hard_seed_manifest": str(hard_seed_manifest),
         "planner_grid": str(planner_grid),
+        "dataset_manifests": {
+            "base": str(base_dataset_manifest),
+            "hardcase": str(hardcase_dataset_manifest),
+            "mixed": str(mixed_dataset_manifest),
+        },
         "paths": {
             "run_root": str(paths.root),
             "base_dataset": str(paths.base_dataset),
@@ -524,12 +684,20 @@ def main() -> int:  # noqa: C901, PLR0915
             "campaign_dir": str(paths.campaign_dir),
         },
         "stage_status": stage_status,
+        "training": training_summary,
         "evaluation": eval_payload,
         "hard_seed_diagnostics": diag_payload,
         "campaign": campaign_status,
         "success_campaign": campaign_summary,
+        "promoted_model": promoted_model,
+        "final_gate_results": {
+            "all_ok": stage_status["all_ok"],
+            "evaluation_ok": stage_status["evaluation_ok"],
+            "hard_seed_diagnostics_ok": stage_status["hard_seed_diagnostics_ok"],
+            "campaign_ok": stage_status["campaign_ok"],
+        },
     }
-    paths.final_summary.write_text(json.dumps(final_summary, indent=2), encoding="utf-8")
+    _write_json(paths.final_summary, final_summary)
 
     md_path = paths.root / "final_performance_summary.md"
     best = campaign_summary.get("best", {}) if isinstance(campaign_summary, dict) else {}
@@ -539,6 +707,7 @@ def main() -> int:  # noqa: C901, PLR0915
         "# Predictive Training Final Performance Summary",
         "",
         f"- Run ID: `{run_id}`",
+        f"- Contract version: `{_CONTRACT_VERSION}`",
         f"- Config: `{config_path}`",
         f"- Scenario matrix: `{scenario_matrix}`",
         f"- Checkpoint: `{paths.checkpoint}`",
@@ -557,10 +726,14 @@ def main() -> int:  # noqa: C901, PLR0915
         f"- Global success: `{best_global.get('success_rate', 'n/a')}`",
         f"- Hard mean min-distance: `{best_hard.get('mean_min_distance', 'n/a')}`",
         f"- Global mean min-distance: `{best_global.get('mean_min_distance', 'n/a')}`",
+        f"- Promoted model: `{promoted_model['promoted']}`",
         "",
         "## Artifacts",
         "",
         f"- JSON summary: `{paths.final_summary}`",
+        f"- Base dataset manifest: `{base_dataset_manifest}`",
+        f"- Hardcase dataset manifest: `{hardcase_dataset_manifest}`",
+        f"- Mixed dataset manifest: `{mixed_dataset_manifest}`",
         f"- Eval dir: `{paths.eval_dir}`",
         f"- Diagnostics dir: `{paths.diagnostics_dir}`",
         f"- Campaign dir: `{paths.campaign_dir}`",

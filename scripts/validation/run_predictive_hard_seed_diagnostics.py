@@ -16,6 +16,9 @@ from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from scripts.validation.predictive_eval_common import load_seed_manifest
 
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
+
 
 def _json_ready(value):  # noqa: C901
     """Convert nested values to JSON-serializable primitives."""
@@ -235,6 +238,9 @@ def main() -> int:
     print(
         json.dumps(
             {
+                "contract_version": _CONTRACT_VERSION,
+                "training_family": _TRAINING_FAMILY,
+                "artifact_role": "predictive_hard_seed_diagnostics",
                 "summary": str(summary_path),
                 "report": str(report_path),
                 "episodes": len(episode_rows),

@@ -18,6 +18,9 @@ from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
+
 
 def parse_args() -> argparse.Namespace:
     """Parse evaluation CLI arguments."""
@@ -97,6 +100,37 @@ def _failure_taxonomy(rows: list[dict]) -> dict:
         "status_counts": dict(by_status),
         "termination_reason_counts": dict(by_reason),
         "scenario_counts": dict(by_scenario),
+    }
+
+
+def _integrity_summary(rows: list[dict]) -> dict[str, object]:
+    """Detect contradiction patterns in evaluation episode records."""
+    contradictions: list[dict[str, object]] = []
+    for row in rows:
+        metrics = row.get("metrics", {})
+        success = _episode_success(row)
+        total_collisions = float(
+            metrics.get("total_collision_count", metrics.get("collisions", 0.0)) or 0.0
+        )
+        termination_reason = str(row.get("termination_reason", "unknown"))
+        if termination_reason == "collision" and success:
+            contradictions.append(
+                {
+                    "episode_id": row.get("episode_id"),
+                    "reason": "collision_with_success",
+                }
+            )
+        if success and total_collisions > 0.0:
+            contradictions.append(
+                {
+                    "episode_id": row.get("episode_id"),
+                    "reason": "success_with_collision_metric",
+                }
+            )
+    return {
+        "pass": not contradictions,
+        "contradiction_count": len(contradictions),
+        "contradictions": contradictions,
     }
 
 
@@ -299,8 +333,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         ),
     }
     gates["pass_all"] = bool(gates["pass_success_rate"] and gates["pass_min_distance"])
+    integrity = _integrity_summary(rows)
 
     result = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_final_evaluation",
         "checkpoint": str(args.checkpoint),
         "scenario_matrix": str(args.scenario_matrix),
         "jsonl_path": str(jsonl_path),
@@ -314,6 +352,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         },
         "per_scenario_delta": per_scenario_summary,
         "failure_taxonomy": _failure_taxonomy(rows),
+        "integrity": integrity,
         "comparison_delta": comparison_delta,
         "quality_gates": gates,
     }
@@ -321,6 +360,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     summary_path.write_text(json.dumps(_nan_to_none(result), indent=2), encoding="utf-8")
     logger.info("Saved evaluation summary to {}", summary_path)
 
+    if not integrity["pass"]:
+        logger.error("Evaluation integrity checks failed: {}", integrity)
+        return 2
     if not gates["pass_all"]:
         logger.error("Evaluation quality gates failed: {}", gates)
         return 2

@@ -642,7 +642,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         convergence=convergence,
         evaluation=evaluation,
         ppo_hyperparams=dict(data.get("ppo_hyperparams", {}) or {}),
-        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "eval_episode_return")),
+        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "success_rate")),
         snqi_weights_path=_resolve_optional_path(
             path,
             data.get("snqi_weights"),

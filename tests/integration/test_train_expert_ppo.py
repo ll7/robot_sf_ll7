@@ -174,6 +174,39 @@ def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path)
     assert config.randomize_seeds is False
 
 
+def test_load_expert_training_config_defaults_best_checkpoint_metric_to_success_rate(
+    tmp_path,
+) -> None:
+    """Configs without an explicit best-checkpoint metric should now prefer success rate."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "default_best_metric.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_default_best_metric_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.best_checkpoint_metric == "success_rate"
+
+
 def test_load_expert_training_config_requires_step_schedule(tmp_path) -> None:
     """Configs without step_schedule should fail instead of silently changing cadence."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()

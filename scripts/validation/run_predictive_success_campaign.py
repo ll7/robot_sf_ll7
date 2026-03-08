@@ -203,12 +203,21 @@ def _run_eval(
     )
 
 
-def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, float]:
-    """Ranking key: hard success first, then hard clearance, then global success."""
+def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, float, float, float]:
+    """Ranking key preferring actual success before clearance in hard-suite ties."""
     hard_clearance = (
         hard.mean_min_distance if np.isfinite(hard.mean_min_distance) else float("-inf")
     )
-    return (hard.success_rate, hard_clearance, global_res.success_rate)
+    global_clearance = (
+        global_res.mean_min_distance if np.isfinite(global_res.mean_min_distance) else float("-inf")
+    )
+    return (
+        hard.success_rate,
+        global_res.success_rate,
+        hard_clearance,
+        global_clearance,
+        global_res.mean_avg_speed,
+    )
 
 
 def _checkpoint_token(checkpoint: str) -> str:

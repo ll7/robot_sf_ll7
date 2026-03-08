@@ -550,6 +550,27 @@ def test_prediction_adapter_progress_escape_keeps_lower_cost_rollout(monkeypatch
     assert (v, w) == (0.2, 0.0)
 
 
+def test_prediction_adapter_sequence_search_is_deterministic(monkeypatch):
+    """Sequence search should stay deterministic for the same observation and config."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_sequence_search_enabled=True,
+        predictive_sequence_segments=3,
+        predictive_sequence_branch_factor=4,
+        predictive_sequence_beam_width=6,
+        predictive_candidate_speeds=(0.0, 0.4, 0.8),
+        predictive_candidate_heading_deltas=(-np.pi / 6, 0.0, np.pi / 6),
+    )
+    obs = _make_obs_with_peds([(1.2, 0.3), (2.0, -0.4)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

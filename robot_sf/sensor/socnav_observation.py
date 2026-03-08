@@ -15,6 +15,11 @@ from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.planner.predictive_foresight import (
+    PredictiveForesightConfig,
+    PredictiveForesightEncoder,
+    predictive_foresight_spaces,
+)
 from robot_sf.sim.simulator import Simulator
 
 DEFAULT_MAX_PEDS = 64
@@ -119,7 +124,12 @@ def socnav_observation_space(
                     ),
                 },
             ),
-        },
+            **(
+                {"predictive": predictive_foresight_spaces()}
+                if getattr(env_config, "predictive_foresight_enabled", False)
+                else {}
+            ),
+        }
     )
 
 
@@ -132,6 +142,54 @@ class SocNavObservationFusion:
     max_pedestrians: int
     robot_index: int = 0
     truncation_warned: bool = False
+    _predictive_foresight: PredictiveForesightEncoder | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize optional predictive foresight encoder."""
+        if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
+            self._predictive_foresight = PredictiveForesightEncoder(
+                PredictiveForesightConfig(
+                    enabled=True,
+                    model_id=str(getattr(self.env_config, "predictive_foresight_model_id", "")),
+                    checkpoint_path=getattr(
+                        self.env_config,
+                        "predictive_foresight_checkpoint_path",
+                        None,
+                    ),
+                    device=str(getattr(self.env_config, "predictive_foresight_device", "cpu")),
+                    max_agents=int(
+                        getattr(
+                            self.env_config, "predictive_foresight_max_agents", self.max_pedestrians
+                        )
+                    ),
+                    horizon_steps=int(
+                        getattr(self.env_config, "predictive_foresight_horizon_steps", 8)
+                    ),
+                    rollout_dt=float(
+                        getattr(self.env_config, "predictive_foresight_rollout_dt", 0.2)
+                    ),
+                    ego_conditioning=bool(
+                        getattr(self.env_config, "predictive_foresight_ego_conditioning", False)
+                    ),
+                    near_distance=float(
+                        getattr(self.env_config, "predictive_foresight_near_distance", 0.7)
+                    ),
+                    front_corridor_length=float(
+                        getattr(
+                            self.env_config,
+                            "predictive_foresight_front_corridor_length",
+                            3.0,
+                        )
+                    ),
+                    front_corridor_half_width=float(
+                        getattr(
+                            self.env_config,
+                            "predictive_foresight_front_corridor_half_width",
+                            1.0,
+                        )
+                    ),
+                )
+            )
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
@@ -207,7 +265,7 @@ class SocNavObservationFusion:
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
-        return {
+        obs = {
             "robot": {
                 "position": robot_pos_clipped,
                 "heading": np.array([wrapped_heading], dtype=np.float32),
@@ -240,3 +298,6 @@ class SocNavObservationFusion:
                 ),
             },
         }
+        if self._predictive_foresight is not None:
+            obs["predictive"] = self._predictive_foresight.encode(obs)
+        return obs

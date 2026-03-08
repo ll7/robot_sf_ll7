@@ -42,6 +42,10 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
+from robot_sf.planner.predictive_foresight import (
+    PredictiveForesightConfig,
+    PredictiveForesightEncoder,
+)
 
 
 @dataclass
@@ -67,6 +71,17 @@ class PPOPlannerConfig:
 
     # Robustness
     fallback_to_goal: bool = True
+    predictive_foresight_enabled: bool = False
+    predictive_foresight_model_id: str = "predictive_proxy_selected_v2_full"
+    predictive_foresight_checkpoint_path: str | None = None
+    predictive_foresight_device: str = "cpu"
+    predictive_foresight_max_agents: int = 16
+    predictive_foresight_horizon_steps: int = 8
+    predictive_foresight_rollout_dt: float = 0.2
+    predictive_foresight_ego_conditioning: bool = False
+    predictive_foresight_near_distance: float = 0.7
+    predictive_foresight_front_corridor_length: float = 3.0
+    predictive_foresight_front_corridor_half_width: float = 1.0
 
 
 class PPOPlanner:
@@ -97,7 +112,24 @@ class PPOPlanner:
         self._model = None
         self._status = "ok"
         self._fallback_reason: str | None = None
+        self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._load_model()
+        if self.config.predictive_foresight_enabled:
+            self._predictive_foresight = PredictiveForesightEncoder(
+                PredictiveForesightConfig(
+                    enabled=True,
+                    model_id=self.config.predictive_foresight_model_id,
+                    checkpoint_path=self.config.predictive_foresight_checkpoint_path,
+                    device=self.config.predictive_foresight_device,
+                    max_agents=self.config.predictive_foresight_max_agents,
+                    horizon_steps=self.config.predictive_foresight_horizon_steps,
+                    rollout_dt=self.config.predictive_foresight_rollout_dt,
+                    ego_conditioning=self.config.predictive_foresight_ego_conditioning,
+                    near_distance=self.config.predictive_foresight_near_distance,
+                    front_corridor_length=self.config.predictive_foresight_front_corridor_length,
+                    front_corridor_half_width=self.config.predictive_foresight_front_corridor_half_width,
+                )
+            )
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -307,15 +339,23 @@ class PPOPlanner:
         if not isinstance(spaces, dict):
             return {str(k): np.asarray(v) for k, v in obs.items()}
 
+        source_obs = dict(obs)
+        if self._predictive_foresight is not None:
+            missing_predictive = [
+                key for key in spaces if key.startswith("predictive_") and key not in source_obs
+            ]
+            if missing_predictive:
+                source_obs.update(self._predictive_feature_payload(source_obs))
+
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
         for key, sub_space in spaces.items():
-            if key not in obs:
+            if key not in source_obs:
                 missing.append(str(key))
                 continue
             target_shape = getattr(sub_space, "shape", None)
             target_dtype = getattr(sub_space, "dtype", None)
-            arr = np.asarray(obs[key], dtype=target_dtype)
+            arr = np.asarray(source_obs[key], dtype=target_dtype)
             if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
                 target_size = int(np.prod(target_shape))
                 if int(arr.size) != target_size:
@@ -329,6 +369,17 @@ class PPOPlanner:
             missing_preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {missing_preview}")
         return converted
+
+    def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Map nested predictive foresight outputs to flat PPO observation keys.
+
+        Returns:
+            dict[str, np.ndarray]: Flat `predictive_*` feature payload.
+        """
+        if self._predictive_foresight is None:
+            return {}
+        feature_block = self._predictive_foresight.encode(obs)
+        return {f"predictive_{key}": value for key, value in feature_block.items()}
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         """Convert the benchmark observation into model input format.

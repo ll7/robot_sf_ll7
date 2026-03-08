@@ -82,6 +82,31 @@ def test_build_model_obs_dict_raises_on_missing_key():
         planner._build_model_obs_dict({"other": [1.0]})
 
 
+def test_build_model_obs_dict_backfills_predictive_features(monkeypatch):
+    """Planner should synthesize predictor-derived keys when the model expects them."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict", predictive_foresight_enabled=True))
+    planner._model = SimpleNamespace(
+        observation_space=SimpleNamespace(
+            spaces={
+                "predictive_min_clearance": SimpleNamespace(shape=(1,), dtype=np.float32),
+                "predictive_gap_scores": SimpleNamespace(shape=(2,), dtype=np.float32),
+            },
+        ),
+    )
+
+    class _DummyEncoder:
+        def encode(self, _obs):
+            return {
+                "min_clearance": np.array([1.5], dtype=np.float32),
+                "gap_scores": np.array([0.4, 0.6], dtype=np.float32),
+            }
+
+    planner._predictive_foresight = _DummyEncoder()
+    converted = planner._build_model_obs_dict({"robot_position": [0.0, 0.0]})
+    assert converted["predictive_min_clearance"][0] == pytest.approx(1.5)
+    assert converted["predictive_gap_scores"].shape == (2,)
+
+
 def test_build_model_obs_dict_raises_on_size_mismatch():
     """Planner should fail when value size cannot match expected shape."""
     planner = PPOPlanner(_planner_config(obs_mode="dict"))

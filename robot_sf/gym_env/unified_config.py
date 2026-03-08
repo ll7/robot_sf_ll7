@@ -108,6 +108,17 @@ class RobotSimulationConfig(BaseSimulationConfig):
     planner_backend: str = field(default="classic")
     planner_classic_config: ClassicPlannerConfig | None = field(default=None)
     navigation_settings: NavigationSettings = field(default_factory=NavigationSettings)
+    predictive_foresight_enabled: bool = field(default=False)
+    predictive_foresight_model_id: str = field(default="predictive_proxy_selected_v2_full")
+    predictive_foresight_checkpoint_path: str | None = field(default=None)
+    predictive_foresight_device: str = field(default="cpu")
+    predictive_foresight_max_agents: int = field(default=16)
+    predictive_foresight_horizon_steps: int = field(default=8)
+    predictive_foresight_rollout_dt: float = field(default=0.2)
+    predictive_foresight_ego_conditioning: bool = field(default=False)
+    predictive_foresight_near_distance: float = field(default=0.7)
+    predictive_foresight_front_corridor_length: float = field(default=3.0)
+    predictive_foresight_front_corridor_half_width: float = field(default=1.0)
 
     def __post_init__(self):
         """Validate robot-specific configuration.

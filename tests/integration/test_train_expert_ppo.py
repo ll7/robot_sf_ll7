@@ -237,6 +237,38 @@ def test_load_expert_training_config_requires_step_schedule(tmp_path) -> None:
         load_expert_training_config(config_path)
 
 
+def test_load_expert_training_config_allows_missing_frequency_episodes(tmp_path) -> None:
+    """Configs should load when evaluation uses only the step_schedule contract."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "missing_frequency.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_missing_frequency_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    assert config.evaluation.frequency_episodes == 0
+    assert config.evaluation.step_schedule == ((None, 20000),)
+
+
 def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:
     """Loader should preserve portable registry-backed resume model ids."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()

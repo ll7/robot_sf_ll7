@@ -620,13 +620,15 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         collision_rate=float(convergence_raw["collision_rate"]),
         plateau_window=int(convergence_raw["plateau_window"]),
     )
+    frequency_episodes = int(evaluation_raw.get("frequency_episodes", 0))
     evaluation = EvaluationSchedule(
-        frequency_episodes=int(evaluation_raw["frequency_episodes"]),
+        frequency_episodes=frequency_episodes,
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
     )
-    _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
+    if "frequency_episodes" in evaluation_raw:
+        _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
     if not evaluation.step_schedule:
         raise ValueError(
             "evaluation.step_schedule is required; frequency_episodes alone is not supported."

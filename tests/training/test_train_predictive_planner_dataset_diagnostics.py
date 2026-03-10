@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from scripts.training import train_predictive_planner as trainer
 
@@ -116,3 +117,29 @@ def test_source_dataset_ids_falls_back_to_stem_when_manifest_is_not_object(tmp_p
 
     source_ids = trainer._source_dataset_ids(dataset)
     assert source_ids == ["prediction_planner:predictive_rollouts_mixed"]
+
+
+def test_validate_checkpoint_registration_inputs_rejects_mismatched_provenance(
+    tmp_path: Path,
+) -> None:
+    """Checkpoint-only registration should reject tuples that do not match the summary."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    checkpoint = tmp_path / "predictive_model.pt"
+    other_checkpoint = tmp_path / "other_model.pt"
+    for path in (dataset, checkpoint, other_checkpoint):
+        path.write_text("stub", encoding="utf-8")
+
+    summary = {
+        "checkpoint": str(checkpoint),
+        "dataset": str(dataset),
+        "model_id": "predictive_model_v2",
+        "selection": {},
+    }
+
+    with pytest.raises(RuntimeError, match="Checkpoint does not match"):
+        trainer._validate_checkpoint_registration_inputs(
+            summary=summary,
+            checkpoint_path=other_checkpoint,
+            dataset_path=dataset,
+            model_id="predictive_model_v2",
+        )

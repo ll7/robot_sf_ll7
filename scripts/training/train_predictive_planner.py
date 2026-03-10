@@ -558,6 +558,56 @@ def _source_dataset_ids(dataset_path: Path) -> list[str]:
     return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
 
 
+def _summary_path_candidates(summary: dict[str, object], *keys: str) -> list[Path]:
+    """Return normalized path candidates from top-level summary keys and nested selection fields."""
+    candidates: list[Path] = []
+    selection = summary.get("selection", {})
+    nested = selection if isinstance(selection, dict) else {}
+    for key in keys:
+        for value in (summary.get(key), nested.get(key)):
+            text = str(value or "").strip()
+            if text:
+                candidates.append(Path(text).resolve())
+    return candidates
+
+
+def _validate_checkpoint_registration_inputs(
+    *,
+    summary: dict[str, object],
+    checkpoint_path: Path,
+    dataset_path: Path,
+    model_id: str,
+) -> None:
+    """Ensure checkpoint-only registration matches the training summary provenance."""
+    summary_checkpoints = _summary_path_candidates(summary, "checkpoint", "checkpoint_path")
+    if not summary_checkpoints:
+        raise RuntimeError("Training summary missing checkpoint provenance for registration.")
+    if checkpoint_path.resolve() not in summary_checkpoints:
+        raise RuntimeError(
+            "Checkpoint does not match training summary provenance: "
+            f"{checkpoint_path} not in {summary_checkpoints}"
+        )
+
+    summary_datasets = _summary_path_candidates(summary, "dataset")
+    if not summary_datasets:
+        raise RuntimeError("Training summary missing dataset provenance for registration.")
+    if dataset_path.resolve() not in summary_datasets:
+        raise RuntimeError(
+            "Dataset does not match training summary provenance: "
+            f"{dataset_path} not in {summary_datasets}"
+        )
+
+    selection = summary.get("selection", {})
+    selection_dict = selection if isinstance(selection, dict) else {}
+    summary_model_id = str(summary.get("model_id") or selection_dict.get("model_id") or "").strip()
+    if not summary_model_id:
+        raise RuntimeError("Training summary missing model_id provenance for registration.")
+    if summary_model_id != model_id:
+        raise RuntimeError(
+            f"Model id does not match training summary provenance: {model_id} != {summary_model_id}"
+        )
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Train predictive trajectory model and persist checkpoint + metrics."""
     args = parse_args()
@@ -574,6 +624,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
         if not isinstance(summary, dict):
             raise TypeError(f"Expected JSON object at {args.training_summary}")
+        _validate_checkpoint_registration_inputs(
+            summary=summary,
+            checkpoint_path=args.checkpoint_only_register,
+            dataset_path=args.dataset,
+            model_id=str(args.model_id),
+        )
         gates = summary.get("quality_gates", {})
         if not isinstance(gates, dict) or not bool(gates.get("pass_all", False)):
             raise RuntimeError("Refusing to register predictive model with failing training gates.")

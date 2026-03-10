@@ -234,7 +234,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     monkeypatch.setattr(
         pipeline,
         "_run_capture_json",
-        lambda _cmd, **_kwargs: {"status": "ok", "returncode": 0},
+        lambda _cmd, **_kwargs: {"status": "ok", "return_code": 0},
     )
     monkeypatch.setattr(
         pipeline,

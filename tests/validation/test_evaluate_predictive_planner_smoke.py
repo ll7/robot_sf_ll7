@@ -63,3 +63,24 @@ def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert payload["contract_version"] == "benchmark-reset-v2"
     assert payload["integrity"]["pass"] is True
+
+
+def test_integrity_summary_groups_multiple_reasons_per_episode() -> None:
+    """Integrity summary should emit one contradiction entry per episode id."""
+    rows = [
+        {
+            "episode_id": "episode_001",
+            "termination_reason": "collision",
+            "metrics": {"success_rate": 1.0, "total_collision_count": 2.0},
+        }
+    ]
+
+    summary = mod._integrity_summary(rows)
+    assert summary["pass"] is False
+    assert summary["contradiction_count"] == 1
+    assert summary["contradictions"] == [
+        {
+            "episode_id": "episode_001",
+            "reasons": ["collision_with_success", "success_with_collision_metric"],
+        }
+    ]

@@ -460,6 +460,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     wandb_cfg = cfg.get("wandb", {})
     if not isinstance(wandb_cfg, dict):
         raise TypeError("wandb must be a mapping")
+    resolved_model_id = str(train_cfg.get("model_id", f"predictive_proxy_selected_v2_{run_stamp}"))
 
     train_cmd = [
         sys.executable,
@@ -469,7 +470,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "--output-dir",
         str(paths.train_dir),
         "--model-id",
-        str(train_cfg.get("model_id", f"predictive_proxy_selected_v2_{run_stamp}")),
+        resolved_model_id,
         "--epochs",
         str(int(train_cfg.get("epochs", 40))),
         "--batch-size",
@@ -634,7 +635,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     promoted_model: dict[str, Any] = {
         "attempted": False,
         "promoted": False,
-        "model_id": str(train_cfg.get("model_id", "")),
+        "model_id": resolved_model_id,
         "checkpoint": str(paths.checkpoint),
     }
     if stage_status["all_ok"]:
@@ -648,7 +649,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 "--output-dir",
                 str(paths.train_dir),
                 "--model-id",
-                str(train_cfg.get("model_id", f"predictive_proxy_selected_v2_{run_stamp}")),
+                resolved_model_id,
                 "--epochs",
                 "0",
                 "--checkpoint-only-register",
@@ -662,6 +663,16 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         )
         promoted_model["register_payload"] = register_payload
         promoted_model["promoted"] = int(register_payload.get("return_code", 1)) == 0
+        stage_status["promotion_ok"] = bool(promoted_model["promoted"])
+    else:
+        stage_status["promotion_ok"] = False
+
+    stage_status["all_ok"] = bool(
+        stage_status["evaluation_ok"]
+        and stage_status["hard_seed_diagnostics_ok"]
+        and stage_status["campaign_ok"]
+        and stage_status["promotion_ok"]
+    )
 
     final_summary = {
         "contract_version": _CONTRACT_VERSION,
@@ -703,6 +714,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "evaluation_ok": stage_status["evaluation_ok"],
             "hard_seed_diagnostics_ok": stage_status["hard_seed_diagnostics_ok"],
             "campaign_ok": stage_status["campaign_ok"],
+            "promotion_ok": stage_status["promotion_ok"],
         },
     }
     _write_json(paths.final_summary, final_summary)
@@ -725,6 +737,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         f"- evaluation_ok: `{stage_status['evaluation_ok']}`",
         f"- hard_seed_diagnostics_ok: `{stage_status['hard_seed_diagnostics_ok']}`",
         f"- campaign_ok: `{stage_status['campaign_ok']}`",
+        f"- promotion_ok: `{stage_status['promotion_ok']}`",
         f"- all_ok: `{stage_status['all_ok']}`",
         "",
         "## Final Campaign Snapshot",

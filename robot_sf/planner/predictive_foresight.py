@@ -29,6 +29,35 @@ class PredictiveForesightConfig:
     front_corridor_half_width: float = 1.0
 
 
+def predictive_foresight_config_from_source(
+    source: Any,
+    *,
+    default_max_agents: int = 16,
+) -> PredictiveForesightConfig:
+    """Build a foresight config from an object exposing predictive_foresight_* attributes.
+
+    Returns:
+        PredictiveForesightConfig: Normalized foresight configuration.
+    """
+    return PredictiveForesightConfig(
+        enabled=bool(getattr(source, "predictive_foresight_enabled", False)),
+        model_id=str(getattr(source, "predictive_foresight_model_id", "")),
+        checkpoint_path=getattr(source, "predictive_foresight_checkpoint_path", None),
+        device=str(getattr(source, "predictive_foresight_device", "cpu")),
+        max_agents=int(getattr(source, "predictive_foresight_max_agents", default_max_agents)),
+        horizon_steps=int(getattr(source, "predictive_foresight_horizon_steps", 8)),
+        rollout_dt=float(getattr(source, "predictive_foresight_rollout_dt", 0.2)),
+        ego_conditioning=bool(getattr(source, "predictive_foresight_ego_conditioning", False)),
+        near_distance=float(getattr(source, "predictive_foresight_near_distance", 0.7)),
+        front_corridor_length=float(
+            getattr(source, "predictive_foresight_front_corridor_length", 3.0)
+        ),
+        front_corridor_half_width=float(
+            getattr(source, "predictive_foresight_front_corridor_half_width", 1.0)
+        ),
+    )
+
+
 def predictive_foresight_spaces() -> spaces.Dict:
     """Return observation spaces for compact predictor-derived features."""
     return spaces.Dict(
@@ -162,8 +191,15 @@ class PredictiveForesightEncoder:
             traj = future[idx, :steps, :]
             ahead = traj[:, 0] > 0.0
             in_corridor = np.abs(traj[:, 1]) <= width
-            enters = bool(np.any(ahead & in_corridor & (traj[:, 0] <= length)))
-            crosses = bool(np.any(np.signbit(traj[:-1, 1]) != np.signbit(traj[1:, 1])))
+            inside_corridor = ahead & in_corridor & (traj[:, 0] <= length)
+            enters = bool(np.any(inside_corridor))
+            crosses = bool(
+                np.any(
+                    (np.signbit(traj[:-1, 1]) != np.signbit(traj[1:, 1]))
+                    & inside_corridor[:-1]
+                    & inside_corridor[1:]
+                )
+            )
             if enters and crosses:
                 count += 1
         return float(count)

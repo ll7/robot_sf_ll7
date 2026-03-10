@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import json
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from scripts.training import train_predictive_planner as trainer
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_dataset_diagnostics_flags_degenerate_targets() -> None:
@@ -55,3 +61,47 @@ def test_selection_decision_prefers_proxy_when_enabled() -> None:
     assert selection["selection_mode"] == "proxy"
     assert selection["selected_epoch"] == 12
     assert selection["proxy_metrics"]["success_rate"] == 0.8
+
+
+def test_should_update_val_loss_best_skips_after_proxy_selection() -> None:
+    """Val-loss fallback should not overwrite a checkpoint already selected by proxy ranking."""
+    assert (
+        trainer._should_update_val_loss_best(
+            select_by_proxy=True,
+            proxy_selected=True,
+            val_loss=0.1,
+            best_val_loss=0.2,
+        )
+        is False
+    )
+    assert (
+        trainer._should_update_val_loss_best(
+            select_by_proxy=True,
+            proxy_selected=False,
+            val_loss=0.1,
+            best_val_loss=0.2,
+        )
+        is True
+    )
+
+
+def test_source_dataset_ids_prefers_manifest_dataset_id(tmp_path: Path) -> None:
+    """Training provenance should use the sibling dataset manifest id when present."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    dataset.write_text("stub", encoding="utf-8")
+    manifest = dataset.with_suffix(dataset.suffix + ".manifest.json")
+    manifest.write_text(
+        json.dumps({"dataset_id": "run123:predictive_mixed_dataset"}), encoding="utf-8"
+    )
+
+    source_ids = trainer._source_dataset_ids(dataset)
+    assert source_ids == ["prediction_planner:run123:predictive_mixed_dataset"]
+
+
+def test_source_dataset_ids_falls_back_to_stem_when_manifest_missing(tmp_path: Path) -> None:
+    """Training provenance should fall back to dataset stem when no manifest exists."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    dataset.write_text("stub", encoding="utf-8")
+
+    source_ids = trainer._source_dataset_ids(dataset)
+    assert source_ids == ["prediction_planner:predictive_rollouts_mixed"]

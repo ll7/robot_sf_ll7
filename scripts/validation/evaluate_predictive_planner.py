@@ -105,7 +105,7 @@ def _failure_taxonomy(rows: list[dict]) -> dict:
 
 def _integrity_summary(rows: list[dict]) -> dict[str, object]:
     """Detect contradiction patterns in evaluation episode records."""
-    contradictions: list[dict[str, object]] = []
+    contradictions_by_episode: dict[str, list[str]] = {}
     for row in rows:
         metrics = row.get("metrics", {})
         success = _episode_success(row)
@@ -113,20 +113,25 @@ def _integrity_summary(rows: list[dict]) -> dict[str, object]:
             metrics.get("total_collision_count", metrics.get("collisions", 0.0)) or 0.0
         )
         termination_reason = str(row.get("termination_reason", "unknown"))
+        episode_id = str(row.get("episode_id", "unknown"))
+        episode_reasons: list[str] = []
         if termination_reason == "collision" and success:
-            contradictions.append(
-                {
-                    "episode_id": row.get("episode_id"),
-                    "reason": "collision_with_success",
-                }
-            )
+            episode_reasons.append("collision_with_success")
         if success and total_collisions > 0.0:
-            contradictions.append(
-                {
-                    "episode_id": row.get("episode_id"),
-                    "reason": "success_with_collision_metric",
-                }
-            )
+            episode_reasons.append("success_with_collision_metric")
+        if episode_reasons:
+            contradictions_by_episode.setdefault(episode_id, [])
+            for reason in episode_reasons:
+                if reason not in contradictions_by_episode[episode_id]:
+                    contradictions_by_episode[episode_id].append(reason)
+    contradictions: list[dict[str, object]] = []
+    for episode_id, reasons in contradictions_by_episode.items():
+        entry: dict[str, object] = {"episode_id": episode_id}
+        if len(reasons) == 1:
+            entry["reason"] = reasons[0]
+        else:
+            entry["reasons"] = reasons
+        contradictions.append(entry)
     return {
         "pass": not contradictions,
         "contradiction_count": len(contradictions),

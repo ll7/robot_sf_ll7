@@ -43,8 +43,8 @@ from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
-    PredictiveForesightConfig,
     PredictiveForesightEncoder,
+    predictive_foresight_config_from_source,
 )
 
 
@@ -114,22 +114,7 @@ class PPOPlanner:
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._load_model()
-        if self.config.predictive_foresight_enabled:
-            self._predictive_foresight = PredictiveForesightEncoder(
-                PredictiveForesightConfig(
-                    enabled=True,
-                    model_id=self.config.predictive_foresight_model_id,
-                    checkpoint_path=self.config.predictive_foresight_checkpoint_path,
-                    device=self.config.predictive_foresight_device,
-                    max_agents=self.config.predictive_foresight_max_agents,
-                    horizon_steps=self.config.predictive_foresight_horizon_steps,
-                    rollout_dt=self.config.predictive_foresight_rollout_dt,
-                    ego_conditioning=self.config.predictive_foresight_ego_conditioning,
-                    near_distance=self.config.predictive_foresight_near_distance,
-                    front_corridor_length=self.config.predictive_foresight_front_corridor_length,
-                    front_corridor_half_width=self.config.predictive_foresight_front_corridor_half_width,
-                )
-            )
+        self._init_predictive_foresight()
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -234,6 +219,18 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         # Need to reload the model if model_path changed
         self._load_model()
+        self._init_predictive_foresight()
+
+    def _init_predictive_foresight(self) -> None:
+        """(Re)build the optional predictive foresight encoder from current config."""
+        self._predictive_foresight = None
+        foresight_cfg = predictive_foresight_config_from_source(
+            self.config,
+            default_max_agents=self.config.predictive_foresight_max_agents,
+        )
+        if not foresight_cfg.enabled:
+            return
+        self._predictive_foresight = PredictiveForesightEncoder(foresight_cfg)
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
@@ -345,7 +342,10 @@ class PPOPlanner:
                 key for key in spaces if key.startswith("predictive_") and key not in source_obs
             ]
             if missing_predictive:
-                source_obs.update(self._predictive_feature_payload(source_obs))
+                payload = self._predictive_feature_payload(source_obs)
+                source_obs.update(
+                    {key: value for key, value in payload.items() if key in missing_predictive}
+                )
 
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []

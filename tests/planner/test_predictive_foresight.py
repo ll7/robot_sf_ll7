@@ -47,3 +47,33 @@ def test_predictive_foresight_features_are_finite() -> None:
     }
     for value in features.values():
         assert np.all(np.isfinite(value))
+
+
+def test_crossing_count_only_counts_crossings_inside_front_corridor() -> None:
+    """Crossing count should ignore centerline sign changes that happen outside the corridor."""
+    encoder = PredictiveForesightEncoder(
+        PredictiveForesightConfig(
+            enabled=True,
+            front_corridor_length=3.0,
+            front_corridor_half_width=1.0,
+        )
+    )
+    future = np.array(
+        [
+            [
+                [1.0, 0.5],
+                [1.5, -0.4],
+                [2.0, -0.6],
+            ],
+            [
+                [3.5, 0.8],
+                [4.0, -0.8],
+                [4.5, -0.9],
+            ],
+        ],
+        dtype=np.float32,
+    )
+    mask = np.array([1.0, 1.0], dtype=np.float32)
+
+    count = encoder._crossing_count(future=future, mask=mask, steps=3)
+    assert count == 1.0

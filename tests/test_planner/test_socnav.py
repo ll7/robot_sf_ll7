@@ -380,6 +380,7 @@ def test_policy_wrappers_and_factory_helpers():
 
 
 def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
+    """Model input_dim takes precedence over config flag when building predictor state."""
     from robot_sf.planner.socnav import make_prediction_policy
 
     adapter = PredictionPlannerAdapter(
@@ -406,7 +407,7 @@ def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
     assert np.allclose(state[:2, 4], 0.5)
     assert np.allclose(state[:2, 5], -0.2)
     assert np.allclose(robot_pos, np.array([0.0, 0.0]))
-    assert robot_heading == 0.0
+    assert robot_heading == pytest.approx(0.0)
     assert isinstance(make_prediction_policy(allow_fallback=True).adapter, PredictionPlannerAdapter)
 
 

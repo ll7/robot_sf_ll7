@@ -158,14 +158,13 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
 
     monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
     monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
-    monkeypatch.setattr(
-        pipeline,
-        "_build_random_seed_manifest",
-        lambda **kwargs: (
-            Path(kwargs["output_path"]).write_text("scenario: [1]\n", encoding="utf-8")
-            or Path(kwargs["output_path"])
-        ),
-    )
+
+    def _fake_build_random_seed_manifest(**kwargs) -> Path:
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("scenario: [1]\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_random_seed_manifest)
 
     def _fake_dataset(path: Path, *, state_dim: int) -> None:
         np.savez(
@@ -240,7 +239,11 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     monkeypatch.setattr(
         pipeline,
         "_parse_args",
-        lambda: pipeline.argparse.Namespace(config=config_path, run_id=None, log_level="INFO"),
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_promotion_smoke",
+            log_level="INFO",
+        ),
     )
 
     code = pipeline.main()
@@ -250,3 +253,124 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     ]
     assert len(collector_cmds) == 2
     assert all("--ego-conditioning" in cmd for cmd in collector_cmds)
+
+
+def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Pipeline should reuse one resolved model id and mark all_ok false on promotion failure."""
+    config_path = tmp_path / "predictive.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_promotion_smoke"},
+                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {},
+                "hardcase_collection": {},
+                "mixing": {},
+                "training": {"model_id": "predictive_explicit_model"},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
+    monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
+
+    def _fake_build_seed_manifest(**kwargs) -> Path:
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("scenario: [1]\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_seed_manifest)
+
+    def _fake_dataset(path: Path) -> None:
+        np.savez(
+            path,
+            state=np.zeros((2, 3, 4), dtype=np.float32),
+            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+            mask=np.ones((2, 3), dtype=np.float32),
+            target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        )
+        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
+
+    invoked: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        invoked.append(list(cmd))
+        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("train_predictive_planner.py" in part for part in cmd):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "training_summary.json").write_text(
+                json.dumps(
+                    {"selection": {"selected_epoch": 1}, "selected_checkpoint_reason": "proxy"}
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
+            return
+        if any("run_predictive_success_campaign.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "campaign_summary.json").write_text(
+                json.dumps({"run_id": "predictive_promotion_smoke", "status": "success"}),
+                encoding="utf-8",
+            )
+            return
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    def _fake_run_capture_json(cmd: list[str], **_kwargs):
+        if "--checkpoint-only-register" in cmd:
+            return {"status": "failed", "return_code": 2}
+        return {"status": "ok", "return_code": 0}
+
+    monkeypatch.setattr(pipeline, "_run", _fake_run)
+    monkeypatch.setattr(pipeline, "_run_capture_json", _fake_run_capture_json)
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_promotion_smoke",
+            log_level="INFO",
+        ),
+    )
+
+    resolved_paths = pipeline._paths_from_config(
+        yaml.safe_load(config_path.read_text(encoding="utf-8")),
+        run_id="predictive_promotion_smoke",
+        base_dir=config_path.parent,
+        output_base_dir=pipeline._REPO_ROOT,
+    )
+    code = pipeline.main()
+    assert code == 2
+    train_cmd = next(
+        cmd for cmd in invoked if any("train_predictive_planner.py" in part for part in cmd)
+    )
+    assert train_cmd[train_cmd.index("--model-id") + 1] == "predictive_explicit_model"
+    final_summary = json.loads(resolved_paths.final_summary.read_text(encoding="utf-8"))
+    assert final_summary["promoted_model"]["model_id"] == "predictive_explicit_model"
+    assert final_summary["stage_status"]["promotion_ok"] is False
+    assert final_summary["final_gate_results"]["all_ok"] is False

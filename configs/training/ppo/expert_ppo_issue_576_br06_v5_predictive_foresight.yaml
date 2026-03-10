@@ -1,3 +1,4 @@
+# Canonical run: uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v5_predictive_foresight.yaml
 # BR-06 v5 PPO retraining with compact predictor-derived foresight features.
 policy_id: ppo_expert_br06_v5_predictive_foresight
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml

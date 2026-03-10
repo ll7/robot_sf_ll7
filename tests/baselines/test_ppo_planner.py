@@ -107,6 +107,52 @@ def test_build_model_obs_dict_backfills_predictive_features(monkeypatch):
     assert converted["predictive_gap_scores"].shape == (2,)
 
 
+def test_build_model_obs_dict_preserves_existing_predictive_features() -> None:
+    """Planner should not overwrite predictive_* keys already present in the observation."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict", predictive_foresight_enabled=True))
+    planner._model = SimpleNamespace(
+        observation_space=SimpleNamespace(
+            spaces={"predictive_min_clearance": SimpleNamespace(shape=(1,), dtype=np.float32)},
+        ),
+    )
+
+    class _DummyEncoder:
+        def encode(self, _obs):
+            return {"min_clearance": np.array([9.0], dtype=np.float32)}
+
+    planner._predictive_foresight = _DummyEncoder()
+    converted = planner._build_model_obs_dict(
+        {"predictive_min_clearance": np.array([1.25], dtype=np.float32)}
+    )
+    assert converted["predictive_min_clearance"][0] == pytest.approx(1.25)
+
+
+def test_configure_rebuilds_predictive_foresight_encoder(monkeypatch) -> None:
+    """configure() should rebuild foresight encoder when predictive settings change."""
+    built: list[tuple[str, int]] = []
+
+    class _DummyEncoder:
+        def __init__(self, config):
+            built.append((config.model_id, config.horizon_steps))
+
+    monkeypatch.setattr("robot_sf.baselines.ppo.PredictiveForesightEncoder", _DummyEncoder)
+    planner = PPOPlanner(
+        _planner_config(
+            predictive_foresight_enabled=True,
+            predictive_foresight_model_id="predictive_a",
+            predictive_foresight_horizon_steps=8,
+        )
+    )
+    planner.configure(
+        _planner_config(
+            predictive_foresight_enabled=True,
+            predictive_foresight_model_id="predictive_b",
+            predictive_foresight_horizon_steps=12,
+        )
+    )
+    assert built == [("predictive_a", 8), ("predictive_b", 12)]
+
+
 def test_build_model_obs_dict_raises_on_size_mismatch():
     """Planner should fail when value size cannot match expected shape."""
     planner = PPOPlanner(_planner_config(obs_mode="dict"))

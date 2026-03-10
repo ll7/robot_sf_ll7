@@ -654,7 +654,9 @@ def test_upload_wandb_best_checkpoint_artifact_logs_model_with_aliases(
     """Best checkpoint upload should publish a W&B model artifact with stable aliases."""
 
     class _Artifact:
-        def __init__(self, name, artifact_type, metadata):
+        def __init__(self, name, artifact_type=None, metadata=None, **kwargs):
+            if artifact_type is None:
+                artifact_type = kwargs.get("type")
             self.name = name
             self.type = artifact_type
             self.metadata = metadata

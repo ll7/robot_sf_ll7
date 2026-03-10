@@ -3333,28 +3333,37 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         future = self._predict_trajectories(state, mask)
         steps = self._effective_rollout_steps(future_peds=future, mask=mask)
 
+        best = (0.0, 0.0)
+        best_cost = float("inf")
+
         if bool(self.config.predictive_sequence_search_enabled):
-            return self._plan_sequence_search(
+            best = self._plan_sequence_search(
                 observation=observation,
                 future=future,
                 mask=mask,
                 steps=steps,
             )
-
-        best = (0.0, 0.0)
-        best_cost = float("inf")
-        for v, w in self._candidate_set(future_peds=future, mask=mask):
-            cost = self._score_action(
+            best_cost = self._score_action(
                 observation=observation,
                 future_peds=future,
                 mask=mask,
-                v=v,
-                w=w,
+                v=best[0],
+                w=best[1],
                 steps=steps,
             )
-            if cost < best_cost:
-                best_cost = cost
-                best = (v, w)
+        else:
+            for v, w in self._candidate_set(future_peds=future, mask=mask):
+                cost = self._score_action(
+                    observation=observation,
+                    future_peds=future,
+                    mask=mask,
+                    v=v,
+                    w=w,
+                    steps=steps,
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best = (v, w)
 
         if bool(self.config.predictive_progress_escape_enabled):
             goal_dist = float(np.linalg.norm(goal - robot_pos))

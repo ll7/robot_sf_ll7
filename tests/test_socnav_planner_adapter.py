@@ -571,6 +571,28 @@ def test_prediction_adapter_sequence_search_is_deterministic(monkeypatch):
     assert planner_a.plan(obs) == planner_b.plan(obs)
 
 
+def test_prediction_adapter_sequence_search_keeps_progress_escape(monkeypatch):
+    """Sequence search should still allow progress-escape recovery in clear space."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_sequence_search_enabled=True,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.4,
+        predictive_progress_escape_clearance_margin=0.1,
+    )
+    obs = _make_obs(goal=(4.0, 0.0), heading=0.0)
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v >= 0.39
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

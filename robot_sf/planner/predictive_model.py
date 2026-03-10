@@ -106,7 +106,7 @@ class PredictiveTrajectoryModel(nn.Module):
         """Predict future pedestrian positions in the robot frame.
 
         Args:
-            state: Agent features ``(B, N, 4)``.
+            state: Agent features ``(B, N, input_dim)`` as configured by the model.
             mask: Agent validity mask ``(B, N)`` with 1 for active slots.
 
         Returns:

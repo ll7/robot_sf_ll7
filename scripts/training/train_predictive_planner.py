@@ -477,6 +477,19 @@ def _selection_decision(
     }
 
 
+def _should_update_val_loss_best(
+    *,
+    select_by_proxy: bool,
+    proxy_selected: bool,
+    val_loss: float,
+    best_val_loss: float,
+) -> bool:
+    """Return whether the val-loss path should replace the current best checkpoint."""
+    if bool(select_by_proxy) and bool(proxy_selected):
+        return False
+    return float(val_loss) < float(best_val_loss)
+
+
 def _register_model_entry(
     *,
     model_id: str,
@@ -508,11 +521,34 @@ def _register_model_entry(
             "notes": [
                 f"Dataset: {dataset}",
                 f"Training summary: {summary_path}",
-                f"Selection mode: {selection['selection_mode']}",
+                f"Selection mode: {selection.get('selection_mode', 'unknown')}",
                 "Promoted by scripts/training/train_predictive_planner.py",
             ],
         }
     )
+
+
+def _dataset_manifest_path(dataset_path: Path) -> Path:
+    """Return the expected dataset-manifest path for a generated NPZ dataset."""
+    return dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+
+
+def _source_dataset_ids(dataset_path: Path) -> list[str]:
+    """Resolve dataset provenance ids from the sibling manifest when available."""
+    manifest_path = _dataset_manifest_path(dataset_path)
+    if manifest_path.exists():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to parse dataset manifest {}: {}", manifest_path, exc)
+        else:
+            dataset_id = str(payload.get("dataset_id", "")).strip()
+            if dataset_id:
+                return [f"{_TRAINING_FAMILY}:{dataset_id}"]
+            logger.warning("Dataset manifest {} is missing dataset_id", manifest_path)
+    else:
+        logger.warning("Dataset manifest missing next to dataset: {}", manifest_path)
+    return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
 
 
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
@@ -633,6 +669,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "epoch": -1,
     }
     best_proxy: dict[str, float] | None = None
+    proxy_selected = False
     proxy_enabled = args.proxy_scenario_matrix is not None and int(args.proxy_every_epochs) > 0
 
     for epoch in range(1, int(args.epochs) + 1):
@@ -660,7 +697,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         }
         history.append(row)
 
-        if val_loss < best["val_loss"]:
+        if _should_update_val_loss_best(
+            select_by_proxy=bool(args.select_by_proxy),
+            proxy_selected=proxy_selected,
+            val_loss=val_loss,
+            best_val_loss=float(best["val_loss"]),
+        ):
             best = {
                 "val_loss": val_loss,
                 "val_ade": val_ade,
@@ -765,6 +807,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "val_loss": float(val_loss),
                     "epoch": float(epoch),
                 }
+                proxy_selected = True
                 best = {
                     "val_loss": val_loss,
                     "val_ade": val_ade,
@@ -846,7 +889,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "selection_mode": selection["selection_mode"],
         "selection": selection,
         "selected_checkpoint_reason": selection["selected_checkpoint_reason"],
-        "source_dataset_ids": [f"{_TRAINING_FAMILY}:{Path(args.dataset).stem}"],
+        "source_dataset_ids": _source_dataset_ids(Path(args.dataset)),
         "proxy": {
             "enabled": bool(proxy_enabled),
             "scenario_matrix": str(args.proxy_scenario_matrix)

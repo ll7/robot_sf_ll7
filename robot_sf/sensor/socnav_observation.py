@@ -16,8 +16,8 @@ from loguru import logger
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner.predictive_foresight import (
-    PredictiveForesightConfig,
     PredictiveForesightEncoder,
+    predictive_foresight_config_from_source,
     predictive_foresight_spaces,
 )
 from robot_sf.sim.simulator import Simulator
@@ -148,46 +148,9 @@ class SocNavObservationFusion:
         """Initialize optional predictive foresight encoder."""
         if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
             self._predictive_foresight = PredictiveForesightEncoder(
-                PredictiveForesightConfig(
-                    enabled=True,
-                    model_id=str(getattr(self.env_config, "predictive_foresight_model_id", "")),
-                    checkpoint_path=getattr(
-                        self.env_config,
-                        "predictive_foresight_checkpoint_path",
-                        None,
-                    ),
-                    device=str(getattr(self.env_config, "predictive_foresight_device", "cpu")),
-                    max_agents=int(
-                        getattr(
-                            self.env_config, "predictive_foresight_max_agents", self.max_pedestrians
-                        )
-                    ),
-                    horizon_steps=int(
-                        getattr(self.env_config, "predictive_foresight_horizon_steps", 8)
-                    ),
-                    rollout_dt=float(
-                        getattr(self.env_config, "predictive_foresight_rollout_dt", 0.2)
-                    ),
-                    ego_conditioning=bool(
-                        getattr(self.env_config, "predictive_foresight_ego_conditioning", False)
-                    ),
-                    near_distance=float(
-                        getattr(self.env_config, "predictive_foresight_near_distance", 0.7)
-                    ),
-                    front_corridor_length=float(
-                        getattr(
-                            self.env_config,
-                            "predictive_foresight_front_corridor_length",
-                            3.0,
-                        )
-                    ),
-                    front_corridor_half_width=float(
-                        getattr(
-                            self.env_config,
-                            "predictive_foresight_front_corridor_half_width",
-                            1.0,
-                        )
-                    ),
+                predictive_foresight_config_from_source(
+                    self.env_config,
+                    default_max_agents=self.max_pedestrians,
                 )
             )
 

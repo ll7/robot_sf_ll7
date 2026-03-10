@@ -153,6 +153,20 @@ def test_configure_rebuilds_predictive_foresight_encoder(monkeypatch) -> None:
     assert built == [("predictive_a", 8), ("predictive_b", 12)]
 
 
+def test_get_metadata_redacts_predictive_checkpoint_path() -> None:
+    """Planner metadata should not expose local predictive checkpoint paths."""
+    planner = PPOPlanner(
+        _planner_config(
+            model_path="/tmp/models/policy/model.zip",
+            predictive_foresight_checkpoint_path="/tmp/models/predictive/model.pt",
+        )
+    )
+
+    metadata = planner.get_metadata()
+    assert metadata["config"]["model_path"] == "model.zip"
+    assert metadata["config"]["predictive_foresight_checkpoint_path"] == "model.pt"
+
+
 def test_build_model_obs_dict_raises_on_size_mismatch():
     """Planner should fail when value size cannot match expected shape."""
     planner = PPOPlanner(_planner_config(obs_mode="dict"))

@@ -542,6 +542,13 @@ def _source_dataset_ids(dataset_path: Path) -> list[str]:
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("Failed to parse dataset manifest {}: {}", manifest_path, exc)
         else:
+            if not isinstance(payload, dict):
+                logger.warning(
+                    "Dataset manifest {} must be a JSON object, got {}",
+                    manifest_path,
+                    type(payload).__name__,
+                )
+                return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
             dataset_id = str(payload.get("dataset_id", "")).strip()
             if dataset_id:
                 return [f"{_TRAINING_FAMILY}:{dataset_id}"]

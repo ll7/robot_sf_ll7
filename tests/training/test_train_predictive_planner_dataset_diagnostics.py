@@ -105,3 +105,14 @@ def test_source_dataset_ids_falls_back_to_stem_when_manifest_missing(tmp_path: P
 
     source_ids = trainer._source_dataset_ids(dataset)
     assert source_ids == ["prediction_planner:predictive_rollouts_mixed"]
+
+
+def test_source_dataset_ids_falls_back_to_stem_when_manifest_is_not_object(tmp_path: Path) -> None:
+    """Training provenance should ignore malformed non-object manifests safely."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    dataset.write_text("stub", encoding="utf-8")
+    manifest = dataset.with_suffix(dataset.suffix + ".manifest.json")
+    manifest.write_text(json.dumps(["bad", "manifest"]), encoding="utf-8")
+
+    source_ids = trainer._source_dataset_ids(dataset)
+    assert source_ids == ["prediction_planner:predictive_rollouts_mixed"]

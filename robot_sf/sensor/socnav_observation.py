@@ -125,7 +125,14 @@ def socnav_observation_space(
                 },
             ),
             **(
-                {"predictive": predictive_foresight_spaces()}
+                {
+                    "predictive": predictive_foresight_spaces(
+                        predictive_foresight_config_from_source(
+                            env_config,
+                            default_max_agents=max_pedestrians,
+                        )
+                    )
+                }
                 if getattr(env_config, "predictive_foresight_enabled", False)
                 else {}
             ),

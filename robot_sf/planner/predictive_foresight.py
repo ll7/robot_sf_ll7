@@ -39,27 +39,47 @@ def predictive_foresight_config_from_source(
     Returns:
         PredictiveForesightConfig: Normalized foresight configuration.
     """
+    default_config = PredictiveForesightConfig()
     return PredictiveForesightConfig(
         enabled=bool(getattr(source, "predictive_foresight_enabled", False)),
-        model_id=str(getattr(source, "predictive_foresight_model_id", "")),
+        model_id=str(
+            getattr(source, "predictive_foresight_model_id", None) or default_config.model_id
+        ),
         checkpoint_path=getattr(source, "predictive_foresight_checkpoint_path", None),
-        device=str(getattr(source, "predictive_foresight_device", "cpu")),
+        device=str(getattr(source, "predictive_foresight_device", default_config.device)),
         max_agents=int(getattr(source, "predictive_foresight_max_agents", default_max_agents)),
-        horizon_steps=int(getattr(source, "predictive_foresight_horizon_steps", 8)),
-        rollout_dt=float(getattr(source, "predictive_foresight_rollout_dt", 0.2)),
+        horizon_steps=int(
+            getattr(source, "predictive_foresight_horizon_steps", default_config.horizon_steps)
+        ),
+        rollout_dt=float(
+            getattr(source, "predictive_foresight_rollout_dt", default_config.rollout_dt)
+        ),
         ego_conditioning=bool(getattr(source, "predictive_foresight_ego_conditioning", False)),
-        near_distance=float(getattr(source, "predictive_foresight_near_distance", 0.7)),
+        near_distance=float(
+            getattr(source, "predictive_foresight_near_distance", default_config.near_distance)
+        ),
         front_corridor_length=float(
-            getattr(source, "predictive_foresight_front_corridor_length", 3.0)
+            getattr(
+                source,
+                "predictive_foresight_front_corridor_length",
+                default_config.front_corridor_length,
+            )
         ),
         front_corridor_half_width=float(
-            getattr(source, "predictive_foresight_front_corridor_half_width", 1.0)
+            getattr(
+                source,
+                "predictive_foresight_front_corridor_half_width",
+                default_config.front_corridor_half_width,
+            )
         ),
     )
 
 
-def predictive_foresight_spaces() -> spaces.Dict:
+def predictive_foresight_spaces(
+    config: PredictiveForesightConfig | None = None,
+) -> spaces.Dict:
     """Return observation spaces for compact predictor-derived features."""
+    cfg = config or PredictiveForesightConfig()
     return spaces.Dict(
         {
             "min_clearance": spaces.Box(
@@ -74,12 +94,18 @@ def predictive_foresight_spaces() -> spaces.Dict:
             ),
             "crossing_count": spaces.Box(
                 low=np.array([0.0], dtype=np.float32),
-                high=np.array([64.0], dtype=np.float32),
+                high=np.array([float(cfg.max_agents)], dtype=np.float32),
                 dtype=np.float32,
             ),
             "gap_scores": spaces.Box(
                 low=np.array([0.0, 0.0], dtype=np.float32),
-                high=np.array([10.0, 10.0], dtype=np.float32),
+                high=np.array(
+                    [
+                        float(cfg.front_corridor_half_width),
+                        float(cfg.front_corridor_half_width),
+                    ],
+                    dtype=np.float32,
+                ),
                 dtype=np.float32,
             ),
             "flow_alignment": spaces.Box(
@@ -138,6 +164,7 @@ class PredictiveForesightEncoder:
         )
         if not isfinite(min_clearance):
             min_clearance = 50.0
+        gap_limit = max(float(self.config.front_corridor_half_width), 0.0)
         return {
             "min_clearance": np.array([float(np.clip(min_clearance, 0.0, 50.0))], dtype=np.float32),
             "ttc_risk": np.array([float(np.clip(ttc_risk, 0.0, 1_000.0))], dtype=np.float32),
@@ -145,7 +172,11 @@ class PredictiveForesightEncoder:
                 [float(np.clip(crossing_count, 0.0, float(self.config.max_agents)))],
                 dtype=np.float32,
             ),
-            "gap_scores": np.asarray(gap_scores, dtype=np.float32),
+            "gap_scores": np.clip(
+                np.asarray(gap_scores, dtype=np.float32),
+                0.0,
+                gap_limit,
+            ),
             "flow_alignment": np.array(
                 [float(np.clip(flow_alignment, -1.0, 1.0))], dtype=np.float32
             ),

@@ -523,7 +523,10 @@ class PPOPlanner:
         """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
-        cfg["model_path"] = str(Path(self.config.model_path))
+        cfg["model_path"] = Path(self.config.model_path).name
+        checkpoint_path = cfg.get("predictive_foresight_checkpoint_path")
+        if isinstance(checkpoint_path, str) and checkpoint_path:
+            cfg["predictive_foresight_checkpoint_path"] = Path(checkpoint_path).name
         meta = {"algorithm": "ppo", "config": cfg, "status": self._status}
         if self._fallback_reason:
             meta["fallback_reason"] = self._fallback_reason

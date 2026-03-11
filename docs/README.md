@@ -84,6 +84,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[SLURM Submission Workflow](./dev/slurm_submission.md)** - Submit batch jobs with the effective partition/QoS max wall time by default
+* **[SLURM Resource Audit](./dev/slurm_resource_audit.md)** - Inspect Slurm allocations, query W&B system metrics correctly, and decide whether CPU, memory, or GPU requests are oversized
 * **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
 * **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 * **[SocNav structured observation example](../examples/advanced/18_socnav_structured_observation.py)** - Run RobotEnv with SocNavBench-style observations and a simple planner adapter.

@@ -101,7 +101,7 @@ def env(dummy_map):
     env = make_pedestrian_env(
         config=config,
         robot_model=robot_model,
-        debug=True,
+        debug=False,
         recording_enabled=False,
         peds_have_obstacle_forces=False,
     )

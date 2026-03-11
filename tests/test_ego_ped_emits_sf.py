@@ -89,9 +89,10 @@ def env(dummy_map):
     """
     config = PedestrianSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"test": dummy_map}),
-        sim_config=SimulationSettings(),
+        sim_config=SimulationSettings(
+            debug_without_robot_movement=True
+        ),  # Enable debug mode to isolate social force effects
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
-        debug_without_robot_movement=True,  # Enable debug mode to isolate social force effects
     )
 
     robot_model = "./model/run_043"

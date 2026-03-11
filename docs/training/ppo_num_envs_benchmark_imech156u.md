@@ -9,6 +9,64 @@ Scope:
 - same 500k evaluation cadence,
 - only `num_envs` changes.
 
+## Results
+
+The benchmark completed for `num_envs` 8, 14, 16, 30, and 32. Two different
+recommendations came out of it:
+
+- `num_envs=30` is the best raw-throughput point on `imech156-u`.
+- `num_envs=8` produced the strongest full 141-episode evaluation candidate.
+
+Measured host-throughput snapshot from W&B:
+
+| `num_envs` | `time/fps` | `perf/train_env_steps_per_sec` | Peak RSS (MB) | Peak system memory % |
+| --- | ---: | ---: | ---: | ---: |
+| 8 | 310.8 | 316.3 | 12013 | 31.0 |
+| 14 | 397.5 | 410.3 | 18119 | 49.6 |
+| 16 | 405.2 | 398.6 | 21515 | 57.4 |
+| 30 | 532.7 | 552.4 | 35525 | 96.4 |
+| 32 | 518.1 | 566.1 | 39689 | 96.8 |
+
+Interpretation:
+
+- `30` beats `32` on `time/fps` and is close enough on env-steps/sec that it is
+  the better raw-throughput choice.
+- `32` is already on the wrong side of the memory-pressure cliff.
+- `14` and `16` give much more headroom and are safer defaults when long-run
+  stability matters more than absolute throughput.
+
+Measured full 141-episode policy-analysis results for the best saved checkpoint
+from the benchmark runs:
+
+| candidate | success | collision |
+| --- | ---: | ---: |
+| promoted PPO v3 baseline | 0.8511 | 0.1489 |
+| `num_envs=8` best checkpoint | 0.8652 | 0.1348 |
+| `num_envs=14` best checkpoint | 0.8582 | 0.1418 |
+| `num_envs=30` best checkpoint | 0.8582 | 0.1418 |
+
+Interpretation:
+
+- The benchmark does not support a single universal "best `num_envs`" answer.
+- `30` is the best host-throughput setting on this machine.
+- `8` is currently the strongest evaluated model candidate among the tested
+  benchmark runs.
+- `14` is the best compromise if you want materially higher throughput than `8`
+  without running into the memory pressure seen at `30`/`32`.
+
+## Recommendation
+
+Use these defaults on `imech156-u`:
+
+- throughput benchmarking / short exploratory runs: `num_envs=30`
+- long production PPO runs with headroom: `num_envs=14`
+- quality-sensitive reproduction of the strongest 1M-step candidate from this
+  benchmark: `num_envs=8`
+
+Do not default to `num_envs=32` on this host. It is slightly faster than `30`
+on env-steps/sec, but worse on `time/fps`, pushes memory usage to the same
+ceiling, and produced worse early policy quality.
+
 ## Configs
 
 Run these configs in this order:

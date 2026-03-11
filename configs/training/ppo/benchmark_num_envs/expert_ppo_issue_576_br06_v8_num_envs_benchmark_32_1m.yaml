@@ -2,7 +2,7 @@
 # 1M-step continuation from the shared BR-06 v3 warm start.
 # Only num_envs changes across this benchmark set.
 policy_id: ppo_expert_br06_v8_num_envs_benchmark_32_1m
-scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: 32
 worker_mode: subproc

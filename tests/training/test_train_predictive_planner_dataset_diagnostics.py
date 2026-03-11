@@ -143,3 +143,54 @@ def test_validate_checkpoint_registration_inputs_rejects_mismatched_provenance(
             dataset_path=dataset,
             model_id="predictive_model_v2",
         )
+
+
+def test_validate_checkpoint_registration_inputs_rejects_mismatched_dataset(
+    tmp_path: Path,
+) -> None:
+    """Checkpoint-only registration should reject mismatched dataset provenance."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    other_dataset = tmp_path / "other_rollouts.npz"
+    checkpoint = tmp_path / "predictive_model.pt"
+    for path in (dataset, other_dataset, checkpoint):
+        path.write_text("stub", encoding="utf-8")
+
+    summary = {
+        "checkpoint": str(checkpoint),
+        "dataset": str(dataset),
+        "model_id": "predictive_model_v2",
+        "selection": {},
+    }
+
+    with pytest.raises(RuntimeError, match="Dataset does not match"):
+        trainer._validate_checkpoint_registration_inputs(
+            summary=summary,
+            checkpoint_path=checkpoint,
+            dataset_path=other_dataset,
+            model_id="predictive_model_v2",
+        )
+
+
+def test_validate_checkpoint_registration_inputs_rejects_mismatched_model_id(
+    tmp_path: Path,
+) -> None:
+    """Checkpoint-only registration should reject mismatched model-id provenance."""
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    checkpoint = tmp_path / "predictive_model.pt"
+    for path in (dataset, checkpoint):
+        path.write_text("stub", encoding="utf-8")
+
+    summary = {
+        "checkpoint": str(checkpoint),
+        "dataset": str(dataset),
+        "model_id": "predictive_model_v2",
+        "selection": {},
+    }
+
+    with pytest.raises(RuntimeError, match="Model id does not match"):
+        trainer._validate_checkpoint_registration_inputs(
+            summary=summary,
+            checkpoint_path=checkpoint,
+            dataset_path=dataset,
+            model_id="predictive_model_v3",
+        )

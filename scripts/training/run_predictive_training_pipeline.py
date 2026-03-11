@@ -382,6 +382,16 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     hardcase_cfg = cfg.get("hardcase_collection", {})
     if not isinstance(hardcase_cfg, dict):
         raise TypeError("hardcase_collection must be a mapping")
+    base_ego = bool(base_collection.get("ego_conditioning", False))
+    hardcase_ego = bool(hardcase_cfg.get("ego_conditioning", False))
+    if base_ego != hardcase_ego:
+        raise ValueError(
+            "Incompatible predictive dataset feature widths: "
+            f"base_collection.ego_conditioning={base_ego} "
+            f"hardcase_collection.ego_conditioning={hardcase_ego} "
+            f"for run_id={run_id} "
+            f"base_dataset={paths.base_dataset} hardcase_dataset={paths.hardcase_dataset}"
+        )
     _run(
         [
             sys.executable,
@@ -401,7 +411,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "--output",
             str(paths.hardcase_dataset),
         ]
-        + (["--ego-conditioning"] if bool(hardcase_cfg.get("ego_conditioning", False)) else []),
+        + (["--ego-conditioning"] if hardcase_ego else []),
         log_level=args.log_level,
     )
     hardcase_dataset_manifest = _write_dataset_manifest(

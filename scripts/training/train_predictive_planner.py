@@ -558,16 +558,26 @@ def _source_dataset_ids(dataset_path: Path) -> list[str]:
     return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
 
 
-def _summary_path_candidates(summary: dict[str, object], *keys: str) -> list[Path]:
+def _summary_path_candidates(
+    summary: dict[str, object],
+    *keys: str,
+    summary_path: Path | None = None,
+) -> list[Path]:
     """Return normalized path candidates from top-level summary keys and nested selection fields."""
     candidates: list[Path] = []
     selection = summary.get("selection", {})
     nested = selection if isinstance(selection, dict) else {}
+    base_dir = summary_path.parent.resolve() if summary_path is not None else None
     for key in keys:
         for value in (summary.get(key), nested.get(key)):
             text = str(value or "").strip()
             if text:
-                candidates.append(Path(text).resolve())
+                path = Path(text)
+                if not path.is_absolute() and base_dir is not None:
+                    path = (base_dir / path).resolve()
+                else:
+                    path = path.resolve()
+                candidates.append(path)
     return candidates
 
 
@@ -577,9 +587,15 @@ def _validate_checkpoint_registration_inputs(
     checkpoint_path: Path,
     dataset_path: Path,
     model_id: str,
+    summary_path: Path | None = None,
 ) -> None:
     """Ensure checkpoint-only registration matches the training summary provenance."""
-    summary_checkpoints = _summary_path_candidates(summary, "checkpoint", "checkpoint_path")
+    summary_checkpoints = _summary_path_candidates(
+        summary,
+        "checkpoint",
+        "checkpoint_path",
+        summary_path=summary_path,
+    )
     if not summary_checkpoints:
         raise RuntimeError("Training summary missing checkpoint provenance for registration.")
     if checkpoint_path.resolve() not in summary_checkpoints:
@@ -588,7 +604,7 @@ def _validate_checkpoint_registration_inputs(
             f"{checkpoint_path} not in {summary_checkpoints}"
         )
 
-    summary_datasets = _summary_path_candidates(summary, "dataset")
+    summary_datasets = _summary_path_candidates(summary, "dataset", summary_path=summary_path)
     if not summary_datasets:
         raise RuntimeError("Training summary missing dataset provenance for registration.")
     if dataset_path.resolve() not in summary_datasets:
@@ -621,6 +637,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint_only_register}")
         if not args.training_summary.exists():
             raise FileNotFoundError(f"Training summary not found: {args.training_summary}")
+        if not args.dataset.exists():
+            raise FileNotFoundError(f"Dataset not found: {args.dataset}")
         summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
         if not isinstance(summary, dict):
             raise TypeError(f"Expected JSON object at {args.training_summary}")
@@ -629,6 +647,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             checkpoint_path=args.checkpoint_only_register,
             dataset_path=args.dataset,
             model_id=str(args.model_id),
+            summary_path=args.training_summary,
         )
         gates = summary.get("quality_gates", {})
         if not isinstance(gates, dict) or not bool(gates.get("pass_all", False)):

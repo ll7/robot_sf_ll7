@@ -126,12 +126,9 @@ def _integrity_summary(rows: list[dict]) -> dict[str, object]:
                     contradictions_by_episode[episode_id].append(reason)
     contradictions: list[dict[str, object]] = []
     for episode_id, reasons in contradictions_by_episode.items():
-        entry: dict[str, object] = {"episode_id": episode_id}
-        if len(reasons) == 1:
-            entry["reason"] = reasons[0]
-        else:
-            entry["reasons"] = reasons
+        entry: dict[str, object] = {"episode_id": episode_id, "reasons": sorted(reasons)}
         contradictions.append(entry)
+    contradictions.sort(key=lambda entry: str(entry.get("episode_id", "")))
     return {
         "pass": not contradictions,
         "contradiction_count": len(contradictions),

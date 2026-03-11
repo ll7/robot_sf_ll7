@@ -247,7 +247,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     )
 
     code = pipeline.main()
-    assert code in {0, 2}
+    assert code == 0
     collector_cmds = [
         cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
     ]

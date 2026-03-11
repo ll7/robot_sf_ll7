@@ -93,18 +93,30 @@ def test_build_model_obs_dict_backfills_predictive_features(monkeypatch):
             },
         ),
     )
+    seen: dict[str, object] = {}
 
     class _DummyEncoder:
-        def encode(self, _obs):
+        def encode(self, obs):
+            seen.update(obs)
             return {
                 "min_clearance": np.array([1.5], dtype=np.float32),
                 "gap_scores": np.array([0.4, 0.6], dtype=np.float32),
             }
 
     planner._predictive_foresight = _DummyEncoder()
-    converted = planner._build_model_obs_dict({"robot_position": [0.0, 0.0]})
+    converted = planner._build_model_obs_dict(
+        {
+            "robot_position": [0.0, 0.0],
+            "robot_heading": [0.0],
+            "goal_current": [1.0, 0.0],
+            "pedestrians_positions": [[1.0, 0.5]],
+            "pedestrians_velocities": [[0.1, 0.0]],
+            "pedestrians_count": [1.0],
+        }
+    )
     assert converted["predictive_min_clearance"][0] == pytest.approx(1.5)
     assert converted["predictive_gap_scores"].shape == (2,)
+    assert set(seen) >= {"robot", "goal", "pedestrians", "map", "sim"}
 
 
 def test_build_model_obs_dict_preserves_existing_predictive_features() -> None:

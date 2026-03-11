@@ -39,6 +39,40 @@ def _make_obs() -> dict[str, object]:
 def test_predictive_foresight_features_are_finite() -> None:
     """Foresight encoder should always emit finite compact features."""
     encoder = PredictiveForesightEncoder(PredictiveForesightConfig(enabled=True))
+    encoder._adapter = type(
+        "_Adapter",
+        (),
+        {
+            "_build_model_input": staticmethod(
+                lambda _obs: (
+                    np.zeros((2, 4), dtype=np.float32),
+                    np.ones((2,), dtype=np.float32),
+                    np.zeros((2,), dtype=np.float32),
+                    0.0,
+                )
+            ),
+            "_predict_trajectories": staticmethod(
+                lambda _state, _mask: np.array(
+                    [
+                        [[1.0, 0.4], [1.5, 0.2]],
+                        [[1.2, -0.3], [1.8, -0.1]],
+                    ],
+                    dtype=np.float32,
+                )
+            ),
+            "_effective_rollout_steps": staticmethod(lambda **_kwargs: 2),
+            "_min_predicted_distance": staticmethod(lambda **_kwargs: 1.25),
+            "_socnav_fields": staticmethod(
+                lambda obs: (obs["robot"], obs["goal"], obs["pedestrians"])
+            ),
+            "_as_1d_float": staticmethod(
+                lambda value, pad=0: np.pad(
+                    np.asarray(value, dtype=np.float32).reshape(-1),
+                    (0, max(0, pad - np.asarray(value).size)),
+                )[: pad or None]
+            ),
+        },
+    )()
     features = encoder.encode(_make_obs())
     assert set(features) == {
         "min_clearance",

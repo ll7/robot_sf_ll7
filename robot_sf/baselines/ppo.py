@@ -378,8 +378,51 @@ class PPOPlanner:
         """
         if self._predictive_foresight is None:
             return {}
-        feature_block = self._predictive_foresight.encode(obs)
+        feature_block = self._predictive_foresight.encode(
+            self._normalize_predictive_foresight_obs(obs)
+        )
         return {f"predictive_{key}": value for key, value in feature_block.items()}
+
+    def _normalize_predictive_foresight_obs(self, obs: dict[str, Any]) -> dict[str, Any]:
+        """Adapt flat PPO dict observations into the structured SocNav format for foresight.
+
+        Returns:
+            dict[str, Any]: Structured observation block compatible with the foresight encoder.
+        """
+        if "robot" in obs and "goal" in obs and "pedestrians" in obs:
+            return obs
+
+        def _arr(key: str, default: list[float] | list[list[float]], *, dtype=float) -> np.ndarray:
+            return np.asarray(obs.get(key, default), dtype=dtype)
+
+        return {
+            "robot": {
+                "position": _arr("robot_position", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "heading": _arr("robot_heading", [0.0], dtype=np.float32).reshape(-1)[:1],
+                "speed": _arr("robot_speed", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "radius": _arr("robot_radius", [0.3], dtype=np.float32).reshape(-1)[:1],
+            },
+            "goal": {
+                "current": _arr("goal_current", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "next": _arr("goal_next", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+            },
+            "pedestrians": {
+                "positions": _arr(
+                    "pedestrians_positions", np.zeros((0, 2), dtype=np.float32), dtype=np.float32
+                ),
+                "velocities": _arr(
+                    "pedestrians_velocities", np.zeros((0, 2), dtype=np.float32), dtype=np.float32
+                ),
+                "count": _arr("pedestrians_count", [0.0], dtype=np.float32).reshape(-1)[:1],
+                "radius": _arr("pedestrians_radius", [0.3], dtype=np.float32).reshape(-1)[:1],
+            },
+            "map": {
+                "size": _arr("map_size", [20.0, 20.0], dtype=np.float32).reshape(-1)[:2],
+            },
+            "sim": {
+                "timestep": _arr("sim_timestep", [0.1], dtype=np.float32).reshape(-1)[:1],
+            },
+        }
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         """Convert the benchmark observation into model input format.

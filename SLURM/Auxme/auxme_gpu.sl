@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=120G
-#SBATCH --time=08:00:00
+#SBATCH --time=1-12:00:00
 #SBATCH --gres=gpu:a30:1
 #SBATCH --output=auxme-gpu-%j.out
 

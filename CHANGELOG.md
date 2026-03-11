@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
 * Auxme GPU SLURM submissions now default to the current `a30` partition maximum wall time instead of the previous 8-hour fallback.
 * Auxme GPU batch runs now bootstrap the environment modules shell function when available and default staging/results paths to repo-local `output/slurm/` locations instead of failing on unavailable `/scratch/${USER}` paths.
+* Auxme GPU batch runs now support forwarding extra `uv run` flags, allowing shared max-time submissions for jobs such as `uv run --extra rllib python ...`.
 * Expert PPO warm-start runs now emit direct W&B `rollout/*`,  `train/*`, and `time/*` metrics during training so resumed runs show progress before the next scheduled evaluation checkpoint and do not depend solely on TensorBoard discovery.
 * `robot_sf/benchmark/perf_trend.py` now treats `--history-limit 0` as "load no history reports" instead of unintentionally loading all matched files.
 * `robot_sf_bench plot-scenarios` now avoids thumbnail filename collisions for name-only matrices by applying deterministic `id -> name -> scenario_id -> hash` fallback resolution, sanitization, and collision suffixing.

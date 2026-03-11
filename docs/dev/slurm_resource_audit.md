@@ -210,6 +210,43 @@ Practical rule:
   16 envs.
 - Do not assume that 24 envs is better just because 24 CPUs were reserved.
 
+## Concrete PPO `num_envs` findings from `imech156-u`
+
+We ran a controlled PPO host benchmark on `imech156-u` (16 physical cores, 32
+threads) with `num_envs` set to 8, 14, 16, 30, and 32.
+
+Observed peaks from the W&B system stream:
+
+| `num_envs` | peak RSS (MB) | peak system memory % | `time/fps` |
+| --- | ---: | ---: | ---: |
+| 8 | 12013 | 31.0 | 310.8 |
+| 14 | 18119 | 49.6 | 397.5 |
+| 16 | 21515 | 57.4 | 405.2 |
+| 30 | 35525 | 96.4 | 532.7 |
+| 32 | 39689 | 96.8 | 518.1 |
+
+Interpretation:
+
+- incremental memory growth is roughly linear through the mid-range, about
+  `1.0-1.2 GB` per additional env in the useful scaling regime;
+- once the host reaches the `30-32` env range, memory overhead becomes
+  nonlinear and the machine sits on a memory cliff;
+- `32` envs is not a good default, even though env-steps/sec can look slightly
+  better than `30`, because the host has no meaningful memory headroom left.
+
+Recommended planning rule for PPO on similar hosts:
+
+- budget about `1.2 GB` of memory per env worker,
+- reserve at least `8-12 GB` of host headroom for the learner, Python runtime,
+  W&B, file cache, and OS overhead,
+- use `num_envs=14-16` as the conservative long-run range on 32-thread hosts,
+- use `num_envs=30` only when your goal is maximum short-run throughput and you
+  have verified that the host can tolerate the memory pressure.
+
+This benchmark also showed that the highest-throughput setting is not
+necessarily the best model-quality setting. On the same benchmark, the strongest
+1M-step PPO candidate came from the `num_envs=8` run, not `30` or `32`.
+
 ## A quick audit checklist
 
 Use this before deciding to change Slurm requests:

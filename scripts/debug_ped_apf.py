@@ -134,7 +134,7 @@ def plot_forces_over_time2(forces_over_time):
     plt.show()
 
 
-def plot_forces_quiver(forces_over_time, ped_idx=0, force_indices=[0, 6], scale=1.0):
+def plot_forces_quiver(forces_over_time, ped_idx=0, force_indices=None, scale=1.0):
     """
     Plot forces as arrows over time for a given pedestrian.
 
@@ -143,6 +143,8 @@ def plot_forces_quiver(forces_over_time, ped_idx=0, force_indices=[0, 6], scale=
     force_indices: list of force component indices to plot (e.g., [0]=desired, [6]=adversarial)
     scale: scaling factor for arrows
     """
+    if force_indices is None:
+        force_indices = [0, 6]
     forces_over_time = np.array(forces_over_time)
     timesteps = np.arange(forces_over_time.shape[0])
 

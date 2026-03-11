@@ -426,7 +426,7 @@ def _validate_and_log_config(config: Any) -> None:
     validate_config(config, strict=True)
     resolved = get_resolved_config_dict(config)
     # Log resolved config for reproducibility (T031)
-    logger.info(
+    logger.debug(
         "Resolved config: type={} backend={} sensors={}",
         type(config).__name__,
         resolved.get("backend", "fast-pysf"),
@@ -516,9 +516,10 @@ def make_robot_env(  # noqa: PLR0913
         peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             Use ``config.peds_have_static_obstacle_forces`` (obstacle forces) and
             ``config.peds_have_robot_repulsion`` (robot repulsion) going forward.
-        reward_func: Optional custom reward function; falls back to internal simple reward
-            with warning.
-        reward_name: Optional named reward preset (`simple`, `punish_action`, `snqi_step`).
+        reward_func: Optional custom reward function; when omitted, a named profile
+            is resolved via ``reward_name`` (default: ``route_completion_v2``).
+        reward_name: Optional named reward preset (`route_completion_v2`, `social_quality_v1`,
+            `simple`, `punish_action`, `snqi_step`, `alyassi`).
             Ignored when ``reward_func`` is provided.
         reward_kwargs: Optional keyword arguments passed to the named reward preset builder.
         debug: Enable debug/visual features (may trigger view creation when recording).
@@ -570,7 +571,8 @@ def make_robot_env(  # noqa: PLR0913
         render_options = render_options_local
         recording_options = recording_options_local
 
-    if reward_func is None and reward_name is not None:
+    if reward_func is None:
+        reward_name = reward_name or "route_completion_v2"
         reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
 
     _apply_global_seed(seed)
@@ -591,7 +593,7 @@ def make_robot_env(  # noqa: PLR0913
         render_options=render_options,
         recording_options=recording_options,
     )
-    logger.info(
+    logger.debug(
         "Creating robot env debug={debug} record_video={record} video_path={path} fps={fps}",
         debug=debug,
         record=eff_record_video,
@@ -661,7 +663,8 @@ def make_image_robot_env(  # noqa: PLR0913
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
         render_options = _apply_render(mapped, render_options)
         recording_options = _apply_recording(mapped, recording_options)
-    if reward_func is None and reward_name is not None:
+    if reward_func is None:
+        reward_name = reward_name or "route_completion_v2"
         reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
     _apply_global_seed(seed)
 

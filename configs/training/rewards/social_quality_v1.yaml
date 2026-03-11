@@ -1,0 +1,16 @@
+profile: social_quality_v1
+version: 1
+reward_name: social_quality_v1
+reward_kwargs:
+  weights:
+    progress: 1.0
+    living: -0.02
+    collision: -6.0
+    near_miss: -1.2
+    ttc_risk: -0.9
+    comfort: -0.9
+    smoothness: -0.2
+    terminal_bonus: 1.5
+notes:
+  - Social-quality-oriented reward profile with stronger safety shaping.
+  - Success is route completion only (no waypoint success).

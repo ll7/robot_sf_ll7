@@ -1,0 +1,66 @@
+experiment:
+  run_id: predictive_br07_all_maps_randomized
+
+output:
+  root: output/tmp/predictive_planner/pipeline
+
+scenarios:
+  scenario_matrix: ../../scenarios/classic_interactions.yaml
+  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
+
+base_collection:
+  # Randomized seed manifest generated over all scenarios in scenario_matrix.
+  seeds_per_scenario: 4
+  random_seed_base: 11000
+  max_steps: 200
+  max_agents: 24
+  horizon_steps: 8
+  max_speed: 1.2
+
+hardcase_collection:
+  max_steps: 220
+  max_agents: 24
+  horizon_steps: 8
+  max_speed: 1.2
+
+mixing:
+  hardcase_repeat: 2
+  shuffle_seed: 42
+
+training:
+  model_id: predictive_proxy_selected_v2
+  epochs: 40
+  batch_size: 128
+  lr: 0.0003
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 42
+  hidden_dim: 128
+  message_passing_steps: 3
+  max_val_ade: 1.2
+  max_val_fde: 2.0
+  proxy_every_epochs: 5
+  proxy_horizon: 120
+  proxy_dt: 0.1
+  proxy_workers: 1
+
+wandb:
+  enabled: true
+  project: robot_sf
+  entity: ll7
+  group: predictive-br07
+  job_type: train
+  name: predictive_br07_all_maps_randomized
+  mode: online
+  tags:
+    - predictive
+    - br07
+    - all-maps
+    - randomized-seeds
+
+evaluation:
+  workers: 1
+  campaign_workers: 2
+  horizon: 120
+  dt: 0.1

@@ -62,3 +62,31 @@ If the model is not present locally and W&B metadata is configured in
   training config, known limitations).
 - The YAML registry is the source of truth for automation and should contain
   the W&B run metadata when available.
+
+## PPO Expert Model
+
+Current PPO expert model id in `model/registry.yaml`:
+
+- `ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`
+
+Deprecated legacy entries kept for traceability:
+
+- `ppo_expert_br06_v2_15m_all_maps_20260302T152332` (killed early, deprecated)
+- `ppo_expert_br06_v2_15m_all_maps_20260303T074433`
+
+## Predictive Planner Models
+
+Current predictive planner model ids in `model/registry.yaml` include:
+
+- `predictive_rgl_v1`
+- `predictive_rgl_full_v1`
+- `predictive_rgl_sweep_h256_mp4_s42`
+- `predictive_rgl_sweep_h192_mp3_s7_wd5e5`
+- `predictive_proxy_selected_v1`
+
+Recommended benchmark default:
+
+- `predictive_proxy_selected_v1`
+
+The camera-ready predictive config uses this id via
+`configs/algos/prediction_planner_camera_ready.yaml`.

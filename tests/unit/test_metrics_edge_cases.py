@@ -21,7 +21,6 @@ import math
 
 import numpy as np
 
-from robot_sf.benchmark.constants import COLLISION_DIST as D_COLL
 from robot_sf.benchmark.constants import COMFORT_FORCE_THRESHOLD as F_THRESH
 from robot_sf.benchmark.constants import NEAR_MISS_DIST as D_NEAR
 from robot_sf.benchmark.metrics import (
@@ -66,22 +65,23 @@ def _episode(
 
 
 def test_collision_and_near_miss_boundary_classification():
-    """Distances at boundaries classify correctly:
+    """Clearance boundaries classify correctly with explicit radii.
 
-    step0: distance == D_COLL        -> near-miss (NOT collision)
-    step1: distance == D_COLL - eps  -> collision
-    step2: distance == D_NEAR        -> neither collision nor near-miss
+    step0: clearance == 0.0         -> near-miss (NOT collision)
+    step1: clearance < 0.0          -> collision
+    step2: clearance == D_NEAR      -> neither collision nor near-miss
     """
 
     eps = 1e-6
     # Robot fixed at origin
     robot_pos = np.zeros((3, 2), dtype=float)
+    radii_sum = 1.0 + 0.4
     # Single pedestrian positioned to yield the desired distances each step
     ped_positions = np.array(
         [
-            [D_COLL, 0.0],  # exactly D_COLL
-            [D_COLL - eps, 0.0],  # just inside collision
-            [D_NEAR, 0.0],  # exactly D_NEAR
+            [radii_sum, 0.0],  # exactly zero clearance
+            [radii_sum - eps, 0.0],  # just inside collision
+            [radii_sum + D_NEAR, 0.0],  # exactly near-miss upper boundary
         ],
         dtype=float,
     )[:, None, :]  # (T,1,2)

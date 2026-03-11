@@ -49,7 +49,8 @@ Range = tuple[float, float]
 # Robot types
 DifferentialDriveAction = tuple[float, float]  # (linear velocity, angular velocity)
 BicycleAction = tuple[float, float]  # (acceleration, steering angle)
-RobotAction = Union[DifferentialDriveAction, BicycleAction]
+HolonomicAction = tuple[float, float]  # (vx, vy) or (v, omega) based on command mode
+RobotAction = Union[DifferentialDriveAction, BicycleAction, HolonomicAction]
 RobotPose = tuple[Vec2D, float]
 """
 Type alias for a robot's pose represented as a tuple of a 2D vector (position)

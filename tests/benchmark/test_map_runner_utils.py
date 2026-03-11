@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -10,10 +11,23 @@ import pytest
 from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_config,
+    _default_robot_command_space,
+    _extract_ppo_pedestrians,
+    _finalize_feasibility_metadata,
     _goal_policy,
+    _normalize_xy_rows,
     _parse_algo_config,
+    _planner_kinematics_compatibility,
+    _policy_command_to_env_action,
+    _ppo_action_to_unicycle,
+    _ppo_paper_gate_status,
+    _preflight_policy,
+    _project_with_feasibility,
     _resolve_seed_list,
+    _robot_kinematics_label,
+    _robot_max_speed,
     _run_map_episode,
+    _scenario_robot_kinematics_label,
     _select_seeds,
     _stack_ped_positions,
     _suite_key,
@@ -24,6 +38,33 @@ from robot_sf.benchmark.map_runner import (
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+
+
+class _KinematicsStub:
+    """Minimal kinematics model test double for map-runner wiring tests."""
+
+    name: str = "stub"
+
+    def __init__(self, projected: tuple[float, float], *, feasible: bool = True) -> None:
+        self._projected = projected
+        self._feasible = feasible
+        self.calls: list[tuple[float, float]] = []
+
+    def is_feasible(self, command: tuple[float, float]) -> bool:
+        del command
+        return self._feasible
+
+    def project(self, command: tuple[float, float]) -> tuple[float, float]:
+        self.calls.append((float(command[0]), float(command[1])))
+        return self._projected
+
+    def diagnostics(
+        self,
+        command: tuple[float, float],
+        projected: tuple[float, float],
+    ) -> dict[str, object]:
+        del command, projected
+        return {}
 
 
 def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
@@ -57,6 +98,10 @@ def test_goal_policy_and_build_policy() -> None:
     }
     linear, angular = policy(obs)
     assert meta["status"] == "ok"
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "deterministic_goal_seeking"
+    assert meta["planner_kinematics"]["execution_mode"] == "native"
+    assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
     assert linear > 0.0
     assert abs(angular) <= 1.0
 
@@ -69,6 +114,65 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     _, meta = _build_policy("rvo", {})
     assert meta["status"] == "placeholder"
     assert meta["fallback_reason"] == "unimplemented"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_build_policy_socnav_bench_forwards_allow_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure socnav_bench policy wiring respects allow_fallback setting."""
+
+    captured: dict[str, bool] = {}
+
+    class _DummyAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config
+            captured["allow_fallback"] = bool(allow_fallback)
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter", _DummyAdapter)
+    _, meta = _build_policy("socnav_bench", {"allow_fallback": True})
+    assert captured["allow_fallback"] is True
+    assert meta["status"] == "ok"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_build_policy_socnav_sampling_uses_local_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure socnav_sampling maps to local SamplingPlannerAdapter, not SocNavBench wrapper."""
+
+    calls: dict[str, int] = {"local": 0, "upstream": 0}
+
+    class _DummyLocalAdapter:
+        def __init__(self, config) -> None:
+            del config
+            calls["local"] += 1
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    class _DummyUpstreamAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config, allow_fallback
+            calls["upstream"] += 1
+
+        def plan(self, _obs):
+            return (0.0, 0.0)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SamplingPlannerAdapter", _DummyLocalAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter",
+        _DummyUpstreamAdapter,
+    )
+
+    _, meta = _build_policy("socnav_sampling", {"allow_fallback": True})
+    assert calls["local"] == 1
+    assert calls["upstream"] == 0
+    assert meta["status"] == "ok"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
 def test_suite_seed_selection_and_behavior_sanity() -> None:
@@ -106,12 +210,346 @@ def test_velocity_and_ped_stack_helpers() -> None:
     traj = [np.array([[0.0, 0.0]]), np.array([[1.0, 1.0], [2.0, 2.0]])]
     stacked = _stack_ped_positions(traj)
     assert stacked.shape == (2, 2, 2)
+    assert _stack_ped_positions([]).shape == (0, 0, 2)
+
+
+def test_map_runner_metadata_and_normalization_helpers() -> None:
+    """Cover helper branches for kinematics metadata and PPO payload conversion."""
+    assert _normalize_xy_rows([]).shape == (0, 2)
+    assert _normalize_xy_rows([1.0, 2.0]).shape == (1, 2)
+    assert _normalize_xy_rows([1.0]).shape == (0, 2)
+    trimmed = _normalize_xy_rows(np.array([[1.0, 2.0, 3.0]]))
+    assert trimmed.shape == (1, 2)
+
+    class DifferentialDriveSettings:
+        max_linear_speed = 2.5
+
+    class BicycleDriveSettings:
+        max_velocity = 3.5
+
+    diff = type("Cfg", (), {"robot_config": DifferentialDriveSettings()})()
+    bike = type("Cfg", (), {"robot_config": BicycleDriveSettings()})()
+    unknown = type("Cfg", (), {"robot_config": object()})()
+    none_cfg = type("Cfg", (), {"robot_config": None})()
+
+    assert _robot_kinematics_label(diff) == "differential_drive"
+    assert _robot_kinematics_label(bike) == "bicycle_drive"
+    assert _robot_kinematics_label(unknown) != ""
+    assert _robot_kinematics_label(none_cfg) == "differential_drive"
+    assert _robot_max_speed(diff) == 2.5
+    assert _robot_max_speed(bike) == 3.5
+    assert _robot_max_speed(none_cfg) is None
+
+    assert _scenario_robot_kinematics_label({}) == "differential_drive"
+    assert (
+        _scenario_robot_kinematics_label({"robot_config": {"type": "bicycle_drive"}})
+        == "bicycle_drive"
+    )
+    assert _scenario_robot_kinematics_label({"robot_config": {"type": "holonomic"}}) == "holonomic"
+    assert (
+        _scenario_robot_kinematics_label({"robot_config": {"type": "skid_steer"}}) == "skid_steer"
+    )
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": 0.5, "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is True and reason is None
+    ok, reason = _ppo_paper_gate_status({"profile": "paper"})
+    assert ok is False and "missing 'provenance'" in str(reason)
+
+    native = _ppo_action_to_unicycle({"v": 0.2, "omega": 0.1}, {"robot": {}}, {})
+    assert native[2] == "native"
+    adapted = _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 0.0},
+        {"robot": {"heading": [0.0]}},
+        {"v_max": 1.0, "omega_max": 1.0},
+    )
+    assert adapted[2] == "adapter"
+
+
+def test_map_runner_feasibility_helpers_accumulate_and_finalize() -> None:
+    """Feasibility helpers should tolerate missing meta and compute summary stats."""
+    passthrough = _project_with_feasibility(
+        model=_KinematicsStub((0.5, 0.1)),
+        command=(0.5, 0.1),
+        meta={},
+    )
+    assert passthrough == (0.5, 0.1)
+
+    meta = {
+        "kinematics_feasibility": {
+            "commands_evaluated": 0,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "_sum_abs_delta_linear": 0.0,
+            "_sum_abs_delta_angular": 0.0,
+            "_max_abs_delta_linear": 0.0,
+            "_max_abs_delta_angular": 0.0,
+        }
+    }
+    projected = _project_with_feasibility(
+        model=_KinematicsStub((0.2, -0.1), feasible=False),
+        command=(0.5, 0.3),
+        meta=meta,
+    )
+    assert projected == (0.2, -0.1)
+    _finalize_feasibility_metadata(meta)
+    feasibility = meta["kinematics_feasibility"]
+    assert feasibility["commands_evaluated"] == 1
+    assert feasibility["infeasible_native_count"] == 1
+    assert feasibility["projected_count"] == 1
+    assert feasibility["projection_rate"] == pytest.approx(1.0)
+    assert feasibility["infeasible_rate"] == pytest.approx(1.0)
+    assert feasibility["max_abs_delta_linear"] > 0.0
+
+    empty_meta = {"kinematics_feasibility": {}}
+    _finalize_feasibility_metadata(empty_meta)
+    assert empty_meta["kinematics_feasibility"]["projection_rate"] == 0.0
+
+
+def test_map_runner_paper_gate_and_compatibility_branches() -> None:
+    """Exercise paper-gate validation and planner/kinematics compatibility branches."""
+    ok, reason = _ppo_paper_gate_status({"profile": "experimental"})
+    assert ok is False and reason is None
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": "bad", "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is False and "numeric" in str(reason)
+
+    ok, reason = _ppo_paper_gate_status(
+        {
+            "profile": "paper",
+            "provenance": {
+                "training_config": "cfg",
+                "training_commit": "abc",
+                "dataset_version": "v1",
+                "checkpoint_id": "ckpt",
+                "normalization_id": "norm",
+                "deterministic_seed_set": "eval",
+            },
+            "quality_gate": {"min_success_rate": 0.9, "measured_success_rate": 0.7},
+        }
+    )
+    assert ok is False and "quality gate failed" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="rvo",
+        robot_kinematics="holonomic",
+        algo_config={},
+    )
+    assert compatible is False and "disabled" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="ppo",
+        robot_kinematics="holonomic",
+        algo_config={"obs_mode": "image"},
+    )
+    assert compatible is False and "non-image" in str(reason)
+
+    compatible, reason = _planner_kinematics_compatibility(
+        algo="ppo",
+        robot_kinematics="differential_drive",
+        algo_config={"obs_mode": "image"},
+    )
+    assert compatible is True and reason is None
+
+
+def test_extract_ppo_pedestrians_respects_count_and_radius() -> None:
+    """Pedestrian extraction should slice by count and pad malformed velocity payloads."""
+    ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(
+        {
+            "positions": [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+            "velocities": [[0.5, 0.0]],
+            "count": [2],
+            "radius": [0.4],
+        }
+    )
+    assert ped_pos.shape == (2, 2)
+    assert ped_vel.shape == (2, 2)
+    assert ped_vel[1].tolist() == [0.0, 0.0]
+    assert ped_radius == pytest.approx(0.4)
+
+
+def test_build_policy_for_portfolio_adapters_tracks_feasibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter-backed planner policies should expose feasibility metadata and callable output."""
+
+    class _GapPredictionStub:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            return 0.2, 0.0
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.GapAwarePredictionAdapter",
+        _GapPredictionStub,
+    )
+
+    for algo_name in ("risk_dwa", "stream_gap", "gap_prediction", "mppi_social"):
+        policy, meta = _build_policy(
+            algo_name,
+            {"max_linear_speed": 0.8, "max_angular_speed": 0.5},
+            robot_kinematics="differential_drive",
+        )
+        linear, angular = policy(
+            {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
+                "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+                "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
+            }
+        )
+        assert np.isfinite(linear)
+        assert np.isfinite(angular)
+        feasibility = meta.get("kinematics_feasibility")
+        assert isinstance(feasibility, dict)
+        assert feasibility["commands_evaluated"] >= 1
+
+
+def test_ppo_action_to_unicycle_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PPO command conversion should route through the kinematics contract."""
+    model = _KinematicsStub((0.7, -0.3))
+    resolver_calls: list[dict[str, object]] = []
+
+    def _resolver(**kwargs):
+        resolver_calls.append(dict(kwargs))
+        return model
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        _resolver,
+    )
+
+    native = _ppo_action_to_unicycle(
+        {"v": 1.8, "omega": 2.0},
+        {"robot": {"heading": [0.0]}},
+        {"v_max": 1.0, "omega_max": 1.0},
+        robot_kinematics="differential_drive",
+    )
+    assert native[0] == pytest.approx(0.7)
+    assert native[1] == pytest.approx(-0.3)
+    assert native[2] == "native"
+    assert model.calls == [(1.8, 2.0)]
+    assert resolver_calls
+    assert resolver_calls[0].get("robot_kinematics") == "differential_drive"
+
+
+def test_build_policy_goal_path_uses_kinematics_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Goal policy should project commands through kinematics contract wiring."""
+    model = _KinematicsStub((0.2, 0.1))
+    resolver_calls: list[dict[str, object]] = []
+
+    def _resolver(**kwargs):
+        resolver_calls.append(dict(kwargs))
+        return model
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        _resolver,
+    )
+    policy, meta = _build_policy("goal", {"max_speed": 10.0}, robot_kinematics="bicycle_drive")
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [10.0, 0.0]},
+    }
+    assert policy(obs) == pytest.approx((0.2, 0.1))
+    assert model.calls == [(10.0, 0.0)]
+    assert resolver_calls
+    assert resolver_calls[0].get("robot_kinematics") == "bicycle_drive"
+    assert meta["planner_kinematics"]["execution_mode"] == "native"
+
+
+def test_ppo_action_to_unicycle_adapter_converts_heading_error_to_angular_velocity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter path should project speed with gain-scaled angular velocity."""
+    model = _KinematicsStub((0.0, 0.0))
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        lambda **kwargs: model,
+    )
+    _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 1.0},
+        {"robot": {"heading": [0.0]}},
+        {"omega_kp": 2.0, "omega_max": 1.0},
+        robot_kinematics="differential_drive",
+    )
+    assert model.calls
+    assert model.calls[0][0] == pytest.approx(1.0)
+    # heading error = pi/2, with kp=2 and omega_max=1 clips to 1.0
+    assert model.calls[0][1] == pytest.approx(1.0)
+
+
+def test_preflight_policy_passes_robot_kinematics_to_build_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preflight should build policy with the requested robot kinematics."""
+    captured: dict[str, object] = {}
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del adapter_impact_eval
+        captured["algo"] = algo
+        captured["cfg"] = cfg
+        captured["robot_kinematics"] = robot_kinematics
+
+        def _policy(_obs):
+            return (0.0, 0.0)
+
+        return _policy, {}
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="goal",
+        algo_config={"max_speed": 1.0},
+        benchmark_profile="baseline-safe",
+        missing_prereq_policy="fail-fast",
+        robot_kinematics="bicycle_drive",
+    )
+    assert cfg["max_speed"] == 1.0
+    assert preflight["status"] == "ok"
+    assert captured["robot_kinematics"] == "bicycle_drive"
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
-    """Verify SocNav config fallback and seed list parsing."""
-    cfg = _build_socnav_config({"invalid_key": 123})
+    """Verify SocNav config ignores unknown keys but preserves known ones."""
+    cfg = _build_socnav_config(
+        {
+            "invalid_key": 123,
+            "predictive_goal_weight": 7.25,
+            "predictive_allow_reverse_candidates": True,
+        }
+    )
     assert hasattr(cfg, "social_force_desired_speed")
+    assert cfg.predictive_goal_weight == 7.25
+    assert cfg.predictive_allow_reverse_candidates is True
 
     seed_path = tmp_path / "seeds.yaml"
     seed_path.write_text("suite_a: [1, 2]\ninvalid: 3\n", encoding="utf-8")
@@ -203,7 +641,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.compute_all_metrics",
-        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.post_process_metrics",
@@ -224,7 +662,267 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         scenario_path=Path("."),
     )
     assert record["scenario_id"] == "s1"
-    assert record["metrics"]["success"] == 1.0
+    assert record["metrics"]["success"] == 0.0
+    algo_md = record["algorithm_metadata"]
+    assert algo_md["baseline_category"] == "classical"
+    assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
+    feasibility = algo_md.get("kinematics_feasibility")
+    assert isinstance(feasibility, dict)
+    assert "projection_rate" in feasibility
+    assert "infeasible_rate" in feasibility
+
+
+def test_run_map_episode_does_not_stop_on_waypoint_only_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Waypoint-only success flags must not trigger map-runner early success stop."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.step_calls = 0
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            self.step_calls += 1
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            info = {
+                "success": True,
+                "meta": {"is_waypoint_complete": True, "is_route_complete": False},
+            }
+            # Keep env alive unless map-runner incorrectly performs early success break.
+            return obs, 0.0, False, False, info
+
+        def close(self) -> None:
+            return None
+
+    map_def = _minimal_map_def()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_env = _DummyEnv(map_def)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: dummy_env,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    record = _run_map_episode(
+        scenario,
+        seed=1,
+        horizon=50,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+    assert dummy_env.step_calls == 50
+    assert record["steps"] == 50
+    assert record["termination_reason"] == "max_steps"
+
+
+def test_run_map_episode_stops_immediately_on_route_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route completion should trigger early success stop immediately."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.step_calls = 0
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            self.step_calls += 1
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            info = {"meta": {"is_waypoint_complete": True, "is_route_complete": True}}
+            return obs, 0.0, False, False, info
+
+        def close(self) -> None:
+            return None
+
+    map_def = _minimal_map_def()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_env = _DummyEnv(map_def)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: dummy_env,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    record = _run_map_episode(
+        scenario,
+        seed=1,
+        horizon=50,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+    assert dummy_env.step_calls == 1
+    assert record["steps"] == 1
+    assert record["termination_reason"] == "success"
+
+
+def test_run_map_episode_collision_wins_over_route_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Collision + route-complete in same terminal step must resolve as collision."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.step_calls = 0
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            self.step_calls += 1
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            info = {
+                "meta": {
+                    "is_waypoint_complete": True,
+                    "is_route_complete": True,
+                    "is_obstacle_collision": True,
+                }
+            }
+            return obs, 0.0, True, False, info
+
+        def close(self) -> None:
+            return None
+
+    map_def = _minimal_map_def()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_env = _DummyEnv(map_def)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: dummy_env,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 1.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    record = _run_map_episode(
+        scenario,
+        seed=1,
+        horizon=50,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+    assert record["termination_reason"] == "collision"
+    assert record["outcome"]["collision_event"] is True
+    assert record["outcome"]["route_complete"] is False
 
 
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,10 +953,18 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         resume=False,
     )
     assert result["written"] == 1
+    assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
+    assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
+        "unknown",
+        "differential_drive",
+    }
 
     # Resume path skips existing episode
     monkeypatch.setattr("robot_sf.benchmark.map_runner.index_existing", lambda path: {"ep1"})
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.compute_episode_id", lambda sc, seed: "ep1")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._compute_map_episode_id",
+        lambda sc, seed: "ep1",
+    )
     result = run_map_batch(
         [scenario],
         out_path,
@@ -305,3 +1011,66 @@ def test_run_map_batch_filters_and_validation(
         resume=False,
     )
     assert result["total_jobs"] == 1
+
+
+def test_run_map_batch_skips_incompatible_kinematics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Incompatible planner/kinematics combinations should be skipped with explicit reason."""
+    scenario = {
+        "name": "s1",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic"},
+    }
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._planner_kinematics_compatibility",
+        lambda **kwargs: (False, "mock incompatible combo"),
+    )
+    result = run_map_batch(
+        [scenario],
+        tmp_path / "out.jsonl",
+        schema_path=tmp_path / "schema.json",
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+    assert result["written"] == 0
+    assert result["preflight"]["status"] == "skipped"
+    assert "compatibility_reason" in result["preflight"]
+
+
+def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
+    """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
+
+    class HolonomicConfig:
+        command_mode = "vx_vy"
+
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]), action_space=None)
+    config = SimpleNamespace(
+        robot_config=HolonomicConfig(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+    action = _policy_command_to_env_action(env=env, config=config, command=(1.0, 2.0))
+
+    expected_heading = 0.2
+    np.testing.assert_allclose(
+        action,
+        np.array([np.cos(expected_heading), np.sin(expected_heading)], dtype=float),
+    )
+
+
+def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
+    """Runtime command mode should override algo-config command mode for holonomic metadata."""
+    assert (
+        _default_robot_command_space(
+            "holonomic",
+            {"command_mode": "unicycle_vw"},
+            robot_command_mode="vx_vy",
+        )
+        == "holonomic_vxy"
+    )

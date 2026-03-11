@@ -39,16 +39,26 @@ import yaml
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     TERMINATION_REASONS,
+    build_outcome_payload,
+    collision_event,
+    outcome_contradictions,
     resolve_termination_reason,
+    route_complete_success,
     status_from_termination_reason,
 )
-from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, compute_episode_id
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    compute_episode_id,
+    validate_episode_success_integrity,
+)
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -65,6 +75,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
     make_orca_policy,
+    make_prediction_policy,
     make_sacadrl_policy,
     make_social_force_policy,
 )
@@ -75,7 +86,7 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.tools.render_scenario_videos import _defensive_obs_adapter
-from scripts.training.train_expert_ppo import _apply_env_overrides, load_expert_training_config
+from scripts.training.train_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -84,6 +95,7 @@ if TYPE_CHECKING:
 _POLICY_CHOICES = (
     "goal",
     "ppo",
+    "prediction_planner",
     "socnav_sampling",
     "socnav_social_force",
     "socnav_orca",
@@ -106,21 +118,12 @@ _SUMMARY_METRICS = (
     "curvature_mean",
     "curvature_mean_eps0p1",
     "low_speed_frac",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "collisions",
 )
 
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
-
-_POLICY_CATEGORIES = {
-    "fast_pysf": "oracle",
-    "fast_pysf_planner": "oracle",
-    "goal": "heuristic",
-    "socnav_sampling": "heuristic",
-    "socnav_social_force": "heuristic",
-    "socnav_orca": "heuristic",
-    "socnav_sacadrl": "learned",
-    "socnav_bench": "heuristic",
-    "ppo": "learned",
-}
 
 
 @dataclass
@@ -447,6 +450,8 @@ def _build_socnav_policy(
     socnav_allow_fallback: bool,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
+    if policy_name == "prediction_planner":
+        return make_prediction_policy(allow_fallback=socnav_allow_fallback)
     if policy_name == "socnav_sampling":
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
@@ -471,6 +476,15 @@ def _build_socnav_policy(
             allow_fallback=socnav_allow_fallback,
         )
     return None
+
+
+def _policy_uses_adapter(policy_name: str) -> bool:
+    """Return whether policy execution uses adapter command translation."""
+    return (
+        policy_name == "prediction_planner"
+        or policy_name.startswith("socnav_")
+        or policy_name.startswith("fast_pysf")
+    )
 
 
 def _apply_socnav_grid_overrides(
@@ -609,14 +623,16 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             "termination_reason_counts": {},
             "termination_reason_rates": {},
         }
-    successes = sum(1 for r in records if r.get("metrics", {}).get("success"))
-    collisions = sum(1 for r in records if int(r.get("metrics", {}).get("collisions", 0)) > 0)
-    timeouts = sum(1 for r in records if r.get("status") == "failure")
     reason_counts = dict.fromkeys(_TERMINATION_REASON_CHOICES, 0)
     for rec in records:
         reason = str(rec.get("termination_reason", "")).strip()
         if reason in reason_counts:
             reason_counts[reason] += 1
+    # Keep rate metrics aligned with canonical termination reasons so summary
+    # cannot report "success=1.0" while all episodes terminated as collisions.
+    successes = int(reason_counts.get("success", 0))
+    collisions = int(reason_counts.get("collision", 0))
+    failures = max(0, len(records) - successes - collisions)
     reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
     metric_means: dict[str, float] = {}
     for metric in _SUMMARY_METRICS:
@@ -637,10 +653,13 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "episodes": len(records),
         "success_rate": successes / len(records),
         "collision_rate": collisions / len(records),
-        "failures": timeouts,
+        "failures": failures,
         "termination_reason_counts": reason_counts,
         "termination_reason_rates": reason_rates,
         "metric_means": metric_means,
+        "ped_collision_rate": float(metric_means.get("ped_collision_count", 0.0)),
+        "obstacle_collision_rate": float(metric_means.get("obstacle_collision_count", 0.0)),
+        "total_collision_rate": float(metric_means.get("collisions", 0.0)),
     }
 
 
@@ -730,6 +749,9 @@ def _write_report(  # noqa: C901
         f"- Episodes: {summary.get('episodes', 0)}",
         f"- Success rate: {summary.get('success_rate', 0.0):.3f}",
         f"- Collision rate: {summary.get('collision_rate', 0.0):.3f}",
+        f"- Ped collision rate: {summary.get('ped_collision_rate', 0.0):.3f}",
+        f"- Obstacle collision rate: {summary.get('obstacle_collision_rate', 0.0):.3f}",
+        f"- Total collision count mean: {summary.get('total_collision_rate', 0.0):.3f}",
         "",
         "## Termination reasons",
     ]
@@ -903,6 +925,9 @@ def _finalize_run(
 
 
 def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    violations = validate_episode_success_integrity(record)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
@@ -1213,6 +1238,8 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
     reached_goal_step: int | None = None
+    route_complete_flag = False
+    loop_exhausted = True
 
     start_time = time.time()
     terminated = False
@@ -1226,14 +1253,15 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         if videos:
             env.render()
 
-        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        # Snapshot simulator state arrays to avoid aliasing mutable backend buffers.
+        robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
+        peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
         if record_forces:
             forces = getattr(env.simulator, "last_ped_forces", None)
             if forces is None:
                 forces_arr = np.zeros_like(peds, dtype=float)
             else:
-                forces_arr = np.asarray(forces, dtype=float)
+                forces_arr = np.array(forces, dtype=float, copy=True)
                 if forces_arr.shape != peds.shape:
                     forces_arr = np.zeros_like(peds, dtype=float)
         else:
@@ -1243,13 +1271,25 @@ def _collect_episode_trajectories(  # noqa: PLR0913
         ped_positions.append(peds)
         ped_forces.append(forces_arr)
 
-        if reached_goal_step is None and bool(info.get("success") or info.get("is_success")):
+        route_complete = route_complete_success(info)
+        if reached_goal_step is None and route_complete:
             reached_goal_step = step_idx
+            route_complete_flag = True
+            loop_exhausted = False
+            break
         if terminated or truncated:
+            loop_exhausted = False
             break
 
     wall_time = float(max(1e-9, time.time() - start_time))
-    reached_max_steps = not terminated and not truncated and bool(robot_positions)
+    reached_max_steps = bool(
+        not route_complete_flag
+        and not terminated
+        and not truncated
+        and loop_exhausted
+        and max_steps > 0
+        and len(robot_positions) >= max_steps
+    )
     return EpisodeRuntimeOutcome(
         trajectory=EpisodeTrajectory(robot_positions, ped_positions, ped_forces),
         reached_goal_step=reached_goal_step,
@@ -1273,6 +1313,9 @@ def _build_episode_record(  # noqa: PLR0913
     wall_time: float,
     max_steps: int,
     dt: float,
+    robot_max_speed: float | None,
+    robot_radius: float,
+    ped_radius: float,
     ts_start: str,
     video_path: Path | None,
     terminated: bool,
@@ -1306,8 +1349,15 @@ def _build_episode_record(  # noqa: PLR0913
             goal=goal_vec,
             dt=float(dt),
             reached_goal_step=reached_goal_step,
+            robot_radius=float(robot_radius),
+            ped_radius=float(ped_radius),
         )
-        metrics_raw = compute_all_metrics(ep, horizon=max_steps, shortest_path_len=shortest_path)
+        metrics_raw = compute_all_metrics(
+            ep,
+            horizon=max_steps,
+            shortest_path_len=shortest_path,
+            robot_max_speed=robot_max_speed,
+        )
         metrics_raw["shortest_path_len"] = float(shortest_path)
         # Filter jerk/curvature at low speeds to avoid numerical blow-ups when |v| ~ 0.
         speed_eps = 0.1
@@ -1326,10 +1376,19 @@ def _build_episode_record(  # noqa: PLR0913
         )
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
-    success = bool(
-        last_info.get("success") or last_info.get("is_success") or metrics.get("success")
+    meta = last_info.get("meta")
+    # Canonical episode collision: event-stream collision OR metric-level collision evidence.
+    # This keeps success/outcome semantics aligned with benchmark metrics.
+    metric_collisions = float(metrics.get("collisions", 0.0) or 0.0)
+    collision = bool(collision_event(last_info) or metric_collisions > 0.0)
+    route_complete_signal = route_complete_success(last_info)
+    success = bool(route_complete_signal and not collision)
+    route_complete = success
+    timeout = bool(
+        (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))
+        or truncated
+        or reached_max_steps
     )
-    collision = bool(last_info.get("collision") or metrics.get("collisions"))
     termination_reason = resolve_termination_reason(
         terminated=terminated,
         truncated=truncated,
@@ -1338,12 +1397,31 @@ def _build_episode_record(  # noqa: PLR0913
         reached_max_steps=reached_max_steps,
     )
     status = status_from_termination_reason(termination_reason)
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=timeout,
+    )
 
     scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError(
+            f"Episode integrity contradictions for scenario '{scenario_id}', seed={seed}: "
+            + "; ".join(contradictions)
+        )
     scenario_params = dict(scenario)
     scenario_params.setdefault("id", scenario_id)
     scenario_params.setdefault("algo", policy_name)
 
+    algo_metadata = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name},
+    )
     record = {
         "version": "v1",
         "episode_id": compute_episode_id(scenario_params, seed),
@@ -1351,13 +1429,15 @@ def _build_episode_record(  # noqa: PLR0913
         "seed": int(seed),
         "scenario_params": scenario_params,
         "metrics": metrics,
-        "algorithm_metadata": {"algorithm": policy_name},
+        "algorithm_metadata": algo_metadata,
         "algo": policy_name,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status,
         "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
         "termination_flags": {
             "terminated": bool(terminated),
             "truncated": bool(truncated),
@@ -1399,6 +1479,12 @@ def _build_error_episode_record(
         collision=False,
         had_error=True,
     )
+    algo_metadata = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name, "status": "error"},
+        execution_mode="adapter" if _policy_uses_adapter(policy_name) else "native",
+    )
+    outcome = build_outcome_payload(route_complete=False, collision=False, timeout=False)
     return {
         "version": "v1",
         "episode_id": compute_episode_id(scenario_params, seed),
@@ -1406,13 +1492,15 @@ def _build_error_episode_record(
         "seed": int(seed),
         "scenario_params": scenario_params,
         "metrics": {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0},
-        "algorithm_metadata": {"algorithm": policy_name, "status": "error"},
+        "algorithm_metadata": algo_metadata,
         "algo": policy_name,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": datetime.now(_TIMESTAMP_TZ).isoformat()},
         "status": status_from_termination_reason(termination_reason),
         "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": []},
         "termination_flags": {
             "terminated": False,
             "truncated": False,
@@ -1477,6 +1565,19 @@ def _run_episode(  # noqa: PLR0913
         env_factory_kwargs=env_factory_kwargs,
     )
     ts_start = datetime.now(_TIMESTAMP_TZ).isoformat()
+    cfg_robot = getattr(config, "robot_config", None)
+    robot_max_speed = None
+    robot_radius = 1.0
+    ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+    if cfg_robot is not None:
+        for attr in ("max_linear_speed", "max_velocity"):
+            value = getattr(cfg_robot, attr, None)
+            if isinstance(value, (int, float)) and float(value) > 0.0:
+                robot_max_speed = float(value)
+                break
+        radius_val = getattr(cfg_robot, "radius", None)
+        if isinstance(radius_val, (int, float)) and float(radius_val) > 0.0:
+            robot_radius = float(radius_val)
     record: dict[str, Any] | None = None
     try:
         obs = _reset_env(
@@ -1511,6 +1612,9 @@ def _run_episode(  # noqa: PLR0913
             wall_time=runtime.wall_time,
             max_steps=max_steps,
             dt=config.sim_config.time_per_step_in_secs,
+            robot_max_speed=robot_max_speed,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
             ts_start=ts_start,
             video_path=episode_video,
             terminated=runtime.terminated,
@@ -1544,6 +1648,12 @@ def _run_episode(  # noqa: PLR0913
             if video_meta:
                 video_meta["termination_reason"] = record.get("termination_reason")
                 record["video"] = video_meta
+        if record is not None:
+            _apply_video_termination_suffix(
+                video_path=episode_video,
+                termination_reason=str(record.get("termination_reason", "")),
+                record=record,
+            )
 
 
 def _close_env(env) -> None:
@@ -1553,6 +1663,45 @@ def _close_env(env) -> None:
             getattr(env, method)()
         except Exception as exc:
             logger.warning("Failed to call env.{}(): {}", method, exc)
+
+
+def _video_with_termination_suffix(video_path: Path, termination_reason: str) -> Path:
+    """Return the target video path with a termination suffix appended to the stem."""
+    suffix = re.sub(r"[^\w.-]+", "_", str(termination_reason).strip()).strip("._")
+    if not suffix:
+        suffix = "unknown"
+    return video_path.with_name(f"{video_path.stem}_{suffix}{video_path.suffix}")
+
+
+def _apply_video_termination_suffix(
+    *,
+    video_path: Path | None,
+    termination_reason: str | None,
+    record: dict[str, Any],
+) -> None:
+    """Rename episode video to include termination reason and keep record metadata in sync."""
+    if video_path is None or not video_path.exists():
+        return
+    reason = str(termination_reason or "").strip()
+    if not reason:
+        return
+    target = _video_with_termination_suffix(video_path, reason)
+    if target == video_path:
+        return
+    try:
+        if target.exists():
+            target.unlink()
+        video_path.rename(target)
+    except Exception as exc:
+        logger.warning(
+            "Failed to append termination suffix to video {}: {}",
+            video_path,
+            exc,
+        )
+        return
+    video_meta = record.get("video")
+    if isinstance(video_meta, dict):
+        video_meta["path"] = str(target)
 
 
 @dataclass
@@ -1946,6 +2095,10 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
     Returns:
         dict[str, Any]: Summary metadata for the policy run.
     """
+    canonical_meta = enrich_algorithm_metadata(
+        algo=policy_name,
+        metadata={"algorithm": policy_name},
+    )
     output_base = sweep_root / policy_name if sweep_root is not None else args.output
     video_base = (
         sweep_video_root / policy_name if sweep_video_root is not None else args.video_output
@@ -1993,9 +2146,14 @@ def _run_policy_analysis_for_policy(  # noqa: PLR0913
         policy_name=policy_name,
         output_root=output_root,
     )
+    baseline_category = str(
+        result["summary"].get("baseline_category")
+        or canonical_meta.get("baseline_category")
+        or "unknown"
+    )
     return {
         "policy": policy_name,
-        "category": _POLICY_CATEGORIES.get(policy_name, "unknown"),
+        "category": baseline_category,
         "summary": result["summary"],
         "metric_means": result["summary"].get("metric_means", {}),
         "report_md": result["report_md"],

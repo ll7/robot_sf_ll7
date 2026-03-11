@@ -9,7 +9,10 @@
         "episode_id",
         "scenario_id",
         "seed",
-        "metrics"
+        "metrics",
+        "termination_reason",
+        "outcome",
+        "integrity"
     ],
     "properties": {
         "version": {
@@ -43,6 +46,9 @@
                 "algorithm": {
                     "type": "string"
                 },
+                "canonical_algorithm": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string",
                     "enum": [
@@ -55,13 +61,186 @@
                 "fallback_reason": {
                     "type": "string"
                 },
+                "baseline_category": {
+                    "type": "string",
+                    "enum": [
+                        "diagnostic",
+                        "classical",
+                        "learning",
+                        "unknown"
+                    ]
+                },
+                "policy_semantics": {
+                    "type": "string"
+                },
                 "config": {
                     "type": "object"
                 },
                 "config_hash": {
                     "type": "string"
+                },
+                "stochastic_reference": {
+                    "type": "boolean"
+                },
+                "distinct_from_goal_baseline": {
+                    "type": "boolean"
+                },
+                "planner_kinematics": {
+                    "type": "object",
+                    "properties": {
+                        "robot_kinematics": {
+                            "type": "string"
+                        },
+                        "planner_command_space": {
+                            "type": "string"
+                        },
+                        "supports_native_commands": {
+                            "type": "boolean"
+                        },
+                        "supports_adapter_commands": {
+                            "type": "boolean"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_name": {
+                            "type": "string"
+                        },
+                        "adapter_active": {
+                            "type": "boolean"
+                        },
+                        "scenario_kinematics": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "adapter_impact": {
+                    "type": "object",
+                    "properties": {
+                        "requested": {
+                            "type": "boolean"
+                        },
+                        "native_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "adapted_steps": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "execution_mode": {
+                            "type": "string",
+                            "enum": [
+                                "native",
+                                "adapter",
+                                "mixed",
+                                "unknown"
+                            ]
+                        },
+                        "adapter_fraction": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "kinematics_feasibility": {
+                    "type": "object",
+                    "properties": {
+                        "commands_evaluated": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "infeasible_native_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projected_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "projection_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "infeasible_rate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1.0
+                        },
+                        "mean_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "mean_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_linear": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "max_abs_delta_angular": {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
+            "additionalProperties": true
+        },
+        "metric_parameters": {
+            "type": "object",
+            "description": "Metric threshold profile and signature used for report reproducibility.",
+            "properties": {
+                "threshold_signature": {
+                    "type": "string"
+                },
+                "threshold_profile": {
+                    "type": "object",
+                    "properties": {
+                        "profile_id": {
+                            "type": "string"
+                        },
+                        "collision_distance_m": {
+                            "type": "number"
+                        },
+                        "near_miss_distance_m": {
+                            "type": "number"
+                        },
+                        "comfort_force_threshold": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "profile_id",
+                        "collision_distance_m",
+                        "near_miss_distance_m",
+                        "comfort_force_threshold"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "required": [
+                "threshold_signature",
+                "threshold_profile"
+            ],
             "additionalProperties": true
         },
         "metrics": {
@@ -75,6 +254,52 @@
                     "object"
                 ]
             }
+        },
+        "termination_reason": {
+            "type": "string",
+            "enum": [
+                "success",
+                "collision",
+                "terminated",
+                "truncated",
+                "max_steps",
+                "error"
+            ]
+        },
+        "outcome": {
+            "type": "object",
+            "required": [
+                "route_complete",
+                "collision_event",
+                "timeout_event"
+            ],
+            "properties": {
+                "route_complete": {
+                    "type": "boolean"
+                },
+                "collision_event": {
+                    "type": "boolean"
+                },
+                "timeout_event": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
+        "integrity": {
+            "type": "object",
+            "required": [
+                "contradictions"
+            ],
+            "properties": {
+                "contradictions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": true
         },
         "config_hash": {
             "type": "string"

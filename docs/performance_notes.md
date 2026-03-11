@@ -41,8 +41,96 @@ Location: `scripts/validation/performance_smoke_test.py`
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   uv run python scripts/validation/performance_smoke_test.py
 
-# Results saved to: results/performance_smoke_test.json
+# Results saved to: output/benchmarks/performance_smoke_test.json
 ```
+
+### Cold/Warm Regression Suite
+Location: `robot_sf/benchmark/perf_cold_warm.py`
+
+This suite separates cold-start and steady-state runs and compares medians against
+a tracked baseline snapshot (`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`).
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python -m robot_sf.benchmark.perf_cold_warm \
+    --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
+    --scenario-name classic_crossing_low \
+    --episode-steps 64 \
+    --cold-runs 1 \
+    --warm-runs 2 \
+    --baseline configs/benchmarks/perf_baseline_classic_cold_warm_v1.json \
+    --output-json output/benchmarks/perf/cold_warm_local.json \
+    --output-markdown output/benchmarks/perf/cold_warm_local.md
+```
+
+The report includes:
+- `env_create_sec`
+- `first_step_sec`
+- `episode_sec`
+- `steps_per_sec`
+
+and classifies regressions as startup-dominated vs steady-state-dominated.
+
+CI integration:
+- PR smoke: `.github/workflows/ci.yml` (`Cold/warm perf regression smoke`)
+  - advisory on PRs with a conservative profile:
+    - baseline: `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+    - thresholds: `max_slowdown_pct=0.75`, `max_throughput_drop_pct=0.60`
+    - absolute deltas: `min_seconds_delta=0.20`, `min_throughput_delta=1.00`
+  - enforced on `main`/`workflow_dispatch` with default profile:
+    - baseline: `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+    - thresholds: `max_slowdown_pct=0.60`, `max_throughput_drop_pct=0.50`
+    - absolute deltas: `min_seconds_delta=0.15`, `min_throughput_delta=0.75`
+- Nightly broader checks: `.github/workflows/perf-nightly.yml`
+
+### Overall Trend Benchmark Suite
+Location: `robot_sf/benchmark/perf_trend.py`
+
+This suite executes a stable scenario matrix and emits a single schema-versioned report:
+
+- matrix config: `configs/benchmarks/perf_trend_matrix_classic_v1.yaml`
+- report schema: `benchmark-perf-trend-report.v1`
+- fixed KPI set per phase: `env_create_sec`, `first_step_sec`, `episode_sec`, `steps_per_sec`
+
+Local run:
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python -m robot_sf.benchmark.perf_trend \
+    --matrix configs/benchmarks/perf_trend_matrix_classic_v1.yaml \
+    --history-glob 'output/benchmarks/perf/trend/history/*.json' \
+    --output-json output/benchmarks/perf/trend/latest.json \
+    --output-markdown output/benchmarks/perf/trend/latest.md
+```
+
+Nightly behavior:
+- runs the matrix in `.github/workflows/perf-nightly.yml`
+- restores prior trend reports from cache when available
+- compares current run against recent history medians
+- stores latest report back into history cache path
+- uploads all perf artifacts from `output/benchmarks/perf/`
+
+Regression diagnostics include whether degradation is startup-dominated
+(`env_create_sec`/`first_step_sec`) or steady-state-dominated (`episode_sec`/`steps_per_sec`).
+
+### Baseline Management
+
+Use the committed snapshot as the initial reference point. If hardware/runtime
+changes make it stale, regenerate values from nightly artifacts and update
+`configs/benchmarks/perf_baseline_classic_cold_warm_v1.json` and
+`configs/benchmarks/perf_baseline_classic_cold_warm_medium_v1.json` in a dedicated PR.
+
+### Simulation Throughput Guard (cluster-aware)
+Location: `tests/perf/test_simulation_speed_perf.py`
+
+The throughput guard supports environment-specific calibration:
+
+- `ROBOT_SF_SIM_STEPS_SOFT` (default `2.0`)
+- `ROBOT_SF_SIM_STEPS_HARD` (default `0.5`)
+- `ROBOT_SF_PERF_ENFORCE=1` to turn soft/hard threshold breaches into test failures
+
+On shared or heterogeneous cluster nodes, keep enforcement off for exploratory runs and
+set tuned thresholds per hardware profile.
 
 ### Benchmark Runner Performance
 Location: `robot_sf/benchmark/runner.py`
@@ -67,8 +155,8 @@ Location: `robot_sf/benchmark/runner.py`
 
 ### Regression Detection
 - Performance degradation > 50% should trigger investigation
-- Compare against baseline measurements from this document
-- Use `results/performance_smoke_test.json` for automated monitoring
+- Compare against `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
+- Use `output/benchmarks/perf/*.json` and nightly artifacts for trend monitoring
 
 ## Optimization Notes
 

@@ -7,10 +7,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pygame
 
+from robot_sf.render import sim_view
 from robot_sf.render.sim_view import SimulationView
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+MIN_SPRITE_DIMENSION = 64
+MIN_NON_TRANSPARENT_PIXELS = 1000
 
 
 def _write_sprite(path: Path) -> None:
@@ -19,6 +23,22 @@ def _write_sprite(path: Path) -> None:
     surface = pygame.Surface((8, 8), pygame.SRCALPHA)
     surface.fill((255, 0, 0, 255))
     pygame.image.save(surface, str(path))
+
+
+def test_default_sprite_assets_are_not_placeholder_pixels() -> None:
+    """Default sprite assets should be production-sized images, not 1x1 placeholders."""
+    sprite_paths = (
+        sim_view._DEFAULT_ROBOT_SPRITE,
+        sim_view._DEFAULT_PED_SPRITE,
+        sim_view._DEFAULT_EGO_PED_SPRITE,
+    )
+    for sprite_path in sprite_paths:
+        surface = pygame.image.load(sprite_path)
+        width, height = surface.get_size()
+        assert width >= MIN_SPRITE_DIMENSION
+        assert height >= MIN_SPRITE_DIMENSION
+        alpha_values = pygame.surfarray.array_alpha(surface)
+        assert int((alpha_values > 0).sum()) >= MIN_NON_TRANSPARENT_PIXELS
 
 
 def test_robot_circle_mode_draws_circle(monkeypatch) -> None:
@@ -53,6 +73,28 @@ def test_robot_sprite_mode_uses_rotation(monkeypatch, tmp_path: Path) -> None:
     )
     view._draw_robot(((1.0, 1.0), 0.5))
     assert rotate_calls
+
+
+def test_robot_sprite_heading_has_right_90deg_offset(monkeypatch, tmp_path: Path) -> None:
+    """Robot sprite with theta=0 should rotate -90° to match world-frame heading."""
+    sprite_path = tmp_path / "robot_sprite_offset.png"
+    _write_sprite(sprite_path)
+    rotate_calls: list[float] = []
+    orig_rotate = pygame.transform.rotate
+
+    def _spy_rotate(surface, angle):
+        rotate_calls.append(float(angle))
+        return orig_rotate(surface, angle)
+
+    monkeypatch.setattr(pygame.transform, "rotate", _spy_rotate)
+    view = SimulationView(
+        record_video=True,
+        robot_render_mode="sprite",
+        robot_sprite_path=str(sprite_path),
+    )
+    view._draw_robot(((1.0, 1.0), 0.0))
+    assert rotate_calls
+    assert abs(rotate_calls[-1] + 90.0) < 1e-6
 
 
 def test_robot_sprite_missing_path_falls_back_to_circle(monkeypatch) -> None:

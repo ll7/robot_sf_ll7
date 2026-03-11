@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from math import atan2, dist
 from random import sample
 
+import numpy as np
 from loguru import logger
 from shapely.geometry import Polygon
 from shapely.prepared import PreparedGeometry, prep
@@ -20,6 +21,50 @@ from robot_sf.planner import PlanningError
 from robot_sf.planner.visibility_planner import PlanningFailedError
 
 _PLANNER_RETRY_ATTEMPTS = 5
+
+
+@dataclass(frozen=True)
+class NavigationSettings:
+    """Settings for route sampling behavior in navigation utilities."""
+
+    waypoint_noise_enabled: bool = False
+    waypoint_noise_std: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Validate waypoint-noise configuration values."""
+        if self.waypoint_noise_std < 0:
+            raise ValueError("waypoint_noise_std must be >= 0.0")
+
+
+def _resolve_navigation_settings(map_def: MapDefinition) -> NavigationSettings:
+    """Resolve navigation settings from map metadata with safe defaults.
+
+    Returns:
+        NavigationSettings: Effective settings for route sampling.
+    """
+    configured = getattr(map_def, "_navigation_settings", None)
+    if isinstance(configured, NavigationSettings):
+        return configured
+    return NavigationSettings()
+
+
+def _apply_waypoint_noise(
+    waypoints: list[Vec2D],
+    *,
+    settings: NavigationSettings,
+) -> list[Vec2D]:
+    """Apply Gaussian noise to intermediate waypoints when enabled.
+
+    Returns:
+        list[Vec2D]: New waypoint list with optional noise on intermediate points.
+    """
+    if not settings.waypoint_noise_enabled or settings.waypoint_noise_std <= 0.0:
+        return list(waypoints)
+    if not waypoints:
+        return []
+    waypoints_array = np.asarray(waypoints, dtype=float)
+    noise = np.random.normal(0.0, settings.waypoint_noise_std, size=waypoints_array.shape)
+    return [tuple(point) for point in (waypoints_array + noise)]
 
 
 def _select_spawn_id(map_def: MapDefinition, spawn_id: int | None) -> int:
@@ -312,11 +357,10 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     initial_spawn = sample_zone(route.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
     final_goal = sample_zone(route.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
 
-    # Construct the route
-    route = [initial_spawn, *route.waypoints, final_goal]
-
-    # TODO(#254): add noise to the exact waypoint positions to avoid learning routes by heart
-    # See: https://github.com/ll7/robot_sf_ll7/issues/254
+    # Construct the route with optional noise on intermediate waypoints only.
+    settings = _resolve_navigation_settings(map_def)
+    waypoints = _apply_waypoint_noise(route.waypoints, settings=settings)
+    route = [initial_spawn, *waypoints, final_goal]
 
     return route
 

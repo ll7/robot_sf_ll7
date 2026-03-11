@@ -67,6 +67,7 @@ scenarios:
   metadata:
     archetype: group_crossing
     density: high
+    density_advisory: high_density_stress
     flow: bi
     groups: 0.5
     plausibility:

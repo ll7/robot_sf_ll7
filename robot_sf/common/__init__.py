@@ -39,6 +39,11 @@ from robot_sf.common.artifacts import (
 from robot_sf.common.compat import validate_compatibility
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.geometry import euclid_dist
+from robot_sf.common.hardware import (
+    HardwareCapacity,
+    detect_hardware_capacity,
+    recommend_env_runners,
+)
 from robot_sf.common.matplotlib_utils import ensure_interactive_backend, is_headless_environment
 from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.common.seed import SeedReport, set_global_seed
@@ -98,6 +103,10 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     "set_global_seed",
     # Geometry
     "euclid_dist",
+    # Hardware helpers (from .hardware)
+    "HardwareCapacity",
+    "detect_hardware_capacity",
+    "recommend_env_runners",
     # Matplotlib utilities (from .matplotlib_utils)
     "ensure_interactive_backend",
     "is_headless_environment",

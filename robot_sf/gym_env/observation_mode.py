@@ -1,9 +1,9 @@
 """Observation mode options for Gym environments."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ObservationMode(str, Enum):
+class ObservationMode(StrEnum):
     """Selectable observation encodings for Gym environments."""
 
     DEFAULT_GYM = "default_gym"

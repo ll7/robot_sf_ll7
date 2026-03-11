@@ -7,6 +7,8 @@ producing a warm-start checkpoint for subsequent PPO fine-tuning.
 from __future__ import annotations
 
 import argparse
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,11 +18,10 @@ from loguru import logger
 
 try:
     from gymnasium.spaces.utils import flatten as flatten_space
-    from imitation.data import types as im_types
     from stable_baselines3 import PPO
 except ImportError as exc:
     raise RuntimeError(
-        "This script requires 'gymnasium', 'imitation', and 'stable-baselines3' packages."
+        "This script requires core training packages ('gymnasium', 'stable-baselines3')."
     ) from exc
 
 from robot_sf import common
@@ -34,6 +35,69 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from gymnasium.spaces import Space
+    from imitation.data.types import Trajectory as ImitationTrajectory
+
+
+@dataclass(slots=True)
+class _FallbackTrajectory:
+    """Lightweight trajectory container used when imitation is not installed."""
+
+    obs: np.ndarray
+    acts: np.ndarray
+    infos: object
+    terminal: bool
+
+
+class ImitationDependencyWarning(UserWarning):
+    """Warning emitted when the optional imitation dependency stack is misconfigured."""
+
+
+def _warn_imitation_dependency_mode(*, dry_run: bool) -> None:
+    """Warn users how to invoke BC pre-training with the optional imitation dependency group."""
+    if dry_run:
+        return
+    try:
+        import imitation  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        return
+    warnings.warn(
+        "BC pre-training uses the optional `imitation` dependency stack. "
+        "Run this command with `uv run --group imitation ...` after `uv sync --group imitation`. "
+        "Do not combine it with `--extra rllib` in the same uv invocation because gymnasium versions "
+        "are intentionally split across these workflows.",
+        ImitationDependencyWarning,
+        stacklevel=2,
+    )
+
+
+def _resolve_trajectory_class() -> type[Any]:
+    """Return the imitation trajectory type or a lightweight local fallback."""
+    try:
+        from imitation.data import types as im_types
+    except ImportError:
+        return _FallbackTrajectory
+    return im_types.Trajectory
+
+
+def _require_imitation_bc():
+    """Import and return imitation BC module, raising a clear install hint on failure."""
+    try:
+        from imitation.algorithms import bc
+    except ImportError as exc:
+        warnings.warn(
+            "Could not import `imitation.algorithms.bc`. "
+            "Install the optional stack with `uv sync --group imitation` and run this script via "
+            "`uv run --group imitation ...`.",
+            ImitationDependencyWarning,
+            stacklevel=2,
+        )
+        raise RuntimeError(
+            "This script requires the optional imitation stack. Install with: uv sync --group imitation "
+            "and run with: uv run --group imitation ..."
+        ) from exc
+    return bc
 
 
 def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
@@ -77,8 +141,9 @@ def _flatten_single_observation(obs: Any, observation_space: Space | None) -> np
 def _convert_to_transitions(
     dataset: dict[str, Any],
     observation_space: Space | None = None,
-) -> list[im_types.Trajectory]:
+) -> list[ImitationTrajectory | _FallbackTrajectory]:
     """Convert NPZ arrays to imitation-compatible trajectories."""
+    trajectory_cls = _resolve_trajectory_class()
     trajectories = []
 
     for ep_idx in range(dataset["episode_count"]):
@@ -91,7 +156,7 @@ def _convert_to_transitions(
         obs_arrays = _ensure_observation_history(obs_arrays, acts_arrays, ep_idx)
 
         # Create trajectory for this episode
-        traj = im_types.Trajectory(
+        traj = trajectory_cls(
             obs=obs_arrays,
             acts=acts_arrays,
             infos=None,
@@ -131,11 +196,11 @@ def _ensure_observation_history(
 
 def _create_bc_trainer(
     env: Any,
-    trajectories: list[im_types.Trajectory],
+    trajectories: list[ImitationTrajectory | _FallbackTrajectory],
     config: BCPretrainingConfig,
 ) -> tuple[Any, PPO]:
     """Initialize BC trainer alongside the PPO container holding the policy."""
-    from imitation.algorithms import bc
+    bc = _require_imitation_bc()
 
     policy_model = PPO(
         "MlpPolicy",
@@ -162,6 +227,7 @@ def run_bc_pretraining(
     dry_run: bool = False,
 ) -> Path:
     """Execute behavioural cloning pre-training and save checkpoint."""
+    _warn_imitation_dependency_mode(dry_run=dry_run)
     logger.info("Starting BC pre-training run_id={}", config.run_id)
 
     # Load dataset

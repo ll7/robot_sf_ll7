@@ -24,7 +24,7 @@ class DifferentialDriveSettings:
     # Maximum linear velocity the robot can achieve
     max_linear_speed: float = 2.0
     # Maximum angular velocity the robot can achieve
-    max_angular_speed: float = 0.5
+    max_angular_speed: float = 1.0
     # Radius of the wheels (used to calculate rotations from linear movement)
     wheel_radius: float = 0.05
     # Distance between the centers of the two wheels of the robot

@@ -1,8 +1,6 @@
-"""
-test robot_sf.eval.EnvMetrics
-"""
+"""Tests for environment metric helpers."""
 
-from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics
+from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics, PedVecEnvMetrics, VecEnvMetrics
 
 
 def test_total_routes():
@@ -75,7 +73,7 @@ def test_update():
     meta = {
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
-        "is_robot_at_goal": True,
+        "is_waypoint_complete": True,
         "is_timesteps_exceeded": False,
         "is_route_complete": True,
     }
@@ -90,7 +88,7 @@ def test_on_next_intermediate_outcome():
     meta = {
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
-        "is_robot_at_goal": True,
+        "is_waypoint_complete": True,
         "is_timesteps_exceeded": False,
     }
     metrics._on_next_intermediate_outcome(meta)
@@ -123,3 +121,141 @@ def test_ped_update():
     metrics.update(meta)
     assert metrics.exceeded_timesteps == 1
     assert metrics.route_end_distance == 45.0
+
+
+def test_env_rate_properties_and_vector_aggregation():
+    """Vector aggregation should expose consistent route/intermediate rates."""
+    m1 = EnvMetrics()
+    m1.route_outcomes.extend([EnvOutcome.REACHED_GOAL, EnvOutcome.TIMEOUT])
+    m1.intermediate_goal_outcomes.extend([EnvOutcome.REACHED_GOAL, EnvOutcome.OBSTACLE_COLLISION])
+    m2 = EnvMetrics()
+    m2.route_outcomes.extend([EnvOutcome.PEDESTRIAN_COLLISION, EnvOutcome.REACHED_GOAL])
+    m2.intermediate_goal_outcomes.extend([EnvOutcome.REACHED_GOAL, EnvOutcome.REACHED_GOAL])
+
+    vec = VecEnvMetrics(metrics=[m1, m2])
+    assert 0.0 <= m1.route_completion_rate <= 1.0
+    assert 0.0 <= m1.interm_goal_completion_rate <= 1.0
+    assert 0.0 <= m1.timeout_rate <= 1.0
+    assert 0.0 <= m1.obstacle_collision_rate <= 1.0
+    assert 0.0 <= m1.pedestrian_collision_rate <= 1.0
+    assert 0.0 <= vec.route_completion_rate <= 1.0
+    assert 0.0 <= vec.interm_goal_completion_rate <= 1.0
+    assert 0.0 <= vec.timeout_rate <= 1.0
+    assert 0.0 <= vec.obstacle_collision_rate <= 1.0
+    assert 0.0 <= vec.pedestrian_collision_rate <= 1.0
+
+    before_m1 = len(m1.route_outcomes)
+    before_m2 = len(m2.route_outcomes)
+    vec.update(
+        [
+            {
+                "is_pedestrian_collision": False,
+                "is_obstacle_collision": False,
+                "is_waypoint_complete": False,
+                "is_timesteps_exceeded": True,
+                "is_route_complete": False,
+            },
+            {
+                "is_pedestrian_collision": True,
+                "is_obstacle_collision": False,
+                "is_waypoint_complete": False,
+                "is_timesteps_exceeded": False,
+                "is_route_complete": False,
+            },
+        ]
+    )
+    assert len(m1.route_outcomes) == before_m1 + 1
+    assert len(m2.route_outcomes) == before_m2 + 1
+    assert m1.route_outcomes[-1] == EnvOutcome.TIMEOUT
+    assert m2.route_outcomes[-1] == EnvOutcome.PEDESTRIAN_COLLISION
+
+
+def test_ped_outcome_priority_and_vector_rates():
+    """Pedestrian metrics should prefer collision outcomes over completion flags."""
+    ped = PedEnvMetrics()
+    ped.update(
+        {
+            "distance_to_robot": 1.0,
+            "is_robot_collision": True,
+            "is_route_complete": True,
+            "is_timesteps_exceeded": False,
+            "is_obstacle_collision": False,
+            "is_pedestrian_collision": False,
+            "is_robot_obstacle_collision": False,
+            "is_robot_pedestrian_collision": False,
+        }
+    )
+    ped.update(
+        {
+            "distance_to_robot": 2.0,
+            "is_robot_collision": False,
+            "is_route_complete": True,
+            "is_timesteps_exceeded": False,
+            "is_obstacle_collision": False,
+            "is_pedestrian_collision": False,
+            "is_robot_obstacle_collision": False,
+            "is_robot_pedestrian_collision": False,
+        }
+    )
+    ped.update(
+        {
+            "distance_to_robot": 3.0,
+            "is_robot_collision": False,
+            "is_route_complete": False,
+            "is_timesteps_exceeded": False,
+            "is_obstacle_collision": False,
+            "is_pedestrian_collision": False,
+            "is_robot_obstacle_collision": True,
+            "is_robot_pedestrian_collision": False,
+        }
+    )
+
+    assert ped.robot_collisions == 1
+    assert ped.robot_at_goal == 1
+    assert ped.robot_obstacle_collisions == 1
+    assert 0.0 <= ped.robot_collision_rate <= 1.0
+    assert 0.0 <= ped.robot_at_goal_rate <= 1.0
+    assert 0.0 <= ped.robot_obstacle_collision_rate <= 1.0
+    assert 0.0 <= ped.robot_pedestrian_collision_rate <= 1.0
+    assert ped.route_end_distance >= 0.0
+
+    ped2 = PedEnvMetrics()
+    vec = PedVecEnvMetrics(metrics=[ped, ped2])
+    assert 0.0 <= vec.timeout_rate <= 1.0
+    assert 0.0 <= vec.obstacle_collision_rate <= 1.0
+    assert 0.0 <= vec.pedestrian_collision_rate <= 1.0
+    assert 0.0 <= vec.robot_collision_rate <= 1.0
+    assert 0.0 <= vec.robot_at_goal_rate <= 1.0
+    assert 0.0 <= vec.robot_obstacle_collision_rate <= 1.0
+    assert 0.0 <= vec.robot_pedestrian_collision_rate <= 1.0
+    assert vec.route_end_distance >= 0.0
+    before_p1 = len(ped.route_outcomes)
+    before_p2 = len(ped2.route_outcomes)
+    vec.update(
+        [
+            {
+                "distance_to_robot": 0.5,
+                "is_robot_collision": False,
+                "is_route_complete": False,
+                "is_timesteps_exceeded": True,
+                "is_obstacle_collision": False,
+                "is_pedestrian_collision": False,
+                "is_robot_obstacle_collision": False,
+                "is_robot_pedestrian_collision": False,
+            },
+            {
+                "distance_to_robot": 0.8,
+                "is_robot_collision": False,
+                "is_route_complete": False,
+                "is_timesteps_exceeded": True,
+                "is_obstacle_collision": False,
+                "is_pedestrian_collision": False,
+                "is_robot_obstacle_collision": False,
+                "is_robot_pedestrian_collision": False,
+            },
+        ]
+    )
+    assert len(ped.route_outcomes) == before_p1 + 1
+    assert len(ped2.route_outcomes) == before_p2 + 1
+    assert ped.route_outcomes[-1] == EnvOutcome.TIMEOUT
+    assert ped2.route_outcomes[-1] == EnvOutcome.TIMEOUT

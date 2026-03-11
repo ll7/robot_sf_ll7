@@ -21,6 +21,7 @@ minimal (sample efficiency + optional sensitivity).
 
 from __future__ import annotations
 
+import importlib
 import json
 import platform
 import re
@@ -43,11 +44,6 @@ from robot_sf.research.aggregation import (
     export_metrics_csv,
     export_metrics_json,
 )
-from robot_sf.research.figures import (
-    plot_learning_curve,
-    plot_sample_efficiency,
-    plot_sensitivity,
-)
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.report_template import MarkdownReportRenderer
 from robot_sf.research.statistics import evaluate_hypothesis
@@ -62,6 +58,15 @@ def _iso() -> str:  # small helper
     """Return current UTC timestamp in ISO format."""
 
     return datetime.now(UTC).isoformat()
+
+
+def _figures_module():
+    """Lazy-load the figures module to defer heavy plotting imports.
+
+    Returns:
+        Imported `robot_sf.research.figures` module object.
+    """
+    return importlib.import_module("robot_sf.research.figures")
 
 
 @dataclass
@@ -170,12 +175,14 @@ class ReportOrchestrator:
         Returns:
             list[dict[str, Any]]: List of figure descriptors including output paths.
         """
+        figures_module = _figures_module()
+
         figures: list[dict[str, Any]] = []
         safe_exceptions = (OSError, RuntimeError, ValueError)
 
         if baseline_timesteps and pretrained_timesteps:
             try:
-                figure = plot_sample_efficiency(
+                figure = figures_module.plot_sample_efficiency(
                     baseline_timesteps, pretrained_timesteps, figures_dir
                 )
                 if figure.get("paths"):
@@ -186,7 +193,7 @@ class ReportOrchestrator:
         if baseline_rewards and pretrained_rewards:
             try:
                 timesteps = [float(i) for i in range(len(baseline_rewards[0]))]
-                figure = plot_learning_curve(
+                figure = figures_module.plot_learning_curve(
                     timesteps, baseline_rewards, pretrained_rewards, figures_dir
                 )
                 if figure.get("paths"):
@@ -682,6 +689,7 @@ class AblationOrchestrator:
         Returns:
             Path: Path to the generated `report.md` file.
         """
+        figures_module = _figures_module()
         variants = variants or self.run_ablation_matrix()
         figures_dir = self.output_dir / "figures"
         figures_dir.mkdir(exist_ok=True)
@@ -695,7 +703,7 @@ class AblationOrchestrator:
                 first_param = "dataset_size"
         if first_param and variants:
             try:
-                sens = plot_sensitivity(variants, first_param, figures_dir)
+                sens = figures_module.plot_sensitivity(variants, first_param, figures_dir)
                 if sens.get("paths"):
                     figures.append(sens)
             except safe_exceptions as exc:  # pragma: no cover

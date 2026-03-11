@@ -93,7 +93,7 @@ def restore_random_state(state: dict[str, Any]) -> None
 - Internal: None (leaf module)
 
 **Usage Patterns**:
-- Imported by: `scripts/training_ppo.py`, test fixtures, benchmark runner
+- Imported by: `scripts/training/train_ppo.py`, test fixtures, benchmark runner
 - Typical use:
   ```python
   from robot_sf.common.seed import set_global_seed

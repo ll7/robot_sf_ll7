@@ -7,6 +7,7 @@ import pytest
 
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
+    PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
     SamplingPlannerAdapter,
     SocialForcePlannerAdapter,
@@ -15,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
     make_orca_policy,
+    make_prediction_policy,
     make_sacadrl_policy,
     make_social_force_policy,
 )
@@ -306,6 +308,248 @@ def test_sacadrl_adapter_runs_model_when_available():
     assert np.isfinite(w)
 
 
+def test_prediction_adapter_fallback_when_model_missing(monkeypatch):
+    """Predictive adapter can fall back to constant-velocity prediction when model is unavailable."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
+    obs = _make_obs_with_peds([(1.0, 0.2), (1.6, -0.1)], goal=(4.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert np.isfinite(v)
+    assert np.isfinite(w)
+
+
+def test_prediction_adapter_requires_model_when_fallback_disabled(monkeypatch):
+    """Predictive adapter fails fast when checkpoint/model loading fails and fallback is disabled."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    with pytest.raises(RuntimeError, match="missing predictive model"):
+        adapter.plan(obs)
+
+
+def test_prediction_adapter_ttc_penalty_reduces_speed(monkeypatch):
+    """High TTC weight should bias the predictive planner toward slower commands."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.2, 0.0)], goal=(5.0, 0.0), heading=0.0)
+
+    cfg_lo = SocNavPlannerConfig(
+        predictive_ttc_weight=0.0,
+        predictive_ttc_distance=0.9,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_hi = SocNavPlannerConfig(
+        predictive_ttc_weight=0.8,
+        predictive_ttc_distance=1.2,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    v_lo, _w_lo = PredictionPlannerAdapter(cfg_lo, allow_fallback=True).plan(obs)
+    v_hi, _w_hi = PredictionPlannerAdapter(cfg_hi, allow_fallback=True).plan(obs)
+    assert v_hi <= v_lo
+
+
+def test_prediction_adapter_speed_clearance_gain_reduces_speed(monkeypatch):
+    """Speed-adaptive safety margin should discourage aggressive forward speed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.4, 0.0)], goal=(5.0, 0.0), heading=0.0)
+
+    cfg_base = SocNavPlannerConfig(
+        predictive_collision_weight=0.8,
+        predictive_ttc_weight=0.6,
+        predictive_ttc_distance=0.9,
+        predictive_robot_radius=0.25,
+        predictive_pedestrian_radius=0.25,
+        predictive_speed_clearance_gain=0.0,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_gain = SocNavPlannerConfig(
+        predictive_collision_weight=0.8,
+        predictive_ttc_weight=0.6,
+        predictive_ttc_distance=0.9,
+        predictive_robot_radius=0.25,
+        predictive_pedestrian_radius=0.25,
+        predictive_speed_clearance_gain=0.6,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+
+    v_base, _w_base = PredictionPlannerAdapter(cfg_base, allow_fallback=True).plan(obs)
+    v_gain, _w_gain = PredictionPlannerAdapter(cfg_gain, allow_fallback=True).plan(obs)
+    assert v_gain <= v_base
+
+
+def test_prediction_adapter_progress_risk_penalty_reduces_speed(monkeypatch):
+    """Progress-risk coupling should discourage fast progress through tight clearances."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    obs = _make_obs_with_peds([(1.1, 0.0)], goal=(4.0, 0.0), heading=0.0)
+
+    cfg_lo = SocNavPlannerConfig(
+        predictive_progress_risk_weight=0.0,
+        predictive_progress_risk_distance=1.3,
+        predictive_ttc_weight=0.1,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+    cfg_hi = SocNavPlannerConfig(
+        predictive_progress_risk_weight=4.0,
+        predictive_progress_risk_distance=1.3,
+        predictive_ttc_weight=0.1,
+        predictive_collision_weight=0.2,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+    )
+
+    v_lo, _w_lo = PredictionPlannerAdapter(cfg_lo, allow_fallback=True).plan(obs)
+    v_hi, _w_hi = PredictionPlannerAdapter(cfg_hi, allow_fallback=True).plan(obs)
+    assert v_hi <= v_lo
+
+
+def test_prediction_adapter_adaptive_lattice_expands_near_field(monkeypatch):
+    """Near-field context should produce an expanded candidate lattice."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_near_field_distance=2.5,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+        predictive_near_field_speed_samples=(0.1, 0.2),
+        predictive_near_field_heading_deltas=(-np.pi / 2, 0.0, np.pi / 2),
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+
+    # One near pedestrian prediction triggers near-field expansion.
+    future = np.zeros((1, 4, 2), dtype=np.float32)
+    future[0, :, 0] = 0.8
+    mask = np.array([1.0], dtype=np.float32)
+
+    candidates = adapter._candidate_set(future_peds=future, mask=mask)
+    base_count = len(cfg.predictive_candidate_speeds) * len(cfg.predictive_candidate_heading_deltas)
+    assert len(candidates) > base_count
+
+
+def test_prediction_adapter_reverse_candidates_appear_in_near_field(monkeypatch):
+    """Reverse candidates should be added when explicitly enabled in close-contact regimes."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_allow_reverse_candidates=True,
+        predictive_reverse_candidate_speeds=(-0.15, -0.3),
+        predictive_reverse_near_field_only=True,
+        predictive_near_field_distance=2.5,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+
+    future = np.zeros((1, 4, 2), dtype=np.float32)
+    future[0, :, 0] = 0.6
+    mask = np.array([1.0], dtype=np.float32)
+
+    candidates = adapter._candidate_set(future_peds=future, mask=mask)
+    assert any(v < 0.0 for v, _ in candidates)
+
+
+def test_prediction_adapter_progress_escape_injects_motion_in_clear_space(monkeypatch):
+    """Progress-escape should avoid stationary commands when far from goal and safe."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.4,
+        predictive_progress_escape_clearance_margin=0.1,
+    )
+    obs = _make_obs(goal=(4.0, 0.0), heading=0.0)
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v >= 0.39
+
+
+def test_prediction_adapter_progress_escape_respects_clearance_gate(monkeypatch):
+    """Progress-escape should not force motion when predicted clearance is too low."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.5,
+        predictive_hard_clearance_distance=0.75,
+        predictive_progress_escape_clearance_margin=0.2,
+        predictive_near_field_distance=0.0,
+        predictive_near_field_speed_samples=(),
+        predictive_near_field_heading_deltas=(0.0,),
+    )
+    obs = _make_obs_with_peds([(0.2, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    monkeypatch.setattr(
+        PredictionPlannerAdapter,
+        "_min_predicted_distance",
+        lambda self, **_kwargs: 0.1,
+    )
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v <= 1e-6
+
+
+def test_prediction_adapter_progress_escape_keeps_lower_cost_rollout(monkeypatch):
+    """Progress-escape should not replace a safer rollout with a worse scored command."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_candidate_speeds=(0.0, 0.2),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.5,
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    monkeypatch.setattr(
+        adapter,
+        "_score_action",
+        lambda **kwargs: 0.1 if kwargs["v"] == 0.2 else 1.0,
+    )
+    v, w = adapter.plan(_make_obs(goal=(4.0, 0.0), heading=0.0))
+    assert (v, w) == (0.2, 0.0)
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
@@ -318,3 +562,5 @@ def test_policy_constructors():
     assert v >= 0.0
     sacadrl_policy = make_sacadrl_policy(allow_fallback=True)
     assert isinstance(sacadrl_policy.adapter, SACADRLPlannerAdapter)
+    prediction_policy = make_prediction_policy(allow_fallback=True)
+    assert isinstance(prediction_policy.adapter, PredictionPlannerAdapter)

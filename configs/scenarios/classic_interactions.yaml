@@ -5,6 +5,7 @@
 
 includes:
   - archetypes/classic_bottleneck.yaml
+  - archetypes/classic_realworld_bottleneck.yaml
   - archetypes/classic_crossing.yaml
   - archetypes/classic_doorway.yaml
   - archetypes/classic_group_crossing.yaml
@@ -12,5 +13,6 @@ includes:
   - archetypes/classic_merging.yaml
   - archetypes/classic_overtaking.yaml
   - archetypes/classic_t_intersection.yaml
+  - archetypes/classic_urban_crossing.yaml
 map_search_paths:
   - ../../maps/svg_maps

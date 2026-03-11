@@ -54,21 +54,26 @@ class BenchmarkCLIConfig:
     target_collision_half_width: float = 0.05
     target_success_half_width: float = 0.05
     target_snqi_half_width: float = 0.05
+    bootstrap_samples: int = 1000
+    bootstrap_confidence: float = 0.95
+    bootstrap_seed: int | None = None
     # Video / plots toggles
     disable_videos: bool = False
     max_videos: int = 1
     video_renderer: str = "auto"
     video_fps: int = 10
+    freeze_manifest_path: str | None = None
+    metrics_subset: list[str] | None = None
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    # Generate timestamp for default output directory
-    """TODO docstring. Document this function.
-
+    """Create the CLI argument parser for full classic benchmark runs.
 
     Returns:
-        TODO docstring.
+        Configured ``argparse.ArgumentParser`` with all benchmark runtime,
+        precision, visualization, and freeze-manifest flags.
     """
+    # Generate timestamp for default output directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     default_output = f"tmp/results/full_classic_run_{timestamp}"
 
@@ -151,6 +156,34 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Target CI half-width for snqi metric",
     )
     parser.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=1000,
+        help="Bootstrap sample count for aggregate confidence intervals",
+    )
+    parser.add_argument(
+        "--bootstrap-confidence",
+        type=float,
+        default=0.95,
+        help="Bootstrap confidence level for aggregate confidence intervals",
+    )
+    parser.add_argument(
+        "--bootstrap-seed",
+        type=int,
+        default=None,
+        help="Bootstrap RNG seed (default: master seed)",
+    )
+    parser.add_argument(
+        "--metrics-subset",
+        default="",
+        help="Comma-separated metric subset for freeze-contract tracking",
+    )
+    parser.add_argument(
+        "--freeze-manifest",
+        default=None,
+        help="Optional freeze manifest file (YAML/JSON) for reproducibility checks",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
@@ -184,15 +217,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
-    """TODO docstring. Document this function.
+    """Convert parsed CLI arguments into a benchmark config object.
 
     Args:
-        ns: TODO docstring.
+        ns: Parsed command-line namespace from ``build_arg_parser``.
 
     Returns:
-        TODO docstring.
+        ``BenchmarkCLIConfig`` populated from CLI arguments with normalized
+        optional fields (for example, horizon and metric subset parsing).
     """
     horizon_override = ns.horizon if ns.horizon and ns.horizon > 0 else None
+    metrics_subset = [
+        metric.strip() for metric in str(ns.metrics_subset).split(",") if metric.strip()
+    ]
     return BenchmarkCLIConfig(
         scenario_matrix_path=ns.scenarios,
         output_root=ns.output,
@@ -208,10 +245,15 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
         target_collision_half_width=ns.target_collision_half_width,
         target_success_half_width=ns.target_success_half_width,
         target_snqi_half_width=ns.target_snqi_half_width,
+        bootstrap_samples=ns.bootstrap_samples,
+        bootstrap_confidence=ns.bootstrap_confidence,
+        bootstrap_seed=ns.bootstrap_seed,
         disable_videos=ns.disable_videos,
         max_videos=ns.max_videos,
         video_renderer=ns.video_renderer,
         video_fps=ns.video_fps,
+        freeze_manifest_path=ns.freeze_manifest,
+        metrics_subset=metrics_subset or None,
     )
 
 

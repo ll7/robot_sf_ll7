@@ -90,7 +90,9 @@ The density feeds into population sizing in `ped_population` logic. Two spawn st
 
 Edge effects:
 * Very small spawn areas quantize pedestrian counts (ceil) introducing discrete jumps.
-* Maps without spawn zones default to zero pedestrians regardless of density.
+* Maps without `ped_spawn_zone*` can still spawn route-following pedestrians when
+  `ped_route*` definitions exist (route-only mode). A map with neither pedestrian
+  routes nor crowded zones yields zero pedestrians.
 
 ## Performance Considerations
 Higher densities increase:
@@ -109,7 +111,7 @@ Rationale: preserve canonical benchmark comparability while enabling exploratory
 ## Common Pitfalls
 | Issue | Cause | Mitigation |
 |-------|-------|------------|
-| Unexpected zero pedestrians | Missing or malformed spawn zones in SVG | Validate SVG with `examples/svg_map_example.py --strict` |
+| Unexpected zero pedestrians | Missing/invalid pedestrian routes or zones in SVG | Validate SVG with `examples/advanced/13_svg_map_validation.py --all --strict` |
 | Large variance across seeds | Density near saturation (≥0.09) | Reduce density or increase map area |
 | Long runtimes / timeouts | Extremely high density | Use performance smoke test; lower density |
 | Metrics unstable (near misses ~0) | Density too low (<0.02) | Increase to at least 0.02 |

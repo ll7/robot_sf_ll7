@@ -1,0 +1,66 @@
+# Gap-aware predictive planner.
+# Root keys configure the predictive head; `stream_gap` configures the veto layer.
+allow_testing_algorithms: true
+
+predictive_model_id: predictive_proxy_selected_v1
+predictive_device: cpu
+predictive_max_agents: 16
+predictive_horizon_steps: 8
+predictive_rollout_dt: 0.2
+
+max_linear_speed: 1.6
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+
+predictive_goal_weight: 7.2
+predictive_collision_weight: 0.58
+predictive_near_miss_weight: 0.10
+predictive_velocity_weight: 0.01
+predictive_turn_weight: 0.01
+predictive_ttc_weight: 0.34
+predictive_ttc_distance: 0.9
+
+predictive_progress_risk_weight: 2.6
+predictive_progress_risk_distance: 1.3
+predictive_hard_clearance_distance: 0.8
+predictive_hard_clearance_weight: 3.1
+
+predictive_safe_distance: 0.35
+predictive_near_distance: 0.7
+predictive_robot_radius: 0.25
+predictive_pedestrian_radius: 0.25
+predictive_speed_clearance_gain: 0.6
+
+predictive_adaptive_horizon_enabled: true
+predictive_horizon_boost_steps: 8
+predictive_near_field_distance: 2.6
+predictive_near_field_speed_cap: 0.78
+predictive_near_field_speed_samples: [0.12, 0.25, 0.4, 0.58, 0.78]
+predictive_near_field_heading_deltas: [-1.570796, -1.047198, -0.785398, -0.523599, 0.0, 0.523599, 0.785398, 1.047198, 1.570796]
+predictive_candidate_speeds: [0.0, 0.3, 0.6, 0.9, 1.2]
+predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
+predictive_progress_escape_enabled: false
+
+occupancy_weight: 0.25
+stop_override_margin: 0.02
+approach_speed_cap: 0.42
+
+stream_gap:
+  max_linear_speed: 1.2
+  max_angular_speed: 1.2
+  goal_tolerance: 0.25
+  heading_gain: 1.7
+  turn_in_place_angle: 0.75
+  forward_lookahead: 4.5
+  rear_margin: 0.5
+  corridor_half_width: 0.9
+  emergency_clearance: 0.55
+  sample_dt: 0.2
+  sample_horizon: 4.0
+  safe_gap_time: 1.0
+  approach_gap_time: 0.8
+  wait_speed: 0.0
+  creep_speed: 0.15
+  approach_speed: 0.4
+  commit_speed: 1.0
+  commit_hold_steps: 6

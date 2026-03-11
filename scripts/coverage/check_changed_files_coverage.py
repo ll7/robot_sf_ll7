@@ -209,7 +209,7 @@ def _report_failures(
     missing: list[dict[str, object]],
     below_min: list[dict[str, object]],
 ) -> None:
-    print("Coverage requirement not met:")
+    print("Test coverage requirement not met:")
     if missing:
         _print_lines(["- Missing coverage data for:"] + [f"  - {r['file']}" for r in missing])
     if below_min:

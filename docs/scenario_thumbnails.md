@@ -19,6 +19,11 @@ Outputs
 - docs/figures/scenarios/<scenario_id>.png (+ .pdf when --pdf)
 - docs/figures/scenarios/montage.png (+ montage.pdf when --pdf)
 
+Scenario ID resolution for file naming is explicit:
+- `id` -> `name` -> `scenario_id` -> stable hash fallback
+- labels are sanitized for filesystem safety
+- collisions after sanitization are deterministically disambiguated with suffixes (`__2`, `__3`, ...)
+
 ## Programmatic API
 
 ```python

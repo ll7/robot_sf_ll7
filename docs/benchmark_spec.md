@@ -30,29 +30,52 @@ metric definitions/caveats.
 * If a scenario omits `seeds` and no seed set is requested, the map runner falls back to
   [`configs/benchmarks/seed_list_v1.yaml`](../configs/benchmarks/seed_list_v1.yaml).
 
-## Baseline Categories (Oracle / Heuristic / Learned)
+## Baseline Categories (Diagnostic / Classical / Learning)
 
 Baselines are labeled by category to keep comparisons explicit. Not every runner exposes every
 baseline; use the entrypoint noted below.
 
 | Baseline | Category | Entrypoint |
 | --- | --- | --- |
-| `fast_pysf_planner` | oracle | `scripts/tools/policy_analysis_run.py --policy fast_pysf_planner` |
-| `social_force` | heuristic | `scripts/run_classic_interactions.py --algo social_force` |
-| `orca` | heuristic | `scripts/run_classic_interactions.py --algo orca` |
-| `goal` / `simple` | heuristic | `scripts/run_classic_interactions.py --algo goal` |
-| `random` | heuristic | Registry-only baseline (not wired into policy_analysis_run.py) |
-| `ppo` | learned | `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
+| `fast_pysf_planner` | diagnostic | `scripts/tools/policy_analysis_run.py --policy fast_pysf_planner` |
+| `random` | diagnostic | Registry-only baseline (not wired into policy_analysis_run.py) |
+| `social_force` | classical | `scripts/run_classic_interactions.py --algo social_force` |
+| `orca` | classical | `scripts/run_classic_interactions.py --algo orca` |
+| `goal` / `simple` | classical | `scripts/run_classic_interactions.py --algo goal` |
+| `ppo` | learning | `scripts/run_classic_interactions.py --algo ppo` or `scripts/tools/policy_analysis_run.py --policy ppo --model-path ...` |
 
 Notes:
 * Map-based benchmark runs use `scripts/run_classic_interactions.py` (see below) and accept the
   `--algo` names shown above.
 * Learned baselines require model checkpoints; for policy analysis, provide `--model-path`.
-* `random`/`ppo` are exposed via the baseline registry for non-map scenario matrices; map-based
-  suites should use policy analysis for learned/GT comparisons. `random` is not currently wired
-  into `policy_analysis_run.py`.
+* `random` is exposed via the baseline registry for non-map scenario matrices and is not currently
+  wired into `policy_analysis_run.py`.
+* `random` is the **stochastic reference baseline**: it samples actions from a configured uniform
+  distribution (seeded RNG), and is intentionally distinct from deterministic `goal`.
+* `ppo` is available in both map-based benchmark runs and policy-analysis runs; policy analysis
+  remains the preferred path when you need richer learned-policy diagnostics (videos, per-policy
+  reports, and policy sweep metadata).
 * ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
   in the algo config to use the heuristic fallback.
+* `socnav_bench` requires SocNavBench prerequisites (including `skfmm`); install with
+  `uv sync --extra socnav` for native upstream execution.
+* `socnav_sampling` uses the in-repo sampling adapter baseline, while `socnav_bench` is the
+  upstream SocNavBench sampling wrapper.
+
+## Algorithm Readiness Profiles
+
+Canonical readiness profiles are versioned in
+[`configs/benchmarks/paper_baseline_algorithms_v1.yaml`](../configs/benchmarks/paper_baseline_algorithms_v1.yaml).
+
+CLI gating:
+* `--benchmark-profile baseline-safe` (default): allows only baseline-ready algorithms.
+* `--benchmark-profile paper-baseline`: publication profile; allows PPO only when paper-grade
+  provenance and quality-gate fields are present in the algo config.
+* `--benchmark-profile experimental`: allows baseline-ready + experimental algorithms.
+* `--adapter-impact-eval` (optional): records adapter-impact metadata (native vs adapted step
+  counts where measurable, currently most informative for PPO command conversion).
+
+Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
 ## Reproducible Command (One-Liner)
 
@@ -75,6 +98,31 @@ Expected outputs:
 To re-run a different baseline, change `--policy` or supply `--policies`. For deterministic runs,
 use `--seed-set dev|eval` and a fresh output folder (or delete existing JSONL files).
 
+**Recommended CI invocation (machine-readable):**
+
+```bash
+robot_sf_bench run \
+  --matrix configs/scenarios/classic_interactions.yaml \
+  --out output/benchmarks/ci/episodes.jsonl \
+  --algo goal \
+  --benchmark-profile baseline-safe \
+  --structured-output jsonl \
+  --external-log-noise auto
+```
+
+## Resume Semantics (Map Runs)
+
+Map-runner resume identity is scoped to the full run unit, not just `(scenario, seed)`.
+Each episode identity includes:
+
+* scenario payload + seed
+* algorithm (`algo`)
+* algorithm config hash (`algo_config_hash`)
+* run-shaping overrides when provided (`run_horizon`, `run_dt`, `record_forces`)
+
+This guarantees that resuming across mixed algorithm/config batches does not accidentally skip
+jobs that belong to a different algorithm or planner configuration.
+
 ## Metrics: Definitions + Caveats (Summary)
 
 Full details live in
@@ -82,7 +130,10 @@ Full details live in
 
 **Core metrics**
 * `success`: goal reached before horizon without collision.
-* `time_to_goal_norm`: steps-to-goal normalized by horizon (1.0 on failure).
+* `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).
+* `time_to_goal_norm_success_only`: same normalization, but only valid for successful episodes.
+* `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
+  (`shortest_path_len / robot_max_speed`).
 * `collisions`,  `near_misses`: counts based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
 
@@ -92,6 +143,18 @@ Full details live in
 
 **Smoothness**
 * `jerk_mean`,  `curvature_mean`,  `energy`
+
+**Experimental pedestrian-impact (opt-in)**
+* `ped_impact_*` metrics (enabled only via
+  `compute_all_metrics(..., experimental_ped_impact=True)`).
+* Current prototype exposes near-vs-far deltas for pedestrian acceleration and
+  heading turn-rate, plus sample/validity counters.
+* Near/far semantics: distance to robot `<= ped_impact_radius_m` is "near",
+  `> ped_impact_radius_m` is "far".
+* Time-window semantics: signal smoothing uses trailing rolling means over
+  `ped_impact_window_steps`.
+* Aggregation strategy: compute per-pedestrian `(near_mean - far_mean)` first,
+  then aggregate across pedestrians (mean/median) to reduce density bias.
 
 **SocNavBench subset (vendored)**
 * `socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`
@@ -105,6 +168,12 @@ Full details live in
 * If forces are not recorded, force-based metrics are `NaN`.
 * If there are no pedestrians, distance/force metrics may be `NaN` while collisions are `0`.
 * Curvature excludes near-zero velocities; invalid samples are filtered.
+* `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, use
+  `time_to_goal_norm_success_only` together with the numeric validity flag
+  `time_to_goal_success_only_valid == 1.0`.
+* Experimental `ped_impact_*` metrics are exploratory and should be reported
+  with the associated validity/sample counters. Deltas can be undefined when a
+  pedestrian has only near or only far samples.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 
@@ -113,7 +182,30 @@ Full details live in
 Each episode record is schema-validated against
 `robot_sf/benchmark/schemas/episode.schema.v1.json` and includes:
 * `scenario_id`,  `seed`,  `scenario_params`,  `metrics`, timing fields
+* `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
+  `algorithm_metadata.policy_semantics`
+* `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
+  adapter markers for compatibility interpretation. Contract now also includes
+  `planner_command_space` (`unicycle_vw|holonomic_vxy`) for kinematics-aware interpretation.
+* `algorithm_metadata.kinematics_feasibility` with command-level intervention diagnostics:
+  `commands_evaluated`, `infeasible_native_count`, `projected_count`,
+  `projection_rate`, `infeasible_rate`, `mean/max abs delta` for linear and angular commands.
+* `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
+  for threshold provenance and reproducibility
 * Git/config hashes for reproducibility
+
+Batch/campaign-level metadata returned by `run_map_batch` (not individual
+records from `_run_map_episode`) includes:
+* `preflight.learned_policy_contract` for learned planners (currently PPO), including:
+  * contract schema (allowed observation/action modes)
+  * captured runtime config values
+  * `status` (`pass|warn|fail|not_applicable`)
+  * explicit mismatch/warning lists for auditability
 
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.
+Aggregation validates threshold-profile consistency and rejects mixed profiles.
+
+For threshold studies, run `scripts/benchmark_threshold_sensitivity.py` to quantify
+distance/comfort threshold impacts across scenario families and to compare speed-aware
+near-miss alternatives (relative-speed weighting and TTC-gating).

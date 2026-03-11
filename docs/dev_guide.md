@@ -106,6 +106,22 @@ registry from training pipelines.
 uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
 ```
 
+### Reusable dev scripts
+
+Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex
+skills use the same commands:
+
+```bash
+scripts/dev/ruff_fix_format.sh
+scripts/dev/run_tests_parallel.sh
+BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+scripts/dev/gh_comment.sh pr --current <<'EOF'
+Summary line
+- bullet 1
+- bullet 2
+EOF
+```
+
 ### Environment factory pattern (CRITICAL)
 
 **Always use factory functions** — never instantiate gymnasium environments directly:
@@ -143,13 +159,25 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 
 ### Data flow and integration
 
-- **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
+- **Training loop**: `scripts/training/train_ppo.py` →
+  factory functions → vectorized environments → StableBaselines3
+- **RLlib workflow**: `scripts/training/train_dreamerv3_rllib.py` →
+  factory functions → RLlib env registration → DreamerV3
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
 - **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 
 ### Configuration hierarchy
 
 **For complete documentation, see [Configuration Architecture](./architecture/configuration.md)** (precedence rules, migration guide, module structure).
+
+### Config-first workflow (default)
+
+Prefer committed YAML configs under `configs/` as the default way to run training and sweeps.
+This keeps runs reproducible, reviewable, and easy to replay on another machine.
+
+- Commit stable run definitions (scenario, seeds, metrics, cadence) in config files.
+- Document a canonical `uv run ... --config <path>` command in docs/PR text.
+- Reserve direct CLI tuning flags for temporary local overrides.
 
 Use unified config classes from `robot_sf.gym_env.unified_config`:
 
@@ -500,7 +528,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 
 ### Executive summary
 
-- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
+- **Architecture**: Social navigation RL framework with Gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline, and optional RLlib DreamerV3 workflow
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
@@ -745,6 +773,9 @@ The CI pipeline includes integrated performance monitoring for system package in
 - Metrics recorded during package installation steps
 - Performance data saved as artifacts for analysis
 - Automatic validation against performance targets
+- Cold/warm regression smoke on `main`: startup-only regressions (`env_create_sec`,
+  `first_step_sec`) are advisory (`WARN`), while steady-state regressions
+  (`episode_sec`, `steps_per_sec`) remain blocking (`FAIL`).
 
 **Local Testing**:
 - Use `act` tool for local CI workflow testing: `act push --container-architecture linux/amd64 --job ci --verbose`
@@ -765,6 +796,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 uv run python scripts/validation/run_examples_smoke.py --dry-run
 uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
 uv run python scripts/validation/run_examples_smoke.py
+uv run python scripts/validation/svg_inspect.py maps/svg_maps --pattern "classic_*.svg" --strict warning
 uv run python scripts/tools/check_artifact_root.py
 
 # Performance baseline validation
@@ -776,6 +808,7 @@ Success criteria:
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
 - Example smoke harness: exits 0; all `ci_enabled` examples pass and archived entries are reported as skipped via manifest metadata.
+- SVG inspection: exits 0 in strict mode only if no warning/error findings are detected at the selected threshold.
 - Artifact guard: exits 0; repository root remains clean with all artifacts under `output/` (mirror of the CI enforcement step).
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
   - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
@@ -934,7 +967,7 @@ uv run python examples/demo_refactored_environments.py
 
 ### Training scripts
 ```bash
-uv run python scripts/training_ppo.py
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 uv run python scripts/hparam_opt.py
 uv run python scripts/evaluate.py
 ```
@@ -942,6 +975,14 @@ uv run python scripts/evaluate.py
 ### Imitation Learning Pipeline (PPO Pre-training)
 
 The project supports accelerating PPO training via behavioral cloning pre-training from expert trajectories. This enables sample-efficient training by warm-starting agents with expert demonstrations.
+
+Install the optional imitation stack before running BC pre-training:
+
+```bash
+uv sync --group imitation
+```
+
+Use `uv run --group imitation ...` for BC pre-training commands.
 
 **Quick Overview:** Expert PPO Training → Trajectory Collection → BC Pre-training → PPO Fine-tuning → Comparison Analysis
 
@@ -959,9 +1000,9 @@ The project supports accelerating PPO training via behavioral cloning pre-traini
 uv run python examples/advanced/16_imitation_learning_pipeline.py
 
 # Or run individual steps manually:
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
 ```
 
@@ -970,6 +1011,30 @@ Set `--log-level DEBUG` if you need the full resolved-config dumps from the fact
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
 - Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`
+
+### RLlib DreamerV3 (`drive_state` + `rays`)
+
+RLlib DreamerV3 can be trained on the default non-image observation contract.
+
+```bash
+# Install RLlib optional dependency
+uv sync --extra rllib
+
+# Validate config
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
+  --dry-run
+
+# Run training
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+
+The workflow uses deterministic flattening order (`drive_state`, `rays`) and can normalize
+actions to `[-1,1]` for DreamerV3.
+The launcher also pins Ray workers to the active interpreter and disables `uv run`
+runtime-env propagation to avoid worker-side environment rebuilds.
+See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/monitor/recovery runbook.
 
 ### Docker training (advanced)
 ```bash

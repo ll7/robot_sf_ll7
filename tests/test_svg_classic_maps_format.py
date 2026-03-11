@@ -15,9 +15,12 @@ import re
 from pathlib import Path
 
 import pytest
+from shapely.geometry import LineString, Polygon
 
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.nav.svg_map_parser import SvgMapConverter
+from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_ped_routes
 
 ROOT = Path(__file__).resolve().parent.parent
 SVG_DIR = ROOT / "maps" / "svg_maps"
@@ -55,6 +58,8 @@ def test_classic_svg_route_indices(svg_path: Path):
     md = converter.get_map_definition()
     max_spawn_robot = len(md.robot_spawn_zones) - 1 if md.robot_spawn_zones else -1
     max_goal_robot = len(md.robot_goal_zones) - 1 if md.robot_goal_zones else -1
+    max_spawn_ped = len(md.ped_spawn_zones) - 1 if md.ped_spawn_zones else -1
+    max_goal_ped = len(md.ped_goal_zones) - 1 if md.ped_goal_zones else -1
 
     route_label_pattern = re.compile(r"(ped_route|robot_route)_(\d+)_(\d+)")
     # Access protected attributes path_info for labels (test-only introspection)
@@ -71,6 +76,53 @@ def test_classic_svg_route_indices(svg_path: Path):
                 f"robot_route spawn index {spawn_i} out of range"
             )
             assert 0 <= goal_i <= max_goal_robot, f"robot_route goal index {goal_i} out of range"
-        # ped_route indices would relate to ped zones; we just ensure non-negative
         if kind == "ped_route":
-            assert spawn_i >= 0 and goal_i >= 0, "ped_route indices must be non-negative"
+            assert 0 <= spawn_i <= max_spawn_ped, f"ped_route spawn index {spawn_i} out of range"
+            assert 0 <= goal_i <= max_goal_ped, f"ped_route goal index {goal_i} out of range"
+
+
+def test_classic_crossing_ped_routes_avoid_obstacle_interior():
+    """Crossing map pedestrian routes should not traverse obstacle interiors."""
+    converter = SvgMapConverter(str(SVG_DIR / "classic_crossing.svg"))
+    md = converter.get_map_definition()
+    obstacle_polys = [Polygon(ob.vertices) for ob in md.obstacles]
+
+    for route in md.ped_routes:
+        if len(route.waypoints) < 2:
+            continue
+        route_line = LineString(route.waypoints)
+        intersects_interior = any(
+            route_line.crosses(obstacle_poly) or route_line.within(obstacle_poly)
+            for obstacle_poly in obstacle_polys
+        )
+        assert not intersects_interior, (
+            f"classic_crossing pedestrian route {route.spawn_id}->{route.goal_id} crosses obstacle "
+            "interior"
+        )
+
+
+@pytest.mark.parametrize("svg_path", _classic_svg_files())
+def test_classic_svg_ped_routes_spawn_nonzero_population(svg_path: Path) -> None:
+    """Classic maps with pedestrian routes should produce at least one route pedestrian."""
+    converter = SvgMapConverter(str(svg_path))
+    md = converter.get_map_definition()
+    if not md.ped_routes:
+        pytest.skip("Map has no pedestrian routes")
+
+    for route in md.ped_routes:
+        assert len(route.waypoints) >= 2, "Pedestrian route must contain at least two waypoints"
+        assert route.total_length > 0, "Pedestrian route must have non-zero length"
+
+    spawn_cfg = PedSpawnConfig(
+        peds_per_area_m2=0.06,
+        max_group_members=3,
+        route_spawn_distribution="spread",
+        route_spawn_seed=123,
+        route_spawn_jitter_frac=0.05,
+    )
+    ped_states, *_ = populate_ped_routes(
+        spawn_cfg,
+        md.ped_routes,
+        obstacle_polygons=get_prepared_obstacles(md),
+    )
+    assert ped_states.shape[0] > 0, "Expected non-zero route pedestrian spawn count"

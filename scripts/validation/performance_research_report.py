@@ -13,19 +13,20 @@ from pathlib import Path
 from robot_sf.research.orchestrator import ReportOrchestrator
 
 TARGET_SECONDS = float(os.environ.get("RESEARCH_PERF_BUDGET", "120.0"))
+PERF_CI_SAMPLES = int(os.environ.get("RESEARCH_PERF_CI_SAMPLES", "100"))
+PERF_GENERATE_FIGURES = os.environ.get("RESEARCH_PERF_GENERATE_FIGURES", "0") == "1"
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run a synthetic report-generation performance harness.
 
     Returns:
-        TODO docstring.
+        Exit code: 0 when within the configured hard budget, 1 otherwise.
     """
     start = time.time()
     out_dir = Path(os.environ.get("RESEARCH_REPORT_PERF_DIR", "output/tmp/perf_research_report"))
     out_dir.mkdir(parents=True, exist_ok=True)
-    orchestrator = ReportOrchestrator(out_dir)
+    orchestrator = ReportOrchestrator(out_dir, ci_samples=PERF_CI_SAMPLES)
     seeds = [1, 2, 3]
     metric_records = []
     for s in seeds:
@@ -55,6 +56,7 @@ def main() -> int:
         baseline_rewards=[[0, 1, 2], [0, 1.1, 2.1], [0, 1.2, 2.2]],
         pretrained_rewards=[[0, 1.5, 2.5], [0, 1.6, 2.6], [0, 1.7, 2.7]],
         telemetry={"cpu_percent": 12.0, "mem_mb": 55.0},
+        generate_figures=PERF_GENERATE_FIGURES,
     )
     elapsed = time.time() - start
     print(f"research report performance elapsed={elapsed:.2f}s")

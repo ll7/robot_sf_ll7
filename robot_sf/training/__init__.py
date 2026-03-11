@@ -32,6 +32,11 @@ from .multi_extractor_paths import (
     summary_paths,
 )
 from .multi_extractor_summary import write_summary_artifacts
+from .runtime_helpers import (
+    DEFAULT_RAY_RUNTIME_ENV_EXCLUDES,
+    append_jsonl_record,
+    resolve_ray_runtime_env,
+)
 from .scenario_sampling import (
     ScenarioSampler,
     ScenarioSwitchingEnv,
@@ -39,6 +44,7 @@ from .scenario_sampling import (
 )
 
 __all__ = [
+    "DEFAULT_RAY_RUNTIME_ENV_EXCLUDES",
     "DEFAULT_TMP_ROOT",
     "ENV_TMP_OVERRIDE",
     "BehaviouralCloningConfig",
@@ -54,6 +60,7 @@ __all__ = [
     "TrainingRunSummary",
     "TrajectoryCollectionConfig",
     "analyze_imitation_results",
+    "append_jsonl_record",
     "collect_hardware_profile",
     "convergence_timestep",
     "generate_figures",
@@ -61,6 +68,7 @@ __all__ = [
     "make_extractor_directory",
     "make_run_directory",
     "resolve_base_output_root",
+    "resolve_ray_runtime_env",
     "sample_efficiency_ratio",
     "scenario_id_from_definition",
     "summarize_metric",

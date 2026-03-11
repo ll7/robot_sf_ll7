@@ -9,10 +9,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import platform
 import random
+import subprocess
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,10 +24,20 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.termination_reason import (
+    build_outcome_payload,
+    metric_scalar,
+    outcome_contradictions,
+    resolve_termination_reason,
+    status_from_termination_reason,
+)
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -58,6 +72,26 @@ except ImportError:
 # -----------------------------
 
 
+def _find_repo_root(path: Path) -> Path:
+    """Locate repository root by searching upward for git metadata.
+
+    Returns:
+        Repository root path when ``.git`` is found, otherwise a layout fallback.
+    """
+
+    start = path if path.is_dir() else path.parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    try:
+        return path.resolve().parents[3]
+    except IndexError:  # pragma: no cover - defensive fallback
+        return start
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
+
+
 @dataclass
 class BenchmarkManifest:
     """Manifest metadata for a benchmark run."""
@@ -75,6 +109,7 @@ class BenchmarkManifest:
     episodes_per_second: float = 0.0
     workers: int = 1
     scaling_efficiency: dict = field(default_factory=dict)
+    freeze_validation: dict[str, Any] = field(default_factory=dict)
 
 
 def _ensure_algo_metadata(
@@ -128,9 +163,8 @@ def _ensure_algo_metadata(
     algo_meta = record.get("algorithm_metadata")
     if algo_meta is None or not isinstance(algo_meta, dict):
         algo_meta = {}
-        record["algorithm_metadata"] = algo_meta
-    algo_meta.setdefault("algorithm", algo_value)
-    algo_meta.setdefault("status", "ok")
+    algo_meta = enrich_algorithm_metadata(algo=algo_value, metadata=algo_meta)
+    record["algorithm_metadata"] = algo_meta
 
     record["algo"] = algo_value
     return record
@@ -145,14 +179,19 @@ def _compute_git_hash(root: Path) -> str:
     Returns:
         Short git hash (12 characters) or 'unknown' if not retrievable.
     """
+    repo_root = _REPO_ROOT if (_REPO_ROOT / ".git").exists() else root
+    commit = _run_git(repo_root, "rev-parse", "--short=12", "HEAD")
+    if commit:
+        return commit
+
     git_hash = "unknown"
     try:  # pragma: no cover - environment dependent
-        head_ref = root / ".git" / "HEAD"
+        head_ref = repo_root / ".git" / "HEAD"
         if head_ref.exists():
             content = head_ref.read_text(encoding="utf-8").strip()
             if content.startswith("ref:"):
                 ref_path = content.split(" ", 1)[1].strip()
-                ref_file = root / ".git" / ref_path
+                ref_file = repo_root / ".git" / ref_path
                 if ref_file.exists():
                     git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
             else:
@@ -164,6 +203,125 @@ def _compute_git_hash(root: Path) -> str:
         # Unexpected but plausible runtime/type errors -> log at debug and continue
         logger.debug("_compute_git_hash unexpected error")
     return git_hash
+
+
+def _run_git(repo_root: Path, *args: str) -> str | None:
+    """Run a git command and return stripped stdout on success.
+
+    Returns:
+        Command stdout with surrounding whitespace removed, or None on failure.
+    """
+
+    try:  # pragma: no cover - depends on external git runtime
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, RuntimeError):
+        return None
+    if proc.returncode != 0:
+        return None
+    out = proc.stdout.strip()
+    return out if out else None
+
+
+def _repo_name_from_remote(remote: str) -> str:
+    """Derive a repository name from a git remote string.
+
+    Returns:
+        Parsed repository name or "unknown" when unavailable.
+    """
+
+    candidate = remote.strip().rstrip("/")
+    if candidate.startswith("git@") and ":" in candidate:
+        candidate = candidate.split(":", 1)[1]
+    tail = candidate.rsplit("/", 1)[-1]
+    if tail.endswith(".git"):
+        tail = tail[:-4]
+    return tail or "unknown"
+
+
+def _to_iso_utc(ts: float) -> str:
+    """Format unix timestamp as canonical UTC ISO-8601 string.
+
+    Returns:
+        UTC timestamp in ISO-8601 format with trailing "Z".
+    """
+
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _build_run_meta(root: Path, cfg, manifest: BenchmarkManifest) -> dict[str, Any]:
+    """Build canonical run-level traceability metadata.
+
+    Returns:
+        JSON-serializable run metadata payload.
+    """
+
+    remote = _run_git(_REPO_ROOT, "config", "--get", "remote.origin.url") or "unknown"
+    branch = _run_git(_REPO_ROOT, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
+    commit = _run_git(_REPO_ROOT, "rev-parse", "HEAD") or _compute_git_hash(root)
+
+    argv = [str(v) for v in (sys.argv or [])]
+    command = argv[0] if argv else "unknown"
+    args = argv[1:] if argv else []
+
+    matrix_path_raw = getattr(cfg, "scenario_matrix_path", None)
+    matrix_path = "unknown"
+    if matrix_path_raw is not None:
+        try:
+            matrix_path = str(Path(str(matrix_path_raw)).resolve())
+        except (OSError, RuntimeError, ValueError, TypeError):
+            matrix_path = str(matrix_path_raw)
+
+    base_seed = getattr(cfg, "base_seed", None)
+    if base_seed is None:
+        base_seed = getattr(cfg, "master_seed", None)
+    repeats = getattr(cfg, "repeats", None)
+    if repeats is None:
+        repeats = getattr(cfg, "initial_episodes", None)
+
+    run_id = root.resolve().name or "unknown"
+    run_meta = {
+        "run_id": run_id,
+        "created_at_utc": _to_iso_utc(float(manifest.created_at)),
+        "repo": {
+            "name": _repo_name_from_remote(remote) if remote != "unknown" else _REPO_ROOT.name,
+            "remote": remote,
+            "branch": branch,
+            "commit": commit,
+        },
+        "cli": {
+            "command": command,
+            "args": args,
+        },
+        "matrix_path": matrix_path,
+        "seed_plan": {
+            "base_seed": safe_int(base_seed),
+            "repeats": safe_int(repeats),
+        },
+        "environment": {
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "platform": platform.platform(),
+        },
+    }
+    freeze_validation = getattr(manifest, "freeze_validation", {})
+    if freeze_validation:
+        run_meta["freeze_manifest"] = freeze_validation
+    return run_meta
+
+
+def _write_run_meta_files(root: Path, cfg, manifest: BenchmarkManifest) -> None:
+    """Write canonical run metadata file in both local and paper-contract locations."""
+
+    run_meta = _build_run_meta(root, cfg, manifest)
+    run_id = str(run_meta.get("run_id", "unknown"))
+    paper_path = root / "artifacts" / run_id / "run_meta.json"
+    paper_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(paper_path, run_meta)
+    _write_json(root / "run_meta.json", run_meta)
 
 
 def _prepare_output_dirs(cfg):
@@ -286,6 +444,11 @@ _DEFAULT_SNQI_WEIGHTS = {
     "w_jerk": 0.25,
     "w_curvature": 0.25,
 }
+_STUB_DT_SECONDS = 0.1
+_STUB_PATH_EFFICIENCY = 0.9
+_STUB_AVG_SPEED = 1.0
+_STUB_MAX_STEPS = 5
+_STUB_REPLAY_LINEAR_V = 0.05
 
 
 @lru_cache(maxsize=4)
@@ -335,9 +498,7 @@ def _build_env_config(scenario, cfg, horizon: int):
     if candidate is not None and not candidate.is_absolute():
         candidate = (matrix_dir / candidate).resolve()
     if candidate is None or not candidate.exists():
-        fallback = (
-            Path(__file__).resolve().parents[3] / "maps" / "svg_maps" / "classic_crossing.svg"
-        )
+        fallback = _REPO_ROOT / "maps" / "svg_maps" / "classic_crossing.svg"
         if fallback.exists():
             raw["map_file"] = str(fallback)
     config = build_robot_config_from_scenario(
@@ -414,7 +575,7 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
         return np.full_like(ped_pos, np.nan)
 
     if arr.shape == ped_pos.shape:
-        return arr
+        return np.array(arr, dtype=float, copy=True)
 
     out = np.full_like(ped_pos, np.nan)
     copy_len = min(arr.shape[0], ped_pos.shape[0])
@@ -491,6 +652,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
     reached_goal_step: int | None,
     goal: np.ndarray,
     horizon: int,
+    robot_radius: float,
+    ped_radius: float,
 ) -> dict[str, float]:
     """Compute episode metrics for the classic benchmark pipeline.
 
@@ -531,6 +694,8 @@ def _compute_episode_metrics(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
+        robot_radius=float(robot_radius),
+        ped_radius=float(ped_radius),
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
@@ -626,9 +791,10 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         action_arr = _simple_goal_policy(env.simulator)
         obs, _reward, terminated, truncated, info = env.step(action_arr)
         _ = obs
-        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        # Snapshot mutable backend buffers to preserve per-step trajectory history.
+        robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
         heading = float(env.simulator.robot_poses[0][1])
-        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        peds = np.array(env.simulator.ped_pos, dtype=float, copy=True)
         forces = _extract_ped_forces(env.simulator, peds)
         robot_positions.append(robot_pos)
         ped_positions.append(peds)
@@ -657,7 +823,8 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         except Exception:
             # Rendering is best-effort; ignore to keep rollout running
             pass
-        if reached_goal_step is None and bool(info.get("success")):
+        step_meta = info.get("meta", {}) if isinstance(info, dict) else {}
+        if reached_goal_step is None and bool(step_meta.get("is_route_complete")):
             reached_goal_step = step_idx
         if terminated or truncated:
             break
@@ -676,54 +843,83 @@ def _close_env(env):
         pass
 
 
-def _make_episode_record(job, cfg) -> dict[str, Any]:
-    """Execute a real episode using the environment factory and compute metrics.
+def _make_stub_episode_record(
+    job,
+    cfg,
+    *,
+    episode_id: str,
+    horizon: int,
+) -> dict[str, Any]:
+    """Build a synthetic episode record used by fast-stub benchmark runs.
+
+    Args:
+        job: Episode job descriptor with scenario/seed identifiers.
+        cfg: Benchmark configuration namespace.
+        episode_id: Deterministic episode identifier.
+        horizon: Episode horizon in simulation steps.
 
     Returns:
-        Episode record dictionary containing metrics, status, and metadata.
+        dict[str, Any]: Synthetic benchmark episode record.
     """
-
-    episode_id = _episode_id_from_job(job)
-    if bool(getattr(cfg, "fast_stub", False)):
-        now = time.time()
-        horizon = _resolve_horizon(job, cfg)
-        record: dict[str, Any] = {
-            "version": "v1",
-            "episode_id": episode_id,
-            "scenario_id": job.scenario_id,
-            "seed": job.seed,
+    now = time.time()
+    metrics = {
+        "collision_rate": 0.0,
+        "success_rate": 1.0,
+        # Keep deterministic synthetic defaults stable across runs.
+        "time_to_goal": float(horizon) * _STUB_DT_SECONDS,
+        "path_efficiency": _STUB_PATH_EFFICIENCY,
+        "avg_speed": _STUB_AVG_SPEED,
+    }
+    termination_reason, outcome, contradictions = _termination_payload_from_metrics(metrics)
+    record: dict[str, Any] = {
+        "version": "v1",
+        "episode_id": episode_id,
+        "scenario_id": job.scenario_id,
+        "seed": job.seed,
+        "archetype": job.archetype,
+        "density": job.density,
+        "status": status_from_termination_reason(termination_reason),
+        "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
+        "metrics": metrics,
+        "steps": min(horizon, _STUB_MAX_STEPS),
+        "horizon": horizon,
+        "wall_time_sec": 0.0,
+        "created_at": now,
+        "scenario_params": {
             "archetype": job.archetype,
             "density": job.density,
-            "status": "success",
-            "metrics": {
-                "collision_rate": 0.0,
-                "success_rate": 1.0,
-                "time_to_goal": float(horizon) * 0.1,
-                "path_efficiency": 0.9,
-                "avg_speed": 1.0,
-            },
-            "steps": min(horizon, 5),
-            "horizon": horizon,
-            "wall_time_sec": 0.0,
-            "created_at": now,
-            "scenario_params": {
-                "archetype": job.archetype,
-                "density": job.density,
-                "max_episode_steps": horizon,
-                "scenario_id": job.scenario_id,
-                "hash_fragment": getattr(getattr(job, "scenario", None), "hash_fragment", ""),
-            },
-            "timing": {"steps_per_second": 0.0},
-        }
-        if bool(getattr(cfg, "capture_replay", False)):
-            replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
-            record["replay_steps"] = replay
-            record["replay_peds"] = [[] for _ in replay]
-            record["replay_actions"] = [(0.05, 0.0) for _ in replay]
-            record["replay_dt"] = 0.1
-            record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
-        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
-        return record
+            "max_episode_steps": horizon,
+            "scenario_id": job.scenario_id,
+            "hash_fragment": getattr(getattr(job, "scenario", None), "hash_fragment", ""),
+        },
+        "timing": {"steps_per_second": 0.0},
+    }
+    if bool(getattr(cfg, "capture_replay", False)):
+        replay = [
+            (i * _STUB_DT_SECONDS, _STUB_REPLAY_LINEAR_V * i, 0.0, 0.0)
+            for i in range(record["steps"])
+        ]
+        record["replay_steps"] = replay
+        record["replay_peds"] = [[] for _ in replay]
+        record["replay_ped_forces"] = [[] for _ in replay]
+        record["replay_actions"] = [(_STUB_REPLAY_LINEAR_V, 0.0) for _ in replay]
+        record["replay_dt"] = _STUB_DT_SECONDS
+        record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
+    return record
+
+
+def _require_job_scenario(job, *, episode_id: str):
+    """Return job.scenario or raise a contract error when missing.
+
+    Args:
+        job: Episode job descriptor.
+        episode_id: Deterministic episode identifier for diagnostics.
+
+    Returns:
+        Scenario descriptor object attached to the job.
+    """
     scenario = getattr(job, "scenario", None)
     if scenario is None:
         raise AggregationMetadataError(
@@ -732,7 +928,95 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
             missing_fields=("scenario",),
             advice="Regenerate jobs via plan_scenarios/expand_episode_jobs.",
         )
-    horizon = _resolve_horizon(job, cfg)
+    return scenario
+
+
+def _sanitize_episode_metrics(metrics_raw: dict[str, float]) -> dict[str, float]:
+    """Drop non-finite metric values prior to serialization.
+
+    Args:
+        metrics_raw: Raw metric payload from metric computation.
+
+    Returns:
+        dict[str, float]: Serializable metrics with non-finite values removed.
+    """
+    return {
+        key: value
+        for key, value in metrics_raw.items()
+        if not isinstance(value, float) or math.isfinite(value)
+    }
+
+
+def _status_from_metrics(metrics: dict[str, float]) -> str:
+    """Compute episode status from success and collision metrics.
+
+    Args:
+        metrics: Episode metric payload.
+
+    Returns:
+        Status label (`success`, `failure`, or `collision`).
+    """
+    success_rate = float(metrics.get("success_rate", 0.0))
+    collision_rate = metrics.get("collision_rate")
+    status = "success" if success_rate >= 1.0 else "failure"
+    if collision_rate:
+        status = "collision"
+    return status
+
+
+def _termination_payload_from_metrics(
+    metrics: dict[str, float],
+) -> tuple[str, dict[str, bool], list[str]]:
+    """Derive canonical termination/outcome payload from metrics.
+
+    Returns:
+        tuple[str, dict[str, bool], list[str]]: ``(termination_reason, outcome, contradictions)``.
+    """
+    route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
+    collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
+    ended = route_complete or collision
+    termination_reason = resolve_termination_reason(
+        terminated=ended,
+        truncated=False,
+        success=route_complete,
+        collision=collision,
+        reached_max_steps=not ended,
+    )
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=not ended,
+    )
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(contradictions))
+    return termination_reason, outcome, contradictions
+
+
+def _orchestrate_real_episode(
+    job,
+    cfg,
+    *,
+    episode_id: str,
+    scenario,
+    horizon: int,
+) -> dict[str, Any]:
+    """Run a real environment episode and compute finalized metric payload.
+
+    Args:
+        job: Episode job descriptor with seed/archetype metadata.
+        cfg: Benchmark configuration namespace.
+        episode_id: Deterministic episode identifier.
+        scenario: Scenario descriptor attached to ``job``.
+        horizon: Episode horizon in simulation steps.
+
+    Returns:
+        dict[str, Any]: Runtime payload used for record assembly.
+    """
     start_time = time.time()
     env, dt, replay_cap, goal_vec = _init_env_for_job(
         job,
@@ -763,6 +1047,9 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
             episode_id=episode_id,
             scenario_id=job.scenario_id,
         ).warning("Pedestrian forces unavailable; force-based metrics will be NaN.")
+    env_config = getattr(env, "config", None)
+    robot_cfg = getattr(env_config, "robot_config", None)
+    sim_cfg = getattr(env_config, "sim_config", None)
     metrics_raw = _compute_episode_metrics(
         job,
         scenario,
@@ -776,18 +1063,81 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
         horizon=horizon,
+        robot_radius=float(getattr(robot_cfg, "radius", 1.0)),
+        ped_radius=float(getattr(sim_cfg, "ped_radius", 0.4)),
     )
-    metrics: dict[str, float | None] = {}
-    for key, value in metrics_raw.items():
-        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-            continue
-        metrics[key] = value
-    success_rate = float(metrics.get("success_rate") or 0.0)
-    collision_rate = metrics.get("collision_rate")
-    status = "success" if success_rate >= 1.0 else "failure"
-    if collision_rate:
-        status = "collision"
     wall_time = time.time() - start_time
+    return {
+        "metrics": _sanitize_episode_metrics(metrics_raw),
+        "steps_taken": steps_taken,
+        "wall_time": wall_time,
+        "start_time": start_time,
+        "ped_forces": ped_forces,
+        "replay_capture": replay_cap,
+    }
+
+
+def _attach_replay_payload(
+    record: dict[str, Any],
+    *,
+    scenario,
+    replay_capture: ReplayCapture,
+    ped_forces: list[np.ndarray],
+) -> None:
+    """Attach finalized replay arrays to an episode record in-place.
+
+    Args:
+        record: Episode record being assembled.
+        scenario: Scenario descriptor for map path metadata.
+        replay_capture: Replay capture object used during rollout.
+        ped_forces: Per-step pedestrian force snapshots from rollout.
+    """
+    episode = replay_capture.finalize()
+    finalized = episode.steps
+    record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
+    record["replay_peds"] = [s.ped_positions or [] for s in finalized]
+    record["replay_ped_forces"] = [np.asarray(f, dtype=float).tolist() for f in ped_forces]
+    record["replay_actions"] = [s.action for s in finalized]
+    record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
+    record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
+    record["replay_goals"] = [s.robot_goal for s in finalized]
+    record["replay_dt"] = episode.dt
+    record["replay_map_path"] = getattr(scenario, "map_path", "")
+
+
+def _make_episode_record(job, cfg) -> dict[str, Any]:
+    """Execute a real episode using the environment factory and compute metrics.
+
+    Returns:
+        Episode record dictionary containing metrics, status, and metadata.
+    """
+
+    episode_id = _episode_id_from_job(job)
+    horizon = _resolve_horizon(job, cfg)
+    if bool(getattr(cfg, "fast_stub", False)):
+        record = _make_stub_episode_record(
+            job,
+            cfg,
+            episode_id=episode_id,
+            horizon=horizon,
+        )
+        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
+        ensure_metric_parameters(record)
+        return record
+
+    scenario = _require_job_scenario(job, episode_id=episode_id)
+    runtime = _orchestrate_real_episode(
+        job,
+        cfg,
+        episode_id=episode_id,
+        scenario=scenario,
+        horizon=horizon,
+    )
+    metrics = runtime["metrics"]
+    steps_taken = int(runtime["steps_taken"])
+    wall_time = float(runtime["wall_time"])
+    start_time = float(runtime["start_time"])
+    termination_reason, outcome, contradictions = _termination_payload_from_metrics(metrics)
     record: dict[str, Any] = {
         "version": "v1",
         "episode_id": episode_id,
@@ -795,7 +1145,10 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         "seed": job.seed,
         "archetype": job.archetype,
         "density": job.density,
-        "status": status,
+        "status": status_from_termination_reason(termination_reason),
+        "termination_reason": termination_reason,
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
         "metrics": metrics,
         "steps": steps_taken,
         "horizon": horizon,
@@ -815,23 +1168,20 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
             "hash_fragment": getattr(scenario, "hash_fragment", ""),
         },
     }
-    if bool(getattr(cfg, "capture_replay", False)) and replay_cap is not None:
-        episode = replay_cap.finalize()
-        episode.map_path = getattr(scenario, "map_path", "")
-        finalized = episode.steps
-        record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
-        record["replay_peds"] = [s.ped_positions or [] for s in finalized]
-        record["replay_actions"] = [s.action for s in finalized]
-        record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
-        record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
-        record["replay_goals"] = [s.robot_goal for s in finalized]
-        record["replay_dt"] = episode.dt
-        record["replay_map_path"] = episode.map_path
+    replay_capture = runtime["replay_capture"]
+    if bool(getattr(cfg, "capture_replay", False)) and isinstance(replay_capture, ReplayCapture):
+        _attach_replay_payload(
+            record,
+            scenario=scenario,
+            replay_capture=replay_capture,
+            ped_forces=runtime["ped_forces"],
+        )
     _ensure_algo_metadata(
         record,
         algo=getattr(cfg, "algo", None),
         episode_id=episode_id,
     )
+    ensure_metric_parameters(record)
     return record
 
 
@@ -1091,6 +1441,38 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
 
     # Manifest & initial execution
     manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
+    freeze_manifest_path = getattr(cfg, "freeze_manifest_path", None)
+    if freeze_manifest_path:
+        manifest.freeze_validation = evaluate_freeze_manifest(
+            freeze_manifest_path,
+            cfg,
+            scenario_matrix_hash=scenario_matrix_hash,
+            git_commit=manifest.git_hash,
+            raw_scenarios=raw,
+        )
+        freeze_status = manifest.freeze_validation.get("status")
+        if freeze_status == "mismatch":
+            logger.warning(
+                "Freeze manifest mismatch: {} differences against {}",
+                manifest.freeze_validation.get("mismatch_count", 0),
+                freeze_manifest_path,
+            )
+            for mismatch in manifest.freeze_validation.get("mismatches", []):
+                logger.warning(
+                    "Freeze mismatch {}: expected={} observed={}",
+                    mismatch.get("path"),
+                    mismatch.get("expected"),
+                    mismatch.get("observed"),
+                )
+        elif freeze_status == "error":
+            logger.warning(
+                "Freeze manifest validation failed for {}: {}",
+                freeze_manifest_path,
+                manifest.freeze_validation.get("error"),
+            )
+        else:
+            logger.info("Freeze manifest matched runtime contract: {}", freeze_manifest_path)
+
     all_records = list(run_episode_jobs(jobs, cfg, manifest))
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
 
@@ -1143,6 +1525,7 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
     _update_scaling_efficiency(manifest, cfg)
     manifest.scaling_efficiency.setdefault("finalized", True)
     write_manifest(manifest, str(root / "manifest.json"))
+    _write_run_meta_files(root, cfg, manifest)
 
     # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
     try:

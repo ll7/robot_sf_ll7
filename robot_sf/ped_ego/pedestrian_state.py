@@ -136,6 +136,10 @@ class PedestrianState:
             "is_robot_collision": self.is_collision_with_robot,
             "is_obstacle_collision": self.is_collision_with_obst,
             "distance_to_robot": self.distance_to_robot,
+            # For pedestrian-side observations, robot goal completion is a single-stage flag.
+            # Emit route/waypoint aliases so downstream consumers can use canonical keys.
+            "is_waypoint_complete": self.is_robot_at_goal,
+            "is_route_complete": self.is_robot_at_goal,
             "is_robot_at_goal": self.is_robot_at_goal,
             "is_robot_obstacle_collision": self.is_collision_robot_with_obstacle,
             "is_robot_pedestrian_collision": self.is_collision_robot_with_pedestrian,

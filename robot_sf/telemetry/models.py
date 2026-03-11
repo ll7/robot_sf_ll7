@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover - import hints only during type checking
     from collections.abc import Iterable, Sequence
 
 
-class PipelineRunStatus(str, Enum):
+class PipelineRunStatus(StrEnum):
     """States for overall pipeline execution."""
 
     PENDING = "pending"
@@ -27,7 +27,7 @@ class PipelineRunStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class StepStatus(str, Enum):
+class StepStatus(StrEnum):
     """Lifecycle states for individual pipeline steps."""
 
     PENDING = "pending"
@@ -37,7 +37,7 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class RecommendationSeverity(str, Enum):
+class RecommendationSeverity(StrEnum):
     """Severity levels for generated performance recommendations."""
 
     INFO = "info"
@@ -45,7 +45,7 @@ class RecommendationSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class PerformanceTestStatus(str, Enum):
+class PerformanceTestStatus(StrEnum):
     """Classification for scripted performance smoke tests."""
 
     PASSED = "passed"

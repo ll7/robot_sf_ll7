@@ -101,6 +101,13 @@ class TestVersionDetectionIntegration:
             "scenario_id": f"test-scenario-{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}",
             "seed": 42,
             "metrics": {"total_reward": 100.5, "steps": 50, "success": 1},
+            "termination_reason": "success",
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
         }
 
         # Should validate successfully

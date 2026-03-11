@@ -68,6 +68,13 @@ def test_episode_schema_minimal_valid_passes_when_ready():
         "scenario_id": "sc_basic",
         "seed": 123,
         "metrics": {"collisions": 0, "near_misses": 0},
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
     }
     try:
         jsonschema.validate(instance=minimal, schema=schema)

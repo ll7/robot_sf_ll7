@@ -9,7 +9,8 @@ field grid, and ``time_to_goal`` is undefined when the goal is never
 reached).
 
 Implemented categories:
-- Core navigation: success, time_to_goal_norm, collisions, near_misses, min_distance,
+- Core navigation: success, time_to_goal_norm, time_to_goal_norm_success_only,
+  time_to_goal_ideal_ratio, collisions, near_misses, min_distance,
   mean_distance, path_efficiency, avg_speed.
 - Comfort/force: force_quantiles, per_ped_force_quantiles, force_exceed_events,
   comfort_exposure, force_gradient_norm_mean.
@@ -22,6 +23,9 @@ Implemented categories:
   aggregated_time.
 - SocNavBench subset: socnavbench_path_length, socnavbench_path_length_ratio,
   socnavbench_path_irregularity.
+- Experimental (optional): pedestrian-impact deltas for acceleration and
+  heading turn-rate near-vs-far from the robot (enabled via
+  ``compute_all_metrics(..., experimental_ped_impact=True)``).
 
 Missing/optional data handling:
 - Empty pedestrian sets (K=0) return 0.0 for collision counts and ``NaN`` for distances where
@@ -79,6 +83,10 @@ class EpisodeData:
     other_agents_pos : (T,J,2) array | None
         Other robot positions for multi-agent scenarios (default: None).
         Used by agent_collisions (AC) metric.
+    robot_radius : float
+        Robot footprint radius in meters for clearance-based robot-pedestrian metrics.
+    ped_radius : float
+        Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics.
     """
 
     robot_pos: np.ndarray
@@ -94,6 +102,8 @@ class EpisodeData:
     # Optional fields for paper metrics (2306.16740v4)
     obstacles: np.ndarray | None = None
     other_agents_pos: np.ndarray | None = None
+    robot_radius: float = 1.0
+    ped_radius: float = 0.4
 
 
 def has_force_data(data: EpisodeData) -> bool:
@@ -114,6 +124,72 @@ def has_force_data(data: EpisodeData) -> bool:
     if not np.isfinite(data.ped_forces).any():
         return False
     return not np.allclose(data.ped_forces, 0.0)
+
+
+def force_sample_stats(data: EpisodeData) -> dict[str, int | float | str]:
+    """Summarize force sample validity for transparent degenerate-case reporting.
+
+    Returns:
+        Dict with status and counts of raw/finite/invalid/zero/nonzero samples.
+    """
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if ped_count == 0:
+        return {
+            "status": "no-pedestrians",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    if data.ped_forces.shape != data.peds_pos.shape:
+        return {
+            "status": "shape-mismatch",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    magnitudes = np.linalg.norm(data.ped_forces, axis=2)
+    raw_samples = int(magnitudes.size)
+    if raw_samples == 0:
+        return {
+            "status": "empty",
+            "raw_samples": 0,
+            "finite_samples": 0,
+            "invalid_samples": 0,
+            "zero_force_samples": 0,
+            "nonzero_force_samples": 0,
+            "valid_fraction": 0.0,
+        }
+
+    finite_mask = np.isfinite(magnitudes)
+    finite_samples = int(np.count_nonzero(finite_mask))
+    invalid_samples = int(raw_samples - finite_samples)
+    zero_force_samples = int(np.count_nonzero(np.abs(magnitudes[finite_mask]) <= 1e-12))
+    nonzero_force_samples = int(finite_samples - zero_force_samples)
+
+    if finite_samples == 0:
+        status = "all-invalid"
+    elif nonzero_force_samples == 0:
+        status = "all-zero"
+    else:
+        status = "ok"
+
+    return {
+        "status": status,
+        "raw_samples": raw_samples,
+        "finite_samples": finite_samples,
+        "invalid_samples": invalid_samples,
+        "zero_force_samples": zero_force_samples,
+        "nonzero_force_samples": nonzero_force_samples,
+        "valid_fraction": float(finite_samples / raw_samples) if raw_samples > 0 else 0.0,
+    }
 
 
 # --- Internal helper functions for paper metrics ---
@@ -181,6 +257,211 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
     return np.linalg.norm(diffs, axis=2)
 
 
+def _compute_clearance_matrix(data: EpisodeData) -> np.ndarray:
+    """Compute robot-pedestrian surface clearance matrix.
+
+    Clearance is center-to-center distance minus ``robot_radius + ped_radius``.
+    Values below zero indicate geometric overlap/contact.
+
+    Returns:
+        (T,K) array with per-timestep robot-pedestrian clearances in meters.
+    """
+    center_dists = _compute_distance_matrix(data)
+    if center_dists.size == 0:
+        return center_dists
+    return center_dists - float(data.robot_radius + data.ped_radius)
+
+
+def _rolling_nanmean(samples: np.ndarray, *, window: int) -> np.ndarray:
+    """Compute trailing rolling mean with NaN-aware averaging per pedestrian.
+
+    Returns:
+        Array with the same shape as ``samples`` containing smoothed values.
+    """
+    if samples.ndim != 2:
+        return np.asarray(samples, dtype=float)
+    if samples.size == 0:
+        return np.asarray(samples, dtype=float)
+    if int(window) <= 1:
+        return np.asarray(samples, dtype=float)
+
+    window = int(window)
+    n_steps, n_peds = samples.shape
+    kernel = np.ones(window, dtype=float)
+    smoothed = np.full((n_steps, n_peds), np.nan, dtype=float)
+    finite = np.isfinite(samples)
+    values = np.where(finite, samples, 0.0)
+    for ped_idx in range(n_peds):
+        sums = np.convolve(values[:, ped_idx], kernel, mode="full")[:n_steps]
+        counts = np.convolve(finite[:, ped_idx].astype(float), kernel, mode="full")[:n_steps]
+        valid = counts > 0.0
+        smoothed[valid, ped_idx] = sums[valid] / counts[valid]
+    return smoothed
+
+
+def _ped_accel_magnitude(ped_vel: np.ndarray, *, dt: float) -> np.ndarray:
+    """Return per-pedestrian acceleration magnitude from velocity samples."""
+    if ped_vel.shape[0] < 2:
+        return np.empty((0, ped_vel.shape[1]), dtype=float)
+    if dt <= 0.0:
+        return np.full((ped_vel.shape[0] - 1, ped_vel.shape[1]), np.nan, dtype=float)
+    ped_acc = np.diff(ped_vel, axis=0) / dt
+    return np.linalg.norm(ped_acc, axis=2)
+
+
+def _ped_turn_rate_magnitude(
+    ped_vel: np.ndarray,
+    *,
+    dt: float,
+    speed_eps: float = 1e-3,
+) -> np.ndarray:
+    """Return absolute pedestrian heading-rate from velocity samples.
+
+    Low-speed headings are treated as invalid and marked NaN to avoid noisy
+    angle flips when velocity is near zero.
+    """
+    if ped_vel.shape[0] < 2:
+        return np.empty((0, ped_vel.shape[1]), dtype=float)
+    if dt <= 0.0:
+        return np.full((ped_vel.shape[0] - 1, ped_vel.shape[1]), np.nan, dtype=float)
+
+    headings = np.arctan2(ped_vel[..., 1], ped_vel[..., 0])  # (T-1, K)
+    heading_delta = np.diff(headings, axis=0)
+    # Wrap to [-pi, pi] before dividing by dt.
+    heading_delta = (heading_delta + np.pi) % (2.0 * np.pi) - np.pi
+    turn_rate = np.abs(heading_delta / dt)
+
+    speed_prev = np.linalg.norm(ped_vel[:-1], axis=2)
+    speed_next = np.linalg.norm(ped_vel[1:], axis=2)
+    valid = (speed_prev > speed_eps) & (speed_next > speed_eps)
+    turn_rate[~valid] = np.nan
+    return turn_rate
+
+
+def _masked_nanmean(samples: np.ndarray, mask: np.ndarray) -> float:
+    """Return NaN-aware mean over samples constrained by mask."""
+    masked = np.where(mask, samples, np.nan)
+    finite = np.isfinite(masked)
+    if not finite.any():
+        return float("nan")
+    return float(np.nanmean(masked))
+
+
+def _masked_nanmean_axis0(samples: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Return per-column NaN-aware mean over samples constrained by mask."""
+    masked = np.where(mask, samples, np.nan)
+    sums = np.nansum(masked, axis=0)
+    counts = np.sum(np.isfinite(masked), axis=0)
+    out = np.full(masked.shape[1], np.nan, dtype=float)
+    valid = counts > 0
+    out[valid] = sums[valid] / counts[valid]
+    return out
+
+
+def experimental_ped_impact_metrics(
+    data: EpisodeData,
+    *,
+    radius_m: float = 2.0,
+    window_steps: int = 5,
+) -> dict[str, float]:
+    """Compute optional pedestrian-impact metrics (near-vs-far deltas).
+
+    Semantics:
+    - Near/far split uses robot-pedestrian distance with threshold ``radius_m``.
+    - Signals are smoothed by trailing rolling mean over ``window_steps``.
+    - Aggregation is per-pedestrian delta (near_mean - far_mean) first, then
+      averaged/median across pedestrians to reduce scenario-density bias.
+
+    Returns:
+        Mapping of ``ped_impact_*`` scalar metrics.
+    """
+    radius = float(radius_m) if math.isfinite(radius_m) and radius_m > 0.0 else 2.0
+    try:
+        window_candidate = int(window_steps)
+    except (TypeError, ValueError, OverflowError):
+        window_candidate = 5
+    window = window_candidate if window_candidate > 0 else 1
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+
+    metrics: dict[str, float] = {
+        "ped_impact_radius_m": radius,
+        "ped_impact_window_steps": float(window),
+        "ped_impact_ped_count": float(ped_count),
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 0.0,
+        "ped_impact_near_sample_frac": 0.0,
+        "ped_impact_accel_near_mean": float("nan"),
+        "ped_impact_accel_far_mean": float("nan"),
+        "ped_impact_accel_delta_mean": float("nan"),
+        "ped_impact_accel_delta_median": float("nan"),
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_near_mean": float("nan"),
+        "ped_impact_turn_rate_far_mean": float("nan"),
+        "ped_impact_turn_rate_delta_mean": float("nan"),
+        "ped_impact_turn_rate_delta_median": float("nan"),
+        "ped_impact_turn_rate_delta_valid": 0.0,
+    }
+    if ped_count == 0:
+        return metrics
+
+    distances = _compute_distance_matrix(data)
+    ped_vel = _compute_ped_velocities(data.peds_pos, data.dt)
+    if ped_vel.shape[0] < 2:
+        return metrics
+
+    accel_mag = _ped_accel_magnitude(ped_vel, dt=data.dt)
+    turn_rate_mag = _ped_turn_rate_magnitude(ped_vel, dt=data.dt)
+    if accel_mag.shape[0] == 0 or turn_rate_mag.shape[0] == 0:
+        return metrics
+
+    # Align distance at time i+1 with second-difference signals (T-2, K).
+    aligned_dist = distances[1:]
+    sample_count = min(aligned_dist.shape[0], accel_mag.shape[0], turn_rate_mag.shape[0])
+    if sample_count <= 0:
+        return metrics
+    aligned_dist = aligned_dist[:sample_count]
+    accel_mag = accel_mag[:sample_count]
+    turn_rate_mag = turn_rate_mag[:sample_count]
+
+    accel_smoothed = _rolling_nanmean(accel_mag, window=window)
+    turn_smoothed = _rolling_nanmean(turn_rate_mag, window=window)
+
+    near_mask = np.isfinite(aligned_dist) & (aligned_dist <= radius)
+    far_mask = np.isfinite(aligned_dist) & (aligned_dist > radius)
+    near_samples = int(np.count_nonzero(near_mask))
+    far_samples = int(np.count_nonzero(far_mask))
+    total_samples = near_samples + far_samples
+    metrics["ped_impact_near_samples"] = float(near_samples)
+    metrics["ped_impact_far_samples"] = float(far_samples)
+    metrics["ped_impact_near_sample_frac"] = (
+        float(near_samples / total_samples) if total_samples > 0 else 0.0
+    )
+
+    metrics["ped_impact_accel_near_mean"] = _masked_nanmean(accel_smoothed, near_mask)
+    metrics["ped_impact_accel_far_mean"] = _masked_nanmean(accel_smoothed, far_mask)
+    accel_near_per_ped = _masked_nanmean_axis0(accel_smoothed, near_mask)
+    accel_far_per_ped = _masked_nanmean_axis0(accel_smoothed, far_mask)
+    accel_valid = np.isfinite(accel_near_per_ped) & np.isfinite(accel_far_per_ped)
+    if accel_valid.any():
+        accel_delta = accel_near_per_ped[accel_valid] - accel_far_per_ped[accel_valid]
+        metrics["ped_impact_accel_delta_mean"] = float(np.mean(accel_delta))
+        metrics["ped_impact_accel_delta_median"] = float(np.median(accel_delta))
+        metrics["ped_impact_accel_delta_valid"] = float(np.count_nonzero(accel_valid))
+
+    metrics["ped_impact_turn_rate_near_mean"] = _masked_nanmean(turn_smoothed, near_mask)
+    metrics["ped_impact_turn_rate_far_mean"] = _masked_nanmean(turn_smoothed, far_mask)
+    turn_near_per_ped = _masked_nanmean_axis0(turn_smoothed, near_mask)
+    turn_far_per_ped = _masked_nanmean_axis0(turn_smoothed, far_mask)
+    turn_valid = np.isfinite(turn_near_per_ped) & np.isfinite(turn_far_per_ped)
+    if turn_valid.any():
+        turn_delta = turn_near_per_ped[turn_valid] - turn_far_per_ped[turn_valid]
+        metrics["ped_impact_turn_rate_delta_mean"] = float(np.mean(turn_delta))
+        metrics["ped_impact_turn_rate_delta_median"] = float(np.median(turn_delta))
+        metrics["ped_impact_turn_rate_delta_valid"] = float(np.count_nonzero(turn_valid))
+
+    return metrics
+
+
 # --- Metric stub functions ---
 def success(data: EpisodeData, *, horizon: int) -> float:
     """Return 1 if goal reached before horizon with zero collisions else 0.
@@ -203,19 +484,96 @@ def success(data: EpisodeData, *, horizon: int) -> float:
 def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
     """Normalized time to goal; 1.0 if not successful.
 
-    success definition mirrors `success` metric (no collision + reached early).
+    Success definition mirrors benchmark-facing `success_rate` semantics.
 
     Returns:
         Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
-    if success(data, horizon=horizon) == 1.0:
+    if success_rate(data, horizon=horizon) == 1.0:
         assert data.reached_goal_step is not None
         return float(data.reached_goal_step) / float(horizon)
     return 1.0
 
 
+def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
+    """Success-only normalized time-to-goal value.
+
+    Returns:
+        Normalized time-to-goal for successful episodes, NaN otherwise.
+    """
+    if success_rate(data, horizon=horizon) != 1.0:
+        return float("nan")
+    assert data.reached_goal_step is not None
+    return float(data.reached_goal_step) / float(horizon)
+
+
+def ideal_time_to_goal(
+    data: EpisodeData,
+    *,
+    shortest_path_len: float,
+    robot_max_speed: float,
+) -> float:
+    """Return ideal travel time as shortest-path length divided by max speed.
+
+    Returns:
+        Ideal lower-bound travel time in seconds, or NaN if inputs are invalid.
+    """
+    if not math.isfinite(shortest_path_len) or shortest_path_len < 0.0:
+        return float("nan")
+    if not math.isfinite(robot_max_speed) or robot_max_speed <= 0.0:
+        return float("nan")
+    return float(shortest_path_len / robot_max_speed)
+
+
+def _resolved_robot_max_speed(data: EpisodeData, *, robot_max_speed: float | None) -> float:
+    """Resolve the effective robot max speed from override, observations, or fallback.
+
+    Args:
+        data: Episode trajectory data, including robot velocities.
+        robot_max_speed: Optional caller-provided max speed override.
+
+    Returns:
+        float: Positive finite speed. Uses valid ``robot_max_speed`` first, then
+        max observed ``||robot_vel||``, and finally falls back to ``1.0``.
+    """
+    if robot_max_speed is not None and math.isfinite(robot_max_speed) and robot_max_speed > 0.0:
+        return float(robot_max_speed)
+    if data.robot_vel.size > 0:
+        observed = float(np.linalg.norm(data.robot_vel, axis=1).max(initial=0.0))
+        if math.isfinite(observed) and observed > 0.0:
+            return observed
+    return 1.0
+
+
+def time_to_goal_ideal_ratio(
+    data: EpisodeData,
+    *,
+    horizon: int,
+    shortest_path_len: float,
+    robot_max_speed: float,
+) -> float:
+    """Success-only ratio between achieved time and ideal shortest-path time.
+
+    Returns:
+        ``time_to_goal / ideal_time`` for successful episodes, NaN otherwise.
+    """
+    if success_rate(data, horizon=horizon) != 1.0:
+        return float("nan")
+    actual = time_to_goal(data)
+    if not math.isfinite(actual):
+        return float("nan")
+    ideal = ideal_time_to_goal(
+        data,
+        shortest_path_len=shortest_path_len,
+        robot_max_speed=robot_max_speed,
+    )
+    if not math.isfinite(ideal) or ideal <= 0.0:
+        return float("nan")
+    return float(actual / ideal)
+
+
 def collisions(data: EpisodeData) -> float:
-    """Count timesteps where min pedestrian distance < D_COLL.
+    """Count timesteps with negative robot-pedestrian clearance.
 
     If no pedestrians are present (K=0) returns 0.0.
 
@@ -224,14 +582,13 @@ def collisions(data: EpisodeData) -> float:
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
-    min_d = dists.min(axis=1)
-    return float(np.count_nonzero(min_d < D_COLL))
+    clearances = _compute_clearance_matrix(data)  # (T,K)
+    min_clearance = clearances.min(axis=1)
+    return float(np.count_nonzero(min_clearance < 0.0))
 
 
 def near_misses(data: EpisodeData) -> float:
-    """Count timesteps with d_coll <= min distance < d_near.
+    """Count timesteps with small positive robot-pedestrian clearance.
 
     If no pedestrians present returns 0.0.
 
@@ -240,43 +597,56 @@ def near_misses(data: EpisodeData) -> float:
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)
-    min_d = dists.min(axis=1)
-    mask = (min_d >= D_COLL) & (min_d < D_NEAR)
+    clearances = _compute_clearance_matrix(data)  # (T,K)
+    min_clearance = clearances.min(axis=1)
+    mask = (min_clearance >= 0.0) & (min_clearance < D_NEAR)
     return float(np.count_nonzero(mask))
 
 
 def min_distance(data: EpisodeData) -> float:
-    """Return global minimum distance to any pedestrian.
+    """Return global minimum robot-pedestrian center distance.
 
     Returns NaN when there are no pedestrians.
 
     Returns:
-        Minimum distance in meters, or NaN if no pedestrians.
+        Minimum center-to-center distance in meters, or NaN if no pedestrians.
     """
     if data.peds_pos.shape[1] == 0:
         return float("nan")
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)
+    dists = _compute_distance_matrix(data)
     return float(dists.min())
 
 
 def mean_distance(data: EpisodeData) -> float:
-    """Return mean over time of the minimum robot–pedestrian distance.
+    """Return mean over time of minimum robot-pedestrian center distance.
 
-    At each timestep t, compute d_t = min_k ||peds_pos[t, k] - robot_pos[t]||.
+    At each timestep t, compute distance_t = min_k ||robot - ped_k||.
     Return mean_t d_t. Returns NaN if there are no pedestrians.
 
     Returns:
-        Mean minimum distance in meters, or NaN if no pedestrians.
+        Mean minimum center distance in meters, or NaN if no pedestrians.
     """
-    # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
     if data.peds_pos.shape[1] == 0:
         return float("nan")
-    diffs = data.peds_pos - data.robot_pos[:, None, :]
-    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
+    dists = _compute_distance_matrix(data)  # (T,K)
     min_per_t = dists.min(axis=1)  # (T,)
+    return float(np.mean(min_per_t))
+
+
+def min_clearance(data: EpisodeData) -> float:
+    """Return global minimum robot-pedestrian surface clearance."""
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    clearances = _compute_clearance_matrix(data)
+    return float(clearances.min())
+
+
+def mean_clearance(data: EpisodeData) -> float:
+    """Return mean over time of minimum robot-pedestrian surface clearance."""
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    clearances = _compute_clearance_matrix(data)
+    min_per_t = clearances.min(axis=1)
     return float(np.mean(min_per_t))
 
 
@@ -945,9 +1315,10 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
-    dists = _compute_distance_matrix(data)
-    min_d = dists.min(axis=1)
-    return float(np.count_nonzero(min_d < threshold))
+    clearances = _compute_clearance_matrix(data)
+    min_clearance = clearances.min(axis=1)
+    clearance_threshold = float(threshold) - float(data.robot_radius + data.ped_radius)
+    return float(np.count_nonzero(min_clearance < clearance_threshold))
 
 
 def timeout(data: EpisodeData, *, horizon: int) -> float:
@@ -1835,10 +2206,20 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 METRIC_NAMES: list[str] = [
     "success",
     "time_to_goal_norm",
+    "time_to_goal_norm_success_only",
+    "time_to_goal_success_only_valid",
+    "time_to_goal_ideal_ratio",
+    "time_to_goal_ideal_ratio_valid",
     "collisions",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "agent_collision_count",
+    "total_collision_count",
     "near_misses",
     "min_distance",
     "mean_distance",
+    "min_clearance",
+    "mean_clearance",
     "robot_ped_within_5m_frac",
     "path_efficiency",
     "socnavbench_path_length",
@@ -1869,6 +2250,10 @@ def compute_all_metrics(
     *,
     horizon: int,
     shortest_path_len: float | None = None,
+    robot_max_speed: float | None = None,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
 ) -> dict[str, float]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
@@ -1880,10 +2265,19 @@ def compute_all_metrics(
         horizon: Episode horizon (number of timesteps) used by normalized metrics.
         shortest_path_len: Optional precomputed shortest path length from start to goal. When
             ``None``, the Euclidean distance between initial pose and goal acts as fallback.
+        robot_max_speed: Optional robot speed cap (m/s) for ideal-time normalization. When
+            ``None``, observed max speed (fallback ``1.0``) is used.
+        experimental_ped_impact: Enable optional experimental ``ped_impact_*`` metrics that
+            estimate near-vs-far pedestrian acceleration and turn-rate deltas.
+        ped_impact_radius_m: Near/far distance threshold in meters used by experimental pedestrian
+            impact metrics.
+        ped_impact_window_steps: Trailing smoothing window length (timesteps) used by
+            experimental pedestrian impact metrics.
 
     Returns:
         dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
-        ``force_gradient_norm_mean``) to the computed scalar value.
+        ``force_gradient_norm_mean``) to the computed scalar value. When
+        ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` keys are included.
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
@@ -1895,12 +2289,37 @@ def compute_all_metrics(
         )
 
     values: dict[str, float] = {}
-    values["success"] = success(data, horizon=horizon)
+    # Use collision-count-based success semantics for benchmark-facing outputs.
+    values["success"] = success_rate(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
-    values["collisions"] = collisions(data)
+    values["time_to_goal_norm_success_only"] = time_to_goal_norm_success_only(data, horizon)
+    values["time_to_goal_success_only_valid"] = (
+        1.0 if math.isfinite(values["time_to_goal_norm_success_only"]) else 0.0
+    )
+    speed_cap = _resolved_robot_max_speed(data, robot_max_speed=robot_max_speed)
+    values["time_to_goal_ideal_ratio"] = time_to_goal_ideal_ratio(
+        data,
+        horizon=horizon,
+        shortest_path_len=shortest_path_len,
+        robot_max_speed=speed_cap,
+    )
+    values["time_to_goal_ideal_ratio_valid"] = (
+        1.0 if math.isfinite(values["time_to_goal_ideal_ratio"]) else 0.0
+    )
+    ped_collision_count = human_collisions(data)
+    obstacle_collision_count = wall_collisions(data)
+    agent_collision_count = agent_collisions(data)
+    total_collision_count = ped_collision_count + obstacle_collision_count + agent_collision_count
+    values["collisions"] = total_collision_count
+    values["ped_collision_count"] = ped_collision_count
+    values["obstacle_collision_count"] = obstacle_collision_count
+    values["agent_collision_count"] = agent_collision_count
+    values["total_collision_count"] = total_collision_count
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
     values["mean_distance"] = mean_distance(data)
+    values["min_clearance"] = min_clearance(data)
+    values["mean_clearance"] = mean_clearance(data)
     values["robot_ped_within_5m_frac"] = robot_ped_within_5m_frac(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values["socnavbench_path_length"] = socnavbench_path_length(data)
@@ -1910,15 +2329,24 @@ def compute_all_metrics(
     values.update(per_ped_force_quantiles(data))
     values["ped_force_mean"] = ped_force_mean(data)
     values["force_exceed_events"] = force_exceed_events(data)
+    values["force_sample_stats"] = force_sample_stats(data)
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)
     values["curvature_mean"] = curvature_mean(data)
     values["energy"] = energy(data)
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
-    values["wall_collisions"] = wall_collisions(data)
+    values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)
+    if experimental_ped_impact:
+        values.update(
+            experimental_ped_impact_metrics(
+                data,
+                radius_m=ped_impact_radius_m,
+                window_steps=ped_impact_window_steps,
+            )
+        )
     return values
 
 
@@ -1947,10 +2375,24 @@ def post_process_metrics(
     if snqi_weights is not None:
         snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
         metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
-    for count_key in ("collisions", "near_misses", "force_exceed_events"):
+    for count_key in (
+        "collisions",
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "agent_collision_count",
+        "total_collision_count",
+        "near_misses",
+        "force_exceed_events",
+    ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])
+            except Exception:  # pragma: no cover
+                pass
+    for valid_key in ("time_to_goal_success_only_valid", "time_to_goal_ideal_ratio_valid"):
+        if valid_key in metrics and metrics[valid_key] is not None:
+            try:
+                metrics[valid_key] = bool(int(metrics[valid_key]))
             except Exception:  # pragma: no cover
                 pass
     return _sanitize_metrics(metrics)
@@ -1997,13 +2439,17 @@ __all__ = [
     "force_exceed_events",
     "force_gradient_norm_mean",
     "force_quantiles",
+    "force_sample_stats",
     "has_force_data",
     "human_collisions",
+    "ideal_time_to_goal",
     "jerk_avg",
     "jerk_max",
     "jerk_mean",
     "jerk_min",
+    "mean_clearance",
     "mean_distance",
+    "min_clearance",
     "min_distance",
     "near_misses",
     "path_efficiency",
@@ -2023,7 +2469,9 @@ __all__ = [
     "success_rate",
     "time_to_collision_min",
     "time_to_goal",
+    "time_to_goal_ideal_ratio",
     "time_to_goal_norm",
+    "time_to_goal_norm_success_only",
     "timeout",
     "velocity_avg",
     "velocity_max",

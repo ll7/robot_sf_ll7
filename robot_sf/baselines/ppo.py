@@ -8,7 +8,7 @@ same simple interface as other baselines:
 - reset(), close(), get_metadata()
 
 Observation comes from `robot_sf.baselines.social_force.Observation` and is
-converted to the model's expected form. We support two modes:
+converted to the model's expected form. We support three modes:
 
 - vector: derive a compact vector from the Observation (relative goal, robot
           velocity, nearest-K pedestrian relative positions). If the loaded
@@ -16,6 +16,9 @@ converted to the model's expected form. We support two modes:
           fallback to a simple goal-seeking action.
 - image: pass-through of an image found under obs.robot["image"]; if missing,
          we raise unless fallback is enabled.
+- dict: pass-through of flattened dict observations (for MultiInput PPO models
+        trained on SocNav structured keys like `occupancy_grid`, `goal_current`,
+        `robot_position`, etc.). Values are cast/reshaped to model space.
 
 The adapter aims to be robust: if prediction fails (shape mismatch, device
 issues), we return a goal-seeking fallback action when `fallback_to_goal` is
@@ -38,6 +41,7 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
 
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.models import resolve_model_path
 
 
 @dataclass
@@ -46,13 +50,14 @@ class PPOPlannerConfig:
 
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
+    model_id: str | None = None
 
     # Device handling: "auto" | "cpu" | "cuda" | "cuda:0" etc.
     device: str = "auto"
     deterministic: bool = True
 
     # Observation handling
-    obs_mode: str = "vector"  # "vector" | "image"
+    obs_mode: str = "vector"  # "vector" | "image" | "dict"
     nearest_k: int = 5  # K for nearest pedestrian features
 
     # Action space formatting for benchmark
@@ -122,7 +127,24 @@ class PPOPlanner:
             self._status = "fallback"
             self._fallback_reason = "sb3_missing"
             return
-        mp = Path(self.config.model_path)
+        try:
+            mp = (
+                resolve_model_path(self.config.model_id)
+                if self.config.model_id
+                else Path(self.config.model_path)
+            )
+        except (KeyError, RuntimeError, ValueError) as exc:
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO model",
+                    f"Failed to resolve model: {exc}",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "model_resolution_failed"
+                return
+            raise
         if not mp.exists():
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
@@ -137,7 +159,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"PPO model file not found: {mp}",
                 f"Place model at '{mp}' or check available models in model/ directory. "
-                "Download from releases or train with scripts/training_ppo.py",
+                "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
         try:
             # Avoid printing system info in CI/test logs
@@ -158,7 +180,7 @@ class PPOPlanner:
             raise_fatal_with_remedy(
                 f"Failed to load PPO model from {mp}: {e}",
                 "Check model compatibility with current stable_baselines3 version. "
-                "Re-train if needed using scripts/training_ppo.py",
+                "Re-train if needed using scripts/training/train_ppo.py --config ...",
             )
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -191,6 +213,9 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        if isinstance(obs, dict) and self._uses_dict_observation():
+            return self._step_dict_obs(obs)
+
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -211,12 +236,37 @@ class PPOPlanner:
                 return self._fallback_action(obs)
             raise
 
+    def _uses_dict_observation(self) -> bool:
+        """Return whether planner is configured for native dict observations."""
+        return str(self.config.obs_mode).strip().lower() in {"dict", "native_dict", "multi_input"}
+
+    def _step_dict_obs(self, obs: dict[str, Any]) -> dict[str, float]:
+        """Predict an action from flattened dict observations expected by MultiInput PPO.
+
+        Returns:
+            Action dict in configured output space.
+        """
+        try:
+            model_obs = self._build_model_obs_dict(obs)
+            action_vec = self._predict_action(model_obs)
+            if action_vec is None:
+                raise RuntimeError("PPO model unavailable or prediction failed")
+            return self._action_vec_to_dict_from_array(action_vec)
+        except (RuntimeError, ValueError, OSError):
+            if self.config.fallback_to_goal:
+                if self._status != "fallback":
+                    self._status = "fallback"
+                if self._fallback_reason is None:
+                    self._fallback_reason = "prediction_failed"
+                return self._fallback_action_dict(obs)
+            raise
+
     # --- Helpers -------------------------------------------------------
-    def _predict_action(self, obs: Observation) -> np.ndarray | None:
+    def _predict_action(self, model_obs: np.ndarray | dict[str, np.ndarray]) -> np.ndarray | None:
         """Run PPO inference and return the raw action vector.
 
         Args:
-            obs: Benchmark observation.
+            model_obs: Model-ready observation payload.
 
         Returns:
             Action vector or None when unavailable.
@@ -224,7 +274,6 @@ class PPOPlanner:
         if self._model is None:
             return None
 
-        model_obs = self._build_model_obs(obs)
         # SB3 supports batch and single obs; ensure correct shape for vector
         if isinstance(model_obs, np.ndarray) and model_obs.ndim == 1:
             model_obs_in = model_obs  # SB3 accepts 1D for single obs
@@ -243,6 +292,43 @@ class PPOPlanner:
             # Log at debug level for diagnostics; fall back to goal if enabled
             logger.debug("PPO model prediction failed: %s", exc, exc_info=True)
             return None
+
+    def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Build model-ready dict observation and align dtypes/shapes to model space.
+
+        Returns:
+            Dict payload shaped and typed to match the loaded model's observation space.
+        """
+        if self._model is None:
+            return {str(k): np.asarray(v) for k, v in obs.items()}
+
+        space = getattr(self._model, "observation_space", None)
+        spaces = getattr(space, "spaces", None)
+        if not isinstance(spaces, dict):
+            return {str(k): np.asarray(v) for k, v in obs.items()}
+
+        converted: dict[str, np.ndarray] = {}
+        missing: list[str] = []
+        for key, sub_space in spaces.items():
+            if key not in obs:
+                missing.append(str(key))
+                continue
+            target_shape = getattr(sub_space, "shape", None)
+            target_dtype = getattr(sub_space, "dtype", None)
+            arr = np.asarray(obs[key], dtype=target_dtype)
+            if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
+                target_size = int(np.prod(target_shape))
+                if int(arr.size) != target_size:
+                    raise ValueError(
+                        f"Observation key '{key}' shape mismatch: got {arr.shape}, "
+                        f"expected {target_shape}",
+                    )
+                arr = arr.reshape(target_shape)
+            converted[key] = arr
+        if missing:
+            missing_preview = ", ".join(missing[:6])
+            raise ValueError(f"Missing required dict observation keys: {missing_preview}")
+        return converted
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         """Convert the benchmark observation into model input format.
@@ -293,15 +379,11 @@ class PPOPlanner:
         vec = np.concatenate([rel_goal, rv, ped_flat]).astype(float)
         return vec
 
-    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
-        """Convert a raw action vector to the benchmark action dict.
-
-        Args:
-            act: Raw action vector.
-            _obs: Observation (unused; reserved for future use).
+    def _action_vec_to_dict_from_array(self, act: np.ndarray) -> dict[str, float]:
+        """Convert a raw action vector to the configured action dictionary.
 
         Returns:
-            Action dict in configured action space.
+            Action dict in either velocity or unicycle format.
         """
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
@@ -320,6 +402,14 @@ class PPOPlanner:
             vx *= scale
             vy *= scale
         return {"vx": vx, "vy": vy}
+
+    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
+        """Convert raw action vector to configured action dict for Observation mode.
+
+        Returns:
+            Action dict in configured output space.
+        """
+        return self._action_vec_to_dict_from_array(act)
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
         """Return a simple goal-seeking action when PPO is unavailable.
@@ -344,6 +434,32 @@ class PPOPlanner:
         return {
             "vx": float(dir_unit[0] * min(self.config.v_max, dist)),
             "vy": float(dir_unit[1] * min(self.config.v_max, dist)),
+        }
+
+    def _fallback_action_dict(self, obs: dict[str, Any]) -> dict[str, float]:
+        """Goal-seeking fallback for flattened dict observations.
+
+        Returns:
+            Goal-directed fallback action dict.
+        """
+        robot_pos = np.asarray(obs.get("robot_position", [0.0, 0.0]), dtype=float).reshape(-1)
+        goal_pos = np.asarray(obs.get("goal_current", [0.0, 0.0]), dtype=float).reshape(-1)
+        if robot_pos.size < 2 or goal_pos.size < 2:
+            if self.config.action_space == "unicycle":
+                return {"v": 0.0, "omega": 0.0}
+            return {"vx": 0.0, "vy": 0.0}
+        delta = goal_pos[:2] - robot_pos[:2]
+        dist = float(np.linalg.norm(delta))
+        if dist < self.EPS:
+            if self.config.action_space == "unicycle":
+                return {"v": 0.0, "omega": 0.0}
+            return {"vx": 0.0, "vy": 0.0}
+        unit = delta / dist
+        if self.config.action_space == "unicycle":
+            return {"v": min(self.config.v_max, dist), "omega": 0.0}
+        return {
+            "vx": float(unit[0] * min(self.config.v_max, dist)),
+            "vy": float(unit[1] * min(self.config.v_max, dist)),
         }
 
     # --- Metadata ------------------------------------------------------

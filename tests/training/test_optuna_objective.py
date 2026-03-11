@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.training.optuna_objective import (
+    episodic_metric_from_records,
     eval_metric_series,
     load_episode_records,
     objective_from_series,
@@ -40,6 +41,28 @@ def test_objective_from_series_best_checkpoint_mode_returns_none():
     """Best-checkpoint mode delegates scoring to checkpoint selection logic."""
     series = [(100, 1.0)]
     assert objective_from_series(series, mode="best_checkpoint", window=3) is None
+    assert objective_from_series(series, mode="episodic_snqi", window=3) is None
+
+
+def test_episodic_metric_from_records_uses_full_episode_values() -> None:
+    """Episodic reducer should average episode-level values, not checkpoint means."""
+    records = [
+        {"eval_step": 100, "metrics": {"snqi": 0.0}},
+        {"eval_step": 100, "metrics": {"snqi": 1.0}},
+        {"eval_step": 200, "metrics": {"snqi": 1.0}},
+    ]
+    # Mean over all 3 episode values.
+    assert episodic_metric_from_records(records, metric_name="snqi", window=5) == pytest.approx(
+        2.0 / 3.0
+    )
+    # Last-window=1 keeps only eval_step=200 episodes.
+    assert episodic_metric_from_records(records, metric_name="snqi", window=1) == pytest.approx(1.0)
+
+
+def test_episodic_metric_from_records_returns_none_for_missing_metric() -> None:
+    """Episodic reducer should return None when no valid values exist."""
+    records = [{"eval_step": 100, "metrics": {"success_rate": 1.0}}]
+    assert episodic_metric_from_records(records, metric_name="snqi", window=3) is None
 
 
 def test_load_episode_records_reads_jsonl(tmp_path: Path):

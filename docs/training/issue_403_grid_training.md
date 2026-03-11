@@ -12,7 +12,7 @@ without additional context.
   uv sync --all-extras
   source .venv/bin/activate
   ```
-- Stable-Baselines3 installed (included in extras).
+- Stable-Baselines3 installed (included in core dependencies).
 - Artifact root (recommended):
   ```bash
   export ROBOT_SF_ARTIFACT_ROOT=$PWD/output
@@ -64,7 +64,7 @@ This ensures the policy is actually trained on the grid+SocNav observation space
 
 This validates the full pipeline without heavy training.
 ```bash
-uv run python scripts/training/train_expert_ppo.py \
+uv run python scripts/training/train_ppo.py \
   --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml \
   --dry-run
 ```
@@ -76,7 +76,7 @@ Expected artifacts (under `output/`):
 ## 4) Full training run (10M steps)
 
 ```bash
-uv run python scripts/training/train_expert_ppo.py \
+uv run python scripts/training/train_ppo.py \
   --config configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml
 ```
 

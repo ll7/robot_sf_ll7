@@ -25,15 +25,22 @@ See Also
 - specs/001-map-verification : Feature specification
 """
 
-# Names in __all__ are provided via lazy imports in __getattr__ below
-# This avoids heavy module loading at import time
+# Public API surface for robot_sf.maps.verification.
 __all__ = [
     "MapRecord",
+    "SvgInspectionReport",
     "VerificationResult",
     "VerificationRunSummary",
+    "inspect_svg",
+    "inspect_svg_targets",
     "verify_maps",
 ]
 
 from robot_sf.maps.verification.context import VerificationResult, VerificationRunSummary
 from robot_sf.maps.verification.map_inventory import MapRecord
 from robot_sf.maps.verification.runner import verify_maps
+from robot_sf.maps.verification.svg_inspection import (
+    SvgInspectionReport,
+    inspect_svg,
+    inspect_svg_targets,
+)

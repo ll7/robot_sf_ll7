@@ -8,6 +8,7 @@ scenarios:
   metadata:
     archetype: bottleneck
     density: low
+    density_advisory: zero_baseline_route_spawn
     flow: bi
     groups: 0.0
     plausibility:
@@ -36,6 +37,7 @@ scenarios:
   metadata:
     archetype: bottleneck
     density: medium
+    density_advisory: zero_baseline_route_spawn
     flow: bi
     groups: 0.0
     plausibility:
@@ -64,6 +66,7 @@ scenarios:
   metadata:
     archetype: bottleneck
     density: high
+    density_advisory: zero_baseline_route_spawn
     flow: bi
     groups: 0.0
     plausibility:

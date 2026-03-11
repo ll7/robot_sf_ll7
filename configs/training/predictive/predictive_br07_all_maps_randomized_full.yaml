@@ -1,0 +1,69 @@
+experiment:
+  run_id: predictive_br07_all_maps_randomized_full
+
+output:
+  root: output/tmp/predictive_planner/pipeline
+
+scenarios:
+  scenario_matrix: ../../scenarios/classic_interactions.yaml
+  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
+
+base_collection:
+  # Larger base coverage for a full run.
+  seeds_per_scenario: 8
+  random_seed_base: 21000
+  max_steps: 240
+  max_agents: 24
+  horizon_steps: 8
+  max_speed: 1.2
+
+hardcase_collection:
+  max_steps: 260
+  max_agents: 24
+  horizon_steps: 8
+  max_speed: 1.2
+
+mixing:
+  hardcase_repeat: 3
+  shuffle_seed: 42
+
+training:
+  model_id: predictive_proxy_selected_v2_full
+  # Recommended "full capacity" range is 180-240 epochs; 220 is a good default.
+  epochs: 220
+  batch_size: 128
+  lr: 0.0002
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 42
+  hidden_dim: 192
+  message_passing_steps: 3
+  max_val_ade: 1.0
+  max_val_fde: 1.8
+  # Keep proxy checks, but reduce frequency so training throughput stays practical.
+  proxy_every_epochs: 10
+  proxy_horizon: 120
+  proxy_dt: 0.1
+  proxy_workers: 1
+
+wandb:
+  enabled: true
+  project: robot_sf
+  entity: ll7
+  group: predictive-br07-full
+  job_type: train
+  name: predictive_br07_all_maps_randomized_full
+  mode: online
+  tags:
+    - predictive
+    - br07
+    - all-maps
+    - randomized-seeds
+    - full-training
+
+evaluation:
+  workers: 1
+  campaign_workers: 2
+  horizon: 120
+  dt: 0.1

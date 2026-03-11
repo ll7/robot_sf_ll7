@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
@@ -14,6 +15,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import (
     MapDefinition,
     MapDefinitionPool,
@@ -22,6 +24,9 @@ from robot_sf.nav.map_config import (
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -587,9 +592,171 @@ def build_robot_config_from_scenario(
 
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
+    _apply_robot_overrides(config, scenario.get("robot_config", {}))
     _apply_map_pool(config, scenario, scenario_path)
+    _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
     return config
+
+
+def _coerce_finite_float(value: Any, *, field_name: str) -> float:
+    """Parse and validate a finite float value for scenario robot_config fields.
+
+    Returns:
+        float: Parsed finite float value.
+    """
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"robot_config.{field_name} must be finite.")
+    return parsed
+
+
+def _coerce_non_negative_float(value: Any, *, field_name: str) -> float:
+    """Parse and validate a non-negative finite float for scenario robot_config fields.
+
+    Returns:
+        float: Parsed finite float value that is ``>= 0``.
+    """
+    parsed = _coerce_finite_float(value, field_name=field_name)
+    if parsed < 0.0:
+        raise ValueError(f"robot_config.{field_name} must be >= 0.")
+    return parsed
+
+
+def _coerce_bool(value: Any, *, field_name: str) -> bool:
+    """Coerce boolean-like override values with strict validation.
+
+    Returns:
+        bool: Parsed boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"robot_config.{field_name} must be a boolean.")
+
+
+def _robot_type_alias(raw: str) -> str:
+    """Normalize scenario robot type aliases to canonical labels.
+
+    Returns:
+        str: Canonical robot type label.
+    """
+    robot_type = raw.lower()
+    if robot_type in {"diff_drive", "diff", "differential"}:
+        return "differential_drive"
+    if robot_type in {"bicycle", "bike"}:
+        return "bicycle_drive"
+    if robot_type in {"omni", "omnidirectional"}:
+        return "holonomic"
+    return robot_type
+
+
+def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDriveSettings:
+    """Build differential-drive settings from scenario overrides.
+
+    Returns:
+        DifferentialDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "max_linear_speed" in overrides:
+        kwargs["max_linear_speed"] = _coerce_finite_float(
+            overrides["max_linear_speed"], field_name="max_linear_speed"
+        )
+    if "max_angular_speed" in overrides:
+        kwargs["max_angular_speed"] = _coerce_finite_float(
+            overrides["max_angular_speed"], field_name="max_angular_speed"
+        )
+    if "wheel_radius" in overrides:
+        kwargs["wheel_radius"] = _coerce_finite_float(
+            overrides["wheel_radius"], field_name="wheel_radius"
+        )
+    if "interaxis_length" in overrides:
+        kwargs["interaxis_length"] = _coerce_finite_float(
+            overrides["interaxis_length"], field_name="interaxis_length"
+        )
+    if "allow_backwards" in overrides:
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
+    return DifferentialDriveSettings(**kwargs)
+
+
+def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSettings:
+    """Build bicycle-drive settings from scenario overrides.
+
+    Returns:
+        BicycleDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "wheelbase" in overrides:
+        kwargs["wheelbase"] = _coerce_finite_float(overrides["wheelbase"], field_name="wheelbase")
+    if "max_steer" in overrides:
+        kwargs["max_steer"] = _coerce_finite_float(overrides["max_steer"], field_name="max_steer")
+    if "max_velocity" in overrides:
+        kwargs["max_velocity"] = _coerce_finite_float(
+            overrides["max_velocity"], field_name="max_velocity"
+        )
+    if "max_accel" in overrides:
+        kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
+    if "allow_backwards" in overrides:
+        kwargs["allow_backwards"] = _coerce_bool(
+            overrides["allow_backwards"],
+            field_name="allow_backwards",
+        )
+    return BicycleDriveSettings(**kwargs)
+
+
+def _holonomic_robot_settings(overrides: Mapping[str, Any]) -> HolonomicDriveSettings:
+    """Build holonomic-drive settings from scenario overrides.
+
+    Returns:
+        HolonomicDriveSettings: Parsed settings object.
+    """
+    kwargs: dict[str, Any] = {}
+    if "radius" in overrides:
+        kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
+    if "max_speed" in overrides:
+        kwargs["max_speed"] = _coerce_finite_float(overrides["max_speed"], field_name="max_speed")
+    if "max_angular_speed" in overrides:
+        kwargs["max_angular_speed"] = _coerce_finite_float(
+            overrides["max_angular_speed"], field_name="max_angular_speed"
+        )
+    if "command_mode" in overrides:
+        kwargs["command_mode"] = str(overrides["command_mode"]).strip().lower()
+    return HolonomicDriveSettings(**kwargs)
+
+
+def _apply_robot_overrides(
+    config: RobotSimulationConfig,
+    overrides: Mapping[str, Any] | None,
+) -> None:
+    """Apply optional scenario-level robot kinematics overrides."""
+    if not isinstance(overrides, Mapping) or not overrides:
+        return
+    raw_type = str(overrides.get("type", overrides.get("model", "differential_drive"))).strip()
+    robot_type = _robot_type_alias(raw_type)
+    if robot_type == "differential_drive":
+        config.robot_config = _differential_robot_settings(overrides)
+        return
+    if robot_type == "bicycle_drive":
+        config.robot_config = _bicycle_robot_settings(overrides)
+        return
+    if robot_type == "holonomic":
+        config.robot_config = _holonomic_robot_settings(overrides)
+        return
+    raise ValueError(
+        "robot_config.type must be one of 'differential_drive', 'bicycle_drive', or 'holonomic'."
+    )
 
 
 def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapDefinition | None:
@@ -1062,7 +1229,169 @@ def _apply_map_pool(
     config.map_id = map_name
 
 
+def _resolve_route_overrides_path(path_value: str, *, scenario_path: Path) -> Path:
+    """Resolve a route override file path relative to scenario YAML.
+
+    Returns:
+        Path: Absolute route override file path.
+    """
+    candidate = Path(path_value)
+    if not candidate.is_absolute():
+        candidate = (scenario_path.parent / candidate).resolve()
+    return candidate
+
+
+def _route_zone_from_map(
+    map_def: MapDefinition,
+    *,
+    is_robot: bool,
+    spawn_id: int,
+    goal_id: int,
+    waypoints: list[tuple[float, float]],
+) -> tuple[Any, Any]:
+    """Resolve spawn/goal zone geometry for a route payload entry.
+
+    Returns:
+        tuple[Any, Any]: Spawn and goal zone geometries.
+    """
+    spawn_zones = map_def.robot_spawn_zones if is_robot else map_def.ped_spawn_zones
+    goal_zones = map_def.robot_goal_zones if is_robot else map_def.ped_goal_zones
+    routes = map_def.robot_routes if is_robot else map_def.ped_routes
+
+    if 0 <= spawn_id < len(spawn_zones):
+        spawn_zone = spawn_zones[spawn_id]
+    else:
+        spawn_zone = next(
+            (route.spawn_zone for route in routes if route.spawn_id == spawn_id),
+            (
+                (waypoints[0][0], waypoints[0][1]),
+                (waypoints[0][0] + 0.1, waypoints[0][1]),
+                (waypoints[0][0], waypoints[0][1] + 0.1),
+            ),
+        )
+    if 0 <= goal_id < len(goal_zones):
+        goal_zone = goal_zones[goal_id]
+    else:
+        goal_zone = next(
+            (route.goal_zone for route in routes if route.goal_id == goal_id),
+            (
+                (waypoints[-1][0], waypoints[-1][1]),
+                (waypoints[-1][0] + 0.1, waypoints[-1][1]),
+                (waypoints[-1][0], waypoints[-1][1] + 0.1),
+            ),
+        )
+    return spawn_zone, goal_zone
+
+
+def _coerce_route_payload(
+    map_def: MapDefinition,
+    route_entries: list[Any],
+    *,
+    is_robot: bool,
+) -> list[GlobalRoute]:
+    """Coerce a list of route payload dictionaries into GlobalRoute objects.
+
+    Returns:
+        list[GlobalRoute]: Parsed route objects for the selected entity class.
+    """
+    coerced: list[GlobalRoute] = []
+    entity_name = "robot_routes" if is_robot else "ped_routes"
+    for idx, entry in enumerate(route_entries):
+        if not isinstance(entry, Mapping):
+            raise ValueError(f"{entity_name}[{idx}] must be a mapping")
+        if "spawn_id" not in entry or "goal_id" not in entry:
+            raise ValueError(f"{entity_name}[{idx}] missing spawn_id/goal_id")
+        if "waypoints" not in entry:
+            raise ValueError(f"{entity_name}[{idx}] missing waypoints")
+        spawn_id = int(entry["spawn_id"])
+        goal_id = int(entry["goal_id"])
+        waypoints_raw = entry["waypoints"]
+        if not isinstance(waypoints_raw, list) or len(waypoints_raw) < 2:
+            raise ValueError(f"{entity_name}[{idx}].waypoints must be a list with >=2 points")
+        waypoints = [
+            _coerce_point(point, f"{entity_name}[{idx}].waypoints") for point in waypoints_raw
+        ]
+        spawn_zone, goal_zone = _route_zone_from_map(
+            map_def,
+            is_robot=is_robot,
+            spawn_id=spawn_id,
+            goal_id=goal_id,
+            waypoints=waypoints,
+        )
+        coerced.append(
+            GlobalRoute(
+                spawn_id=spawn_id,
+                goal_id=goal_id,
+                waypoints=waypoints,
+                spawn_zone=spawn_zone,
+                goal_zone=goal_zone,
+                source_label="override_adversarial",
+            )
+        )
+    return coerced
+
+
+def apply_route_overrides(
+    map_def: MapDefinition,
+    route_payload: Mapping[str, Any],
+) -> None:
+    """Apply route payload overrides to a map definition in-place."""
+    robot_entries = route_payload.get("robot_routes", [])
+    ped_entries = route_payload.get("ped_routes", [])
+    if not isinstance(robot_entries, list):
+        raise ValueError("route_payload.robot_routes must be a list")
+    if not isinstance(ped_entries, list):
+        raise ValueError("route_payload.ped_routes must be a list")
+    if robot_entries:
+        map_def.robot_routes = _coerce_route_payload(map_def, robot_entries, is_robot=True)
+    if ped_entries:
+        map_def.ped_routes = _coerce_route_payload(map_def, ped_entries, is_robot=False)
+    map_def.__post_init__()
+
+
+def _load_route_override_payload(route_overrides_path: Path) -> Mapping[str, Any]:
+    """Load route override payload from YAML artifact file.
+
+    Returns:
+        Mapping[str, Any]: Payload containing robot_routes/ped_routes lists.
+    """
+    data = yaml.safe_load(route_overrides_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, Mapping):
+        raise ValueError(f"Route override file must contain a mapping: {route_overrides_path}")
+    if "route_payload" in data:
+        payload = data["route_payload"]
+        if not isinstance(payload, Mapping):
+            raise ValueError("route_payload must be a mapping")
+        return payload
+    return data
+
+
+def _apply_route_overrides(
+    config: RobotSimulationConfig,
+    route_overrides_file: Any,
+    scenario_path: Path,
+) -> None:
+    """Apply route overrides artifact to the active scenario map."""
+    if route_overrides_file is None:
+        return
+    if not isinstance(route_overrides_file, str) or not route_overrides_file.strip():
+        raise ValueError("route_overrides_file must be a non-empty string path")
+    if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
+        raise ValueError("route_overrides_file provided but no map_pool is loaded")
+    route_overrides_path = _resolve_route_overrides_path(
+        route_overrides_file, scenario_path=scenario_path
+    )
+    if not route_overrides_path.exists():
+        raise ValueError(f"route_overrides_file does not exist: {route_overrides_path}")
+    map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    map_copy = deepcopy(map_def)
+    payload = _load_route_override_payload(route_overrides_path)
+    apply_route_overrides(map_copy, payload)
+    config.map_pool.map_defs[map_name] = map_copy
+
+
 __all__ = [
+    "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",

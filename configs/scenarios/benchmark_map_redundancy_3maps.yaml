@@ -1,0 +1,9 @@
+name: benchmark_map_redundancy_3maps
+
+includes:
+  - single/francis2023_perpendicular_traffic.yaml
+  - single/francis2023_intersection_no_gesture.yaml
+  - archetypes/classic_urban_crossing.yaml
+
+map_search_paths:
+  - ../../maps/svg_maps

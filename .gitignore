@@ -23,6 +23,7 @@ robot_sf/data_analysis/datasets/*.json
 
 # Canonical artifact root
 output/
+wandb
 
 # Python virtual environments
 .venv/
@@ -48,6 +49,12 @@ dist/
 
 .gemini/
 gha-creds-*.json
+
+# SocNavBench third-party datasets (local-only, license-restricted)
+third_party/socnavbench/wayptnav_data/
+third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
+third_party/socnavbench/surreal/code/human_meshes/
+third_party/socnavbench/surreal/code/human_textures/
 
 # Cmake
 third_party/python-rvo2/.*

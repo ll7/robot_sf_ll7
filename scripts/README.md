@@ -4,29 +4,30 @@ This directory contains all executable scripts for the Robot SF project, organiz
 
 ## Table of Contents
 
-- [Quick Navigation by Task](#quick-navigation-by-task)
-- [Directory Structure](#directory-structure)
-- [Core Scripts](#core-scripts)
-- [Training Scripts](#training-scripts)
-- [Research & Analysis](#research--analysis)
-- [Validation & Testing](#validation--testing)
-- [Tools & Utilities](#tools--utilities)
-- [Coverage & Performance](#coverage--performance)
-- [Legacy & Debugging](#legacy--debugging)
+* [Quick Navigation by Task](#quick-navigation-by-task)
+* [Directory Structure](#directory-structure)
+* [Core Scripts](#core-scripts)
+* [Training Scripts](#training-scripts)
+* [Research & Analysis](#research--analysis)
+* [Validation & Testing](#validation--testing)
+* [Tools & Utilities](#tools--utilities)
+* [Coverage & Performance](#coverage--performance)
+* [Legacy & Debugging](#legacy--debugging)
 
 ## Quick Navigation by Task
 
 ### I want to...
 
-- **Train a robot policy** → [`training_ppo.py`](#training_ppopy) or [`training/`](#training-directory)
-- **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
-- **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
-- **Validate changes** → [`validation/`](#validation-directory)
-- **Compare training runs** → [`tools/compare_training_runs.py`](#toolscompare_training_runspy)
-- **Preview scenario trajectories** → [`tools/preview_scenario_trajectories.py`](#toolspreview_scenario_trajectoriespy)
-- **Work with SNQI metrics** → [`SNQI scripts`](#snqi-weight-scripts)
-- **Check performance** → [`validation/performance_smoke_test.py`](#validationperformance_smoke_testpy)
-- **Migrate artifacts** → [`tools/migrate_artifacts.py`](#toolsmigrate_artifactspy)
+* **Train a robot policy** → [`training/train_ppo.py`](#training-directory)
+* **Train/evaluate predictive planner** → [`scripts/training/train_predictive_planner.py`](#predictive-planner-workflow) and [`scripts/validation/run_predictive_success_campaign.py`](#predictive-planner-workflow)
+* **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
+* **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
+* **Validate changes** → [`validation/`](#validation-directory)
+* **Compare training runs** → [`tools/compare_training_runs.py`](#toolscompare_training_runspy)
+* **Preview scenario trajectories** → [`tools/preview_scenario_trajectories.py`](#toolspreview_scenario_trajectoriespy)
+* **Work with SNQI metrics** → [`SNQI scripts`](#snqi-weight-scripts)
+* **Check performance** → [`validation/performance_smoke_test.py`](#validationperformance_smoke_testpy)
+* **Migrate artifacts** → [`tools/migrate_artifacts.py`](#toolsmigrate_artifactspy)
 
 ## Directory Structure
 
@@ -37,10 +38,17 @@ scripts/
 ├── README_SNQI_WEIGHTS.md             # SNQI weight documentation
 │
 ├── training/                          # Training workflows
-│   ├── train_expert_ppo.py           # Expert PPO training
+│   ├── train_ppo.py           # Expert PPO training
+│   ├── train_dreamerv3_rllib.py      # RLlib DreamerV3 training
+│   ├── collect_predictive_planner_data.py # Predictive planner dataset collection
+│   ├── collect_predictive_hardcase_data.py # Hard-case predictive dataset collection
+│   ├── build_predictive_mixed_dataset.py # Merge base + hard datasets
+│   ├── train_predictive_planner.py   # Predictive trajectory model training
 │   ├── collect_expert_trajectories.py # Trajectory collection
 │   ├── pretrain_from_expert.py       # Behavioral cloning pre-training
-│   └── train_ppo_with_pretrained_policy.py # PPO fine-tuning
+│   ├── train_ppo_with_pretrained_policy.py # PPO fine-tuning
+│   ├── optuna_expert_ppo.py          # Optuna sweep for expert PPO
+│   └── launch_optuna_expert_ppo.py   # Config-first Optuna launcher
 │
 ├── research/                          # Research & analysis
 │   ├── generate_report.py            # Research report generation
@@ -48,6 +56,11 @@ scripts/
 │
 ├── validation/                        # Testing & validation
 │   ├── performance_smoke_test.py     # Performance validation
+│   ├── evaluate_predictive_planner.py # Predictive planner benchmark eval
+│   ├── analyze_predictive_hard_cases.py # Hard-case taxonomy report
+│   ├── run_predictive_hard_seed_diagnostics.py # Per-seed diagnostics traces
+│   ├── run_predictive_success_campaign.py # Checkpoint/config campaign sweep
+│   ├── run_planner_portfolio_campaign.py # Multi-planner campaign sweep
 │   ├── run_examples_smoke.py         # Example script smoke tests
 │   ├── verify_maps.py                # Map file validation
 │   └── test_*.sh                     # Shell-based validation tests
@@ -59,6 +72,7 @@ scripts/
 │   ├── render_scenario_videos.py     # Render scenario videos from trajectories
 │   ├── migrate_artifacts.py          # Artifact migration
 │   ├── check_artifact_root.py        # Artifact policy guard
+│   ├── inspect_optuna_db.py           # Inspect Optuna sqlite databases
 │   └── validate_report.py            # Report validation
 │
 ├── coverage/                          # Coverage tools
@@ -76,116 +90,190 @@ scripts/
 
 ### Training Scripts
 
-#### `training_ppo.py`
-**Purpose**: Main PPO training entry point  
-**Usage**:
-```bash
-uv run python scripts/training_ppo.py
-```
-**Details**: Standard PPO training workflow using StableBaselines3
+### Predictive Planner Workflow
+
+#### `scripts/training/collect_predictive_planner_data.py`
+
+Collect trajectory-prediction training data from scenario rollouts.
+
+#### `scripts/training/collect_predictive_hardcase_data.py`
+
+Collect focused hard-case data using a seed manifest.
+
+#### `scripts/training/build_predictive_mixed_dataset.py`
+
+Build a mixed dataset combining base and hard-case samples.
+
+#### `scripts/training/train_predictive_planner.py`
+
+Train predictive trajectory model checkpoint(s); supports proxy hard-set evaluation and selection.
+
+#### `scripts/validation/evaluate_predictive_planner.py`
+
+Run map-runner benchmark evaluation for a checkpoint + planner config.
+
+#### `scripts/validation/run_predictive_hard_seed_diagnostics.py`
+
+Generate per-seed trace diagnostics for hard manifests.
+
+#### `scripts/validation/run_predictive_success_campaign.py`
+
+Run checkpoint/config sweep with hard/global ranking and confidence intervals.
+
+#### `scripts/validation/run_planner_portfolio_campaign.py`
+
+Run side-by-side campaign sweeps across multiple planner families (predictive and non-predictive).
 
 #### `training_a2c.py`
+
 **Purpose**: A2C algorithm training  
 **Usage**:
+
 ```bash
 uv run python scripts/training_a2c.py
 ```
+
 **Details**: Alternative training algorithm (A2C)
 
 #### `training_ped_ppo.py`
+
 **Purpose**: PPO training for pedestrian environments  
 **Usage**:
+
 ```bash
 uv run python scripts/training_ped_ppo.py
 ```
 
 #### `wandb_ppo_training.py`
+
 **Purpose**: PPO training with Weights & Biases logging  
 **Usage**:
+
 ```bash
 uv run python scripts/wandb_ppo_training.py
 ```
+
 **Details**: See `docs/wandb.md` for setup
 
 #### `multi_extractor_training.py`
+
 **Purpose**: Compare multiple feature extractors with reproducible summaries  
 **Usage**:
+
 ```bash
 uv run python scripts/multi_extractor_training.py
 ```
+
 **Details**: Orchestrates PPO training runs for configured feature extractors, captures hardware metadata
 
 ### Benchmark Scripts
 
 #### `classic_benchmark_full.py`
+
 **Purpose**: CLI entry for Full Classic Interaction Benchmark  
 **Usage**:
+
 ```bash
 uv run python scripts/classic_benchmark_full.py
 ```
+
 **Details**: Expanded parser with full benchmark flags
 
 #### `benchmark02.py`
+
 **Purpose**: Performance benchmarking with metrics collection  
 **Usage**:
+
 ```bash
 DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 ```
+
 **Expected**: ~22 steps/second, ~45ms per step
 
 #### `benchmark_workers.py`
+
 **Purpose**: Parallel benchmark execution with worker processes  
 **Usage**:
+
 ```bash
 uv run python scripts/benchmark_workers.py
 ```
 
 #### `run_social_navigation_benchmark.py`
+
 **Purpose**: Complete social navigation benchmark runner  
 **Usage**:
+
 ```bash
 uv run python scripts/run_social_navigation_benchmark.py
 ```
+
 **Details**: Executes full benchmark suite
 
 ### Analysis & Visualization
 
 #### `generate_figures.py`
+
 **Purpose**: Generate benchmark figures from episodes JSONL  
 **Usage**:
+
 ```bash
 uv run python scripts/generate_figures.py
 ```
+
 **Output**: Pareto plots, distributions, baseline comparison tables, scenario thumbnails
 
 #### `ranking_table.py`
+
 **Purpose**: Generate ranking tables by metric from benchmark episodes  
 **Usage**:
+
 ```bash
 uv run python scripts/ranking_table.py
 ```
+
 **Details**: Aggregates episode metrics per group, builds ranking tables sorted by chosen metric
 
 #### `analyze_feature_extractors.py`
+
 **Purpose**: Statistical analysis for feature extractor comparison  
 **Usage**:
+
 ```bash
 uv run python scripts/analyze_feature_extractors.py
 ```
 
 #### `seed_variance.py`
+
 **Purpose**: Compute SNQI seed variance from benchmark episodes  
 **Usage**:
+
 ```bash
 uv run python scripts/seed_variance.py
 ```
+
 **Details**: Groups episodes and reports variability across seed means
+
+#### `benchmark_threshold_sensitivity.py`
+
+**Purpose**: Quantify sensitivity of near-miss and comfort metrics to threshold choices
+and evaluate speed-aware near-miss alternatives (relative-speed weighting and TTC-gating)
+across scenario families.
+**Usage**:
+
+```bash
+uv run python scripts/benchmark_threshold_sensitivity.py \
+    --in output/benchmarks/full_classic/episodes/episodes.jsonl \
+    --out output/benchmarks/full_classic/reports/threshold_sensitivity.json
+```
 
 ### SNQI Weight Scripts
 
 #### `recompute_snqi_weights.py`
+
 **Purpose**: Recompute SNQI weights using different strategies  
 **Usage**:
+
 ```bash
 # Simple weight recomputation
 uv run python scripts/recompute_snqi_weights.py \
@@ -194,11 +282,14 @@ uv run python scripts/recompute_snqi_weights.py \
     --compare-strategies \
     --output weight_comparison.json
 ```
+
 **Details**: See `README_SNQI_WEIGHTS.md` for detailed documentation
 
 #### `snqi_weight_optimization.py`
+
 **Purpose**: Advanced SNQI weight optimization with differential evolution  
 **Usage**:
+
 ```bash
 uv run python scripts/snqi_weight_optimization.py \
     --episodes episodes.jsonl \
@@ -209,8 +300,10 @@ uv run python scripts/snqi_weight_optimization.py \
 ```
 
 #### `snqi_sensitivity_analysis.py`
+
 **Purpose**: Full sensitivity analysis with visualizations  
 **Usage**:
+
 ```bash
 uv run python scripts/snqi_sensitivity_analysis.py \
     --episodes episodes.jsonl \
@@ -220,15 +313,19 @@ uv run python scripts/snqi_sensitivity_analysis.py \
 ```
 
 #### `validate_snqi_scripts.py`
+
 **Purpose**: Verify SNQI scripts work correctly  
 **Usage**:
+
 ```bash
 uv run python scripts/validate_snqi_scripts.py
 ```
 
 #### `example_snqi_workflow.py`
+
 **Purpose**: Complete SNQI workflow example with generated data  
 **Usage**:
+
 ```bash
 uv run python scripts/example_snqi_workflow.py
 ```
@@ -237,51 +334,82 @@ uv run python scripts/example_snqi_workflow.py
 
 Imitation learning pipeline scripts (feature 001-ppo-imitation-pretrain):
 
-### `training/train_expert_ppo.py`
+```bash
+# Required for behavioral cloning pre-training (imitation package)
+uv sync --group imitation
+# Use `uv run --group imitation ...` for pretrain_from_expert commands
+```
+
+### `training/train_ppo.py`
+
 **Purpose**: Expert PPO training workflow entry point  
 **Usage**:
+
 ```bash
-uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 ```
+
 **Details**: Loads unified config, orchestrates PPO expert training, evaluates policy, persists manifests
 
+### `training/train_dreamerv3_rllib.py`
+**Purpose**: RLlib DreamerV3 training on `drive_state` + `rays` observations  
+**Usage**:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+**Details**: Uses factory-created Robot SF envs, deterministic observation flattening (`drive_state`, `rays`), optional `[-1,1]` action normalization, and periodic RLlib checkpoints under `output/dreamerv3/`
+
 ### `training/collect_expert_trajectories.py`
+
 **Purpose**: Trajectory collection for imitation learning  
 **Usage**:
+
 ```bash
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
 ```
+
 **Details**: Records episodes using expert policy, dumps to NPZ dataset, validates artifact
 
 ### `training/pretrain_from_expert.py`
+
 **Purpose**: Behavioral cloning pre-training from expert trajectories  
 **Usage**:
+
 ```bash
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
 ```
+
 **Details**: Trains PPO policy using BC on expert trajectories
 
 ### `training/train_ppo_with_pretrained_policy.py`
+
 **Purpose**: PPO fine-tuning from pre-trained checkpoint  
 **Usage**:
+
 ```bash
 uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
 ```
+
 **Details**: Continues training with PPO from warm-start policy
 
 ## Research Directory
 
 ### `research/generate_report.py`
+
 **Purpose**: Research report generation from tracked runs  
 **Usage**:
+
 ```bash
 uv run python scripts/research/generate_report.py
 ```
+
 **Details**: Loads tracker manifests, generates comprehensive reports
 
 ### `research/compare_ablations.py`
+
 **Purpose**: CLI for ablation study comparison (User Story 4)  
 **Usage**:
+
 ```bash
 uv run python scripts/research/compare_ablations.py \
     --config configs/research/example_ablation.yaml \
@@ -290,22 +418,28 @@ uv run python scripts/research/compare_ablations.py \
     --threshold 40.0 \
     --output output/research_reports/ablation_bc
 ```
+
 **Details**: Runs ablation matrix and generates comparison report
 
 ## Validation Directory
 
 ### `validation/performance_smoke_test.py`
+
 **Purpose**: Performance baseline validation  
 **Usage**:
+
 ```bash
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   uv run python scripts/validation/performance_smoke_test.py
 ```
+
 **Details**: Validates performance against baseline targets
 
 ### `validation/run_examples_smoke.py`
+
 **Purpose**: Execute smoke tests for all examples  
 **Usage**:
+
 ```bash
 # Dry run (show what would execute)
 uv run python scripts/validation/run_examples_smoke.py --dry-run
@@ -318,15 +452,19 @@ uv run python scripts/validation/run_examples_smoke.py
 ```
 
 ### `validation/validate_examples_manifest.py`
+
 **Purpose**: Ensure examples manifest is complete and aligned  
 **Usage**:
+
 ```bash
 uv run python scripts/validation/validate_examples_manifest.py
 ```
 
 ### `validation/verify_maps.py`
+
 **Purpose**: Map file validation  
 **Usage**:
+
 ```bash
 # CI mode
 uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output output/validation/map_verification.json
@@ -339,44 +477,54 @@ uv run python scripts/validation/verify_maps.py
 
 Quick environment validation scripts:
 
-- `validation/test_basic_environment.sh` - Basic environment sanity check
-- `validation/test_model_prediction.sh` - Model loading and inference test
-- `validation/test_complete_simulation.sh` - Full simulation run test
-- `validation/test_classic_benchmark_full.sh` - Classic benchmark validation
-- `validation/test_coverage_collection.sh` - Coverage collection test
-- `validation/test_research_report_smoke.sh` - Research report smoke test
+* `validation/test_basic_environment.sh` - Basic environment sanity check
+* `validation/test_model_prediction.sh` - Model loading and inference test
+* `validation/test_complete_simulation.sh` - Full simulation run test
+* `validation/test_classic_benchmark_full.sh` - Classic benchmark validation
+* `validation/test_coverage_collection.sh` - Coverage collection test
+* `validation/test_research_report_smoke.sh` - Research report smoke test
 
 ### `validation/run_research_quickstart.sh`
+
 **Purpose**: Execute research pipeline quickstart  
 **Usage**:
+
 ```bash
 bash scripts/validation/run_research_quickstart.sh
 ```
 
 ### `validation/render_examples_readme.py`
+
 **Purpose**: Generate/update examples README from manifest  
 **Usage**:
+
 ```bash
 uv run python scripts/validation/render_examples_readme.py
 ```
 
 ### `validation/playback_trajectory.py`
+
 **Purpose**: Trajectory visualization and playback  
 **Usage**:
+
 ```bash
 uv run python scripts/validation/playback_trajectory.py
 ```
 
 ### `validation/performance_research_report.py`
+
 **Purpose**: Research report performance validation  
 **Usage**:
+
 ```bash
 uv run python scripts/validation/performance_research_report.py
 ```
 
 ### `validation/verify_sf_implementation.py`
+
 **Purpose**: Social Force implementation verification  
 **Usage**:
+
 ```bash
 uv run python scripts/validation/verify_sf_implementation.py
 ```
@@ -384,8 +532,10 @@ uv run python scripts/validation/verify_sf_implementation.py
 ## Tools Directory
 
 ### `tools/run_tracker_cli.py`
+
 **Purpose**: Command-line helper for run-tracking telemetry  
 **Usage**:
+
 ```bash
 # Show run status
 uv run python scripts/tools/run_tracker_cli.py status <run_id>
@@ -413,36 +563,47 @@ uv run python scripts/tools/run_tracker_cli.py perf-tests \
 ```
 
 ### `tools/preview_scenario_trajectories.py`
+
 **Purpose**: Preview single-pedestrian trajectories on top of scenario maps  
 **Usage**:
+
 ```bash
 uv run python scripts/tools/preview_scenario_trajectories.py \
   --scenario configs/scenarios/classic_interactions.yaml \
   --scenario-id classic_head_on_corridor
 ```
+
 **Details**: Writes a PNG under `output/preview/scenario_trajectories/` by default. Use `MPLBACKEND=Agg` for headless runs.
 
 ### `tools/render_scenario_videos.py`
+
 **Purpose**: Render MP4 videos for every scenario in a scenario matrix  
 **Usage**:
+
 ```bash
 uv run python scripts/tools/render_scenario_videos.py \
   --scenario configs/scenarios/francis2023.yaml \
   --all
 ```
+
 **Details**: Writes videos under a timestamped folder in `output/recordings/` and saves a `manifest.json`. Use `--policy ppo --model-path model/run_023.zip` to drive the robot with the defensive PPO policy.
 
 ### `tools/compare_training_runs.py`
+
 **Purpose**: Comparison tool for analyzing training runs  
 **Usage**:
+
 ```bash
 uv run python scripts/tools/compare_training_runs.py
 ```
+
 **Details**: Computes sample-efficiency metrics, convergence timings
 
 ### `tools/migrate_artifacts.py`
+
 **Purpose**: Migration helper to consolidate legacy artifacts  
 **Usage**:
+
 ```bash
 # Run migration
 uv run python scripts/tools/migrate_artifacts.py
@@ -450,71 +611,91 @@ uv run python scripts/tools/migrate_artifacts.py
 # Or use console entry point
 uv run robot-sf-migrate-artifacts
 ```
+
 **Details**: Consolidates `results/`, `recordings/`, `htmlcov/`, `coverage.json` into `output/`
 
 ### `tools/check_artifact_root.py`
+
 **Purpose**: Guard script ensuring artifacts respect canonical `output/` root  
 **Usage**:
+
 ```bash
 uv run python scripts/tools/check_artifact_root.py
 ```
+
 **Details**: Fails fast when new top-level artifacts appear
 
 ### `tools/validate_report.py`
+
 **Purpose**: Report validation helper  
 **Usage**:
+
 ```bash
 uv run python scripts/tools/validate_report.py
 ```
+
 **Details**: Checks required files and directories exist
 
 ## Coverage & Performance
 
 ### `coverage/open_coverage_report.py`
+
 **Purpose**: Open HTML coverage report in browser  
 **Usage**:
+
 ```bash
 uv run python scripts/coverage/open_coverage_report.py
 ```
+
 **Details**: Automatically opens `output/coverage/htmlcov/index.html`
 
 ### `coverage/compare_coverage.py`
+
 **Purpose**: Coverage comparison between runs  
 **Usage**:
+
 ```bash
 uv run python scripts/coverage/compare_coverage.py
 ```
 
 ### `telemetry/run_perf_tests.py`
+
 **Purpose**: Telemetry-aware wrapper for performance smoke test  
 **Usage**:
+
 ```bash
 uv run python scripts/telemetry/run_perf_tests.py
 ```
+
 **Details**: Invokes `performance_smoke_test.py` and persists structured results
 
 ### `perf/baseline_factory_creation.py`
+
 **Purpose**: Baseline environment factory creation timing  
 **Usage**:
+
 ```bash
 uv run python scripts/perf/baseline_factory_creation.py
 ```
+
 **Details**: Measures factory creation performance
 
 ## Legacy & Debugging
 
 ### Debugging Scripts
 
-- `debug_random_policy.py` - Test environment with random policy
-- `debug_trained_policy.py` - Test with trained policy checkpoint
-- `debug_ped_policy.py` - Debug pedestrian policy
-- `debug_ped_discrete.py` - Simulate hardcoded deterministic policy with four actions
+* `debug_random_policy.py` - Test environment with random policy
+* `debug_trained_policy.py` - Test with trained policy checkpoint
+* `debug_ped_policy.py` - Debug pedestrian policy
+* `debug_ped_discrete.py` - Simulate hardcoded deterministic policy with four actions
 
 ### Data Conversion
 
 #### `convert_pickle_to_jsonl.py`
+
 **Purpose**: Convert legacy multi-episode pickle files to per-episode JSONL  
 **Usage**:
+
 ```bash
 uv run python scripts/convert_pickle_to_jsonl.py
 ```
@@ -522,15 +703,19 @@ uv run python scripts/convert_pickle_to_jsonl.py
 ### Recording & Playback
 
 #### `demo_jsonl_recording.py`
+
 **Purpose**: Demonstration of JSONL recording and playback functionality  
 **Usage**:
+
 ```bash
 uv run python scripts/demo_jsonl_recording.py
 ```
 
 #### `play_recordings.py`
+
 **Purpose**: Playback recorded episodes  
 **Usage**:
+
 ```bash
 uv run python scripts/play_recordings.py
 ```
@@ -538,95 +723,193 @@ uv run python scripts/play_recordings.py
 ### Other Utilities
 
 #### `failure_extractor.py`
+
 **Purpose**: Extract worst episodes by chosen metric from episodes JSONL  
 **Usage**:
+
 ```bash
 uv run python scripts/failure_extractor.py
 ```
+
 **Details**: Selects top-k worst episodes by dotted metric path
 
 #### `collect_slow_tests.py`
+
 **Purpose**: Parse `pytest --durations=N` output into structured JSON  
 **Usage**:
+
 ```bash
 pytest --durations=20 | uv run python scripts/collect_slow_tests.py > slow_tests.json
 ```
 
 #### `compare_slow_tests.py`
+
 **Purpose**: Compare before/after slow test JSON captures  
 **Usage**:
+
 ```bash
 uv run python scripts/compare_slow_tests.py --before progress/slow_tests_pre.json --after progress/slow_tests_post.json
 ```
 
 #### `evaluate.py`
+
 **Purpose**: Policy evaluation script  
 **Usage**:
+
 ```bash
 uv run python scripts/evaluate.py
 ```
 
 #### `hparam_opt.py`
+
 **Purpose**: Hyperparameter optimization with Optuna  
 **Usage**:
+
 ```bash
 uv run python scripts/hparam_opt.py
 ```
 
+#### `tools/inspect_optuna_db.py`
+
+**Purpose**: Inspect Optuna sqlite databases (list studies, show best trials)  
+**Usage**:
+
+```bash
+uv run python scripts/tools/inspect_optuna_db.py --db output/optuna/weekend_optuna_expert_ppo.db
+```
+
 #### `training/optuna_expert_ppo.py`
+
 **Purpose**: Optuna sweep for expert PPO training configs  
 **Usage**:
+
 ```bash
 uv run python scripts/training/optuna_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 ```
 
+#### `training/launch_optuna_expert_ppo.py`
+
+**Purpose**: Config-first launcher for Optuna expert PPO sweeps  
+**Usage**:
+
+```bash
+uv run python scripts/training/launch_optuna_expert_ppo.py --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
+```
+
+By default the Optuna workflow logs at `WARNING` ; use `--log-level INFO` (or set
+`log_level` in the launcher YAML) when you need progress/detail logs.
+W&B tracking is enabled by default for Optuna trials; disable it explicitly with
+`--disable-wandb` (or `disable_wandb: true` in the launcher config). Trials are
+grouped under the Optuna study name and tagged by objective/metric for easier
+online comparison.
+
+**Weekend GPU matrix (exact commands)**:
+
+```bash
+# last_n_mean (default robust mode)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_last_n_mean \
+  --objective-mode last_n_mean
+
+# final_eval
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_final_eval \
+  --objective-mode final_eval
+
+# auc
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_auc \
+  --objective-mode auc
+
+# episodic_snqi (full episode-log objective)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/launch_optuna_expert_ppo.py \
+  --config configs/training/ppo_imitation/optuna_expert_ppo.yaml \
+  --study-name weekend_optuna_episodic_snqi \
+  --metric snqi \
+  --objective-mode episodic_snqi
+```
+
+#### `training/train_dreamerv3_rllib.py`
+**Purpose**: Config-first RLlib DreamerV3 training for Robot SF (`drive_state` + `rays`)  
+**Usage**:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
+```
+**Notes**:
+- Launcher pins workers to the active interpreter and disables `uv run` propagation in Ray.
+- Runtime packaging excludes heavy paths by default (`.git`, `.venv`, `output`, caches, media).
+- Auxme launch/monitor/recovery workflow: `docs/training/dreamerv3_rllib_drive_state_rays.md`
+
+Optional validation-only run:
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
+  --dry-run
+```
+
 #### `benchmark_repro_check.py`
+
 **Purpose**: Create minimal test scenario for reproducibility testing  
 **Usage**:
+
 ```bash
 uv run python scripts/benchmark_repro_check.py
 ```
 
 #### `generate_video_contact_sheet.py`
+
 **Purpose**: Placeholder for generating thumbnail contact sheets from episode videos  
 **Usage**:
+
 ```bash
 uv run python scripts/generate_video_contact_sheet.py
 ```
+
 **Details**: Implementation deferred until video artifact pipeline stabilizes
 
 #### `update_svg_viewbox.py`
+
 **Purpose**: Update viewBox attribute of SVG files  
 **Usage**:
+
 ```bash
 uv run python scripts/update_svg_viewbox.py
 ```
 
 #### `scale_svgs_to_50m.py`
+
 **Purpose**: Scale SVG coordinate values  
 **Usage**:
+
 ```bash
 uv run python scripts/scale_svgs_to_50m.py
 ```
 
 #### `run_classic_interactions.py`
+
 **Purpose**: Run classic interaction scenarios  
 **Usage**:
+
 ```bash
 uv run python scripts/run_classic_interactions.py
 ```
 
 ### PPO Training Subdirectory
 
-Legacy training experiments in `PPO_training/`:
+Legacy training experiments in `PPO_training/` :
 
-- `train_ppo_punish_action.py` - PPO with action punishment
+* `train_ppo_punish_action.py` - PPO with action punishment
 
 ## Common Patterns
 
 ### Environment Variables
 
 Many scripts support headless execution:
+
 ```bash
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/<script>.py
 ```
@@ -634,6 +917,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/<script>.py
 ### Artifact Override
 
 Override artifact destination:
+
 ```bash
 export ROBOT_SF_ARTIFACT_ROOT=/path/to/custom/output
 uv run python scripts/<script>.py
@@ -642,24 +926,26 @@ uv run python scripts/<script>.py
 ### Common Flags
 
 Most scripts support standard flags:
-- `--help` - Show usage information
-- `--config <path>` - Specify configuration file
-- `--output <path>` - Specify output directory
-- `--debug` - Enable debug logging
-- `--log-level DEBUG|INFO|WARNING|ERROR` - Set log level
+* `--help` - Show usage information
+* `--config <path>` - Specify configuration file
+* `--output <path>` - Specify output directory
+* `--debug` - Enable debug logging
+* `--log-level DEBUG|INFO|WARNING|ERROR` - Set log level
 
 ## Quick Start Workflows
 
 ### 1. Train a Robot Policy
+
 ```bash
-# Standard PPO training
-uv run python scripts/training_ppo.py
+# Canonical PPO training
+uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
 
 # Or imitation learning pipeline
 uv run python examples/advanced/16_imitation_learning_pipeline.py
 ```
 
 ### 2. Run Benchmarks
+
 ```bash
 # Full classic benchmark
 uv run python scripts/classic_benchmark_full.py
@@ -669,6 +955,7 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 ```
 
 ### 3. Analyze Results
+
 ```bash
 # Generate figures
 uv run python scripts/generate_figures.py
@@ -681,6 +968,7 @@ uv run python scripts/research/generate_report.py
 ```
 
 ### 4. Validate Changes
+
 ```bash
 # Run validation suite
 ./scripts/validation/test_basic_environment.sh
@@ -696,6 +984,7 @@ uv run python scripts/tools/check_artifact_root.py
 ```
 
 ### 5. SNQI Weight Analysis
+
 ```bash
 # Quick test
 uv run python scripts/validate_snqi_scripts.py
@@ -712,12 +1001,12 @@ uv run python scripts/snqi_weight_optimization.py \
 
 ## Related Documentation
 
-- **Development Guide**: `docs/dev_guide.md` - Primary development reference
-- **SNQI Quick Start**: `scripts/QUICK_START.md` - SNQI recomputation guide
-- **SNQI Weights**: `scripts/README_SNQI_WEIGHTS.md` - Detailed SNQI documentation
-- **Imitation Learning**: `docs/imitation_learning_pipeline.md` - Pipeline guide
-- **Examples**: `examples/README.md` - Curated example scripts
-- **Artifact Policy**: `specs/243-clean-output-dirs/quickstart.md` - Artifact management
+* **Development Guide**: `docs/dev_guide.md` - Primary development reference
+* **SNQI Quick Start**: `scripts/QUICK_START.md` - SNQI recomputation guide
+* **SNQI Weights**: `scripts/README_SNQI_WEIGHTS.md` - Detailed SNQI documentation
+* **Imitation Learning**: `docs/imitation_learning_pipeline.md` - Pipeline guide
+* **Examples**: `examples/README.md` - Curated example scripts
+* **Artifact Policy**: `specs/243-clean-output-dirs/quickstart.md` - Artifact management
 
 ## Contributing
 
@@ -734,11 +1023,11 @@ When adding new scripts:
 ## Support
 
 For questions or issues:
-- Check the development guide: `docs/dev_guide.md`
-- Review examples: `examples/README.md`
-- File an issue on GitHub
+* Check the development guide: `docs/dev_guide.md`
+* Review examples: `examples/README.md`
+* File an issue on GitHub
 
 ---
 
-**Last Updated**: 2025-11-24  
+**Last Updated**: 2026-02-11  
 **Maintained By**: Robot SF Development Team

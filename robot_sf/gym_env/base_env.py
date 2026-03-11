@@ -70,7 +70,7 @@ class BaseEnv(Env):
         # Set video FPS if not provided
         if video_fps is None:
             video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
-            logger.info(f"Video FPS not provided, setting to {video_fps}")
+            logger.debug(f"Video FPS not provided, setting to {video_fps}")
 
         # Extract map definition; respect explicit map_id when provided.
         map_id = getattr(env_config, "map_id", None)
@@ -81,6 +81,7 @@ class BaseEnv(Env):
                 raise ValueError(str(exc)) from exc
         else:
             self.map_def = env_config.map_pool.choose_random_map()
+        self.map_def._navigation_settings = getattr(env_config, "navigation_settings", None)
         attach_planner_to_map(self.map_def, self.env_config)
 
         self.debug = debug
@@ -157,6 +158,9 @@ class BaseEnv(Env):
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
+                robot_rotation_action_max_abs=float(
+                    getattr(env_config.robot_config, "max_angular_speed", 1.0),
+                ),
                 ped_radius=env_config.sim_config.ped_radius,
                 goal_radius=env_config.sim_config.goal_radius,
                 record_video=record_video,

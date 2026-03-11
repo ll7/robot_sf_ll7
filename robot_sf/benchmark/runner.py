@@ -47,6 +47,7 @@ except ImportError as exc:  # pragma: no cover - optional baseline dependency
 else:
     _BASELINE_IMPORT_ERROR = None
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
@@ -54,12 +55,21 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_pr
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.termination_reason import (
+    build_outcome_payload,
+    metric_scalar,
+    outcome_contradictions,
+    resolve_termination_reason,
+    status_from_termination_reason,
+)
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
     compute_episode_id,
     episode_identity_hash,
     index_existing,
+    validate_episode_success_integrity,
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
@@ -299,7 +309,15 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         }
 
     if algo == "simple_policy":
-        return _simple_policy_adapter()
+        policy_fn, metadata = _simple_policy_adapter()
+        return (
+            policy_fn,
+            enrich_algorithm_metadata(
+                algo=algo,
+                metadata=metadata,
+                execution_mode="native",
+            ),
+        )
 
     planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
@@ -395,6 +413,11 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
+    metadata = enrich_algorithm_metadata(
+        algo=algo,
+        metadata=metadata,
+        execution_mode="native",
+    )
 
     return policy_fn, metadata
 
@@ -833,6 +856,8 @@ def _build_episode_record(
     metrics: dict[str, Any],
     algo_metadata: dict[str, Any],
     ts_start: str,
+    termination_reason: str,
+    outcome: dict[str, bool],
 ) -> dict[str, Any]:
     """Assemble a JSON-serializable episode record.
 
@@ -840,6 +865,18 @@ def _build_episode_record(
         Episode record dictionary.
     """
     episode_id = compute_episode_id(scenario_params, seed)
+    algo_name = str(scenario_params.get("algo") or algo_metadata.get("algorithm") or "unknown")
+    enriched_algo_metadata = enrich_algorithm_metadata(algo=algo_name, metadata=algo_metadata)
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+        metrics=metrics,
+    )
+    if contradictions:
+        raise ValueError(
+            f"Episode integrity contradictions for scenario '{scenario_params.get('id', 'unknown')}', "
+            f"seed={seed}: {'; '.join(contradictions)}"
+        )
     record = {
         "version": "v1",
         "episode_id": episode_id,
@@ -847,14 +884,19 @@ def _build_episode_record(
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
-        "algorithm_metadata": algo_metadata,
+        "algorithm_metadata": enriched_algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_start},
+        "termination_reason": termination_reason,
+        "status": status_from_termination_reason(termination_reason),
+        "outcome": outcome,
+        "integrity": {"contradictions": contradictions},
     }
     algo_value = scenario_params.get("algo")
     if algo_value is not None:
         record["algo"] = algo_value
+    ensure_metric_parameters(record)
     return record
 
 
@@ -928,11 +970,34 @@ def run_episode(  # noqa: PLR0913
 
     # Compute metrics
     metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
+    collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
+    route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
+    ended = route_complete or collision
+    termination_reason = resolve_termination_reason(
+        terminated=ended,
+        truncated=False,
+        success=route_complete,
+        collision=collision,
+        reached_max_steps=not ended,
+    )
+    outcome = build_outcome_payload(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=not ended,
+    )
 
     # Build record
     scenario_params_record = dict(scenario_params)
     scenario_params_record.setdefault("algo", algo)
-    record = _build_episode_record(scenario_params_record, seed, metrics, algo_metadata, ts_start)
+    record = _build_episode_record(
+        scenario_params_record,
+        seed,
+        metrics,
+        algo_metadata,
+        ts_start,
+        termination_reason,
+        outcome,
+    )
 
     steps_taken = max(0, len(robot_pos_traj) - 1)
 
@@ -956,10 +1021,6 @@ def run_episode(  # noqa: PLR0913
     record["timing"] = {
         "steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0,
     }
-    status = "success" if record.get("metrics", {}).get("success") else "failure"
-    if record.get("metrics", {}).get("collisions"):
-        status = "collision"
-    record["status"] = status
     return record
 
 
@@ -970,6 +1031,9 @@ def validate_and_write(
 ) -> None:
     """Validate an episode record against schema and append to JSONL."""
     schema = load_schema(schema_path)
+    violations = validate_episode_success_integrity(record)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1031,6 +1095,9 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 
 def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
     """Validate a record against schema and append to JSONL."""
+    violations = validate_episode_success_integrity(rec)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
@@ -1354,6 +1421,9 @@ def run_batch(  # noqa: PLR0913
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None = None,
     algo: str = "simple_policy",
     algo_config_path: str | None = None,
+    benchmark_profile: str = "baseline-safe",
+    socnav_missing_prereq_policy: str = "fail-fast",
+    adapter_impact_eval: bool = False,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1386,6 +1456,9 @@ def run_batch(  # noqa: PLR0913
             snqi_baseline=snqi_baseline,
             algo=algo,
             algo_config_path=algo_config_path,
+            benchmark_profile=benchmark_profile,
+            socnav_missing_prereq_policy=socnav_missing_prereq_policy,
+            adapter_impact_eval=adapter_impact_eval,
             workers=workers,
             resume=resume,
         )

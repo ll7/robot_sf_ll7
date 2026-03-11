@@ -14,6 +14,8 @@ from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
+    human_collisions,
+    post_process_metrics,
     snqi,
     time_to_goal,
 )
@@ -72,12 +74,16 @@ def test_metrics_keys_all_collisions():
         assert name in values
     # Collisions every timestep -> collisions == T
     assert values["collisions"] == 5
+    assert values["ped_collision_count"] == 5
+    assert values["obstacle_collision_count"] == 0
+    assert values["total_collision_count"] == 5
     # Near misses zero because all are strict collisions
     assert values["near_misses"] == 0
-    # Min distance exactly zero
-    assert values["min_distance"] == 0.0
-    # Mean distance also zero in this constructed case
-    assert values["mean_distance"] == 0.0
+    # Min distance is center-to-center; clearances are tracked separately.
+    assert values["min_distance"] == pytest.approx(0.0)
+    assert values["mean_distance"] == pytest.approx(0.0)
+    assert values["min_clearance"] == pytest.approx(-1.4)
+    assert values["mean_clearance"] == pytest.approx(-1.4)
 
 
 def test_metrics_partial_success_flag_present():
@@ -88,39 +94,61 @@ def test_metrics_partial_success_flag_present():
 
 
 def test_near_miss_region_only():
-    # Craft positions so robot at origin; pedestrians at 0.3m (>0.25 collision) and 0.45m
+    # Craft positions so robot at origin; pedestrians are close but non-overlapping.
     """TODO docstring. Document this function."""
     T, K = 4, 2
     ep = _make_episode(T=T, K=K)
     # Robot stays at origin
-    # Place ped 0 at (0.3,0), ped 1 at (0.45,0) constant over time
-    ep.peds_pos[:, 0, 0] = 0.3
-    ep.peds_pos[:, 1, 0] = 0.45
+    # With robot_radius=1.0 and ped_radius=0.4, center distance must be >1.4 to avoid collision.
+    # Values in (1.4, 1.9) map to near misses (clearance in [0.0, 0.5)).
+    ep.peds_pos[:, 0, 0] = 1.5
+    ep.peds_pos[:, 1, 0] = 1.8
     values = compute_all_metrics(ep, horizon=10)
     # No collisions
     assert values["collisions"] == 0
-    # Near miss each timestep because min dist 0.3 inside [0.25,0.5)
+    # Near miss each timestep because min clearance 0.1 inside [0.0, 0.5).
     assert values["near_misses"] == T
-    # Min distance 0.3
-    assert np.isclose(values["min_distance"], 0.3)
-    # Mean distance also 0.3 (constant over time)
-    assert np.isclose(values["mean_distance"], 0.3)
+    assert np.isclose(values["min_distance"], 1.5)
+    assert np.isclose(values["mean_distance"], 1.5)
+    assert np.isclose(values["min_clearance"], 0.1)
+    assert np.isclose(values["mean_clearance"], 0.1)
 
 
 def test_mixed_collision_and_near_miss():
-    # First two timesteps collision (<0.25), next two near-miss (0.3)
+    # First two timesteps overlap (collision), next two are positive-clearance near-misses.
     """TODO docstring. Document this function."""
     T = 4
     ep = _make_episode(T=T, K=1)
-    dists = [0.1, 0.2, 0.3, 0.3]
+    dists = [0.1, 0.2, 1.5, 1.6]
     for t, d in enumerate(dists):
         ep.peds_pos[t, 0, 0] = d
     values = compute_all_metrics(ep, horizon=10)
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
     assert np.isclose(values["min_distance"], 0.1)
-    # Mean of per-timestep minimum distances: (0.1 + 0.2 + 0.3 + 0.3)/4 = 0.225
-    assert np.isclose(values["mean_distance"], 0.225)
+    assert np.isclose(values["mean_distance"], 0.85)
+    assert np.isclose(values["min_clearance"], -1.3)
+    assert np.isclose(values["mean_clearance"], -0.55)
+
+
+def test_metrics_include_agent_collisions_in_total_collision_count():
+    """Other-agent collisions should contribute to total collisions and collision summaries."""
+    ep = _make_episode(T=4, K=0)
+    ep.other_agents_pos = np.zeros((4, 1, 2), dtype=float)
+    values = compute_all_metrics(ep, horizon=10)
+    assert values["collisions"] == 4
+    assert values["ped_collision_count"] == 0
+    assert values["obstacle_collision_count"] == 0
+    assert values["agent_collision_count"] == 4
+    assert values["total_collision_count"] == 4
+
+
+def test_human_collisions_honors_custom_threshold():
+    """Custom center-distance thresholds should translate into clearance thresholds."""
+    ep = _make_episode(T=3, K=1)
+    ep.peds_pos[:, 0, 0] = 1.6
+    assert human_collisions(ep) == 0.0
+    assert human_collisions(ep, threshold=1.7) == 3.0
 
 
 def test_success_and_time_to_goal_norm_success_case():
@@ -144,6 +172,33 @@ def test_time_to_goal_nan_when_goal_not_reached():
     ep = _make_episode(T=4, K=0)
     ep.reached_goal_step = None
     assert math.isnan(time_to_goal(ep))
+
+
+def test_success_only_time_to_goal_metrics_flag_validity() -> None:
+    """Success-only time metrics should expose explicit validity flags."""
+    ep = _make_episode(T=6, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 5.0, 6)
+    ep.reached_goal_step = 5
+    vals = compute_all_metrics(ep, horizon=10, shortest_path_len=5.0, robot_max_speed=1.0)
+    assert np.isclose(vals["time_to_goal_norm_success_only"], 0.5)
+    assert vals["time_to_goal_success_only_valid"] == 1.0
+    assert np.isclose(vals["time_to_goal_ideal_ratio"], 0.1)
+    assert vals["time_to_goal_ideal_ratio_valid"] == 1.0
+
+
+def test_success_only_time_to_goal_metrics_drop_on_failure() -> None:
+    """Failed episodes should keep validity false and omit NaN success-only values."""
+    ep = _make_episode(T=6, K=1)
+    ep.reached_goal_step = 5
+    ep.peds_pos[:, 0, 0] = 0.0  # force collision -> failure
+    raw = compute_all_metrics(ep, horizon=10, shortest_path_len=5.0, robot_max_speed=1.0)
+    assert math.isnan(raw["time_to_goal_norm_success_only"])
+    assert raw["time_to_goal_success_only_valid"] == 0.0
+    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+    assert metrics["time_to_goal_success_only_valid"] is False
+    assert "time_to_goal_norm_success_only" not in metrics
+    assert metrics["time_to_goal_ideal_ratio_valid"] is False
+    assert "time_to_goal_ideal_ratio" not in metrics
 
 
 def test_success_failure_due_to_collision():
@@ -360,6 +415,13 @@ def test_episode_schema_accepts_ped_force_metrics():
         "scenario_id": "sc-demo",
         "seed": 123,
         "metrics": metrics,
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
         "timing": {"steps_per_second": 1.0},
     }
     schema_path = (
@@ -506,6 +568,72 @@ def test_force_gradient_norm_mean():
     assert 0.9 <= g <= 1.1
 
 
+def test_experimental_ped_impact_metrics_are_opt_in() -> None:
+    """Experimental pedestrian-impact keys should only appear when explicitly enabled."""
+    ep = _make_episode(T=8, K=1)
+    ep.peds_pos[:, 0, 0] = 1.0
+
+    base = compute_all_metrics(ep, horizon=10)
+    assert not any(key.startswith("ped_impact_") for key in base)
+
+    enabled = compute_all_metrics(ep, horizon=10, experimental_ped_impact=True)
+    assert "ped_impact_radius_m" in enabled
+    assert "ped_impact_window_steps" in enabled
+    assert "ped_impact_accel_delta_valid" in enabled
+    assert "ped_impact_turn_rate_delta_valid" in enabled
+
+
+def test_experimental_ped_impact_near_vs_far_deltas() -> None:
+    """Near-vs-far split should expose positive disturbance deltas for a crafted trajectory."""
+    ep = _make_episode(T=12, K=1)
+    ep.dt = 0.1
+
+    # Keep robot static at origin.
+    ep.robot_pos[:] = 0.0
+
+    # Far segment: smooth straight walk (distance > 2m).
+    ep.peds_pos[:6, 0, 0] = np.linspace(4.0, 3.0, 6)
+    ep.peds_pos[:6, 0, 1] = 0.0
+    # Near segment: zig-zag close to robot (distance <= 2m) to induce
+    # larger acceleration and heading-rate changes.
+    ep.peds_pos[6:, 0, 0] = np.linspace(1.4, 1.1, 6)
+    ep.peds_pos[6:, 0, 1] = np.array([0.20, -0.20, 0.25, -0.25, 0.20, -0.20])
+
+    vals = compute_all_metrics(
+        ep,
+        horizon=12,
+        experimental_ped_impact=True,
+        ped_impact_radius_m=2.0,
+        ped_impact_window_steps=1,
+    )
+    assert vals["ped_impact_accel_delta_valid"] == 1.0
+    assert vals["ped_impact_turn_rate_delta_valid"] == 1.0
+    assert vals["ped_impact_near_samples"] > 0.0
+    assert vals["ped_impact_far_samples"] > 0.0
+    assert vals["ped_impact_accel_delta_mean"] > 0.0
+    assert vals["ped_impact_turn_rate_delta_mean"] > 0.0
+
+
+def test_experimental_ped_impact_handles_empty_crowd() -> None:
+    """Experimental pedestrian-impact metrics should stay stable when K=0."""
+    ep = _make_episode(T=8, K=0)
+    vals = compute_all_metrics(
+        ep,
+        horizon=8,
+        experimental_ped_impact=True,
+        ped_impact_radius_m=2.5,
+        ped_impact_window_steps=7,
+    )
+    assert vals["ped_impact_ped_count"] == 0.0
+    assert vals["ped_impact_near_samples"] == 0.0
+    assert vals["ped_impact_far_samples"] == 0.0
+    assert vals["ped_impact_near_sample_frac"] == 0.0
+    assert vals["ped_impact_accel_delta_valid"] == 0.0
+    assert vals["ped_impact_turn_rate_delta_valid"] == 0.0
+    assert vals["ped_impact_radius_m"] == 2.5
+    assert vals["ped_impact_window_steps"] == 7.0
+
+
 def test_snqi_scoring():
     # Construct two metric dicts: one ideal, one poor
     """TODO docstring. Document this function."""
@@ -587,6 +715,19 @@ def test_collision_count():
     result = collision_count(ep)
     assert result >= 0.0
     assert np.isfinite(result)
+
+
+def test_collision_split_metrics_are_consistent() -> None:
+    """Collision split metrics should be internally consistent."""
+    ep = _make_episode(T=5, K=1)
+    # Human collisions on every step.
+    ep.peds_pos[:, 0, :] = ep.robot_pos + 0.01
+    # Wall collisions on every step.
+    ep.obstacles = np.array([[0.01, 0.01]])
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["ped_collision_count"] == 5
+    assert vals["obstacle_collision_count"] == 5
+    assert vals["total_collision_count"] == 10
 
 
 def test_wall_collisions():

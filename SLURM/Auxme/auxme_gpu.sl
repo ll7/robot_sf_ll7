@@ -21,8 +21,8 @@ MODULE_LIST=${AUXME_MODULES:-"gcc/13.2.0"}
 CUDA_MODULE=${AUXME_CUDA_MODULE:-cuda/12.1}
 RESULTS_ROOT=${AUXME_RESULTS_DIR:-${SCRATCH_ROOT}/robot_sf/results}
 WORKDIR=${SLURM_TMPDIR:-/tmp/${USER}/${SLURM_JOB_ID}}
-TRAIN_SCRIPT=${AUXME_TRAIN_SCRIPT:-scripts/training_ppo.py}
-TRAIN_ARGS=${AUXME_TRAIN_ARGS:-"--config configs/scenarios/classic_interactions.yaml --device cuda --total-timesteps 200000"}
+TRAIN_SCRIPT=${AUXME_TRAIN_SCRIPT:-scripts/training/train_ppo.py}
+TRAIN_ARGS=${AUXME_TRAIN_ARGS:-"--config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml --log-level INFO"}
 RUN_OUTPUT_DIR=""
 
 if [[ ! -d ${PROJECT_ROOT}/.git ]]; then
@@ -67,7 +67,6 @@ mkdir -p "${WORKDIR}"
 RUN_STAGING_DIR="${WORKDIR}/robot_sf"
 RUN_OUTPUT_DIR="${RUN_STAGING_DIR}/results"
 mkdir -p "${RUN_OUTPUT_DIR}"
+export ROBOT_SF_ARTIFACT_ROOT="${RUN_OUTPUT_DIR}"
 
-srun --kill-on-bad-exit=1 uv run python "${TRAIN_SCRIPT}" \
-  --output-dir "${RUN_OUTPUT_DIR}" \
-  ${TRAIN_ARGS}
+srun --kill-on-bad-exit=1 uv run python "${TRAIN_SCRIPT}" ${TRAIN_ARGS}

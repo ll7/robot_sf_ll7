@@ -50,10 +50,14 @@ class ExpertTrainingConfig:
     tracking: dict[str, object] = field(default_factory=dict)
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
+    scenario_sampling: dict[str, object] = field(default_factory=dict)
     num_envs: int | None = None
     worker_mode: str = "auto"
     socnav_orca_time_horizon: float | None = None
     socnav_orca_neighbor_dist: float | None = None
+    resume_from: Path | None = None
+    resume_model_id: str | None = None
+    resume_source_step: int | None = None
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -77,16 +81,27 @@ class ExpertTrainingConfig:
         tracking: dict[str, object] | None = None,
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
+        scenario_sampling: dict[str, object] | None = None,
         num_envs: int | None = None,
         worker_mode: str = "auto",
         socnav_orca_time_horizon: float | None = None,
         socnav_orca_neighbor_dist: float | None = None,
+        resume_from: Path | None = None,
+        resume_model_id: str | None = None,
+        resume_source_step: int | None = None,
     ) -> ExpertTrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
         Returns:
             ExpertTrainingConfig: Constructed configuration instance.
         """
+
+        resolved_env_factory_kwargs = dict(env_factory_kwargs or {})
+        if (
+            "reward_func" not in resolved_env_factory_kwargs
+            and "reward_name" not in resolved_env_factory_kwargs
+        ):
+            resolved_env_factory_kwargs["reward_name"] = "route_completion_v2"
 
         return cls(
             scenario_config=scenario_config,
@@ -106,11 +121,17 @@ class ExpertTrainingConfig:
             policy_net_arch=tuple(int(dim) for dim in policy_net_arch),
             tracking=dict(tracking or {}),
             env_overrides=dict(env_overrides or {}),
-            env_factory_kwargs=dict(env_factory_kwargs or {}),
+            env_factory_kwargs=resolved_env_factory_kwargs,
+            scenario_sampling=dict(scenario_sampling or {}),
             num_envs=num_envs,
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,
             socnav_orca_neighbor_dist=socnav_orca_neighbor_dist,
+            resume_from=resume_from.resolve() if resume_from else None,
+            resume_model_id=str(resume_model_id).strip() if resume_model_id else None,
+            resume_source_step=(
+                int(resume_source_step) if resume_source_step is not None else None
+            ),
         )
 
 

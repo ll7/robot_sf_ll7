@@ -14,11 +14,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_algorithm_metadata_present(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Smoke-test that benchmark episode records include enriched algorithm metadata."""
     matrix = [
         {
             "id": "algo-meta-smoke",
@@ -51,3 +47,8 @@ def test_algorithm_metadata_present(tmp_path: Path):
     algo_md = rec["algorithm_metadata"]
     assert isinstance(algo_md, dict)
     assert "algorithm" in algo_md
+    assert algo_md["baseline_category"] == "classical"
+    assert algo_md["policy_semantics"] == "deterministic_goal_seeking"
+    planner_meta = algo_md.get("planner_kinematics")
+    assert isinstance(planner_meta, dict)
+    assert planner_meta.get("execution_mode") == "native"

@@ -16,7 +16,8 @@ from robot_sf.research.statistics import (
 def test_paired_t_test_basic():
     """Test basic paired t-test."""
     x = [1.0, 2.0, 3.0, 4.0, 5.0]
-    y = [1.5, 2.5, 3.5, 4.5, 5.5]
+    # Use non-constant pairwise differences to avoid precision-loss warnings.
+    y = [1.4, 2.55, 3.35, 4.65, 5.45]
 
     result = paired_t_test(x, y)
 

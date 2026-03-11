@@ -73,7 +73,41 @@ def test_scale_path_info_scales_length_and_sets_inflation(tmp_path):
 
     assert scaled["length"] == pytest.approx(2.0)  # length scales by meters_per_cell
     assert scaled["inflation_cells"] == 1
+    assert scaled["inflation_meters"] == pytest.approx(0.5)
     assert scaled["cost"] == 7
+
+
+def test_scale_path_info_sets_inflation_meters_none_when_inflation_disabled(tmp_path):
+    """Scaled path info should include inflation_meters=None when inflation is not used."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=2.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    grid = planner.grid
+    scaled = planner._scale_path_info({"length": 2.0}, grid, inflation=None)
+
+    assert scaled is not None
+    assert "inflation_meters" in scaled
+    assert scaled["inflation_meters"] is None
+    assert scaled["inflation_cells"] is None
+
+
+def test_config_resolves_inflation_meters_to_cells() -> None:
+    """Meter-based inflation should ceil to avoid under-inflation."""
+    cfg = ClassicPlannerConfig(cells_per_meter=2.0, inflate_radius_meters=0.6)
+    assert cfg.resolved_inflate_radius_cells() == 2
+
+
+def test_config_supports_legacy_inflation_cells_argument() -> None:
+    """Legacy callers using inflate_radius_cells should still resolve correctly."""
+    cfg = ClassicPlannerConfig(cells_per_meter=2.0, inflate_radius_cells=2)
+    assert cfg.resolved_inflate_radius_cells() == 2
+    assert cfg.inflate_radius_meters is None
 
 
 def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
@@ -104,7 +138,7 @@ def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
         captured["grid"] = grid
         captured["path"] = path
 
-    monkeypatch.setattr("robot_sf.planner.classic_global_planner.render_path", fake_render_path)
+    monkeypatch.setattr("robot_sf.planner.classic_global_planner.visualize_path", fake_render_path)
 
     path_world = [(0.5, 0.5), (1.5, 0.5)]
     expands = {"node": types.SimpleNamespace()}
@@ -274,3 +308,122 @@ def test_plan_random_path_is_reproducible_with_seed(tmp_path):
     assert path1[-1] == planner._grid_to_world(*planner._world_to_grid(*goal1))
     assert info1 is not None
     assert info2 is not None
+
+
+def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
+    """Random path search should optimize by selecting the longest feasible candidate."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter(
+        [
+            (0.0, 0.0),
+            (1.0, 1.0),  # candidate 1
+            (0.0, 0.0),
+            (2.0, 2.0),  # candidate 2
+            (0.0, 0.0),
+            (3.0, 3.0),  # candidate 3
+        ]
+    )
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
+
+    scores = {
+        ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 1.0}),
+        ((0.0, 0.0), (2.0, 2.0)): ([(0.0, 0.0), (2.0, 2.0)], {"length": 5.0}),
+        ((0.0, 0.0), (3.0, 3.0)): ([(0.0, 0.0), (3.0, 3.0)], {"length": 3.5}),
+    }
+
+    def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
+        return scores[(start, goal)]
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    path, info, start, goal = planner.plan_random_path(max_attempts=3)
+
+    assert (start, goal) == ((0.0, 0.0), (2.0, 2.0))
+    assert path == [(0.0, 0.0), (2.0, 2.0)]
+    assert info == {"length": 5.0}
+
+
+def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
+    """When length ties, path with more waypoints should be selected."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=0,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter([(0.0, 0.0), (1.0, 1.0), (0.0, 0.0), (2.0, 2.0)])
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
+
+    scores = {
+        ((0.0, 0.0), (1.0, 1.0)): ([(0.0, 0.0), (1.0, 1.0)], {"length": 4.0}),
+        ((0.0, 0.0), (2.0, 2.0)): ([(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)], {"length": 4.0}),
+    }
+
+    def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
+        return scores[(start, goal)]
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    path, info, start, goal = planner.plan_random_path(max_attempts=2)
+
+    assert (start, goal) == ((0.0, 0.0), (2.0, 2.0))
+    assert path == [(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)]
+    assert info == {"length": 4.0}
+
+
+def test_plan_random_path_can_disable_inflation_fallback(tmp_path, monkeypatch):
+    """Random-path planning should forward fallback control to `plan`."""
+    map_def = _make_basic_map(tmp_path)
+    planner = ClassicGlobalPlanner(
+        map_def,
+        ClassicPlannerConfig(
+            cells_per_meter=1.0,
+            inflate_radius_cells=2,
+            add_boundary_obstacles=False,
+        ),
+    )
+    sampled_points = iter([(0.0, 0.0), (1.0, 1.0)])
+
+    def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        try:
+            return next(sampled_points)
+        except StopIteration:
+            pytest.fail("fake_random_valid_point_on_grid exhausted unexpectedly")
+
+    observed = {}
+
+    def fake_plan(  # type: ignore[no-untyped-def]
+        start, goal, algorithm=None, allow_inflation_fallback=True
+    ):
+        observed["allow_inflation_fallback"] = allow_inflation_fallback
+        return [start, goal], {"length": 1.0}
+
+    monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
+    monkeypatch.setattr(planner, "plan", fake_plan)
+
+    planner.plan_random_path(max_attempts=1, allow_inflation_fallback=False)
+
+    assert observed["allow_inflation_fallback"] is False

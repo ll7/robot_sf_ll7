@@ -5,3 +5,4 @@ This folder documents built-in baseline algorithms available in the Social Navig
 - Social Force (baseline_sf)
 - PPO (ppo)
 - Random (random)
+- Prediction Planner (prediction_planner)

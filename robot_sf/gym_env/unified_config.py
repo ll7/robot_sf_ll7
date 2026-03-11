@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.navigation import NavigationSettings
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.planner.classic_global_planner import ClassicPlannerConfig
@@ -25,6 +26,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
     DifferentialDriveSettings,
 )
+from robot_sf.robot.holonomic_drive import HolonomicDriveRobot, HolonomicDriveSettings
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -76,7 +78,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     Extends base configuration with robot-specific settings.
     """
 
-    robot_config: DifferentialDriveSettings | BicycleDriveSettings = field(
+    robot_config: DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings = field(
         default_factory=DifferentialDriveSettings,
     )
     # Environment behavior flags
@@ -105,6 +107,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
     # Planner backend selection: "classic" (default) or "visibility"
     planner_backend: str = field(default="classic")
     planner_classic_config: ClassicPlannerConfig | None = field(default=None)
+    navigation_settings: NavigationSettings = field(default_factory=NavigationSettings)
 
     def __post_init__(self):
         """Validate robot-specific configuration.
@@ -197,7 +200,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
         if self.sample_positions_globally and not self.use_planner:
             raise ValueError("sample_positions_globally=True requires use_planner=True")
 
-    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
+    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot | HolonomicDriveRobot:
         """Create a robot instance based on configuration.
 
         Returns:
@@ -207,6 +210,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
             return DifferentialDriveRobot(self.robot_config)
         elif isinstance(self.robot_config, BicycleDriveSettings):
             return BicycleDriveRobot(self.robot_config)
+        elif isinstance(self.robot_config, HolonomicDriveSettings):
+            return HolonomicDriveRobot(self.robot_config)
         else:
             raise NotImplementedError(f"Unsupported robot type: {type(self.robot_config)}")
 

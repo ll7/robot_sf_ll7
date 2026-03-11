@@ -14,6 +14,16 @@ The following constants define the distance thresholds used throughout the metri
 - **Near-miss distance**: 0.50m (upper bound for near-miss region)
 - **Force comfort threshold**: 2.0 (unitless, force magnitude above which interaction is considered uncomfortable)
 
+Threshold provenance and reproducibility contract:
+
+- Canonical values live in `robot_sf/benchmark/constants.py`.
+- Episode records now embed `metric_parameters.threshold_profile` and a deterministic
+  `metric_parameters.threshold_signature`.
+- Aggregation validates that all episodes in a report share one threshold profile;
+  mixed profiles are rejected to prevent invalid comparisons.
+- The sensitivity workflow in `scripts/benchmark_threshold_sensitivity.py` quantifies
+  how metric summaries change across threshold grids per scenario family.
+
 ## Core Metrics
 
 ### Safety Metrics
@@ -29,6 +39,11 @@ The following constants define the distance thresholds used throughout the metri
 - **Type**: Integer count
 - **Range**: [0, episode_length]
 - **Purpose**: Proximity safety measure
+- **Speed dependence (current default)**: Disabled. Near-miss is distance-only in the
+  canonical benchmark metric.
+- **Evaluated alternatives**: Relative-speed weighted near-miss score and TTC-gated
+  near-miss count (reported by threshold sensitivity tooling, not replacing the
+  canonical metric).
 
 #### Minimum Interpersonal Distance
 - **Definition**: Global minimum distance to any pedestrian across the episode
@@ -135,4 +150,4 @@ For SNQI computation, metrics are normalized using baseline statistics:
 - Force threshold calibrated empirically for current fast-pysf physics model
 - SNQI methodology follows composite index best practices with learned weights
 
-*Last updated: September 2025*
+*Last updated: February 2026*

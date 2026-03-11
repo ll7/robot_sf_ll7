@@ -16,6 +16,7 @@ Wrapper options:
   --partition <name>  Override partition discovery
   --qos <name>        Override QoS discovery
   --time <value>      Explicit wall time; disables auto-max discovery
+  --sbatch-arg <arg>  Additional sbatch option to forward before the script path
   --dry-run           Print the resolved sbatch command without submitting
   -h, --help          Show this help message
 
@@ -27,6 +28,7 @@ Examples:
   scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
   scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/auxme_gpu.sl
   scripts/dev/sbatch_use_max_time.sh --partition a30 --qos a30-gpu SLURM/Auxme/auxme_gpu.sl
+  scripts/dev/sbatch_use_max_time.sh --sbatch-arg=--dependency=afterok:12345 SLURM/Auxme/auxme_gpu.sl
 EOF
 }
 
@@ -121,6 +123,7 @@ partition=""
 qos=""
 explicit_time=""
 dry_run=0
+extra_sbatch_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -135,6 +138,14 @@ while [[ $# -gt 0 ]]; do
     --time)
       explicit_time="$2"
       shift 2
+      ;;
+    --sbatch-arg)
+      extra_sbatch_args+=("$2")
+      shift 2
+      ;;
+    --sbatch-arg=*)
+      extra_sbatch_args+=("${1#*=}")
+      shift
       ;;
     --dry-run)
       dry_run=1
@@ -202,6 +213,9 @@ fi
 cmd=(sbatch)
 if [[ -n "$resolved_time" ]]; then
   cmd+=("--time=$resolved_time")
+fi
+if [[ ${#extra_sbatch_args[@]} -gt 0 ]]; then
+  cmd+=("${extra_sbatch_args[@]}")
 fi
 cmd+=("$script_path")
 if [[ $# -gt 0 ]]; then

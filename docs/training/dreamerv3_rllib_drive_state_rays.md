@@ -1,14 +1,14 @@
-# DreamerV3 RLlib Runbook (`drive_state` + `rays`)
+# DreamerV3 RLlib Runbook ( `drive_state` + `rays` )
 
 This runbook documents a reproducible RLlib DreamerV3 workflow for Robot SF using
-the default non-image observation contract (`drive_state`, `rays`).
+the default non-image observation contract ( `drive_state` , `rays` ).
 
 Current scope note:
 
-- BR-08 prep is reproducible and benchmark-reset-v2 aligned.
-- The current launcher is still built on the unified env/map-pool surface, not the
+* BR-08 prep is reproducible and benchmark-reset-v2 aligned.
+* The current launcher is still built on the unified env/map-pool surface, not the
   scenario-matrix/all-SVG pipeline used by PPO benchmark runs.
-- Treat DreamerV3 here as a challenger training track with a clean launch/eval contract,
+* Treat DreamerV3 here as a challenger training track with a clean launch/eval contract, 
   not yet as full scenario-matrix parity with PPO.
 
 ## 1) Prerequisites
@@ -20,7 +20,7 @@ uv sync --extra rllib
 source .venv/bin/activate
 ```
 
-Note: the imitation pipeline now lives in a separate dependency group (`--group imitation`).
+Note: the imitation pipeline now lives in a separate dependency group ( `--group imitation` ).
 
 Headless execution is recommended for training servers:
 
@@ -32,7 +32,13 @@ export SDL_VIDEODRIVER=dummy
 
 ## 2) Canonical Command
 
-Use this as the default full launch command:
+Use this wrapper as the default full launch command:
+
+```bash
+scripts/training/run_dreamerv3_br08.sh full
+```
+
+Direct launcher equivalent:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
@@ -41,13 +47,17 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 Why this command is canonical:
 
-- pins Ray workers to the same Python executable as the driver (`runtime_env.py_executable`)
-- disables `uv run` runtime-env propagation in Ray (`ray.disable_uv_run_runtime_env: true`)
-- uses curated runtime package excludes to avoid large uploads (`ray.runtime_env.excludes`)
+* pins Ray workers to the same Python executable as the driver (`runtime_env.py_executable`)
+* disables `uv run` runtime-env propagation in Ray (`ray.disable_uv_run_runtime_env: true`)
+* uses curated runtime package excludes to avoid large uploads (`ray.runtime_env.excludes`)
 
-Use `configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml` for the gate run.
+Use `gate` for the short validation run:
 
-Canonical BR-08 gate command:
+```bash
+scripts/training/run_dreamerv3_br08.sh gate
+```
+
+Direct launcher equivalent:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
@@ -58,12 +68,12 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 Both BR-08 Dreamer configs include these reliability settings:
 
-- `ray.disable_uv_run_runtime_env: true`
-- `ray.runtime_env.working_dir: .`
-- `ray.runtime_env.excludes: [...]` (e.g. `.git`, `.venv`, `output`, caches, large media)
-- action/observation contract fixes for float32-compatible env outputs
-- `env.factory_kwargs.reward_name: route_completion_v3`
-- success-priority reward weights aligned with the current benchmark-reset PPO runs
+* `ray.disable_uv_run_runtime_env: true`
+* `ray.runtime_env.working_dir: .`
+* `ray.runtime_env.excludes: [...]` (e.g. `.git`,  `.venv`,  `output`, caches, large media)
+* action/observation contract fixes for float32-compatible env outputs
+* `env.factory_kwargs.reward_name: route_completion_v3`
+* success-priority reward weights aligned with the current benchmark-reset PPO runs
 
 These prevent worker-side uv rebuild loops and reduce startup package overhead.
 
@@ -72,9 +82,7 @@ These prevent worker-side uv rebuild loops and reduce startup package overhead.
 Use dry-run to validate YAML parsing and resolved settings:
 
 ```bash
-uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml \
-  --dry-run
+scripts/training/run_dreamerv3_br08.sh gate --dry-run
 ```
 
 ## 5) Launch Patterns (Auxme)
@@ -86,8 +94,7 @@ srun -p <partition> --gres=gpu:a30:1 --cpus-per-task=24 --mem=64G --time=24:00:0
 tmux new -s dreamer
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
-uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
+scripts/training/run_dreamerv3_br08.sh full
 ```
 
 Detach/reattach:
@@ -112,8 +119,7 @@ sbatch <<'EOF'
 set -euo pipefail
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
-uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
+scripts/training/run_dreamerv3_br08.sh full
 EOF
 ```
 
@@ -124,13 +130,13 @@ DreamerV3 promotion should follow the same success-first philosophy as PPO:
 1. train the gate/full run,
 2. benchmark the best exported checkpoint,
 3. compare against the current promoted PPO champion on success, collision split,
-   timeout rate, and then SNQI,
+   timeout rate, and then SNQI, 
 4. only promote if the full benchmark result is a genuine improvement.
 
 Current limitation:
 
-- `train_dreamerv3_rllib.py` does not yet expose the full scenario-matrix training surface.
-- Benchmark comparison should therefore be treated as a challenger evaluation step after
+* `train_dreamerv3_rllib.py` does not yet expose the full scenario-matrix training surface.
+* Benchmark comparison should therefore be treated as a challenger evaluation step after
   training, not proof that Dreamer trained on the same all-scenarios curriculum as PPO.
 
 ## 6) Monitoring Checklist
@@ -154,8 +160,8 @@ ls -lah "$RUN_DIR/checkpoints"
 
 ### W&B
 
-- online mode (`*_auxme_a30_full.yaml`): check project dashboard live
-- offline mode (`drive_state_rays.yaml`): sync later with:
+* online mode (`*_auxme_a30_full.yaml`): check project dashboard live
+* offline mode (`drive_state_rays.yaml`): sync later with:
 
 ```bash
 wandb sync output/wandb/wandb/offline-run-*
@@ -182,18 +188,20 @@ sattach <jobid>.0
 
 ### Case C: startup warnings/failures
 
-- Worker env mismatch warnings: ensure `ray.disable_uv_run_runtime_env: true` is present.
-- Large package upload warnings: verify `ray.runtime_env.excludes` in YAML.
-- If `result.jsonl` stops updating for prolonged time, treat run as stalled and restart.
+* Worker env mismatch warnings: ensure `ray.disable_uv_run_runtime_env: true` is present.
+* Large package upload warnings: verify `ray.runtime_env.excludes` in YAML.
+* If `result.jsonl` stops updating for prolonged time, treat run as stalled and restart.
 
 ## 8) Outputs
 
 Artifacts are written under:
 
-`output/dreamerv3/<run_id>_<timestamp>/`
+ `output/dreamerv3/<run_id>_<timestamp>/`
 
 Key files:
 
-- `checkpoints/` (periodic + final RLlib checkpoints)
-- `result.jsonl` (JSONL per-iteration progress stream for live monitoring)
-- `run_summary.json` (iteration history and run metadata)
+* `checkpoints/` (periodic + final RLlib checkpoints)
+* `result.jsonl` (JSONL per-iteration progress stream for live monitoring)
+* `run_summary.json` (iteration history and run metadata)
+* `run_meta.json` (repo/branch/commit, CLI, seed report, resource resolution, status)
+* `resolved_config.json` (fully resolved Dreamer config captured with the run)

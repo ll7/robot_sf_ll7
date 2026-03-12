@@ -254,6 +254,32 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _run_benchmark_gate(
+    benchmark_cmd: list[str],
+    benchmark_jsonl: Path,
+) -> tuple[dict[str, Any], subprocess.CalledProcessError | None]:
+    """Run benchmark evaluation and still return a failed gate summary on subprocess errors."""
+    benchmark_error: subprocess.CalledProcessError | None = None
+    try:
+        subprocess.run(benchmark_cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        benchmark_error = exc
+        logger.warning("Benchmark gate failed with exit code {}: {}", exc.returncode, exc)
+
+    if benchmark_jsonl.exists():
+        benchmark_records = _load_jsonl_records(benchmark_jsonl)
+    elif benchmark_error is None:
+        raise FileNotFoundError(f"Expected benchmark JSONL missing: {benchmark_jsonl}")
+    else:
+        benchmark_records = []
+
+    benchmark_gate = _benchmark_summary(benchmark_records)
+    if benchmark_error is not None:
+        benchmark_gate["gate_pass"] = False
+        benchmark_gate["runner_exit_code"] = benchmark_error.returncode
+    return benchmark_gate, benchmark_error
+
+
 def _registry_entry_from_candidate(
     *,
     model_id: str,
@@ -466,9 +492,7 @@ def main() -> int:
     if args.benchmark_snqi_baseline:
         benchmark_cmd.extend(["--snqi-baseline", str(args.benchmark_snqi_baseline)])
     logger.info("Running benchmark gate via: {}", " ".join(benchmark_cmd))
-    subprocess.run(benchmark_cmd, check=True)
-    benchmark_records = _load_jsonl_records(benchmark_jsonl)
-    benchmark_gate = _benchmark_summary(benchmark_records)
+    benchmark_gate, _benchmark_error = _run_benchmark_gate(benchmark_cmd, benchmark_jsonl)
     benchmark_summary_path = benchmark_root / "summary.json"
     benchmark_summary_path.write_text(json.dumps(benchmark_gate, indent=2), encoding="utf-8")
     benchmark_result = {

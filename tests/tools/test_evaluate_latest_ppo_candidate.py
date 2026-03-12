@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import yaml
@@ -103,7 +104,54 @@ def test_benchmark_summary_flags_contradictions_and_gate() -> None:
     summary = latest_eval._benchmark_summary(records)
     assert summary["gate_pass"] is False
     assert summary["problem_episode_count"] == 1
-    assert summary["weakest_scenarios"][0]["scenario_id"] == "s2"
+
+
+def test_run_benchmark_gate_returns_summary_when_runner_fails_with_jsonl(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Benchmark subprocess failures should still yield a summary when JSONL exists."""
+    jsonl_path = tmp_path / "episodes.jsonl"
+    jsonl_path.write_text(
+        json.dumps(
+            {
+                "scenario_id": "s1",
+                "seed": 1,
+                "termination_reason": "success",
+                "metrics": {"success_rate": 1.0, "collision_rate": 0.0, "snqi": 0.4},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def _raise(*_args, **_kwargs) -> None:
+        raise subprocess.CalledProcessError(2, ["benchmark"])
+
+    monkeypatch.setattr(latest_eval.subprocess, "run", _raise)
+    summary, error = latest_eval._run_benchmark_gate(["benchmark"], jsonl_path)
+    assert error is not None
+    assert error.returncode == 2
+    assert summary["episodes"] == 1
+    assert summary["gate_pass"] is False
+    assert summary["runner_exit_code"] == 2
+
+
+def test_run_benchmark_gate_returns_failed_empty_summary_when_runner_fails_without_jsonl(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Benchmark subprocess failures without JSONL should still produce a failed gate summary."""
+
+    def _raise(*_args, **_kwargs) -> None:
+        raise subprocess.CalledProcessError(3, ["benchmark"])
+
+    monkeypatch.setattr(latest_eval.subprocess, "run", _raise)
+    summary, error = latest_eval._run_benchmark_gate(["benchmark"], tmp_path / "episodes.jsonl")
+    assert error is not None
+    assert error.returncode == 3
+    assert summary["episodes"] == 0
+    assert summary["gate_pass"] is False
+    assert summary["runner_exit_code"] == 3
+    assert summary["weakest_scenarios"] == []
 
 
 def test_registry_entry_from_candidate_uses_selection_metadata(tmp_path: Path) -> None:

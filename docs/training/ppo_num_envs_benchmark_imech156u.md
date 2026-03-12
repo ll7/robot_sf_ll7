@@ -67,6 +67,27 @@ Do not default to `num_envs=32` on this host. It is slightly faster than `30`
 on env-steps/sec, but worse on `time/fps`, pushes memory usage to the same
 ceiling, and produced worse early policy quality.
 
+## Auto modes
+
+PPO now supports two host-aware auto sizing modes:
+
+- `num_envs: auto_throughput`
+  - default behavior
+  - aims for the highest practical env count while still leaving a small
+    learner/OS margin
+- `num_envs: auto_stable`
+  - conservative mode
+  - leaves materially more memory headroom for long runs and background system
+    overhead
+
+`num_envs: auto` resolves to `auto_throughput`.
+
+Important:
+
+- use the auto modes for host-adaptive runs,
+- keep explicit numeric `num_envs` in benchmark configs when exact
+  reproducibility matters.
+
 ## Configs
 
 Run these configs in this order:

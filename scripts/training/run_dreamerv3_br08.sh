@@ -6,13 +6,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 show_help() {
   cat <<'EOF'
-Usage: scripts/training/run_dreamerv3_br08.sh <gate|full> [dreamer-args...]
+Usage: scripts/training/run_dreamerv3_br08.sh <gate|full|benchmark-gate|benchmark-full> [dreamer-args...]
 
 Launch the BR-08 RLlib DreamerV3 training profiles with the repository virtualenv,
 headless-safe defaults, and canonical config paths.
 
 Examples:
   scripts/training/run_dreamerv3_br08.sh gate --dry-run
+  scripts/training/run_dreamerv3_br08.sh benchmark-gate --dry-run
   scripts/training/run_dreamerv3_br08.sh full --log-level INFO
 EOF
 }
@@ -31,6 +32,12 @@ case "$profile" in
     ;;
   full)
     config_path="configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml"
+    ;;
+  benchmark-gate)
+    config_path="configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml"
+    ;;
+  benchmark-full)
+    config_path="configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml"
     ;;
   -h|--help)
     show_help

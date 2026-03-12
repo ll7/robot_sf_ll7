@@ -1,11 +1,14 @@
-# DreamerV3 RLlib Runbook ( `drive_state` + `rays` )
+# DreamerV3 RLlib Runbook
 
 This runbook documents a reproducible RLlib DreamerV3 workflow for Robot SF using
-the default non-image observation contract ( `drive_state` , `rays` ).
+the current non-image observation contracts used for Dreamer benchmarking.
 
 Current scope note:
 
 * BR-08 prep is reproducible and benchmark-reset-v2 aligned.
+* Two observation variants are maintained on purpose:
+  + `gate` / `full`: legacy challenger runs on flattened `drive_state + rays`
+  + `benchmark-gate` / `benchmark-full`: benchmark-aligned `socnav_struct + occupancy_grid`
 * The current launcher is still built on the unified env/map-pool surface, not the
   scenario-matrix/all-SVG pipeline used by PPO benchmark runs.
 * Treat DreamerV3 here as a challenger training track with a clean launch/eval contract, 
@@ -35,14 +38,14 @@ export SDL_VIDEODRIVER=dummy
 Use this wrapper as the default full launch command:
 
 ```bash
-scripts/training/run_dreamerv3_br08.sh full
+scripts/training/run_dreamerv3_br08.sh benchmark-full
 ```
 
 Direct launcher equivalent:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
 ```
 
 Why this command is canonical:
@@ -51,29 +54,39 @@ Why this command is canonical:
 * disables `uv run` runtime-env propagation in Ray (`ray.disable_uv_run_runtime_env: true`)
 * uses curated runtime package excludes to avoid large uploads (`ray.runtime_env.excludes`)
 
-Use `gate` for the short validation run:
+Use `benchmark-gate` for the short benchmark-aligned validation run:
 
 ```bash
-scripts/training/run_dreamerv3_br08.sh gate
+scripts/training/run_dreamerv3_br08.sh benchmark-gate
 ```
 
 Direct launcher equivalent:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml
 ```
+
+Legacy vector-only challenger profiles remain available via `gate` and `full` when
+you want to compare Dreamer against a simpler `drive_state + rays` input contract.
 
 ## 3) Config Notes
 
-Both BR-08 Dreamer configs include these reliability settings:
+All BR-08 Dreamer configs include these reliability settings:
 
 * `ray.disable_uv_run_runtime_env: true`
 * `ray.runtime_env.working_dir: .`
-* `ray.runtime_env.excludes: [...]` (e.g. `.git`,  `.venv`,  `output`, caches, large media)
+* `ray.runtime_env.excludes: [...]` (e.g. `.git`,   `.venv`,   `output`, caches, large media)
 * action/observation contract fixes for float32-compatible env outputs
 * `env.factory_kwargs.reward_name: route_completion_v3`
 * success-priority reward weights aligned with the current benchmark-reset PPO runs
+
+The benchmark-aligned profiles additionally set:
+
+* `env.config.observation_mode: socnav_struct`
+* `env.config.use_occupancy_grid: true`
+* `env.config.include_grid_in_observation: true`
+* `env.flatten_keys: null` so Dreamer flattens the full benchmark observation surface
 
 These prevent worker-side uv rebuild loops and reduce startup package overhead.
 
@@ -83,6 +96,7 @@ Use dry-run to validate YAML parsing and resolved settings:
 
 ```bash
 scripts/training/run_dreamerv3_br08.sh gate --dry-run
+scripts/training/run_dreamerv3_br08.sh benchmark-gate --dry-run
 ```
 
 ## 5) Launch Patterns (Auxme)
@@ -94,7 +108,7 @@ srun -p <partition> --gres=gpu:a30:1 --cpus-per-task=24 --mem=64G --time=24:00:0
 tmux new -s dreamer
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
-scripts/training/run_dreamerv3_br08.sh full
+scripts/training/run_dreamerv3_br08.sh benchmark-full
 ```
 
 Detach/reattach:

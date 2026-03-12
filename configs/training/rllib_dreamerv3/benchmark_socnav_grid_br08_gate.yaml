@@ -1,0 +1,94 @@
+# BR-08 gate profile for DreamerV3 RLlib on the benchmark-aligned SocNav+grid contract.
+# This is the canonical short validation run before long benchmark-focused training.
+experiment:
+  run_id: dreamerv3_br08_benchmark_socnav_grid_gate
+  output_root: output/dreamerv3
+  train_iterations: 60
+  checkpoint_every: 20
+  seed: 123
+  log_level: WARNING
+
+ray:
+  address: null
+  local_mode: false
+  include_dashboard: false
+  num_cpus: 8
+  num_gpus: 0
+  disable_uv_run_runtime_env: true
+  runtime_env:
+    working_dir: .
+    excludes:
+      - ".git"
+      - ".venv"
+      - ".pytest_cache"
+      - ".ruff_cache"
+      - "__pycache__"
+      - "output"
+      - "results"
+      - "dist"
+      - "robot_sf.egg-info"
+      - "*.mp4"
+      - "*.gif"
+
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf_dreamerv3
+    group: br08-benchmark-socnav-grid-gate
+    job_type: train
+    mode: offline
+    tags: [dreamerv3, rllib, br08, benchmark-reset-v2, gate, socnav_struct, occupancy_grid]
+    dir: output/wandb
+
+env:
+  flatten_observation: true
+  flatten_keys: null
+  normalize_actions: true
+  factory_kwargs:
+    debug: false
+    recording_enabled: false
+    reward_name: route_completion_v3
+    reward_kwargs:
+      weights:
+        progress: 1.1
+        living: -0.015
+        collision: -15.0
+        near_miss: -3.0
+        ttc_risk: -2.8
+        comfort: -0.5
+        smoothness: -0.18
+        timeout: -6.5
+        stagnation: -2.0
+        terminal_bonus: 20.0
+  config:
+    observation_mode: socnav_struct
+    use_image_obs: false
+    use_occupancy_grid: true
+    include_grid_in_observation: true
+    grid_config:
+      resolution: 0.2
+      width: 32.0
+      height: 32.0
+      channels: [obstacles, pedestrians, combined]
+      use_ego_frame: true
+      center_on_robot: true
+
+algorithm:
+  framework: torch
+  env_runners:
+    num_env_runners: 4
+    num_envs_per_env_runner: 1
+    rollout_fragment_length: 16
+  resources:
+    num_gpus: 0
+  learners:
+    num_learners: 0
+  training:
+    model_size: XS
+    training_ratio: 64
+    batch_size_B: 16
+    batch_length_T: 32
+    horizon_H: 10
+    world_model_lr: 0.0001
+    actor_lr: 0.00003
+    critic_lr: 0.00003

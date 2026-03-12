@@ -183,16 +183,31 @@ algorithm:
     summary_path = run_dir / "run_summary.json"
     result_path = run_dir / "result.jsonl"
     checkpoint_dir = run_dir / "checkpoints"
+    run_meta_path = run_dir / "run_meta.json"
+    resolved_config_path = run_dir / "resolved_config.json"
     assert summary_path.exists()
     assert result_path.exists()
     assert checkpoint_dir.exists()
+    assert run_meta_path.exists()
+    assert resolved_config_path.exists()
 
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["run_id"] == "smoke"
     assert summary["train_iterations"] == 2
+    assert summary["run_meta_path"] == str(run_meta_path)
+    assert summary["resolved_config_path"] == str(resolved_config_path)
+    assert summary["seed_report"]["seed"] == 11
     assert len(summary["history"]) == 2
     assert summary["scenario_matrix_path"] is None
     assert summary["randomize_seeds"] is False
+
+    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    assert run_meta["status"] == "succeeded"
+    assert run_meta["seed_report"]["seed"] == 11
+    assert run_meta["artifacts"]["summary_path"] == str(summary_path)
+
+    resolved_config = json.loads(resolved_config_path.read_text(encoding="utf-8"))
+    assert resolved_config["experiment"]["run_id"] == "smoke"
 
     result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(result_lines) == 2
@@ -237,6 +252,12 @@ algorithm:
 
     assert fake_algo.stop_called is True
     assert fake_ray.shutdown_called is True
+    run_dir = run_config.experiment.output_root / "smoke_fail_20260211T120000Z"
+    run_meta_path = run_dir / "run_meta.json"
+    assert run_meta_path.exists()
+    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    assert run_meta["status"] == "failed"
+    assert run_meta["error"]["type"] == "RuntimeError"
 
 
 def test_make_env_creator_uses_scenario_switching_env_when_matrix_configured(

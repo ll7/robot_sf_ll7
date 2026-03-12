@@ -67,7 +67,6 @@ env:
   config:
     use_image_obs: false
     include_grid_in_observation: false
-    randomize_seeds: true
 
 algorithm:
   framework: torch

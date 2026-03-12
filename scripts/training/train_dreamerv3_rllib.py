@@ -7,6 +7,8 @@ import copy
 import json
 import logging
 import os
+import platform
+import subprocess
 import sys
 from dataclasses import dataclass, is_dataclass
 from datetime import UTC, datetime
@@ -16,7 +18,9 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.common.hardware import detect_hardware_capacity, recommend_env_runners
+from robot_sf.common.seed import set_global_seed
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
@@ -755,6 +759,35 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
         handle.write("\n")
 
 
+def _run_git(repo_root: Path, *args: str) -> str | None:
+    """Execute a git command and return trimmed stdout when available."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    output = result.stdout.strip()
+    return output or None
+
+
+def _repo_name_from_remote(remote: str | None, repo_root: Path) -> str:
+    """Infer a repository name from a git remote URL."""
+    if not remote:
+        return repo_root.name
+    normalized = remote.rstrip("/")
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+    tail = normalized.rsplit("/", 1)[-1]
+    if ":" in tail:
+        tail = tail.rsplit(":", 1)[-1]
+    return tail or repo_root.name
+
+
 def _serialize_for_wandb(value: Any) -> Any:
     """Recursively convert dataclass/path values into wandb-friendly primitives."""
     if isinstance(value, Path):
@@ -764,11 +797,126 @@ def _serialize_for_wandb(value: Any) -> Any:
             key: _serialize_for_wandb(getattr(value, key))
             for key in value.__dataclass_fields__  # type: ignore[attr-defined]
         }
+    if hasattr(value, "__dict__"):
+        return {
+            str(key): _serialize_for_wandb(val)
+            for key, val in vars(value).items()
+            if not str(key).startswith("_")
+        }
     if isinstance(value, dict):
         return {str(k): _serialize_for_wandb(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [_serialize_for_wandb(v) for v in value]
     return value
+
+
+def _build_run_meta(
+    run_config: DreamerRunConfig,
+    *,
+    run_dir: Path,
+    run_stamp: str,
+    config_path: Path | None,
+    shared_capacity: object | None,
+    seed_report: object,
+    status: str,
+    checkpoint_dir: Path,
+    result_log_path: Path,
+    summary_path: Path,
+    resolved_config_path: Path,
+    error: BaseException | None = None,
+) -> dict[str, object]:
+    """Build run-level provenance metadata for one DreamerV3 execution."""
+    repo_root = get_repository_root()
+    remote = _run_git(repo_root, "config", "--get", "remote.origin.url")
+    branch = _run_git(repo_root, "rev-parse", "--abbrev-ref", "HEAD")
+    commit = _run_git(repo_root, "rev-parse", "HEAD")
+    argv = [str(value) for value in (sys.argv or [])]
+    command = argv[0] if argv else "unknown"
+    args = argv[1:] if argv else []
+    config_path_text = str(config_path.resolve()) if config_path is not None else None
+    return {
+        "run_id": run_config.experiment.run_id,
+        "run_stamp_utc": run_stamp,
+        "status": status,
+        "source_config_path": config_path_text,
+        "repo": {
+            "name": _repo_name_from_remote(remote, repo_root),
+            "remote": remote or "unknown",
+            "branch": branch or "unknown",
+            "commit": commit or "unknown",
+        },
+        "cli": {
+            "command": command,
+            "args": args,
+        },
+        "environment": {
+            "python_version": (
+                f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            ),
+            "platform": platform.platform(),
+            "cwd": str(Path.cwd().resolve()),
+        },
+        "seed_report": _serialize_for_wandb(seed_report),
+        "ray": {
+            "address": run_config.ray.address,
+            "local_mode": run_config.ray.local_mode,
+            "include_dashboard": run_config.ray.include_dashboard,
+            "num_cpus": run_config.ray.num_cpus,
+            "num_gpus": run_config.ray.num_gpus,
+            "disable_uv_run_runtime_env": run_config.ray.disable_uv_run_runtime_env,
+            "runtime_env": _serialize_for_wandb(run_config.ray.runtime_env),
+        },
+        "auto_capacity": _serialize_for_wandb(shared_capacity),
+        "artifacts": {
+            "run_dir": str(run_dir),
+            "checkpoint_dir": str(checkpoint_dir),
+            "result_log_path": str(result_log_path),
+            "summary_path": str(summary_path),
+            "resolved_config_path": str(resolved_config_path),
+        },
+        "resolved_config": _serialize_for_wandb(run_config),
+        "error": (
+            {"type": type(error).__name__, "message": str(error)} if error is not None else None
+        ),
+    }
+
+
+def _write_run_bookkeeping(
+    run_config: DreamerRunConfig,
+    *,
+    run_dir: Path,
+    run_stamp: str,
+    config_path: Path | None,
+    shared_capacity: object | None,
+    seed_report: object,
+    status: str,
+    checkpoint_dir: Path,
+    result_log_path: Path,
+    summary_path: Path,
+    error: BaseException | None = None,
+) -> tuple[Path, Path]:
+    """Persist resolved config and run metadata for the current run state."""
+    resolved_config_path = run_dir / "resolved_config.json"
+    _write_json(resolved_config_path, _serialize_for_wandb(run_config))
+    run_meta_path = run_dir / "run_meta.json"
+    _write_json(
+        run_meta_path,
+        _build_run_meta(
+            run_config,
+            run_dir=run_dir,
+            run_stamp=run_stamp,
+            config_path=config_path,
+            shared_capacity=shared_capacity,
+            seed_report=seed_report,
+            status=status,
+            checkpoint_dir=checkpoint_dir,
+            result_log_path=result_log_path,
+            summary_path=summary_path,
+            resolved_config_path=resolved_config_path,
+            error=error,
+        ),
+    )
+    return resolved_config_path, run_meta_path
 
 
 def _init_wandb_tracking(run_config: DreamerRunConfig, *, run_stamp: str):
@@ -937,7 +1085,7 @@ def _run_training_iterations(
     return history
 
 
-def run_training(run_config: DreamerRunConfig) -> int:
+def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = None) -> int:
     """Execute the DreamerV3 training loop and persist run artifacts."""
     if run_config.ray.disable_uv_run_runtime_env:
         os.environ[_RAY_ENABLE_UV_RUN_RUNTIME_ENV_ENV_VAR] = "0"
@@ -955,6 +1103,19 @@ def run_training(run_config: DreamerRunConfig) -> int:
     result_log_path = run_dir / "result.jsonl"
     history: list[dict[str, object]] = []
     shared_capacity = _detect_shared_capacity(run_config)
+    seed_report = set_global_seed(run_config.experiment.seed)
+    resolved_config_path, run_meta_path = _write_run_bookkeeping(
+        run_config,
+        run_dir=run_dir,
+        run_stamp=run_stamp,
+        config_path=config_path,
+        shared_capacity=shared_capacity,
+        seed_report=seed_report,
+        status="initializing",
+        checkpoint_dir=checkpoint_dir,
+        result_log_path=result_log_path,
+        summary_path=summary_path,
+    )
     try:
         wandb_run = _init_wandb_tracking(run_config, run_stamp=run_stamp)
         env_name = f"robot_sf_dreamerv3_{run_config.experiment.run_id}"
@@ -1003,14 +1164,45 @@ def run_training(run_config: DreamerRunConfig) -> int:
                 "randomize_seeds": bool(
                     run_config.env.config_overrides.get("randomize_seeds", False)
                 ),
+                "run_meta_path": str(run_meta_path),
+                "resolved_config_path": str(resolved_config_path),
+                "seed_report": _serialize_for_wandb(seed_report),
                 "history": history,
             },
+        )
+        resolved_config_path, run_meta_path = _write_run_bookkeeping(
+            run_config,
+            run_dir=run_dir,
+            run_stamp=run_stamp,
+            config_path=config_path,
+            shared_capacity=shared_capacity,
+            seed_report=seed_report,
+            status="succeeded",
+            checkpoint_dir=checkpoint_dir,
+            result_log_path=result_log_path,
+            summary_path=summary_path,
         )
         if wandb_run is not None:
             wandb_run.summary["run_summary_path"] = str(summary_path)
             wandb_run.summary["checkpoint_dir"] = str(checkpoint_dir)
+            wandb_run.summary["run_meta_path"] = str(run_meta_path)
         logger.info("DreamerV3 run summary written to {}", summary_path)
         return 0
+    except Exception as exc:
+        _write_run_bookkeeping(
+            run_config,
+            run_dir=run_dir,
+            run_stamp=run_stamp,
+            config_path=config_path,
+            shared_capacity=shared_capacity,
+            seed_report=seed_report,
+            status="failed",
+            checkpoint_dir=checkpoint_dir,
+            result_log_path=result_log_path,
+            summary_path=summary_path,
+            error=exc,
+        )
+        raise
     finally:
         if algo is not None and hasattr(algo, "stop"):
             algo.stop()
@@ -1110,7 +1302,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    return run_training(run_config)
+    return run_training(run_config, config_path=args.config)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entrypoint

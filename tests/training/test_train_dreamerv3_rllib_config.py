@@ -364,4 +364,5 @@ def test_repo_br08_configs_load_with_expected_reward_contract(
     assert isinstance(weights, dict)
     assert weights["terminal_bonus"] == 20.0
     assert weights["collision"] == -15.0
-    assert run_config.env.config_overrides["randomize_seeds"] is True
+    assert run_config.env.config_overrides["use_image_obs"] is False
+    assert run_config.env.config_overrides["include_grid_in_observation"] is False

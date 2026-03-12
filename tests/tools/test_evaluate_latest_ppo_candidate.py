@@ -21,7 +21,7 @@ def test_promotion_summary_flags_gate_and_weakest_scenarios() -> None:
             "success_rate": 0.85,
             "collision_rate": 0.05,
             "termination_reason_counts": {"success": 8, "collision": 1, "max_steps": 1},
-            "metric_means": {"path_efficiency": 0.7},
+            "metric_means": {"path_efficiency": 0.7, "snqi": 0.2},
         },
         "aggregates": {
             "s1": {"success_rate": {"mean": 1.0}, "collision_rate": {"mean": 0.0}},
@@ -32,6 +32,7 @@ def test_promotion_summary_flags_gate_and_weakest_scenarios() -> None:
     summary = latest_eval._promotion_summary(payload)
     assert summary["gate_pass"] is True
     assert summary["episodes"] == 10
+    assert summary["snqi"] == 0.2
     assert summary["weakest_scenarios"][0]["scenario_id"] == "s2"
 
 
@@ -43,7 +44,7 @@ def test_promotion_summary_rejects_problematic_candidate() -> None:
             "success_rate": 0.6,
             "collision_rate": 0.2,
             "termination_reason_counts": {"success": 3, "collision": 1, "max_steps": 1},
-            "metric_means": {},
+            "metric_means": {"snqi": -0.1},
         },
         "aggregates": {},
         "problem_episodes": [{"scenario_id": "bad", "seed": 1}],
@@ -90,18 +91,18 @@ def test_benchmark_summary_flags_contradictions_and_gate() -> None:
             "scenario_id": "s1",
             "seed": 1,
             "termination_reason": "success",
-            "metrics": {"success_rate": 1.0, "collision_rate": 0.0},
+            "metrics": {"success_rate": 1.0, "collision_rate": 0.0, "snqi": 0.4},
         },
         {
             "scenario_id": "s2",
             "seed": 2,
             "termination_reason": "collision",
-            "metrics": {"success_rate": 1.0, "collision_rate": 1.0},
+            "metrics": {"success_rate": 1.0, "collision_rate": 1.0, "snqi": -0.2},
         },
     ]
     summary = latest_eval._benchmark_summary(records)
     assert summary["gate_pass"] is False
-    assert summary["problem_episode_count"] == 2
+    assert summary["problem_episode_count"] == 1
     assert summary["weakest_scenarios"][0]["scenario_id"] == "s2"
 
 
@@ -116,16 +117,18 @@ def test_registry_entry_from_candidate_uses_selection_metadata(tmp_path: Path) -
             "run_name": "ppo_candidate_run",
         },
         checkpoint_path=tmp_path / "model.zip",
-        training_config=tmp_path / "train.yaml",
         decision={
-            "policy_gate": {"success_rate": 0.9, "collision_rate": 0.05},
-            "benchmark_gate": {"success_rate": 0.85, "collision_rate": 0.08},
+            "policy_gate": {"success_rate": 0.9, "collision_rate": 0.05, "snqi": 0.3},
+            "benchmark_gate": {"success_rate": 0.85, "collision_rate": 0.08, "snqi": 0.2},
         },
+        wandb_entity="ll7",
+        wandb_project="robot_sf",
     )
     assert entry["model_id"] == "ppo_candidate"
     assert entry["wandb_run_path"] == "ll7/robot_sf/abc123"
     assert entry["wandb_entity"] == "ll7"
     assert entry["wandb_project"] == "robot_sf"
+    assert "config_path" not in entry
     assert "Promoted via scripts/tools/evaluate_latest_ppo_candidate.py." in entry["notes"][0]
 
 
@@ -155,11 +158,14 @@ def test_write_promotion_report_includes_benchmark_and_decision(tmp_path: Path) 
             "policy_gate": {
                 "success_rate": 0.9,
                 "collision_rate": 0.05,
+                "snqi": 0.25,
+                "problem_episode_count": 0,
                 "gate_pass": True,
             },
             "benchmark_gate": {
                 "success_rate": 0.85,
                 "collision_rate": 0.08,
+                "snqi": 0.22,
                 "problem_episode_count": 0,
                 "gate_pass": True,
                 "weakest_scenarios": [

@@ -18,8 +18,10 @@ from robot_sf.models import resolve_latest_wandb_model, upsert_registry_entry
 
 POLICY_SUCCESS_THRESHOLD = 0.80
 POLICY_COLLISION_THRESHOLD = 0.10
+POLICY_SNQI_THRESHOLD = 0.0
 BENCHMARK_SUCCESS_THRESHOLD = 0.80
 BENCHMARK_COLLISION_THRESHOLD = 0.10
+BENCHMARK_SNQI_THRESHOLD = 0.0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -60,6 +62,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark-workers", type=int, default=1)
     parser.add_argument("--benchmark-horizon", type=int, default=120)
     parser.add_argument("--benchmark-dt", type=float, default=0.1)
+    parser.add_argument("--benchmark-snqi-weights", type=Path)
+    parser.add_argument("--benchmark-snqi-baseline", type=Path)
     parser.add_argument("--registry-path", type=Path, default=Path("model/registry.yaml"))
     parser.add_argument(
         "--promote",
@@ -100,18 +104,23 @@ def _promotion_summary(summary_payload: dict[str, Any]) -> dict[str, Any]:
 
     success_rate = float(summary.get("success_rate", 0.0))
     collision_rate = float(summary.get("collision_rate", 0.0))
+    snqi = float(metric_means.get("snqi", 0.0) or 0.0)
+    problem_episode_count = len(problem_episodes)
     return {
         "episodes": int(summary.get("episodes", 0)),
         "success_rate": success_rate,
         "collision_rate": collision_rate,
+        "snqi": snqi,
         "ped_collision_count": int(termination_counts.get("collision", 0)),
         "termination_reason_counts": termination_counts,
         "metric_means": metric_means,
-        "problem_episode_count": len(problem_episodes),
+        "problem_episode_count": problem_episode_count,
         "weakest_scenarios": weakest,
         "gate_pass": (
             success_rate >= POLICY_SUCCESS_THRESHOLD
             and collision_rate <= POLICY_COLLISION_THRESHOLD
+            and snqi >= POLICY_SNQI_THRESHOLD
+            and problem_episode_count == 0
         ),
     }
 
@@ -153,16 +162,13 @@ def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _record_metric(record: dict[str, Any], key: str) -> float:
-    return float((record.get("metrics") or {}).get(key, 0.0) or 0.0)
-
-
 def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     if not records:
         return {
             "episodes": 0,
             "success_rate": 0.0,
             "collision_rate": 0.0,
+            "snqi": 0.0,
             "termination_reason_counts": {},
             "problem_episode_count": 0,
             "weakest_scenarios": [],
@@ -175,14 +181,17 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     contradictions: list[dict[str, Any]] = []
     success_sum = 0.0
     collision_sum = 0.0
+    snqi_values: list[float] = []
 
     for record in records:
         metrics = dict(record.get("metrics") or {})
         scenario_id = str(record.get("scenario_id") or "unknown")
         success = float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
         collision = float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
+        snqi = float(metrics.get("snqi", 0.0) or 0.0)
         success_sum += success
         collision_sum += collision
+        snqi_values.append(snqi)
         termination = str(record.get("termination_reason") or "unknown")
         termination_counts[termination] = termination_counts.get(termination, 0) + 1
         row = scenario_rows.setdefault(
@@ -201,7 +210,7 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "reason": "collision_and_success",
                 }
             )
-        if termination == "collision" and success > 0.0:
+        elif termination == "collision" and success > 0.0:
             contradictions.append(
                 {
                     "scenario_id": scenario_id,
@@ -226,10 +235,12 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     episodes = len(records)
     success_rate = success_sum / episodes
     collision_rate = collision_sum / episodes
+    snqi_mean = sum(snqi_values) / len(snqi_values) if snqi_values else 0.0
     return {
         "episodes": episodes,
         "success_rate": success_rate,
         "collision_rate": collision_rate,
+        "snqi": snqi_mean,
         "termination_reason_counts": termination_counts,
         "problem_episode_count": len(contradictions),
         "weakest_scenarios": weakest,
@@ -237,6 +248,7 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "gate_pass": (
             success_rate >= BENCHMARK_SUCCESS_THRESHOLD
             and collision_rate <= BENCHMARK_COLLISION_THRESHOLD
+            and snqi_mean >= BENCHMARK_SNQI_THRESHOLD
             and not contradictions
         ),
     }
@@ -248,27 +260,33 @@ def _registry_entry_from_candidate(
     display_name: str,
     selection: dict[str, Any],
     checkpoint_path: Path,
-    training_config: Path,
     decision: dict[str, Any],
+    wandb_entity: str,
+    wandb_project: str,
 ) -> dict[str, Any]:
+    try:
+        local_path = str(checkpoint_path.relative_to(Path.cwd()))
+    except ValueError:
+        local_path = str(checkpoint_path)
     return {
         "model_id": model_id,
         "display_name": display_name,
-        "local_path": str(checkpoint_path),
-        "config_path": str(training_config),
+        "local_path": local_path,
         "commit": None,
         "wandb_run_id": selection["run_id"],
         "wandb_run_path": selection["run_path"],
-        "wandb_entity": selection["run_path"].split("/")[0],
-        "wandb_project": selection["run_path"].split("/")[1],
+        "wandb_entity": wandb_entity,
+        "wandb_project": wandb_project,
         "wandb_file": Path(checkpoint_path).name,
         "tags": ["ppo", "candidate", "promotion-workflow"],
         "notes": [
             "Promoted via scripts/tools/evaluate_latest_ppo_candidate.py.",
             f"Policy analysis success={decision['policy_gate']['success_rate']:.4f} "
-            f"collision={decision['policy_gate']['collision_rate']:.4f}.",
+            f"collision={decision['policy_gate']['collision_rate']:.4f} "
+            f"snqi={decision['policy_gate']['snqi']:.4f}.",
             f"Benchmark success={decision['benchmark_gate']['success_rate']:.4f} "
-            f"collision={decision['benchmark_gate']['collision_rate']:.4f}.",
+            f"collision={decision['benchmark_gate']['collision_rate']:.4f} "
+            f"snqi={decision['benchmark_gate']['snqi']:.4f}.",
         ],
     }
 
@@ -306,6 +324,8 @@ def _write_promotion_report(
         f"- report_md: `{policy_result['report_md']}`",
         f"- success_rate: `{decision['policy_gate']['success_rate']:.4f}`",
         f"- collision_rate: `{decision['policy_gate']['collision_rate']:.4f}`",
+        f"- snqi: `{decision['policy_gate']['snqi']:.4f}`",
+        f"- problem_episode_count: `{decision['policy_gate']['problem_episode_count']}`",
         f"- gate_pass: `{decision['policy_gate']['gate_pass']}`",
         "",
         "## Benchmark Gate",
@@ -314,6 +334,7 @@ def _write_promotion_report(
         f"- algo_config: `{benchmark_result['algo_config']}`",
         f"- success_rate: `{decision['benchmark_gate']['success_rate']:.4f}`",
         f"- collision_rate: `{decision['benchmark_gate']['collision_rate']:.4f}`",
+        f"- snqi: `{decision['benchmark_gate']['snqi']:.4f}`",
         f"- contradictions: `{decision['benchmark_gate']['problem_episode_count']}`",
         f"- gate_pass: `{decision['benchmark_gate']['gate_pass']}`",
         "",
@@ -440,6 +461,10 @@ def main() -> int:
         str(args.benchmark_dt),
         "--no-resume",
     ]
+    if args.benchmark_snqi_weights:
+        benchmark_cmd.extend(["--snqi-weights", str(args.benchmark_snqi_weights)])
+    if args.benchmark_snqi_baseline:
+        benchmark_cmd.extend(["--snqi-baseline", str(args.benchmark_snqi_baseline)])
     logger.info("Running benchmark gate via: {}", " ".join(benchmark_cmd))
     subprocess.run(benchmark_cmd, check=True)
     benchmark_records = _load_jsonl_records(benchmark_jsonl)
@@ -475,8 +500,9 @@ def main() -> int:
             display_name=display_name,
             selection=selection_payload,
             checkpoint_path=checkpoint_path,
-            training_config=args.training_config.resolve(),
             decision=decision,
+            wandb_entity=str(args.wandb_entity),
+            wandb_project=str(args.wandb_project),
         )
         upsert_registry_entry(entry, registry_path=args.registry_path)
         decision["registry_updated"] = True

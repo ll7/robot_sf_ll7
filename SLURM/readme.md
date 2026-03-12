@@ -8,6 +8,11 @@ For new long-running jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw 
 The wrapper queries the current partition and QoS limits and submits with the effective
 max wall time by default.
 
+For post-run sizing decisions, use the SLURM + W&B audit workflow in
+`docs/dev/slurm_resource_audit.md`. That runbook shows how to compare Slurm
+allocations with W&B `history(stream="system")` metrics and explains why PPO
+`num_envs` should not simply match reserved CPU count.
+
 ## Track CPU and GPU usage
 
 Activate the conda environment:

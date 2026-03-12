@@ -20,12 +20,15 @@ from scripts.training.train_ppo import (
     _BestCheckpointCandidate,
     _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
+    _describe_num_envs_resolution,
     _DirectWandbMetricsCallback,
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _finalize_best_checkpoint,
+    _parse_num_envs,
     _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
+    _resolve_num_envs,
     _resolve_resume_checkpoint,
     _update_wandb_best_checkpoint_summary,
     _upload_wandb_best_checkpoint_artifact,
@@ -274,6 +277,94 @@ def test_load_expert_training_config_allows_missing_frequency_episodes(tmp_path)
 
     assert config.evaluation.frequency_episodes == 0
     assert config.evaluation.step_schedule == ((None, 20000),)
+
+
+def test_parse_num_envs_supports_host_aware_auto_modes() -> None:
+    """Loader helper should normalize supported auto num_envs tokens."""
+
+    assert _parse_num_envs(None) is None
+    assert _parse_num_envs("auto") == "auto_throughput"
+    assert _parse_num_envs("auto_throughput") == "auto_throughput"
+    assert _parse_num_envs("auto_stable") == "auto_stable"
+    assert _parse_num_envs(8) == 8
+
+
+def test_load_expert_training_config_supports_auto_stable_num_envs(tmp_path) -> None:
+    """Configs should preserve host-aware auto num_envs modes."""
+
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "auto_stable.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_auto_stable_test",
+                "scenario_config": str(scenario_config),
+                "num_envs": "auto_stable",
+                "worker_mode": "auto",
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.num_envs == "auto_stable"
+
+
+def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> None:
+    """Auto env modes should resolve to throughput and stable host-aware counts."""
+
+    monkeypatch.setattr("scripts.training.train_ppo.os.cpu_count", lambda: 32)
+    monkeypatch.setattr(
+        "scripts.training.train_ppo._host_memory_gib",
+        lambda: 36.8,
+    )
+
+    base_kwargs = {
+        "scenario_config": Path(
+            "configs/scenarios/classic_interactions_francis2023.yaml"
+        ).resolve(),
+        "seeds": (123,),
+        "total_timesteps": 1000,
+        "policy_id": "ppo_auto_test",
+        "convergence": ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=100,
+        ),
+        "evaluation": EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            hold_out_scenarios=(),
+            step_schedule=((1000, 1000),),
+        ),
+    }
+
+    throughput_cfg = ExpertTrainingConfig(**base_kwargs, num_envs="auto_throughput")
+    stable_cfg = ExpertTrainingConfig(**base_kwargs, num_envs="auto_stable")
+
+    assert _resolve_num_envs(throughput_cfg) == 27
+    assert _resolve_num_envs(stable_cfg) == 13
+
+    throughput_details = _describe_num_envs_resolution(throughput_cfg)
+    stable_details = _describe_num_envs_resolution(stable_cfg)
+    assert throughput_details["mode"] == "auto_throughput"
+    assert throughput_details["decision"] == "throughput heuristic; limited by memory cap"
+    assert throughput_details["memory_cap"] == 27
+    assert stable_details["mode"] == "auto_stable"
+    assert stable_details["decision"] == "stable headroom heuristic; limited by memory cap"
+    assert stable_details["memory_cap"] == 13
 
 
 def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:

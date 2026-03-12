@@ -146,6 +146,13 @@ _DIRECT_WANDB_TRAIN_METRIC_KEYS = (
     "train/policy_gradient_loss",
     "train/entropy_loss",
 )
+_AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB = 6.0
+_AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB = 1.1
+_AUTO_NUM_ENVS_STABLE_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_STABLE_CPU_DIVISOR = 2
+_AUTO_NUM_ENVS_STABLE_HEADROOM_GIB = 20.0
+_AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB = 1.2
 
 
 def _wandb_training_clock() -> float:
@@ -299,12 +306,16 @@ def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
     return tuple(schedule)
 
 
-def _parse_num_envs(raw: object) -> int | None:
-    """Parse num_envs setting (supports int or 'auto')."""
+def _parse_num_envs(raw: object) -> int | str | None:
+    """Parse num_envs setting (supports int and host-aware auto modes)."""
     if raw is None:
         return None
-    if isinstance(raw, str) and raw.strip().lower() == "auto":
-        return None
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"auto", "auto_throughput"}:
+            return "auto_throughput"
+        if normalized == "auto_stable":
+            return "auto_stable"
     return max(1, int(raw))
 
 
@@ -316,12 +327,134 @@ def _ensure_cuda_determinism_env() -> None:
     logger.info("Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic CUDA")
 
 
+def _slurm_allocated_cpus() -> int | None:
+    """Return allocated CPU count from Slurm when available."""
+
+    for key in ("SLURM_CPUS_PER_TASK", "SLURM_JOB_CPUS_PER_NODE"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        token = raw.split("(", 1)[0].split(",", 1)[0].strip()
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def _host_logical_cpus() -> int:
+    """Return the logical CPU count available to the current process."""
+
+    return max(1, _slurm_allocated_cpus() or (os.cpu_count() or 1))
+
+
+def _host_memory_gib() -> float | None:
+    """Return total visible host memory in GiB when detectable."""
+
+    if hasattr(os, "sysconf"):
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            phys_pages = os.sysconf("SC_PHYS_PAGES")
+            if isinstance(page_size, int) and isinstance(phys_pages, int):
+                total_bytes = page_size * phys_pages
+                if total_bytes > 0:
+                    return float(total_bytes) / float(1024**3)
+        except (ValueError, OSError):
+            pass
+    return None
+
+
+def _memory_limited_num_envs(*, headroom_gib: float, env_budget_gib: float) -> int | None:
+    """Estimate a safe env cap from visible host memory."""
+
+    total_gib = _host_memory_gib()
+    if total_gib is None:
+        return None
+    usable_gib = max(0.0, total_gib - headroom_gib)
+    return max(1, int(usable_gib // env_budget_gib))
+
+
+def _describe_num_envs_resolution(config: ExpertTrainingConfig) -> dict[str, object]:
+    """Return structured details explaining how num_envs was resolved."""
+
+    if isinstance(config.num_envs, int):
+        resolved = max(1, int(config.num_envs))
+        return {
+            "requested": int(config.num_envs),
+            "mode": "fixed",
+            "logical_cpus": None,
+            "slurm_cpus": None,
+            "reserve_cores": int(config.num_envs_reserve_cores),
+            "host_memory_gib": None,
+            "cpu_target": resolved,
+            "memory_cap": None,
+            "headroom_gib": None,
+            "env_budget_gib": None,
+            "resolved": resolved,
+            "decision": "explicit config integer",
+        }
+
+    mode = (
+        str(config.num_envs).strip().lower()
+        if isinstance(config.num_envs, str)
+        else "auto_throughput"
+    )
+    if mode == "auto":
+        mode = "auto_throughput"
+    if mode not in {"auto_throughput", "auto_stable"}:
+        raise ValueError("num_envs must be an int or one of {'auto_throughput', 'auto_stable'}")
+
+    slurm_cpus = _slurm_allocated_cpus()
+    logical_cpus = max(1, slurm_cpus or (os.cpu_count() or 1))
+    reserve = max(0, int(config.num_envs_reserve_cores))
+    host_memory_gib = _host_memory_gib()
+    if mode == "auto_stable":
+        cpu_target = max(
+            1,
+            (logical_cpus // _AUTO_NUM_ENVS_STABLE_CPU_DIVISOR)
+            - _AUTO_NUM_ENVS_STABLE_RESERVED_CORES
+            - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_STABLE_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB
+        decision_label = "stable headroom heuristic"
+    else:
+        cpu_target = max(
+            1,
+            logical_cpus - _AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB
+        decision_label = "throughput heuristic"
+
+    memory_cap = None
+    if host_memory_gib is not None:
+        usable_gib = max(0.0, host_memory_gib - headroom_gib)
+        memory_cap = max(1, int(usable_gib // env_budget_gib))
+    resolved = cpu_target if memory_cap is None else max(1, min(cpu_target, memory_cap))
+    limiter = "cpu target" if memory_cap is None or cpu_target <= memory_cap else "memory cap"
+
+    return {
+        "requested": config.num_envs if config.num_envs is not None else "auto_throughput",
+        "mode": mode,
+        "logical_cpus": logical_cpus,
+        "slurm_cpus": slurm_cpus,
+        "reserve_cores": reserve,
+        "host_memory_gib": host_memory_gib,
+        "cpu_target": cpu_target,
+        "memory_cap": memory_cap,
+        "headroom_gib": headroom_gib,
+        "env_budget_gib": env_budget_gib,
+        "resolved": resolved,
+        "decision": f"{decision_label}; limited by {limiter}",
+    }
+
+
 def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
     """Resolve the effective number of environments for training."""
-    if config.num_envs is not None:
-        return max(1, int(config.num_envs))
-    cores = os.cpu_count() or 1
-    return max(1, cores - 1)
+    return int(_describe_num_envs_resolution(config)["resolved"])
 
 
 def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
@@ -716,15 +849,17 @@ def _log_startup_summary(
     worker_mode: str,
 ) -> None:
     """Emit one structured startup summary for run-critical resolved config."""
+    num_envs_details = _describe_num_envs_resolution(config)
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
-        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} "
+        "total_timesteps={} reward_profile={} requested_num_envs={} num_envs={} worker_mode={} "
         "randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
         config.total_timesteps,
         _resolved_reward_name(config.env_factory_kwargs),
+        config.num_envs if config.num_envs is not None else "auto_throughput",
         num_envs,
         worker_mode,
         _randomize_seeds(config),
@@ -736,6 +871,27 @@ def _log_startup_summary(
             else "<none>"
         ),
         sorted(config.scenario_sampling.keys()),
+    )
+    logger.info(
+        "num_envs resolution: requested={} mode={} resolved={} decision='{}' "
+        "logical_cpus={} slurm_cpus={} reserve_cores={} host_memory_gib={} "
+        "cpu_target={} memory_cap={} headroom_gib={} env_budget_gib={}",
+        num_envs_details["requested"],
+        num_envs_details["mode"],
+        num_envs_details["resolved"],
+        num_envs_details["decision"],
+        num_envs_details["logical_cpus"],
+        num_envs_details["slurm_cpus"],
+        num_envs_details["reserve_cores"],
+        (
+            round(float(num_envs_details["host_memory_gib"]), 2)
+            if isinstance(num_envs_details["host_memory_gib"], int | float)
+            else None
+        ),
+        num_envs_details["cpu_target"],
+        num_envs_details["memory_cap"],
+        num_envs_details["headroom_gib"],
+        num_envs_details["env_budget_gib"],
     )
 
 

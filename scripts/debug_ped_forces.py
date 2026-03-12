@@ -135,20 +135,21 @@ def get_file():
 
 
 def run():
+    """Run the debug environment to analyze pedestrian social forces."""
     env = make_env("maps/svg_maps/debug_06.svg")
     filename = get_file()
     # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
-    model = PPO.load(filename, env=env)
+    # model = PPO.load(filename, env=env)
 
-    obs = env.reset()
+    _ = env.reset()
     env.simulator.ego_ped.state.pose = ((12.0, 10.0), 0)
 
     # Teleport NPC
-    def teleport_npc(x, y):
-        env.simulator.pysf_sim.peds.state[0, 0:2] = [x, y]  # position
-        env.simulator.pysf_sim.peds.state[0, 2:4] = [1.0, 0.0]  # velocity
+    # def teleport_npc(x, y):
+    #     env.simulator.pysf_sim.peds.state[0, 0:2] = [x, y]  # position
+    #     env.simulator.pysf_sim.peds.state[0, 2:4] = [1.0, 0.0]  # velocity
 
     # teleport_npc(1.0, 10.0)
 
@@ -156,7 +157,7 @@ def run():
     all_forces = []
     total_forces = []
     social_force_threshold = 0.5
-    force_names = [type(force).__name__ for force in env.simulator.pysf_sim.forces]
+    # force_names = [type(force).__name__ for force in env.simulator.pysf_sim.forces]
     for i in range(400):
         action = np.array([0, 0])  # No action for the ego pedestrian
         _, _, done, _, _ = env.step(action)

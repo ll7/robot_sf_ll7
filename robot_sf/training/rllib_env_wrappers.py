@@ -2,46 +2,92 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 from gymnasium import ActionWrapper, ObservationWrapper, spaces
 
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
 DEFAULT_FLATTEN_KEYS: tuple[str, ...] = (OBS_DRIVE_STATE, OBS_RAYS)
 
 
-class DriveStateRaysFlattenWrapper(ObservationWrapper):
-    """Flatten selected Dict observation keys into a single float32 vector.
+def _iter_leaf_spaces(space: spaces.Space[Any]) -> list[spaces.Box]:
+    """Return leaf Box spaces in deterministic order.
 
-    The wrapper enforces a deterministic key order so training pipelines get stable
-    feature layout independent of the backing ``spaces.Dict`` insertion ordering.
+    Raises:
+        TypeError: If the observation tree contains non-Box leaves.
+    """
+    if isinstance(space, spaces.Box):
+        return [space]
+    if isinstance(space, spaces.Dict):
+        leaves: list[spaces.Box] = []
+        for subspace in space.spaces.values():
+            leaves.extend(_iter_leaf_spaces(subspace))
+        return leaves
+    raise TypeError(
+        "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
+        f"Received {type(space).__name__}."
+    )
+
+
+def _flatten_observation_leaves(space: spaces.Space[Any], observation: Any) -> list[np.ndarray]:
+    """Flatten one observation payload using the declared space traversal order.
+
+    Returns:
+        Flattened float32 leaf arrays in deterministic traversal order.
+    """
+    if isinstance(space, spaces.Box):
+        return [np.asarray(observation, dtype=np.float32).reshape(-1)]
+    if isinstance(space, spaces.Dict):
+        if not isinstance(observation, Mapping):
+            raise TypeError("FlattenDictObservationWrapper requires mapping observations.")
+        parts: list[np.ndarray] = []
+        for key, subspace in space.spaces.items():
+            if key not in observation:
+                raise KeyError(f"Missing observation key for flattening: {key}")
+            parts.extend(_flatten_observation_leaves(subspace, observation[key]))
+        return parts
+    raise TypeError(
+        "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
+        f"Received {type(space).__name__}."
+    )
+
+
+class FlattenDictObservationWrapper(ObservationWrapper):
+    """Flatten Dict observations into a single float32 vector.
+
+    The wrapper enforces a deterministic traversal order so training pipelines get
+    stable feature layout independent of runtime dict ordering. Nested ``spaces.Dict``
+    subtrees are traversed recursively in declaration order.
     """
 
-    def __init__(self, env: Any, *, keys: Sequence[str] = DEFAULT_FLATTEN_KEYS) -> None:
+    def __init__(self, env: Any, *, keys: Sequence[str] | None = None) -> None:
         """Initialize flattening wrapper for the given observation keys.
 
         Args:
             env: Wrapped gymnasium environment.
-            keys: Ordered observation keys to concatenate into one vector.
+            keys: Optional ordered top-level observation keys to concatenate into one
+                vector. When ``None``, all top-level keys are flattened.
 
         Raises:
-            TypeError: If env observation space is not a Dict or subspaces are not Box.
+            TypeError: If env observation space is not a Dict or leaves are not Box.
             KeyError: If one of the requested keys is missing.
-            ValueError: If no keys are provided.
+            ValueError: If the observation space has no keys to flatten.
         """
         super().__init__(env)
-        if not keys:
-            raise ValueError("DriveStateRaysFlattenWrapper requires at least one key.")
-        self._keys = tuple(str(key) for key in keys)
 
         obs_space = getattr(env, "observation_space", None)
         if not isinstance(obs_space, spaces.Dict):
-            raise TypeError("DriveStateRaysFlattenWrapper requires a Dict observation space.")
+            raise TypeError("FlattenDictObservationWrapper requires a Dict observation space.")
+
+        resolved_keys = (
+            tuple(obs_space.spaces.keys()) if keys is None else tuple(str(key) for key in keys)
+        )
+        if not resolved_keys:
+            raise ValueError("FlattenDictObservationWrapper requires at least one key.")
+        self._keys = resolved_keys
 
         missing_keys = [key for key in self._keys if key not in obs_space.spaces]
         if missing_keys:
@@ -50,11 +96,9 @@ class DriveStateRaysFlattenWrapper(ObservationWrapper):
         lows: list[np.ndarray] = []
         highs: list[np.ndarray] = []
         for key in self._keys:
-            subspace = obs_space.spaces[key]
-            if not isinstance(subspace, spaces.Box):
-                raise TypeError(f"Observation key '{key}' must map to gymnasium.spaces.Box.")
-            lows.append(np.asarray(subspace.low, dtype=np.float32).reshape(-1))
-            highs.append(np.asarray(subspace.high, dtype=np.float32).reshape(-1))
+            for leaf in _iter_leaf_spaces(obs_space.spaces[key]):
+                lows.append(np.asarray(leaf.low, dtype=np.float32).reshape(-1))
+                highs.append(np.asarray(leaf.high, dtype=np.float32).reshape(-1))
 
         flat_low = np.concatenate(lows).astype(np.float32, copy=False)
         flat_high = np.concatenate(highs).astype(np.float32, copy=False)
@@ -70,8 +114,22 @@ class DriveStateRaysFlattenWrapper(ObservationWrapper):
         Returns:
             Flattened float32 observation vector.
         """
-        parts = [np.asarray(observation[key], dtype=np.float32).reshape(-1) for key in self._keys]
+        parts: list[np.ndarray] = []
+        for key in self._keys:
+            parts.extend(
+                _flatten_observation_leaves(
+                    self.env.observation_space.spaces[key], observation[key]
+                )
+            )
         return np.concatenate(parts).astype(np.float32, copy=False)
+
+
+class DriveStateRaysFlattenWrapper(FlattenDictObservationWrapper):
+    """Backwards-compatible alias for the legacy drive-state/rays flattening wrapper."""
+
+    def __init__(self, env: Any, *, keys: Sequence[str] = DEFAULT_FLATTEN_KEYS) -> None:
+        """Initialize the legacy drive-state/rays flattening wrapper."""
+        super().__init__(env, keys=keys)
 
 
 class SymmetricActionRescaleWrapper(ActionWrapper):
@@ -128,7 +186,7 @@ def wrap_for_dreamerv3(
     env: Any,
     *,
     flatten_observation: bool,
-    flatten_keys: Sequence[str] = DEFAULT_FLATTEN_KEYS,
+    flatten_keys: Sequence[str] | None = DEFAULT_FLATTEN_KEYS,
     normalize_actions: bool,
 ) -> Any:
     """Apply the standard Robot SF wrappers for DreamerV3 training.
@@ -138,7 +196,7 @@ def wrap_for_dreamerv3(
     """
     wrapped = env
     if flatten_observation:
-        wrapped = DriveStateRaysFlattenWrapper(wrapped, keys=flatten_keys)
+        wrapped = FlattenDictObservationWrapper(wrapped, keys=flatten_keys)
     if normalize_actions:
         wrapped = SymmetricActionRescaleWrapper(wrapped)
     return wrapped
@@ -147,6 +205,7 @@ def wrap_for_dreamerv3(
 __all__ = [
     "DEFAULT_FLATTEN_KEYS",
     "DriveStateRaysFlattenWrapper",
+    "FlattenDictObservationWrapper",
     "SymmetricActionRescaleWrapper",
     "wrap_for_dreamerv3",
 ]

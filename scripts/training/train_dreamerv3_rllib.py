@@ -1,4 +1,4 @@
-"""Train RLlib DreamerV3 on Robot SF drive_state+rays observations."""
+"""Train RLlib DreamerV3 on Robot SF observations."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ import os
 import platform
 import subprocess
 import sys
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args, get_origin
 
 import yaml
 from loguru import logger
@@ -116,7 +117,7 @@ class EnvSettings:
     """Environment construction settings for RLlib workers."""
 
     flatten_observation: bool
-    flatten_keys: tuple[str, ...]
+    flatten_keys: tuple[str, ...] | None
     normalize_actions: bool
     factory_kwargs: dict[str, object]
     config_overrides: dict[str, object]
@@ -388,12 +389,16 @@ def _parse_env_settings(payload: dict[str, object], *, base_dir: Path | None = N
     _ensure_known_keys(env_raw, field_name="env", allowed=_ENV_KEYS)
 
     flatten_keys_raw = env_raw.get("flatten_keys", list(DEFAULT_FLATTEN_KEYS))
-    if not isinstance(flatten_keys_raw, list | tuple):
-        raise ValueError("env.flatten_keys must be a list or tuple of strings.")
+    if flatten_keys_raw is None:
+        flatten_keys: tuple[str, ...] | None = None
+    else:
+        if not isinstance(flatten_keys_raw, list | tuple):
+            raise ValueError("env.flatten_keys must be a list/tuple of strings or null.")
+        flatten_keys = tuple(str(key) for key in flatten_keys_raw)
 
     return EnvSettings(
         flatten_observation=bool(env_raw.get("flatten_observation", True)),
-        flatten_keys=tuple(str(key) for key in flatten_keys_raw),
+        flatten_keys=flatten_keys,
         normalize_actions=bool(env_raw.get("normalize_actions", True)),
         factory_kwargs=_ensure_mapping(
             env_raw.get("factory_kwargs"), field_name="env.factory_kwargs"
@@ -478,32 +483,93 @@ def load_run_config(path: Path) -> DreamerRunConfig:
     )
 
 
-def _apply_nested_overrides(
+def _apply_nested_overrides(  # noqa: C901
     config_obj: object,
     overrides: dict[str, object],
     *,
     context_name: str = "env.config",
 ) -> None:
     """Recursively apply dict overrides onto dataclass-like objects."""
+
+    field_map = (
+        {field.name: field for field in fields(config_obj)} if is_dataclass(config_obj) else {}
+    )
+
+    def _coerce_from_annotation(annotation: object, value: object) -> object:
+        if annotation in {Any, object}:
+            return value
+
+        origin = get_origin(annotation)
+        if origin is not None:
+            args = [arg for arg in get_args(annotation) if arg is not type(None)]
+            if len(args) == 1:
+                return _coerce_from_annotation(args[0], value)
+            if origin is list and isinstance(value, list | tuple):
+                item_annotation = args[0] if args else Any
+                return [_coerce_from_annotation(item_annotation, item) for item in value]
+
+        if isinstance(annotation, type):
+            if issubclass(annotation, Enum) and not isinstance(value, annotation):
+                return annotation(value)
+            if is_dataclass(annotation) and isinstance(value, dict):
+                nested_obj = annotation()
+                _apply_nested_overrides(
+                    nested_obj,
+                    dict(value),
+                    context_name=context_name,
+                )
+                return nested_obj
+
+        return value
+
+    def _coerce_override_value(
+        current_attr: object,
+        value: object,
+        *,
+        field_annotation: object | None,
+    ) -> object:
+        if field_annotation is not None:
+            coerced = _coerce_from_annotation(field_annotation, value)
+            if coerced is not value:
+                return coerced
+        if isinstance(current_attr, Enum) and not isinstance(value, type(current_attr)):
+            return type(current_attr)(value)
+        if isinstance(current_attr, list) and current_attr:
+            exemplar = current_attr[0]
+            if isinstance(exemplar, Enum) and isinstance(value, list | tuple):
+                enum_type = type(exemplar)
+                return [item if isinstance(item, enum_type) else enum_type(item) for item in value]
+        if current_attr is None and field_annotation is not None:
+            return _coerce_from_annotation(field_annotation, value)
+        return value
+
     for key, value in overrides.items():
         if not hasattr(config_obj, key):
             raise ValueError(f"Unknown {context_name} override field: '{key}'")
         current_attr = getattr(config_obj, key)
+        field_annotation = field_map.get(key).type if key in field_map else None
         if isinstance(value, dict) and (
             hasattr(current_attr, "__dict__") or is_dataclass(current_attr)
         ):
             _apply_nested_overrides(current_attr, value, context_name=f"{context_name}.{key}")
         else:
-            setattr(config_obj, key, value)
+            setattr(
+                config_obj,
+                key,
+                _coerce_override_value(
+                    current_attr,
+                    value,
+                    field_annotation=field_annotation,
+                ),
+            )
 
 
 def _create_env_template(env_settings: EnvSettings) -> RobotSimulationConfig:
     """Build the base RobotSimulationConfig used by all RLlib workers."""
     config = RobotSimulationConfig()
     _apply_nested_overrides(config, env_settings.config_overrides, context_name="env.config")
-    # Force vector-observation mode for the drive_state+rays DreamerV3 pipeline.
+    # DreamerV3 configs in this launcher currently assume non-image observations.
     config.use_image_obs = False
-    config.include_grid_in_observation = False
     return config
 
 
@@ -810,7 +876,7 @@ def _serialize_for_wandb(value: Any) -> Any:
     return value
 
 
-def _build_run_meta(
+def _build_run_meta(  # noqa: PLR0913
     run_config: DreamerRunConfig,
     *,
     run_dir: Path,
@@ -881,7 +947,7 @@ def _build_run_meta(
     }
 
 
-def _write_run_bookkeeping(
+def _write_run_bookkeeping(  # noqa: PLR0913
     run_config: DreamerRunConfig,
     *,
     run_dir: Path,
@@ -1293,12 +1359,13 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["LOGURU_LEVEL"] = run_config.experiment.log_level
 
     if args.dry_run:
-        logger.info(
-            "Dry-run config resolved: run_id={} iterations={} checkpoint_every={} output_root={}",
-            run_config.experiment.run_id,
-            run_config.experiment.train_iterations,
-            run_config.experiment.checkpoint_every,
-            run_config.experiment.output_root,
+        print(
+            "Dry-run config resolved: "
+            f"run_id={run_config.experiment.run_id} "
+            f"iterations={run_config.experiment.train_iterations} "
+            f"checkpoint_every={run_config.experiment.checkpoint_every} "
+            f"output_root={run_config.experiment.output_root}",
+            file=sys.stderr,
         )
         return 0
 

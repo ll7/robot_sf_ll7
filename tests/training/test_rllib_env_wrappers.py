@@ -6,10 +6,13 @@ import numpy as np
 from gymnasium import Env, spaces
 
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.training.rllib_env_wrappers import (
     DEFAULT_FLATTEN_KEYS,
     DriveStateRaysFlattenWrapper,
+    FlattenDictObservationWrapper,
     SymmetricActionRescaleWrapper,
     wrap_for_dreamerv3,
 )
@@ -48,6 +51,51 @@ class _DummyDictEnv(Env):
         """Echo deterministic observation to keep wrapper tests focused."""
         return dict(self._obs), 0.0, False, False, {"action_seen": np.asarray(action)}
 
+    def render(self):  # pragma: no cover - test stub only
+        """Satisfy the Gymnasium Env abstract interface for static test doubles."""
+        return None
+
+
+class _DummyNestedDictEnv(Env):
+    """Environment exposing nested Dict observations for generic flattening tests."""
+
+    metadata = {"render_modes": []}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.observation_space = spaces.Dict(
+            {
+                "robot": spaces.Dict(
+                    {
+                        "position": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                        "heading": spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),
+                    }
+                ),
+                "occupancy_grid": spaces.Box(low=0.0, high=1.0, shape=(2, 2, 1), dtype=np.float32),
+            }
+        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        self._obs = {
+            "robot": {
+                "position": np.array([0.25, -0.5], dtype=np.float32),
+                "heading": np.array([0.75], dtype=np.float32),
+            },
+            "occupancy_grid": np.array(
+                [[[0.0], [1.0]], [[0.5], [0.25]]],
+                dtype=np.float32,
+            ),
+        }
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):  # type: ignore[override]
+        super().reset(seed=seed)
+        return self._obs, {}
+
+    def step(self, action):  # type: ignore[override]
+        return self._obs, 0.0, False, False, {"action_seen": np.asarray(action)}
+
+    def render(self):  # pragma: no cover - test stub only
+        return None
+
 
 def test_drive_state_rays_flatten_wrapper_respects_key_order():
     """Wrapper should concatenate keys in the explicit order."""
@@ -58,6 +106,20 @@ def test_drive_state_rays_flatten_wrapper_respects_key_order():
     assert wrapped.observation_space.shape == (5,)
     assert obs.shape == (5,)
     np.testing.assert_allclose(obs, np.array([0.1, 0.2, 0.3, 0.25, -0.5], dtype=np.float32))
+
+
+def test_flatten_dict_observation_wrapper_flattens_nested_dicts_and_grid():
+    """Generic Dreamer flattener should accept nested dict spaces plus occupancy grids."""
+    env = _DummyNestedDictEnv()
+    wrapped = FlattenDictObservationWrapper(env, keys=None)
+
+    obs, _ = wrapped.reset()
+
+    assert wrapped.observation_space.shape == (7,)
+    np.testing.assert_allclose(
+        obs,
+        np.array([0.0, 1.0, 0.5, 0.25, 0.75, 0.25, -0.5], dtype=np.float32),
+    )
 
 
 def test_symmetric_action_rescale_wrapper_maps_minus1_plus1_to_env_bounds():
@@ -110,5 +172,40 @@ def test_wrap_for_dreamerv3_reset_and_step_match_observation_contract():
         assert wrapped.observation_space.contains(step_obs)
         assert np.asarray(step_obs["drive_state"]).dtype == np.float32
         assert np.asarray(step_obs["rays"]).dtype == np.float32
+    finally:
+        wrapped.close()
+
+
+def test_wrap_for_dreamerv3_supports_benchmark_socnav_grid_contract():
+    """Dreamer wrappers should flatten benchmark-style SocNav+grid observations into float32 vectors."""
+    config = RobotSimulationConfig()
+    config.observation_mode = ObservationMode.SOCNAV_STRUCT
+    config.use_image_obs = False
+    config.use_occupancy_grid = True
+    config.include_grid_in_observation = True
+    config.grid_config = GridConfig(
+        resolution=0.2,
+        width=32.0,
+        height=32.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS, GridChannel.COMBINED],
+        use_ego_frame=True,
+        center_on_robot=True,
+    )
+
+    env = make_robot_env(config=config, debug=False, recording_enabled=False)
+    wrapped = wrap_for_dreamerv3(
+        env,
+        flatten_observation=True,
+        flatten_keys=None,
+        normalize_actions=True,
+    )
+    try:
+        reset_obs, _ = wrapped.reset()
+        assert wrapped.observation_space.contains(reset_obs)
+        assert np.asarray(reset_obs).dtype == np.float32
+
+        step_obs, _, _, _, _ = wrapped.step(wrapped.action_space.sample())
+        assert wrapped.observation_space.contains(step_obs)
+        assert np.asarray(step_obs).dtype == np.float32
     finally:
         wrapped.close()

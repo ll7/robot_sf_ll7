@@ -186,7 +186,7 @@ class SensorFusion:
             The next observation, consisting of the drive state and LiDAR state.
         """
         # Get the current LiDAR state
-        lidar_state = self.lidar_sensor()
+        lidar_state = np.asarray(self.lidar_sensor(), dtype=np.float32)
         # TODO: append beginning at the end for conv feature extractor
 
         # Get the current robot speed

@@ -51,3 +51,24 @@ def test_sensor_fusion_stacks_history() -> None:
     expected_row = drive_state / orig_space[OBS_DRIVE_STATE].high[0]
     for row in obs[OBS_DRIVE_STATE]:
         assert np.allclose(row, expected_row)
+
+
+def test_sensor_fusion_reset_coerces_float64_lidar_to_float32() -> None:
+    """First reset should not preserve float64 LiDAR arrays in the stacked observation."""
+    robot_obs = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+    target_obs = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
+    lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(4,), dtype=np.float32)
+
+    _norm_space, orig_space = fused_sensor_space(2, robot_obs, target_obs, lidar_obs)
+    fusion = SensorFusion(
+        lidar_sensor=lambda: np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64),
+        robot_speed_sensor=lambda: (1.0, 0.0),
+        target_sensor=lambda: (2.0, 0.1, 0.2),
+        unnormed_obs_space=orig_space,
+        use_next_goal=True,
+    )
+
+    obs = fusion.next_obs()
+
+    assert obs[OBS_RAYS].dtype == np.float32
+    assert np.isfinite(obs[OBS_RAYS]).all()

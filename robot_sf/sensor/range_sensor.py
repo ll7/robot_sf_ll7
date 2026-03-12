@@ -250,7 +250,7 @@ def raycast(  # noqa: PLR0913
     Returns:
         numpy.ndarray: Per-ray distances with shape ``(num_rays,)``.
     """
-    out_ranges = np.full((ray_angles.shape[0]), np.inf)
+    out_ranges = np.full((ray_angles.shape[0]), np.inf, dtype=np.float32)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
 
@@ -300,7 +300,7 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
 
     if not rows:
         return None
-    return np.array(rows, dtype=np.float64)
+    return np.array(rows, dtype=np.float32)
 
 
 @numba.njit(fastmath=True)
@@ -331,7 +331,7 @@ def lidar_ray_scan(
     """
 
     (pos_x, pos_y), robot_orient = pose
-    scan_noise = np.array(settings.scan_noise)
+    scan_noise = np.asarray(settings.scan_noise, dtype=np.float32)
     scan_dist = settings.max_scan_dist
 
     ped_pos = occ.pedestrian_coords
@@ -342,8 +342,11 @@ def lidar_ray_scan(
 
     lower = robot_orient + settings.angle_opening[0]
     upper = robot_orient + settings.angle_opening[1]
-    ray_angles = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
-    ray_angles = np.array([(angle + np.pi * 2) % (np.pi * 2) for angle in ray_angles])
+    ray_angles = np.linspace(lower, upper, settings.num_rays + 1, dtype=np.float32)[:-1]
+    ray_angles = np.asarray(
+        [(angle + np.pi * 2) % (np.pi * 2) for angle in ray_angles],
+        dtype=np.float32,
+    )
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])
@@ -369,7 +372,7 @@ def lidar_ray_scan(
             other_robot_circles=dynamic_robot_circles,
         )
     range_postprocessing(ranges, scan_noise, scan_dist)
-    return ranges, ray_angles
+    return ranges.astype(np.float32, copy=False), ray_angles.astype(np.float32, copy=False)
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:

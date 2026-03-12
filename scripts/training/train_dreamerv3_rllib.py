@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
+import numpy as np
 import yaml
 from loguru import logger
 
@@ -658,18 +659,46 @@ def _build_algorithm_config(
 
 def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
     """Extract a scalar metric from nested training result dictionaries."""
+    scalar_types = (int, float, np.integer, np.floating)
     for key in keys:
         value = result.get(key)
-        if isinstance(value, int | float):
-            return value
+        if isinstance(value, scalar_types):
+            return int(value) if isinstance(value, np.integer) else float(value)
     for container_name in ("env_runners", "env_runner_results"):
         container = result.get(container_name)
         if isinstance(container, dict):
             for key in keys:
                 value = container.get(key)
-                if isinstance(value, int | float):
-                    return value
+                if isinstance(value, scalar_types):
+                    return int(value) if isinstance(value, np.integer) else float(value)
     return None
+
+
+def _extract_iteration_metrics(result: dict[str, Any]) -> dict[str, float | int | None]:
+    """Extract iteration metrics and sanitize empty-episode reward aggregates.
+
+    RLlib reports ``episode_return_mean=nan`` when an iteration finishes with zero
+    completed episodes. Treat that as "no aggregate available yet" rather than as a
+    numerically meaningful reward signal.
+    """
+    reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
+    timesteps_total = _extract_metric(
+        result,
+        "num_env_steps_sampled_lifetime",
+        "timesteps_total",
+    )
+    episodes_completed = _extract_metric(result, "num_episodes", "episodes_this_iter")
+
+    reward_value = float(reward_mean) if isinstance(reward_mean, int | float) else None
+    episode_count = int(episodes_completed) if isinstance(episodes_completed, int | float) else None
+    if reward_value is not None and not np.isfinite(reward_value) and (episode_count or 0) == 0:
+        reward_value = None
+
+    return {
+        "reward_mean": reward_value,
+        "timesteps_total": timesteps_total,
+        "episodes_completed": episode_count,
+    }
 
 
 def _save_checkpoint(algo: Any, checkpoint_dir: Path) -> str:
@@ -972,23 +1001,23 @@ def _run_training_iterations(
     history: list[dict[str, object]] = []
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
-        reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
-        timesteps_total = _extract_metric(
-            result,
-            "num_env_steps_sampled_lifetime",
-            "timesteps_total",
-        )
+        metrics = _extract_iteration_metrics(result)
+        reward_mean = metrics["reward_mean"]
+        timesteps_total = metrics["timesteps_total"]
+        episodes_completed = metrics["episodes_completed"]
         logger.info(
-            "iter={} reward_mean={} timesteps_total={}",
+            "iter={} reward_mean={} timesteps_total={} episodes_completed={}",
             iteration,
             reward_mean,
             timesteps_total,
+            episodes_completed,
         )
         history.append(
             {
                 "iteration": iteration,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
+                "episodes_completed": episodes_completed,
             }
         )
         append_jsonl_record(
@@ -998,6 +1027,7 @@ def _run_training_iterations(
                 "iteration": iteration,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
+                "episodes_completed": episodes_completed,
             },
         )
         if wandb_run is not None:
@@ -1006,6 +1036,7 @@ def _run_training_iterations(
                     "iteration": iteration,
                     "reward_mean": reward_mean,
                     "timesteps_total": timesteps_total,
+                    "episodes_completed": episodes_completed,
                 },
                 step=iteration,
             )

@@ -252,6 +252,26 @@ def test_lidar_ray_scan_basic_obstacle():
     assert np.any(np.isclose(ranges, 2.0))
 
 
+def test_lidar_ray_scan_returns_float32_outputs():
+    """LiDAR scans should expose float32 ranges and ray angles for Gym compatibility."""
+    obstacle_coords = np.array([[3.0, 0.0, 3.0, 2.0]], dtype=np.float64)
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(max_scan_dist=10.0, num_rays=8, scan_noise=[0.0, 0.0])
+
+    ranges, ray_angles = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+
+    assert ranges.dtype == np.float32
+    assert ray_angles.dtype == np.float32
+
+
 def test_lidar_ray_scan_enemy_branch():
     """Ego-ped occupancy path detects enemy radius."""
     obstacle_coords = np.empty((0, 4), dtype=np.float64)

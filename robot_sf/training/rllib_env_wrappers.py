@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
-from gymnasium import ActionWrapper, ObservationWrapper, spaces
+from gymnasium import ActionWrapper, ObservationWrapper, Wrapper, spaces
 
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
@@ -49,6 +49,44 @@ def _flatten_observation_leaves(space: spaces.Space[Any], observation: Any) -> l
         "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
         f"Received {type(space).__name__}."
     )
+
+
+def _normalized_box_bound(
+    bound: np.ndarray, *, shape: tuple[int, ...], dtype: np.dtype[Any]
+) -> np.ndarray:
+    """Broadcast Box bounds to the declared dtype to avoid float64 precision warnings."""
+    array = np.asarray(bound, dtype=dtype)
+    if array.shape == shape:
+        return array
+    return np.broadcast_to(array, shape).astype(dtype, copy=False)
+
+
+def _normalize_space_dtypes(space: spaces.Space[Any]) -> spaces.Space[Any]:
+    """Clone Box/Dict spaces so their bounds use the declared leaf dtypes exactly."""
+    if isinstance(space, spaces.Box):
+        dtype = np.dtype(space.dtype)
+        low = _normalized_box_bound(space.low, shape=space.shape, dtype=dtype)
+        high = _normalized_box_bound(space.high, shape=space.shape, dtype=dtype)
+        return spaces.Box(low=low, high=high, dtype=dtype)
+    if isinstance(space, spaces.Dict):
+        return spaces.Dict(
+            {key: _normalize_space_dtypes(subspace) for key, subspace in space.spaces.items()}
+        )
+    return space
+
+
+def _coerce_observation_to_space(space: spaces.Space[Any], observation: Any) -> Any:
+    """Cast observation payloads to the dtypes declared by the observation space."""
+    if isinstance(space, spaces.Box):
+        return np.asarray(observation, dtype=space.dtype)
+    if isinstance(space, spaces.Dict):
+        if not isinstance(observation, Mapping):
+            raise TypeError("ObservationSpaceDtypeWrapper requires mapping observations.")
+        return {
+            key: _coerce_observation_to_space(subspace, observation[key])
+            for key, subspace in space.spaces.items()
+        }
+    return observation
 
 
 class FlattenDictObservationWrapper(ObservationWrapper):
@@ -128,6 +166,17 @@ class DriveStateRaysFlattenWrapper(FlattenDictObservationWrapper):
         super().__init__(env, keys=keys)
 
 
+class ObservationSpaceDtypeWrapper(ObservationWrapper):
+    """Force observations to match the declared observation-space dtypes exactly."""
+
+    def __init__(self, env: Wrapper) -> None:
+        super().__init__(env)
+        self.observation_space = _normalize_space_dtypes(env.observation_space)
+
+    def observation(self, observation: Any) -> Any:
+        return _coerce_observation_to_space(self.observation_space, observation)
+
+
 class SymmetricActionRescaleWrapper(ActionWrapper):
     """Expose a ``[-1, 1]`` action space while mapping actions to environment bounds."""
 
@@ -193,6 +242,7 @@ def wrap_for_dreamerv3(
     wrapped = env
     if flatten_observation:
         wrapped = FlattenDictObservationWrapper(wrapped, keys=flatten_keys)
+    wrapped = ObservationSpaceDtypeWrapper(wrapped)
     if normalize_actions:
         wrapped = SymmetricActionRescaleWrapper(wrapped)
     return wrapped
@@ -202,6 +252,7 @@ __all__ = [
     "DEFAULT_FLATTEN_KEYS",
     "DriveStateRaysFlattenWrapper",
     "FlattenDictObservationWrapper",
+    "ObservationSpaceDtypeWrapper",
     "SymmetricActionRescaleWrapper",
     "wrap_for_dreamerv3",
 ]

@@ -13,6 +13,7 @@ from robot_sf.training.rllib_env_wrappers import (
     DEFAULT_FLATTEN_KEYS,
     DriveStateRaysFlattenWrapper,
     FlattenDictObservationWrapper,
+    ObservationSpaceDtypeWrapper,
     SymmetricActionRescaleWrapper,
     wrap_for_dreamerv3,
 )
@@ -97,6 +98,45 @@ class _DummyNestedDictEnv(Env):
         return None
 
 
+class _Float64ObsEnv(Env):
+    """Environment that violates its float32 observation contract."""
+
+    metadata = {"render_modes": []}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.observation_space = spaces.Dict(
+            {
+                "vector": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                "nested": spaces.Dict(
+                    {
+                        "grid": spaces.Box(low=0.0, high=1.0, shape=(2, 2, 1), dtype=np.float32),
+                    }
+                ),
+            }
+        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):  # type: ignore[override]
+        super().reset(seed=seed)
+        return {
+            "vector": np.array([0.25, -0.5], dtype=np.float64),
+            "nested": {
+                "grid": np.array(
+                    [[[0.0], [1.0]], [[0.5], [0.25]]],
+                    dtype=np.float64,
+                )
+            },
+        }, {}
+
+    def step(self, action):  # type: ignore[override]
+        obs, _ = self.reset()
+        return obs, 0.0, False, False, {"action_seen": np.asarray(action)}
+
+    def render(self):  # pragma: no cover - test stub only
+        return None
+
+
 def test_drive_state_rays_flatten_wrapper_respects_key_order():
     """Wrapper should concatenate keys in the explicit order."""
     env = _DummyDictEnv()
@@ -130,6 +170,18 @@ def test_symmetric_action_rescale_wrapper_maps_minus1_plus1_to_env_bounds():
     assert wrapped.action_space.shape == env.action_space.shape
     np.testing.assert_allclose(wrapped.action(np.array([-1.0, 1.0], dtype=np.float32)), [0.0, 2.0])
     np.testing.assert_allclose(wrapped.action(np.array([1.0, -1.0], dtype=np.float32)), [2.0, -2.0])
+
+
+def test_observation_space_dtype_wrapper_coerces_nested_float64_observations():
+    """Final Dreamer observation wrapper should coerce nested float64 payloads to space dtypes."""
+    env = _Float64ObsEnv()
+    wrapped = ObservationSpaceDtypeWrapper(env)
+
+    obs, _ = wrapped.reset()
+
+    assert wrapped.observation_space.contains(obs)
+    assert np.asarray(obs["vector"]).dtype == np.float32
+    assert np.asarray(obs["nested"]["grid"]).dtype == np.float32
 
 
 def test_wrap_for_dreamerv3_applies_expected_wrapper_stack():

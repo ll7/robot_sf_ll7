@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 import scripts.training.train_dreamerv3_rllib as dreamer
@@ -61,6 +62,28 @@ class _FakeAlgo:
 
     def stop(self) -> None:
         self.stop_called = True
+
+
+class _FakeSparseEpisodeAlgo(_FakeAlgo):
+    """Algorithm stub that simulates iterations with and without completed episodes."""
+
+    def train(self) -> dict[str, object]:
+        self.train_calls += 1
+        if self.train_calls == 1:
+            return {
+                "env_runners": {
+                    "episode_return_mean": np.float64(-5.0),
+                    "num_episodes": np.int64(2),
+                },
+                "num_env_steps_sampled_lifetime": np.int64(64),
+            }
+        return {
+            "env_runners": {
+                "episode_return_mean": np.float64(float("nan")),
+                "num_episodes": np.int64(0),
+            },
+            "num_env_steps_sampled_lifetime": np.int64(128),
+        }
 
 
 class _FrozenDateTime:
@@ -257,3 +280,47 @@ algorithm:
     run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
     assert run_meta["status"] == "failed"
     assert run_meta["error"]["type"] == "RuntimeError"
+
+
+def test_run_training_logs_null_reward_for_empty_episode_aggregates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Iterations with zero completed episodes should log a missing reward aggregate, not NaN."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_sparse.yaml",
+        f"""
+experiment:
+    run_id: sparse
+    output_root: {tmp_path.as_posix()}/output
+    train_iterations: 2
+    checkpoint_every: 2
+    seed: 11
+    log_level: WARNING
+algorithm:
+    framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_ray = _FakeRay()
+    fake_algo = _FakeSparseEpisodeAlgo()
+
+    monkeypatch.setattr(dreamer, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(
+        dreamer,
+        "_import_rllib",
+        lambda: (fake_ray, object, lambda _env_name, _creator: None),
+    )
+    monkeypatch.setattr(dreamer, "_init_wandb_tracking", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dreamer, "_build_algorithm_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(dreamer, "_build_algorithm_instance", lambda _cfg: fake_algo)
+
+    exit_code = dreamer.run_training(run_config)
+
+    assert exit_code == 0
+    result_path = run_config.experiment.output_root / "sparse_20260211T120000Z" / "result.jsonl"
+    lines = [json.loads(line) for line in result_path.read_text(encoding="utf-8").splitlines()]
+    assert lines[0]["reward_mean"] == -5.0
+    assert lines[0]["episodes_completed"] == 2
+    assert lines[1]["reward_mean"] is None
+    assert lines[1]["episodes_completed"] == 0

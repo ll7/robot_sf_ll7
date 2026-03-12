@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve the latest PPO checkpoint from W&B and run a promotion-grade policy analysis."""
+"""Resolve the latest PPO checkpoint from W&B and run promotion-grade evaluation."""
 
 from __future__ import annotations
 
@@ -10,10 +10,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
 from loguru import logger
 
 from robot_sf.common.logging import configure_logging
-from robot_sf.models import resolve_latest_wandb_model
+from robot_sf.models import resolve_latest_wandb_model, upsert_registry_entry
+
+POLICY_SUCCESS_THRESHOLD = 0.80
+POLICY_COLLISION_THRESHOLD = 0.10
+POLICY_SNQI_THRESHOLD = 0.0
+BENCHMARK_SUCCESS_THRESHOLD = 0.80
+BENCHMARK_COLLISION_THRESHOLD = 0.10
+BENCHMARK_SNQI_THRESHOLD = 0.0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -51,6 +59,25 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("output/benchmarks/latest_ppo_candidate_eval"),
         help="Root directory for analysis outputs.",
     )
+    parser.add_argument("--benchmark-workers", type=int, default=1)
+    parser.add_argument("--benchmark-horizon", type=int, default=120)
+    parser.add_argument("--benchmark-dt", type=float, default=0.1)
+    parser.add_argument("--benchmark-snqi-weights", type=Path)
+    parser.add_argument("--benchmark-snqi-baseline", type=Path)
+    parser.add_argument("--registry-path", type=Path, default=Path("model/registry.yaml"))
+    parser.add_argument(
+        "--promote",
+        action="store_true",
+        help="Update the model registry when both promotion gates pass.",
+    )
+    parser.add_argument(
+        "--registry-model-id",
+        help="Override model_id used when promoting into the registry.",
+    )
+    parser.add_argument(
+        "--registry-display-name",
+        help="Override display_name used when promoting into the registry.",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser
 
@@ -75,21 +102,219 @@ def _promotion_summary(summary_payload: dict[str, Any]) -> dict[str, Any]:
         key=lambda row: (row["success_rate"], -row["collision_rate"], row["scenario_id"]),
     )[:5]
 
-    promotion = {
+    success_rate = float(summary.get("success_rate", 0.0))
+    collision_rate = float(summary.get("collision_rate", 0.0))
+    snqi = float(metric_means.get("snqi", 0.0) or 0.0)
+    problem_episode_count = len(problem_episodes)
+    return {
         "episodes": int(summary.get("episodes", 0)),
-        "success_rate": float(summary.get("success_rate", 0.0)),
-        "collision_rate": float(summary.get("collision_rate", 0.0)),
+        "success_rate": success_rate,
+        "collision_rate": collision_rate,
+        "snqi": snqi,
         "ped_collision_count": int(termination_counts.get("collision", 0)),
         "termination_reason_counts": termination_counts,
         "metric_means": metric_means,
-        "problem_episode_count": len(problem_episodes),
+        "problem_episode_count": problem_episode_count,
         "weakest_scenarios": weakest,
         "gate_pass": (
-            float(summary.get("success_rate", 0.0)) >= 0.80
-            and float(summary.get("collision_rate", 0.0)) <= 0.10
+            success_rate >= POLICY_SUCCESS_THRESHOLD
+            and collision_rate <= POLICY_COLLISION_THRESHOLD
+            and snqi >= POLICY_SNQI_THRESHOLD
+            and problem_episode_count == 0
         ),
     }
-    return promotion
+
+
+def _build_benchmark_algo_config(
+    *,
+    training_config_path: Path,
+    checkpoint_path: Path,
+    output_path: Path,
+) -> Path:
+    """Build a temporary PPO algo-config matching the training observation contract."""
+    training_payload = yaml.safe_load(training_config_path.read_text(encoding="utf-8")) or {}
+    env_overrides = dict(training_payload.get("env_overrides") or {})
+    config_payload: dict[str, Any] = {
+        "model_path": str(checkpoint_path),
+        "device": "auto",
+        "deterministic": True,
+        "obs_mode": "dict",
+        "action_space": "unicycle",
+        "fallback_to_goal": True,
+    }
+    for key, value in env_overrides.items():
+        if str(key).startswith("predictive_foresight_"):
+            config_payload[str(key)] = value
+    output_path.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")
+    return output_path
+
+
+def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    if not path.exists():
+        raise FileNotFoundError(f"Expected benchmark JSONL missing: {path}")
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            records.append(json.loads(line))
+    return records
+
+
+def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not records:
+        return {
+            "episodes": 0,
+            "success_rate": 0.0,
+            "collision_rate": 0.0,
+            "snqi": 0.0,
+            "termination_reason_counts": {},
+            "problem_episode_count": 0,
+            "weakest_scenarios": [],
+            "contradictions": [],
+            "gate_pass": False,
+        }
+
+    termination_counts: dict[str, int] = {}
+    scenario_rows: dict[str, dict[str, float]] = {}
+    contradictions: list[dict[str, Any]] = []
+    success_sum = 0.0
+    collision_sum = 0.0
+    snqi_values: list[float] = []
+
+    for record in records:
+        metrics = dict(record.get("metrics") or {})
+        scenario_id = str(record.get("scenario_id") or "unknown")
+        success = float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
+        collision = float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
+        snqi = float(metrics.get("snqi", 0.0) or 0.0)
+        success_sum += success
+        collision_sum += collision
+        snqi_values.append(snqi)
+        termination = str(record.get("termination_reason") or "unknown")
+        termination_counts[termination] = termination_counts.get(termination, 0) + 1
+        row = scenario_rows.setdefault(
+            scenario_id,
+            {"episodes": 0.0, "success_sum": 0.0, "collision_sum": 0.0},
+        )
+        row["episodes"] += 1.0
+        row["success_sum"] += success
+        row["collision_sum"] += collision
+        if collision > 0.0 and success > 0.0:
+            contradictions.append(
+                {
+                    "scenario_id": scenario_id,
+                    "seed": record.get("seed"),
+                    "termination_reason": termination,
+                    "reason": "collision_and_success",
+                }
+            )
+        elif termination == "collision" and success > 0.0:
+            contradictions.append(
+                {
+                    "scenario_id": scenario_id,
+                    "seed": record.get("seed"),
+                    "termination_reason": termination,
+                    "reason": "collision_termination_with_success",
+                }
+            )
+
+    weakest = sorted(
+        (
+            {
+                "scenario_id": scenario_id,
+                "success_rate": row["success_sum"] / row["episodes"],
+                "collision_rate": row["collision_sum"] / row["episodes"],
+            }
+            for scenario_id, row in scenario_rows.items()
+        ),
+        key=lambda row: (row["success_rate"], -row["collision_rate"], row["scenario_id"]),
+    )[:5]
+
+    episodes = len(records)
+    success_rate = success_sum / episodes
+    collision_rate = collision_sum / episodes
+    snqi_mean = sum(snqi_values) / len(snqi_values) if snqi_values else 0.0
+    return {
+        "episodes": episodes,
+        "success_rate": success_rate,
+        "collision_rate": collision_rate,
+        "snqi": snqi_mean,
+        "termination_reason_counts": termination_counts,
+        "problem_episode_count": len(contradictions),
+        "weakest_scenarios": weakest,
+        "contradictions": contradictions,
+        "gate_pass": (
+            success_rate >= BENCHMARK_SUCCESS_THRESHOLD
+            and collision_rate <= BENCHMARK_COLLISION_THRESHOLD
+            and snqi_mean >= BENCHMARK_SNQI_THRESHOLD
+            and not contradictions
+        ),
+    }
+
+
+def _run_benchmark_gate(
+    benchmark_cmd: list[str],
+    benchmark_jsonl: Path,
+) -> tuple[dict[str, Any], subprocess.CalledProcessError | None]:
+    """Run benchmark evaluation and still return a failed gate summary on subprocess errors."""
+    benchmark_error: subprocess.CalledProcessError | None = None
+    try:
+        subprocess.run(benchmark_cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        benchmark_error = exc
+        logger.warning("Benchmark gate failed with exit code {}: {}", exc.returncode, exc)
+
+    if benchmark_jsonl.exists():
+        benchmark_records = _load_jsonl_records(benchmark_jsonl)
+    elif benchmark_error is None:
+        raise FileNotFoundError(f"Expected benchmark JSONL missing: {benchmark_jsonl}")
+    else:
+        benchmark_records = []
+
+    benchmark_gate = _benchmark_summary(benchmark_records)
+    if benchmark_error is not None:
+        benchmark_gate["gate_pass"] = False
+        benchmark_gate["runner_exit_code"] = benchmark_error.returncode
+    return benchmark_gate, benchmark_error
+
+
+def _registry_entry_from_candidate(
+    *,
+    model_id: str,
+    display_name: str,
+    selection: dict[str, Any],
+    checkpoint_path: Path,
+    decision: dict[str, Any],
+    wandb_entity: str,
+    wandb_project: str,
+) -> dict[str, Any]:
+    try:
+        local_path = str(checkpoint_path.relative_to(Path.cwd()))
+    except ValueError:
+        local_path = str(checkpoint_path)
+    return {
+        "model_id": model_id,
+        "display_name": display_name,
+        "local_path": local_path,
+        "commit": None,
+        "wandb_run_id": selection["run_id"],
+        "wandb_run_path": selection["run_path"],
+        "wandb_entity": wandb_entity,
+        "wandb_project": wandb_project,
+        "wandb_file": Path(checkpoint_path).name,
+        "tags": ["ppo", "candidate", "promotion-workflow"],
+        "notes": [
+            "Promoted via scripts/tools/evaluate_latest_ppo_candidate.py.",
+            f"Policy analysis success={decision['policy_gate']['success_rate']:.4f} "
+            f"collision={decision['policy_gate']['collision_rate']:.4f} "
+            f"snqi={decision['policy_gate']['snqi']:.4f}.",
+            f"Benchmark success={decision['benchmark_gate']['success_rate']:.4f} "
+            f"collision={decision['benchmark_gate']['collision_rate']:.4f} "
+            f"snqi={decision['benchmark_gate']['snqi']:.4f}.",
+        ],
+    }
 
 
 def _write_promotion_report(
@@ -97,14 +322,16 @@ def _write_promotion_report(
     output_root: Path,
     selection: dict[str, Any],
     policy_result: dict[str, Any],
-    promotion: dict[str, Any],
+    benchmark_result: dict[str, Any],
+    decision: dict[str, Any],
 ) -> tuple[Path, Path]:
     json_path = output_root / "promotion_report.json"
     md_path = output_root / "promotion_report.md"
     payload = {
         "selection": selection,
         "policy_result": policy_result,
-        "promotion": promotion,
+        "benchmark_result": benchmark_result,
+        "decision": decision,
     }
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     lines = [
@@ -118,20 +345,33 @@ def _write_promotion_report(
         f"- created_at: `{selection['created_at']}`",
         f"- downloaded_model: `{selection['downloaded_model']}`",
         "",
-        "## Policy Analysis",
+        "## Policy Analysis Gate",
         f"- summary_json: `{policy_result['summary_json']}`",
         f"- report_md: `{policy_result['report_md']}`",
-        f"- videos_root: `{policy_result.get('video_root')}`",
+        f"- success_rate: `{decision['policy_gate']['success_rate']:.4f}`",
+        f"- collision_rate: `{decision['policy_gate']['collision_rate']:.4f}`",
+        f"- snqi: `{decision['policy_gate']['snqi']:.4f}`",
+        f"- problem_episode_count: `{decision['policy_gate']['problem_episode_count']}`",
+        f"- gate_pass: `{decision['policy_gate']['gate_pass']}`",
         "",
-        "## Gate",
-        f"- gate_pass: `{promotion['gate_pass']}`",
-        f"- success_rate: `{promotion['success_rate']:.4f}`",
-        f"- collision_rate: `{promotion['collision_rate']:.4f}`",
-        f"- problem_episode_count: `{promotion['problem_episode_count']}`",
+        "## Benchmark Gate",
+        f"- episodes_jsonl: `{benchmark_result['episodes_jsonl']}`",
+        f"- summary_json: `{benchmark_result['summary_json']}`",
+        f"- algo_config: `{benchmark_result['algo_config']}`",
+        f"- success_rate: `{decision['benchmark_gate']['success_rate']:.4f}`",
+        f"- collision_rate: `{decision['benchmark_gate']['collision_rate']:.4f}`",
+        f"- snqi: `{decision['benchmark_gate']['snqi']:.4f}`",
+        f"- contradictions: `{decision['benchmark_gate']['problem_episode_count']}`",
+        f"- gate_pass: `{decision['benchmark_gate']['gate_pass']}`",
         "",
-        "## Weakest Scenarios",
+        "## Promotion Decision",
+        f"- promote: `{decision['promote']}`",
+        f"- rationale: `{decision['rationale']}`",
+        f"- registry_updated: `{decision['registry_updated']}`",
+        "",
+        "## Weakest Benchmark Scenarios",
     ]
-    for row in promotion["weakest_scenarios"]:
+    for row in decision["benchmark_gate"]["weakest_scenarios"]:
         lines.append(
             f"- `{row['scenario_id']}`: success_rate={row['success_rate']:.4f}, "
             f"collision_rate={row['collision_rate']:.4f}"
@@ -140,8 +380,13 @@ def _write_promotion_report(
     return json_path, md_path
 
 
+def _decision_exit_code(decision: dict[str, Any]) -> int:
+    """Map promotion decision outcome to a machine-readable process exit code."""
+    return 0 if bool(decision.get("promote")) else 2
+
+
 def main() -> int:
-    """Resolve the newest PPO checkpoint from W&B, analyze it, and write a promotion report."""
+    """Resolve the newest PPO checkpoint from W&B, evaluate it, and write a promotion report."""
     args = _build_parser().parse_args()
     configure_logging(verbose=str(args.log_level).upper() == "DEBUG")
 
@@ -149,6 +394,8 @@ def main() -> int:
     output_root.mkdir(parents=True, exist_ok=True)
     analysis_root = output_root / "policy_analysis"
     videos_root = output_root / "videos"
+    benchmark_root = output_root / "benchmark"
+    benchmark_root.mkdir(parents=True, exist_ok=True)
     allowed_states = tuple(
         state.strip().lower()
         for state in str(args.wandb_allowed_states).split(",")
@@ -182,7 +429,7 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    cmd = [
+    policy_cmd = [
         sys.executable,
         "scripts/tools/policy_analysis_run.py",
         "--training-config",
@@ -202,9 +449,9 @@ def main() -> int:
         "--all",
     ]
     if args.videos:
-        cmd.extend(["--videos", "--video-fps", str(args.video_fps)])
-    logger.info("Running policy analysis via: {}", " ".join(cmd))
-    subprocess.run(cmd, check=True)
+        policy_cmd.extend(["--videos", "--video-fps", str(args.video_fps)])
+    logger.info("Running policy analysis via: {}", " ".join(policy_cmd))
+    subprocess.run(policy_cmd, check=True)
 
     summary_path = analysis_root / "summary.json"
     if not summary_path.exists():
@@ -215,16 +462,88 @@ def main() -> int:
         "report_md": str(analysis_root / "report.md"),
         "video_root": str(videos_root) if args.videos else None,
     }
-    promotion = _promotion_summary(summary_payload)
+    policy_gate = _promotion_summary(summary_payload)
+
+    algo_config_path = _build_benchmark_algo_config(
+        training_config_path=args.training_config.resolve(),
+        checkpoint_path=checkpoint_path.resolve(),
+        output_path=benchmark_root / "ppo_candidate_algo.yaml",
+    )
+    benchmark_jsonl = benchmark_root / "episodes.jsonl"
+    benchmark_cmd = [
+        sys.executable,
+        "scripts/run_classic_interactions.py",
+        "--algo",
+        "ppo",
+        "--algo-config",
+        str(algo_config_path),
+        "--output",
+        str(benchmark_jsonl),
+        "--workers",
+        str(args.benchmark_workers),
+        "--horizon",
+        str(args.benchmark_horizon),
+        "--dt",
+        str(args.benchmark_dt),
+        "--no-resume",
+    ]
+    if args.benchmark_snqi_weights:
+        benchmark_cmd.extend(["--snqi-weights", str(args.benchmark_snqi_weights)])
+    if args.benchmark_snqi_baseline:
+        benchmark_cmd.extend(["--snqi-baseline", str(args.benchmark_snqi_baseline)])
+    logger.info("Running benchmark gate via: {}", " ".join(benchmark_cmd))
+    benchmark_gate, _benchmark_error = _run_benchmark_gate(benchmark_cmd, benchmark_jsonl)
+    benchmark_summary_path = benchmark_root / "summary.json"
+    benchmark_summary_path.write_text(json.dumps(benchmark_gate, indent=2), encoding="utf-8")
+    benchmark_result = {
+        "episodes_jsonl": str(benchmark_jsonl),
+        "summary_json": str(benchmark_summary_path),
+        "algo_config": str(algo_config_path),
+    }
+
+    decision = {
+        "policy_gate": policy_gate,
+        "benchmark_gate": benchmark_gate,
+        "promote": bool(policy_gate["gate_pass"] and benchmark_gate["gate_pass"]),
+        "rationale": (
+            "both policy-analysis and benchmark gates passed"
+            if policy_gate["gate_pass"] and benchmark_gate["gate_pass"]
+            else "one or more promotion gates failed"
+        ),
+        "registry_updated": False,
+    }
+
+    if args.promote and decision["promote"]:
+        model_id = str(args.registry_model_id or selection.run_name or selection.run_id)
+        display_name = str(
+            args.registry_display_name
+            or f"PPO latest candidate promoted ({selection.run_name or selection.run_id})"
+        )
+        entry = _registry_entry_from_candidate(
+            model_id=model_id,
+            display_name=display_name,
+            selection=selection_payload,
+            checkpoint_path=checkpoint_path,
+            decision=decision,
+            wandb_entity=str(args.wandb_entity),
+            wandb_project=str(args.wandb_project),
+        )
+        upsert_registry_entry(entry, registry_path=args.registry_path)
+        decision["registry_updated"] = True
+        decision["registry_model_id"] = model_id
+
     report_json, report_md = _write_promotion_report(
         output_root=output_root,
         selection=selection_payload,
         policy_result=policy_result,
-        promotion=promotion,
+        benchmark_result=benchmark_result,
+        decision=decision,
     )
     logger.info("Latest model selection written to {}", output_root / "latest_model_selection.json")
     logger.info("Promotion report written to {} and {}", report_md, report_json)
-    return 0
+    if args.promote and not decision["promote"]:
+        logger.warning("Promotion requested but gates failed; registry was not updated.")
+    return _decision_exit_code(decision)
 
 
 if __name__ == "__main__":

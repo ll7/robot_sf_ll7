@@ -48,8 +48,11 @@ history stream. Use `history(stream="system", ...)`.
 
 Example:
 
+Use the Python interpreter from your active project environment when running the
+snippets below.
+
 ```bash
-/home/luttkule/git/robot_sf_ll7/.venv/bin/python - <<'PY'
+python - <<'PY'
 import json
 import math
 import statistics
@@ -117,7 +120,7 @@ The metadata file is useful for verifying what the process saw at startup,
 including Slurm environment variables.
 
 ```bash
-/home/luttkule/git/robot_sf_ll7/.venv/bin/python - <<'PY'
+python - <<'PY'
 import json
 import tempfile
 from pathlib import Path

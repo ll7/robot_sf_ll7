@@ -25,6 +25,7 @@ WORKDIR=${SLURM_TMPDIR:-/tmp/${USER}/${SLURM_JOB_ID}}
 TRAIN_SCRIPT=${AUXME_TRAIN_SCRIPT:-scripts/training/train_ppo.py}
 TRAIN_ARGS=${AUXME_TRAIN_ARGS:-"--config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml --log-level INFO"}
 AUXME_UV_RUN_ARGS=${AUXME_UV_RUN_ARGS:-""}
+AUXME_UV_RUN_ARGS_FILE=${AUXME_UV_RUN_ARGS_FILE:-""}
 RUN_OUTPUT_DIR=""
 MODULES_AVAILABLE=0
 
@@ -103,12 +104,20 @@ mkdir -p "${RUN_OUTPUT_DIR}"
 export ROBOT_SF_ARTIFACT_ROOT="${RUN_OUTPUT_DIR}"
 
 echo "[auxme] Running: uv run python ${TRAIN_SCRIPT} ${TRAIN_ARGS}"
-if [[ -n "${AUXME_UV_RUN_ARGS}" ]]; then
+if [[ -n "${AUXME_UV_RUN_ARGS_FILE}" ]]; then
+  if [[ ! -f "${AUXME_UV_RUN_ARGS_FILE}" ]]; then
+    echo "[auxme] AUXME_UV_RUN_ARGS_FILE does not exist: ${AUXME_UV_RUN_ARGS_FILE}" >&2
+    exit 1
+  fi
+  mapfile -t UV_RUN_ARGS_ARRAY < "${AUXME_UV_RUN_ARGS_FILE}"
+elif [[ -n "${AUXME_UV_RUN_ARGS}" ]]; then
+  echo "[auxme] AUXME_UV_RUN_ARGS uses shell word-splitting and is kept for backwards compatibility." >&2
+  echo "[auxme] Prefer AUXME_UV_RUN_ARGS_FILE with one uv-run argument per line." >&2
   # shellcheck disable=SC2206
   UV_RUN_ARGS_ARRAY=(${AUXME_UV_RUN_ARGS})
 else
   UV_RUN_ARGS_ARRAY=()
 fi
 
-echo "[auxme] Running: uv run ${AUXME_UV_RUN_ARGS} python ${TRAIN_SCRIPT} ${TRAIN_ARGS}"
+echo "[auxme] Running: uv run ${UV_RUN_ARGS_ARRAY[*]} python ${TRAIN_SCRIPT} ${TRAIN_ARGS}"
 srun --kill-on-bad-exit=1 uv run "${UV_RUN_ARGS_ARRAY[@]}" python "${TRAIN_SCRIPT}" ${TRAIN_ARGS}

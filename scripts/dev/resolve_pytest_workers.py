@@ -23,7 +23,10 @@ def _resolve_worker_spec(
     if requested_value:
         if requested_value == "auto":
             return "auto", "explicit override via PYTEST_NUM_WORKERS=auto"
-        workers = int(requested_value)
+        try:
+            workers = int(requested_value)
+        except ValueError:
+            raise ValueError("PYTEST_NUM_WORKERS must be a positive integer or 'auto'") from None
         if workers <= 0:
             raise ValueError("PYTEST_NUM_WORKERS must be a positive integer or 'auto'")
         return str(workers), "explicit override via PYTEST_NUM_WORKERS"
@@ -31,7 +34,7 @@ def _resolve_worker_spec(
     logical_cpus = max(1, int(cpu_count or 1))
     normalized_system = system.lower()
     if normalized_system == "darwin":
-        workers = max(MACOS_MIN_WORKERS, min(MACOS_MAX_WORKERS, logical_cpus // 2 or 1))
+        workers = max(MACOS_MIN_WORKERS, min(MACOS_MAX_WORKERS, max(1, logical_cpus // 2)))
         return (
             str(workers),
             f"macOS-safe default derived from {logical_cpus} logical CPUs "

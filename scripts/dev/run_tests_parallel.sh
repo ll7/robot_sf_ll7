@@ -69,7 +69,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-worker_spec="$(uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" --requested "$worker_override" --show-reason 2> >(cat >&2))"
+requested_args=()
+if [[ -n "$worker_override" ]]; then
+  requested_args=(--requested "$worker_override")
+fi
+
+worker_spec="$(
+  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" "${requested_args[@]}" --show-reason \
+    2> >(cat >&2)
+)"
 if [[ -z "$worker_spec" ]]; then
   echo "Failed to resolve pytest worker count." >&2
   exit 2

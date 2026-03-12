@@ -191,6 +191,8 @@ algorithm:
     assert summary["run_id"] == "smoke"
     assert summary["train_iterations"] == 2
     assert len(summary["history"]) == 2
+    assert summary["scenario_matrix_path"] is None
+    assert summary["randomize_seeds"] is False
 
     result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(result_lines) == 2
@@ -235,3 +237,63 @@ algorithm:
 
     assert fake_algo.stop_called is True
     assert fake_ray.shutdown_called is True
+
+
+def test_make_env_creator_uses_scenario_switching_env_when_matrix_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Scenario-matrix Dreamer configs should build via ScenarioSwitchingEnv."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_matrix.yaml",
+        f"""
+experiment:
+  run_id: smoke
+  output_root: {tmp_path.as_posix()}/output
+  train_iterations: 1
+  checkpoint_every: 1
+  seed: 11
+  log_level: WARNING
+env:
+  flatten_observation: true
+  flatten_keys: [drive_state, rays]
+  normalize_actions: true
+  scenario_matrix:
+    path: {scenarios.as_posix()}
+    strategy: cycle
+algorithm:
+  framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(dreamer, "load_scenarios", lambda *args, **kwargs: [{"name": "demo"}])
+
+    class _SwitchingEnvStub:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+            self.observation_space = "obs"
+            self.action_space = "act"
+            self.metadata = {}
+            self.render_mode = None
+
+        def reset(self, *args, **kwargs):  # pragma: no cover - passthrough stub
+            return {}, {}
+
+    monkeypatch.setattr(dreamer, "ScenarioSwitchingEnv", _SwitchingEnvStub)
+    monkeypatch.setattr(
+        dreamer,
+        "wrap_for_dreamerv3",
+        lambda env, **kwargs: {"env": env, "wrap_kwargs": kwargs},
+    )
+
+    creator = dreamer._make_env_creator(run_config)
+    wrapped = creator({"worker_index": 2})
+
+    assert isinstance(captured["scenario_sampler"], dreamer.ScenarioSampler)
+    assert captured["scenario_path"] == scenarios.resolve()
+    assert captured["seed"] == 13
+    assert captured["suite_name"] == "dreamerv3_rllib"
+    assert wrapped["wrap_kwargs"]["flatten_keys"] == ("drive_state", "rays")

@@ -21,6 +21,8 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
 from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
 
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 _TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking"}
@@ -42,7 +44,22 @@ _RAY_KEYS = {
     "runtime_env",
 }
 _RAY_RUNTIME_ENV_KEYS = {"working_dir", "excludes", "env_vars", "py_executable"}
-_ENV_KEYS = {"flatten_observation", "flatten_keys", "normalize_actions", "factory_kwargs", "config"}
+_ENV_KEYS = {
+    "flatten_observation",
+    "flatten_keys",
+    "normalize_actions",
+    "factory_kwargs",
+    "config",
+    "scenario_matrix",
+}
+_SCENARIO_MATRIX_KEYS = {
+    "path",
+    "strategy",
+    "switch_per_reset",
+    "include_scenarios",
+    "exclude_scenarios",
+    "weights",
+}
 _ALGORITHM_KEYS = {"framework", "training", "env_runners", "resources", "learners", "api_stack"}
 _TRACKING_KEYS = {"wandb"}
 _WANDB_KEYS = {
@@ -99,6 +116,19 @@ class EnvSettings:
     normalize_actions: bool
     factory_kwargs: dict[str, object]
     config_overrides: dict[str, object]
+    scenario_matrix: ScenarioMatrixSettings | None
+
+
+@dataclass(slots=True)
+class ScenarioMatrixSettings:
+    """Scenario-matrix-driven DreamerV3 training settings."""
+
+    path: Path
+    strategy: str
+    switch_per_reset: bool
+    include_scenarios: tuple[str, ...]
+    exclude_scenarios: tuple[str, ...]
+    weights: dict[str, float]
 
 
 @dataclass(slots=True)
@@ -139,6 +169,7 @@ class TrackingSettings:
 class DreamerRunConfig:
     """Complete validated training configuration."""
 
+    config_path: Path
     experiment: ExperimentSettings
     ray: RaySettings
     env: EnvSettings
@@ -209,18 +240,23 @@ def _coerce_optional_text(value: object, *, field_name: str) -> str | None:
     return text
 
 
-def _resolve_config_path(raw_value: object, *, field_name: str) -> Path:
+def _resolve_config_path(
+    raw_value: object, *, field_name: str, base_dir: Path | None = None
+) -> Path:
     """Resolve a path-like config value to an absolute path."""
     text_value = str(raw_value).strip()
     if not text_value:
         raise ValueError(f"{field_name} cannot be empty.")
     path_value = Path(text_value)
     if not path_value.is_absolute():
-        path_value = (Path.cwd() / path_value).resolve()
+        origin = base_dir if base_dir is not None else Path.cwd()
+        path_value = (origin / path_value).resolve()
     return path_value
 
 
-def _parse_experiment_settings(payload: dict[str, object]) -> ExperimentSettings:
+def _parse_experiment_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> ExperimentSettings:
     """Parse and validate the experiment section."""
     experiment_raw = _ensure_mapping(payload.get("experiment"), field_name="experiment")
     _ensure_known_keys(experiment_raw, field_name="experiment", allowed=_EXPERIMENT_KEYS)
@@ -232,6 +268,7 @@ def _parse_experiment_settings(payload: dict[str, object]) -> ExperimentSettings
     output_root = _resolve_config_path(
         experiment_raw.get("output_root", "output/dreamerv3"),
         field_name="experiment.output_root",
+        base_dir=base_dir,
     )
     train_iterations = int(experiment_raw.get("train_iterations", 20))
     checkpoint_every = int(experiment_raw.get("checkpoint_every", 5))
@@ -254,7 +291,7 @@ def _parse_experiment_settings(payload: dict[str, object]) -> ExperimentSettings
     )
 
 
-def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
+def _parse_ray_settings(payload: dict[str, object], *, base_dir: Path | None = None) -> RaySettings:
     """Parse and validate the ray section."""
     ray_raw = _ensure_mapping(payload.get("ray"), field_name="ray")
     _ensure_known_keys(ray_raw, field_name="ray", allowed=_RAY_KEYS)
@@ -266,7 +303,7 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
     )
     if working_dir is not None:
         runtime_env["working_dir"] = str(
-            _resolve_config_path(working_dir, field_name="working_dir")
+            _resolve_config_path(working_dir, field_name="working_dir", base_dir=base_dir)
         )
 
     excludes_raw = runtime_env_raw.get("excludes")
@@ -301,7 +338,47 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
     )
 
 
-def _parse_env_settings(payload: dict[str, object]) -> EnvSettings:
+def _parse_scenario_matrix_settings(
+    env_raw: dict[str, object], *, base_dir: Path | None = None
+) -> ScenarioMatrixSettings | None:
+    """Parse optional scenario-matrix settings for Dreamer parity training."""
+    scenario_matrix_raw = env_raw.get("scenario_matrix")
+    if scenario_matrix_raw is None:
+        return None
+    if not isinstance(scenario_matrix_raw, dict):
+        raise ValueError("env.scenario_matrix must be a mapping.")
+    _ensure_known_keys(
+        scenario_matrix_raw,
+        field_name="env.scenario_matrix",
+        allowed=_SCENARIO_MATRIX_KEYS,
+    )
+    if "path" not in scenario_matrix_raw or scenario_matrix_raw.get("path") in {None, ""}:
+        raise ValueError("env.scenario_matrix.path cannot be empty.")
+    include_raw = scenario_matrix_raw.get("include_scenarios", ())
+    exclude_raw = scenario_matrix_raw.get("exclude_scenarios", ())
+    if not isinstance(include_raw, list | tuple):
+        raise ValueError("env.scenario_matrix.include_scenarios must be a list or tuple.")
+    if not isinstance(exclude_raw, list | tuple):
+        raise ValueError("env.scenario_matrix.exclude_scenarios must be a list or tuple.")
+    weights_raw = _ensure_mapping(
+        scenario_matrix_raw.get("weights"),
+        field_name="env.scenario_matrix.weights",
+    )
+    return ScenarioMatrixSettings(
+        path=_resolve_config_path(
+            scenario_matrix_raw.get("path"),
+            field_name="env.scenario_matrix.path",
+            base_dir=base_dir,
+        ),
+        strategy=str(scenario_matrix_raw.get("strategy", "random")).strip().lower(),
+        switch_per_reset=bool(scenario_matrix_raw.get("switch_per_reset", True)),
+        include_scenarios=tuple(str(name) for name in include_raw),
+        exclude_scenarios=tuple(str(name) for name in exclude_raw),
+        weights={str(key): float(value) for key, value in weights_raw.items()},
+    )
+
+
+def _parse_env_settings(payload: dict[str, object], *, base_dir: Path | None = None) -> EnvSettings:
     """Parse and validate the environment section."""
     env_raw = _ensure_mapping(payload.get("env"), field_name="env")
     _ensure_known_keys(env_raw, field_name="env", allowed=_ENV_KEYS)
@@ -318,6 +395,7 @@ def _parse_env_settings(payload: dict[str, object]) -> EnvSettings:
             env_raw.get("factory_kwargs"), field_name="env.factory_kwargs"
         ),
         config_overrides=_ensure_mapping(env_raw.get("config"), field_name="env.config"),
+        scenario_matrix=_parse_scenario_matrix_settings(env_raw, base_dir=base_dir),
     )
 
 
@@ -339,7 +417,9 @@ def _parse_algorithm_settings(payload: dict[str, object]) -> AlgorithmSettings:
     )
 
 
-def _parse_tracking_settings(payload: dict[str, object]) -> TrackingSettings:
+def _parse_tracking_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> TrackingSettings:
     """Parse and validate tracking configuration."""
     tracking_raw = _ensure_mapping(payload.get("tracking"), field_name="tracking")
     _ensure_known_keys(tracking_raw, field_name="tracking", allowed=_TRACKING_KEYS)
@@ -351,7 +431,9 @@ def _parse_tracking_settings(payload: dict[str, object]) -> TrackingSettings:
         raise ValueError("tracking.wandb.tags must be a list or tuple of strings.")
 
     wandb_dir = _resolve_config_path(
-        wandb_raw.get("dir", "output/wandb"), field_name="tracking.wandb.dir"
+        wandb_raw.get("dir", "output/wandb"),
+        field_name="tracking.wandb.dir",
+        base_dir=base_dir,
     )
     return TrackingSettings(
         wandb=WandbSettings(
@@ -383,11 +465,12 @@ def load_run_config(path: Path) -> DreamerRunConfig:
     _ensure_known_keys(payload, field_name="root", allowed=_TOP_LEVEL_KEYS)
 
     return DreamerRunConfig(
-        experiment=_parse_experiment_settings(payload),
-        ray=_parse_ray_settings(payload),
-        env=_parse_env_settings(payload),
+        config_path=resolved,
+        experiment=_parse_experiment_settings(payload, base_dir=resolved.parent),
+        ray=_parse_ray_settings(payload, base_dir=resolved.parent),
+        env=_parse_env_settings(payload, base_dir=resolved.parent),
         algorithm=_parse_algorithm_settings(payload),
-        tracking=_parse_tracking_settings(payload),
+        tracking=_parse_tracking_settings(payload, base_dir=resolved.parent),
     )
 
 
@@ -429,16 +512,66 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
     factory_kwargs = dict(config.env.factory_kwargs)
     factory_kwargs.setdefault("debug", False)
     factory_kwargs.setdefault("recording_enabled", False)
+    scenario_matrix = config.env.scenario_matrix
+    loaded_scenarios = (
+        load_scenarios(scenario_matrix.path, base_dir=scenario_matrix.path.parent)
+        if scenario_matrix is not None
+        else None
+    )
 
     def _creator(worker_env_config: dict[str, object] | None = None) -> Any:
+        worker_env_payload = dict(worker_env_config or {})
         worker_overrides = {
             key: value
-            for key, value in dict(worker_env_config or {}).items()
+            for key, value in worker_env_payload.items()
             if key not in _IGNORED_ENV_CONTEXT_KEYS
         }
-        worker_config = copy.deepcopy(template)
-        _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
-        env = make_robot_env(config=worker_config, **factory_kwargs)
+        worker_index = int(worker_env_payload.get("worker_index", 0) or 0)
+        worker_seed = int(config.experiment.seed + worker_index)
+        if scenario_matrix is None:
+            worker_config = copy.deepcopy(template)
+            _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
+            env = make_robot_env(config=worker_config, **factory_kwargs)
+        else:
+            sampler = ScenarioSampler(
+                scenarios=loaded_scenarios or (),
+                include_scenarios=scenario_matrix.include_scenarios,
+                exclude_scenarios=scenario_matrix.exclude_scenarios,
+                weights=scenario_matrix.weights or None,
+                seed=worker_seed,
+                strategy=scenario_matrix.strategy,
+            )
+
+            def _config_builder(scenario: dict[str, object]) -> RobotSimulationConfig:
+                scenario_config = build_robot_config_from_scenario(
+                    scenario,
+                    scenario_path=scenario_matrix.path,
+                )
+                _apply_nested_overrides(
+                    scenario_config,
+                    copy.deepcopy(config.env.config_overrides),
+                    context_name="env.config",
+                )
+                _apply_nested_overrides(
+                    scenario_config,
+                    worker_overrides,
+                    context_name="worker.config",
+                )
+                scenario_config.use_image_obs = False
+                scenario_config.include_grid_in_observation = False
+                return scenario_config
+
+            env = ScenarioSwitchingEnv(
+                scenario_sampler=sampler,
+                scenario_path=scenario_matrix.path,
+                env_factory=make_robot_env,
+                config_builder=_config_builder,
+                env_factory_kwargs=factory_kwargs,
+                suite_name="dreamerv3_rllib",
+                algorithm_name=config.experiment.run_id,
+                switch_per_reset=scenario_matrix.switch_per_reset,
+                seed=worker_seed,
+            )
         return wrap_for_dreamerv3(
             env,
             flatten_observation=flatten_observation,
@@ -846,11 +979,30 @@ def run_training(run_config: DreamerRunConfig) -> int:
             summary_path,
             {
                 "run_id": run_config.experiment.run_id,
+                "config_path": str(run_config.config_path),
                 "run_dir": str(run_dir),
                 "train_iterations": run_config.experiment.train_iterations,
                 "checkpoint_every": run_config.experiment.checkpoint_every,
                 "seed": run_config.experiment.seed,
                 "result_log_path": str(result_log_path),
+                "scenario_matrix_path": (
+                    str(run_config.env.scenario_matrix.path)
+                    if run_config.env.scenario_matrix is not None
+                    else None
+                ),
+                "scenario_matrix_strategy": (
+                    run_config.env.scenario_matrix.strategy
+                    if run_config.env.scenario_matrix is not None
+                    else None
+                ),
+                "scenario_switch_per_reset": (
+                    run_config.env.scenario_matrix.switch_per_reset
+                    if run_config.env.scenario_matrix is not None
+                    else None
+                ),
+                "randomize_seeds": bool(
+                    run_config.env.config_overrides.get("randomize_seeds", False)
+                ),
                 "history": history,
             },
         )

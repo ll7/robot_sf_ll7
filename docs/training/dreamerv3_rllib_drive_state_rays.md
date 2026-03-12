@@ -6,10 +6,10 @@ the default non-image observation contract (`drive_state`, `rays`).
 Current scope note:
 
 - BR-08 prep is reproducible and benchmark-reset-v2 aligned.
-- The current launcher is still built on the unified env/map-pool surface, not the
-  scenario-matrix/all-SVG pipeline used by PPO benchmark runs.
-- Treat DreamerV3 here as a challenger training track with a clean launch/eval contract,
-  not yet as full scenario-matrix parity with PPO.
+- The current launcher now supports scenario-matrix-driven training through
+  `env.scenario_matrix`, using the same YAML scenario manifests as the PPO benchmark-reset runs.
+- Dreamer still remains a challenger track until benchmark evidence shows it beats the current PPO
+  champion.
 
 ## 1) Prerequisites
 
@@ -64,6 +64,8 @@ Both BR-08 Dreamer configs include these reliability settings:
 - action/observation contract fixes for float32-compatible env outputs
 - `env.factory_kwargs.reward_name: route_completion_v3`
 - success-priority reward weights aligned with the current benchmark-reset PPO runs
+- `env.scenario_matrix.path: configs/scenarios/classic_interactions_francis2023.yaml`
+- randomized seed semantics from `env.config.randomize_seeds: true`
 
 These prevent worker-side uv rebuild loops and reduce startup package overhead.
 
@@ -129,9 +131,9 @@ DreamerV3 promotion should follow the same success-first philosophy as PPO:
 
 Current limitation:
 
-- `train_dreamerv3_rllib.py` does not yet expose the full scenario-matrix training surface.
-- Benchmark comparison should therefore be treated as a challenger evaluation step after
-  training, not proof that Dreamer trained on the same all-scenarios curriculum as PPO.
+- Scenario-matrix parity now covers the training env source, but Dreamer still uses its own RLlib
+  env-runner topology rather than the PPO `SubprocVecEnv` stack. Compare results at the benchmark
+  level, not by assuming identical rollout dynamics.
 
 ## 6) Monitoring Checklist
 
@@ -197,3 +199,9 @@ Key files:
 - `checkpoints/` (periodic + final RLlib checkpoints)
 - `result.jsonl` (JSONL per-iteration progress stream for live monitoring)
 - `run_summary.json` (iteration history and run metadata)
+- `run_summary.json` also records:
+  - `config_path`
+  - `scenario_matrix_path`
+  - `scenario_matrix_strategy`
+  - `scenario_switch_per_reset`
+  - `randomize_seeds`

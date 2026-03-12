@@ -44,6 +44,10 @@ env:
   flatten_observation: true
   flatten_keys: [drive_state, rays]
   normalize_actions: true
+  scenario_matrix:
+    path: ../../scenarios/classic_interactions_francis2023.yaml
+    strategy: random
+    switch_per_reset: true
   factory_kwargs:
     debug: false
     recording_enabled: false

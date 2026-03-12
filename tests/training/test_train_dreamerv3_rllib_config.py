@@ -48,6 +48,60 @@ algorithm:
     assert run_config.env.flatten_keys == ("drive_state", "rays")
     assert run_config.algorithm.framework == "torch"
     assert run_config.experiment.output_root.is_absolute()
+    assert run_config.env.scenario_matrix is None
+
+
+def test_load_run_config_parses_scenario_matrix_relative_to_config(tmp_path: Path):
+    """Scenario-matrix config should resolve relative to the YAML location."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_matrix.yaml",
+        """
+experiment:
+  run_id: smoke
+env:
+  scenario_matrix:
+    path: ./scenarios.yaml
+    strategy: cycle
+    switch_per_reset: false
+    include_scenarios: [a]
+    exclude_scenarios: [b]
+    weights:
+      a: 2.0
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.env.scenario_matrix is not None
+    assert run_config.env.scenario_matrix.path == scenarios.resolve()
+    assert run_config.env.scenario_matrix.strategy == "cycle"
+    assert run_config.env.scenario_matrix.switch_per_reset is False
+    assert run_config.env.scenario_matrix.include_scenarios == ("a",)
+    assert run_config.env.scenario_matrix.exclude_scenarios == ("b",)
+    assert run_config.env.scenario_matrix.weights == {"a": 2.0}
+
+
+def test_load_run_config_rejects_empty_scenario_matrix_path(tmp_path: Path):
+    """Scenario-matrix configs must provide a non-empty path."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_bad_matrix.yaml",
+        """
+experiment:
+  run_id: smoke
+env:
+  scenario_matrix:
+    path: ""
+algorithm:
+  framework: torch
+""",
+    )
+
+    with pytest.raises(ValueError, match="env.scenario_matrix.path"):
+        load_run_config(config_path)
 
 
 def test_load_run_config_rejects_unknown_root_keys(tmp_path: Path):
@@ -226,7 +280,7 @@ algorithm:
     run_config = load_run_config(config_path)
 
     assert run_config.ray.disable_uv_run_runtime_env is True
-    assert run_config.ray.runtime_env["working_dir"] == str(Path.cwd().resolve())
+    assert run_config.ray.runtime_env["working_dir"] == str(config_path.parent.resolve())
     assert run_config.ray.runtime_env["py_executable"] == "/tmp/fake-python"
     assert run_config.ray.runtime_env["excludes"] == [".git", "output"]
     assert run_config.ray.runtime_env["env_vars"] == {"FOO": "bar"}

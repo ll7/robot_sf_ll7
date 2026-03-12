@@ -408,7 +408,9 @@ def _apply_nested_overrides(
 ) -> None:
     """Recursively apply dict overrides onto dataclass-like objects."""
 
-    field_map = {field.name: field for field in fields(config_obj)} if is_dataclass(config_obj) else {}
+    field_map = (
+        {field.name: field for field in fields(config_obj)} if is_dataclass(config_obj) else {}
+    )
 
     def _coerce_from_annotation(annotation: object, value: object) -> object:
         if annotation in {Any, object}:
@@ -463,7 +465,9 @@ def _apply_nested_overrides(
             raise ValueError(f"Unknown {context_name} override field: '{key}'")
         current_attr = getattr(config_obj, key)
         field_annotation = field_map.get(key).type if key in field_map else None
-        if isinstance(value, dict) and (hasattr(current_attr, "__dict__") or is_dataclass(current_attr)):
+        if isinstance(value, dict) and (
+            hasattr(current_attr, "__dict__") or is_dataclass(current_attr)
+        ):
             _apply_nested_overrides(current_attr, value, context_name=f"{context_name}.{key}")
         else:
             setattr(

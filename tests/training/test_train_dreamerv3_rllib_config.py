@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from scripts.training.train_dreamerv3_rllib import (
-  _apply_nested_overrides,
+    _apply_nested_overrides,
     _build_ray_init_kwargs,
     _resolve_auto_overrides,
     load_run_config,
 )
-from robot_sf.gym_env.observation_mode import ObservationMode
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
-from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 
 
 def _write_yaml(path: Path, content: str) -> Path:
@@ -152,9 +152,9 @@ def test_apply_nested_overrides_reconstructs_grid_config_dataclass() -> None:
     assert env_config.grid_config.use_ego_frame is True
     assert env_config.grid_config.center_on_robot is True
     assert env_config.grid_config.channels == [
-      GridChannel.OBSTACLES,
-      GridChannel.PEDESTRIANS,
-      GridChannel.COMBINED,
+        GridChannel.OBSTACLES,
+        GridChannel.PEDESTRIANS,
+        GridChannel.COMBINED,
     ]
 
 

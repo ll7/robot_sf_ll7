@@ -65,6 +65,29 @@ models:
           high collision on classic scenarios and one integrity-contradiction
           error episode.
       - Analysis: model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md
+  - model_id: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311
+    display_name: PPO BR-06 v8 num_envs=8 benchmark best checkpoint (2026-03-11 candidate)
+    local_path: output/model_cache/ppo_num_envs_benchmark_candidates/08/model.zip
+    config_path: configs/training/ppo/benchmark_num_envs/expert_ppo_issue_576_br06_v8_num_envs_benchmark_08_1m.yaml
+    commit: 63853a635c521fc5f2d5c0995cfd8bd3d190b89d
+    wandb_run_id: mwmtrog8
+    wandb_run_path: ll7/robot_sf/mwmtrog8
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - br06
+      - v8-success-priority
+      - candidate
+      - benchmark-num-envs
+      - num-envs-8
+      - best-success
+    notes:
+      - Best intermediate checkpoint from the imech156-u num_envs benchmark run.
+      - W&B best-checkpoint summary: output/model_cache/ppo_num_envs_benchmark_candidates/08/best_checkpoint_summary.json
+      - Full policy sweep: output/benchmarks/20260311_policy_analysis_ppo_v8_numenv08_best/report.md
+      - Full 141-episode sweep slightly outperformed the promoted PPO v3 baseline on success and collision rate.
   - model_id: ga3c_cadrl_iros18
     display_name: GA3C-CADRL (IROS18) checkpoint
     local_path: model/ga3c_cadrl/IROS18/network_01900000.meta

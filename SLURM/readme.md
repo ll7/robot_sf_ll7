@@ -1,8 +1,12 @@
 # SLURM
 
 ```bash
-sbatch slurm_train.sl
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 ```
+
+For new long-running jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch`.
+The wrapper queries the current partition and QoS limits and submits with the effective
+max wall time by default.
 
 ## Track CPU and GPU usage
 

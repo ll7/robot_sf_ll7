@@ -413,6 +413,7 @@ class SocNavPlannerConfig:
     predictive_device: str = "cpu"
     predictive_max_agents: int = 16
     predictive_horizon_steps: int = 8
+    predictive_ego_conditioning: bool = False
     predictive_rollout_dt: float = 0.2
     predictive_goal_weight: float = 1.0
     predictive_collision_weight: float = 6.0
@@ -462,6 +463,19 @@ class SocNavPlannerConfig:
     predictive_progress_escape_min_speed_ratio: float = 0.35
     predictive_progress_escape_heading_gain: float = 1.4
     predictive_progress_escape_clearance_margin: float = 0.2
+    predictive_sequence_search_enabled: bool = False
+    predictive_sequence_segments: int = 3
+    predictive_sequence_branch_factor: int = 5
+    predictive_sequence_beam_width: int = 8
+    predictive_phase_logic_enabled: bool = True
+    predictive_phase_commit_clearance: float = 1.4
+    predictive_phase_yield_clearance: float = 0.95
+    predictive_phase_recover_clearance: float = 1.8
+    predictive_phase_recover_progress: float = 0.25
+    predictive_phase_commit_weight: float = 1.4
+    predictive_phase_yield_weight: float = 2.0
+    predictive_phase_align_weight: float = 0.4
+    predictive_phase_recover_weight: float = 1.5
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -2655,13 +2669,20 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             tuple[np.ndarray, np.ndarray, np.ndarray, float]:
             ``(state, mask, robot_pos, robot_heading)``.
         """
-        robot_state, _goal_state, ped_state = self._socnav_fields(observation)
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        robot_speed = self._as_1d_float(robot_state.get("speed", [0.0, 0.0]), pad=2)[:2]
         ped_positions, ped_velocities_ego = self._normalize_pedestrians(ped_state)
 
         max_agents = max(1, int(self.config.predictive_max_agents))
-        state = np.zeros((max_agents, 4), dtype=np.float32)
+        expected_dim = 4
+        if bool(self.config.predictive_ego_conditioning):
+            expected_dim = 9
+        model = self._ensure_model()
+        if model is not None:
+            expected_dim = int(getattr(model.config, "input_dim", expected_dim))
+        state = np.zeros((max_agents, expected_dim), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         count = min(max_agents, ped_positions.shape[0])
         if count > 0:
@@ -2673,6 +2694,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             state[:count, 0] = rel_x
             state[:count, 1] = rel_y
             state[:count, 2:4] = ped_velocities_ego[:count]
+            if expected_dim >= 9:
+                goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+                goal_rel_world = goal_current - robot_pos
+                goal_rel = np.array(
+                    [
+                        cos_h * goal_rel_world[0] + sin_h * goal_rel_world[1],
+                        -sin_h * goal_rel_world[0] + cos_h * goal_rel_world[1],
+                    ],
+                    dtype=np.float32,
+                )
+                goal_dist = float(np.linalg.norm(goal_rel))
+                goal_dir = goal_rel / max(goal_dist, 1e-6)
+                state[:count, 4] = float(robot_speed[0]) if robot_speed.size > 0 else 0.0
+                state[:count, 5] = float(robot_speed[1]) if robot_speed.size > 1 else 0.0
+                state[:count, 6] = float(goal_dir[0])
+                state[:count, 7] = float(goal_dir[1])
+                state[:count, 8] = goal_dist
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 
@@ -3067,6 +3105,218 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.occupancy_weight) * occ_penalty
         )
 
+    def _rollout_robot_sequence(
+        self,
+        *,
+        sequence: list[tuple[float, float]],
+        segment_steps: int,
+        dt: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Roll out a piecewise-constant action sequence in the robot local frame.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Local positions and headings for rollout steps.
+        """
+        pos = np.zeros(2, dtype=float)
+        heading = 0.0
+        traj = np.zeros((max(1, len(sequence) * max(1, segment_steps)), 2), dtype=float)
+        headings = np.zeros((traj.shape[0],), dtype=float)
+        idx = 0
+        for v, w in sequence:
+            for _ in range(max(1, segment_steps)):
+                heading += float(w) * dt
+                pos[0] += float(v) * np.cos(heading) * dt
+                pos[1] += float(v) * np.sin(heading) * dt
+                traj[idx] = pos
+                headings[idx] = heading
+                idx += 1
+        return traj[:idx], headings[:idx]
+
+    def _score_action_sequence(
+        self,
+        *,
+        observation: dict,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        sequence: list[tuple[float, float]],
+        steps: int,
+    ) -> float:
+        """Score a short piecewise-constant action sequence; lower is better.
+
+        Returns:
+            float: Scalar sequence cost.
+        """
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        segments = max(1, len(sequence))
+        segment_steps = max(1, int(np.ceil(max(1, steps) / segments)))
+        local_traj, local_headings = self._rollout_robot_sequence(
+            sequence=sequence,
+            segment_steps=segment_steps,
+            dt=dt,
+        )
+        horizon = min(local_traj.shape[0], int(steps), int(future_peds.shape[1]))
+        local_traj = local_traj[:horizon]
+        local_headings = local_headings[:horizon]
+
+        radius_margin = float(self.config.predictive_robot_radius) + float(
+            self.config.predictive_pedestrian_radius
+        )
+        min_clearance = float("inf")
+        collision_pen = 0.0
+        near_pen = 0.0
+        ttc_pen = 0.0
+        safe_dist = float(self.config.predictive_safe_distance) + radius_margin
+        near_dist = max(float(self.config.predictive_near_distance) + radius_margin, safe_dist)
+        ttc_threshold = float(self.config.predictive_ttc_distance) + radius_margin
+
+        for t in range(horizon):
+            delta = future_peds[:, t, :] - local_traj[t].reshape(1, 2)
+            dist = np.linalg.norm(delta, axis=1)
+            valid_dist = dist[mask > 0.5]
+            if valid_dist.size == 0:
+                continue
+            min_clearance = min(min_clearance, float(np.min(valid_dist)))
+            collision_pen += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
+            near_pen += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+            shortfall = np.maximum(0.0, ttc_threshold - valid_dist)
+            ttc_pen += float(np.sum(shortfall / (float(t + 1) * dt + self._EPS)))
+
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        final_local = local_traj[-1] if horizon > 0 else np.zeros(2, dtype=float)
+        final_world = robot_pos + np.array(
+            [
+                cos_h * final_local[0] - sin_h * final_local[1],
+                sin_h * final_local[0] + cos_h * final_local[1],
+            ],
+            dtype=float,
+        )
+        initial_dist = float(np.linalg.norm(goal - robot_pos))
+        final_dist = float(np.linalg.norm(goal - final_world))
+        goal_progress = initial_dist - final_dist
+
+        direction = final_world - robot_pos
+        if np.linalg.norm(direction) <= self._EPS:
+            direction = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        _, occ_penalty = self._path_penalty(
+            robot_pos=robot_pos,
+            direction=direction,
+            observation=observation,
+            base_distance=max(float(np.linalg.norm(final_world - robot_pos)), 1e-3),
+            num_samples=max(2, horizon),
+        )
+
+        velocity_pen = float(sum(abs(v) for v, _ in sequence))
+        turn_pen = float(sum(abs(w) for _, w in sequence))
+        progress_risk_shortfall = max(
+            0.0, float(self.config.predictive_progress_risk_distance) - float(min_clearance)
+        )
+        progress_risk_pen = max(0.0, goal_progress) * progress_risk_shortfall
+        hard_clearance_shortfall = max(
+            0.0, float(self.config.predictive_hard_clearance_distance) - float(min_clearance)
+        )
+
+        phase_cost = 0.0
+        if bool(self.config.predictive_phase_logic_enabled):
+            first_v, _first_w = sequence[0]
+            first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
+            first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
+            goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+            heading_err = abs((goal_heading - first_heading + np.pi) % (2.0 * np.pi) - np.pi)
+            phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
+            if min_clearance >= float(self.config.predictive_phase_commit_clearance):
+                phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
+            if min_clearance < float(self.config.predictive_phase_yield_clearance):
+                phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
+            if min_clearance >= float(
+                self.config.predictive_phase_recover_clearance
+            ) and goal_progress < float(self.config.predictive_phase_recover_progress):
+                phase_cost += float(self.config.predictive_phase_recover_weight)
+
+        return (
+            -float(self.config.predictive_goal_weight) * goal_progress
+            + float(self.config.predictive_collision_weight) * collision_pen
+            + float(self.config.predictive_near_miss_weight) * near_pen
+            + float(self.config.predictive_progress_risk_weight) * progress_risk_pen
+            + float(self.config.predictive_hard_clearance_weight) * hard_clearance_shortfall
+            + float(self.config.predictive_velocity_weight) * velocity_pen
+            + float(self.config.predictive_turn_weight) * turn_pen
+            + float(self.config.predictive_ttc_weight) * ttc_pen
+            + float(self.config.occupancy_weight) * occ_penalty
+            + phase_cost
+        )
+
+    def _plan_sequence_search(
+        self,
+        *,
+        observation: dict,
+        future: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[float, float]:
+        """Run deterministic beam search over short piecewise-constant control sequences.
+
+        Returns:
+            tuple[float, float]: First action from the lowest-cost sequence.
+        """
+        candidates = self._candidate_set(future_peds=future, mask=mask)
+        base_ranked = sorted(
+            (
+                (
+                    self._score_action(
+                        observation=observation,
+                        future_peds=future,
+                        mask=mask,
+                        v=v,
+                        w=w,
+                        steps=steps,
+                    ),
+                    (v, w),
+                )
+                for v, w in candidates
+            ),
+            key=lambda item: float(item[0]),
+        )
+        branch = max(1, int(self.config.predictive_sequence_branch_factor))
+        beam_width = max(1, int(self.config.predictive_sequence_beam_width))
+        segments = max(1, int(self.config.predictive_sequence_segments))
+        stage_candidates = [cand for _score, cand in base_ranked[:branch]]
+
+        beam: list[tuple[float, list[tuple[float, float]]]] = []
+        for candidate in stage_candidates:
+            seq = [candidate]
+            score = self._score_action_sequence(
+                observation=observation,
+                future_peds=future,
+                mask=mask,
+                sequence=seq,
+                steps=steps,
+            )
+            beam.append((score, seq))
+        beam.sort(key=lambda item: float(item[0]))
+        beam = beam[:beam_width]
+
+        for _ in range(1, segments):
+            expanded: list[tuple[float, list[tuple[float, float]]]] = []
+            for _prev_score, seq in beam:
+                for candidate in stage_candidates:
+                    new_seq = seq + [candidate]
+                    score = self._score_action_sequence(
+                        observation=observation,
+                        future_peds=future,
+                        mask=mask,
+                        sequence=new_seq,
+                        steps=steps,
+                    )
+                    expanded.append((score, new_seq))
+            expanded.sort(key=lambda item: float(item[0]))
+            beam = expanded[:beam_width]
+        return beam[0][1][0] if beam else (0.0, 0.0)
+
     def plan(self, observation: dict) -> tuple[float, float]:
         """Compute (v, w) via predictive rollout search over learned trajectories.
 
@@ -3085,18 +3335,35 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         best = (0.0, 0.0)
         best_cost = float("inf")
-        for v, w in self._candidate_set(future_peds=future, mask=mask):
-            cost = self._score_action(
+
+        if bool(self.config.predictive_sequence_search_enabled):
+            best = self._plan_sequence_search(
+                observation=observation,
+                future=future,
+                mask=mask,
+                steps=steps,
+            )
+            best_cost = self._score_action(
                 observation=observation,
                 future_peds=future,
                 mask=mask,
-                v=v,
-                w=w,
+                v=best[0],
+                w=best[1],
                 steps=steps,
             )
-            if cost < best_cost:
-                best_cost = cost
-                best = (v, w)
+        else:
+            for v, w in self._candidate_set(future_peds=future, mask=mask):
+                cost = self._score_action(
+                    observation=observation,
+                    future_peds=future,
+                    mask=mask,
+                    v=v,
+                    w=w,
+                    steps=steps,
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best = (v, w)
 
         if bool(self.config.predictive_progress_escape_enabled):
             goal_dist = float(np.linalg.norm(goal - robot_pos))

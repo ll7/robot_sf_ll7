@@ -114,6 +114,7 @@ skills use the same commands:
 ```bash
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 scripts/dev/gh_comment.sh pr --current <<'EOF'
 Summary line
@@ -121,6 +122,10 @@ Summary line
 - bullet 2
 EOF
 ```
+
+For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the submitted
+wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
+`#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
 ### Environment factory pattern (CRITICAL)
 

@@ -31,6 +31,7 @@ class PredictiveModelConfig:
 
     max_agents: int = 16
     horizon_steps: int = 8
+    input_dim: int = 4
     hidden_dim: int = 96
     message_passing_steps: int = 2
     distance_temperature: float = 2.0
@@ -62,7 +63,8 @@ class PredictiveTrajectoryModel(nn.Module):
     """Graph-based predictor that forecasts future pedestrian positions.
 
     Input state is a tensor of shape ``(B, N, 4)`` containing pedestrian features:
-    ``(x_rel, y_rel, vx_rel, vy_rel)`` in the robot frame.
+    ``(x_rel, y_rel, vx_rel, vy_rel)`` in the robot frame, optionally extended with
+    ego-conditioned repeated features.
     """
 
     def __init__(self, config: PredictiveModelConfig) -> None:
@@ -71,7 +73,7 @@ class PredictiveTrajectoryModel(nn.Module):
         self.config = config
         h = int(config.hidden_dim)
         self.encoder = nn.Sequential(
-            nn.Linear(4, h),
+            nn.Linear(int(config.input_dim), h),
             nn.ReLU(),
             nn.Linear(h, h),
             nn.ReLU(),
@@ -104,7 +106,7 @@ class PredictiveTrajectoryModel(nn.Module):
         """Predict future pedestrian positions in the robot frame.
 
         Args:
-            state: Agent features ``(B, N, 4)``.
+            state: Agent features ``(B, N, input_dim)`` as configured by the model.
             mask: Agent validity mask ``(B, N)`` with 1 for active slots.
 
         Returns:

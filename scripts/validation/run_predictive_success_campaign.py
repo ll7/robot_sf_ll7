@@ -18,6 +18,9 @@ from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
+
 
 @dataclass
 class EvalResult:
@@ -200,12 +203,21 @@ def _run_eval(
     )
 
 
-def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, float]:
-    """Ranking key: hard success first, then hard clearance, then global success."""
+def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, float, float, float]:
+    """Ranking key preferring actual success before clearance in hard-suite ties."""
     hard_clearance = (
         hard.mean_min_distance if np.isfinite(hard.mean_min_distance) else float("-inf")
     )
-    return (hard.success_rate, hard_clearance, global_res.success_rate)
+    global_clearance = (
+        global_res.mean_min_distance if np.isfinite(global_res.mean_min_distance) else float("-inf")
+    )
+    return (
+        hard.success_rate,
+        global_res.success_rate,
+        hard_clearance,
+        global_clearance,
+        global_res.mean_avg_speed,
+    )
 
 
 def _checkpoint_token(checkpoint: str) -> str:
@@ -289,6 +301,9 @@ def main() -> int:
 
     top = ranked[0]
     summary = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_success_campaign",
         "generated_at": datetime.now(UTC).isoformat(),
         "scenario_matrix": str(args.scenario_matrix),
         "hard_seed_manifest": str(args.hard_seed_manifest),

@@ -15,6 +15,11 @@ from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.planner.predictive_foresight import (
+    PredictiveForesightEncoder,
+    predictive_foresight_config_from_source,
+    predictive_foresight_spaces,
+)
 from robot_sf.sim.simulator import Simulator
 
 DEFAULT_MAX_PEDS = 64
@@ -119,7 +124,19 @@ def socnav_observation_space(
                     ),
                 },
             ),
-        },
+            **(
+                {
+                    "predictive": predictive_foresight_spaces(
+                        predictive_foresight_config_from_source(
+                            env_config,
+                            default_max_agents=max_pedestrians,
+                        )
+                    )
+                }
+                if getattr(env_config, "predictive_foresight_enabled", False)
+                else {}
+            ),
+        }
     )
 
 
@@ -132,6 +149,17 @@ class SocNavObservationFusion:
     max_pedestrians: int
     robot_index: int = 0
     truncation_warned: bool = False
+    _predictive_foresight: PredictiveForesightEncoder | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize optional predictive foresight encoder."""
+        if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
+            self._predictive_foresight = PredictiveForesightEncoder(
+                predictive_foresight_config_from_source(
+                    self.env_config,
+                    default_max_agents=self.max_pedestrians,
+                )
+            )
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
@@ -207,7 +235,7 @@ class SocNavObservationFusion:
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
-        return {
+        obs = {
             "robot": {
                 "position": robot_pos_clipped,
                 "heading": np.array([wrapped_heading], dtype=np.float32),
@@ -240,3 +268,6 @@ class SocNavObservationFusion:
                 ),
             },
         }
+        if self._predictive_foresight is not None:
+            obs["predictive"] = self._predictive_foresight.encode(obs)
+        return obs

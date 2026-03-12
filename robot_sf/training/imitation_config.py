@@ -39,7 +39,7 @@ class ExpertTrainingConfig:
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
     ppo_hyperparams: dict[str, object] = field(default_factory=dict)
-    best_checkpoint_metric: str = "eval_episode_return"
+    best_checkpoint_metric: str = "success_rate"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     randomize_seeds: bool = False
@@ -71,7 +71,7 @@ class ExpertTrainingConfig:
         convergence: ConvergenceCriteria,
         evaluation: EvaluationSchedule,
         ppo_hyperparams: dict[str, object] | None = None,
-        best_checkpoint_metric: str = "eval_episode_return",
+        best_checkpoint_metric: str = "success_rate",
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
         scenario_id: str | None = None,

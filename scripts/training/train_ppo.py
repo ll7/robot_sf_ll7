@@ -499,6 +499,7 @@ class BestCheckpointSummary:
     checkpoint_path: Path
     metrics: dict[str, float]
     meets_convergence: bool
+    report_path: Path | None = None
 
 
 @dataclass(slots=True)
@@ -620,13 +621,15 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         collision_rate=float(convergence_raw["collision_rate"]),
         plateau_window=int(convergence_raw["plateau_window"]),
     )
+    frequency_episodes = int(evaluation_raw.get("frequency_episodes", 0))
     evaluation = EvaluationSchedule(
-        frequency_episodes=int(evaluation_raw["frequency_episodes"]),
+        frequency_episodes=frequency_episodes,
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
     )
-    _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
+    if "frequency_episodes" in evaluation_raw:
+        _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
     if not evaluation.step_schedule:
         raise ValueError(
             "evaluation.step_schedule is required; frequency_episodes alone is not supported."
@@ -642,7 +645,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         convergence=convergence,
         evaluation=evaluation,
         ppo_hyperparams=dict(data.get("ppo_hyperparams", {}) or {}),
-        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "eval_episode_return")),
+        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "success_rate")),
         snqi_weights_path=_resolve_optional_path(
             path,
             data.get("snqi_weights"),
@@ -1462,6 +1465,25 @@ def _finalize_best_checkpoint(
         )
         return None
     shutil.copy2(best_source, best_path)
+    report_path = checkpoint_dir / f"{config.policy_id}_best.summary.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "policy_id": config.policy_id,
+                "metric": tracker.metric_name,
+                "value": float(best_candidate.score),
+                "eval_step": int(best_candidate.eval_step),
+                "meets_convergence": bool(best_candidate.meets_convergence),
+                "metrics": best_candidate.metrics,
+                "source_checkpoint_path": str(best_source),
+                "best_checkpoint_path": str(best_path),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return BestCheckpointSummary(
         metric=tracker.metric_name,
         value=best_candidate.score,
@@ -1469,6 +1491,7 @@ def _finalize_best_checkpoint(
         checkpoint_path=best_path,
         metrics=best_candidate.metrics,
         meets_convergence=best_candidate.meets_convergence,
+        report_path=report_path,
     )
 
 
@@ -1524,7 +1547,113 @@ def _log_perf_to_wandb(
     )
 
 
-def _train_with_schedule(  # noqa: PLR0913
+def _update_wandb_best_checkpoint_summary(
+    wandb_run: object | None,
+    *,
+    config: ExpertTrainingConfig,
+    best_summary: BestCheckpointSummary,
+) -> None:
+    """Mirror the selected best checkpoint metadata into W&B summary fields."""
+    if wandb_run is None or not hasattr(wandb_run, "summary"):
+        return
+    summary = wandb_run.summary
+    payload: dict[str, object] = {
+        "best/checkpoint_metric": best_summary.metric,
+        "best/checkpoint_value": float(best_summary.value),
+        "best/eval_step": int(best_summary.eval_step),
+        "best/checkpoint_path": str(best_summary.checkpoint_path),
+        "best/checkpoint_alias": "best-success",
+        "best/meets_convergence": bool(best_summary.meets_convergence),
+        "best/policy_id": config.policy_id,
+        "best/selection_policy": (
+            "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi"
+        ),
+    }
+    if best_summary.report_path is not None:
+        payload["best/checkpoint_report_path"] = str(best_summary.report_path)
+    for key, value in best_summary.metrics.items():
+        payload[f"best/{key}"] = float(value)
+    if hasattr(summary, "update"):
+        summary.update(payload)
+    else:  # pragma: no cover - defensive fallback for loose stubs
+        for key, value in payload.items():
+            summary[key] = value
+
+
+def _upload_wandb_best_checkpoint_artifact(
+    wandb_run: object | None,
+    *,
+    config: ExpertTrainingConfig,
+    best_summary: BestCheckpointSummary,
+) -> None:
+    """Upload the selected best PPO checkpoint as a dedicated W&B model artifact."""
+    if wandb_run is None:
+        return
+    try:  # pragma: no cover - optional dependency
+        import wandb  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Skipping W&B best-checkpoint artifact upload: {}", exc)
+        return
+
+    artifact_name = f"{config.policy_id}-best-success"
+    metadata: dict[str, object] = {
+        "policy_id": config.policy_id,
+        "selection_policy": "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi",
+        "metric": best_summary.metric,
+        "metric_value": float(best_summary.value),
+        "eval_step": int(best_summary.eval_step),
+        "meets_convergence": bool(best_summary.meets_convergence),
+        "metrics": {key: float(value) for key, value in best_summary.metrics.items()},
+    }
+    artifact = wandb.Artifact(artifact_name, type="model", metadata=metadata)
+    artifact.description = (
+        "Best intermediate PPO checkpoint selected from periodic evaluation for this run."
+    )
+    artifact.add_file(str(best_summary.checkpoint_path), name="model.zip")
+    if best_summary.report_path is not None and best_summary.report_path.exists():
+        artifact.add_file(str(best_summary.report_path), name="best_checkpoint_summary.json")
+    aliases = ["best-success", f"step-{best_summary.eval_step}"]
+    try:
+        wandb_run.log_artifact(artifact, aliases=aliases)
+    except TypeError:  # pragma: no cover - older or stubbed interfaces
+        wandb_run.log_artifact(artifact)
+
+
+def _persist_best_checkpoint_if_updated(
+    tracker: _BestCheckpointTracker,
+    *,
+    config: ExpertTrainingConfig,
+    checkpoint_dir: Path | None,
+    wandb_run: object | None,
+    last_persisted_eval_step: int | None,
+) -> tuple[BestCheckpointSummary | None, int | None]:
+    """Persist and publish the currently selected best checkpoint when it changes."""
+    best_candidate = tracker.best()
+    if best_candidate is None or best_candidate.eval_step == last_persisted_eval_step:
+        return None, last_persisted_eval_step
+
+    best_summary = _finalize_best_checkpoint(
+        tracker,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+    )
+    if best_summary is None:
+        return None, last_persisted_eval_step
+
+    _update_wandb_best_checkpoint_summary(
+        wandb_run,
+        config=config,
+        best_summary=best_summary,
+    )
+    _upload_wandb_best_checkpoint_artifact(
+        wandb_run,
+        config=config,
+        best_summary=best_summary,
+    )
+    return best_summary, best_summary.eval_step
+
+
+def _train_with_schedule(  # noqa: C901,PLR0913
     model: PPO,
     *,
     config: ExpertTrainingConfig,
@@ -1571,6 +1700,8 @@ def _train_with_schedule(  # noqa: PLR0913
         higher_is_better=higher_is_better,
         convergence=config.convergence,
     )
+    best_summary: BestCheckpointSummary | None = None
+    last_persisted_best_eval_step: int | None = None
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
@@ -1628,14 +1759,26 @@ def _train_with_schedule(  # noqa: PLR0913
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
         tracker.update(summary, eval_step=eval_step)
+        persisted_best, last_persisted_best_eval_step = _persist_best_checkpoint_if_updated(
+            tracker,
+            config=config,
+            checkpoint_dir=checkpoint_dir,
+            wandb_run=wandb_run,
+            last_persisted_eval_step=last_persisted_best_eval_step,
+        )
+        if persisted_best is not None:
+            best_summary = persisted_best
         episode_records.extend(eval_records)
         timesteps_done = eval_step
 
-    best_summary = _finalize_best_checkpoint(
-        tracker,
-        config=config,
-        checkpoint_dir=checkpoint_dir,
-    )
+    if best_summary is None:
+        best_summary, _ = _persist_best_checkpoint_if_updated(
+            tracker,
+            config=config,
+            checkpoint_dir=checkpoint_dir,
+            wandb_run=wandb_run,
+            last_persisted_eval_step=last_persisted_best_eval_step,
+        )
     return metrics_raw, episode_records, best_summary, eval_timeline, perf_timeline
 
 

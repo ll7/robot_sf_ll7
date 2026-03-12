@@ -103,7 +103,6 @@ RUN_OUTPUT_DIR="${RUN_STAGING_DIR}/results"
 mkdir -p "${RUN_OUTPUT_DIR}"
 export ROBOT_SF_ARTIFACT_ROOT="${RUN_OUTPUT_DIR}"
 
-echo "[auxme] Running: uv run python ${TRAIN_SCRIPT} ${TRAIN_ARGS}"
 if [[ -n "${AUXME_UV_RUN_ARGS_FILE}" ]]; then
   if [[ ! -f "${AUXME_UV_RUN_ARGS_FILE}" ]]; then
     echo "[auxme] AUXME_UV_RUN_ARGS_FILE does not exist: ${AUXME_UV_RUN_ARGS_FILE}" >&2
@@ -113,6 +112,7 @@ if [[ -n "${AUXME_UV_RUN_ARGS_FILE}" ]]; then
 elif [[ -n "${AUXME_UV_RUN_ARGS}" ]]; then
   echo "[auxme] AUXME_UV_RUN_ARGS uses shell word-splitting and is kept for backwards compatibility." >&2
   echo "[auxme] Prefer AUXME_UV_RUN_ARGS_FILE with one uv-run argument per line." >&2
+  echo "[auxme] AUXME_UV_RUN_ARGS only supports simple space-delimited tokens." >&2
   # shellcheck disable=SC2206
   UV_RUN_ARGS_ARRAY=(${AUXME_UV_RUN_ARGS})
 else

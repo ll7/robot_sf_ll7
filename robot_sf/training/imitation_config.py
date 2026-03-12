@@ -125,7 +125,7 @@ class ExpertTrainingConfig:
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=resolved_env_factory_kwargs,
             scenario_sampling=dict(scenario_sampling or {}),
-            num_envs=(str(num_envs) if isinstance(num_envs, str) else num_envs),
+            num_envs=num_envs,
             num_envs_reserve_cores=int(num_envs_reserve_cores),
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,

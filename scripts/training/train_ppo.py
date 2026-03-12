@@ -146,6 +146,13 @@ _DIRECT_WANDB_TRAIN_METRIC_KEYS = (
     "train/policy_gradient_loss",
     "train/entropy_loss",
 )
+_AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB = 6.0
+_AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB = 1.1
+_AUTO_NUM_ENVS_STABLE_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_STABLE_CPU_DIVISOR = 2
+_AUTO_NUM_ENVS_STABLE_HEADROOM_GIB = 20.0
+_AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB = 1.2
 
 
 def _wandb_training_clock() -> float:
@@ -404,14 +411,22 @@ def _describe_num_envs_resolution(config: ExpertTrainingConfig) -> dict[str, obj
     reserve = max(0, int(config.num_envs_reserve_cores))
     host_memory_gib = _host_memory_gib()
     if mode == "auto_stable":
-        cpu_target = max(1, (logical_cpus // 2) - 2 - reserve)
-        headroom_gib = 20.0
-        env_budget_gib = 1.2
+        cpu_target = max(
+            1,
+            (logical_cpus // _AUTO_NUM_ENVS_STABLE_CPU_DIVISOR)
+            - _AUTO_NUM_ENVS_STABLE_RESERVED_CORES
+            - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_STABLE_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB
         decision_label = "stable headroom heuristic"
     else:
-        cpu_target = max(1, logical_cpus - 2 - reserve)
-        headroom_gib = 6.0
-        env_budget_gib = 1.1
+        cpu_target = max(
+            1,
+            logical_cpus - _AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB
         decision_label = "throughput heuristic"
 
     memory_cap = None

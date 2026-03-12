@@ -20,6 +20,7 @@ from scripts.training.train_ppo import (
     _BestCheckpointCandidate,
     _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
+    _describe_num_envs_resolution,
     _DirectWandbMetricsCallback,
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
@@ -355,6 +356,15 @@ def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> Non
 
     assert _resolve_num_envs(throughput_cfg) == 27
     assert _resolve_num_envs(stable_cfg) == 13
+
+    throughput_details = _describe_num_envs_resolution(throughput_cfg)
+    stable_details = _describe_num_envs_resolution(stable_cfg)
+    assert throughput_details["mode"] == "auto_throughput"
+    assert throughput_details["decision"] == "throughput heuristic; limited by memory cap"
+    assert throughput_details["memory_cap"] == 27
+    assert stable_details["mode"] == "auto_stable"
+    assert stable_details["decision"] == "stable headroom heuristic; limited by memory cap"
+    assert stable_details["memory_cap"] == 13
 
 
 def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:

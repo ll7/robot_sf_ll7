@@ -22,6 +22,7 @@ Wrapper options:
 Environment overrides:
   PYTEST_FAST_FAIL=1|0
   PYTEST_ORDER_MODE=failed-first|new-first|none
+  PYTEST_NUM_WORKERS=<int>|auto
 
 Examples:
   scripts/dev/run_tests_parallel.sh
@@ -32,6 +33,7 @@ EOF
 
 fast_fail="${PYTEST_FAST_FAIL:-1}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
+worker_override="${PYTEST_NUM_WORKERS:-}"
 
 pytest_args=()
 while [[ $# -gt 0 ]]; do
@@ -67,7 +69,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-cmd=(uv run pytest -n auto)
+worker_spec="$(uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" --requested "$worker_override" --show-reason 2> >(cat >&2))"
+if [[ -z "$worker_spec" ]]; then
+  echo "Failed to resolve pytest worker count." >&2
+  exit 2
+fi
+
+echo "Resolved pytest-xdist workers: $worker_spec" >&2
+
+cmd=(uv run pytest -n "$worker_spec")
 
 if [[ "$fast_fail" == "1" ]]; then
   cmd+=("-x")

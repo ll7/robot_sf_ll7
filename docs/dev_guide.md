@@ -123,6 +123,11 @@ Summary line
 EOF
 ```
 
+On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
+default instead of `-n auto`, because the unbounded auto worker selection can leave local
+validation wrappers hanging after child processes should have exited. Override with
+`PYTEST_NUM_WORKERS=<int>` or `PYTEST_NUM_WORKERS=auto` when needed.
+
 For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the submitted
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.

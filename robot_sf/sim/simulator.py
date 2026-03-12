@@ -378,14 +378,28 @@ class PedSimulator(Simulator):
         forces and robot interactions, and prepares robot navigation paths.
         """
         pysf_config = PySFSimConfig()
-        spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
+        spawn_config = PedSpawnConfig(
+            self.config.peds_per_area_m2,
+            self.config.max_peds_per_group,
+            route_spawn_distribution=self.config.route_spawn_distribution,
+            route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
+            route_spawn_seed=self.config.route_spawn_seed,
+            reset_follow_route_at_start=self.config.peds_reset_follow_route_at_start,
+        )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,
             spawn_config,
             self.map_def.ped_routes,
             self.map_def.ped_crowded_zones,
+            obstacle_polygons=get_prepared_obstacles(self.map_def),
+            single_pedestrians=self.map_def.single_pedestrians,
+            time_step_s=self.config.time_per_step_in_secs,
+            single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
             add_ego_state=True,  # Add Ego pedestrian state to pysf_state
         )
+        for behavior in self.peds_behaviors:
+            if isinstance(behavior, SinglePedestrianBehavior):
+                behavior.set_robot_pose_provider(lambda: self.robot_poses)
 
         self.pysf_sim = PySFSimulator(
             self.pysf_state.pysf_states(),

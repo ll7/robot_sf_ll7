@@ -1,8 +1,4 @@
-"""Configuration dataclasses for the fast-pysf simulator.
-
-This module groups runtime-tunable parameters for scene integration,
-pedestrian interaction forces, obstacle handling, and spawning.
-"""
+"""Configuration dataclasses for the fast-pysf simulator."""
 
 from dataclasses import dataclass, field
 

@@ -13,7 +13,7 @@ from robot_sf.common.types import Line2D
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import SvgRectangle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -49,34 +49,27 @@ def dummy_map():
         goal_zone=r_goal,
     )
 
-    ped_spawn = SvgRectangle(
-        x=5, y=5, width=1, height=1, label="ped_spawn", id_="ped_spawn"
-    ).get_zone()
-
-    ped_goal = SvgRectangle(
-        x=35, y=5, width=1, height=1, label="ped_goal", id_="ped_goal"
-    ).get_zone()
-
-    ped_path = GlobalRoute(
-        spawn_id=0,
-        goal_id=0,
-        waypoints=[[7, 5], [34, 5]],
-        spawn_zone=ped_spawn,
-        goal_zone=ped_goal,
-    )
+    single_pedestrians = [
+        SinglePedestrianDefinition(
+            id="npc_0",
+            start=(1.0, 10.0),
+            goal=(34.0, 10.0),
+        ),
+    ]
 
     map_def = MapDefinition(
         width=width,
         height=height,
         obstacles=[],
         robot_spawn_zones=[r_spawn],
-        ped_spawn_zones=[ped_spawn],
+        ped_spawn_zones=[],
         robot_goal_zones=[r_goal],
         bounds=bounds,
         robot_routes=[r_path],
-        ped_goal_zones=[ped_goal],
+        ped_goal_zones=[],
         ped_crowded_zones=[],
-        ped_routes=[ped_path],
+        ped_routes=[],
+        single_pedestrians=single_pedestrians,
     )
     return map_def
 
@@ -90,7 +83,10 @@ def env(dummy_map):
     config = PedestrianSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"test": dummy_map}),
         sim_config=SimulationSettings(
-            debug_without_robot_movement=True
+            debug_without_robot_movement=True,
+            peds_reset_follow_route_at_start=True,
+            difficulty=0,
+            ped_density_by_difficulty=[0.0],
         ),  # Enable debug mode to isolate social force effects
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
@@ -113,33 +109,34 @@ def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
     Test that the NPC pedestrian senses the ego pedestrian using social forces.
     """
     _, _ = env.reset()
-
+    assert len(env.simulator.ped_pos) == 1, (
+        f"Expected exactly one NPC pedestrian in this test, not {len(env.simulator.ped_pos)}"
+    )
     # Case 1: Ego in the way of NPC
-    # Place ego at (12, 5), which is along the NPC's route from (7, 5) to (34, 5)
-    env.simulator.ego_ped.state.pose = ((12.0, 5.0), 0)
-    social_forces = []
+    # Place ego at (12, 10), which is along the NPC's route from (7, 10) to (34, 10)
+    env.simulator.ego_ped.state.pose = ((12.0, 10.0), 0)
+    ped_positions = env.simulator.pysf_state.ped_positions
+    print("Pedestrian positions over time:", ped_positions)
+    social_force_threshold = 0.5
+    threshold_reached = False
     for i in range(200):
         action = np.array([0, 0])  # No action for the ego pedestrian
         _, _, done, _, _ = env.step(action)
         # Get the social force for the NPC (index 0)
         sf = env.simulator.pysf_sim.forces[1]()  # index 1 is social force
-        social_forces.append(sf[0].copy())
-        # env.render()
-        # time.sleep(0.05)
-
+        social_force_norm = float(np.linalg.norm(sf[0]))
+        if social_force_norm > social_force_threshold:
+            assert social_force_norm > social_force_threshold
+            threshold_reached = True
+            break
         if done:
             break
 
-    # Check that the social force changes at some point
-    diffs = [
-        np.linalg.norm(social_forces[i + 1] - social_forces[i])
-        for i in range(len(social_forces) - 1)
-    ]
-    assert any(d > 1e-6 for d in diffs), "Social force on NPC did not change during the episode"
+    assert threshold_reached, "NPC social force never exceeded 0.5 when ego was in the path"
 
     _, _ = env.reset()
     # Case 2: Ego not in the way of NPC
-    # Place ego at (30, 30), which is not along the NPC's route from (7, 5) to (34, 5)
+    # Place ego at (30, 30), which is not along the NPC's route from (1.0, 10.0) to (34.0, 10.0)
     env.simulator.ego_ped.state.pose = ((30.0, 30.0), 0)
     social_forces = []
     for i in range(200):
@@ -148,8 +145,6 @@ def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
         # Get the social force for the NPC (index 0)
         sf = env.simulator.pysf_sim.forces[1]()  # index 1 is social force
         social_forces.append(sf[0].copy())
-        # env.render()
-        # time.sleep(0.05)
 
         if done:
             break

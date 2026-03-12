@@ -299,12 +299,16 @@ def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
     return tuple(schedule)
 
 
-def _parse_num_envs(raw: object) -> int | None:
-    """Parse num_envs setting (supports int or 'auto')."""
+def _parse_num_envs(raw: object) -> int | str | None:
+    """Parse num_envs setting (supports int and host-aware auto modes)."""
     if raw is None:
         return None
-    if isinstance(raw, str) and raw.strip().lower() == "auto":
-        return None
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"auto", "auto_throughput"}:
+            return "auto_throughput"
+        if normalized == "auto_stable":
+            return "auto_stable"
     return max(1, int(raw))
 
 
@@ -316,12 +320,86 @@ def _ensure_cuda_determinism_env() -> None:
     logger.info("Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic CUDA")
 
 
+def _slurm_allocated_cpus() -> int | None:
+    """Return allocated CPU count from Slurm when available."""
+
+    for key in ("SLURM_CPUS_PER_TASK", "SLURM_JOB_CPUS_PER_NODE"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        token = raw.split("(", 1)[0].split(",", 1)[0].strip()
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def _host_logical_cpus() -> int:
+    """Return the logical CPU count available to the current process."""
+
+    return max(1, _slurm_allocated_cpus() or (os.cpu_count() or 1))
+
+
+def _host_memory_gib() -> float | None:
+    """Return total visible host memory in GiB when detectable."""
+
+    if hasattr(os, "sysconf"):
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            phys_pages = os.sysconf("SC_PHYS_PAGES")
+            if isinstance(page_size, int) and isinstance(phys_pages, int):
+                total_bytes = page_size * phys_pages
+                if total_bytes > 0:
+                    return float(total_bytes) / float(1024**3)
+        except (ValueError, OSError):
+            pass
+    return None
+
+
+def _memory_limited_num_envs(*, headroom_gib: float, env_budget_gib: float) -> int | None:
+    """Estimate a safe env cap from visible host memory."""
+
+    total_gib = _host_memory_gib()
+    if total_gib is None:
+        return None
+    usable_gib = max(0.0, total_gib - headroom_gib)
+    return max(1, int(usable_gib // env_budget_gib))
+
+
+def _resolve_auto_num_envs(mode: str, *, reserve_cores: int) -> int:
+    """Resolve host-aware auto env counts for throughput or stability."""
+
+    logical_cpus = _host_logical_cpus()
+    reserve = max(0, int(reserve_cores))
+    if mode == "auto_stable":
+        cpu_target = max(1, (logical_cpus // 2) - 2 - reserve)
+        memory_cap = _memory_limited_num_envs(headroom_gib=20.0, env_budget_gib=1.2)
+    else:
+        cpu_target = max(1, logical_cpus - 2 - reserve)
+        memory_cap = _memory_limited_num_envs(headroom_gib=6.0, env_budget_gib=1.1)
+    if memory_cap is None:
+        return cpu_target
+    return max(1, min(cpu_target, memory_cap))
+
+
 def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
     """Resolve the effective number of environments for training."""
-    if config.num_envs is not None:
+
+    if isinstance(config.num_envs, int):
         return max(1, int(config.num_envs))
-    cores = os.cpu_count() or 1
-    return max(1, cores - 1)
+    mode = (
+        str(config.num_envs).strip().lower()
+        if isinstance(config.num_envs, str)
+        else "auto_throughput"
+    )
+    if mode not in {"auto", "auto_throughput", "auto_stable"}:
+        raise ValueError("num_envs must be an int or one of {'auto_throughput', 'auto_stable'}")
+    if mode == "auto":
+        mode = "auto_throughput"
+    return _resolve_auto_num_envs(mode, reserve_cores=config.num_envs_reserve_cores)
 
 
 def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
@@ -718,13 +796,14 @@ def _log_startup_summary(
     """Emit one structured startup summary for run-critical resolved config."""
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
-        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} "
+        "total_timesteps={} reward_profile={} requested_num_envs={} num_envs={} worker_mode={} "
         "randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
         config.total_timesteps,
         _resolved_reward_name(config.env_factory_kwargs),
+        config.num_envs if config.num_envs is not None else "auto_throughput",
         num_envs,
         worker_mode,
         _randomize_seeds(config),

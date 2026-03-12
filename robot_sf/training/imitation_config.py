@@ -51,7 +51,7 @@ class ExpertTrainingConfig:
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     scenario_sampling: dict[str, object] = field(default_factory=dict)
-    num_envs: int | None = None
+    num_envs: int | str | None = None
     num_envs_reserve_cores: int = 0
     worker_mode: str = "auto"
     socnav_orca_time_horizon: float | None = None
@@ -83,7 +83,7 @@ class ExpertTrainingConfig:
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
         scenario_sampling: dict[str, object] | None = None,
-        num_envs: int | None = None,
+        num_envs: int | str | None = None,
         num_envs_reserve_cores: int = 0,
         worker_mode: str = "auto",
         socnav_orca_time_horizon: float | None = None,
@@ -125,7 +125,7 @@ class ExpertTrainingConfig:
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=resolved_env_factory_kwargs,
             scenario_sampling=dict(scenario_sampling or {}),
-            num_envs=num_envs,
+            num_envs=(str(num_envs) if isinstance(num_envs, str) else num_envs),
             num_envs_reserve_cores=int(num_envs_reserve_cores),
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,

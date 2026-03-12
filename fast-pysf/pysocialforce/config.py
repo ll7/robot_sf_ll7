@@ -1,4 +1,8 @@
-"""Config"""
+"""Configuration dataclasses for the fast-pysf simulator.
+
+This module groups runtime-tunable parameters for scene integration,
+pedestrian interaction forces, obstacle handling, and spawning.
+"""
 
 from dataclasses import dataclass, field
 
@@ -7,7 +11,16 @@ from pysocialforce.ped_population import PedSpawnConfig
 
 @dataclass
 class SceneConfig:
-    """TODO docstring. Document this class."""
+    """Global simulation parameters shared across all force terms.
+
+    Attributes:
+        enable_group: Enable group-related forces (coherence, repulsion, gaze).
+        agent_radius: Pedestrian radius used for collision/interaction geometry (meters).
+        dt_secs: Integration step size in seconds.
+        max_speed_multiplier: Upper bound multiplier for desired speeds.
+        tau: Relaxation time constant used by force models (seconds).
+        resolution: Spatial resolution used for obstacle preprocessing.
+    """
 
     enable_group: bool = True
     agent_radius: float = 0.35
@@ -19,14 +32,23 @@ class SceneConfig:
 
 @dataclass
 class GroupCoherenceForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for attraction that keeps pedestrians within a group together.
+
+    Attributes:
+        factor: Scaling factor for group coherence force magnitude.
+    """
 
     factor: float = 3.0
 
 
 @dataclass
 class GroupReplusiveForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for short-range repulsion between members of the same group.
+
+    Attributes:
+        factor: Scaling factor for intra-group repulsive force.
+        threshold: Distance threshold where repulsion becomes active (meters).
+    """
 
     factor: float = 1.0
     threshold: float = 0.55
@@ -34,7 +56,12 @@ class GroupReplusiveForceConfig:
 
 @dataclass
 class GroupGazeForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for gaze-alignment force encouraging shared heading.
+
+    Attributes:
+        factor: Scaling factor for group gaze force magnitude.
+        fov_phi: Field-of-view angle used by gaze interaction logic (degrees).
+    """
 
     factor: float = 4.0
     fov_phi: float = 90.0
@@ -42,7 +69,13 @@ class GroupGazeForceConfig:
 
 @dataclass
 class DesiredForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for goal-directed acceleration toward target waypoints.
+
+    Attributes:
+        factor: Scaling factor for desired force magnitude.
+        relaxation_time: Time to relax toward desired velocity (seconds).
+        goal_threshold: Distance considered "arrived at goal" (meters).
+    """
 
     factor: float = 1.0
     relaxation_time: float = 0.5
@@ -51,7 +84,16 @@ class DesiredForceConfig:
 
 @dataclass
 class SocialForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for pedestrian-pedestrian interaction (social repulsion).
+
+    Attributes:
+        factor: Global scaling factor for social interaction force.
+        lambda_importance: Relative weight between velocity and distance terms.
+        gamma: Interaction range/smoothing parameter from the SFM formulation.
+        n: Exponent shaping angular dependency.
+        n_prime: Exponent shaping directional weighting.
+        activation_threshold: Max interaction distance for social force (meters).
+    """
 
     factor: float = 5.1
     lambda_importance: float = 2.0
@@ -63,7 +105,13 @@ class SocialForceConfig:
 
 @dataclass
 class ObstacleForceConfig:
-    """TODO docstring. Document this class."""
+    """Parameters for repulsion from static obstacles and map boundaries.
+
+    Attributes:
+        factor: Scaling factor for obstacle force magnitude.
+        sigma: Additional radius inflation term for obstacle interaction.
+        threshold: Base distance offset used in obstacle activation logic.
+    """
 
     factor: float = 10.0
     sigma: float = 0.0
@@ -72,7 +120,11 @@ class ObstacleForceConfig:
 
 @dataclass
 class SimulatorConfig:
-    """TODO docstring. Document this class."""
+    """Top-level container aggregating all simulator and force configurations.
+
+    This dataclass is passed to the simulator factory and forwarded to
+    scene setup, force construction, and pedestrian spawn initialization.
+    """
 
     scene_config: SceneConfig = field(default_factory=SceneConfig)
     group_coherence_force_config: GroupCoherenceForceConfig = field(

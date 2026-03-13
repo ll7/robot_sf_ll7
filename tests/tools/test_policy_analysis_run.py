@@ -194,6 +194,24 @@ def test_summarize_records_zero_fills_missing_collision_split_metrics() -> None:
     assert summary["agent_collision_rate"] == pytest.approx(0.0)
 
 
+def test_resolved_total_collision_value_prefers_split_counts_over_termination_fallback() -> None:
+    """Split collision counters should be used before forcing a 1.0 termination fallback."""
+    total, used_fallback = policy_analysis_run._resolved_total_collision_value(
+        {
+            "termination_reason": "collision",
+            "metrics": {
+                "collisions": 0.0,
+                "ped_collision_count": 0.0,
+                "obstacle_collision_count": 1.0,
+                "agent_collision_count": 0.0,
+            },
+        }
+    )
+
+    assert total == pytest.approx(1.0)
+    assert used_fallback is False
+
+
 def test_summarize_records_does_not_count_waypoint_only_success() -> None:
     """Waypoint-level success must not be treated as route completion success."""
     records = [

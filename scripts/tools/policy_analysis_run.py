@@ -668,23 +668,23 @@ def _resolved_total_collision_value(record: dict[str, Any]) -> tuple[float, bool
                 total = numeric_total
     except (TypeError, ValueError):
         total = None
-    if total is None:
-        split_total = 0.0
-        for metric_name in (
-            "ped_collision_count",
-            "obstacle_collision_count",
-            "agent_collision_count",
-        ):
-            raw_split = metrics.get(metric_name)
-            try:
-                if raw_split is None:
-                    continue
-                numeric_split = float(raw_split)
-            except (TypeError, ValueError):
+    split_total = 0.0
+    for metric_name in (
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "agent_collision_count",
+    ):
+        raw_split = metrics.get(metric_name)
+        try:
+            if raw_split is None:
                 continue
-            if math.isfinite(numeric_split):
-                split_total += numeric_split
-        total = split_total
+            numeric_split = float(raw_split)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric_split):
+            split_total += numeric_split
+    if total is None or total <= 0.0:
+        total = split_total if split_total > 0.0 else (0.0 if total is None else total)
     if total <= 0.0 and str(record.get("termination_reason", "")).strip() == "collision":
         return 1.0, True
     return float(total), False

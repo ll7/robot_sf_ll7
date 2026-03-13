@@ -25,6 +25,7 @@ import importlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -633,6 +634,9 @@ class BestCheckpointSummary:
     metrics: dict[str, float]
     meets_convergence: bool
     report_path: Path | None = None
+    policy_analysis_summary_path: Path | None = None
+    policy_analysis_report_path: Path | None = None
+    policy_analysis_video_root: Path | None = None
 
 
 @dataclass(slots=True)
@@ -643,6 +647,9 @@ class _BestCheckpointCandidate:
     score: float
     metrics: dict[str, float]
     meets_convergence: bool
+    report_path: Path | None = None
+    summary_path: Path | None = None
+    video_root: Path | None = None
 
 
 @dataclass(slots=True)
@@ -760,6 +767,10 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
+        full_policy_analysis_on_new_best=bool(
+            evaluation_raw.get("full_policy_analysis_on_new_best", False)
+        ),
+        full_policy_analysis_videos=bool(evaluation_raw.get("full_policy_analysis_videos", False)),
     )
     if "frequency_episodes" in evaluation_raw:
         _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
@@ -769,6 +780,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         )
 
     return ExpertTrainingConfig.from_raw(
+        source_config_path=path,
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=common.ensure_seed_tuple(data.get("seeds", [])),
@@ -1450,6 +1462,7 @@ def _execute_training(
             wandb_callback=wandb_callback,
             start_timesteps=start_timesteps,
             checkpoint_dir=common.get_expert_policy_dir() / "checkpoints" / config.policy_id,
+            run_id=run_id,
             startup_sec=startup_sec,
             num_envs=num_envs,
         )
@@ -1713,6 +1726,9 @@ def _update_wandb_best_checkpoint_summary(
     if wandb_run is None or not hasattr(wandb_run, "summary"):
         return
     summary = wandb_run.summary
+    policy_analysis_summary_path = getattr(best_summary, "policy_analysis_summary_path", None)
+    policy_analysis_report_path = getattr(best_summary, "policy_analysis_report_path", None)
+    policy_analysis_video_root = getattr(best_summary, "policy_analysis_video_root", None)
     payload: dict[str, object] = {
         "best/checkpoint_metric": best_summary.metric,
         "best/checkpoint_value": float(best_summary.value),
@@ -1722,11 +1738,20 @@ def _update_wandb_best_checkpoint_summary(
         "best/meets_convergence": bool(best_summary.meets_convergence),
         "best/policy_id": config.policy_id,
         "best/selection_policy": (
-            "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi"
+            "full_policy_analysis: success_rate -> lower collision_rate -> lower max_steps_rate "
+            "-> higher snqi"
+            if policy_analysis_summary_path is not None
+            else "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi"
         ),
     }
     if best_summary.report_path is not None:
         payload["best/checkpoint_report_path"] = str(best_summary.report_path)
+    if policy_analysis_summary_path is not None:
+        payload["best/policy_analysis_summary_path"] = str(policy_analysis_summary_path)
+    if policy_analysis_report_path is not None:
+        payload["best/policy_analysis_report_path"] = str(policy_analysis_report_path)
+    if policy_analysis_video_root is not None:
+        payload["best/policy_analysis_video_root"] = str(policy_analysis_video_root)
     for key, value in best_summary.metrics.items():
         payload[f"best/{key}"] = float(value)
     if hasattr(summary, "update"):
@@ -1768,6 +1793,12 @@ def _upload_wandb_best_checkpoint_artifact(
     artifact.add_file(str(best_summary.checkpoint_path), name="model.zip")
     if best_summary.report_path is not None and best_summary.report_path.exists():
         artifact.add_file(str(best_summary.report_path), name="best_checkpoint_summary.json")
+    policy_analysis_summary_path = getattr(best_summary, "policy_analysis_summary_path", None)
+    if policy_analysis_summary_path is not None and Path(policy_analysis_summary_path).exists():
+        artifact.add_file(
+            str(policy_analysis_summary_path),
+            name="policy_analysis_summary.json",
+        )
     aliases = ["best-success", f"step-{best_summary.eval_step}"]
     try:
         wandb_run.log_artifact(artifact, aliases=aliases)
@@ -1809,7 +1840,152 @@ def _persist_best_checkpoint_if_updated(
     return best_summary, best_summary.eval_step
 
 
-def _train_with_schedule(  # noqa: C901,PLR0913
+def _is_policy_analysis_better(
+    candidate: _BestCheckpointCandidate,
+    current: _BestCheckpointCandidate | None,
+) -> bool:
+    """Compare full policy-analysis candidates using benchmark-facing tie-breaks."""
+    if current is None:
+        return True
+    keys: tuple[tuple[str, bool], ...] = (
+        ("success_rate", True),
+        ("collision_rate", False),
+        ("max_steps_rate", False),
+        ("snqi", True),
+    )
+    for key, higher_is_better in keys:
+        cand = float(candidate.metrics.get(key, 0.0))
+        cur = float(current.metrics.get(key, 0.0))
+        if np.isclose(cand, cur):
+            continue
+        return cand > cur if higher_is_better else cand < cur
+    return int(candidate.eval_step) < int(current.eval_step)
+
+
+def _run_policy_analysis_for_checkpoint(
+    *,
+    config: ExpertTrainingConfig,
+    checkpoint_path: Path,
+    eval_step: int,
+    run_id: str,
+    output_root: Path,
+    videos: bool,
+) -> _BestCheckpointCandidate:
+    """Run full policy analysis for a candidate PPO checkpoint and return summary metrics."""
+    if config.source_config_path is None:
+        raise ValueError("source_config_path is required for policy-analysis checkpoint selection")
+    analysis_root = output_root / f"step_{eval_step}"
+    analysis_root.mkdir(parents=True, exist_ok=True)
+    video_root = analysis_root / "videos"
+    cmd = [
+        sys.executable,
+        "scripts/tools/policy_analysis_run.py",
+        "--training-config",
+        str(config.source_config_path),
+        "--policy",
+        "ppo",
+        "--model-path",
+        str(checkpoint_path),
+        "--output",
+        str(analysis_root),
+        "--all",
+    ]
+    if videos:
+        cmd.extend(["--videos", "--video-output", str(video_root)])
+    logger.info(
+        "Running full policy analysis for candidate checkpoint eval_step={} via: {}",
+        eval_step,
+        " ".join(cmd),
+    )
+    subprocess.run(cmd, check=True)
+    summary_path = analysis_root / "summary.json"
+    report_path = analysis_root / "report.md"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary = dict(payload.get("summary") or {})
+    termination_rates = dict(summary.get("termination_reason_rates") or {})
+    metrics = {
+        "success_rate": float(summary.get("success_rate", 0.0)),
+        "collision_rate": float(summary.get("collision_rate", 0.0)),
+        "max_steps_rate": float(termination_rates.get("max_steps", 0.0)),
+        "snqi": float((summary.get("metric_means") or {}).get("snqi", 0.0) or 0.0),
+    }
+    meets_convergence = (
+        metrics["success_rate"] >= config.convergence.success_rate
+        and metrics["collision_rate"] <= config.convergence.collision_rate
+    )
+    return _BestCheckpointCandidate(
+        eval_step=int(eval_step),
+        score=metrics["success_rate"],
+        metrics=metrics,
+        meets_convergence=meets_convergence,
+        report_path=report_path if report_path.exists() else None,
+        summary_path=summary_path,
+        video_root=video_root if videos and video_root.exists() else None,
+    )
+
+
+def _finalize_policy_analysis_best_checkpoint(
+    candidate: _BestCheckpointCandidate,
+    *,
+    config: ExpertTrainingConfig,
+    checkpoint_dir: Path | None,
+) -> BestCheckpointSummary | None:
+    """Persist the checkpoint selected by full policy analysis and return its summary."""
+    if checkpoint_dir is None:
+        return None
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    best_path = checkpoint_dir / f"{config.policy_id}_best.zip"
+    best_source = checkpoint_dir / f"{config.policy_id}_step{candidate.eval_step}.zip"
+    if not best_source.exists():
+        logger.warning(
+            "Policy-analysis best checkpoint source missing at {}; skipping best checkpoint copy.",
+            best_source,
+        )
+        return None
+    shutil.copy2(best_source, best_path)
+    report_path = checkpoint_dir / f"{config.policy_id}_best.summary.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "policy_id": config.policy_id,
+                "metric": "policy_analysis_success_rate",
+                "value": float(candidate.metrics["success_rate"]),
+                "eval_step": int(candidate.eval_step),
+                "meets_convergence": bool(candidate.meets_convergence),
+                "metrics": candidate.metrics,
+                "source_checkpoint_path": str(best_source),
+                "best_checkpoint_path": str(best_path),
+                "policy_analysis_summary_path": str(candidate.summary_path)
+                if candidate.summary_path
+                else None,
+                "policy_analysis_report_path": str(candidate.report_path)
+                if candidate.report_path
+                else None,
+                "policy_analysis_video_root": str(candidate.video_root)
+                if candidate.video_root
+                else None,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return BestCheckpointSummary(
+        metric="policy_analysis_success_rate",
+        value=float(candidate.metrics["success_rate"]),
+        eval_step=int(candidate.eval_step),
+        checkpoint_path=best_path,
+        metrics=dict(candidate.metrics),
+        meets_convergence=bool(candidate.meets_convergence),
+        report_path=report_path,
+        policy_analysis_summary_path=candidate.summary_path,
+        policy_analysis_report_path=candidate.report_path,
+        policy_analysis_video_root=candidate.video_root,
+    )
+
+
+def _train_with_schedule(  # noqa: C901,PLR0913,PLR0915
     model: PPO,
     *,
     config: ExpertTrainingConfig,
@@ -1822,6 +1998,7 @@ def _train_with_schedule(  # noqa: C901,PLR0913
     wandb_callback: object | None,
     start_timesteps: int = 0,
     checkpoint_dir: Path | None = None,
+    run_id: str | None = None,
     startup_sec: float = 0.0,
     num_envs: int = 1,
 ) -> tuple[
@@ -1858,6 +2035,8 @@ def _train_with_schedule(  # noqa: C901,PLR0913
     )
     best_summary: BestCheckpointSummary | None = None
     last_persisted_best_eval_step: int | None = None
+    policy_analysis_best: _BestCheckpointCandidate | None = None
+    last_policy_analysis_candidate_eval_step: int | None = None
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
@@ -1915,19 +2094,57 @@ def _train_with_schedule(  # noqa: C901,PLR0913
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
         tracker.update(summary, eval_step=eval_step)
-        persisted_best, last_persisted_best_eval_step = _persist_best_checkpoint_if_updated(
-            tracker,
-            config=config,
-            checkpoint_dir=checkpoint_dir,
-            wandb_run=wandb_run,
-            last_persisted_eval_step=last_persisted_best_eval_step,
-        )
-        if persisted_best is not None:
-            best_summary = persisted_best
+        if config.evaluation.full_policy_analysis_on_new_best:
+            cheap_best = tracker.best()
+            if (
+                cheap_best is not None
+                and cheap_best.eval_step != last_policy_analysis_candidate_eval_step
+                and checkpoint_dir is not None
+                and run_id is not None
+            ):
+                candidate = _run_policy_analysis_for_checkpoint(
+                    config=config,
+                    checkpoint_path=checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip",
+                    eval_step=eval_step,
+                    run_id=run_id,
+                    output_root=get_imitation_report_dir() / "policy_analysis_candidates" / run_id,
+                    videos=config.evaluation.full_policy_analysis_videos,
+                )
+                last_policy_analysis_candidate_eval_step = cheap_best.eval_step
+                if _is_policy_analysis_better(candidate, policy_analysis_best):
+                    policy_analysis_best = candidate
+                    persisted_best = _finalize_policy_analysis_best_checkpoint(
+                        candidate,
+                        config=config,
+                        checkpoint_dir=checkpoint_dir,
+                    )
+                    if persisted_best is not None:
+                        _update_wandb_best_checkpoint_summary(
+                            wandb_run,
+                            config=config,
+                            best_summary=persisted_best,
+                        )
+                        _upload_wandb_best_checkpoint_artifact(
+                            wandb_run,
+                            config=config,
+                            best_summary=persisted_best,
+                        )
+                        best_summary = persisted_best
+                        last_persisted_best_eval_step = persisted_best.eval_step
+        else:
+            persisted_best, last_persisted_best_eval_step = _persist_best_checkpoint_if_updated(
+                tracker,
+                config=config,
+                checkpoint_dir=checkpoint_dir,
+                wandb_run=wandb_run,
+                last_persisted_eval_step=last_persisted_best_eval_step,
+            )
+            if persisted_best is not None:
+                best_summary = persisted_best
         episode_records.extend(eval_records)
         timesteps_done = eval_step
 
-    if best_summary is None:
+    if best_summary is None and not config.evaluation.full_policy_analysis_on_new_best:
         best_summary, _ = _persist_best_checkpoint_if_updated(
             tracker,
             config=config,

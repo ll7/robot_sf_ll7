@@ -25,11 +25,14 @@ from scripts.training.train_ppo import (
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _finalize_best_checkpoint,
+    _finalize_policy_analysis_best_checkpoint,
+    _is_policy_analysis_better,
     _parse_num_envs,
     _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
     _resolve_num_envs,
     _resolve_resume_checkpoint,
+    _run_policy_analysis_for_checkpoint,
     _update_wandb_best_checkpoint_summary,
     _upload_wandb_best_checkpoint_artifact,
     load_expert_training_config,
@@ -151,6 +154,41 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
         "classic_crossing_medium": 2.0,
     }
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
+
+
+def test_load_expert_training_config_supports_full_policy_analysis_eval_flags(tmp_path) -> None:
+    """Loader should parse the full policy-analysis checkpoint-selection flags."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "policy_analysis_eval.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_policy_analysis_eval_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 1000000,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.1,
+                    "plateau_window": 100,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 30,
+                    "step_schedule": [{"every_steps": 1000000}],
+                    "full_policy_analysis_on_new_best": True,
+                    "full_policy_analysis_videos": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    assert config.source_config_path == config_path.resolve()
+    assert config.evaluation.full_policy_analysis_on_new_best is True
+    assert config.evaluation.full_policy_analysis_videos is False
 
 
 def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path) -> None:
@@ -885,3 +923,76 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     assert second_best is None
     assert second_eval_step == 17_000_000
     assert len(run.logged) == 1
+
+
+def test_policy_analysis_candidate_flow_prefers_full_analysis_metrics(
+    tmp_path, monkeypatch
+) -> None:
+    """Full policy analysis should become the actual checkpoint-selection signal."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    training_config_path = tmp_path / "train.yaml"
+    training_config_path.write_text("policy_id: stub\n", encoding="utf-8")
+    config = ExpertTrainingConfig.from_raw(
+        source_config_path=training_config_path,
+        scenario_config=scenario_config,
+        seeds=(123, 231),
+        total_timesteps=30_000_000,
+        policy_id="ppo_test",
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=30,
+            step_schedule=((None, 1_000_000),),
+            full_policy_analysis_on_new_best=True,
+            full_policy_analysis_videos=False,
+        ),
+    )
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    source = checkpoint_dir / "ppo_test_step17000000.zip"
+    source.write_text("checkpoint", encoding="utf-8")
+
+    def _fake_run(cmd, check):
+        assert check is True
+        output_dir = Path(cmd[cmd.index("--output") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "summary": {
+                "success_rate": 0.94,
+                "collision_rate": 0.02,
+                "termination_reason_rates": {"max_steps": 0.01},
+                "metric_means": {"snqi": 0.42},
+            }
+        }
+        (output_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        (output_dir / "report.md").write_text("# report\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("scripts.training.train_ppo.subprocess.run", _fake_run)
+
+    candidate = _run_policy_analysis_for_checkpoint(
+        config=config,
+        checkpoint_path=source,
+        eval_step=17_000_000,
+        run_id="run123",
+        output_root=tmp_path / "policy_analysis",
+        videos=False,
+    )
+    assert candidate.metrics["success_rate"] == pytest.approx(0.94)
+    assert candidate.metrics["collision_rate"] == pytest.approx(0.02)
+    assert candidate.metrics["max_steps_rate"] == pytest.approx(0.01)
+    assert candidate.metrics["snqi"] == pytest.approx(0.42)
+    assert _is_policy_analysis_better(candidate, None) is True
+
+    best = _finalize_policy_analysis_best_checkpoint(
+        candidate,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+    )
+    assert best is not None
+    assert best.checkpoint_path.exists()
+    assert best.policy_analysis_summary_path is not None
+    assert best.policy_analysis_report_path is not None
+    report_payload = json.loads(best.report_path.read_text(encoding="utf-8"))
+    assert report_payload["metric"] == "policy_analysis_success_rate"
+    assert report_payload["metrics"]["success_rate"] == pytest.approx(0.94)

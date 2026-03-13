@@ -26,6 +26,8 @@ class EvaluationSchedule:
     evaluation_episodes: int
     hold_out_scenarios: tuple[str, ...] = ()
     step_schedule: tuple[tuple[int | None, int], ...] = ()
+    full_policy_analysis_on_new_best: bool = False
+    full_policy_analysis_videos: bool = False
 
 
 @dataclass(slots=True)
@@ -38,6 +40,7 @@ class ExpertTrainingConfig:
     policy_id: str
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
+    source_config_path: Path | None = None
     ppo_hyperparams: dict[str, object] = field(default_factory=dict)
     best_checkpoint_metric: str = "success_rate"
     snqi_weights_path: Path | None = None
@@ -64,6 +67,7 @@ class ExpertTrainingConfig:
     def from_raw(  # noqa: PLR0913
         cls,
         *,
+        source_config_path: Path | None = None,
         scenario_config: Path,
         seeds: tuple[int, ...] | list[int],
         randomize_seeds: bool = False,
@@ -107,6 +111,7 @@ class ExpertTrainingConfig:
 
         return cls(
             scenario_config=scenario_config,
+            source_config_path=source_config_path.resolve() if source_config_path else None,
             seeds=ensure_seed_tuple(seeds),
             randomize_seeds=bool(randomize_seeds),
             total_timesteps=total_timesteps,

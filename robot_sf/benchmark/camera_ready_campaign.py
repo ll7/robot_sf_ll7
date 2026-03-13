@@ -27,6 +27,10 @@ from shapely.geometry import LineString, Polygon
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.seed_variance import (
+    build_seed_variability_csv_rows,
+    build_seed_variability_rows,
+)
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     calibrate_weights,
@@ -52,6 +56,19 @@ DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1
 DEFAULT_SEED_SETS_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
 
 _REPORT_METRICS: tuple[str, ...] = (
+    "success",
+    "collisions",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "total_collision_count",
+    "near_misses",
+    "time_to_goal_norm",
+    "path_efficiency",
+    "comfort_exposure",
+    "jerk_mean",
+    "snqi",
+)
+_SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "success",
     "collisions",
     "ped_collision_count",
@@ -1068,6 +1085,58 @@ def _write_matrix_summary_artifacts(
     }
     _write_json(json_path, payload)
     _write_csv(csv_path, rows)
+    return json_path, csv_path
+
+
+def _build_seed_variability_payload(
+    records: list[dict[str, Any]],
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+    config_hash: str,
+    git_hash: str,
+    seed_policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Build paper-facing seed-variability export payload from campaign episodes.
+
+    Returns:
+        JSON-serializable payload for ``seed_variability_by_scenario.json``.
+    """
+    rows = build_seed_variability_rows(
+        records,
+        metrics=_SEED_VARIABILITY_METRICS,
+        campaign_id=campaign_id,
+        config_hash=config_hash,
+        git_hash=git_hash,
+        seed_policy=seed_policy,
+    )
+    return {
+        "schema_version": "benchmark-seed-variability-by-scenario.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "metrics": list(_SEED_VARIABILITY_METRICS),
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_seed_variability_artifacts(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> tuple[Path, Path]:
+    """Write paper-facing seed-variability JSON and CSV artifacts.
+
+    Returns:
+        Tuple of ``(json_path, csv_path)`` for the generated artifacts.
+    """
+    json_path = reports_dir / "seed_variability_by_scenario.json"
+    csv_path = reports_dir / "seed_variability_by_scenario.csv"
+    _write_json(json_path, payload)
+    csv_rows = build_seed_variability_csv_rows(
+        payload.get("rows") or [],
+        metrics=payload.get("metrics") or [],
+    )
+    _write_csv(csv_path, csv_rows)
     return json_path, csv_path
 
 
@@ -2225,6 +2294,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     resolved_seeds = list(prepared["resolved_seeds"])
     scenario_hash = str(prepared["scenario_hash"])
     git_meta = dict(prepared["git_meta"])
+    config_hash = str(prepared["config_hash"])
 
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -2232,6 +2302,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
+    seed_variability_records: list[dict[str, Any]] = []
     kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     stop_requested = False
 
@@ -2343,6 +2414,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
 
             if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
+                for record in records:
+                    annotated = dict(record)
+                    annotated["planner_key"] = planner.key
+                    annotated["planner_group"] = planner.planner_group
+                    annotated["benchmark_profile"] = planner.benchmark_profile
+                    annotated["kinematics"] = kinematics
+                    seed_variability_records.append(annotated)
                 try:
                     aggregates = compute_aggregates_with_ci(
                         records,
@@ -2642,6 +2720,22 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
+    seed_variability_payload = _build_seed_variability_payload(
+        seed_variability_records,
+        campaign_id=campaign_id,
+        generated_at_utc=campaign_finished_at_utc,
+        config_hash=config_hash,
+        git_hash=git_meta.get("commit", "unknown"),
+        seed_policy={
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "resolved_seeds": list(resolved_seeds),
+        },
+    )
+    seed_variability_json_path, seed_variability_csv_path = _write_seed_variability_artifacts(
+        reports_dir,
+        seed_variability_payload,
+    )
     release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
     repository_url = cfg.repository_url.rstrip("/")
@@ -2809,6 +2903,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "comparability_md": (
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
+            "seed_variability_json": _repo_relative(seed_variability_json_path),
+            "seed_variability_csv": _repo_relative(seed_variability_csv_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -2883,11 +2979,21 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "comparability_md": (
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
+            "seed_variability_json": _repo_relative(seed_variability_json_path),
+            "seed_variability_csv": _repo_relative(seed_variability_csv_path),
         },
         "snqi_artifacts": {
             "diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
             "diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
             "sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+        },
+        "seed_variability_artifacts": {
+            "json": _repo_relative(seed_variability_json_path),
+            "csv": _repo_relative(seed_variability_csv_path),
+        },
+        "seed_variability": {
+            "metrics": list(_SEED_VARIABILITY_METRICS),
+            "row_count": int(seed_variability_payload.get("row_count", 0)),
         },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
@@ -2913,6 +3019,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_contract_status": contract_eval.status,
             "artifacts": {
                 **dict(manifest_payload.get("artifacts") or {}),
+                "seed_variability_json": _repo_relative(seed_variability_json_path),
+                "seed_variability_csv": _repo_relative(seed_variability_csv_path),
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
@@ -2948,6 +3056,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "snqi_sensitivity_csv": str(snqi_sensitivity_csv_path),
         "matrix_summary_json": str(matrix_summary_json_path),
         "matrix_summary_csv": str(matrix_summary_csv_path),
+        "seed_variability_json": str(seed_variability_json_path),
+        "seed_variability_csv": str(seed_variability_csv_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
         "total_episodes": total_episodes,

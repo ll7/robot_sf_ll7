@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a dedicated `SLURM/Auxme/auxme_pro6000_gpu.sl` batch wrapper for `pro6000` nodes that avoids `srun` and falls back to `cp -a` when `rsync` is unavailable, so PPO jobs can run on `auxme-imech142`-style hosts.
 * Promoted predictive planner checkpoint `predictive_proxy_selected_v2_xl_ego` into the model registry with a W&B-backed download entry (`ll7/robot_sf/i17pmely`).
 * Added explicit BR-06 v6, v7, and v9 auto-env PPO resubmit configs for 24-CPU Auxme jobs so queued reruns can resolve `num_envs` from the host allocation instead of staying pinned to 8 env workers.
 * Added `scripts/dev/sbatch_use_max_time.sh` plus SLURM submission docs so new batch jobs can query partition/QoS wall-time limits and default to the effective maximum at submit time.

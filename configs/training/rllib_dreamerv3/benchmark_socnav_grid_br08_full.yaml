@@ -12,8 +12,8 @@ ray:
   address: null
   local_mode: false
   include_dashboard: false
-  num_cpus: auto
-  num_gpus: auto
+  num_cpus: 32
+  num_gpus: 1
   disable_uv_run_runtime_env: true
   runtime_env:
     working_dir: .
@@ -44,6 +44,10 @@ env:
   flatten_observation: true
   flatten_keys: null
   normalize_actions: true
+  scenario_matrix:
+    path: ../../scenarios/classic_interactions_francis2023.yaml
+    strategy: random
+    switch_per_reset: true
   factory_kwargs:
     debug: false
     recording_enabled: false
@@ -73,14 +77,24 @@ env:
       use_ego_frame: true
       center_on_robot: true
 
+evaluation:
+  enabled: true
+  every_iterations: 100
+  evaluation_episodes: 30
+  hold_out_scenarios: []
+  output_subdir: evaluation
+  scenario_matrix:
+    path: ../../scenarios/classic_interactions_francis2023.yaml
+    strategy: cycle
+
 algorithm:
   framework: torch
   env_runners:
-    num_env_runners: auto
+    num_env_runners: 24
     num_envs_per_env_runner: 1
-    rollout_fragment_length: 32
+    rollout_fragment_length: 64
   resources:
-    num_gpus: auto
+    num_gpus: 1
   learners:
     num_learners: 0
   training:

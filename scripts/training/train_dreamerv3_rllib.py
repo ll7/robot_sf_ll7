@@ -26,13 +26,20 @@ from robot_sf.common.hardware import detect_hardware_capacity, recommend_env_run
 from robot_sf.common.seed import set_global_seed
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.training.policy_checkpoint_evaluator import (
+    build_eval_timeline_entry,
+    evaluate_policy_episodes,
+    write_episode_records,
+    write_summary,
+)
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
 from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
+from robot_sf.training.snqi_utils import resolve_training_snqi_context
 
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
-_TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking"}
+_TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking", "evaluation"}
 _EXPERIMENT_KEYS = {
     "run_id",
     "output_root",
@@ -69,6 +76,16 @@ _SCENARIO_MATRIX_KEYS = {
 }
 _ALGORITHM_KEYS = {"framework", "training", "env_runners", "resources", "learners", "api_stack"}
 _TRACKING_KEYS = {"wandb"}
+_EVALUATION_KEYS = {
+    "enabled",
+    "every_iterations",
+    "evaluation_episodes",
+    "hold_out_scenarios",
+    "output_subdir",
+    "scenario_matrix",
+    "snqi_weights",
+    "snqi_baseline",
+}
 _WANDB_KEYS = {
     "enabled",
     "project",
@@ -173,6 +190,20 @@ class TrackingSettings:
 
 
 @dataclass(slots=True)
+class EvaluationSettings:
+    """Periodic evaluation settings for Dreamer training runs."""
+
+    enabled: bool
+    every_iterations: int
+    evaluation_episodes: int
+    hold_out_scenarios: tuple[str, ...]
+    output_subdir: str
+    scenario_matrix: ScenarioMatrixSettings | None
+    snqi_weights_path: Path | None
+    snqi_baseline_path: Path | None
+
+
+@dataclass(slots=True)
 class DreamerRunConfig:
     """Complete validated training configuration."""
 
@@ -182,6 +213,7 @@ class DreamerRunConfig:
     env: EnvSettings
     algorithm: AlgorithmSettings
     tracking: TrackingSettings
+    evaluation: EvaluationSettings
 
 
 def _ensure_mapping(payload: object, *, field_name: str) -> dict[str, object]:
@@ -465,6 +497,56 @@ def _parse_tracking_settings(
     )
 
 
+def _resolve_optional_path(
+    value: object,
+    *,
+    field_name: str,
+    base_dir: Path | None = None,
+) -> Path | None:
+    """Resolve an optional path-like config value."""
+    if value in {None, ""}:
+        return None
+    return _resolve_config_path(value, field_name=field_name, base_dir=base_dir)
+
+
+def _parse_evaluation_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> EvaluationSettings:
+    """Parse and validate the optional periodic evaluation section."""
+    evaluation_raw = _ensure_mapping(payload.get("evaluation"), field_name="evaluation")
+    _ensure_known_keys(evaluation_raw, field_name="evaluation", allowed=_EVALUATION_KEYS)
+    enabled = bool(evaluation_raw.get("enabled", False))
+    every_iterations = int(evaluation_raw.get("every_iterations", 0) or 0)
+    evaluation_episodes = int(evaluation_raw.get("evaluation_episodes", 0) or 0)
+    hold_out_raw = evaluation_raw.get("hold_out_scenarios", ())
+    if not isinstance(hold_out_raw, list | tuple):
+        raise ValueError("evaluation.hold_out_scenarios must be a list or tuple.")
+    scenario_matrix = _parse_scenario_matrix_settings(evaluation_raw, base_dir=base_dir)
+    if enabled and every_iterations < 1:
+        raise ValueError("evaluation.every_iterations must be >= 1 when evaluation is enabled.")
+    if enabled and evaluation_episodes < 1:
+        raise ValueError("evaluation.evaluation_episodes must be >= 1 when evaluation is enabled.")
+    output_subdir = str(evaluation_raw.get("output_subdir", "evaluation")).strip() or "evaluation"
+    return EvaluationSettings(
+        enabled=enabled,
+        every_iterations=every_iterations,
+        evaluation_episodes=evaluation_episodes,
+        hold_out_scenarios=tuple(str(name) for name in hold_out_raw),
+        output_subdir=output_subdir,
+        scenario_matrix=scenario_matrix,
+        snqi_weights_path=_resolve_optional_path(
+            evaluation_raw.get("snqi_weights"),
+            field_name="evaluation.snqi_weights",
+            base_dir=base_dir,
+        ),
+        snqi_baseline_path=_resolve_optional_path(
+            evaluation_raw.get("snqi_baseline"),
+            field_name="evaluation.snqi_baseline",
+            base_dir=base_dir,
+        ),
+    )
+
+
 def load_run_config(path: Path) -> DreamerRunConfig:
     """Load, validate, and normalize the DreamerV3 run configuration YAML."""
     resolved = path.resolve()
@@ -482,6 +564,7 @@ def load_run_config(path: Path) -> DreamerRunConfig:
         env=_parse_env_settings(payload, base_dir=resolved.parent),
         algorithm=_parse_algorithm_settings(payload),
         tracking=_parse_tracking_settings(payload, base_dir=resolved.parent),
+        evaluation=_parse_evaluation_settings(payload, base_dir=resolved.parent),
     )
 
 
@@ -630,7 +713,6 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
                     context_name="worker.config",
                 )
                 scenario_config.use_image_obs = False
-                scenario_config.include_grid_in_observation = False
                 return scenario_config
 
             env = ScenarioSwitchingEnv(
@@ -834,6 +916,180 @@ def _normalize_reward_metric(
         episodes_completed,
     )
     return None
+
+
+def _normalize_episode_len_metric(
+    episode_len_mean: float | int | None,
+    *,
+    episodes_completed: int | None,
+    iteration: int,
+) -> float | int | None:
+    """Suppress RLlib empty-episode NaNs for episode length metrics."""
+    if not isinstance(episode_len_mean, float) or math.isfinite(episode_len_mean):
+        return episode_len_mean
+    if episodes_completed in {None, 0}:
+        return None
+    logger.warning(
+        "iter={} reported non-finite episode_len_mean={} with episodes_completed={}",
+        iteration,
+        episode_len_mean,
+        episodes_completed,
+    )
+    return None
+
+
+def _create_dreamer_eval_env_factory(
+    run_config: DreamerRunConfig,
+):
+    """Build a deterministic evaluation env factory for Dreamer checkpoints and live policies."""
+    evaluation_settings = run_config.evaluation
+    scenario_matrix = evaluation_settings.scenario_matrix or run_config.env.scenario_matrix
+    factory_kwargs = dict(run_config.env.factory_kwargs)
+    factory_kwargs.setdefault("debug", False)
+    factory_kwargs.setdefault("recording_enabled", False)
+    template = _create_env_template(run_config.env)
+    loaded_scenarios = (
+        load_scenarios(scenario_matrix.path, base_dir=scenario_matrix.path.parent)
+        if scenario_matrix is not None
+        else None
+    )
+    sampler = None
+    if scenario_matrix is not None:
+        include_scenarios = (
+            evaluation_settings.hold_out_scenarios
+            if evaluation_settings.hold_out_scenarios
+            else scenario_matrix.include_scenarios
+        )
+        sampler = ScenarioSampler(
+            scenarios=loaded_scenarios or (),
+            include_scenarios=include_scenarios,
+            exclude_scenarios=()
+            if evaluation_settings.hold_out_scenarios
+            else scenario_matrix.exclude_scenarios,
+            weights=scenario_matrix.weights or None,
+            seed=run_config.experiment.seed,
+            strategy=(
+                "cycle" if evaluation_settings.hold_out_scenarios else scenario_matrix.strategy
+            ),
+        )
+
+    def _make_env(_episode_idx: int, seed: int | None):
+        if sampler is None or scenario_matrix is None:
+            env = make_robot_env(
+                config=copy.deepcopy(template),
+                seed=seed,
+                suite_name="dreamerv3_rllib_eval",
+                algorithm_name=run_config.experiment.run_id,
+                **factory_kwargs,
+            )
+            return (
+                wrap_for_dreamerv3(
+                    env,
+                    flatten_observation=run_config.env.flatten_observation,
+                    flatten_keys=run_config.env.flatten_keys,
+                    normalize_actions=run_config.env.normalize_actions,
+                ),
+                None,
+            )
+
+        scenario, scenario_name = sampler.sample()
+        scenario_config = build_robot_config_from_scenario(
+            scenario,
+            scenario_path=scenario_matrix.path,
+        )
+        _apply_nested_overrides(
+            scenario_config,
+            copy.deepcopy(run_config.env.config_overrides),
+            context_name="env.config",
+        )
+        scenario_config.use_image_obs = False
+        env = make_robot_env(
+            config=scenario_config,
+            seed=seed,
+            suite_name="dreamerv3_rllib_eval",
+            scenario_name=scenario_name,
+            algorithm_name=run_config.experiment.run_id,
+            **factory_kwargs,
+        )
+        return (
+            wrap_for_dreamerv3(
+                env,
+                flatten_observation=run_config.env.flatten_observation,
+                flatten_keys=run_config.env.flatten_keys,
+                normalize_actions=run_config.env.normalize_actions,
+            ),
+            scenario_name,
+        )
+
+    return _make_env
+
+
+def _run_periodic_evaluation(
+    algo: Any,
+    run_config: DreamerRunConfig,
+    *,
+    run_dir: Path,
+    iteration: int,
+    checkpoint_path: str | None,
+    timesteps_total: float | int | None,
+    wandb_run: Any | None,
+    snqi_context: object,
+) -> dict[str, object]:
+    """Evaluate the current Dreamer policy and persist standardized artifacts."""
+    eval_dir = run_dir / run_config.evaluation.output_subdir
+    env_factory = _create_dreamer_eval_env_factory(run_config)
+    evaluation = evaluate_policy_episodes(
+        episodes=run_config.evaluation.evaluation_episodes,
+        make_env=env_factory,
+        action_fn=lambda obs: algo.compute_single_action(obs, explore=False),
+        eval_step=iteration,
+        base_seed=run_config.experiment.seed,
+        randomize_seeds=bool(run_config.env.config_overrides.get("randomize_seeds", False)),
+        snqi_context=snqi_context,
+    )
+    summary = dict(evaluation.summary)
+    summary.update(
+        {
+            "iteration": iteration,
+            "checkpoint_path": checkpoint_path,
+            "timesteps_total": timesteps_total,
+        }
+    )
+    summary_path = eval_dir / f"summary_iter_{iteration:05d}.json"
+    episodes_path = eval_dir / f"episodes_iter_{iteration:05d}.jsonl"
+    timeline_path = eval_dir / "eval_timeline.jsonl"
+    write_summary(summary_path, summary)
+    write_episode_records(episodes_path, evaluation.episode_records)
+    timeline_row = build_eval_timeline_entry(summary, eval_step=iteration)
+    timeline_row.update(
+        {
+            "ts_utc": datetime.now(UTC).isoformat(),
+            "iteration": iteration,
+            "checkpoint_path": checkpoint_path,
+            "timesteps_total": timesteps_total,
+            "summary_path": str(summary_path),
+            "episodes_path": str(episodes_path),
+        }
+    )
+    append_jsonl_record(timeline_path, timeline_row)
+
+    if wandb_run is not None:
+        metric_means = summary.get("metric_means", {})
+        termination_rates = summary.get("termination_reason_rates", {})
+        wandb_payload: dict[str, object] = {
+            "iteration": iteration,
+            "eval/episodes": summary.get("episodes", 0),
+            "eval/episode_len_mean": summary.get("episode_len_mean", 0.0),
+            "eval/wall_sec": summary.get("eval_wall_sec", 0.0),
+        }
+        if isinstance(metric_means, dict):
+            for key, value in metric_means.items():
+                wandb_payload[f"eval/{key}"] = value
+        if isinstance(termination_rates, dict):
+            for reason, value in termination_rates.items():
+                wandb_payload[f"eval/termination_reason_{reason}_rate"] = value
+        wandb_run.log(wandb_payload, step=iteration)
+    return summary
 
 
 def _save_checkpoint(algo: Any, checkpoint_dir: Path) -> str:
@@ -1128,9 +1384,11 @@ def _run_training_iterations(
     algo: Any,
     run_config: DreamerRunConfig,
     *,
+    run_dir: Path,
     checkpoint_dir: Path,
     result_log_path: Path,
     wandb_run: Any | None,
+    snqi_context: object,
 ) -> list[dict[str, object]]:
     """Execute iterations, logging metrics and writing checkpoints."""
     history: list[dict[str, object]] = []
@@ -1146,15 +1404,22 @@ def _run_training_iterations(
             episodes_completed=episodes_completed,
             iteration=iteration,
         )
+        episode_len_mean = _extract_metric(result, "episode_len_mean", "episode_length_mean")
+        episode_len_mean = _normalize_episode_len_metric(
+            episode_len_mean,
+            episodes_completed=episodes_completed,
+            iteration=iteration,
+        )
         timesteps_total = _extract_metric(
             result,
             "num_env_steps_sampled_lifetime",
             "timesteps_total",
         )
         logger.info(
-            "iter={} episodes_completed={} reward_mean={} timesteps_total={}",
+            "iter={} episodes_completed={} episode_len_mean={} reward_mean={} timesteps_total={}",
             iteration,
             episodes_completed,
+            episode_len_mean,
             reward_mean,
             timesteps_total,
         )
@@ -1162,6 +1427,7 @@ def _run_training_iterations(
             {
                 "iteration": iteration,
                 "episodes_completed": episodes_completed,
+                "episode_len_mean": episode_len_mean,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
             }
@@ -1172,6 +1438,7 @@ def _run_training_iterations(
                 "ts_utc": datetime.now(UTC).isoformat(),
                 "iteration": iteration,
                 "episodes_completed": episodes_completed,
+                "episode_len_mean": episode_len_mean,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
             },
@@ -1183,15 +1450,34 @@ def _run_training_iterations(
             }
             if episodes_completed is not None:
                 wandb_payload["episodes_completed"] = episodes_completed
+            if episode_len_mean is not None:
+                wandb_payload["episode_len_mean"] = episode_len_mean
             if reward_mean is not None:
                 wandb_payload["reward_mean"] = reward_mean
             wandb_run.log(wandb_payload, step=iteration)
 
+        should_eval = run_config.evaluation.enabled and (
+            (iteration % run_config.evaluation.every_iterations) == 0
+            or iteration == run_config.experiment.train_iterations
+        )
         is_periodic_ckpt = (iteration % run_config.experiment.checkpoint_every) == 0
         is_final_ckpt = iteration == run_config.experiment.train_iterations
-        if is_periodic_ckpt or is_final_ckpt:
+        checkpoint_path: str | None = None
+        if is_periodic_ckpt or is_final_ckpt or should_eval:
             ckpt_path = _save_checkpoint(algo, checkpoint_dir)
+            checkpoint_path = ckpt_path
             logger.info("checkpoint_saved={}", ckpt_path)
+        if should_eval:
+            _run_periodic_evaluation(
+                algo,
+                run_config,
+                run_dir=run_dir,
+                iteration=iteration,
+                checkpoint_path=checkpoint_path,
+                timesteps_total=timesteps_total,
+                wandb_run=wandb_run,
+                snqi_context=snqi_context,
+            )
     return history
 
 
@@ -1214,6 +1500,10 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
     history: list[dict[str, object]] = []
     shared_capacity = _detect_shared_capacity(run_config)
     seed_report = set_global_seed(run_config.experiment.seed)
+    snqi_context = resolve_training_snqi_context(
+        weights_path=run_config.evaluation.snqi_weights_path,
+        baseline_path=run_config.evaluation.snqi_baseline_path,
+    )
     resolved_config_path, run_meta_path = _write_run_bookkeeping(
         run_config,
         run_dir=run_dir,
@@ -1241,9 +1531,11 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
         history = _run_training_iterations(
             algo,
             run_config,
+            run_dir=run_dir,
             checkpoint_dir=checkpoint_dir,
             result_log_path=result_log_path,
             wandb_run=wandb_run,
+            snqi_context=snqi_context,
         )
 
         _write_json(
@@ -1277,6 +1569,11 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
                 "run_meta_path": str(run_meta_path),
                 "resolved_config_path": str(resolved_config_path),
                 "seed_report": _serialize_for_wandb(seed_report),
+                "evaluation_timeline_path": (
+                    str(run_dir / run_config.evaluation.output_subdir / "eval_timeline.jsonl")
+                    if run_config.evaluation.enabled
+                    else None
+                ),
                 "history": history,
             },
         )
@@ -1390,6 +1687,7 @@ def _apply_cli_overrides(
         env=run_config.env,
         algorithm=run_config.algorithm,
         tracking=run_config.tracking,
+        evaluation=run_config.evaluation,
     )
 
 

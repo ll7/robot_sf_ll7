@@ -55,6 +55,7 @@ algorithm:
     assert run_config.algorithm.framework == "torch"
     assert run_config.experiment.output_root.is_absolute()
     assert run_config.env.scenario_matrix is None
+    assert run_config.evaluation.enabled is False
 
 
 def test_load_run_config_parses_scenario_matrix_relative_to_config(tmp_path: Path):
@@ -89,6 +90,48 @@ algorithm:
     assert run_config.env.scenario_matrix.include_scenarios == ("a",)
     assert run_config.env.scenario_matrix.exclude_scenarios == ("b",)
     assert run_config.env.scenario_matrix.weights == {"a": 2.0}
+
+
+def test_load_run_config_parses_evaluation_settings(tmp_path: Path) -> None:
+    """Dreamer configs should accept periodic evaluation settings with relative paths."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    weights = tmp_path / "weights.json"
+    weights.write_text("{}\n", encoding="utf-8")
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_eval.yaml",
+        """
+experiment:
+  run_id: smoke
+evaluation:
+  enabled: true
+  every_iterations: 5
+  evaluation_episodes: 7
+  hold_out_scenarios: [s1, s2]
+  output_subdir: periodic_eval
+  scenario_matrix:
+    path: ./scenarios.yaml
+    strategy: cycle
+  snqi_weights: ./weights.json
+  snqi_baseline: ./baseline.json
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.evaluation.enabled is True
+    assert run_config.evaluation.every_iterations == 5
+    assert run_config.evaluation.evaluation_episodes == 7
+    assert run_config.evaluation.hold_out_scenarios == ("s1", "s2")
+    assert run_config.evaluation.output_subdir == "periodic_eval"
+    assert run_config.evaluation.scenario_matrix is not None
+    assert run_config.evaluation.scenario_matrix.path == scenarios.resolve()
+    assert run_config.evaluation.snqi_weights_path == weights.resolve()
+    assert run_config.evaluation.snqi_baseline_path == baseline.resolve()
 
 
 def test_load_run_config_rejects_empty_scenario_matrix_path(tmp_path: Path):
@@ -490,3 +533,16 @@ def test_repo_br08_configs_load_with_expected_reward_contract(
         assert run_config.env.config_overrides["include_grid_in_observation"] is True
     else:
         assert run_config.env.config_overrides["include_grid_in_observation"] is False
+
+
+def test_repo_benchmark_socnav_grid_full_enables_periodic_eval() -> None:
+    """The long socnav-grid Dreamer profile should declare benchmark-matrix evaluation."""
+    run_config = load_run_config(
+        Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
+    )
+
+    assert run_config.env.scenario_matrix is not None
+    assert run_config.evaluation.enabled is True
+    assert run_config.evaluation.every_iterations == 100
+    assert run_config.evaluation.evaluation_episodes == 30
+    assert run_config.evaluation.scenario_matrix is not None

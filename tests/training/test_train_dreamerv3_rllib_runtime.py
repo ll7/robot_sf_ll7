@@ -51,8 +51,13 @@ class _FakeAlgo:
         self.train_calls += 1
         return {
             "episode_return_mean": float(self.train_calls),
+            "episode_len_mean": 100.0 + self.train_calls,
             "num_env_steps_sampled_lifetime": self.train_calls * 10,
         }
+
+    def compute_single_action(self, _obs, *, explore: bool = False):
+        assert explore is False
+        return 0.0
 
     def save_to_path(self, checkpoint_dir: str) -> str:
         path = Path(checkpoint_dir) / f"checkpoint_{self.train_calls}"
@@ -71,6 +76,7 @@ class _FakeAlgoNoCompletedEpisodes(_FakeAlgo):
         return {
             "env_runner_results": {
                 "episode_return_mean": float("nan"),
+                "episode_len_mean": float("nan"),
                 "num_episodes": 0,
                 "num_env_steps_sampled_lifetime": self.train_calls * 10,
             }
@@ -85,6 +91,37 @@ class _FrozenDateTime:
         if tz is None:
             return datetime(2026, 2, 11, 12, 0, 0, tzinfo=UTC)
         return datetime(2026, 2, 11, 12, 0, 0, tzinfo=UTC)
+
+
+class _EvalEnv:
+    """Minimal env stub used to exercise Dreamer periodic evaluation integration."""
+
+    def __init__(self) -> None:
+        self.state = SimpleNamespace(max_sim_steps=5)
+        self._steps = 0
+
+    def reset(self):
+        self._steps = 0
+        return {"obs": 0.0}, {}
+
+    def step(self, _action):
+        self._steps += 1
+        terminated = self._steps >= 1
+        info = {
+            "meta": {
+                "is_route_complete": True,
+                "is_pedestrian_collision": False,
+                "is_robot_collision": False,
+                "is_obstacle_collision": False,
+                "is_timesteps_exceeded": False,
+                "step_of_episode": self._steps,
+                "max_sim_steps": 5,
+            }
+        }
+        return {"obs": 0.0}, 1.0, terminated, False, info
+
+    def close(self) -> None:
+        return None
 
 
 def test_apply_config_method_warns_when_payload_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,6 +249,8 @@ algorithm:
     assert summary["resolved_config_path"] == str(resolved_config_path)
     assert summary["seed_report"]["seed"] == 11
     assert len(summary["history"]) == 2
+    assert summary["history"][0]["episode_len_mean"] == 101.0
+    assert summary["history"][1]["episode_len_mean"] == 102.0
     assert summary["scenario_matrix_path"] is None
     assert summary["randomize_seeds"] is False
 
@@ -226,7 +265,9 @@ algorithm:
     result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(result_lines) == 2
     assert json.loads(result_lines[0])["iteration"] == 1
+    assert json.loads(result_lines[0])["episode_len_mean"] == 101.0
     assert json.loads(result_lines[1])["iteration"] == 2
+    assert json.loads(result_lines[1])["episode_len_mean"] == 102.0
 
 
 def test_run_training_cleans_up_ray_and_algo_on_failure(
@@ -315,9 +356,129 @@ algorithm:
     result_record = json.loads(result_lines[0])
 
     assert summary["history"][0]["episodes_completed"] == 0
+    assert summary["history"][0]["episode_len_mean"] is None
     assert summary["history"][0]["reward_mean"] is None
     assert result_record["episodes_completed"] == 0
+    assert result_record["episode_len_mean"] is None
     assert result_record["reward_mean"] is None
+
+
+def test_make_env_creator_preserves_grid_observation_with_scenario_matrix(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Scenario-matrix Dreamer env creation must not disable benchmark grid observations."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_grid_matrix.yaml",
+        f"""
+experiment:
+    run_id: smoke
+env:
+    flatten_observation: true
+    flatten_keys: null
+    normalize_actions: true
+    scenario_matrix:
+        path: {scenarios.as_posix()}
+        strategy: cycle
+    config:
+        observation_mode: socnav_struct
+        use_image_obs: false
+        use_occupancy_grid: true
+        include_grid_in_observation: true
+algorithm:
+    framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(dreamer, "load_scenarios", lambda *args, **kwargs: [{"name": "demo"}])
+    monkeypatch.setattr(
+        dreamer,
+        "build_robot_config_from_scenario",
+        lambda *_args, **_kwargs: dreamer.RobotSimulationConfig(),
+    )
+
+    class _SwitchingEnvStub:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+            self.observation_space = "obs"
+            self.action_space = "act"
+            self.metadata = {}
+            self.render_mode = None
+
+        def reset(self, *args, **kwargs):  # pragma: no cover - passthrough stub
+            return {}, {}
+
+    monkeypatch.setattr(dreamer, "ScenarioSwitchingEnv", _SwitchingEnvStub)
+    monkeypatch.setattr(
+        dreamer,
+        "wrap_for_dreamerv3",
+        lambda env, **kwargs: {"env": env, "wrap_kwargs": kwargs},
+    )
+
+    creator = dreamer._make_env_creator(run_config)
+    creator({"worker_index": 1})
+    scenario_config = captured["config_builder"]({"name": "demo"})
+
+    assert scenario_config.include_grid_in_observation is True
+    assert scenario_config.use_occupancy_grid is True
+
+
+def test_run_training_writes_periodic_eval_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Periodic Dreamer evaluation should emit summary and timeline artifacts."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_eval.yaml",
+        f"""
+experiment:
+    run_id: smoke_eval
+    output_root: {tmp_path.as_posix()}/output
+    train_iterations: 1
+    checkpoint_every: 1
+    seed: 11
+    log_level: WARNING
+evaluation:
+    enabled: true
+    every_iterations: 1
+    evaluation_episodes: 2
+algorithm:
+    framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_ray = _FakeRay()
+    fake_algo = _FakeAlgo()
+
+    monkeypatch.setattr(dreamer, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(
+        dreamer,
+        "_import_rllib",
+        lambda: (fake_ray, object, lambda _env_name, _creator: None),
+    )
+    monkeypatch.setattr(dreamer, "_init_wandb_tracking", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dreamer, "_build_algorithm_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(dreamer, "_build_algorithm_instance", lambda _cfg: fake_algo)
+    monkeypatch.setattr(
+        dreamer,
+        "_create_dreamer_eval_env_factory",
+        lambda _cfg: lambda _episode_idx, _seed: (_EvalEnv(), f"scenario-{_episode_idx}"),
+    )
+
+    exit_code = dreamer.run_training(run_config)
+
+    assert exit_code == 0
+    run_dir = run_config.experiment.output_root / "smoke_eval_20260211T120000Z"
+    eval_dir = run_dir / "evaluation"
+    summary = json.loads((eval_dir / "summary_iter_00001.json").read_text(encoding="utf-8"))
+    timeline_lines = (eval_dir / "eval_timeline.jsonl").read_text(encoding="utf-8").splitlines()
+    assert summary["metric_means"]["success_rate"] == pytest.approx(1.0)
+    assert summary["termination_reason_counts"]["success"] == 2
+    assert len(timeline_lines) == 1
 
 
 def test_make_env_creator_uses_scenario_switching_env_when_matrix_configured(

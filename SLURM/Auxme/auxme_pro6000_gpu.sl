@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=48G
+#SBATCH --mem=128G
 #SBATCH --time=2-13:00:00
 #SBATCH --gres=gpu:pro6000:1
 #SBATCH --output=auxme-pro6000-gpu-%j.out

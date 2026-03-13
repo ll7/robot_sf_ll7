@@ -14,6 +14,7 @@ Design notes:
 Public API
 ----------
 - compute_seed_variance(records, ...): return mapping group -> metric -> stats
+- build_seed_variability_rows(records, ...): paper-facing per-scenario/per-planner export rows
 
 CLI wiring is implemented in `robot_sf.benchmark.cli` as subcommand
 `seed-variance`.
@@ -157,4 +158,166 @@ def compute_seed_variance(
     return out
 
 
-__all__ = ["compute_seed_variance"]
+def _coerce_float(value: Any) -> float | None:
+    """Convert a value to a finite float when possible.
+
+    Returns:
+        Finite float value, or ``None`` when conversion fails.
+    """
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def build_seed_variability_rows(
+    records: list[dict[str, Any]] | Sequence[dict[str, Any]],
+    *,
+    metrics: Sequence[str],
+    campaign_id: str,
+    config_hash: str,
+    git_hash: str,
+    seed_policy: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build paper-facing seed-variability rows from benchmark episode records.
+
+    The rows are grouped by scenario and planner identity, then summarized
+    across seeds while retaining per-seed metric means.
+
+    Returns:
+        List of paper-facing variability rows with per-seed metrics and
+        across-seed summary statistics.
+    """
+    grouped: dict[
+        tuple[str, str, str, str, str, str],
+        dict[int, list[dict[str, Any]]],
+    ] = defaultdict(lambda: defaultdict(list))
+
+    for record in records:
+        scenario_id = str(record.get("scenario_id") or "unknown")
+        planner_key = str(
+            record.get("planner_key")
+            or _get_nested(record, "scenario_params.planner_key", default=None)
+            or record.get("algo")
+            or _get_nested(record, "scenario_params.algo", default="unknown")
+        )
+        algo = str(
+            record.get("algo") or _get_nested(record, "scenario_params.algo", default="unknown")
+        )
+        planner_group = str(record.get("planner_group") or "unknown")
+        kinematics = str(record.get("kinematics") or "unknown")
+        benchmark_profile = str(record.get("benchmark_profile") or "unknown")
+        seed = int(record.get("seed", -1))
+        grouped[(scenario_id, planner_key, algo, planner_group, kinematics, benchmark_profile)][
+            seed
+        ].append(flatten_metrics(record))
+
+    rows: list[dict[str, Any]] = []
+    for (
+        scenario_id,
+        planner_key,
+        algo,
+        planner_group,
+        kinematics,
+        benchmark_profile,
+    ), seed_groups in sorted(grouped.items()):
+        per_seed_rows: list[dict[str, Any]] = []
+        across_seed_values: dict[str, list[float]] = {metric: [] for metric in metrics}
+        total_episodes = 0
+        for seed, seed_records in sorted(seed_groups.items()):
+            total_episodes += len(seed_records)
+            metric_rows: dict[str, float] = {}
+            for metric in metrics:
+                metric_values: list[float] = []
+                for seed_record in seed_records:
+                    numeric = _coerce_float(seed_record.get(metric))
+                    if numeric is not None:
+                        metric_values.append(numeric)
+                if metric_values:
+                    mean_value = float(np.mean(metric_values))
+                    metric_rows[metric] = mean_value
+                    across_seed_values[metric].append(mean_value)
+            per_seed_rows.append(
+                {
+                    "seed": seed,
+                    "episode_count": len(seed_records),
+                    "metrics": metric_rows,
+                }
+            )
+        rows.append(
+            {
+                "scenario_id": scenario_id,
+                "planner_key": planner_key,
+                "algo": algo,
+                "planner_group": planner_group,
+                "kinematics": kinematics,
+                "benchmark_profile": benchmark_profile,
+                "seed_count": len(seed_groups),
+                "episode_count": total_episodes,
+                "seed_list": [entry["seed"] for entry in per_seed_rows],
+                "per_seed": per_seed_rows,
+                "summary": {
+                    metric: _stats_for_vals(values)
+                    for metric, values in across_seed_values.items()
+                    if values
+                },
+                "provenance": {
+                    "campaign_id": campaign_id,
+                    "config_hash": config_hash,
+                    "git_hash": git_hash,
+                    "seed_policy": seed_policy,
+                },
+            }
+        )
+    return rows
+
+
+def build_seed_variability_csv_rows(
+    rows: Sequence[dict[str, Any]],
+    *,
+    metrics: Sequence[str],
+) -> list[dict[str, Any]]:
+    """Flatten seed-variability rows into CSV-friendly per-seed rows.
+
+    Returns:
+        Flat rows suitable for CSV export, one row per scenario/planner/seed.
+    """
+    csv_rows: list[dict[str, Any]] = []
+    for row in rows:
+        provenance = dict(row.get("provenance") or {})
+        summary = dict(row.get("summary") or {})
+        for seed_row in row.get("per_seed") or []:
+            csv_row = {
+                "scenario_id": row.get("scenario_id"),
+                "planner_key": row.get("planner_key"),
+                "algo": row.get("algo"),
+                "planner_group": row.get("planner_group"),
+                "kinematics": row.get("kinematics"),
+                "benchmark_profile": row.get("benchmark_profile"),
+                "seed": seed_row.get("seed"),
+                "seed_episode_count": seed_row.get("episode_count"),
+                "seed_list": ",".join(str(seed) for seed in row.get("seed_list") or []),
+                "campaign_id": provenance.get("campaign_id"),
+                "config_hash": provenance.get("config_hash"),
+                "git_hash": provenance.get("git_hash"),
+                "seed_policy_mode": (provenance.get("seed_policy") or {}).get("mode"),
+                "seed_policy_seed_set": (provenance.get("seed_policy") or {}).get("seed_set"),
+            }
+            per_seed_metrics = dict(seed_row.get("metrics") or {})
+            for metric in metrics:
+                csv_row[f"{metric}_per_seed_mean"] = per_seed_metrics.get(metric)
+                metric_summary = dict(summary.get(metric) or {})
+                csv_row[f"{metric}_across_seed_mean"] = metric_summary.get("mean")
+                csv_row[f"{metric}_across_seed_std"] = metric_summary.get("std")
+                csv_row[f"{metric}_across_seed_cv"] = metric_summary.get("cv")
+                csv_row[f"{metric}_across_seed_count"] = metric_summary.get("count")
+            csv_rows.append(csv_row)
+    return csv_rows
+
+
+__all__ = [
+    "build_seed_variability_csv_rows",
+    "build_seed_variability_rows",
+    "compute_seed_variance",
+]

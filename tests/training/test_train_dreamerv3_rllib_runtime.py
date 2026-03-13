@@ -63,6 +63,20 @@ class _FakeAlgo:
         self.stop_called = True
 
 
+class _FakeAlgoNoCompletedEpisodes(_FakeAlgo):
+    """Algorithm stub that mimics RLlib returning NaN means for empty-episode iterations."""
+
+    def train(self) -> dict[str, object]:
+        self.train_calls += 1
+        return {
+            "env_runner_results": {
+                "episode_return_mean": float("nan"),
+                "num_episodes": 0,
+                "num_env_steps_sampled_lifetime": self.train_calls * 10,
+            }
+        }
+
+
 class _FrozenDateTime:
     """Deterministic datetime replacement for reproducible run directories."""
 
@@ -258,6 +272,52 @@ algorithm:
     run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
     assert run_meta["status"] == "failed"
     assert run_meta["error"]["type"] == "RuntimeError"
+
+
+def test_run_training_records_null_reward_when_no_episodes_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Empty-episode RLlib iterations should serialize reward_mean as null instead of NaN."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_empty_eps.yaml",
+        f"""
+experiment:
+    run_id: smoke_empty_eps
+    output_root: {tmp_path.as_posix()}/output
+    train_iterations: 1
+    checkpoint_every: 1
+    seed: 11
+    log_level: WARNING
+algorithm:
+    framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_ray = _FakeRay()
+    fake_algo = _FakeAlgoNoCompletedEpisodes()
+
+    monkeypatch.setattr(dreamer, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(
+        dreamer,
+        "_import_rllib",
+        lambda: (fake_ray, object, lambda _env_name, _creator: None),
+    )
+    monkeypatch.setattr(dreamer, "_init_wandb_tracking", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dreamer, "_build_algorithm_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(dreamer, "_build_algorithm_instance", lambda _cfg: fake_algo)
+
+    exit_code = dreamer.run_training(run_config)
+
+    assert exit_code == 0
+    run_dir = run_config.experiment.output_root / "smoke_empty_eps_20260211T120000Z"
+    summary = json.loads((run_dir / "run_summary.json").read_text(encoding="utf-8"))
+    result_lines = (run_dir / "result.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    result_record = json.loads(result_lines[0])
+
+    assert summary["history"][0]["episodes_completed"] == 0
+    assert summary["history"][0]["reward_mean"] is None
+    assert result_record["episodes_completed"] == 0
+    assert result_record["reward_mean"] is None
 
 
 def test_make_env_creator_uses_scenario_switching_env_when_matrix_configured(

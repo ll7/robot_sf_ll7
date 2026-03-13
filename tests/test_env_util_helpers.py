@@ -89,6 +89,25 @@ def test_make_grid_observation_spaces_metadata_keys() -> None:
         assert key in meta_spaces
 
 
+def test_make_grid_observation_spaces_uses_float32_bounds() -> None:
+    """Grid observation spaces should avoid implicit float64 bounds to keep Gym startup quiet."""
+    grid_config = GridConfig(
+        resolution=1.0,
+        width=4.0,
+        height=3.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
+    )
+
+    grid_box, meta_spaces = make_grid_observation_spaces(grid_config)
+
+    assert grid_box.low.dtype == np.float32
+    assert grid_box.high.dtype == np.float32
+    assert meta_spaces["occupancy_grid_meta_origin"].low.dtype == np.float32
+    assert meta_spaces["occupancy_grid_meta_origin"].high.dtype == np.float32
+    assert meta_spaces["occupancy_grid_meta_robot_pose"].low.dtype == np.float32
+    assert meta_spaces["occupancy_grid_meta_robot_pose"].high.dtype == np.float32
+
+
 def test_create_spaces_adds_custom_sensors_and_grid() -> None:
     """Verify custom sensor spaces and occupancy grid metadata are injected."""
     grid_config = GridConfig(

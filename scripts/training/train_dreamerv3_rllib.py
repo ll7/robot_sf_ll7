@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import logging
+import math
 import os
 import platform
 import subprocess
@@ -13,6 +14,7 @@ import sys
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from numbers import Real
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
@@ -789,19 +791,48 @@ def _build_algorithm_config(
     return cfg
 
 
+def _coerce_real_metric(value: object) -> float | int | None:
+    """Convert Python/NumPy real scalars into JSON-friendly ints/floats."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        return None
+    if isinstance(value, int):
+        return int(value)
+    return float(value)
+
+
 def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
     """Extract a scalar metric from nested training result dictionaries."""
     for key in keys:
-        value = result.get(key)
-        if isinstance(value, int | float):
+        value = _coerce_real_metric(result.get(key))
+        if value is not None:
             return value
     for container_name in ("env_runners", "env_runner_results"):
         container = result.get(container_name)
         if isinstance(container, dict):
             for key in keys:
-                value = container.get(key)
-                if isinstance(value, int | float):
+                value = _coerce_real_metric(container.get(key))
+                if value is not None:
                     return value
+    return None
+
+
+def _normalize_reward_metric(
+    reward_mean: float | int | None,
+    *,
+    episodes_completed: int | None,
+    iteration: int,
+) -> float | int | None:
+    """Suppress RLlib empty-episode NaNs while surfacing unexpected non-finite rewards."""
+    if not isinstance(reward_mean, float) or math.isfinite(reward_mean):
+        return reward_mean
+    if episodes_completed in {None, 0}:
+        return None
+    logger.warning(
+        "iter={} reported non-finite reward_mean={} with episodes_completed={}",
+        iteration,
+        reward_mean,
+        episodes_completed,
+    )
     return None
 
 
@@ -1105,21 +1136,32 @@ def _run_training_iterations(
     history: list[dict[str, object]] = []
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
+        episodes_completed_raw = _extract_metric(result, "num_episodes", "episodes_this_iter")
+        episodes_completed = (
+            int(episodes_completed_raw) if episodes_completed_raw is not None else None
+        )
         reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
+        reward_mean = _normalize_reward_metric(
+            reward_mean,
+            episodes_completed=episodes_completed,
+            iteration=iteration,
+        )
         timesteps_total = _extract_metric(
             result,
             "num_env_steps_sampled_lifetime",
             "timesteps_total",
         )
         logger.info(
-            "iter={} reward_mean={} timesteps_total={}",
+            "iter={} episodes_completed={} reward_mean={} timesteps_total={}",
             iteration,
+            episodes_completed,
             reward_mean,
             timesteps_total,
         )
         history.append(
             {
                 "iteration": iteration,
+                "episodes_completed": episodes_completed,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
             }
@@ -1129,19 +1171,21 @@ def _run_training_iterations(
             {
                 "ts_utc": datetime.now(UTC).isoformat(),
                 "iteration": iteration,
+                "episodes_completed": episodes_completed,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
             },
         )
         if wandb_run is not None:
-            wandb_run.log(
-                {
-                    "iteration": iteration,
-                    "reward_mean": reward_mean,
-                    "timesteps_total": timesteps_total,
-                },
-                step=iteration,
-            )
+            wandb_payload: dict[str, object] = {
+                "iteration": iteration,
+                "timesteps_total": timesteps_total,
+            }
+            if episodes_completed is not None:
+                wandb_payload["episodes_completed"] = episodes_completed
+            if reward_mean is not None:
+                wandb_payload["reward_mean"] = reward_mean
+            wandb_run.log(wandb_payload, step=iteration)
 
         is_periodic_ckpt = (iteration % run_config.experiment.checkpoint_every) == 0
         is_final_ckpt = iteration == run_config.experiment.train_iterations
@@ -1340,6 +1384,7 @@ def _apply_cli_overrides(
     if args.log_level is not None:
         experiment.log_level = str(args.log_level).upper()
     return DreamerRunConfig(
+        config_path=run_config.config_path,
         experiment=experiment,
         ray=run_config.ray,
         env=run_config.env,

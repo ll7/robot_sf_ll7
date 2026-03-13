@@ -62,16 +62,16 @@ def make_grid_observation_spaces(
         grid_config.grid_width,
     )
     grid_box = spaces.Box(
-        low=0.0,
-        high=1.0,
+        low=np.float32(0.0),
+        high=np.float32(1.0),
         shape=grid_shape,
         dtype=np.float32,
     )
     # Return flattened metadata spaces (dict of Box spaces, not a nested Dict space)
     meta_spaces = {
         "occupancy_grid_meta_origin": spaces.Box(
-            low=-np.inf,
-            high=np.inf,
+            low=np.full((2,), -np.inf, dtype=np.float32),
+            high=np.full((2,), np.inf, dtype=np.float32),
             shape=(2,),
             dtype=np.float32,
         ),
@@ -101,8 +101,8 @@ def make_grid_observation_spaces(
             dtype=np.int32,
         ),
         "occupancy_grid_meta_robot_pose": spaces.Box(
-            low=np.array([-np.inf, -np.inf, -np.inf], dtype=np.float32),
-            high=np.array([np.inf, np.inf, np.inf], dtype=np.float32),
+            low=np.full((3,), -np.inf, dtype=np.float32),
+            high=np.full((3,), np.inf, dtype=np.float32),
             dtype=np.float32,
         ),
     }

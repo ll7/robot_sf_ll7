@@ -53,6 +53,17 @@ class _FakeAlgo:
             "episode_return_mean": float(self.train_calls),
             "episode_len_mean": 100.0 + self.train_calls,
             "num_env_steps_sampled_lifetime": self.train_calls * 10,
+            "env_runner_results": {
+                "sample_throughput": 50.0 + self.train_calls,
+            },
+            "timers": {
+                "train_iteration_time_ms": 20.0 + self.train_calls,
+            },
+            "learners": {
+                "default_policy": {
+                    "world_model_loss": 1.5 + self.train_calls,
+                }
+            },
         }
 
     def compute_single_action(self, _obs, *, explore: bool = False):
@@ -122,6 +133,56 @@ class _EvalEnv:
 
     def close(self) -> None:
         return None
+
+
+def _assert_run_training_artifacts(run_config: dreamer.DreamerRunConfig) -> None:
+    """Validate the core summary/result artifacts emitted by the happy-path run."""
+    run_dir = run_config.experiment.output_root / "smoke_20260211T120000Z"
+    summary_path = run_dir / "run_summary.json"
+    result_path = run_dir / "result.jsonl"
+    checkpoint_dir = run_dir / "checkpoints"
+    run_meta_path = run_dir / "run_meta.json"
+    resolved_config_path = run_dir / "resolved_config.json"
+    assert summary_path.exists()
+    assert result_path.exists()
+    assert checkpoint_dir.exists()
+    assert run_meta_path.exists()
+    assert resolved_config_path.exists()
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["run_id"] == "smoke"
+    assert summary["train_iterations"] == 2
+    assert summary["run_meta_path"] == str(run_meta_path)
+    assert summary["resolved_config_path"] == str(resolved_config_path)
+    assert summary["seed_report"]["seed"] == 11
+    assert len(summary["history"]) == 2
+    assert summary["history"][0]["episode_len_mean"] == 101.0
+    assert summary["history"][1]["episode_len_mean"] == 102.0
+    assert summary["history"][0]["observability"]["env_runner_results/sample_throughput"] == 51.0
+    assert summary["history"][0]["observability"]["timers/train_iteration_time_ms"] == 21.0
+    assert summary["history"][0]["observability"]["learners/default_policy/world_model_loss"] == 2.5
+    assert summary["scenario_matrix_path"] is None
+    assert summary["randomize_seeds"] is False
+    assert summary["runtime_diagnostics"]["cfg_num_gpus"] == 1
+
+    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    assert run_meta["status"] == "succeeded"
+    assert run_meta["seed_report"]["seed"] == 11
+    assert run_meta["artifacts"]["summary_path"] == str(summary_path)
+    assert run_meta["runtime_diagnostics"]["cfg_num_gpus"] == 1
+
+    resolved_config = json.loads(resolved_config_path.read_text(encoding="utf-8"))
+    assert resolved_config["experiment"]["run_id"] == "smoke"
+
+    result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(result_lines) == 2
+    assert json.loads(result_lines[0])["iteration"] == 1
+    assert json.loads(result_lines[0])["episode_len_mean"] == 101.0
+    assert (
+        json.loads(result_lines[0])["observability"]["env_runner_results/sample_throughput"] == 51.0
+    )
+    assert json.loads(result_lines[1])["iteration"] == 2
+    assert json.loads(result_lines[1])["episode_len_mean"] == 102.0
 
 
 def test_apply_config_method_warns_when_payload_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,7 +277,18 @@ algorithm:
         ),
     )
     monkeypatch.setattr(dreamer, "_init_wandb_tracking", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(dreamer, "_build_algorithm_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        dreamer,
+        "_build_algorithm_config",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            num_gpus=1,
+            num_learners=0,
+            num_gpus_per_learner=0,
+            num_gpus_per_env_runner=0,
+            num_env_runners=8,
+            local_gpu_idx=0,
+        ),
+    )
     monkeypatch.setattr(dreamer, "_build_algorithm_instance", lambda _cfg: fake_algo)
 
     exit_code = dreamer.run_training(run_config)
@@ -229,45 +301,48 @@ algorithm:
     assert fake_ray.init_kwargs is not None
     assert fake_ray.init_kwargs["num_cpus"] == 8
     assert fake_ray.init_kwargs["num_gpus"] == 1
+    _assert_run_training_artifacts(run_config)
 
-    run_dir = run_config.experiment.output_root / "smoke_20260211T120000Z"
-    summary_path = run_dir / "run_summary.json"
-    result_path = run_dir / "result.jsonl"
-    checkpoint_dir = run_dir / "checkpoints"
-    run_meta_path = run_dir / "run_meta.json"
-    resolved_config_path = run_dir / "resolved_config.json"
-    assert summary_path.exists()
-    assert result_path.exists()
-    assert checkpoint_dir.exists()
-    assert run_meta_path.exists()
-    assert resolved_config_path.exists()
 
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    assert summary["run_id"] == "smoke"
-    assert summary["train_iterations"] == 2
-    assert summary["run_meta_path"] == str(run_meta_path)
-    assert summary["resolved_config_path"] == str(resolved_config_path)
-    assert summary["seed_report"]["seed"] == 11
-    assert len(summary["history"]) == 2
-    assert summary["history"][0]["episode_len_mean"] == 101.0
-    assert summary["history"][1]["episode_len_mean"] == 102.0
-    assert summary["scenario_matrix_path"] is None
-    assert summary["randomize_seeds"] is False
+def test_build_runtime_diagnostics_reports_resolved_gpu_placement(tmp_path: Path) -> None:
+    """Dry-run diagnostics should expose the resolved learner placement fields."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_diag.yaml",
+        """
+experiment:
+    run_id: smoke_diag
+ray:
+    num_gpus: 1
+algorithm:
+    framework: torch
+    env_runners:
+        num_env_runners: 12
+    resources:
+        num_gpus: 1
+    learners:
+        num_learners: 0
+        num_gpus_per_learner: 1
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    algo_config = SimpleNamespace(
+        num_gpus=1,
+        num_learners=0,
+        num_gpus_per_learner=1,
+        num_gpus_per_env_runner=0,
+        num_env_runners=12,
+        local_gpu_idx=0,
+    )
 
-    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
-    assert run_meta["status"] == "succeeded"
-    assert run_meta["seed_report"]["seed"] == 11
-    assert run_meta["artifacts"]["summary_path"] == str(summary_path)
+    diagnostics = dreamer._build_runtime_diagnostics(
+        run_config,
+        algo_config=algo_config,
+        capacity=None,
+    )
 
-    resolved_config = json.loads(resolved_config_path.read_text(encoding="utf-8"))
-    assert resolved_config["experiment"]["run_id"] == "smoke"
-
-    result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
-    assert len(result_lines) == 2
-    assert json.loads(result_lines[0])["iteration"] == 1
-    assert json.loads(result_lines[0])["episode_len_mean"] == 101.0
-    assert json.loads(result_lines[1])["iteration"] == 2
-    assert json.loads(result_lines[1])["episode_len_mean"] == 102.0
+    assert diagnostics["algo_learners"]["num_gpus_per_learner"] == 1
+    assert diagnostics["cfg_num_gpus_per_learner"] == 1
+    assert diagnostics["cfg_num_env_runners"] == 12
 
 
 def test_run_training_cleans_up_ray_and_algo_on_failure(

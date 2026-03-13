@@ -546,3 +546,8 @@ def test_repo_benchmark_socnav_grid_full_enables_periodic_eval() -> None:
     assert run_config.evaluation.every_iterations == 100
     assert run_config.evaluation.evaluation_episodes == 30
     assert run_config.evaluation.scenario_matrix is not None
+    assert run_config.algorithm.learners["num_gpus_per_learner"] == 1
+    assert run_config.algorithm.env_runners["num_env_runners"] == 12
+    assert run_config.algorithm.training["batch_size_B"] == 16
+    assert run_config.algorithm.training["batch_length_T"] == 32
+    assert run_config.algorithm.training["horizon_H"] == 10

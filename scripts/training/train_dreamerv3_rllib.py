@@ -9,8 +9,10 @@ import logging
 import math
 import os
 import platform
+import resource
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -104,6 +106,14 @@ _DEFAULT_API_STACK: dict[str, bool] = {
     "enable_rl_module_and_learner": True,
     "enable_env_runner_and_connector_v2": True,
 }
+_OBSERVABILITY_CONTAINERS = (
+    "env_runner_results",
+    "timers",
+    "learners",
+    "counters",
+    "fault_tolerance",
+    "info",
+)
 
 
 @dataclass(slots=True)
@@ -898,6 +908,145 @@ def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
     return None
 
 
+def _extract_nested_scalar(payload: object, path: tuple[str, ...]) -> float | int | None:
+    """Extract one scalar metric from a nested mapping path."""
+    current = payload
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return _coerce_real_metric(current)
+
+
+def _flatten_numeric_metrics(
+    payload: object,
+    *,
+    prefix: str,
+    target: dict[str, float | int],
+    max_metrics: int = 64,
+    max_depth: int = 5,
+    depth: int = 0,
+) -> None:
+    """Collect a bounded set of numeric leaf metrics from nested RLlib result payloads."""
+    if len(target) >= max_metrics or depth > max_depth:
+        return
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            next_prefix = f"{prefix}/{key}" if prefix else str(key)
+            _flatten_numeric_metrics(
+                value,
+                prefix=next_prefix,
+                target=target,
+                max_metrics=max_metrics,
+                max_depth=max_depth,
+                depth=depth + 1,
+            )
+            if len(target) >= max_metrics:
+                return
+        return
+    metric = _coerce_real_metric(payload)
+    if metric is not None and prefix:
+        target[prefix] = metric
+
+
+def _get_process_max_rss_mb() -> float | None:
+    """Return process max RSS in MiB when the platform exposes it."""
+    usage = getattr(resource, "getrusage", None)
+    if usage is None:
+        return None
+    rss_raw = float(usage(resource.RUSAGE_SELF).ru_maxrss)
+    if rss_raw <= 0:
+        return None
+    if sys.platform == "darwin":
+        return rss_raw / (1024.0 * 1024.0)
+    return rss_raw / 1024.0
+
+
+def _collect_train_observability(
+    result: dict[str, Any],
+    *,
+    iteration_wall_sec: float,
+    timesteps_total: float | int | None,
+    prev_timesteps_total: float | int | None,
+) -> dict[str, float | int]:
+    """Extract stable runtime observability metrics from an RLlib train result."""
+    metrics: dict[str, float | int] = {
+        "iteration_wall_sec": float(iteration_wall_sec),
+    }
+    max_rss_mb = _get_process_max_rss_mb()
+    if max_rss_mb is not None:
+        metrics["process_max_rss_mb"] = float(max_rss_mb)
+    if timesteps_total is not None and prev_timesteps_total is not None:
+        env_steps_delta = int(timesteps_total) - int(prev_timesteps_total)
+        metrics["env_steps_delta"] = env_steps_delta
+        if iteration_wall_sec > 0:
+            metrics["env_steps_per_sec_observed"] = float(env_steps_delta / iteration_wall_sec)
+    for container_name in _OBSERVABILITY_CONTAINERS:
+        container = result.get(container_name)
+        if isinstance(container, dict):
+            _flatten_numeric_metrics(container, prefix=container_name, target=metrics)
+    for metric_name, paths in {
+        "num_env_steps_sampled_lifetime": (
+            ("num_env_steps_sampled_lifetime",),
+            ("env_runner_results", "num_env_steps_sampled_lifetime"),
+        ),
+        "num_env_steps_trained_lifetime": (
+            ("num_env_steps_trained_lifetime",),
+            ("learners", "__all_modules__", "num_env_steps_trained_lifetime"),
+        ),
+        "sample_throughput": (
+            ("sample_throughput",),
+            ("env_runner_results", "sample_throughput"),
+        ),
+        "train_throughput": (
+            ("train_throughput",),
+            ("learners", "__all_modules__", "train_throughput"),
+        ),
+    }.items():
+        for path in paths:
+            value = _extract_nested_scalar(result, path)
+            if value is not None:
+                metrics.setdefault(metric_name, value)
+                break
+    return metrics
+
+
+def _build_runtime_diagnostics(
+    run_config: DreamerRunConfig,
+    *,
+    algo_config: object | None,
+    capacity: object | None,
+) -> dict[str, object]:
+    """Summarize resolved placement-relevant runtime fields for dry-runs and run metadata."""
+    env_runner_payload, resources_payload, capacity = _resolve_auto_overrides(
+        run_config,
+        capacity=capacity,
+    )
+    diagnostics: dict[str, object] = {
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        "ray_num_cpus": run_config.ray.num_cpus,
+        "ray_num_gpus": run_config.ray.num_gpus,
+        "algo_env_runners": env_runner_payload,
+        "algo_resources": resources_payload,
+        "algo_learners": dict(run_config.algorithm.learners),
+        "detected_capacity": _serialize_for_wandb(capacity),
+    }
+    if algo_config is None:
+        return diagnostics
+    for attr_name in (
+        "num_gpus",
+        "num_learners",
+        "num_gpus_per_learner",
+        "num_gpus_per_env_runner",
+        "num_env_runners",
+        "local_gpu_idx",
+    ):
+        value = getattr(algo_config, attr_name, None)
+        if value is not None:
+            diagnostics[f"cfg_{attr_name}"] = value
+    return diagnostics
+
+
 def _normalize_reward_metric(
     reward_mean: float | int | None,
     *,
@@ -1176,6 +1325,7 @@ def _build_run_meta(  # noqa: PLR0913
     result_log_path: Path,
     summary_path: Path,
     resolved_config_path: Path,
+    runtime_diagnostics: dict[str, object] | None,
     error: BaseException | None = None,
 ) -> dict[str, object]:
     """Build run-level provenance metadata for one DreamerV3 execution."""
@@ -1220,6 +1370,7 @@ def _build_run_meta(  # noqa: PLR0913
             "runtime_env": _serialize_for_wandb(run_config.ray.runtime_env),
         },
         "auto_capacity": _serialize_for_wandb(shared_capacity),
+        "runtime_diagnostics": _serialize_for_wandb(runtime_diagnostics),
         "artifacts": {
             "run_dir": str(run_dir),
             "checkpoint_dir": str(checkpoint_dir),
@@ -1246,6 +1397,7 @@ def _write_run_bookkeeping(  # noqa: PLR0913
     checkpoint_dir: Path,
     result_log_path: Path,
     summary_path: Path,
+    runtime_diagnostics: dict[str, object] | None = None,
     error: BaseException | None = None,
 ) -> tuple[Path, Path]:
     """Persist resolved config and run metadata for the current run state."""
@@ -1266,6 +1418,7 @@ def _write_run_bookkeeping(  # noqa: PLR0913
             result_log_path=result_log_path,
             summary_path=summary_path,
             resolved_config_path=resolved_config_path,
+            runtime_diagnostics=runtime_diagnostics,
             error=error,
         ),
     )
@@ -1392,7 +1545,9 @@ def _run_training_iterations(
 ) -> list[dict[str, object]]:
     """Execute iterations, logging metrics and writing checkpoints."""
     history: list[dict[str, object]] = []
+    prev_timesteps_total: float | int | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
+        iteration_started = time.perf_counter()
         result = dict(algo.train())
         episodes_completed_raw = _extract_metric(result, "num_episodes", "episodes_this_iter")
         episodes_completed = (
@@ -1415,13 +1570,23 @@ def _run_training_iterations(
             "num_env_steps_sampled_lifetime",
             "timesteps_total",
         )
+        observability = _collect_train_observability(
+            result,
+            iteration_wall_sec=max(0.0, time.perf_counter() - iteration_started),
+            timesteps_total=timesteps_total,
+            prev_timesteps_total=prev_timesteps_total,
+        )
+        prev_timesteps_total = timesteps_total
         logger.info(
-            "iter={} episodes_completed={} episode_len_mean={} reward_mean={} timesteps_total={}",
+            "iter={} episodes_completed={} episode_len_mean={} reward_mean={} timesteps_total={} "
+            "iter_wall_sec={} observed_env_steps_per_sec={}",
             iteration,
             episodes_completed,
             episode_len_mean,
             reward_mean,
             timesteps_total,
+            observability.get("iteration_wall_sec"),
+            observability.get("env_steps_per_sec_observed"),
         )
         history.append(
             {
@@ -1430,6 +1595,7 @@ def _run_training_iterations(
                 "episode_len_mean": episode_len_mean,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
+                "observability": observability,
             }
         )
         append_jsonl_record(
@@ -1441,6 +1607,7 @@ def _run_training_iterations(
                 "episode_len_mean": episode_len_mean,
                 "reward_mean": reward_mean,
                 "timesteps_total": timesteps_total,
+                "observability": observability,
             },
         )
         if wandb_run is not None:
@@ -1454,6 +1621,8 @@ def _run_training_iterations(
                 wandb_payload["episode_len_mean"] = episode_len_mean
             if reward_mean is not None:
                 wandb_payload["reward_mean"] = reward_mean
+            for key, value in observability.items():
+                wandb_payload[f"train/{key}"] = value
             wandb_run.log(wandb_payload, step=iteration)
 
         should_eval = run_config.evaluation.enabled and (
@@ -1499,6 +1668,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
     result_log_path = run_dir / "result.jsonl"
     history: list[dict[str, object]] = []
     shared_capacity = _detect_shared_capacity(run_config)
+    runtime_diagnostics: dict[str, object] | None = None
     seed_report = set_global_seed(run_config.experiment.seed)
     snqi_context = resolve_training_snqi_context(
         weights_path=run_config.evaluation.snqi_weights_path,
@@ -1515,6 +1685,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
         checkpoint_dir=checkpoint_dir,
         result_log_path=result_log_path,
         summary_path=summary_path,
+        runtime_diagnostics=runtime_diagnostics,
     )
     try:
         wandb_run = _init_wandb_tracking(run_config, run_stamp=run_stamp)
@@ -1526,6 +1697,24 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
             run_config,
             env_name=env_name,
             capacity=shared_capacity,
+        )
+        runtime_diagnostics = _build_runtime_diagnostics(
+            run_config,
+            algo_config=algo_config,
+            capacity=shared_capacity,
+        )
+        _write_run_bookkeeping(
+            run_config,
+            run_dir=run_dir,
+            run_stamp=run_stamp,
+            config_path=config_path,
+            shared_capacity=shared_capacity,
+            seed_report=seed_report,
+            status="running",
+            checkpoint_dir=checkpoint_dir,
+            result_log_path=result_log_path,
+            summary_path=summary_path,
+            runtime_diagnostics=runtime_diagnostics,
         )
         algo = _build_algorithm_instance(algo_config)
         history = _run_training_iterations(
@@ -1569,6 +1758,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
                 "run_meta_path": str(run_meta_path),
                 "resolved_config_path": str(resolved_config_path),
                 "seed_report": _serialize_for_wandb(seed_report),
+                "runtime_diagnostics": _serialize_for_wandb(runtime_diagnostics),
                 "evaluation_timeline_path": (
                     str(run_dir / run_config.evaluation.output_subdir / "eval_timeline.jsonl")
                     if run_config.evaluation.enabled
@@ -1588,6 +1778,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
             checkpoint_dir=checkpoint_dir,
             result_log_path=result_log_path,
             summary_path=summary_path,
+            runtime_diagnostics=runtime_diagnostics,
         )
         if wandb_run is not None:
             wandb_run.summary["run_summary_path"] = str(summary_path)
@@ -1607,6 +1798,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
             checkpoint_dir=checkpoint_dir,
             result_log_path=result_log_path,
             summary_path=summary_path,
+            runtime_diagnostics=runtime_diagnostics,
             error=exc,
         )
         raise
@@ -1702,13 +1894,30 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["LOGURU_LEVEL"] = run_config.experiment.log_level
 
     if args.dry_run:
+        shared_capacity = _detect_shared_capacity(run_config)
+        algo_config = _build_algorithm_config(
+            run_config,
+            env_name=f"robot_sf_dreamerv3_{run_config.experiment.run_id}",
+            capacity=shared_capacity,
+        )
+        diagnostics = _build_runtime_diagnostics(
+            run_config,
+            algo_config=algo_config,
+            capacity=shared_capacity,
+        )
         print(
-            "Dry-run config resolved: "
-            f"run_id={run_config.experiment.run_id} "
-            f"iterations={run_config.experiment.train_iterations} "
-            f"checkpoint_every={run_config.experiment.checkpoint_every} "
-            f"output_root={run_config.experiment.output_root}",
-            file=sys.stderr,
+            json.dumps(
+                {
+                    "run_id": run_config.experiment.run_id,
+                    "iterations": run_config.experiment.train_iterations,
+                    "checkpoint_every": run_config.experiment.checkpoint_every,
+                    "output_root": str(run_config.experiment.output_root),
+                    "runtime_diagnostics": diagnostics,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            file=sys.stdout,
         )
         return 0
 

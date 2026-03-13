@@ -109,6 +109,8 @@ Expected tree:
     amv_coverage_summary.md
     comparability_matrix.json
     comparability_matrix.md
+    seed_variability_by_scenario.json
+    seed_variability_by_scenario.csv
     snqi_diagnostics.json
     snqi_diagnostics.md
     snqi_sensitivity.csv
@@ -143,6 +145,7 @@ Release publication runbook:
 - matrix definition summary rows (`reports/matrix_summary.{json,csv}`)
 - AMV scope coverage summary (`reports/amv_coverage_summary.{json,md}`)
 - Alyassi comparability summary (`reports/comparability_matrix.{json,md}`)
+- seed variability by scenario/planner (`reports/seed_variability_by_scenario.{json,csv}`)
 - SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
 - warning list
 - publication bundle paths (if export enabled)

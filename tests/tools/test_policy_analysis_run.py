@@ -140,6 +140,29 @@ def test_summarize_records_prefers_termination_reason_for_rates() -> None:
     assert summary["termination_reason_counts"]["collision"] == 1
 
 
+def test_summarize_records_backfills_collision_means_from_termination_reason() -> None:
+    """Collision summaries should not stay zero when the episode terminated as collision."""
+    records = [
+        {
+            "status": "collision",
+            "termination_reason": "collision",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 0.0,
+                "ped_collision_count": 0.0,
+                "obstacle_collision_count": 0.0,
+                "agent_collision_count": 0.0,
+            },
+        }
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+
+    assert summary["collision_rate"] == pytest.approx(1.0)
+    assert summary["total_collision_rate"] == pytest.approx(1.0)
+    assert summary["unclassified_collision_rate"] == pytest.approx(1.0)
+    assert summary["warnings"]
+
+
 def test_summarize_records_does_not_count_waypoint_only_success() -> None:
     """Waypoint-level success must not be treated as route completion success."""
     records = [

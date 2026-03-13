@@ -369,6 +369,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "amv_coverage_summary.md").exists()
     assert (campaign_root / "reports" / "comparability_matrix.json").exists()
     assert (campaign_root / "reports" / "comparability_matrix.md").exists()
+    assert (campaign_root / "reports" / "seed_variability_by_scenario.json").exists()
+    assert (campaign_root / "reports" / "seed_variability_by_scenario.csv").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.json").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.md").exists()
     assert (campaign_root / "reports" / "snqi_sensitivity.csv").exists()
@@ -420,6 +422,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
     assert summary_payload["artifacts"]["comparability_json"].endswith(
         "reports/comparability_matrix.json"
+    )
+    assert summary_payload["artifacts"]["seed_variability_json"].endswith(
+        "reports/seed_variability_by_scenario.json"
+    )
+    assert summary_payload["artifacts"]["seed_variability_csv"].endswith(
+        "reports/seed_variability_by_scenario.csv"
     )
     assert summary_payload["artifacts"]["snqi_diagnostics_json"].endswith(
         "reports/snqi_diagnostics.json"

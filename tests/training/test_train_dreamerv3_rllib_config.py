@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from scripts.training.train_dreamerv3_rllib import (
+    _apply_cli_overrides,
     _apply_nested_overrides,
     _build_ray_init_kwargs,
     _resolve_auto_overrides,
@@ -175,6 +177,40 @@ algorithm:
     run_config = load_run_config(config_path)
 
     assert run_config.env.flatten_keys is None
+
+
+def test_apply_cli_overrides_preserves_config_path(tmp_path: Path) -> None:
+    """CLI override reconstruction must retain the source config path for runtime metadata."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer.yaml",
+        """
+experiment:
+  run_id: smoke
+  output_root: output/dreamerv3
+algorithm:
+  framework: torch
+tracking:
+  wandb:
+    enabled: false
+""",
+    )
+
+    run_config = load_run_config(config_path)
+    overridden = _apply_cli_overrides(
+        run_config,
+        Namespace(
+            run_id="override-run",
+            train_iterations=3,
+            checkpoint_every=1,
+            log_level="warning",
+        ),
+    )
+
+    assert overridden.config_path == config_path.resolve()
+    assert overridden.experiment.run_id == "override-run"
+    assert overridden.experiment.train_iterations == 3
+    assert overridden.experiment.checkpoint_every == 1
+    assert overridden.experiment.log_level == "WARNING"
 
 
 def test_apply_nested_overrides_reconstructs_grid_config_dataclass() -> None:

@@ -1340,6 +1340,7 @@ def _apply_cli_overrides(
     if args.log_level is not None:
         experiment.log_level = str(args.log_level).upper()
     return DreamerRunConfig(
+        config_path=run_config.config_path,
         experiment=experiment,
         ray=run_config.ray,
         env=run_config.env,

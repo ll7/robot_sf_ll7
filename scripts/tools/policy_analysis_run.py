@@ -124,6 +124,14 @@ _SUMMARY_METRICS = (
     "collisions",
 )
 
+_COLLISION_SPLIT_METRICS = frozenset(
+    {
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "agent_collision_count",
+    }
+)
+
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
 
 
@@ -626,13 +634,19 @@ def _summary_metric_means(records: list[dict[str, Any]]) -> dict[str, float]:
         for rec in records:
             raw = rec.get("metrics", {}).get(metric)
             if raw is None:
+                if metric in _COLLISION_SPLIT_METRICS:
+                    values.append(0.0)
                 continue
             try:
                 val = float(raw)
             except (TypeError, ValueError):
+                if metric in _COLLISION_SPLIT_METRICS:
+                    values.append(0.0)
                 continue
             if math.isfinite(val):
                 values.append(val)
+            elif metric in _COLLISION_SPLIT_METRICS:
+                values.append(0.0)
         if values:
             metric_means[metric] = float(np.mean(values))
     return metric_means

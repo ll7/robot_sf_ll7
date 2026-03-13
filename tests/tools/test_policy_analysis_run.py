@@ -163,6 +163,37 @@ def test_summarize_records_backfills_collision_means_from_termination_reason() -
     assert summary["warnings"]
 
 
+def test_summarize_records_zero_fills_missing_collision_split_metrics() -> None:
+    """Collision split means should use all episodes, not only records with explicit counters."""
+    records = [
+        {
+            "status": "collision",
+            "termination_reason": "collision",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 1.0,
+                "ped_collision_count": 1.0,
+                "obstacle_collision_count": 0.0,
+                "agent_collision_count": 0.0,
+            },
+        },
+        {
+            "status": "error",
+            "termination_reason": "error",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 0.0,
+            },
+        },
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+
+    assert summary["total_collision_rate"] == pytest.approx(0.5)
+    assert summary["ped_collision_rate"] == pytest.approx(0.5)
+    assert summary["obstacle_collision_rate"] == pytest.approx(0.0)
+    assert summary["agent_collision_rate"] == pytest.approx(0.0)
+
+
 def test_summarize_records_does_not_count_waypoint_only_success() -> None:
     """Waypoint-level success must not be treated as route completion success."""
     records = [

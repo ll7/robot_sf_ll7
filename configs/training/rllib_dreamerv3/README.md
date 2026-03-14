@@ -27,6 +27,14 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
   (`SLURM_CPUS_PER_TASK`, `SLURM_GPUS*`, `CUDA_VISIBLE_DEVICES`) so the same config
   scales across different allocations.
 
+## BR-08 balanced full-run profile
+
+- `benchmark_socnav_grid_br08_full_balanced_gpu_r8.yaml`: Benchmark-aligned SocNav+grid profile
+  for longer BR-08 runs when the default full profile is rollout-bound. It keeps a local learner
+  on GPU (`num_learners=0`, `num_gpus_per_learner=1`), fixes env runners to `8`, lowers
+  `training_ratio` to `64`, shortens `rollout_fragment_length` to `32`, and increases evaluation
+  cadence to every `20` iterations to surface reward regressions earlier.
+
 ## Canonical command
 
 ```bash

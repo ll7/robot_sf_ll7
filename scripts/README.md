@@ -40,6 +40,9 @@ scripts/
 ├── training/                          # Training workflows
 │   ├── train_ppo.py           # Expert PPO training
 │   ├── train_dreamerv3_rllib.py      # RLlib DreamerV3 training
+│   ├── collect_dreamer_world_model_episodes.py # Offline episode export for Dreamer pretraining
+│   ├── check_dreamer_world_model_pretrain.py # Quality gate for offline Dreamer pretraining
+│   ├── run_dreamerv3_world_model_pipeline.sh # Collect -> pretrain -> gate -> fine-tune wrapper
 │   ├── collect_predictive_planner_data.py # Predictive planner dataset collection
 │   ├── collect_predictive_hardcase_data.py # Hard-case predictive dataset collection
 │   ├── build_predictive_mixed_dataset.py # Merge base + hard datasets
@@ -107,6 +110,21 @@ Build a mixed dataset combining base and hard-case samples.
 #### `scripts/training/train_predictive_planner.py`
 
 Train predictive trajectory model checkpoint(s); supports proxy hard-set evaluation and selection.
+
+#### `scripts/training/collect_dreamer_world_model_episodes.py`
+
+Collect teacher-policy episodes in RLlib `SingleAgentEpisode` parquet format for offline
+Dreamer world-model pretraining.
+
+#### `scripts/training/check_dreamer_world_model_pretrain.py`
+
+Validate Dreamer world-model pretraining from `run_summary.json` by checking world-model loss
+improvement and minimum offline-training throughput.
+
+#### `scripts/training/run_dreamerv3_world_model_pipeline.sh`
+
+Run the staged Dreamer world-model workflow (`collect`, `pretrain`, `gate`, `finetune`, or
+`all`) with canonical configs and headless-safe defaults.
 
 #### `scripts/validation/evaluate_predictive_planner.py`
 

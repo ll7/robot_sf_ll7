@@ -41,7 +41,16 @@ from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchi
 from robot_sf.training.snqi_utils import resolve_training_snqi_context
 
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
-_TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking", "evaluation"}
+_TOP_LEVEL_KEYS = {
+    "experiment",
+    "ray",
+    "env",
+    "algorithm",
+    "tracking",
+    "evaluation",
+    "offline_data",
+    "bootstrap",
+}
 _EXPERIMENT_KEYS = {
     "run_id",
     "output_root",
@@ -78,6 +87,29 @@ _SCENARIO_MATRIX_KEYS = {
 }
 _ALGORITHM_KEYS = {"framework", "training", "env_runners", "resources", "learners", "api_stack"}
 _TRACKING_KEYS = {"wandb"}
+_OFFLINE_DATA_KEYS = {
+    "input",
+    "input_read_episodes",
+    "input_read_sample_batches",
+    "input_read_batch_size",
+    "input_filesystem",
+    "input_filesystem_kwargs",
+    "input_compress_columns",
+    "materialize_data",
+    "materialize_mapped_data",
+    "map_batches_kwargs",
+    "iter_batches_kwargs",
+    "actions_in_input_normalized",
+    "shuffle_buffer_size",
+    "dataset_num_iters_per_learner",
+    "output",
+    "output_max_rows_per_file",
+    "output_write_episodes",
+    "output_write_remaining_data",
+    "output_compress_columns",
+    "offline_sampling",
+}
+_BOOTSTRAP_KEYS = {"restore_checkpoint", "restore_component"}
 _EVALUATION_KEYS = {
     "enabled",
     "every_iterations",
@@ -106,6 +138,7 @@ _DEFAULT_API_STACK: dict[str, bool] = {
     "enable_rl_module_and_learner": True,
     "enable_env_runner_and_connector_v2": True,
 }
+_RESTORE_COMPONENT_CHOICES = {"algorithm", "rl_module"}
 _OBSERVABILITY_CONTAINERS = (
     "env_runner_results",
     "timers",
@@ -200,6 +233,14 @@ class TrackingSettings:
 
 
 @dataclass(slots=True)
+class BootstrapSettings:
+    """Optional checkpoint-restore settings for warm-started runs."""
+
+    restore_checkpoint: Path | None
+    restore_component: str
+
+
+@dataclass(slots=True)
 class EvaluationSettings:
     """Periodic evaluation settings for Dreamer training runs."""
 
@@ -224,6 +265,8 @@ class DreamerRunConfig:
     algorithm: AlgorithmSettings
     tracking: TrackingSettings
     evaluation: EvaluationSettings
+    offline_data: dict[str, object]
+    bootstrap: BootstrapSettings
 
 
 def _ensure_mapping(payload: object, *, field_name: str) -> dict[str, object]:
@@ -303,6 +346,17 @@ def _resolve_config_path(
     return path_value
 
 
+def _resolve_workspace_path(raw_value: object, *, field_name: str) -> Path:
+    """Resolve artifact/output paths relative to the workspace root."""
+    text_value = str(raw_value).strip()
+    if not text_value:
+        raise ValueError(f"{field_name} cannot be empty.")
+    path_value = Path(text_value)
+    if not path_value.is_absolute():
+        path_value = (Path.cwd() / path_value).resolve()
+    return path_value
+
+
 def _parse_experiment_settings(
     payload: dict[str, object], *, base_dir: Path | None = None
 ) -> ExperimentSettings:
@@ -314,10 +368,9 @@ def _parse_experiment_settings(
     if not run_id:
         raise ValueError("experiment.run_id cannot be empty.")
 
-    output_root = _resolve_config_path(
+    output_root = _resolve_workspace_path(
         experiment_raw.get("output_root", "output/dreamerv3"),
         field_name="experiment.output_root",
-        base_dir=base_dir,
     )
     train_iterations = int(experiment_raw.get("train_iterations", 20))
     checkpoint_every = int(experiment_raw.get("checkpoint_every", 5))
@@ -483,10 +536,9 @@ def _parse_tracking_settings(
     if not isinstance(tags_raw, list | tuple):
         raise ValueError("tracking.wandb.tags must be a list or tuple of strings.")
 
-    wandb_dir = _resolve_config_path(
+    wandb_dir = _resolve_workspace_path(
         wandb_raw.get("dir", "output/wandb"),
         field_name="tracking.wandb.dir",
-        base_dir=base_dir,
     )
     return TrackingSettings(
         wandb=WandbSettings(
@@ -517,6 +569,81 @@ def _resolve_optional_path(
     if value in {None, ""}:
         return None
     return _resolve_config_path(value, field_name=field_name, base_dir=base_dir)
+
+
+def _resolve_offline_io_uri(
+    value: object,
+    *,
+    field_name: str,
+    base_dir: Path | None = None,
+) -> str:
+    """Resolve a local filesystem path into RLlib's preferred `local://` URI form."""
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{field_name} cannot be empty.")
+    if text.startswith("local://"):
+        raw = text.removeprefix("local://")
+        resolved = _resolve_config_path(raw, field_name=field_name, base_dir=base_dir)
+        return f"local://{resolved}"
+    if "://" in text:
+        return text
+    resolved = _resolve_config_path(text, field_name=field_name, base_dir=base_dir)
+    return f"local://{resolved}"
+
+
+def _parse_offline_data_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> dict[str, object]:
+    """Parse optional RLlib offline-data settings."""
+    offline_raw = _ensure_mapping(payload.get("offline_data"), field_name="offline_data")
+    _ensure_known_keys(offline_raw, field_name="offline_data", allowed=_OFFLINE_DATA_KEYS)
+    if not offline_raw:
+        return {}
+
+    parsed = dict(offline_raw)
+    if "input" in parsed:
+        parsed["input_"] = _resolve_offline_io_uri(
+            parsed.pop("input"),
+            field_name="offline_data.input",
+            base_dir=base_dir,
+        )
+    if "output" in parsed:
+        parsed["output"] = _resolve_offline_io_uri(
+            parsed["output"],
+            field_name="offline_data.output",
+            base_dir=base_dir,
+        )
+    for key in ("input_compress_columns", "output_compress_columns"):
+        raw = parsed.get(key)
+        if raw is not None and not isinstance(raw, list | tuple):
+            raise ValueError(f"offline_data.{key} must be a list or tuple.")
+    for key in ("input_filesystem_kwargs", "map_batches_kwargs", "iter_batches_kwargs"):
+        raw = parsed.get(key)
+        if raw is not None and not isinstance(raw, dict):
+            raise ValueError(f"offline_data.{key} must be a mapping.")
+    return parsed
+
+
+def _parse_bootstrap_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> BootstrapSettings:
+    """Parse optional checkpoint bootstrap settings."""
+    bootstrap_raw = _ensure_mapping(payload.get("bootstrap"), field_name="bootstrap")
+    _ensure_known_keys(bootstrap_raw, field_name="bootstrap", allowed=_BOOTSTRAP_KEYS)
+    restore_component = str(bootstrap_raw.get("restore_component", "algorithm")).strip().lower()
+    if restore_component not in _RESTORE_COMPONENT_CHOICES:
+        raise ValueError(
+            "bootstrap.restore_component must be one of: "
+            + ", ".join(sorted(_RESTORE_COMPONENT_CHOICES))
+        )
+    return BootstrapSettings(
+        restore_checkpoint=_resolve_optional_path(
+            bootstrap_raw.get("restore_checkpoint"),
+            field_name="bootstrap.restore_checkpoint",
+            base_dir=base_dir,
+        ),
+        restore_component=restore_component,
+    )
 
 
 def _parse_evaluation_settings(
@@ -575,6 +702,8 @@ def load_run_config(path: Path) -> DreamerRunConfig:
         algorithm=_parse_algorithm_settings(payload),
         tracking=_parse_tracking_settings(payload, base_dir=resolved.parent),
         evaluation=_parse_evaluation_settings(payload, base_dir=resolved.parent),
+        offline_data=_parse_offline_data_settings(payload, base_dir=resolved.parent),
+        bootstrap=_parse_bootstrap_settings(payload, base_dir=resolved.parent),
     )
 
 
@@ -871,6 +1000,7 @@ def _build_algorithm_config(
     cfg = _apply_env_runner_settings(cfg, env_runner_payload)
     cfg = _apply_config_method(cfg, "resources", resources_payload)
     cfg = _apply_config_method(cfg, "learners", run_config.algorithm.learners)
+    cfg = _apply_config_method(cfg, "offline_data", run_config.offline_data)
     cfg = _apply_config_method(cfg, "training", run_config.algorithm.training)
     debugging = getattr(cfg, "debugging", None)
     if callable(debugging):
@@ -1533,6 +1663,28 @@ def _build_algorithm_instance(algo_config: object) -> Any:
     return algo_config.build()
 
 
+def _restore_bootstrap_checkpoint(algo: Any, run_config: DreamerRunConfig) -> None:
+    """Restore full algorithm state or just the RLModule from a bootstrap checkpoint."""
+    checkpoint_path = run_config.bootstrap.restore_checkpoint
+    if checkpoint_path is None:
+        return
+    restore_from_path = getattr(algo, "restore_from_path", None)
+    if not callable(restore_from_path):
+        raise RuntimeError("Algorithm does not support restore_from_path().")
+    restore_component = run_config.bootstrap.restore_component
+    restore_kwargs: dict[str, object] = {}
+    if restore_component == "rl_module":
+        from ray.rllib.core import COMPONENT_RL_MODULE
+
+        restore_kwargs["component"] = COMPONENT_RL_MODULE
+    logger.info(
+        "Restoring Dreamer bootstrap checkpoint from {} (component={})",
+        checkpoint_path,
+        restore_component,
+    )
+    restore_from_path(str(checkpoint_path), **restore_kwargs)
+
+
 def _run_training_iterations(
     algo: Any,
     run_config: DreamerRunConfig,
@@ -1546,6 +1698,7 @@ def _run_training_iterations(
     """Execute iterations, logging metrics and writing checkpoints."""
     history: list[dict[str, object]] = []
     prev_timesteps_total: float | int | None = None
+    last_checkpoint_path: str | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         iteration_started = time.perf_counter()
         result = dict(algo.train())
@@ -1635,7 +1788,9 @@ def _run_training_iterations(
         if is_periodic_ckpt or is_final_ckpt or should_eval:
             ckpt_path = _save_checkpoint(algo, checkpoint_dir)
             checkpoint_path = ckpt_path
+            last_checkpoint_path = ckpt_path
             logger.info("checkpoint_saved={}", ckpt_path)
+        history[-1]["checkpoint_path"] = checkpoint_path
         if should_eval:
             _run_periodic_evaluation(
                 algo,
@@ -1647,6 +1802,8 @@ def _run_training_iterations(
                 wandb_run=wandb_run,
                 snqi_context=snqi_context,
             )
+    if history:
+        history[-1]["last_checkpoint_path"] = last_checkpoint_path
     return history
 
 
@@ -1717,6 +1874,7 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
             runtime_diagnostics=runtime_diagnostics,
         )
         algo = _build_algorithm_instance(algo_config)
+        _restore_bootstrap_checkpoint(algo, run_config)
         history = _run_training_iterations(
             algo,
             run_config,
@@ -1759,6 +1917,16 @@ def run_training(run_config: DreamerRunConfig, *, config_path: Path | None = Non
                 "resolved_config_path": str(resolved_config_path),
                 "seed_report": _serialize_for_wandb(seed_report),
                 "runtime_diagnostics": _serialize_for_wandb(runtime_diagnostics),
+                "bootstrap_restore_checkpoint": (
+                    str(run_config.bootstrap.restore_checkpoint)
+                    if run_config.bootstrap.restore_checkpoint is not None
+                    else None
+                ),
+                "bootstrap_restore_component": run_config.bootstrap.restore_component,
+                "offline_data": _serialize_for_wandb(run_config.offline_data),
+                "last_checkpoint_path": (
+                    history[-1].get("last_checkpoint_path") if history else None
+                ),
                 "evaluation_timeline_path": (
                     str(run_dir / run_config.evaluation.output_subdir / "eval_timeline.jsonl")
                     if run_config.evaluation.enabled
@@ -1852,6 +2020,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate config and print resolved settings without Ray execution.",
     )
+    parser.add_argument(
+        "--restore-checkpoint",
+        type=Path,
+        default=None,
+        help="Optional checkpoint path to restore before training.",
+    )
+    parser.add_argument(
+        "--restore-component",
+        choices=sorted(_RESTORE_COMPONENT_CHOICES),
+        default=None,
+        help="Optional restore scope override (`algorithm` or `rl_module`).",
+    )
+    parser.add_argument(
+        "--offline-input",
+        type=str,
+        default=None,
+        help="Optional offline input dataset URI/path override for RLlib offline_data().",
+    )
     return parser
 
 
@@ -1872,6 +2058,18 @@ def _apply_cli_overrides(
         experiment.checkpoint_every = int(args.checkpoint_every)
     if args.log_level is not None:
         experiment.log_level = str(args.log_level).upper()
+    bootstrap = copy.deepcopy(run_config.bootstrap)
+    if args.restore_checkpoint is not None:
+        bootstrap.restore_checkpoint = args.restore_checkpoint.resolve()
+    if args.restore_component is not None:
+        bootstrap.restore_component = str(args.restore_component)
+    offline_data = copy.deepcopy(run_config.offline_data)
+    if args.offline_input is not None:
+        offline_data["input_"] = _resolve_offline_io_uri(
+            args.offline_input,
+            field_name="--offline-input",
+        )
+        offline_data.setdefault("input_read_episodes", True)
     return DreamerRunConfig(
         config_path=run_config.config_path,
         experiment=experiment,
@@ -1880,6 +2078,8 @@ def _apply_cli_overrides(
         algorithm=run_config.algorithm,
         tracking=run_config.tracking,
         evaluation=run_config.evaluation,
+        offline_data=offline_data,
+        bootstrap=bootstrap,
     )
 
 
@@ -1912,6 +2112,13 @@ def main(argv: list[str] | None = None) -> int:
                     "iterations": run_config.experiment.train_iterations,
                     "checkpoint_every": run_config.experiment.checkpoint_every,
                     "output_root": str(run_config.experiment.output_root),
+                    "offline_data": run_config.offline_data,
+                    "bootstrap_restore_checkpoint": (
+                        str(run_config.bootstrap.restore_checkpoint)
+                        if run_config.bootstrap.restore_checkpoint is not None
+                        else None
+                    ),
+                    "bootstrap_restore_component": run_config.bootstrap.restore_component,
                     "runtime_diagnostics": diagnostics,
                 },
                 indent=2,

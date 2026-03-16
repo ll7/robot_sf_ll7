@@ -73,6 +73,7 @@ docs = [
 ]
 rllib = [
     "ray[rllib]>=2.53.0",
+    "msgpack-numpy>=0.4.8",
 ]
 progress = [
     "tqdm>=4.67.0",

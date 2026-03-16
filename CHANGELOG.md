@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed DreamerV3 RLlib artifact paths so `experiment.output_root` and `tracking.wandb.dir` resolve under the workspace `output/` tree instead of the config directory.
 * Fixed DreamerV3 RLlib `--config` launches so CLI overrides preserve the source config path instead of crashing during startup.
 * Reduced occupancy-grid observation-space startup warnings by constructing float32 Gymnasium bounds explicitly instead of relying on float64 scalar defaults.
 * Fixed DreamerV3 RLlib training summaries to record `reward_mean: null` when RLlib reports empty-episode iteration means as `NaN`, and now persist `episodes_completed` for clearer diagnostics.
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a staged DreamerV3 BR-08 world-model warm-start workflow with offline teacher-episode export, offline world-model pretraining, a machine-enforced pretraining quality gate, warm-start fine-tune configs, a pipeline wrapper, and a dedicated Slurm submission script.
 * Added Dreamer RLlib runtime placement diagnostics and per-iteration observability metrics so GPU/throughput smoke runs can distinguish sampler, learner, and resource bottlenecks.
 * Added a dedicated `SLURM/Auxme/auxme_pro6000_gpu.sl` batch wrapper for `pro6000` nodes that avoids `srun` and falls back to `cp -a` when `rsync` is unavailable, so PPO jobs can run on `auxme-imech142`-style hosts.
 * Added a shared PPO/Dreamer checkpoint evaluator plus periodic Dreamer evaluation artifacts with standardized success, collision, timeout, and reward-per-episode reporting.

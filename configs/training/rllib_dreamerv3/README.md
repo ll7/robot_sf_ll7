@@ -35,6 +35,19 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
   `training_ratio` to `64`, shortens `rollout_fragment_length` to `32`, and increases evaluation
   cadence to every `20` iterations to surface reward regressions earlier.
 
+## BR-08 world-model warm-start profiles
+
+- `benchmark_socnav_grid_br08_world_model_pretrain.yaml`: Offline Dreamer world-model pretraining
+  config. It expects teacher-generated RLlib episode data under
+  `output/benchmarks/dreamer_world_model/br08_world_model_ppo_teacher`, disables actor/critic
+  updates, and trains only the world model on GPU.
+- `benchmark_socnav_grid_br08_full_balanced_gpu_r8_warmstart.yaml`: Balanced BR-08 full run for
+  fine-tuning from a pretrained world model. Pair it with
+  `scripts/training/run_dreamerv3_world_model_pipeline.sh` so the trainer restores the RLModule
+  weights from the latest pretrain checkpoint before online learning starts.
+- For the staged runbook, quality gate, and Slurm submission flow see
+  `docs/training/dreamerv3_world_model_pipeline.md`.
+
 ## Canonical command
 
 ```bash

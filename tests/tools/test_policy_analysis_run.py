@@ -451,6 +451,67 @@ def test_build_episode_record_metric_collision_overrides_route_complete(monkeypa
     assert record["outcome"]["collision_event"] is True
 
 
+def test_build_episode_record_backfills_collision_split_metrics_from_meta(monkeypatch) -> None:
+    """Collision split counters should be inferred from terminal meta flags when metrics miss them."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {
+            "success": 0.0,
+            "collisions": 0.0,
+            "ped_collision_count": 0.0,
+            "obstacle_collision_count": 0.0,
+            "agent_collision_count": 0.0,
+            "time_to_goal_norm": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+    record = policy_analysis_run._build_episode_record(
+        {"id": "s1"},
+        seed=13,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=None,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        robot_radius=1.0,
+        ped_radius=0.4,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": False, "is_obstacle_collision": True}},
+        reached_max_steps=False,
+    )
+
+    assert record["termination_reason"] == "collision"
+    assert record["metrics"]["collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["ped_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["agent_collision_count"] == pytest.approx(0.0)
+
+
 def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> None:
     """Trajectory collection must copy mutable simulator arrays per timestep."""
 

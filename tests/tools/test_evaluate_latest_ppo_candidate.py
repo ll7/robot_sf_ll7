@@ -106,6 +106,37 @@ def test_benchmark_summary_flags_contradictions_and_gate() -> None:
     assert summary["problem_episode_count"] == 1
 
 
+def test_benchmark_summary_uses_termination_reason_for_collision_and_timeout_rates() -> None:
+    """Benchmark summary should derive collision/max-steps rates from termination semantics."""
+    records = [
+        {
+            "scenario_id": "s1",
+            "seed": 1,
+            "termination_reason": "collision",
+            "metrics": {"success": 0.0, "collisions": 0.0, "snqi": -0.1},
+        },
+        {
+            "scenario_id": "s1",
+            "seed": 2,
+            "termination_reason": "max_steps",
+            "metrics": {"success": 0.0, "collisions": 0.0, "snqi": 0.0},
+        },
+        {
+            "scenario_id": "s2",
+            "seed": 3,
+            "termination_reason": "success",
+            "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.2},
+        },
+    ]
+    summary = latest_eval._benchmark_summary(records)
+    assert summary["success_rate"] == 1.0 / 3.0
+    assert summary["collision_rate"] == 1.0 / 3.0
+    assert summary["max_steps_rate"] == 1.0 / 3.0
+    assert summary["termination_reason_counts"] == {"collision": 1, "max_steps": 1, "success": 1}
+    assert summary["problem_episode_count"] == 0
+    assert summary["weakest_scenarios"][0]["scenario_id"] == "s1"
+
+
 def test_run_benchmark_gate_returns_summary_when_runner_fails_with_jsonl(
     monkeypatch, tmp_path: Path
 ) -> None:

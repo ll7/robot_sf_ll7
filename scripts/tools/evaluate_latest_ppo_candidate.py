@@ -181,26 +181,38 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     contradictions: list[dict[str, Any]] = []
     success_sum = 0.0
     collision_sum = 0.0
+    max_steps_sum = 0.0
     snqi_values: list[float] = []
 
     for record in records:
         metrics = dict(record.get("metrics") or {})
         scenario_id = str(record.get("scenario_id") or "unknown")
-        success = float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
-        collision = float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
+        termination = str(record.get("termination_reason") or "unknown")
+        termination_counts[termination] = termination_counts.get(termination, 0) + 1
+        success = (
+            1.0
+            if termination == "success"
+            else float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
+        )
+        collision = (
+            1.0
+            if termination == "collision"
+            else float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
+        )
+        max_steps = 1.0 if termination == "max_steps" else 0.0
         snqi = float(metrics.get("snqi", 0.0) or 0.0)
         success_sum += success
         collision_sum += collision
+        max_steps_sum += max_steps
         snqi_values.append(snqi)
-        termination = str(record.get("termination_reason") or "unknown")
-        termination_counts[termination] = termination_counts.get(termination, 0) + 1
         row = scenario_rows.setdefault(
             scenario_id,
-            {"episodes": 0.0, "success_sum": 0.0, "collision_sum": 0.0},
+            {"episodes": 0.0, "success_sum": 0.0, "collision_sum": 0.0, "max_steps_sum": 0.0},
         )
         row["episodes"] += 1.0
         row["success_sum"] += success
         row["collision_sum"] += collision
+        row["max_steps_sum"] += max_steps
         if collision > 0.0 and success > 0.0:
             contradictions.append(
                 {
@@ -226,20 +238,28 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "scenario_id": scenario_id,
                 "success_rate": row["success_sum"] / row["episodes"],
                 "collision_rate": row["collision_sum"] / row["episodes"],
+                "max_steps_rate": row["max_steps_sum"] / row["episodes"],
             }
             for scenario_id, row in scenario_rows.items()
         ),
-        key=lambda row: (row["success_rate"], -row["collision_rate"], row["scenario_id"]),
+        key=lambda row: (
+            row["success_rate"],
+            -row["collision_rate"],
+            -row["max_steps_rate"],
+            row["scenario_id"],
+        ),
     )[:5]
 
     episodes = len(records)
     success_rate = success_sum / episodes
     collision_rate = collision_sum / episodes
+    max_steps_rate = max_steps_sum / episodes
     snqi_mean = sum(snqi_values) / len(snqi_values) if snqi_values else 0.0
     return {
         "episodes": episodes,
         "success_rate": success_rate,
         "collision_rate": collision_rate,
+        "max_steps_rate": max_steps_rate,
         "snqi": snqi_mean,
         "termination_reason_counts": termination_counts,
         "problem_episode_count": len(contradictions),

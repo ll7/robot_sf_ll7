@@ -1,3 +1,4 @@
+# Usage: uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml --log-level WARNING
 # BR-06 v10 PPO retraining with compact predictor-derived foresight features
 # and full policy analysis as the true best-checkpoint selector.
 policy_id: ppo_expert_br06_v10_predictive_foresight_success_priority_policy_analysis_select
@@ -72,7 +73,6 @@ env_factory_kwargs:
       timeout: -6.5
       stagnation: -2.0
       terminal_bonus: 20.0
-  peds_have_obstacle_forces: true
 scenario_sampling:
   strategy: random
   profile_strategy: cycle

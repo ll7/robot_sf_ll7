@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -89,7 +90,7 @@ from scripts.tools.render_scenario_videos import _defensive_obs_adapter
 from scripts.training.train_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Sequence
 
 
 _POLICY_CHOICES = (
@@ -1488,6 +1489,27 @@ def _build_episode_record(  # noqa: PLR0913
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     meta = last_info.get("meta")
+    if isinstance(meta, Mapping):
+        total_collision = float(metrics.get("collisions", 0.0) or 0.0)
+        ped_collision_count = float(metrics.get("ped_collision_count", 0.0) or 0.0)
+        obstacle_collision_count = float(metrics.get("obstacle_collision_count", 0.0) or 0.0)
+        agent_collision_count = float(metrics.get("agent_collision_count", 0.0) or 0.0)
+        if (
+            total_collision <= 0.0
+            and ped_collision_count <= 0.0
+            and obstacle_collision_count <= 0.0
+            and agent_collision_count <= 0.0
+        ):
+            ped_collision_count = float(bool(meta.get("is_pedestrian_collision")))
+            obstacle_collision_count = float(bool(meta.get("is_obstacle_collision")))
+            agent_collision_count = float(bool(meta.get("is_robot_collision")))
+            inferred_total = ped_collision_count + obstacle_collision_count + agent_collision_count
+            if inferred_total > 0.0:
+                metrics["ped_collision_count"] = ped_collision_count
+                metrics["obstacle_collision_count"] = obstacle_collision_count
+                metrics["agent_collision_count"] = agent_collision_count
+                metrics["collisions"] = inferred_total
+                metrics["total_collision_count"] = inferred_total
     # Canonical episode collision: event-stream collision OR metric-level collision evidence.
     # This keeps success/outcome semantics aligned with benchmark metrics.
     metric_collisions = float(metrics.get("collisions", 0.0) or 0.0)

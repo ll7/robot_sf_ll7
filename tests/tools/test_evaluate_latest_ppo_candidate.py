@@ -6,6 +6,7 @@ import json
 import subprocess
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools import evaluate_latest_ppo_candidate as latest_eval
@@ -86,7 +87,7 @@ def test_build_benchmark_algo_config_threads_predictive_settings(tmp_path: Path)
 
 
 def test_benchmark_summary_flags_contradictions_and_gate() -> None:
-    """Benchmark gate should reject contradictory collision-plus-success records."""
+    """Benchmark gate should reject contradictory unknown-termination records."""
     records = [
         {
             "scenario_id": "s1",
@@ -97,7 +98,7 @@ def test_benchmark_summary_flags_contradictions_and_gate() -> None:
         {
             "scenario_id": "s2",
             "seed": 2,
-            "termination_reason": "collision",
+            "termination_reason": "unknown",
             "metrics": {"success_rate": 1.0, "collision_rate": 1.0, "snqi": -0.2},
         },
     ]
@@ -137,6 +138,29 @@ def test_benchmark_summary_uses_termination_reason_for_collision_and_timeout_rat
     assert summary["weakest_scenarios"][0]["scenario_id"] == "s1"
 
 
+def test_benchmark_summary_zeroes_known_non_success_terminal_states() -> None:
+    """Known terminal states should not inherit stale success/collision metrics."""
+    records = [
+        {
+            "scenario_id": "s1",
+            "seed": 1,
+            "termination_reason": "terminated",
+            "metrics": {"success": 1.0, "collisions": 1.0, "snqi": -0.4},
+        },
+        {
+            "scenario_id": "s1",
+            "seed": 2,
+            "termination_reason": "error",
+            "metrics": {"success": 1.0, "collisions": 1.0, "snqi": -0.2},
+        },
+    ]
+    summary = latest_eval._benchmark_summary(records)
+    assert summary["success_rate"] == 0.0
+    assert summary["collision_rate"] == 0.0
+    assert summary["max_steps_rate"] == 0.0
+    assert summary["termination_reason_counts"] == {"terminated": 1, "error": 1}
+
+
 def test_resolve_benchmark_snqi_inputs_uses_canonical_defaults(monkeypatch, tmp_path: Path) -> None:
     """Benchmark gate should default to canonical SNQI inputs when none are provided."""
     weights = tmp_path / "weights.json"
@@ -152,6 +176,20 @@ def test_resolve_benchmark_snqi_inputs_uses_canonical_defaults(monkeypatch, tmp_
     )
     assert resolved_weights == weights
     assert resolved_baseline == baseline
+
+
+def test_resolve_benchmark_snqi_inputs_rejects_partial_resolution(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Benchmark gate should fail early when only one SNQI input can be resolved."""
+    weights = tmp_path / "weights.json"
+    weights.write_text("{}", encoding="utf-8")
+    missing_baseline = tmp_path / "missing.json"
+    monkeypatch.setattr(latest_eval, "DEFAULT_BENCHMARK_SNQI_WEIGHTS", weights)
+    monkeypatch.setattr(latest_eval, "DEFAULT_BENCHMARK_SNQI_BASELINE", missing_baseline)
+
+    with pytest.raises(FileNotFoundError, match="requires both SNQI inputs"):
+        latest_eval._resolve_benchmark_snqi_inputs(weights_path=None, baseline_path=None)
 
 
 def test_resolve_benchmark_snqi_inputs_preserves_explicit_paths(tmp_path: Path) -> None:

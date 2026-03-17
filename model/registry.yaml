@@ -109,7 +109,7 @@ models:
       - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the classic_interactions gate.
       - Best-success artifact from W&B run 27dbe5xu.
       - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
-      - Not promoted; carry-forward candidate only pending full benchmark comparison against the promoted v3 baseline.
+      - Not promoted; full 141-episode benchmark is still too weak in absolute terms because max_steps remains high.
   - model_id: ga3c_cadrl_iros18
     display_name: GA3C-CADRL (IROS18) checkpoint
     local_path: model/ga3c_cadrl/IROS18/network_01900000.meta

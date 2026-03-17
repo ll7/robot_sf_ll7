@@ -176,6 +176,11 @@ def _resolve_benchmark_snqi_inputs(
         resolved_weights = DEFAULT_BENCHMARK_SNQI_WEIGHTS
     if resolved_baseline is None and DEFAULT_BENCHMARK_SNQI_BASELINE.exists():
         resolved_baseline = DEFAULT_BENCHMARK_SNQI_BASELINE
+    if (resolved_weights is None) != (resolved_baseline is None):
+        raise FileNotFoundError(
+            "Promotion benchmark requires both SNQI inputs. "
+            "Pass both explicitly or keep both canonical defaults in place."
+        )
     return resolved_weights, resolved_baseline
 
 
@@ -207,17 +212,18 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         scenario_id = str(record.get("scenario_id") or "unknown")
         termination = str(record.get("termination_reason") or "unknown")
         termination_counts[termination] = termination_counts.get(termination, 0) + 1
-        success = (
-            1.0
-            if termination == "success"
-            else float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
-        )
-        collision = (
-            1.0
-            if termination == "collision"
-            else float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
-        )
-        max_steps = 1.0 if termination == "max_steps" else 0.0
+        raw_success = float(metrics.get("success_rate", metrics.get("success", 0.0)) or 0.0)
+        raw_collision = float(metrics.get("collision_rate", metrics.get("collisions", 0.0)) or 0.0)
+        if termination == "success":
+            success, collision, max_steps = 1.0, 0.0, 0.0
+        elif termination == "collision":
+            success, collision, max_steps = 0.0, 1.0, 0.0
+        elif termination == "max_steps":
+            success, collision, max_steps = 0.0, 0.0, 1.0
+        elif termination in {"terminated", "truncated", "error"}:
+            success, collision, max_steps = 0.0, 0.0, 0.0
+        else:
+            success, collision, max_steps = raw_success, raw_collision, 0.0
         snqi = float(metrics.get("snqi", 0.0) or 0.0)
         success_sum += success
         collision_sum += collision

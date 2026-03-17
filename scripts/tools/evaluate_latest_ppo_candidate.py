@@ -170,12 +170,21 @@ def _resolve_benchmark_snqi_inputs(
     baseline_path: Path | None,
 ) -> tuple[Path | None, Path | None]:
     """Resolve canonical SNQI inputs for benchmark-gate runs."""
+    if (weights_path is None) != (baseline_path is None):
+        raise FileNotFoundError(
+            "Promotion benchmark requires both SNQI inputs from the same source. "
+            "Pass both explicitly or keep both canonical defaults in place."
+        )
+
     resolved_weights = weights_path
     resolved_baseline = baseline_path
-    if resolved_weights is None and DEFAULT_BENCHMARK_SNQI_WEIGHTS.exists():
-        resolved_weights = DEFAULT_BENCHMARK_SNQI_WEIGHTS
-    if resolved_baseline is None and DEFAULT_BENCHMARK_SNQI_BASELINE.exists():
-        resolved_baseline = DEFAULT_BENCHMARK_SNQI_BASELINE
+    if resolved_weights is None and resolved_baseline is None:
+        resolved_weights = (
+            DEFAULT_BENCHMARK_SNQI_WEIGHTS if DEFAULT_BENCHMARK_SNQI_WEIGHTS.exists() else None
+        )
+        resolved_baseline = (
+            DEFAULT_BENCHMARK_SNQI_BASELINE if DEFAULT_BENCHMARK_SNQI_BASELINE.exists() else None
+        )
     if (resolved_weights is None) != (resolved_baseline is None):
         raise FileNotFoundError(
             "Promotion benchmark requires both SNQI inputs. "

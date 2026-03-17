@@ -192,6 +192,23 @@ def test_resolve_benchmark_snqi_inputs_rejects_partial_resolution(
         latest_eval._resolve_benchmark_snqi_inputs(weights_path=None, baseline_path=None)
 
 
+def test_resolve_benchmark_snqi_inputs_rejects_mixed_explicit_and_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Explicit weights must not silently mix with default baseline inputs."""
+    explicit_weights = tmp_path / "explicit_weights.json"
+    explicit_weights.write_text("{}", encoding="utf-8")
+    default_baseline = tmp_path / "default_baseline.json"
+    default_baseline.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(latest_eval, "DEFAULT_BENCHMARK_SNQI_BASELINE", default_baseline)
+
+    with pytest.raises(FileNotFoundError, match="same source"):
+        latest_eval._resolve_benchmark_snqi_inputs(
+            weights_path=explicit_weights,
+            baseline_path=None,
+        )
+
+
 def test_resolve_benchmark_snqi_inputs_preserves_explicit_paths(tmp_path: Path) -> None:
     """Explicit benchmark SNQI inputs should override canonical defaults."""
     weights = tmp_path / "weights.json"

@@ -138,6 +138,24 @@ def test_benchmark_summary_uses_termination_reason_for_collision_and_timeout_rat
     assert summary["weakest_scenarios"][0]["scenario_id"] == "s1"
 
 
+def test_benchmark_summary_preserves_collision_success_raw_metric_contradictions() -> None:
+    """Collision terminations with stale raw success metrics should remain visible as problems."""
+    summary = latest_eval._benchmark_summary(
+        [
+            {
+                "scenario_id": "s1",
+                "seed": 7,
+                "termination_reason": "collision",
+                "metrics": {"success_rate": 1.0, "collisions": 1.0, "snqi": -0.2},
+            }
+        ]
+    )
+    assert summary["success_rate"] == 0.0
+    assert summary["collision_rate"] == 1.0
+    assert summary["problem_episode_count"] == 1
+    assert summary["contradictions"][0]["reason"] == "collision_termination_with_success"
+
+
 def test_benchmark_summary_zeroes_known_non_success_terminal_states() -> None:
     """Known terminal states should not inherit stale success/collision metrics."""
     records = [

@@ -255,7 +255,7 @@ def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "reason": "collision_and_success",
                 }
             )
-        elif termination == "collision" and success > 0.0:
+        elif termination == "collision" and raw_success > 0.0:
             contradictions.append(
                 {
                     "scenario_id": scenario_id,

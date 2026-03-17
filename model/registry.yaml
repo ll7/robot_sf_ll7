@@ -88,6 +88,28 @@ models:
       - W&B best-checkpoint summary: output/model_cache/ppo_num_envs_benchmark_candidates/08/best_checkpoint_summary.json
       - Full policy sweep: output/benchmarks/20260311_policy_analysis_ppo_v8_numenv08_best/report.md
       - Full 141-episode sweep slightly outperformed the promoted PPO v3 baseline on success and collision rate.
+  - model_id: ppo_expert_br06_v10_best_27dbe5xu_20260317
+    display_name: PPO BR-06 v10 best-success checkpoint (2026-03-17 carry-forward candidate)
+    local_path: output/model_cache/wandb_artifacts/27dbe5xu_best_success/model.zip
+    config_path: configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml
+    commit: null
+    wandb_run_id: 27dbe5xu
+    wandb_run_path: ll7/robot_sf/27dbe5xu
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - br06
+      - v10-policy-analysis-select
+      - candidate
+      - best-success
+      - carry-forward
+    notes:
+      - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the classic_interactions gate.
+      - Best-success artifact from W&B run 27dbe5xu.
+      - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
+      - Not promoted; full 141-episode benchmark is still too weak in absolute terms because max_steps remains high.
   - model_id: ga3c_cadrl_iros18
     display_name: GA3C-CADRL (IROS18) checkpoint
     local_path: model/ga3c_cadrl/IROS18/network_01900000.meta

@@ -106,6 +106,66 @@ def test_benchmark_summary_flags_contradictions_and_gate() -> None:
     assert summary["problem_episode_count"] == 1
 
 
+def test_benchmark_summary_uses_termination_reason_for_collision_and_timeout_rates() -> None:
+    """Benchmark summary should derive collision/max-steps rates from termination semantics."""
+    records = [
+        {
+            "scenario_id": "s1",
+            "seed": 1,
+            "termination_reason": "collision",
+            "metrics": {"success": 0.0, "collisions": 0.0, "snqi": -0.1},
+        },
+        {
+            "scenario_id": "s1",
+            "seed": 2,
+            "termination_reason": "max_steps",
+            "metrics": {"success": 0.0, "collisions": 0.0, "snqi": 0.0},
+        },
+        {
+            "scenario_id": "s2",
+            "seed": 3,
+            "termination_reason": "success",
+            "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.2},
+        },
+    ]
+    summary = latest_eval._benchmark_summary(records)
+    assert summary["success_rate"] == 1.0 / 3.0
+    assert summary["collision_rate"] == 1.0 / 3.0
+    assert summary["max_steps_rate"] == 1.0 / 3.0
+    assert summary["termination_reason_counts"] == {"collision": 1, "max_steps": 1, "success": 1}
+    assert summary["problem_episode_count"] == 0
+    assert summary["weakest_scenarios"][0]["scenario_id"] == "s1"
+
+
+def test_resolve_benchmark_snqi_inputs_uses_canonical_defaults(monkeypatch, tmp_path: Path) -> None:
+    """Benchmark gate should default to canonical SNQI inputs when none are provided."""
+    weights = tmp_path / "weights.json"
+    baseline = tmp_path / "baseline.json"
+    weights.write_text("{}", encoding="utf-8")
+    baseline.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(latest_eval, "DEFAULT_BENCHMARK_SNQI_WEIGHTS", weights)
+    monkeypatch.setattr(latest_eval, "DEFAULT_BENCHMARK_SNQI_BASELINE", baseline)
+
+    resolved_weights, resolved_baseline = latest_eval._resolve_benchmark_snqi_inputs(
+        weights_path=None,
+        baseline_path=None,
+    )
+    assert resolved_weights == weights
+    assert resolved_baseline == baseline
+
+
+def test_resolve_benchmark_snqi_inputs_preserves_explicit_paths(tmp_path: Path) -> None:
+    """Explicit benchmark SNQI inputs should override canonical defaults."""
+    weights = tmp_path / "weights.json"
+    baseline = tmp_path / "baseline.json"
+    resolved_weights, resolved_baseline = latest_eval._resolve_benchmark_snqi_inputs(
+        weights_path=weights,
+        baseline_path=baseline,
+    )
+    assert resolved_weights == weights
+    assert resolved_baseline == baseline
+
+
 def test_run_benchmark_gate_returns_summary_when_runner_fails_with_jsonl(
     monkeypatch, tmp_path: Path
 ) -> None:

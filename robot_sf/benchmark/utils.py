@@ -217,6 +217,23 @@ def episode_collision_value(record: dict[str, Any]) -> float:
     return 0.0
 
 
+def _parse_optional_float(value: Any) -> float | None:
+    """Parse a float-like value.
+
+    Args:
+        value: Candidate value to coerce.
+
+    Returns:
+        Parsed float value, or ``None`` when the input is absent or invalid.
+    """
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def episode_metric_value(record: dict[str, Any], metric: str) -> float | None:  # noqa: C901
     """Return a normalized numeric metric value for campaign/report aggregation."""
     metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
@@ -229,28 +246,18 @@ def episode_metric_value(record: dict[str, Any], metric: str) -> float | None:  
         return episode_collision_value(record)
     if metric == "total_collision_count":
         for container in (record, metrics):
-            value = container.get("total_collision_count")
-            try:
-                parsed = float(value)
-            except (TypeError, ValueError):
-                continue
-            if parsed > 0.0:
+            parsed = _parse_optional_float(container.get("total_collision_count"))
+            if parsed is not None:
                 return parsed
         for key in ("collisions", "collision_rate"):
-            value = metrics.get(key)
-            try:
-                parsed = float(value)
-            except (TypeError, ValueError):
-                continue
-            if parsed > 0.0:
+            parsed = _parse_optional_float(metrics.get(key))
+            if parsed is not None and parsed > 0.0:
                 return parsed
         return episode_collision_value(record)
 
     for container in (record, metrics):
-        value = container.get(metric)
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError):
+        parsed = _parse_optional_float(container.get(metric))
+        if parsed is None:
             continue
         return None if math.isnan(parsed) else parsed
     return None

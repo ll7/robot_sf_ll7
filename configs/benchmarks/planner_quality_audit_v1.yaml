@@ -64,7 +64,9 @@ reproduction_priority:
       substantially stronger benchmark results than the current local suite, especially on crowd-aware
       learned navigation, and the gap is large enough that current results should not be interpreted as
       family-level evidence.
-    exact_policy_or_config_source: output/repos/SoNIC-Social-Nav and output/repos/CrowdNav
+    exact_policy_or_config_source:
+      - output/repos/SoNIC-Social-Nav
+      - output/repos/CrowdNav
     expected_observation_action_contract: >-
       Human-state or lidar-conditioned learned policy evaluated in the CrowdNav-style simulator/test
       harness, typically with holonomic or unicycle control depending on the paper variant.
@@ -102,7 +104,9 @@ reproduction_priority:
     rationale: >-
       Valuable predictive-planning anchor, but third priority because the immediate paper-comparison gap is
       larger for crowd-aware learned navigation families than for prediction-aware optimization families.
-    exact_policy_or_config_source: output/repos/Pred2Nav and output/repos/go-mpc
+    exact_policy_or_config_source:
+      - output/repos/Pred2Nav
+      - output/repos/go-mpc
     expected_observation_action_contract: >-
       Human-state plus prediction-conditioned MPC or policy optimization stack evaluated with the source
       simulator and planner rollout assumptions.

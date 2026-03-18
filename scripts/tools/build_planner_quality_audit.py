@@ -70,15 +70,22 @@ def _runs_by_planner(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _format_source_list(value: Any) -> str:
+    """Format one or more source paths for markdown output."""
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value if isinstance(item, str) and item)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
 def _load_termination_counts(run_entry: dict[str, Any], campaign_root: Path) -> dict[str, int]:
     episodes_path_value = run_entry.get("episodes_path")
     if not isinstance(episodes_path_value, str) or not episodes_path_value:
         return {}
     episodes_path = Path(episodes_path_value)
     if not episodes_path.is_absolute():
-        episodes_path = (Path.cwd() / episodes_path).resolve()
-        if not episodes_path.exists():
-            episodes_path = (campaign_root / episodes_path_value).resolve()
+        episodes_path = (campaign_root / episodes_path_value).resolve()
     episodes = _read_jsonl(episodes_path)
     counts: Counter[str] = Counter()
     for row in episodes:
@@ -175,7 +182,7 @@ def _build_markdown(payload: dict[str, Any]) -> str:
                 f"### {item['label']}",
                 "",
                 f"- Rationale: {item['rationale']}",
-                f"- Exact policy/config source: `{item['exact_policy_or_config_source']}`",
+                f"- Exact policy/config source: `{_format_source_list(item['exact_policy_or_config_source'])}`",
                 f"- Expected observation/action contract: {item['expected_observation_action_contract']}",
                 f"- Expected scenario/eval protocol: {item['expected_scenario_and_eval_protocol']}",
                 f"- Wrapper strategy: {item['wrapper_strategy']}",

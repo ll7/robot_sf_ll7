@@ -98,6 +98,40 @@ planners:
     assert payload["headline_suite"]["headline_suite"] == ["ppo"]
 
 
+def test_build_audit_resolves_relative_episode_paths_from_campaign_root(tmp_path: Path) -> None:
+    """Relative episodes paths should resolve against the campaign root, not the process cwd."""
+    hard_root = tmp_path / "hard"
+    sanity_root = tmp_path / "sanity"
+    parity = tmp_path / "planner_quality_audit.yaml"
+    _write_json(
+        hard_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "hard_campaign"},
+            "planner_rows": [{"planner_key": "ppo", "success_mean": "0.0"}],
+            "runs": [{"planner": {"key": "ppo"}, "episodes_path": "runs/ppo/episodes.jsonl"}],
+        },
+    )
+    _write_jsonl(
+        hard_root / "runs" / "ppo" / "episodes.jsonl", [{"termination_reason": "max_steps"}]
+    )
+    _write_json(
+        sanity_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "sanity_campaign"}, "planner_rows": []},
+    )
+    parity.write_text(
+        """
+version: planner-quality-audit-v1
+reproduction_priority: []
+planners: {}
+""",
+        encoding="utf-8",
+    )
+
+    payload = build_audit(hard_root, sanity_root, parity)
+    row = payload["planner_audit_rows"][0]
+    assert row["hard_matrix"]["termination_reason_counts"] == {"max_steps": 1}
+
+
 def test_build_markdown_renders_decision_table_and_priority() -> None:
     """Markdown output should include the decision table and reproduction priority sections."""
     payload = {
@@ -145,7 +179,10 @@ def test_build_markdown_renders_decision_table_and_priority() -> None:
             {
                 "label": "CrowdNav / SoNIC family",
                 "rationale": "highest value",
-                "exact_policy_or_config_source": "output/repos/SoNIC-Social-Nav",
+                "exact_policy_or_config_source": [
+                    "output/repos/SoNIC-Social-Nav",
+                    "output/repos/CrowdNav",
+                ],
                 "expected_observation_action_contract": "obs/action",
                 "expected_scenario_and_eval_protocol": "source benchmark",
                 "wrapper_strategy": "adapter",

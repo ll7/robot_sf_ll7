@@ -608,6 +608,24 @@ def _episode_metric_mean(records: list[dict[str, Any]], metric: str) -> float:
     return float(sum(values) / len(values))
 
 
+def _episode_metric_ci(records: list[dict[str, Any]], metric: str) -> tuple[float, float]:
+    """Return CI placeholders for metrics recomputed directly from episode records.
+
+    The aggregate summary block can contain stale CI values when means are
+    corrected from per-episode termination semantics. Emit ``nan`` CI bounds in
+    that case rather than pairing corrected means with misleading intervals.
+    """
+    values: list[float] = []
+    for record in records:
+        value = episode_metric_value(record, metric)
+        if value is None or not math.isfinite(value):
+            continue
+        values.append(value)
+    if not values:
+        return (float("nan"), float("nan"))
+    return (float("nan"), float("nan"))
+
+
 def _safe_float(value: float) -> str:
     """Format a float for report tables with NaN handling.
 
@@ -1819,7 +1837,7 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(  # noqa: C901
+def _planner_report_row(  # noqa: C901, PLR0912
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
@@ -1901,6 +1919,10 @@ def _planner_report_row(  # noqa: C901
                 "total_collision_count_mean",
             }:
                 resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+                if field_name == "success_mean":
+                    success_ci = _episode_metric_ci(records, metric_name)
+                elif field_name == "collisions_mean":
+                    collision_ci = _episode_metric_ci(records, metric_name)
                 continue
             if not math.isfinite(resolved_metrics[field_name]):
                 resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)

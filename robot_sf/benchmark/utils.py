@@ -194,7 +194,12 @@ def episode_success_value(record: dict[str, Any]) -> float:
     metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
     if not isinstance(metrics, dict):
         return 0.0
-    return float(bool(metrics.get("success")))
+    for key in ("success", "success_rate"):
+        parsed = _parse_optional_float(metrics.get(key))
+        if parsed is None or math.isnan(parsed):
+            continue
+        return 1.0 if parsed > 0.0 else 0.0
+    return 0.0
 
 
 def episode_collision_value(record: dict[str, Any]) -> float:
@@ -247,7 +252,7 @@ def episode_metric_value(record: dict[str, Any], metric: str) -> float | None:  
     if metric == "total_collision_count":
         for container in (record, metrics):
             parsed = _parse_optional_float(container.get("total_collision_count"))
-            if parsed is not None:
+            if parsed is not None and not math.isnan(parsed):
                 return parsed
         for key in ("collisions", "collision_rate"):
             parsed = _parse_optional_float(metrics.get(key))

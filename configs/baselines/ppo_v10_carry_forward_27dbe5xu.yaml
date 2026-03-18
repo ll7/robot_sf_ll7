@@ -18,6 +18,5 @@ action_space: unicycle
 v_max: 2.0
 omega_max: 1.0
 
-# Robustness: if model fails to predict (e.g., shape mismatch),
-# fall back to a simple goal-seeking action so runs continue.
-fallback_to_goal: true
+# Fail fast so this comparison reflects the checkpoint itself.
+fallback_to_goal: false

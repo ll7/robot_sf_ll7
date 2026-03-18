@@ -156,6 +156,71 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
     assert analysis["runtime_hotspots"]["slowest_planners"][0]["planner_key"] == "goal"
 
 
+def test_analyze_campaign_accepts_legacy_success_rate_alias(tmp_path: Path) -> None:
+    """Analyzer should treat metrics.success_rate as a legacy success alias."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    episodes_path = campaign_root / "runs" / "goal" / "episodes.jsonl"
+
+    rows = [
+        {
+            "status": "success",
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success_rate": 1.0, "collisions": 0, "snqi": -0.3},
+            "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+        },
+        {
+            "status": "failure",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success_rate": 0.0, "collisions": 1, "snqi": -0.1},
+            "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+        },
+    ]
+    _write_jsonl(episodes_path, rows)
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "test_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 2.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "success_mean": "0.5000",
+                    "collisions_mean": "0.5000",
+                    "snqi_mean": "-0.2000",
+                }
+            ],
+            "runs": [
+                {
+                    "planner": {"key": "goal", "algo": "goal"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/goal/episodes.jsonl",
+                    "summary": {
+                        "written": 2,
+                        "episodes_per_second": 2.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+    assert analysis["findings"] == []
+
+
 def test_analyze_campaign_flags_absolute_map_paths(tmp_path: Path) -> None:
     """Analyzer flags absolute map paths because they hurt artifact portability."""
     campaign_root = tmp_path / "campaign"

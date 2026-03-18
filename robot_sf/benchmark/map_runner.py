@@ -472,17 +472,21 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
 
 
 def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float, float]:
-    robot = obs.get("robot", {})
-    goal = obs.get("goal", {})
-    if isinstance(robot, dict):
-        robot_pos_source = robot.get("position", obs.get("robot_position", [0.0, 0.0]))
-        heading_source = robot.get("heading", obs.get("robot_heading", [0.0]))
-    else:
+    robot = obs.get("robot")
+    goal = obs.get("goal")
+
+    # Prefer the structured benchmark observation, but keep compatibility with
+    # the flattened map-runner keys used by the env.
+    robot_pos_source = robot.get("position") if isinstance(robot, dict) else None
+    if robot_pos_source is None:
         robot_pos_source = obs.get("robot_position", [0.0, 0.0])
+
+    heading_source = robot.get("heading") if isinstance(robot, dict) else None
+    if heading_source is None:
         heading_source = obs.get("robot_heading", [0.0])
-    if isinstance(goal, dict):
-        goal_pos_source = goal.get("current", obs.get("goal_current", [0.0, 0.0]))
-    else:
+
+    goal_pos_source = goal.get("current") if isinstance(goal, dict) else None
+    if goal_pos_source is None:
         goal_pos_source = obs.get("goal_current", [0.0, 0.0])
 
     robot_pos = np.asarray(robot_pos_source, dtype=float)

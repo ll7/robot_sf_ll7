@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.utils import validate_episode_success_integrity
+from robot_sf.benchmark.utils import (
+    episode_collision_value,
+    episode_success_value,
+    validate_episode_success_integrity,
+)
 
 
 @dataclass(frozen=True)
@@ -199,12 +203,8 @@ def _analyze_planner(  # noqa: C901
     episodes = _read_jsonl(episodes_path)
     episodes_n = len(episodes)
 
-    metrics_success = [
-        float(bool((entry.get("metrics") or {}).get("success"))) for entry in episodes
-    ]
-    metrics_collisions = [
-        float((entry.get("metrics") or {}).get("collisions", 0.0) or 0.0) for entry in episodes
-    ]
+    metrics_success = [episode_success_value(entry) for entry in episodes]
+    metrics_collisions = [episode_collision_value(entry) for entry in episodes]
     snqi_values = [_safe_float((entry.get("metrics") or {}).get("snqi")) for entry in episodes]
     snqi_clean = [value for value in snqi_values if value is not None]
 
@@ -267,7 +267,9 @@ def _analyze_planner(  # noqa: C901
 
     if row_entry is not None:
         row_success = _safe_float(row_entry.get("success_mean"))
-        row_collision = _safe_float(row_entry.get("collision_mean"))
+        row_collision = _safe_float(
+            row_entry.get("collisions_mean", row_entry.get("collision_mean"))
+        )
         row_snqi = _safe_float(row_entry.get("snqi_mean"))
         if row_success is not None and abs(row_success - success_mean) > tolerance:
             findings.append(

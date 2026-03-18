@@ -42,7 +42,12 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     sanitize_baseline_stats,
 )
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
-from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, load_optional_json
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    episode_metric_value,
+    load_optional_json,
+)
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -588,6 +593,19 @@ def _metric_ci(block: dict[str, Any], metric: str) -> tuple[float, float]:
         return (float(ci[0]), float(ci[1]))
     except (TypeError, ValueError):
         return (float("nan"), float("nan"))
+
+
+def _episode_metric_mean(records: list[dict[str, Any]], metric: str) -> float:
+    """Return a mean metric value directly from episode records."""
+    values: list[float] = []
+    for record in records:
+        value = episode_metric_value(record, metric)
+        if value is None or not math.isfinite(value):
+            continue
+        values.append(value)
+    if not values:
+        return float("nan")
+    return float(sum(values) / len(values))
 
 
 def _safe_float(value: float) -> str:
@@ -1801,12 +1819,13 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(
+def _planner_report_row(  # noqa: C901
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
     *,
     kinematics: str,
+    records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one campaign table row for a planner run.
 
@@ -1848,6 +1867,44 @@ def _planner_report_row(
     elif execution_mode in {"adapter", "mixed"}:
         readiness_status = "adapter"
 
+    resolved_metrics = {
+        "success_mean": _metric_mean(metric_block, "success"),
+        "collisions_mean": _metric_mean(metric_block, "collisions"),
+        "ped_collision_count_mean": _metric_mean(metric_block, "ped_collision_count"),
+        "obstacle_collision_count_mean": _metric_mean(metric_block, "obstacle_collision_count"),
+        "total_collision_count_mean": _metric_mean(metric_block, "total_collision_count"),
+        "near_misses_mean": _metric_mean(metric_block, "near_misses"),
+        "time_to_goal_norm_mean": _metric_mean(metric_block, "time_to_goal_norm"),
+        "path_efficiency_mean": _metric_mean(metric_block, "path_efficiency"),
+        "comfort_exposure_mean": _metric_mean(metric_block, "comfort_exposure"),
+        "jerk_mean": _metric_mean(metric_block, "jerk_mean"),
+        "snqi_mean": _metric_mean(metric_block, "snqi"),
+    }
+    if records:
+        metric_sources = {
+            "success_mean": "success",
+            "collisions_mean": "collisions",
+            "ped_collision_count_mean": "ped_collision_count",
+            "obstacle_collision_count_mean": "obstacle_collision_count",
+            "total_collision_count_mean": "total_collision_count",
+            "near_misses_mean": "near_misses",
+            "time_to_goal_norm_mean": "time_to_goal_norm",
+            "path_efficiency_mean": "path_efficiency",
+            "comfort_exposure_mean": "comfort_exposure",
+            "jerk_mean": "jerk_mean",
+            "snqi_mean": "snqi",
+        }
+        for field_name, metric_name in metric_sources.items():
+            if field_name in {
+                "success_mean",
+                "collisions_mean",
+                "total_collision_count_mean",
+            }:
+                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+                continue
+            if not math.isfinite(resolved_metrics[field_name]):
+                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
@@ -1860,21 +1917,19 @@ def _planner_report_row(
         "runtime_sec": _safe_float(summary.get("runtime_sec")),
         "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
         "failed_jobs": int(summary.get("failed_jobs", 0)),
-        "success_mean": _safe_float(_metric_mean(metric_block, "success")),
-        "collisions_mean": _safe_float(_metric_mean(metric_block, "collisions")),
-        "ped_collision_count_mean": _safe_float(_metric_mean(metric_block, "ped_collision_count")),
+        "success_mean": _safe_float(resolved_metrics["success_mean"]),
+        "collisions_mean": _safe_float(resolved_metrics["collisions_mean"]),
+        "ped_collision_count_mean": _safe_float(resolved_metrics["ped_collision_count_mean"]),
         "obstacle_collision_count_mean": _safe_float(
-            _metric_mean(metric_block, "obstacle_collision_count")
+            resolved_metrics["obstacle_collision_count_mean"]
         ),
-        "total_collision_count_mean": _safe_float(
-            _metric_mean(metric_block, "total_collision_count")
-        ),
-        "near_misses_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
-        "time_to_goal_norm_mean": _safe_float(_metric_mean(metric_block, "time_to_goal_norm")),
-        "path_efficiency_mean": _safe_float(_metric_mean(metric_block, "path_efficiency")),
-        "comfort_exposure_mean": _safe_float(_metric_mean(metric_block, "comfort_exposure")),
-        "jerk_mean": _safe_float(_metric_mean(metric_block, "jerk_mean")),
-        "snqi_mean": _safe_float(_metric_mean(metric_block, "snqi")),
+        "total_collision_count_mean": _safe_float(resolved_metrics["total_collision_count_mean"]),
+        "near_misses_mean": _safe_float(resolved_metrics["near_misses_mean"]),
+        "time_to_goal_norm_mean": _safe_float(resolved_metrics["time_to_goal_norm_mean"]),
+        "path_efficiency_mean": _safe_float(resolved_metrics["path_efficiency_mean"]),
+        "comfort_exposure_mean": _safe_float(resolved_metrics["comfort_exposure_mean"]),
+        "jerk_mean": _safe_float(resolved_metrics["jerk_mean"]),
+        "snqi_mean": _safe_float(resolved_metrics["snqi_mean"]),
         "success_ci_low": _safe_float(success_ci[0]),
         "success_ci_high": _safe_float(success_ci[1]),
         "collision_ci_low": _safe_float(collision_ci[0]),
@@ -1961,7 +2016,6 @@ def _build_breakdown_rows(  # noqa: C901
                 continue
             scenario_id = str(record.get("scenario_id", "unknown"))
             family = _scenario_family(record)
-            metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
             scenario_key = (planner_key, algo, scenario_id, family)
             family_key = (planner_key, algo, family)
 
@@ -1987,11 +2041,7 @@ def _build_breakdown_rows(  # noqa: C901
             scenario_bucket["episodes"] += 1
             family_bucket["episodes"] += 1
             for metric in _REPORT_METRICS:
-                raw = metrics.get(metric)
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    value = None
+                value = episode_metric_value(record, metric)
                 if value is not None and not math.isfinite(value):
                     value = None
                 _add_metric(scenario_bucket, metric, value)
@@ -2412,6 +2462,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             summary["kinematics"] = kinematics
             _write_json(planner_dir / "summary.json", summary)
 
+            records: list[dict[str, Any]] = []
             if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
                 for record in records:
@@ -2434,7 +2485,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                         f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
                     )
 
-            row = _planner_report_row(planner, summary, aggregates, kinematics=kinematics)
+            row = _planner_report_row(
+                planner,
+                summary,
+                aggregates,
+                kinematics=kinematics,
+                records=records,
+            )
             planner_rows.append(row)
 
             run_entries.append(

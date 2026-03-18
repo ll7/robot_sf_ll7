@@ -655,6 +655,44 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
     assert row["readiness_status"] == "adapter"
 
 
+def test_planner_report_row_backfills_collision_means_from_termination_reason() -> None:
+    """Row builder should not zero out collisions when aggregate metrics are sparse."""
+    planner = PlannerSpec(key="ppo", algo="ppo")
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 2.0,
+        "algorithm_readiness": {"tier": "experimental"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "pass"}},
+        "algorithm_metadata_contract": {},
+    }
+    aggregates = {
+        "ppo": {
+            "success": {"mean": 0.0},
+            "collisions": {"mean": 0.0},
+            "total_collision_count": {"mean": 0.0},
+            "snqi": {"mean": -0.5},
+        }
+    }
+    records = [
+        {"termination_reason": "collision", "metrics": {"snqi": -0.4}},
+        {"termination_reason": "success", "metrics": {"snqi": -0.6}},
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=aggregates,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["success_mean"] == "0.5000"
+    assert row["collisions_mean"] == "0.5000"
+    assert row["total_collision_count_mean"] == "0.5000"
+
+
 def test_jsonable_repo_relative_normalizes_paths_for_stable_hashing(tmp_path: Path) -> None:
     """Hash-prep helper should normalize Path values to stable repo-relative strings."""
     repo_root = get_repository_root().resolve()

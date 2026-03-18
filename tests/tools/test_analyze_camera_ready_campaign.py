@@ -312,3 +312,64 @@ def test_analyze_campaign_flags_success_collision_integrity_violations(tmp_path:
 
     analysis = analyze_campaign(campaign_root)
     assert any("episode integrity violations" in finding for finding in analysis["findings"])
+
+
+def test_analyze_campaign_derives_collision_mean_from_termination_reason(tmp_path: Path) -> None:
+    """Analyzer should derive collisions from termination_reason when metrics are sparse."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    episodes_path = campaign_root / "runs" / "ppo" / "episodes.jsonl"
+
+    _write_jsonl(
+        episodes_path,
+        [
+            {
+                "status": "collision",
+                "termination_reason": "collision",
+                "metrics": {"snqi": -0.2},
+                "algorithm_metadata": {"adapter_impact": {"status": "complete"}},
+            },
+            {
+                "status": "success",
+                "termination_reason": "success",
+                "metrics": {"snqi": -0.1},
+                "algorithm_metadata": {"adapter_impact": {"status": "complete"}},
+            },
+        ],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "test_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 2.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "ppo",
+                    "success_mean": "0.5000",
+                    "collisions_mean": "0.0000",
+                    "snqi_mean": "-0.1500",
+                }
+            ],
+            "runs": [
+                {
+                    "planner": {"key": "ppo", "algo": "ppo"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/ppo/episodes.jsonl",
+                    "summary": {
+                        "written": 2,
+                        "episodes_per_second": 2.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "complete"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+    planner = next(item for item in analysis["planners"] if item["planner_key"] == "ppo")
+    assert planner["collision_mean_episodes"] == pytest.approx(0.5)
+    assert any("collision_mean mismatch" in finding for finding in analysis["findings"])

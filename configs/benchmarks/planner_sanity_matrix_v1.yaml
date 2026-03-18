@@ -1,0 +1,57 @@
+name: planner_sanity_matrix_v1
+paper_facing: false
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+workers: 2
+horizon: 100
+stop_on_failure: false
+resume: true
+record_forces: true
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: prediction_planner
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: socnav_sampling
+    algo: socnav_sampling
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: sacadrl
+    algo: sacadrl
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback

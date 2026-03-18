@@ -1,0 +1,17 @@
+scenarios:
+- name: planner_sanity_simple
+  map_file: ../../../maps/svg_maps/planner_sanity_open.svg
+  simulation_config:
+    max_episode_steps: 300
+    ped_density: 0.0
+  single_pedestrians: []
+  robot_config: {}
+  metadata:
+    archetype: sanity_simple
+    flow: none
+    behavior: none
+    purpose: planner_sanity_check
+  seeds:
+  - 101
+  - 102
+  - 103

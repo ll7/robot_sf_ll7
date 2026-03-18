@@ -1413,7 +1413,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: PLR0913,PLR0915
+def _build_episode_record(  # noqa: C901,PLR0913,PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,
@@ -1494,28 +1494,30 @@ def _build_episode_record(  # noqa: PLR0913,PLR0915
         ped_collision_count = float(metrics.get("ped_collision_count", 0.0) or 0.0)
         obstacle_collision_count = float(metrics.get("obstacle_collision_count", 0.0) or 0.0)
         agent_collision_count = float(metrics.get("agent_collision_count", 0.0) or 0.0)
-        if (
-            ped_collision_count <= 0.0
-            and obstacle_collision_count <= 0.0
-            and agent_collision_count <= 0.0
-        ):
-            inferred_ped_collision = float(bool(meta.get("is_pedestrian_collision")))
-            inferred_obstacle_collision = float(bool(meta.get("is_obstacle_collision")))
-            inferred_agent_collision = float(bool(meta.get("is_robot_collision")))
+        inferred_ped_collision = float(bool(meta.get("is_pedestrian_collision")))
+        inferred_obstacle_collision = float(bool(meta.get("is_obstacle_collision")))
+        inferred_agent_collision = float(bool(meta.get("is_robot_collision")))
+        updated_split = False
+        if ped_collision_count <= 0.0 and inferred_ped_collision > 0.0:
+            metrics["ped_collision_count"] = inferred_ped_collision
+            updated_split = True
+        if obstacle_collision_count <= 0.0 and inferred_obstacle_collision > 0.0:
+            metrics["obstacle_collision_count"] = inferred_obstacle_collision
+            metrics["wall_collisions"] = inferred_obstacle_collision
+            updated_split = True
+        if agent_collision_count <= 0.0 and inferred_agent_collision > 0.0:
+            metrics["agent_collision_count"] = inferred_agent_collision
+            updated_split = True
+        if updated_split:
             inferred_total = (
                 inferred_ped_collision + inferred_obstacle_collision + inferred_agent_collision
             )
-            if inferred_total > 0.0:
-                metrics["ped_collision_count"] = inferred_ped_collision
-                metrics["obstacle_collision_count"] = inferred_obstacle_collision
-                metrics["agent_collision_count"] = inferred_agent_collision
-                metrics["wall_collisions"] = inferred_obstacle_collision
-                metrics["success"] = False
-                if "success_rate" in metrics:
-                    metrics["success_rate"] = 0.0
-                if total_collision <= 0.0:
-                    metrics["collisions"] = inferred_total
-                    metrics["total_collision_count"] = inferred_total
+            metrics["success"] = False
+            if "success_rate" in metrics:
+                metrics["success_rate"] = 0.0
+            if total_collision <= 0.0 and inferred_total > 0.0:
+                metrics["collisions"] = inferred_total
+                metrics["total_collision_count"] = inferred_total
     # Canonical episode collision: event-stream collision OR metric-level collision evidence.
     # This keeps success/outcome semantics aligned with benchmark metrics.
     metric_collisions = float(metrics.get("collisions", 0.0) or 0.0)

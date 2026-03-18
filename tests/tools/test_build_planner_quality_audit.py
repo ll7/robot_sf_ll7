@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from scripts.tools.build_planner_quality_audit import _build_markdown, build_audit
 
@@ -130,6 +131,51 @@ planners: {}
     payload = build_audit(hard_root, sanity_root, parity)
     row = payload["planner_audit_rows"][0]
     assert row["hard_matrix"]["termination_reason_counts"] == {"max_steps": 1}
+
+
+def test_build_audit_falls_back_to_repo_relative_episode_paths(tmp_path: Path) -> None:
+    """Repo-root-relative episode paths should still resolve when not nested under campaign_root."""
+    repo_root = tmp_path / "repo"
+    hard_root = repo_root / "hard"
+    sanity_root = repo_root / "sanity"
+    parity = tmp_path / "planner_quality_audit.yaml"
+    _write_json(
+        hard_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "hard_campaign"},
+            "planner_rows": [{"planner_key": "ppo", "success_mean": "0.0"}],
+            "runs": [
+                {
+                    "planner": {"key": "ppo"},
+                    "episodes_path": "output/benchmarks/example/runs/ppo/episodes.jsonl",
+                }
+            ],
+        },
+    )
+    _write_jsonl(
+        repo_root / "output" / "benchmarks" / "example" / "runs" / "ppo" / "episodes.jsonl",
+        [{"termination_reason": "collision"}],
+    )
+    _write_json(
+        sanity_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "sanity_campaign"}, "planner_rows": []},
+    )
+    parity.write_text(
+        """
+version: planner-quality-audit-v1
+reproduction_priority: []
+planners: {}
+""",
+        encoding="utf-8",
+    )
+
+    with patch(
+        "scripts.tools.build_planner_quality_audit._repository_root", return_value=repo_root
+    ):
+        payload = build_audit(hard_root, sanity_root, parity)
+    row = payload["planner_audit_rows"][0]
+    assert row["hard_matrix"]["termination_reason_counts"] == {"collision": 1}
+    assert row["hard_matrix"]["primary_failure_mode"] == "collision"
 
 
 def test_build_markdown_renders_decision_table_and_priority() -> None:

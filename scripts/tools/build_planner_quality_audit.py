@@ -41,6 +41,11 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+def _repository_root() -> Path:
+    """Resolve the repository root from this script location."""
+    return Path(__file__).resolve().parents[2]
+
+
 def _planner_rows(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
     rows = summary.get("planner_rows")
     if not isinstance(rows, list):
@@ -85,7 +90,14 @@ def _load_termination_counts(run_entry: dict[str, Any], campaign_root: Path) -> 
         return {}
     episodes_path = Path(episodes_path_value)
     if not episodes_path.is_absolute():
-        episodes_path = (campaign_root / episodes_path_value).resolve()
+        campaign_candidate = (campaign_root / episodes_path).resolve()
+        repo_candidate = (_repository_root() / episodes_path).resolve()
+        if campaign_candidate.exists():
+            episodes_path = campaign_candidate
+        elif repo_candidate.exists():
+            episodes_path = repo_candidate
+        else:
+            episodes_path = campaign_candidate
     episodes = _read_jsonl(episodes_path)
     counts: Counter[str] = Counter()
     for row in episodes:

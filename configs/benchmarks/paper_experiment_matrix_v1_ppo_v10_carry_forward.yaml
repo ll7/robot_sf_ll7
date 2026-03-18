@@ -19,8 +19,8 @@ seed_policy:
   seed_set: eval
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
-snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v2.json
-snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v2.json
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
 snqi_contract:
   enabled: true
   enforcement: warn
@@ -28,6 +28,8 @@ snqi_contract:
   rank_alignment_fail_threshold: 0.3
   outcome_separation_warn_threshold: 0.05
   outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
   calibration_seed: 123
   calibration_trials: 6000
 

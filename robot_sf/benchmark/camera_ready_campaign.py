@@ -144,6 +144,8 @@ class SnqiContractConfig:
     rank_alignment_fail_threshold: float = 0.3
     outcome_separation_warn_threshold: float = 0.05
     outcome_separation_fail_threshold: float = 0.0
+    max_component_dominance_warn_threshold: float = 0.24
+    max_component_dominance_fail_threshold: float = 0.27
     calibration_seed: int = 123
     calibration_trials: int = 3000
 
@@ -207,6 +209,24 @@ def _hash_payload(payload: Any) -> str:
     """
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(encoded).hexdigest()[:12]
+
+
+def _sha256_payload(payload: Any) -> str:
+    """Return a stable SHA-256 digest for a JSON-serializable payload."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    """Return a stable SHA-256 digest for a file."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise RuntimeError(f"Failed to hash file '{path}': {exc}") from exc
+    return digest.hexdigest()
 
 
 def _jsonable(value: Any) -> Any:
@@ -764,6 +784,12 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
         "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
         "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+        "max_component_dominance_warn_threshold": (
+            cfg.snqi_contract.max_component_dominance_warn_threshold
+        ),
+        "max_component_dominance_fail_threshold": (
+            cfg.snqi_contract.max_component_dominance_fail_threshold
+        ),
     }
     for field_name, value in threshold_values.items():
         if not math.isfinite(value):
@@ -781,6 +807,14 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
     ):
         raise ValueError(
             "snqi_contract.outcome_separation_fail_threshold must be <= outcome_separation_warn_threshold"
+        )
+    if (
+        cfg.snqi_contract.max_component_dominance_fail_threshold
+        < cfg.snqi_contract.max_component_dominance_warn_threshold
+    ):
+        raise ValueError(
+            "snqi_contract.max_component_dominance_fail_threshold must be >= "
+            "max_component_dominance_warn_threshold"
         )
 
     if cfg.paper_facing:
@@ -988,6 +1022,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             ),
             outcome_separation_fail_threshold=float(
                 snqi_contract_raw.get("outcome_separation_fail_threshold", 0.0)
+            ),
+            max_component_dominance_warn_threshold=float(
+                snqi_contract_raw.get("max_component_dominance_warn_threshold", 0.24)
+            ),
+            max_component_dominance_fail_threshold=float(
+                snqi_contract_raw.get("max_component_dominance_fail_threshold", 0.27)
             ),
             calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
             calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
@@ -1527,6 +1567,17 @@ def _write_snqi_diagnostics_artifacts(
         f"- Rank alignment (Spearman): `{payload.get('rank_alignment_spearman', 0.0):.4f}`",
         f"- Outcome separation: `{payload.get('outcome_separation', 0.0):.4f}`",
         f"- Objective score: `{payload.get('objective_score', 0.0):.4f}`",
+        f"- Dominant component: `{payload.get('dominant_component', 'unknown')}`",
+        f"- Dominant component mean |contribution|: `{payload.get('dominant_component_mean_abs', 0.0):.4f}`",
+        "",
+        "## SNQI Assets",
+        "",
+        f"- Weights path: `{payload.get('weights_path', 'derived')}`",
+        f"- Weights version: `{payload.get('weights_version', 'unknown')}`",
+        f"- Weights SHA-256: `{payload.get('weights_sha256', 'unknown')}`",
+        f"- Baseline path: `{payload.get('baseline_path', 'derived')}`",
+        f"- Baseline version: `{payload.get('baseline_version', 'unknown')}`",
+        f"- Baseline SHA-256: `{payload.get('baseline_sha256', 'unknown')}`",
         "",
         "## Baseline Normalization",
         "",
@@ -1638,6 +1689,12 @@ def prepare_campaign_preflight(
             "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
             "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
             "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+            "max_component_dominance_warn_threshold": (
+                cfg.snqi_contract.max_component_dominance_warn_threshold
+            ),
+            "max_component_dominance_fail_threshold": (
+                cfg.snqi_contract.max_component_dominance_fail_threshold
+            ),
             "calibration_seed": cfg.snqi_contract.calibration_seed,
             "calibration_trials": cfg.snqi_contract.calibration_trials,
         },
@@ -2841,6 +2898,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         rank_alignment_fail=cfg.snqi_contract.rank_alignment_fail_threshold,
         outcome_separation_warn=cfg.snqi_contract.outcome_separation_warn_threshold,
         outcome_separation_fail=cfg.snqi_contract.outcome_separation_fail_threshold,
+        max_component_dominance_warn=cfg.snqi_contract.max_component_dominance_warn_threshold,
+        max_component_dominance_fail=cfg.snqi_contract.max_component_dominance_fail_threshold,
     )
     contract_eval = evaluate_snqi_contract(
         planner_rows,
@@ -2861,6 +2920,22 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         weights=configured_weights,
         baseline=baseline_for_eval,
     )
+    weights_path = (
+        _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
+    )
+    baseline_path = (
+        _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
+    )
+    weights_sha256 = (
+        _sha256_file(cfg.snqi_weights_path)
+        if cfg.snqi_weights_path is not None
+        else _sha256_payload(configured_weights)
+    )
+    baseline_sha256 = (
+        _sha256_file(cfg.snqi_baseline_path)
+        if cfg.snqi_baseline_path is not None
+        else _sha256_payload(baseline_for_eval)
+    )
     snqi_diagnostics_payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",
         "campaign_id": campaign_id,
@@ -2871,12 +2946,26 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "rank_alignment_spearman": contract_eval.rank_alignment_spearman,
         "outcome_separation": contract_eval.outcome_separation,
         "objective_score": contract_eval.objective_score,
+        "dominant_component": contract_eval.dominant_component,
+        "dominant_component_mean_abs": contract_eval.dominant_component_mean_abs,
         "thresholds": {
             "rank_alignment_warn": cfg.snqi_contract.rank_alignment_warn_threshold,
             "rank_alignment_fail": cfg.snqi_contract.rank_alignment_fail_threshold,
             "outcome_separation_warn": cfg.snqi_contract.outcome_separation_warn_threshold,
             "outcome_separation_fail": cfg.snqi_contract.outcome_separation_fail_threshold,
+            "max_component_dominance_warn": cfg.snqi_contract.max_component_dominance_warn_threshold,
+            "max_component_dominance_fail": cfg.snqi_contract.max_component_dominance_fail_threshold,
         },
+        "weights_path": weights_path,
+        "weights_version": (
+            cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+        ),
+        "weights_sha256": weights_sha256,
+        "baseline_path": baseline_path,
+        "baseline_version": (
+            cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
+        ),
+        "baseline_sha256": baseline_sha256,
         "baseline_source": baseline_source,
         "baseline_adjustments": baseline_adjustments,
         "baseline_for_eval": baseline_for_eval,
@@ -2949,12 +3038,18 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_weights_version": (
                 cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
             ),
+            "snqi_weights_sha256": weights_sha256,
             "snqi_baseline_version": (
                 cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
             ),
+            "snqi_baseline_sha256": baseline_sha256,
             "snqi_contract_status": contract_eval.status,
             "snqi_contract_rank_alignment_spearman": contract_eval.rank_alignment_spearman,
             "snqi_contract_outcome_separation": contract_eval.outcome_separation,
+            "snqi_contract_dominant_component": contract_eval.dominant_component,
+            "snqi_contract_dominant_component_mean_abs": (
+                contract_eval.dominant_component_mean_abs
+            ),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,

@@ -97,6 +97,10 @@ def test_analyze_snqi_contract_writes_expected_outputs(tmp_path: Path, capsys) -
     assert "weights_sha256" in diagnostics
     assert "baseline_sha256" in diagnostics
     assert "dominant_component" in diagnostics
+    assert diagnostics["weights_path"] == "derived"
+    assert diagnostics["baseline_path"] == "derived"
+    assert len(diagnostics["weights_sha256"]) == 64
+    assert len(diagnostics["baseline_sha256"]) == 64
 
 
 def test_analyze_snqi_contract_rejects_inverted_thresholds(tmp_path: Path) -> None:

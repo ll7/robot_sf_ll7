@@ -179,8 +179,8 @@ def main(argv: list[str] | None = None) -> int:
         weights=configured_weights,
         baseline=baseline,
     )
-    weights_path = str(args.weights.resolve()) if args.weights is not None else None
-    baseline_path = str(args.baseline.resolve()) if args.baseline is not None else None
+    weights_path = str(args.weights.resolve()) if args.weights is not None else "derived"
+    baseline_path = str(args.baseline.resolve()) if args.baseline is not None else "derived"
     weights_sha256 = (
         _sha256_file(args.weights.resolve())
         if args.weights is not None

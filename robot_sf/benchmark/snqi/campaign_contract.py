@@ -315,10 +315,13 @@ def evaluate_snqi_contract(  # noqa: C901, PLR0912
     dominant_component = "none"
     dominant_component_mean_abs = 0.0
     if component_dominance:
-        dominant_component, dominant_component_mean_abs = max(
+        candidate_component, candidate_mean_abs = max(
             component_dominance.items(),
             key=lambda item: float(item[1]),
         )
+        if float(candidate_mean_abs) > 0.0:
+            dominant_component = str(candidate_component)
+            dominant_component_mean_abs = float(candidate_mean_abs)
 
     objective = rank_alignment + 0.25 * outcome_separation
 

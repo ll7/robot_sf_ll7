@@ -211,6 +211,12 @@ def _hash_payload(payload: Any) -> str:
     return hashlib.sha1(encoded).hexdigest()[:12]
 
 
+def _sha256_payload(payload: Any) -> str:
+    """Return a stable SHA-256 digest for a JSON-serializable payload."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _sha256_file(path: Path) -> str:
     """Return a stable SHA-256 digest for a file."""
     digest = hashlib.sha256()
@@ -2923,12 +2929,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     weights_sha256 = (
         _sha256_file(cfg.snqi_weights_path)
         if cfg.snqi_weights_path is not None
-        else _hash_payload(configured_weights)
+        else _sha256_payload(configured_weights)
     )
     baseline_sha256 = (
         _sha256_file(cfg.snqi_baseline_path)
         if cfg.snqi_baseline_path is not None
-        else _hash_payload(baseline_for_eval)
+        else _sha256_payload(baseline_for_eval)
     )
     snqi_diagnostics_payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",

@@ -20,6 +20,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _sanitize_csv_cell,
     _sanitize_git_remote,
     _sanitize_name,
+    _sha256_file,
     _write_campaign_report,
     load_campaign_config,
     prepare_campaign_preflight,
@@ -208,6 +209,14 @@ def test_load_campaign_config_rejects_non_finite_snqi_thresholds(tmp_path: Path)
 
     with pytest.raises(ValueError, match="must be a finite float"):
         load_campaign_config(config_path)
+
+
+def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:
+    """Hash helper should raise a path-specific error for missing or unreadable files."""
+    missing_path = tmp_path / "missing.json"
+
+    with pytest.raises(RuntimeError, match="Failed to hash file"):
+        _sha256_file(missing_path)
 
 
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915

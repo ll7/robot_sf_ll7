@@ -474,9 +474,20 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
 def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float, float]:
     robot = obs.get("robot", {})
     goal = obs.get("goal", {})
-    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float)
-    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float)[0])
-    goal_pos = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float)
+    if isinstance(robot, dict):
+        robot_pos_source = robot.get("position", obs.get("robot_position", [0.0, 0.0]))
+        heading_source = robot.get("heading", obs.get("robot_heading", [0.0]))
+    else:
+        robot_pos_source = obs.get("robot_position", [0.0, 0.0])
+        heading_source = obs.get("robot_heading", [0.0])
+    if isinstance(goal, dict):
+        goal_pos_source = goal.get("current", obs.get("goal_current", [0.0, 0.0]))
+    else:
+        goal_pos_source = obs.get("goal_current", [0.0, 0.0])
+
+    robot_pos = np.asarray(robot_pos_source, dtype=float)
+    heading = float(np.asarray(heading_source, dtype=float)[0])
+    goal_pos = np.asarray(goal_pos_source, dtype=float)
     vec = goal_pos - robot_pos
     dist = float(np.linalg.norm(vec))
     if dist < 1e-6:

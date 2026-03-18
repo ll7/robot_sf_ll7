@@ -106,6 +106,18 @@ def test_goal_policy_and_build_policy() -> None:
     assert abs(angular) <= 1.0
 
 
+def test_goal_policy_supports_flat_map_runner_observation() -> None:
+    """Goal baseline should work with the flat observation keys emitted by the env."""
+    obs = {
+        "robot_position": [0.0, 0.0],
+        "robot_heading": [0.0],
+        "goal_current": [1.0, 0.0],
+    }
+    linear, angular = _goal_policy(obs, max_speed=1.5)
+    assert linear > 0.0
+    assert abs(angular) <= 1.0
+
+
 def test_build_policy_handles_unknown_and_placeholder() -> None:
     """Ensure unknown algorithms raise and placeholders emit metadata."""
     with pytest.raises(ValueError):

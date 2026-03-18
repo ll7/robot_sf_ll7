@@ -510,6 +510,8 @@ def test_build_episode_record_backfills_collision_split_metrics_from_meta(monkey
     assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
     assert record["metrics"]["ped_collision_count"] == pytest.approx(0.0)
     assert record["metrics"]["agent_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["success"] is False
 
 
 def test_build_episode_record_backfills_split_metrics_when_total_collision_is_present(
@@ -573,6 +575,8 @@ def test_build_episode_record_backfills_split_metrics_when_total_collision_is_pr
     assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
     assert record["metrics"]["ped_collision_count"] == pytest.approx(0.0)
     assert record["metrics"]["agent_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["success"] is False
 
 
 def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> None:

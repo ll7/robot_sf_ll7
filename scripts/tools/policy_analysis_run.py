@@ -1413,7 +1413,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: PLR0913
+def _build_episode_record(  # noqa: PLR0913,PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,
@@ -1509,6 +1509,10 @@ def _build_episode_record(  # noqa: PLR0913
                 metrics["ped_collision_count"] = inferred_ped_collision
                 metrics["obstacle_collision_count"] = inferred_obstacle_collision
                 metrics["agent_collision_count"] = inferred_agent_collision
+                metrics["wall_collisions"] = inferred_obstacle_collision
+                metrics["success"] = False
+                if "success_rate" in metrics:
+                    metrics["success_rate"] = 0.0
                 if total_collision <= 0.0:
                     metrics["collisions"] = inferred_total
                     metrics["total_collision_count"] = inferred_total

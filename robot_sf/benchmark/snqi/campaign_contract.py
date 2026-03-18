@@ -32,6 +32,8 @@ class SnqiContractThresholds:
     rank_alignment_fail: float = 0.3
     outcome_separation_warn: float = 0.05
     outcome_separation_fail: float = 0.0
+    max_component_dominance_warn: float = 0.24
+    max_component_dominance_fail: float = 0.27
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class SnqiContractEvaluation:
     rank_alignment_spearman: float
     outcome_separation: float
     objective_score: float
+    dominant_component: str
+    dominant_component_mean_abs: float
 
 
 def _is_finite(value: Any) -> bool:
@@ -303,16 +307,31 @@ def evaluate_snqi_contract(  # noqa: C901, PLR0912
     else:
         outcome_separation = 0.0
 
+    component_dominance = compute_component_dominance(
+        episodes,
+        weights=weights,
+        baseline=baseline,
+    )
+    dominant_component = "none"
+    dominant_component_mean_abs = 0.0
+    if component_dominance:
+        dominant_component, dominant_component_mean_abs = max(
+            component_dominance.items(),
+            key=lambda item: float(item[1]),
+        )
+
     objective = rank_alignment + 0.25 * outcome_separation
 
     if (
         rank_alignment < thresholds.rank_alignment_fail
         or outcome_separation < thresholds.outcome_separation_fail
+        or dominant_component_mean_abs > thresholds.max_component_dominance_fail
     ):
         status = "fail"
     elif (
         rank_alignment < thresholds.rank_alignment_warn
         or outcome_separation < thresholds.outcome_separation_warn
+        or dominant_component_mean_abs > thresholds.max_component_dominance_warn
     ):
         status = "warn"
     else:
@@ -323,6 +342,8 @@ def evaluate_snqi_contract(  # noqa: C901, PLR0912
         rank_alignment_spearman=float(rank_alignment),
         outcome_separation=float(outcome_separation),
         objective_score=float(objective),
+        dominant_component=str(dominant_component),
+        dominant_component_mean_abs=float(dominant_component_mean_abs),
     )
 
 

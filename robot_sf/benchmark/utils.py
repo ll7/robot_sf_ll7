@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -176,6 +177,95 @@ def validate_episode_success_integrity(record: dict[str, Any]) -> list[str]:
         outcome=outcome,
         metrics=metrics,
     )
+
+
+def episode_success_value(record: dict[str, Any]) -> float:
+    """Return normalized per-episode success in [0, 1].
+
+    Prefers ``termination_reason`` when available because some benchmark JSONL
+    records omit or stale-fill ``metrics.success``.
+    """
+    term = str(record.get("termination_reason", "")).strip().lower()
+    if term == "success":
+        return 1.0
+    if term in {"collision", "max_steps", "truncated", "terminated", "error"}:
+        return 0.0
+
+    metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
+    if not isinstance(metrics, dict):
+        return 0.0
+    for key in ("success", "success_rate"):
+        parsed = _parse_optional_float(metrics.get(key))
+        if parsed is None or math.isnan(parsed):
+            continue
+        return 1.0 if parsed > 0.0 else 0.0
+    return 0.0
+
+
+def episode_collision_value(record: dict[str, Any]) -> float:
+    """Return normalized per-episode collision indicator in [0, 1]."""
+    term = str(record.get("termination_reason", "")).strip().lower()
+    if term == "collision":
+        return 1.0
+    if term in {"success", "max_steps", "truncated", "terminated", "error"}:
+        return 0.0
+
+    metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
+    if not isinstance(metrics, dict):
+        return 0.0
+    for key in ("collisions", "collision_rate"):
+        value = metrics.get(key)
+        try:
+            return 1.0 if float(value) > 0.0 else 0.0
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def _parse_optional_float(value: Any) -> float | None:
+    """Parse a float-like value.
+
+    Args:
+        value: Candidate value to coerce.
+
+    Returns:
+        Parsed float value, or ``None`` when the input is absent or invalid.
+    """
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def episode_metric_value(record: dict[str, Any], metric: str) -> float | None:  # noqa: C901
+    """Return a normalized numeric metric value for campaign/report aggregation."""
+    metrics = record.get("metrics", {}) if isinstance(record, dict) else {}
+    if not isinstance(metrics, dict):
+        metrics = {}
+
+    if metric == "success":
+        return episode_success_value(record)
+    if metric == "collisions":
+        return episode_collision_value(record)
+    if metric == "total_collision_count":
+        for container in (record, metrics):
+            parsed = _parse_optional_float(container.get("total_collision_count"))
+            if parsed is not None and not math.isnan(parsed):
+                return parsed
+        for key in ("collisions", "collision_rate"):
+            parsed = _parse_optional_float(metrics.get(key))
+            if parsed is not None and parsed > 0.0:
+                return parsed
+        return episode_collision_value(record)
+
+    for container in (record, metrics):
+        parsed = _parse_optional_float(container.get(metric))
+        if parsed is None:
+            continue
+        return None if math.isnan(parsed) else parsed
+    return None
 
 
 def format_overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:

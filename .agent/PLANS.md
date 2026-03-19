@@ -34,6 +34,7 @@ Keep plans short and operational:
 
 # Validation
 - Commands to run.
+- Evidence that will prove the change works in this repository.
 
 # Risks / Follow-ups
 - Remaining uncertainty, deferred scope, or issue candidates.
@@ -45,6 +46,9 @@ Keep plans short and operational:
 - Separate observed evidence from assumptions.
 - Prefer canonical scripts and committed configs over ad-hoc commands.
 - When benchmark or planner claims are involved, include the exact docs/configs that anchor the claim.
+- State the proof obligation for any new planner, metric, skill, or test before implementation.
+- Close the plan only after that proof has been gathered or the remaining gap has been called out
+  explicitly.
 - If scope expands, create a follow-up issue instead of silently broadening the implementation.
 
 ## Review Expectations

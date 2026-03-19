@@ -37,6 +37,30 @@ The project enforces Ruff with a 4-space indent, 100-character lines, and double
 ## Testing Guidelines
 Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs with committed artifacts in `output/` when benchmarks change. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows.
 
+## Proof-First Validation
+
+Any new change, skill, benchmark-facing update, or test must be verified with concrete evidence,
+not just implemented.
+
+- New local planners must be proven with an actual benchmark or targeted execution path that shows
+  they run correctly in this repository.
+- Metric changes must include a clear proof that the updated metric now computes the intended values
+  or fixes the intended regression.
+- New skills must be checked against their real invocation path, referenced files, and repository
+  workflow fit.
+- New tests must be shown to fail for the right reason before the fix when practical, or otherwise
+  justified with direct evidence that they cover the intended contract.
+
+Prefer proof that matches the risk:
+
+- benchmark or planner changes: benchmark run, policy-analysis run, or other executable evidence,
+- training/config workflow changes: canonical command run or smoke path,
+- metrics/schema changes: targeted assertions plus a reproducible sample or fixture,
+- docs/skill/instruction changes: verify referenced paths, commands, and discoverability surfaces.
+
+Do not present a change as complete until the proof is recorded in the validation notes, PR text, or
+issue follow-up.
+
 ## Commit & Pull Request Workflow
 Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`). Each PR should summarize intent, reference related issues, and list the commands you ran. Include screenshots or short GIFs when UI or playback output changes, and note any new assets placed under `maps/` or `model/`. Ensure CI stays green by syncing with `main` and resolving lint or test failures locally before requesting review.
 Use the GitHub CLI (`gh`) for repository interactions such as viewing/commenting on issues and creating/updating PRs.
@@ -59,6 +83,7 @@ For non-trivial work, follow `.agent/PLANS.md`:
 - restate the goal and boundaries first,
 - list evidence sources before implementation,
 - keep validation commands explicit,
+- state what proof will demonstrate the change actually works here,
 - record follow-up risks separately from completed scope.
 
 Do not treat plans as throwaway scratch text when they influence benchmark semantics, model provenance, or public docs.

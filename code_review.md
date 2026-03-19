@@ -9,9 +9,12 @@ Check these in order:
 
 1. Correctness of user-visible behavior and public contracts.
 2. Benchmark credibility and provenance.
-3. Reproducibility of commands, configs, and artifacts.
-4. Scope discipline: no hidden workflow churn or speculative infrastructure.
-5. Test and documentation coverage proportional to the risk of the change.
+3. Proof that the new or changed behavior actually works in this repository.
+4. Reproducibility of commands, configs, and artifacts.
+5. Scope discipline: no hidden workflow churn or speculative infrastructure.
+6. Test and documentation coverage proportional to the risk of the change.
+
+Reject changes that only add code or docs without task-appropriate proof.
 
 ## Benchmark-Credibility Review
 
@@ -52,7 +55,26 @@ For planner additions or modifications, review:
 - output contract: action space and kinematics adaptation are explicit,
 - fallback policy: missing dependencies or artifacts fail clearly,
 - provenance: upstream repo/model references remain auditable,
+- proof: benchmark or targeted runtime evidence shows the planner actually runs in this repository,
 - benchmark readiness: paper-facing vs experimental status is still correctly labeled.
+
+If a planner is added but never executed in the local benchmark stack, treat the change as
+incomplete.
+
+## Proof Requirements By Change Type
+
+- new planner or planner integration:
+  run a benchmark, policy-analysis path, or equivalent executable check that proves integration
+  works here.
+- metric update:
+  provide targeted assertions, fixtures, or sample outputs that prove the new metric behavior.
+- new skill:
+  verify the referenced files, commands, and discoverability path are correct for this repository.
+- new test:
+  show that it protects a real contract or regression and is not only syntactic coverage.
+- docs-only guidance:
+  verify every referenced path and command, and ensure the guidance matches the current repo
+  workflow.
 
 ## Documentation Review
 
@@ -72,6 +94,7 @@ Apply Principle XIII from `.specify/memory/constitution.md`:
 - fix high-signal tests immediately,
 - challenge flaky or low-value tests before investing in them,
 - add tests when public contracts or benchmark semantics change,
+- require proof that new tests or fixes meaningfully validate the intended contract,
 - keep validation commands in PR text explicit and reproducible.
 
 Recommended validation gate for broad changes:

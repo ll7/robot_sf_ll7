@@ -191,7 +191,8 @@ wording.
 | `campaign_table.csv: socnav_prereq_policy` | strict-vs-fallback prereq behavior | yes if discussed | semantics stable |
 | `reports/snqi_diagnostics.json: rank_alignment_spearman` | campaign-level SNQI rank alignment check | no direct paper table column unless explicitly discussed | v3 diagnostics schema adds provenance and dominance context |
 | `reports/snqi_diagnostics.json: outcome_separation` | campaign-level SNQI separation check | no direct paper table column unless explicitly discussed | semantics stable; use final value only |
-| `reports/snqi_diagnostics.json: dominant_component` | largest mean absolute SNQI component contribution | likely supporting text only | new v3 paper-facing interpretation field |
+| `reports/snqi_diagnostics.json: dominant_component` | name of the SNQI component with the largest mean absolute contribution | likely supporting text only | new v3 paper-facing interpretation field |
+| `reports/snqi_diagnostics.json: dominant_component_mean_abs` | value of the largest mean absolute SNQI component contribution | likely supporting text only | new v3 paper-facing interpretation field |
 | `publication_manifest.json: provenance.run_dir` | canonical benchmark root for the bundle | not a table column | use in provenance / reproducibility text |
 | `payload/campaign_manifest.json: snqi_weights_path` | asset pointer for bundled campaign payload | not a table column | stable pointer, but not a substitute for full diagnostics |
 

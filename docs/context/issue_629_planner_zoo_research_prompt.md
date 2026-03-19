@@ -212,3 +212,97 @@ Use these final recommendation classes only:
 - benchmark target: structured Robot SF observations with explicit action adaptation when needed
 - provenance preference: upstream URL plus thin wrapper first; subtree-friendly import is a plus
 - unclear license: `reference only`
+
+## Deep-research intake update (2026-03-19)
+
+The following shortlist was added after an external deep-research pass to refine the next likely
+planner-zoo additions. This is a research intake, not a blanket approval to import code. The same
+license, provenance, and source-harness gates still apply.
+
+Important caveats:
+
+- `CrowdNav-SB3` is recorded here as a promising direction, but the originally supplied upstream
+  reference was not a canonical GitHub repository URL. Treat it as a provisional candidate until
+  the exact upstream source, license, and test path are re-verified.
+- `PySocialForce` is useful as a candidate family, but the originally supplied repository
+  attribution may differ from the canonical upstream. Keep the family assessment, and re-verify the
+  exact upstream repo before any import decision.
+- `SocNavGym` remains `prototype only` because GPL-3.0 blocks direct vendoring into this repository.
+- `SDA` remains `assessment only` because Habitat coupling makes direct benchmark integration
+  unlikely without substantial reimplementation.
+
+### Candidate table
+
+| Candidate name | Upstream repo URL | Planner family | License | Pretrained weights? | Obs. compatibility | Action/kinematics | Gymnasium compat. | Integration shape | Wrapper effort | Recommendation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `CrowdNav-SB3` | provisional upstream; exact canonical repo still needs re-verification | Learned (RL/attention) | unresolved in intake; re-verify before import | Yes (claimed in intake) | High (state tensors) | Holonomic or unicycle adapter | High if upstream claim holds | Direct wrapper | Low | `integrate next` if repo claim is verified |
+| [`PySocialForce`](https://github.com/yuxiang-gao/PySocialForce) | <https://github.com/yuxiang-gao/PySocialForce> | Classical (social force) | MIT | N/A | High (agent states) | Velocity vector | High | Direct wrapper | Low | `integrate next` |
+| [`SocNavGym`](https://github.com/gnns4hri/SocNavGym) | <https://github.com/gnns4hri/SocNavGym> | Hybrid (GNN + RL) | GPL-3.0 | Yes | High (structured) | Unicycle or continuous | Native (`0.29.1` in intake) | Source harness | Medium | `prototype only` |
+| [`SDA`](https://github.com/L-Scofano/SDA) | <https://github.com/L-Scofano/SDA> | Learned (history-based) | MIT | Yes | Medium (history-based) | Unicycle | Medium | Model-only adapter | High | `assessment only` |
+| [`RVO2-python`](https://github.com/chengji253/RVO2-python) | <https://github.com/chengji253/RVO2-python> | Geometric (ORCA) | MIT | N/A | High (position and velocity) | Velocity vector | High | Subtree or wrapper | Low | `integrate next` |
+| [`PythonRobotics` DWA](https://github.com/AtsushiSakai/PythonRobotics) | <https://github.com/AtsushiSakai/PythonRobotics> | Classical (reactive) | MIT | N/A | Medium (scan-style or handcrafted state) | Unicycle | Medium | Inspiration or native port | Low | `inspiration only` |
+
+### Top-candidate parity notes
+
+#### CrowdNav-SB3
+
+- Source evaluation:
+  - intake characterizes this as an SB3-native port of the historical CrowdNav SARL/CADRL family
+  - intended scenarios are circle-crossing and random multi-agent crowd navigation
+- Preserve:
+  - multi-input policy wiring
+  - attention handling over variable pedestrian sets
+  - the source observation flattening or tensorization path
+- Risks:
+  - exact upstream provenance is still unresolved from the intake
+  - parity breaks immediately if we benchmark a wrapper over materially different state extraction
+- Interpretation:
+  - promising as the top learned-policy candidate, but only after the exact upstream repo and test
+    harness are verified
+
+#### PySocialForce
+
+- Source evaluation:
+  - vectorized Helbing-style social-force implementation in Python
+- Preserve:
+  - attractive, repulsive, and social force composition
+  - the baseline’s native desired-velocity interpretation
+- Risks:
+  - outputs velocity vectors, so Robot SF would still need an explicit `unicycle_vw` action adapter
+- Interpretation:
+  - strong candidate for classical breadth because the implementation is lightweight, MIT-licensed,
+    and likely wrapper-friendly
+
+#### SocNavGym
+
+- Source evaluation:
+  - structured Gymnasium environment with social-navigation-specific agents and learned policies
+- Preserve:
+  - environment-specific observation graph or structured-state contract
+  - policy expectations around that observation layout
+- Risks:
+  - GPL-3.0 blocks vendoring
+  - credible use would require wrapper-only or external-dependency integration, not subtree import
+- Interpretation:
+  - strong prototype candidate, not a direct import candidate
+
+### Selection summary
+
+- Best for immediate prototype:
+  - `CrowdNav-SB3`, if and only if the upstream repo/license/test path are re-verified
+- Best for classical breadth:
+  - `PySocialForce`
+- Best for learned breadth:
+  - `SocNavGym`
+- Best subtree-friendly candidate:
+  - `RVO2-python`
+- Most likely dead end despite strong paper value:
+  - `SDA`, because Habitat coupling makes parity costly
+
+### Recommended execution sequence
+
+1. Assess and, if still justified, subtree or wrap `RVO2-python` as the clean geometric baseline.
+2. Verify `CrowdNav-SB3` provenance, then run its source-side inference path before any wrapper work.
+3. Wrap `PySocialForce` with an explicit unicycle adapter once the geometric baseline contract is
+   stable.
+4. Avoid Habitat-locked imports such as `SDA` until the core planner-zoo harness is stable.

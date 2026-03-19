@@ -16,6 +16,38 @@ Do not copy code from these repositories into `robot_sf` blindly.
 - `go-mpc` should not be vendored into this repository because it is GPL-3.0 and depends on a FORCESPro-generated solver.
 - `CrowdNav_DSRNN` and `SoNIC-Social-Nav` are mainly useful as alternate learning-based baseline references, not as the primary source for a new classical planner.
 
+## Research Intake Shortlist (2026-03-19)
+
+The current planner-zoo research intake adds a few high-value external candidates. These entries are
+research targets, not approved imports. Keep the same guardrails:
+
+- upstream provenance must be verified from a canonical remote URL
+- license terms must remain compatible with the intended integration shape
+- source-harness or model-only inference must be validated before any benchmark claim
+
+Shortlist summary:
+
+- `CrowdNav-SB3`
+  - recommendation: promising learned-policy candidate
+  - caveat: the intake provided a non-canonical search URL, so the exact upstream repo still needs
+    re-verification before it can be treated as a concrete integration target
+- `PySocialForce`
+  - recommendation: strong classical baseline candidate
+  - caveat: preserve the force-model implementation and add an explicit unicycle adapter rather than
+    silently treating desired velocity as executable control
+- `SocNavGym`
+  - recommendation: `prototype only`
+  - caveat: GPL-3.0 blocks direct vendoring, so any use should stay wrapper-only or external
+    dependency based
+- `SDA`
+  - recommendation: `assessment only`
+  - caveat: Habitat coupling makes direct 2D benchmark reuse high-risk
+- `RVO2-python`
+  - recommendation: strong subtree or wrapper candidate for a clean ORCA-family baseline
+- `PythonRobotics` DWA
+  - recommendation: `inspiration only`
+  - caveat: useful for native ports or ideas, not as a provenance-preserving benchmark import
+
 ## Repository Inventory
 
 ### Pred2Nav

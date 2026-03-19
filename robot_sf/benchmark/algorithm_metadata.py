@@ -56,6 +56,18 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "teb": "placeholder_adapter",
 }
 
+_UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
+    "orca": {
+        "repo_url": "https://github.com/mit-acl/Python-RVO2",
+        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+        "vendored_path": "third_party/python-rvo2",
+        "adapter_boundary": (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
+            "then project the selected velocity into Robot SF unicycle_vw commands."
+        ),
+    },
+}
+
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "goal": {
         "planner_command_space": "unicycle_vw",
@@ -76,6 +88,10 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
     },
     "ppo": {
         "planner_command_space": "mixed_vw_or_vxy",
@@ -237,6 +253,9 @@ def _base_kinematics_metadata(
         "execution_mode": execution_mode or profile.get("default_execution_mode", "unknown"),
         "adapter_name": adapter_name or profile.get("default_adapter_name", "none"),
     }
+    for key, value in profile.items():
+        if key not in metadata and not key.startswith("default_"):
+            metadata[key] = value
     metadata["adapter_active"] = metadata["execution_mode"] in {"adapter", "mixed"}
     return metadata
 
@@ -278,6 +297,9 @@ def enrich_algorithm_metadata(
         "policy_semantics",
         _POLICY_SEMANTICS_BY_CANONICAL.get(canonical, "unspecified"),
     )
+    upstream_reference = _UPSTREAM_REFERENCE_BY_CANONICAL.get(canonical)
+    if upstream_reference is not None:
+        enriched.setdefault("upstream_reference", dict(upstream_reference))
 
     current_kinematics = enriched.get("planner_kinematics")
     base_kinematics = _base_kinematics_metadata(

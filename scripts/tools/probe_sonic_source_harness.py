@@ -100,6 +100,14 @@ def _detect_failure_summary(stderr: str) -> str:
     return "unknown failure"
 
 
+def _safe_metadata_extract(extractor: Any, *args: Any) -> Any:
+    """Run non-essential metadata extraction without letting upstream imports abort the probe."""
+    try:
+        return extractor(*args)
+    except (Exception, SystemExit):
+        return None
+
+
 @dataclass
 class ProbeReport:
     """Structured result for one SoNIC source-harness probe."""
@@ -168,7 +176,35 @@ def run_probe(
             timeout_seconds=timeout_seconds,
         )
 
-    resolved_checkpoint = checkpoint or _default_checkpoint(checkpoints_dir)
+    if checkpoint is None:
+        try:
+            resolved_checkpoint = _default_checkpoint(checkpoints_dir)
+        except FileNotFoundError:
+            return ProbeReport(
+                issue=626,
+                repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+                repo_root=str(repo_root),
+                model_name=model_name,
+                checkpoint="",
+                command=[],
+                docker_base_image=_safe_metadata_extract(
+                    _extract_docker_base_image, dockerfile_path
+                ),
+                source_contract=_safe_metadata_extract(_extract_contract, config_path) or {},
+                training_defaults=_safe_metadata_extract(_load_args_defaults, arguments_path) or {},
+                requirements_files={
+                    name: _read_requirements(path) for name, path in requirements_paths.items()
+                },
+                verdict="source harness blocked",
+                failure_stage="missing_checkpoint",
+                failure_summary=f"No .pt checkpoints found in {checkpoints_dir}",
+                returncode=None,
+                stdout_tail="",
+                stderr_tail="",
+                timeout_seconds=timeout_seconds,
+            )
+    else:
+        resolved_checkpoint = checkpoint
     checkpoint_path = checkpoints_dir / resolved_checkpoint
     if not checkpoint_path.exists():
         return ProbeReport(
@@ -178,9 +214,9 @@ def run_probe(
             model_name=model_name,
             checkpoint=resolved_checkpoint,
             command=[],
-            docker_base_image=_extract_docker_base_image(dockerfile_path),
-            source_contract=_extract_contract(config_path),
-            training_defaults=_load_args_defaults(arguments_path),
+            docker_base_image=_safe_metadata_extract(_extract_docker_base_image, dockerfile_path),
+            source_contract=_safe_metadata_extract(_extract_contract, config_path) or {},
+            training_defaults=_safe_metadata_extract(_load_args_defaults, arguments_path) or {},
             requirements_files={
                 name: _read_requirements(path) for name, path in requirements_paths.items()
             },
@@ -234,9 +270,9 @@ def run_probe(
         model_name=model_name,
         checkpoint=resolved_checkpoint,
         command=command,
-        docker_base_image=_extract_docker_base_image(dockerfile_path),
-        source_contract=_extract_contract(config_path),
-        training_defaults=_load_args_defaults(arguments_path),
+        docker_base_image=_safe_metadata_extract(_extract_docker_base_image, dockerfile_path),
+        source_contract=_safe_metadata_extract(_extract_contract, config_path) or {},
+        training_defaults=_safe_metadata_extract(_load_args_defaults, arguments_path) or {},
         requirements_files={
             name: _read_requirements(path) for name, path in requirements_paths.items()
         },

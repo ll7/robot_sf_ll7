@@ -84,6 +84,49 @@ def test_run_probe_captures_missing_dependency_from_entrypoint(tmp_path: Path) -
     assert report.training_defaults["env_name"] == "CrowdSimPredRealGST-v0"
 
 
+def test_run_probe_blocks_cleanly_when_checkpoint_dir_is_empty(tmp_path: Path) -> None:
+    """An empty checkpoints dir should produce a blocked report, not a traceback."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    (repo_root / "trained_models" / "SoNIC_GST" / "checkpoints" / "05207.pt").unlink()
+    _write(repo_root / "test.py", "print('ok')\n")
+
+    report = run_probe(repo_root, model_name="SoNIC_GST", checkpoint=None, timeout_seconds=5)
+
+    assert report.verdict == "source harness blocked"
+    assert report.failure_stage == "missing_checkpoint"
+    assert "No .pt checkpoints found" in (report.failure_summary or "")
+
+
+def test_run_probe_metadata_extraction_failure_does_not_overwrite_probe_result(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Metadata import failures should not replace the already-determined probe verdict."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    _write(
+        repo_root / "test.py",
+        "raise ModuleNotFoundError(\"No module named 'gym'\")\n",
+    )
+
+    monkeypatch.setattr(
+        "scripts.tools.probe_sonic_source_harness._extract_contract",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(SystemExit(2)),
+    )
+    monkeypatch.setattr(
+        "scripts.tools.probe_sonic_source_harness._load_args_defaults",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("bad args import")),
+    )
+
+    report = run_probe(repo_root, model_name="SoNIC_GST", checkpoint="05207.pt", timeout_seconds=5)
+
+    assert report.verdict == "source harness blocked"
+    assert report.failure_stage == "source_entrypoint"
+    assert report.failure_summary == "missing python dependency: gym"
+    assert report.source_contract == {}
+    assert report.training_defaults == {}
+
+
 def test_render_markdown_includes_probe_summary(tmp_path: Path) -> None:
     """Markdown rendering should expose the verdict, invocation, and failure summary."""
     repo_root = tmp_path / "repo"

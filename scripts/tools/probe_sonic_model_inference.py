@@ -103,6 +103,22 @@ def _extract_contract(config: Any, args: Any) -> dict[str, Any]:
     }
 
 
+def _restore_import_state(
+    original_modules: dict[str, Any], original_sys_path: list[str], repo_root: Path
+) -> None:
+    """Restore `sys.modules` and `sys.path` after an in-process SoNIC import probe."""
+    current_keys = list(sys.modules.keys())
+    for key in current_keys:
+        if key not in original_modules:
+            sys.modules.pop(key, None)
+    sys.modules.update(original_modules)
+    sys.path[:] = original_sys_path
+    while str(repo_root) in sys.path:
+        sys.path.remove(str(repo_root))
+    if str(repo_root) in original_sys_path and str(repo_root) not in sys.path:
+        sys.path.insert(original_sys_path.index(str(repo_root)), str(repo_root))
+
+
 def _load_model_modules(model_name: str) -> tuple[Any, Any, Any, Any]:
     """Import SoNIC training arguments, config, model module, and parsed args safely."""
     args_mod = importlib.import_module(f"trained_models.{model_name}.arguments")
@@ -139,7 +155,9 @@ class ModelProbeReport:
     value_shape: list[int] | None
 
 
-def run_model_probe(repo_root: Path, model_name: str, checkpoint: str | None) -> ModelProbeReport:
+def run_model_probe(  # noqa: PLR0915
+    repo_root: Path, model_name: str, checkpoint: str | None
+) -> ModelProbeReport:
     """Check whether the SoNIC checkpoint can run a forward pass without the source env stack."""
     checkpoints_dir = repo_root / "trained_models" / model_name / "checkpoints"
     resolved_checkpoint = checkpoint or _default_checkpoint(checkpoints_dir)
@@ -147,105 +165,111 @@ def run_model_probe(repo_root: Path, model_name: str, checkpoint: str | None) ->
     if not checkpoint_path.exists():
         raise FileNotFoundError(checkpoint_path)
 
-    sys.path.insert(0, str(repo_root))
-
-    direct_verdict = "direct model import blocked"
-    direct_failure_summary: str | None = None
-    try:
-        _args_mod, config_mod, model_mod, args = _load_model_modules(model_name)
-        config = config_mod.Config()
-        args.num_processes = 1
-        args.no_cuda = True
-        args.cuda = False
-        obs_space, action_space = _minimal_spaces(config)
-        model_mod.Policy(
-            obs_space.spaces, action_space, config, base=config.robot.policy, base_kwargs=args
-        )
-        direct_verdict = "direct model import reproducible"
-    except Exception as exc:  # pragma: no cover
-        direct_failure_summary = f"{type(exc).__name__}: {exc}"
-
-    shims_applied = [
-        "gymnasium as gym module alias",
-        "stub rl.networks.envs.VecNormalize",
-        "config.policy.constant_std=false",
-    ]
-    shimmed_verdict = "model-only inference blocked"
-    shimmed_failure_summary: str | None = None
-    source_contract: dict[str, Any] = {}
-    missing_state_keys: list[str] = []
-    unexpected_state_keys: list[str] = []
-    action_sample: list[float] | None = None
-    action_shape: list[int] | None = None
-    value_shape: list[int] | None = None
+    original_modules = sys.modules.copy()
+    original_sys_path = sys.path[:]
 
     try:
-        for key in [
-            f"trained_models.{model_name}.arguments",
-            f"trained_models.{model_name}.configs.config",
-            "rl.networks.model",
-            "rl.networks.distributions",
-            "rl.networks.network_utils",
-            "rl.networks.selfAttn_srnn_temp_node",
-        ]:
-            sys.modules.pop(key, None)
+        sys.path.insert(0, str(repo_root))
 
-        import gymnasium
+        direct_verdict = "direct model import blocked"
+        direct_failure_summary: str | None = None
+        try:
+            _args_mod, config_mod, model_mod, args = _load_model_modules(model_name)
+            config = config_mod.Config()
+            args.num_processes = 1
+            args.no_cuda = True
+            args.cuda = False
+            obs_space, action_space = _minimal_spaces(config)
+            model_mod.Policy(
+                obs_space.spaces, action_space, config, base=config.robot.policy, base_kwargs=args
+            )
+            direct_verdict = "direct model import reproducible"
+        except Exception as exc:  # pragma: no cover
+            direct_failure_summary = f"{type(exc).__name__}: {exc}"
 
-        sys.modules["gym"] = gymnasium
-        fake_envs = types.ModuleType("rl.networks.envs")
+        shims_applied = [
+            "gymnasium as gym module alias",
+            "stub rl.networks.envs.VecNormalize",
+            "config.policy.constant_std=false",
+        ]
+        shimmed_verdict = "model-only inference blocked"
+        shimmed_failure_summary: str | None = None
+        source_contract: dict[str, Any] = {}
+        missing_state_keys: list[str] = []
+        unexpected_state_keys: list[str] = []
+        action_sample: list[float] | None = None
+        action_shape: list[int] | None = None
+        value_shape: list[int] | None = None
 
-        class VecNormalize:
-            """Minimal stub to satisfy SoNIC network_utils imports."""
+        try:
+            for key in [
+                f"trained_models.{model_name}.arguments",
+                f"trained_models.{model_name}.configs.config",
+                "rl.networks.model",
+                "rl.networks.distributions",
+                "rl.networks.network_utils",
+                "rl.networks.selfAttn_srnn_temp_node",
+            ]:
+                sys.modules.pop(key, None)
 
-        fake_envs.VecNormalize = VecNormalize
-        sys.modules["rl.networks.envs"] = fake_envs
+            import gymnasium
 
-        _args_mod, config_mod, model_mod, args = _load_model_modules(model_name)
-        config = config_mod.Config()
-        args.num_processes = 1
-        args.no_cuda = True
-        args.cuda = False
-        config.policy.constant_std = False
+            sys.modules["gym"] = gymnasium
+            fake_envs = types.ModuleType("rl.networks.envs")
 
-        obs_space, action_space = _minimal_spaces(config)
-        policy = model_mod.Policy(
-            obs_space.spaces, action_space, config, base=config.robot.policy, base_kwargs=args
+            class VecNormalize:
+                """Minimal stub to satisfy SoNIC network_utils imports."""
+
+            fake_envs.VecNormalize = VecNormalize
+            sys.modules["rl.networks.envs"] = fake_envs
+
+            _args_mod, config_mod, model_mod, args = _load_model_modules(model_name)
+            config = config_mod.Config()
+            args.num_processes = 1
+            args.no_cuda = True
+            args.cuda = False
+            config.policy.constant_std = False
+
+            obs_space, action_space = _minimal_spaces(config)
+            policy = model_mod.Policy(
+                obs_space.spaces, action_space, config, base=config.robot.policy, base_kwargs=args
+            )
+            state = torch.load(checkpoint_path, map_location="cpu")
+            missing, unexpected = policy.load_state_dict(state, strict=False)
+            missing_state_keys = list(missing)
+            unexpected_state_keys = list(unexpected)
+
+            obs, rnn_hxs, masks = _synthetic_inputs(config, policy)
+            value, action, _, _ = policy.act(obs, rnn_hxs, masks, deterministic=True)
+
+            source_contract = _extract_contract(config, args)
+            action_sample = [float(x) for x in action.squeeze(0).tolist()]
+            action_shape = list(action.shape)
+            value_shape = list(value.shape)
+            shimmed_verdict = "model-only inference reproducible with shims"
+        except Exception as exc:  # pragma: no cover
+            shimmed_failure_summary = f"{type(exc).__name__}: {exc}"
+
+        return ModelProbeReport(
+            issue=626,
+            repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+            repo_root=str(repo_root),
+            model_name=model_name,
+            checkpoint=resolved_checkpoint,
+            direct_verdict=direct_verdict,
+            direct_failure_summary=direct_failure_summary,
+            shimmed_verdict=shimmed_verdict,
+            shimmed_failure_summary=shimmed_failure_summary,
+            shims_applied=shims_applied,
+            source_contract=source_contract,
+            missing_state_keys=missing_state_keys,
+            unexpected_state_keys=unexpected_state_keys,
+            action_sample=action_sample,
+            action_shape=action_shape,
+            value_shape=value_shape,
         )
-        state = torch.load(checkpoint_path, map_location="cpu")
-        missing, unexpected = policy.load_state_dict(state, strict=False)
-        missing_state_keys = list(missing)
-        unexpected_state_keys = list(unexpected)
-
-        obs, rnn_hxs, masks = _synthetic_inputs(config, policy)
-        value, action, _, _ = policy.act(obs, rnn_hxs, masks, deterministic=True)
-
-        source_contract = _extract_contract(config, args)
-        action_sample = [float(x) for x in action.squeeze(0).tolist()]
-        action_shape = list(action.shape)
-        value_shape = list(value.shape)
-        shimmed_verdict = "model-only inference reproducible with shims"
-    except Exception as exc:  # pragma: no cover
-        shimmed_failure_summary = f"{type(exc).__name__}: {exc}"
-
-    return ModelProbeReport(
-        issue=626,
-        repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
-        repo_root=str(repo_root),
-        model_name=model_name,
-        checkpoint=resolved_checkpoint,
-        direct_verdict=direct_verdict,
-        direct_failure_summary=direct_failure_summary,
-        shimmed_verdict=shimmed_verdict,
-        shimmed_failure_summary=shimmed_failure_summary,
-        shims_applied=shims_applied,
-        source_contract=source_contract,
-        missing_state_keys=missing_state_keys,
-        unexpected_state_keys=unexpected_state_keys,
-        action_sample=action_sample,
-        action_shape=action_shape,
-        value_shape=value_shape,
-    )
+    finally:
+        _restore_import_state(original_modules, original_sys_path, repo_root)
 
 
 def _render_markdown(report: ModelProbeReport) -> str:

@@ -1,0 +1,216 @@
+version: planner-quality-audit-v1
+external_candidates:
+  - family_key: crowdnav_sonic
+    label: CrowdNav / SoNIC family
+    closest_local_proxies:
+      - ppo
+      - socnav_sampling
+      - sacadrl
+    observation_contract_gap: >-
+      CrowdNav-family methods usually consume native CrowdNav simulator state or lidar-conditioned inputs
+      with source-specific normalization and temporal context, whereas our local proxies use Robot SF
+      structured state, occupancy-grid PPO inputs, or adapter-specific legacy contracts.
+    action_contract_gap: >-
+      Source methods may assume holonomic or simulator-native control outputs, while the Robot SF matrix
+      normalizes everything into differential-drive compatible unicycle commands.
+    scenario_assumption_gap: >-
+      Source repos sample their own crowd simulator scenarios and agent policies; the Robot SF paper matrix
+      uses the frozen classic/francis scenario matrix with different interaction structure and map layouts.
+    evaluation_harness_gap: >-
+      Published numbers come from the source test harness and its own success/collision/time accounting, not
+      the Robot SF camera-ready runner.
+    interpretation: >-
+      Current local results should not be interpreted as CrowdNav-family performance until a source-harness
+      reproduction is demonstrated.
+  - family_key: ga3c_cadrl
+    label: GA3C-CADRL / SA-CADRL family
+    closest_local_proxies:
+      - sacadrl
+    observation_contract_gap: >-
+      The literature uses the native joint-state crowd representation expected by the checkpointed CADRL-family
+      model, while our current path is an adapter layer with legacy model-sensitive assumptions.
+    action_contract_gap: >-
+      Source action selection is defined by the checkpointed value/policy model over its native action set;
+      our current adapter path is not yet validated as an exact action-space match.
+    scenario_assumption_gap: >-
+      The source crowd simulator and crowd-agent behavior differ from the Robot SF frozen matrix.
+    evaluation_harness_gap: >-
+      Published CADRL-family results are reported in the source simulator and test harness, not in Robot SF.
+    interpretation: >-
+      Current SACADRL scores are implementation-mismatch evidence and should not be reported as CADRL-family
+      benchmark quality.
+  - family_key: pred2nav
+    label: Pred2Nav / predictive-MPC family
+    closest_local_proxies:
+      - prediction_planner
+    observation_contract_gap: >-
+      External predictive-MPC stacks assume source-specific prediction inputs and rollout state, whereas the
+      Robot SF predictive planner uses its own predictor contract and local planning features.
+    action_contract_gap: >-
+      Source MPC stacks optimize over their own control sequence parameterization; our local predictive planner
+      emits Robot SF adapter-compatible commands.
+    scenario_assumption_gap: >-
+      External repos evaluate on their own simulator and task distributions before any Robot SF port.
+    evaluation_harness_gap: >-
+      Published results come from the source evaluation scripts, not the Robot SF camera-ready benchmark.
+    interpretation: >-
+      Current predictive-planner scores are honest in-repo implementation results, not evidence that the
+      broader predictive-MPC family underperforms on our matrix.
+reproduction_priority:
+  - family_key: crowdnav_sonic
+    label: CrowdNav / SoNIC family
+    rationale: >-
+      Highest-value external reproduction target because published CrowdNav-family systems report
+      substantially stronger benchmark results than the current local suite, especially on crowd-aware
+      learned navigation, and the gap is large enough that current results should not be interpreted as
+      family-level evidence.
+    exact_policy_or_config_source:
+      - output/repos/SoNIC-Social-Nav
+      - output/repos/CrowdNav
+    expected_observation_action_contract: >-
+      Human-state or lidar-conditioned learned policy evaluated in the CrowdNav-style simulator/test
+      harness, typically with holonomic or unicycle control depending on the paper variant.
+    expected_scenario_and_eval_protocol: >-
+      Standard CrowdNav benchmark test harness with the repo's own crowd simulator, scenario sampling,
+      and success/collision/time metrics.
+    wrapper_strategy: >-
+      Import one reference policy checkpoint or inference path without fallback heuristics, then define a
+      thin adapter into the Robot SF benchmark runner only after parity is validated in the source test
+      harness.
+    acceptance_threshold: >-
+      Call the reproduction faithful only after the imported policy reproduces the source repo's own test
+      behavior within a small tolerance before any Robot SF benchmark comparison is reported.
+  - family_key: ga3c_cadrl
+    label: GA3C-CADRL / SA-CADRL family
+    rationale: >-
+      Important legacy crowd-aware RL family, but second priority because our current adapter is clearly
+      not yet paper-faithful and the value of a clean reproduction depends on closing the stronger
+      CrowdNav-family gap first.
+    exact_policy_or_config_source: output/repos/gym-collision-avoidance
+    expected_observation_action_contract: >-
+      Human-state joint-state value-policy inference with the reference model/checkpoint and its native
+      crowd-simulator semantics.
+    expected_scenario_and_eval_protocol: >-
+      Source repo test harness using the reference crowd simulator and native trajectory/time/collision
+      accounting.
+    wrapper_strategy: >-
+      Replace fallback heuristic execution with the actual checkpointed policy path first, then benchmark
+      a fail-fast adapter in Robot SF.
+    acceptance_threshold: >-
+      Treat as faithful only when the source model executes without fallback and reproduces source-harness
+      behavior on held-out reference cases.
+  - family_key: pred2nav
+    label: Pred2Nav / predictive-MPC family
+    rationale: >-
+      Valuable predictive-planning anchor, but third priority because the immediate paper-comparison gap is
+      larger for crowd-aware learned navigation families than for prediction-aware optimization families.
+    exact_policy_or_config_source:
+      - output/repos/Pred2Nav
+      - output/repos/go-mpc
+    expected_observation_action_contract: >-
+      Human-state plus prediction-conditioned MPC or policy optimization stack evaluated with the source
+      simulator and planner rollout assumptions.
+    expected_scenario_and_eval_protocol: >-
+      Source evaluation scripts and scenario conventions from the external repo before any Robot SF port.
+    wrapper_strategy: >-
+      Reproduce one reference evaluation in the source repo, then expose a minimal adapter into Robot SF
+      with the same prediction horizon and control assumptions.
+    acceptance_threshold: >-
+      Treat as faithful only when the external reproduction and the Robot SF wrapper agree qualitatively on
+      representative benchmark scenarios.
+planners:
+  orca:
+    classification: credible benchmark baseline
+    headline_recommendation: keep
+    paper_reference_family: Reciprocal-velocity-obstacle baseline
+    paper_evaluates: >-
+      ORCA-style reciprocal avoidance as a model-based interaction baseline, typically under its native
+      simulator assumptions and reciprocal-agent behavior.
+    current_implementation: >-
+      Native ORCA planner path with direct `rvo2` dependency and no fallback in the corrected
+      camera-ready benchmark stack.
+    missing_for_fair_comparison: >-
+      Scenario distribution and simulator dynamics still differ from external benchmark harnesses, so the
+      number is a strong local baseline result, not a direct reproduction of every ORCA paper table.
+    interpret_result_as: family-level local baseline evidence
+  ppo:
+    classification: credible benchmark baseline
+    headline_recommendation: keep
+    paper_reference_family: End-to-end learned navigation baseline
+    paper_evaluates: >-
+      Learned end-to-end navigation policies that are usually trained and tested inside their own simulator
+      stack with task-specific observation contracts and reward shaping.
+    current_implementation: >-
+      In-repo PPO policy with known provenance, integrity-gated evaluation, and a frozen benchmark config
+      path in the camera-ready matrix.
+    missing_for_fair_comparison: >-
+      Absolute performance is still weak, so it is a credible local baseline but not evidence that our
+      learned-navigation family is competitive with the strongest published methods.
+    interpret_result_as: implementation-level local baseline evidence
+  goal:
+    classification: not suitable for headline comparison
+    headline_recommendation: control-only
+    paper_reference_family: Goal-following heuristic control baseline
+    paper_evaluates: >-
+      Simple goal-seeking behavior is usually used as a lower-bound control, not as a competitive social
+      navigation baseline.
+    current_implementation: >-
+      Native goal policy in Robot SF, now verified on the sanity matrix after the flat-observation bug fix.
+    missing_for_fair_comparison: >-
+      Nothing major is missing; this planner is intentionally simplistic and should remain a control only.
+    interpret_result_as: control-baseline evidence only
+  social_force:
+    classification: weak but honest local implementation
+    headline_recommendation: non-headline
+    paper_reference_family: Force-based interaction baseline
+    paper_evaluates: >-
+      Social-force baselines are usually evaluated with tuned force parameters, scenario-specific simulator
+      assumptions, and the source model's own crowd dynamics.
+    current_implementation: >-
+      Local Social Force adapter baseline that is benchmark-runnable and sanity-capable, but currently weak
+      on the hard matrix.
+    missing_for_fair_comparison: >-
+      We do not yet claim tuned, paper-faithful force parameters or source-harness parity, so the result
+      should be read as a local implementation result rather than a family ceiling.
+    interpret_result_as: implementation-level local baseline evidence
+  sacadrl:
+    classification: paper-reference mismatch
+    headline_recommendation: non-headline
+    paper_reference_family: SA-CADRL / GA3C-CADRL crowd-aware RL
+    paper_evaluates: >-
+      The literature evaluates the actual checkpointed crowd-aware value/policy model in its native crowd
+      simulator and test harness.
+    current_implementation: >-
+      Legacy adapter path in Robot SF with model-sensitive dependencies and historical fallback behavior;
+      currently benchmark-runnable but not validated as a faithful paper reproduction.
+    missing_for_fair_comparison: >-
+      We need fail-fast execution with the real checkpointed policy, source-harness parity checks, and a
+      documented observation/action contract match before using the result as family evidence.
+    interpret_result_as: implementation mismatch, not family-level evidence
+  prediction_planner:
+    classification: weak but honest local implementation
+    headline_recommendation: non-headline
+    paper_reference_family: In-repo predictive planning challenger
+    paper_evaluates: >-
+      Our own prediction-aware local-planning stack rather than a direct external literature family.
+    current_implementation: >-
+      Native Robot SF predictive-planner adapter with camera-ready config, reproducible checkpointing, and
+      integrity-gated benchmark execution.
+    missing_for_fair_comparison: >-
+      The implementation is honest and reproducible, but current quality is too weak for headline paper
+      comparison and should be improved before stronger claims are made.
+    interpret_result_as: implementation-level local evidence
+  socnav_sampling:
+    classification: paper-reference mismatch
+    headline_recommendation: non-headline
+    paper_reference_family: Legacy SocNav / sampling-style crowd-aware proxy
+    paper_evaluates: >-
+      Source papers and repos typically evaluate their own crowd-aware policy or planner stack under a
+      dedicated simulator and task definition.
+    current_implementation: >-
+      Legacy adapter/model-sensitive proxy in Robot SF that runs on the matrix but is not frozen as a
+      paper-faithful baseline.
+    missing_for_fair_comparison: >-
+      We need explicit source anchor selection and parity validation before interpreting the score as a
+      literature-family result.
+    interpret_result_as: implementation mismatch, not family-level evidence

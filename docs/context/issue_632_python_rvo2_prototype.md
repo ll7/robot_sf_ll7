@@ -93,6 +93,59 @@ Interpretation:
 - The probe campaign is too small and degenerate for SNQI interpretation; use it as an integration
   proof, not as a ranking benchmark.
 
+## Canonical paper-surface comparison
+
+To answer the real performance question, the explicit `Python-RVO2` ORCA path was rerun on the
+same scenario surface used by the canonical paper matrix.
+
+Compared campaigns:
+
+- frozen canonical ORCA:
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407`
+- explicit `Python-RVO2` ORCA on the same surface:
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_orca_python_rvo2_only_issue632_orca_only_paper_surface_20260319_211426`
+
+Key result:
+
+- frozen ORCA:
+  - episodes: `141`
+  - success: `0.2340`
+  - collisions: `0.0426`
+  - runtime: `98.2864s`
+  - projection rate: `0.8195`
+- explicit `Python-RVO2` ORCA:
+  - episodes: `141`
+  - success: `0.2199`
+  - collisions: `0.0355`
+  - runtime: `122.8279s`
+  - projection rate: `0.8122`
+
+Termination breakdown:
+
+- frozen ORCA:
+  - success: `33`
+  - collision: `6`
+  - max_steps: `102`
+- explicit `Python-RVO2` ORCA:
+  - success: `31`
+  - collision: `5`
+  - max_steps: `105`
+
+Interpretation:
+
+- Collision rate improves slightly.
+- Success rate gets worse.
+- Runtime gets worse materially.
+- Therefore this prototype is **not** a performance upgrade for the canonical paper matrix.
+
+Claim boundary for this comparison:
+
+- The explicit `Python-RVO2` path is a better-documented and more defensible upstream-backed ORCA
+  entry.
+- It should not replace the frozen paper ORCA numbers based on current evidence.
+- The value of this issue is provenance clarity and explicit command-space translation, not a
+  superior headline benchmark result.
+
 ## Verdict rule
 
 This issue should only claim `viable benchmark prototype` when all of the following hold:
@@ -113,3 +166,4 @@ What this issue does not prove:
 
 - paper-level ORCA parity against every external benchmark harness
 - that holonomic assumptions disappear just because the final command space is `unicycle_vw`
+- that the explicit `Python-RVO2` prototype improves ORCA performance on the paper matrix

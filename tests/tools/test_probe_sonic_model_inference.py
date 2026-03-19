@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from scripts.tools.probe_sonic_model_inference import _render_markdown, run_model_probe
+from scripts.tools.probe_sonic_model_inference import (
+    _extract_contract,
+    _render_markdown,
+    run_model_probe,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -129,6 +133,57 @@ def test_render_markdown_includes_shimmed_result() -> None:
     assert "model-only inference reproducible with shims" in markdown
     assert "gymnasium as gym module alias" in markdown
     assert "holonomic" in markdown
+
+
+def test_extract_contract_handles_missing_nested_sections() -> None:
+    """Missing intermediate config sections should not flip a successful probe to blocked."""
+    contract = _extract_contract(
+        SimpleNamespace(), SimpleNamespace(env_name="CrowdSimPredRealGST-v0")
+    )
+
+    assert contract == {
+        "robot_policy": None,
+        "human_policy": None,
+        "robot_sensor": None,
+        "predict_method": None,
+        "action_kinematics": None,
+        "env_use_wrapper": None,
+        "env_name": "CrowdSimPredRealGST-v0",
+    }
+
+
+def test_render_markdown_uses_blocked_interpretation_for_failed_shimmed_probe() -> None:
+    """Interpretation text should reflect a blocked shimmed probe."""
+    report = SimpleNamespace(
+        issue=626,
+        repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+        model_name="SoNIC_GST",
+        checkpoint="05207.pt",
+        direct_verdict="direct model import blocked",
+        direct_failure_summary="ModuleNotFoundError: No module named 'gym'",
+        shimmed_verdict="model-only inference blocked",
+        shimmed_failure_summary="RuntimeError: test failure",
+        shims_applied=["gymnasium as gym module alias"],
+        missing_state_keys=[],
+        unexpected_state_keys=[],
+        action_sample=None,
+        action_shape=None,
+        value_shape=None,
+        source_contract={
+            "robot_policy": None,
+            "human_policy": None,
+            "robot_sensor": None,
+            "predict_method": None,
+            "action_kinematics": None,
+            "env_use_wrapper": None,
+            "env_name": "CrowdSimPredRealGST-v0",
+        },
+    )
+
+    markdown = _render_markdown(report)
+
+    assert "Model-only reuse is not currently reproducible in this environment." in markdown
+    assert "technically possible, but only with narrow compatibility shims" not in markdown
 
 
 def test_run_model_probe_restores_import_state(

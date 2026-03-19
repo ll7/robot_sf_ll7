@@ -92,13 +92,18 @@ def _synthetic_inputs(
 
 
 def _extract_contract(config: Any, args: Any) -> dict[str, Any]:
+    robot = getattr(config, "robot", object())
+    humans = getattr(config, "humans", object())
+    sim = getattr(config, "sim", object())
+    action_space = getattr(config, "action_space", object())
+    env = getattr(config, "env", object())
     return {
-        "robot_policy": getattr(config.robot, "policy", None),
-        "human_policy": getattr(config.humans, "policy", None),
-        "robot_sensor": getattr(config.robot, "sensor", None),
-        "predict_method": getattr(config.sim, "predict_method", None),
-        "action_kinematics": getattr(config.action_space, "kinematics", None),
-        "env_use_wrapper": getattr(config.env, "use_wrapper", None),
+        "robot_policy": getattr(robot, "policy", None),
+        "human_policy": getattr(humans, "policy", None),
+        "robot_sensor": getattr(robot, "sensor", None),
+        "predict_method": getattr(sim, "predict_method", None),
+        "action_kinematics": getattr(action_space, "kinematics", None),
+        "env_use_wrapper": getattr(env, "use_wrapper", None),
         "env_name": getattr(args, "env_name", None),
     }
 
@@ -274,6 +279,11 @@ def run_model_probe(  # noqa: PLR0915
 
 def _render_markdown(report: ModelProbeReport) -> str:
     contract = report.source_contract
+    interpretation_line = (
+        "- Model-only reuse is technically possible, but only with narrow compatibility shims."
+        if report.shimmed_verdict == "model-only inference reproducible with shims"
+        else "- Model-only reuse is not currently reproducible in this environment."
+    )
     lines = [
         "# SoNIC Model-Only Inference Probe",
         "",
@@ -311,7 +321,7 @@ def _render_markdown(report: ModelProbeReport) -> str:
         "## Interpretation",
         "",
         "- The checkpoint is not plug-and-play in the current environment.",
-        "- Model-only reuse is technically possible, but only with narrow compatibility shims.",
+        interpretation_line,
         "- A future Robot SF adapter would still need explicit observation and action translation.",
     ]
     return "\n".join(lines) + "\n"

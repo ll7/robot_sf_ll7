@@ -241,3 +241,34 @@ def test_build_markdown_renders_decision_table_and_priority() -> None:
     assert "| orca | credible benchmark baseline | keep |" in markdown
     assert "## External Candidate Parity Gaps" in markdown
     assert "CrowdNav / SoNIC family" in markdown
+
+
+def test_build_markdown_keeps_priority_header_without_external_candidates() -> None:
+    """Priority section header should render even when parity-gap rows are absent."""
+    payload = {
+        "hard_matrix_campaign_id": "hard",
+        "sanity_campaign_id": "sanity",
+        "policy_version": "planner-quality-audit-v1",
+        "planner_audit_rows": [],
+        "headline_suite": {
+            "headline_suite": [],
+            "control_only": [],
+            "non_headline": [],
+        },
+        "external_candidates": [],
+        "reproduction_priority": [
+            {
+                "label": "CrowdNav / SoNIC family",
+                "rationale": "highest value",
+                "exact_policy_or_config_source": ["output/repos/SoNIC-Social-Nav"],
+                "expected_observation_action_contract": "obs/action",
+                "expected_scenario_and_eval_protocol": "source benchmark",
+                "wrapper_strategy": "adapter",
+                "acceptance_threshold": "match source behavior",
+            }
+        ],
+    }
+
+    markdown = _build_markdown(payload)
+    assert "## External Reproduction Priority" in markdown
+    assert "### CrowdNav / SoNIC family" in markdown

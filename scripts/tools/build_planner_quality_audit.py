@@ -187,8 +187,10 @@ def _build_markdown(payload: dict[str, Any]) -> str:
                     "",
                 ]
             )
+    reproduction_priority = payload.get("reproduction_priority", [])
+    if reproduction_priority:
         lines.extend(["## External Reproduction Priority", ""])
-    for item in payload["reproduction_priority"]:
+    for item in reproduction_priority:
         lines.extend(
             [
                 f"### {item['label']}",

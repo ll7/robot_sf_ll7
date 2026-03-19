@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Repository agent guidance now requires proof-first validation for new planners, metrics, skills, and tests, with task-appropriate executable or reproducible evidence before a change is considered complete.
+* Added a Codex-native repository context stack: strengthened `AGENTS.md`, new `code_review.md` benchmark/provenance checklist, `.agent/PLANS.md` planning convention, repo-local context skills under `.codex/skills/`, and AI-facing overview/decision docs under `docs/ai/`.
 * Promoted predictive planner checkpoint `predictive_proxy_selected_v2_xl_ego` into the model registry with a W&B-backed download entry (`ll7/robot_sf/i17pmely`).
 * Added explicit BR-06 v6, v7, and v9 auto-env PPO resubmit configs for 24-CPU Auxme jobs so queued reruns can resolve `num_envs` from the host allocation instead of staying pinned to 8 env workers.
 * Added `scripts/dev/sbatch_use_max_time.sh` plus SLURM submission docs so new batch jobs can query partition/QoS wall-time limits and default to the effective maximum at submit time.

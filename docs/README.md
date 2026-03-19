@@ -132,10 +132,11 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
 * **[Issue #535 Execution Note (Paper Matrix Freeze)](./context/issue_535_paper_matrix_freeze.md)** - Frozen paper-facing experiment matrix contract and canonical command path
-* **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
-* **[Issue #626 SoNIC Source Harness Probe](./context/issue_626_sonic_source_harness_probe.md)** - Fail-fast source-harness reproduction command, captured SoNIC contract, blocked verdict, and model-only reuse follow-up
+* **[Issue #635 SNQI v3 Paper-Facing Contract Note](./context/issue_635_snqi_v3_paper_contract.md)** - Exact SNQI v3 asset contract, delta versus the corrected pre-v3 rerun, canonical field mapping, and paper regeneration guidance
 * **[Issue #632 Python-RVO2 Prototype Note](./context/issue_632_python_rvo2_prototype.md)** - Upstream ORCA provenance, explicit velocity-to-unicycle projection contract, validation commands, and same-surface comparison showing documentation gain but no paper-matrix performance upgrade
 * **[Issue #629 Planner Zoo Research Prompt](./context/issue_629_planner_zoo_research_prompt.md)** - Deep-research prompt, evaluation rubric, and execution sequence for external local planner candidates
+* **[Issue #626 SoNIC Source Harness Probe](./context/issue_626_sonic_source_harness_probe.md)** - Fail-fast source-harness reproduction command, captured SoNIC contract, blocked verdict, and model-only reuse follow-up
+* **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 

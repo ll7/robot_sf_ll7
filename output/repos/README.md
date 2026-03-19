@@ -20,7 +20,6 @@ Do not copy code from these repositories into `robot_sf` blindly.
 
 ### Pred2Nav
 
-- Local folder: `output/repos/Pred2Nav`
 - Remote: <https://github.com/sriyash421/Pred2Nav>
 - License summary: no license file was found in the local checkout; treat the repository as reference-only until the upstream license is confirmed.
 - Recommendation: `candidate to study`
@@ -46,7 +45,6 @@ Constraints and risks:
 
 ### CrowdNav
 
-- Local folder: `output/repos/CrowdNav`
 - Remote: <https://github.com/vita-epfl/CrowdNav>
 - License summary: MIT
 - Recommendation: `assessment target for external reproduction`
@@ -66,12 +64,11 @@ Planner relevance to `robot_sf`:
 Constraints and limits:
 
 - Most of the repository is focused on RL policy training rather than reusable planner abstractions.
-- Local pretrained weights are not obviously bundled in this checkout.
+- Public pretrained weights are not obviously bundled in the upstream repository.
 - Treat CrowdNav as the family anchor, not the first runnable spike target.
 
 ### CrowdNav_DSRNN
 
-- Local folder: `output/repos/CrowdNav_DSRNN`
 - Remote: <https://github.com/Shuijing725/CrowdNav_DSRNN>
 - License summary: MIT
 - Recommendation: `family context only`
@@ -90,7 +87,6 @@ Constraints and limits:
 
 ### SoNIC-Social-Nav
 
-- Local folder: `output/repos/SoNIC-Social-Nav`
 - Remote: <https://github.com/tasl-lab/SoNIC-Social-Nav>
 - License summary: MIT at the repo root; bundled subcomponents also include their own licenses, including Apache-2.0 for `Python-RVO2`.
 - Recommendation: `assessment target for external reproduction`
@@ -110,7 +106,6 @@ Constraints and limits:
 
 ### go-mpc
 
-- Local folder: `output/repos/go-mpc`
 - Remote: <https://github.com/tud-amr/go-mpc>
 - License summary: GPL-3.0
 - Recommendation: `do not vendor`
@@ -134,7 +129,6 @@ Constraints and blockers:
 
 ### gym-collision-avoidance
 
-- Local folder: `output/repos/gym-collision-avoidance`
 - Remote: <https://github.com/mit-acl/gym-collision-avoidance>
 - License summary: MIT
 - Recommendation: `inspiration only`

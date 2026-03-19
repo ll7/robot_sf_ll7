@@ -10,14 +10,15 @@ Related issues:
 
 The merged planner audit established that the current headline local suite is limited to `orca` and
 `ppo`, while the repo still lacks a credible external attention-based family anchor. The corrected
-camera-ready benchmark evidence in
-`output/benchmarks/camera_ready/paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407/reports/planner_quality_audit.md`
+camera-ready benchmark evidence described by
+`docs/benchmark_planner_quality_audit.md`
 therefore leaves a visible paper-facing gap: current weak results for local learned planners should
 not be interpreted as evidence that attention-based crowd-navigation families are weak in general.
 
 The CrowdNav family is the right next assessment target because it is the canonical historical
-attention-based crowd-navigation benchmark line, and the local `output/repos/SoNIC-Social-Nav`
-checkout provides a more modern, pretrained, testable descendant-style reference.
+attention-based crowd-navigation benchmark line, and the upstream
+`SoNIC-Social-Nav` repository provides a more modern, pretrained, testable descendant-style
+reference.
 
 ## Canonical source assets
 
@@ -25,10 +26,10 @@ checkout provides a more modern, pretrained, testable descendant-style reference
 
 Use these files as the canonical source anchor for the original attention-based family:
 
-- `output/repos/CrowdNav/README.md`
-- `output/repos/CrowdNav/crowd_nav/test.py`
-- `output/repos/CrowdNav/crowd_nav/configs/env.config`
-- `output/repos/CrowdNav/crowd_nav/configs/policy.config`
+- [CrowdNav README](https://github.com/vita-epfl/CrowdNav/blob/master/README.md)
+- [CrowdNav test.py](https://github.com/vita-epfl/CrowdNav/blob/master/crowd_nav/test.py)
+- [CrowdNav env.config](https://github.com/vita-epfl/CrowdNav/blob/master/crowd_nav/configs/env.config)
+- [CrowdNav policy.config](https://github.com/vita-epfl/CrowdNav/blob/master/crowd_nav/configs/policy.config)
 
 Assessment:
 
@@ -36,19 +37,19 @@ Assessment:
 - It provides the canonical paper/repo lineage for attention-based crowd navigation.
 - It ships the source test entrypoint and config files needed to define the intended simulator and
   policy contract.
-- Local pretrained weights are not obviously bundled in this checkout, so it is better treated as
+- Public pretrained weights are not obviously bundled in the upstream repository, so it is better treated as
   the historical family anchor than as the immediate runnable spike target.
 
 ### SoNIC-Social-Nav: practical executable spike candidate
 
 Use these files as the practical spike anchor for a future reproduction:
 
-- `output/repos/SoNIC-Social-Nav/README.md`
-- `output/repos/SoNIC-Social-Nav/test.py`
-- `output/repos/SoNIC-Social-Nav/trained_models/SoNIC_GST/checkpoints/05207.pt`
-- `output/repos/SoNIC-Social-Nav/trained_models/GST_predictor_rand/checkpoints/41665.pt`
-- `output/repos/SoNIC-Social-Nav/trained_models/ORCA/checkpoints/05207.pt`
-- `output/repos/SoNIC-Social-Nav/trained_models/SF/checkpoints/05207.pt`
+- [SoNIC-Social-Nav README](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/README.md)
+- [SoNIC-Social-Nav test.py](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/test.py)
+- [SoNIC_GST checkpoint](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/trained_models/SoNIC_GST/checkpoints/05207.pt)
+- [GST_predictor_rand checkpoint](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/trained_models/GST_predictor_rand/checkpoints/41665.pt)
+- [ORCA checkpoint](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/trained_models/ORCA/checkpoints/05207.pt)
+- [SF checkpoint](https://github.com/tasl-lab/SoNIC-Social-Nav/blob/main/trained_models/SF/checkpoints/05207.pt)
 
 Assessment:
 
@@ -59,8 +60,9 @@ Assessment:
 
 ### CrowdNav_DSRNN: family context only
 
-Use `output/repos/CrowdNav_DSRNN/README.md` only as context for the broader CrowdNav family
-evolution. It should not be the first target for reproduction.
+Use [CrowdNav_DSRNN README](https://github.com/Shuijing725/CrowdNav_DSRNN/blob/master/README.md)
+only as context for the broader CrowdNav family evolution. It should not be the first target for
+reproduction.
 
 ## Integration shape decision
 

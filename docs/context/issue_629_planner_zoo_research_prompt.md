@@ -306,3 +306,225 @@ Important caveats:
 3. Wrap `PySocialForce` with an explicit unicycle adapter once the geometric baseline contract is
    stable.
 4. Avoid Habitat-locked imports such as `SDA` until the core planner-zoo harness is stable.
+
+## Second-pass integration intake (2026-03-19)
+
+This second-pass intake sharpens the shortlist toward candidates whose upstream code can remain
+intact, runnable, and attributable with only a thin wrapper. The central conclusion is operational:
+the best near-term additions are not necessarily the most novel methods, but the ones that preserve
+provenance while fitting the current benchmark with explicit, reviewable adapters.
+
+### Executive summary
+
+- Best immediate production candidate:
+  - `Python-RVO2`
+  - reason: permissive license, stable bindings, obvious example entrypoint, and a very small
+    provenance surface
+- Best Gymnasium-native breadth anchor:
+  - `Social-Navigation-PyEnvs`
+  - reason: already aligned with `gymnasium==0.29.1`, includes differential-drive framing, and
+    spans ORCA, social-force, and CrowdNav-family learned policies
+- Best learned-policy breadth candidate:
+  - `CrowdNav_HEIGHT`
+  - reason: MIT license, explicit test scripts, downloadable checkpoints, and a clearer learned
+    method identity than most legacy CrowdNav-lineage repos
+- Most likely dead end despite good paper results:
+  - `SoNIC-Social-Nav`
+  - reason: public release remains test or visualization heavy, Docker or NVIDIA oriented, and does
+    not yet give a complete public source-harness story
+
+Main pattern:
+
+- classical or reactive planners integrate cleanly
+- CrowdNav-lineage learned methods remain benchmark-credible but runtime-legacy
+- ROS-heavy MPC planners are method-credible but expensive to integrate faithfully into a
+  Gymnasium-first Python benchmark
+
+### Ranked candidate table
+
+| Rank | Candidate name | Upstream repo URL | Planner family | License | Language/runtime | Pretrained weights? | Source test/inference path? | Observation compatibility | Action/kinematics compatibility | Gymnasium/Python compatibility | Integration shape recommendation | Provenance-preserving import suitability | Expected wrapper effort | Benchmark credibility risk | Overall recommendation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `Python-RVO2` | cited upstream in deep audit; confirm canonical remote before import | Classical/reactive ORCA | Apache-2.0 | C++ core + Cython/Python bindings | No | Yes (`example.py`) | Needs agent positions, radii, and preferred velocity; usually derivable from benchmark state | Velocity-space / holonomic output; explicit `unicycle_vw` projection still required | High; no Gym dependency | Direct wrapper around upstream simulator | Excellent | Low | Low | `integrate next` |
+| 2 | `Social-Navigation-PyEnvs` | cited upstream in deep audit; confirm canonical remote before import | Mixed framework: ORCA, SFM/HSFM, CADRL, LSTM-RL, SARL | Apache-2.0 | Python | Unclear | Yes | Very good; structured crowd state and differential-drive robot already exist | Good; differential-drive robot and laser sensor reduce adaptation burden | Strong if the stated `gymnasium==0.29.1` claim holds | Source-harness reproduction first, then wrap selected planners | Good | Low to medium | Low to medium | `integrate next` |
+| 3 | `CrowdNav_HEIGHT` | cited upstream in deep audit; confirm canonical remote before import | Learned graph-transformer local policy | MIT | Python + PyTorch + OpenAI Baselines | Yes | Yes (`test.py` and variants) | Good if CrowdNav-style structured robot/human state is supplied | Likely velocity-style local action; nonholonomic parity must be validated explicitly | Weak for main stack; better in a side env | Model-only inference adapter after source-harness validation | Good for wrapper-only import | Medium | Medium | `prototype only` |
+| 4 | `CrowdNav` | <https://github.com/vita-epfl/CrowdNav> | Learned local policies + ORCA baseline | MIT | Python | Unclear | Yes (`train.py`, `test.py`) | Good for structured robot/human state if state contract is preserved | Benchmark-credible only if the source policy contract is preserved | Legacy stack; not main-stack native | Source-harness reproduction first | Good | Medium | Medium | `assessment only` |
+| 5 | `soc-nav-training` | cited upstream in deep audit; confirm canonical remote before import | Learned SARL variant / curriculum training | MIT | Python + Torch + legacy Gym | Yes | Yes (`train.py`, `test.py`) | Conceptually close to CrowdNav-style structured state | Same CrowdNav-lineage caveat; preserve source policy semantics | Weak for main stack; better in a side env | Model-only inference adapter if source harness runs first | Good as a pinned external source | Medium | Medium | `prototype only` |
+| 6 | `LT_DWA` | cited upstream in deep audit; confirm canonical remote before import | Classical/reactive kinodynamic DWA | MIT | ROS Noetic + C++/Python | No | Yes (ROS launch flow) | Moderate; expects ROS-world state and simulator-specific config | Strong differential-drive faithfulness | Weak for current stack; ROS side env required | Source-harness reproduction first, then ROS bridge only if justified | Fair | High | Medium | `assessment only` |
+| 7 | `lpsnav` | cited upstream in deep audit; confirm canonical remote before import | Hybrid/social policy framework | MIT | Python | No | Yes (`sim.py`) | Moderate; own scenario/config contract must be mapped | Promising; desired speed and heading interface is adapter-friendly | Python-first and light, but version support still needs confirmation | Direct wrapper or subtree import after small reproduction | Very good | Low to medium | Medium | `prototype only` |
+| 8 | `tud-amr/mpc_planner` | cited upstream in deep audit; confirm canonical remote before import | Optimization/MPC motion planner | Apache-2.0 | ROS/C++ + Python solver generation | No | Yes, via ROS/container setup | Moderate; needs path, obstacle, and cost inputs rather than benchmark-native social obs | Good for motion control, not a direct crowd-policy drop-in | Weak for main stack | Assessment only; bridge, not wrapper | Legally fine, but not lightweight | High | Medium | `assessment only` |
+| 9 | `Pred2Nav` | <https://github.com/sriyash421/Pred2Nav> | Hybrid prediction + vecMPC crowd navigation | Unclear / missing | Python + PyTorch + TensorFlow + legacy Gym | No or unclear | Yes | Moderate; conceptually close to CrowdSim-style structured state | Attractive MPC action generation, but tightly coupled to its own state/prediction contract | Weak for current stack | `reference only` unless license is clarified | Reference-only | High | High | `inspiration only` |
+| 10 | `SoNIC-Social-Nav` | <https://github.com/tasl-lab/SoNIC-Social-Nav> | Learned safe RL + uncertainty wrapper | MIT (root) | Python in Docker, NVIDIA-oriented | Yes | Yes (`test.py`, `visualize.py`) | Good on paper | Plausible for local policy reuse, but incomplete public harness blocks a faithful claim | Poor fit for main stack today | Do not use for integration now | Wrapper-only at best, with incomplete provenance | High | High | `reject` |
+| 11 | `mpc_ros` | cited upstream in deep audit; confirm canonical remote before import | Nonlinear MPC path-tracking local planner | Apache-2.0 | ROS Melodic + C++/Python tooling | No | Yes (ROS build/demo) | Low for social-nav benchmark | Good for unicycle/differential tracking, weak as a social local planner | Poor fit to current stack | Do not use except as controller inspiration | Legally fine, but family mismatch is large | High | High | `reject` |
+| 12 | `mpc_waypoint_tracking_controller` | cited upstream in deep audit; confirm canonical remote before import | Waypoint-tracking MPC local planner | Apache-2.0 | ROS/catkin C++ | No | Yes (demo launch flow) | Low for social benchmark observations | Good for `cmd_vel` generation, weak as a social local planner | Poor fit to current stack | Do not use except as control-backend inspiration | Legally fine, but benchmark-faithful reuse is weak | High | High | `reject` |
+
+### Why the top candidates rank this way
+
+#### 1. Python-RVO2
+
+- Cleanest provenance-preserving import in the set
+- compact upstream, permissive license, obvious example, and no Gym, ROS, Docker, or GPU burden
+- the real limitation is kinematics, not packaging:
+  - ORCA is fundamentally velocity-space and effectively holonomic
+  - any `unicycle_vw` projection must be explicit and benchmark-visible
+
+#### 2. Social-Navigation-PyEnvs
+
+- best ecosystem-level match to the current stack
+- unusually strong breadth anchor because it combines:
+  - Gymnasium alignment
+  - differential-drive framing
+  - classical and learned crowd-navigation methods
+- main unknown:
+  - whether learned checkpoints are actually bundled and reusable without retraining
+
+#### 3. CrowdNav_HEIGHT
+
+- strongest learned-policy candidate from an operational benchmark perspective
+- the ranking penalty is runtime age, not method quality:
+  - better treated in a frozen side environment than forced into the main Python 3.11 stack
+
+#### 4. CrowdNav and `soc-nav-training`
+
+- still matter as the canonical lineage for CADRL/LSTM-RL/SARL-style local policies
+- value is primarily lineage and benchmark credibility, not frictionless integration
+
+#### 5. LT_DWA
+
+- attractive because it is explicitly differential-drive and crowd-aware
+- ranking penalty comes from the likely need for a ROS bridge or sidecar process rather than an
+  in-process Gymnasium wrapper
+
+### Parity notes for the top candidates
+
+#### Python-RVO2
+
+- Source actually evaluates:
+  - reciprocal collision avoidance in velocity space through the RVO2/ORCA formulation
+- Must preserve:
+  - simulator parameters
+  - preferred-velocity semantics
+  - neighbor/radius/time-horizon settings
+  - explicit ORCA-family identity
+- Would break faithfulness:
+  - rewriting the avoidance logic while still calling it ORCA
+  - hiding the holonomic-to-unicycle projection in evaluation glue
+- Why it fits:
+  - minimal runtime burden and almost no provenance ambiguity
+
+#### Social-Navigation-PyEnvs
+
+- Source actually evaluates:
+  - a social-navigation framework spanning ORCA, SFM/HSFM, and CrowdNav-family learned policies in
+    a Gymnasium-style environment with a differential-drive robot
+- Must preserve:
+  - original environment dynamics
+  - human model selection
+  - policy identities and module boundaries
+- Would break faithfulness:
+  - re-encoding the policies into a benchmark-native environment while still claiming original-code
+    backing
+- Why it fits:
+  - unusually good ecosystem alignment for a breadth candidate
+
+#### CrowdNav_HEIGHT
+
+- Source actually evaluates:
+  - learned crowded-navigation inference through a heterogeneous interaction graph-transformer setup
+- Must preserve:
+  - original checkpoint
+  - graph/state construction path
+  - source test-harness behavior before wrapper work
+- Would break faithfulness:
+  - retraining in our environment and presenting the result as the upstream method
+  - reimplementing the graph/state interface from the paper alone
+- Why it fits:
+  - strong learned-policy anchor with explicit assets, but only as an external wrapped method
+
+#### LT_DWA
+
+- Source actually evaluates:
+  - kinodynamic local planning for differential wheeled robots in static and crowd environments via
+    ROS launch flows
+- Must preserve:
+  - ROS-side configuration
+  - wheel/kinodynamic assumptions
+  - original launch/evaluation path
+- Would break faithfulness:
+  - reimplementing the search/cost logic in Python instead of bridging to the upstream planner
+- Why it fits or does not fit:
+  - strong breadth addition, but not a low-effort one
+
+### Best-of selections
+
+- Best candidate for immediate prototype:
+  - `Python-RVO2`
+- Best candidate for classical/reactive breadth:
+  - `LT_DWA` if differential-drive faithfulness matters most
+  - `Python-RVO2` if friction and provenance matter most
+- Best candidate for learned-policy breadth:
+  - `CrowdNav_HEIGHT`
+- Best subtree-friendly candidate:
+  - `Python-RVO2` first
+  - `lpsnav` second
+- Most likely dead end despite good reported results:
+  - `SoNIC-Social-Nav`
+
+### Concrete execution sequence for the top 3
+
+1. `Python-RVO2`
+   - assess first:
+     - isolated Python 3.11 build/install
+     - upstream example loop
+     - benchmark-visible `velocity_vector -> unicycle_vw` projection policy
+   - run first:
+     - upstream `example.py` unmodified
+     - then a minimal benchmark adapter
+   - wrap only after source validation:
+     - yes
+   - avoid:
+     - hiding holonomic-to-unicycle projection inside evaluation plumbing
+
+2. `Social-Navigation-PyEnvs`
+   - assess first:
+     - clean install in current stack
+     - which planners are callable without retraining
+     - whether a planner-only API is possible without adopting the whole simulator
+   - run first:
+     - package install
+     - one classical baseline
+     - one learned CrowdNav-family path if available
+   - wrap only after source validation:
+     - wrap selected planner modules, not the full simulator, unless we explicitly adopt it as a
+       benchmark backend
+   - avoid:
+     - rewriting policies into benchmark-native abstractions before proving upstream parity
+
+3. `CrowdNav_HEIGHT`
+   - assess first:
+     - whether the authors' frozen side environment still runs
+     - whether downloaded checkpoints execute end-to-end via `test.py`
+     - exact state tensor and config requirements at inference
+   - run first:
+     - upstream checkpoint evaluation exactly as documented
+     - only then a one-way adapter from benchmark observation into the upstream state contract
+   - wrap only after source validation:
+     - yes
+   - avoid:
+     - porting directly into the main Python 3.11 environment before the source harness is proven
+
+### What to avoid entirely
+
+- `Pred2Nav` until the licensing situation is clarified
+- `SoNIC-Social-Nav` as a benchmark entry today
+- ROS MPC/path-tracking controllers such as `mpc_ros` or `mpc_waypoint_tracking_controller` as
+  social local planners
+
+### Final recommendation
+
+If the objective is a credible local-planner zoo with minimal wrapper work and strong provenance,
+the practical first wave is:
+
+1. `Python-RVO2` as the first production candidate
+2. `Social-Navigation-PyEnvs` as the breadth scaffold and likely second integration target
+3. `CrowdNav_HEIGHT` as the first learned external anchor, but only through side-environment
+   validation and checkpoint-backed inference wrapping

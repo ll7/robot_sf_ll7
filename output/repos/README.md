@@ -48,6 +48,34 @@ Shortlist summary:
   - recommendation: `inspiration only`
   - caveat: useful for native ports or ideas, not as a provenance-preserving benchmark import
 
+Second-pass ranking highlights:
+
+- best immediate production candidate:
+  - `Python-RVO2`
+- best Gymnasium-native breadth anchor:
+  - `Social-Navigation-PyEnvs`
+- best learned-policy breadth candidate:
+  - `CrowdNav_HEIGHT`
+- most likely dead end despite strong reported results:
+  - `SoNIC-Social-Nav`
+
+Second-pass execution order:
+
+1. `Python-RVO2`
+   - prove upstream example, then add an explicit `velocity_vector -> unicycle_vw` projection
+2. `Social-Navigation-PyEnvs`
+   - run source harness first, then wrap selected planner modules rather than the whole simulator
+3. `CrowdNav_HEIGHT`
+   - validate checkpoint-backed inference in a side environment before any main-stack adapter work
+
+Additional guardrails from the second-pass intake:
+
+- `CrowdNav_HEIGHT`, `CrowdNav`, and related learned-policy repos should stay in frozen side
+  environments until source-harness parity is demonstrated
+- ROS-heavy planners such as `LT_DWA` and MPC repos are method-credible, but they are bridge-first
+  candidates, not low-friction in-process wrappers
+- `Pred2Nav` remains blocked by unclear license status
+
 ## Repository Inventory
 
 ### Pred2Nav

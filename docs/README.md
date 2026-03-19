@@ -81,6 +81,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Getting Started
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
+* **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
+* **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
+* **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
+* **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[SLURM Submission Workflow](./dev/slurm_submission.md)** - Submit batch jobs with the effective partition/QoS max wall time by default
@@ -151,6 +155,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[UV Migration Notes](./UV_MIGRATION.md)** - Migration to UV package manager
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
 * **[Agents & Contributor Onboarding](../AGENTS.md)** - High-level repository structure, coding/testing conventions, workflow tips
+* **[Benchmark/Planner Review Guide](../code_review.md)** - Review checklist for benchmark semantics, normalization, scenario distributions, reproducibility, and provenance
 
 ### Simulation & UI
 

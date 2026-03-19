@@ -75,3 +75,41 @@ Recommended next move inside this issue:
 1. keep the fail-fast probe script as the canonical reproduction entrypoint
 2. use it to validate a dedicated SoNIC source environment
 3. do not start `#627` until the probe returns `source harness reproducible`
+
+## Model-only reuse follow-up
+
+The narrower model-only reuse question is materially better than the full source-harness result, but
+still not plug-and-play.
+
+Canonical command:
+
+```bash
+uv run python scripts/tools/probe_sonic_model_inference.py \
+  --repo-root output/repos/SoNIC-Social-Nav \
+  --model-name SoNIC_GST \
+  --checkpoint 05207.pt \
+  --output-json output/benchmarks/external/sonic_model_inference_probe/report.json \
+  --output-md output/benchmarks/external/sonic_model_inference_probe/report.md
+```
+
+Observed result:
+
+- direct model import verdict: `direct model import blocked`
+- direct failure: `AssertionError: Torch not compiled with CUDA enabled`
+- shimmed model-only verdict: `model-only inference reproducible with shims`
+- shims required:
+  - `gymnasium as gym module alias`
+  - stub `rl.networks.envs.VecNormalize`
+  - `config.policy.constant_std = false`
+- checkpoint load result:
+  - missing state keys: `['dist.logstd._bias']`
+  - unexpected state keys: `[]`
+- synthetic forward pass result:
+  - action shape: `[1, 2]`
+  - value shape: `[1, 1]`
+
+Interpretation:
+
+- The bundled SoNIC checkpoint is reusable at inference time only with narrow compatibility shims.
+- This is enough to justify future model-only adapter work.
+- It is not enough to claim source-harness parity or benchmark-readiness.

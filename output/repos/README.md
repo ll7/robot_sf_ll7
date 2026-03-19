@@ -16,6 +16,66 @@ Do not copy code from these repositories into `robot_sf` blindly.
 - `go-mpc` should not be vendored into this repository because it is GPL-3.0 and depends on a FORCESPro-generated solver.
 - `CrowdNav_DSRNN` and `SoNIC-Social-Nav` are mainly useful as alternate learning-based baseline references, not as the primary source for a new classical planner.
 
+## Research Intake Shortlist (2026-03-19)
+
+The current planner-zoo research intake adds a few high-value external candidates. These entries are
+research targets, not approved imports. Keep the same guardrails:
+
+- upstream provenance must be verified from a canonical remote URL
+- license terms must remain compatible with the intended integration shape
+- source-harness or model-only inference must be validated before any benchmark claim
+
+Shortlist summary:
+
+- `CrowdNav-SB3`
+  - recommendation: promising learned-policy candidate
+  - caveat: the intake provided a non-canonical search URL, so the exact upstream repo still needs
+    re-verification before it can be treated as a concrete integration target
+- `PySocialForce`
+  - recommendation: strong classical baseline candidate
+  - caveat: preserve the force-model implementation and add an explicit unicycle adapter rather than
+    silently treating desired velocity as executable control
+- `SocNavGym`
+  - recommendation: `prototype only`
+  - caveat: GPL-3.0 blocks direct vendoring, so any use should stay wrapper-only or external
+    dependency based
+- `SDA`
+  - recommendation: `assessment only`
+  - caveat: Habitat coupling makes direct 2D benchmark reuse high-risk
+- `RVO2-python`
+  - recommendation: strong subtree or wrapper candidate for a clean ORCA-family baseline
+- `PythonRobotics` DWA
+  - recommendation: `inspiration only`
+  - caveat: useful for native ports or ideas, not as a provenance-preserving benchmark import
+
+Second-pass ranking highlights:
+
+- best immediate production candidate:
+  - `Python-RVO2`
+- best Gymnasium-native breadth anchor:
+  - `Social-Navigation-PyEnvs`
+- best learned-policy breadth candidate:
+  - `CrowdNav_HEIGHT`
+- most likely dead end despite strong reported results:
+  - `SoNIC-Social-Nav`
+
+Second-pass execution order:
+
+1. `Python-RVO2`
+   - prove upstream example, then add an explicit `velocity_vector -> unicycle_vw` projection
+2. `Social-Navigation-PyEnvs`
+   - run source harness first, then wrap selected planner modules rather than the whole simulator
+3. `CrowdNav_HEIGHT`
+   - validate checkpoint-backed inference in a side environment before any main-stack adapter work
+
+Additional guardrails from the second-pass intake:
+
+- `CrowdNav_HEIGHT`, `CrowdNav`, and related learned-policy repos should stay in frozen side
+  environments until source-harness parity is demonstrated
+- ROS-heavy planners such as `LT_DWA` and MPC repos are method-credible, but they are bridge-first
+  candidates, not low-friction in-process wrappers
+- `Pred2Nav` remains blocked by unclear license status
+
 ## Repository Inventory
 
 ### Pred2Nav

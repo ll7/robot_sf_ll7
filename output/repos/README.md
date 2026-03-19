@@ -21,7 +21,8 @@ Do not copy code from these repositories into `robot_sf` blindly.
 ### Pred2Nav
 
 - Remote: <https://github.com/sriyash421/Pred2Nav>
-- License summary: no license file was found in the local checkout; treat the repository as reference-only until the upstream license is confirmed.
+- License summary: no license file was found in the upstream repository at review time
+  (2026-03-19); treat the repository as reference-only until the upstream license is confirmed.
 - Recommendation: `candidate to study`
 
 This repository focuses on crowd navigation with predictive MPC variants and topology-aware cost terms. It is the closest match to the current `robot_sf` benchmark gap because it couples short-horizon robot action rollouts with interchangeable pedestrian trajectory predictors.

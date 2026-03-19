@@ -1,4 +1,9 @@
-# experiment-context
+---
+name: experiment-context
+description: "Find the canonical config-first training or evaluation path, artifact lineage, and validation gates for a concrete experiment task in robot_sf_ll7."
+---
+
+# Experiment Context
 
 Use this skill when a task needs the current training/evaluation run context rather than generic
 benchmark theory.

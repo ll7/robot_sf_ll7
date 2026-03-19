@@ -52,8 +52,8 @@ Then branch by task type:
 
 ### Existing agent workflow surfaces
 
-- `.codex/skills/`: execution-oriented skills such as issue autopilot and benchmark analysis
-- `.agents/skills/`: repo-local context-pack skills for understanding benchmark/planner/doc surfaces
+- `.codex/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
+  planner, experiment, and documentation work
 
 ## Working Style Defaults
 

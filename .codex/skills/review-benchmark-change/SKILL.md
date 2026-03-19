@@ -1,4 +1,9 @@
-# review-benchmark-change
+---
+name: review-benchmark-change
+description: "Review benchmark-sensitive code or docs changes for semantic regressions, normalization drift, reproducibility gaps, and provenance overclaim."
+---
+
+# Review Benchmark Change
 
 Use this skill when reviewing a PR, patch, or doc change that could alter benchmark outcomes or
 their interpretation.

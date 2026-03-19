@@ -1,4 +1,9 @@
-# planner-integration
+---
+name: planner-integration
+description: "Assess planner-family integration feasibility, adapter burden, provenance safety, and benchmark-readiness boundaries in robot_sf_ll7."
+---
+
+# Planner Integration
 
 Use this skill when evaluating, wrapping, or documenting a planner family for benchmark use.
 

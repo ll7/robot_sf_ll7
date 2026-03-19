@@ -38,7 +38,7 @@ Until then, prefer:
 
 1. repo-local instructions,
 2. focused docs under `docs/ai/`,
-3. `.agents/skills/` context packs,
+3. `.codex/skills/` context packs,
 4. manual or scripted context bundles via the chosen packer.
 
 ## What This Prevents

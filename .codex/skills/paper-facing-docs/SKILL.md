@@ -1,4 +1,9 @@
-# paper-facing-docs
+---
+name: paper-facing-docs
+description: "Draft or review benchmark and manuscript-support docs conservatively, with explicit provenance, reproducibility, and caveat handling."
+---
+
+# Paper-Facing Docs
 
 Use this skill for docs that influence benchmark interpretation, manuscript support, or public
 artifact/provenance claims.

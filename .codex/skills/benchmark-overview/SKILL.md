@@ -1,4 +1,9 @@
-# benchmark-overview
+---
+name: benchmark-overview
+description: "Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts, and reproducibility constraints in robot_sf_ll7."
+---
+
+# Benchmark Overview
 
 Use this skill when a task needs a fast, benchmark-faithful understanding of how this repository
 defines scenarios, seeds, baselines, metrics, and output artifacts.

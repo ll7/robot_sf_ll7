@@ -5,6 +5,17 @@ This document covers briefly the repository structure, coding style, testing wor
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 
+## Codex Context Stack
+Treat the following files as the repository-native context stack for Codex-style agents:
+
+- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+- `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
+- `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
+- `.agents/skills/`: repo-local context-pack skills for benchmark, planner, experiment, and paper-facing work.
+- `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
+
+Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
+
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
@@ -42,6 +53,16 @@ When referencing files in PRs, issue comments, docs, and agent responses, use re
 - When citing metric values, add one line interpreting the implication (for example, safety improved but success unchanged).
 - If uncertainty remains, clearly separate observed evidence from hypothesis.
 
+## Planning Convention
+
+For non-trivial work, follow `.agent/PLANS.md`:
+- restate the goal and boundaries first,
+- list evidence sources before implementation,
+- keep validation commands explicit,
+- record follow-up risks separately from completed scope.
+
+Do not treat plans as throwaway scratch text when they influence benchmark semantics, model provenance, or public docs.
+
 ## Key Codex Skills
 
 For issue management and delivery, use these local skills:
@@ -54,6 +75,14 @@ For issue management and delivery, use these local skills:
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
 - `.codex/skills/analyze-camera-ready-benchmark/SKILL.md`
   - Runs consistency diagnostics for camera-ready benchmark campaigns and summarizes runtime/quality/fallback signals.
+
+Use the repo-local context skills under `.agents/skills/` when the task is primarily about understanding or reviewing benchmark/planner context rather than executing GitHub workflow automation:
+
+- `.agents/skills/benchmark-overview/SKILL.md`
+- `.agents/skills/experiment-context/SKILL.md`
+- `.agents/skills/planner-integration/SKILL.md`
+- `.agents/skills/paper-facing-docs/SKILL.md`
+- `.agents/skills/review-benchmark-change/SKILL.md`
 
 ## Donts
 

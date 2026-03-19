@@ -15,19 +15,20 @@ that are:
 
 ## Current Planner Readiness Frame
 
-Use `docs/benchmark_planner_family_coverage.md` as the source of truth.
+Use `docs/benchmark_planner_family_coverage.md` as the source of truth for readiness categories and
+benchmark-facing terminology.
 
-Safe benchmark-facing families today:
+Implemented and benchmarkable families today:
 
 - `goal`
 - `social_force`
 - `orca`
 
-Benchmarkable but still promotion-sensitive:
+Implemented but experimental families today:
 
 - `ppo`
 
-Implemented but still experimental or testing-only:
+Conceptually adjacent only or testing-only entries:
 
 - `guarded_ppo`
 - `prediction_planner`

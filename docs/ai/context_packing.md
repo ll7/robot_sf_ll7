@@ -11,7 +11,7 @@ repository.
 
 ## Why Repomix Wins For This Repo
 
-This repository needs focused, regenerable context bundles for benchmark, planner, and training
+This repository needs focused and regenerable context bundles for benchmark, planner, and training
 subsystems. Repomix is the better default because it combines the features that matter most for
 that workflow:
 

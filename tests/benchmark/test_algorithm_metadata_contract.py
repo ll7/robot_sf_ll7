@@ -44,6 +44,23 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["adapted_steps"] == 0
 
 
+def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
+    """ORCA metadata should make the upstream source and projection policy explicit."""
+    meta = enrich_algorithm_metadata(
+        algo="orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/mit-acl/Python-RVO2"
+    assert upstream["vendored_path"] == "third_party/python-rvo2"
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

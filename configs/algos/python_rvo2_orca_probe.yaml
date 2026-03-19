@@ -1,0 +1,6 @@
+allow_fallback: false
+provenance:
+  upstream_repo: https://github.com/mit-acl/Python-RVO2
+  upstream_commit: 56b245132ea104ee8a621ddf65b8a3dd85028ed2
+  vendored_path: third_party/python-rvo2
+  projection_policy: heading_safe_velocity_to_unicycle_vw

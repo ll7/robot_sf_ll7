@@ -1148,6 +1148,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     if "status" not in meta:
         meta["status"] = "ok"
     meta["config"] = algo_config
+    provenance = algo_config.get("provenance")
+    if isinstance(provenance, dict):
+        meta["provenance"] = provenance
     meta["config_hash"] = _config_hash(algo_config)
     meta = enrich_algorithm_metadata(
         algo=algo_key,

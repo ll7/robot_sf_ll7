@@ -187,6 +187,25 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_orca_preserves_provenance_metadata() -> None:
+    """Ensure ORCA metadata carries explicit upstream provenance and projection fields."""
+    _, meta = _build_policy(
+        "orca",
+        {
+            "allow_fallback": False,
+            "provenance": {
+                "upstream_repo": "https://github.com/mit-acl/Python-RVO2",
+                "upstream_commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["provenance"]["upstream_repo"] == "https://github.com/mit-acl/Python-RVO2"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"

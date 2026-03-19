@@ -1,0 +1,22 @@
+name: python_rvo2_orca_probe
+paper_facing: false
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+workers: 1
+horizon: 150
+stop_on_failure: true
+resume: true
+record_forces: false
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    algo_config: configs/algos/python_rvo2_orca_probe.yaml

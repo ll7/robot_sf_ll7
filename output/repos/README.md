@@ -192,7 +192,7 @@ Constraints and blockers:
 
 - Remote: <https://github.com/mit-acl/gym-collision-avoidance>
 - License summary: MIT
-- Recommendation: `assessment target for external reproduction`
+- Recommendation: `prototype only`
 
 This repository is a mature collision-avoidance benchmark environment with historical SA-CADRL, GA3C-CADRL, PPO-CADRL, and RVO baselines plus bundled learned-policy checkpoints.
 

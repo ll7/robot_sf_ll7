@@ -79,6 +79,54 @@ def _as_matrix(value: Any, *, cols: int) -> np.ndarray:
     return arr.reshape(-1, cols)
 
 
+def _robot_goal_observation_fields(
+    observation: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, float, float, float]:
+    """Extract required robot/goal state from nested or flat observation variants.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, float, float, float]: Robot position, goal position,
+        heading, speed, and robot radius.
+    """
+    if "robot" in observation:
+        robot_state = observation.get("robot", {})
+        goal_state = observation.get("goal", {})
+        robot_pos = _require_array(robot_state.get("position"), size=2, field="robot.position")
+        goal_pos = _require_array(goal_state.get("current"), size=2, field="goal.current")
+        heading = float(
+            _require_array(robot_state.get("heading"), size=1, field="robot.heading")[0]
+        )
+        speed = float(_require_array(robot_state.get("speed"), size=1, field="robot.speed")[0])
+        radius = float(_as_array(robot_state.get("radius"), pad=1, fill=0.3)[0])
+        return robot_pos, goal_pos, heading, speed, radius
+
+    robot_pos = _require_array(observation.get("robot_position"), size=2, field="robot_position")
+    goal_pos = _require_array(observation.get("goal_current"), size=2, field="goal_current")
+    heading = float(
+        _require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0]
+    )
+    speed = float(_require_array(observation.get("robot_speed"), size=1, field="robot_speed")[0])
+    radius = float(_as_array(observation.get("robot_radius"), pad=1, fill=0.3)[0])
+    return robot_pos, goal_pos, heading, speed, radius
+
+
+def _current_heading(observation: dict[str, Any]) -> float:
+    """Extract the robot heading from nested or flat observation variants.
+
+    Returns:
+        float: Robot heading in radians.
+    """
+    if "robot" in observation:
+        return float(
+            _require_array(
+                observation.get("robot", {}).get("heading"),
+                size=1,
+                field="robot.heading",
+            )[0]
+        )
+    return float(_require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0])
+
+
 @contextmanager
 def _upstream_import_context(repo_root: Path) -> Iterator[None]:
     """Temporarily prepend the upstream repo root and restore import state."""
@@ -134,17 +182,9 @@ class SocialNavigationPyEnvsORCAAdapter:
         Returns:
             Any: Upstream ``JointState`` instance for ORCA inference.
         """
+        robot_pos, goal_pos, heading, speed, radius = _robot_goal_observation_fields(observation)
         if "robot" in observation:
-            robot_state = observation.get("robot", {})
-            goal_state = observation.get("goal", {})
             ped_state = observation.get("pedestrians", {})
-            robot_pos = _require_array(robot_state.get("position"), size=2, field="robot.position")
-            goal_pos = _require_array(goal_state.get("current"), size=2, field="goal.current")
-            heading = float(
-                _require_array(robot_state.get("heading"), size=1, field="robot.heading")[0]
-            )
-            speed = float(_require_array(robot_state.get("speed"), size=1, field="robot.speed")[0])
-            radius = float(_as_array(robot_state.get("radius"), pad=1, fill=0.3)[0])
             ped_positions = _as_matrix(ped_state.get("positions"), cols=2)
             ped_velocities = _as_matrix(ped_state.get("velocities"), cols=2)
             ped_count = (
@@ -154,17 +194,6 @@ class SocialNavigationPyEnvsORCAAdapter:
             )
             ped_radius_value = float(_as_array(ped_state.get("radius"), pad=1, fill=0.3)[0])
         else:
-            robot_pos = _require_array(
-                observation.get("robot_position"), size=2, field="robot_position"
-            )
-            goal_pos = _require_array(observation.get("goal_current"), size=2, field="goal_current")
-            heading = float(
-                _require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0]
-            )
-            speed = float(
-                _require_array(observation.get("robot_speed"), size=1, field="robot_speed")[0]
-            )
-            radius = float(_as_array(observation.get("robot_radius"), pad=1, fill=0.3)[0])
             ped_positions = _as_matrix(observation.get("pedestrians_positions"), cols=2)
             ped_velocities = _as_matrix(observation.get("pedestrians_velocities"), cols=2)
             ped_count = (
@@ -215,12 +244,7 @@ class SocialNavigationPyEnvsORCAAdapter:
         vx = float(action.vx)
         vy = float(action.vy)
         speed = float(np.hypot(vx, vy))
-        if "robot" in observation:
-            current_heading = float(
-                _as_array(observation.get("robot", {}).get("heading"), pad=1)[0]
-            )
-        else:
-            current_heading = float(_as_array(observation.get("robot_heading"), pad=1)[0])
+        current_heading = _current_heading(observation)
         desired_heading = float(math.atan2(vy, vx)) if speed > 1e-8 else current_heading
         heading_error = _normalize_angle(desired_heading - current_heading)
         dt = max(float(time_step), 1e-6)

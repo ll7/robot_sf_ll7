@@ -58,6 +58,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
     ),
     AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_hsfm_new_guo",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_hsfm_new_guo", "social_nav_pyenvs_hsfm_new_guo"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),

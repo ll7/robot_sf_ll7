@@ -1,0 +1,27 @@
+name: social_navigation_pyenvs_force_models_probe
+paper_facing: false
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+workers: 1
+horizon: 150
+stop_on_failure: false
+resume: true
+record_forces: false
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: social_navigation_pyenvs_socialforce
+    algo: social_navigation_pyenvs_socialforce
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/social_navigation_pyenvs_socialforce_probe.yaml
+  - key: social_navigation_pyenvs_sfm_helbing
+    algo: social_navigation_pyenvs_sfm_helbing
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/social_navigation_pyenvs_sfm_helbing_probe.yaml

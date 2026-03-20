@@ -62,6 +62,10 @@ from robot_sf.planner.predictive_mppi import (
     build_predictive_mppi_config,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.social_navigation_pyenvs_force_model import (
+    SocialNavigationPyEnvsForceModelAdapter,
+    build_social_navigation_pyenvs_force_model_config,
+)
 from robot_sf.planner.social_navigation_pyenvs_orca import (
     SocialNavigationPyEnvsORCAAdapter,
     build_social_navigation_pyenvs_orca_config,
@@ -95,6 +99,10 @@ _SOCNAV_ALGO_KEYS = {
     "hybrid_portfolio",
     "social_navigation_pyenvs_orca",
     "social_nav_pyenvs_orca",
+    "social_navigation_pyenvs_socialforce",
+    "social_nav_pyenvs_socialforce",
+    "social_navigation_pyenvs_sfm_helbing",
+    "social_nav_pyenvs_sfm_helbing",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1127,6 +1135,20 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
         adapter = SocialNavigationPyEnvsORCAAdapter(
             config=build_social_navigation_pyenvs_orca_config(algo_config)
+        )
+    elif algo_key in {"social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"}:
+        adapter = SocialNavigationPyEnvsForceModelAdapter(
+            config=build_social_navigation_pyenvs_force_model_config(
+                algo_config,
+                default_policy_name="socialforce",
+            )
+        )
+    elif algo_key in {"social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"}:
+        adapter = SocialNavigationPyEnvsForceModelAdapter(
+            config=build_social_navigation_pyenvs_force_model_config(
+                algo_config,
+                default_policy_name="sfm_helbing",
+            )
         )
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))

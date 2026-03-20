@@ -15,6 +15,8 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "social_force": "classical",
     "orca": "classical",
     "social_navigation_pyenvs_orca": "classical",
+    "social_navigation_pyenvs_socialforce": "classical",
+    "social_navigation_pyenvs_sfm_helbing": "classical",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
@@ -39,6 +41,8 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
     "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
+    "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
+    "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -79,6 +83,28 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "Robot SF unicycle_vw commands."
         ),
     },
+    "social_navigation_pyenvs_socialforce": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream SocialForce predict(), then project ActionXY "
+            "into Robot SF unicycle_vw commands."
+        ),
+    },
+    "social_navigation_pyenvs_sfm_helbing": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream SFM-Helbing predict(), then project ActionXY "
+            "into Robot SF unicycle_vw commands."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -112,6 +138,28 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "SocialNavigationPyEnvsORCAAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_socialforce": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_sfm_helbing": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
         "upstream_command_space": "velocity_vector_xy",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",

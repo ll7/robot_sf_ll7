@@ -9,18 +9,19 @@ Related issues:
 ## Goal
 
 Correct the self-velocity contract used by `social_navigation_pyenvs_orca` so raw upstream
-`ActionXY` parity is not broken by reconstructing self velocity from `heading + scalar speed` when
-an explicit planar velocity is available.
+`ActionXY` parity is not broken by reconstructing self-velocity from `heading + scalar speed` when
+an explicit planar self-velocity is available.
 
 ## Implementation decision
 
-Robot SF now exposes an explicit world-frame planar self velocity in SocNav structured observations:
+Robot SF now exposes an explicit world-frame planar self-velocity in SocNav structured observations:
 
 - nested field: `robot.velocity_xy`
 - flattened field: `robot_velocity_xy`
 
-The `SocialNavigationPyEnvsORCAAdapter` now prefers that explicit planar velocity when present and
-falls back to `linear_speed + heading` reconstruction only when no planar velocity is available.
+The `SocialNavigationPyEnvsORCAAdapter` now prefers that explicit planar self-velocity when present
+and falls back to `linear_speed + heading` reconstruction only when no planar self-velocity is
+available.
 
 This is a real contract correction, not a hidden heuristic:
 
@@ -71,7 +72,7 @@ Key scenario evidence:
 Interpretation:
 
 - the previous `#649` mismatch was a real adapter bug
-- after consuming explicit planar self velocity, the adapter matches upstream raw `ActionXY`
+- after consuming explicit planar self-velocity, the adapter matches upstream raw `ActionXY`
   selection on the tested upstream scenarios
 - the remaining fidelity gap is no longer in raw upstream policy inference
 

@@ -288,7 +288,7 @@ class SocialNavigationPyEnvsORCAAdapter:
             for i in range(ped_count)
         ]
         joint_state = self._JointState(self_state, humans)
-        joint_state._robot_sf_velocity_source = velocity_source
+        joint_state.robot_sf_velocity_source = velocity_source
         return joint_state
 
     def act(
@@ -330,9 +330,7 @@ class SocialNavigationPyEnvsORCAAdapter:
                 "projected_command_vw": [linear, angular],
                 "heading_error_rad": heading_error,
                 "projection_policy": self.projection_policy,
-                "self_velocity_source": getattr(
-                    joint_state, "_robot_sf_velocity_source", "unknown"
-                ),
+                "self_velocity_source": getattr(joint_state, "robot_sf_velocity_source", "unknown"),
             },
         )
 

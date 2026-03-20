@@ -192,23 +192,28 @@ Constraints and blockers:
 
 - Remote: <https://github.com/mit-acl/gym-collision-avoidance>
 - License summary: MIT
-- Recommendation: `inspiration only`
+- Recommendation: `prototype only`
 
-This repository is a mature crowd and multi-agent collision-avoidance environment with historical CADRL, GA3C-CADRL, and RVO baselines.
+This repository is a mature collision-avoidance benchmark environment with historical SA-CADRL, GA3C-CADRL, PPO-CADRL, and RVO baselines plus bundled learned-policy checkpoints.
 
-Relevant upstream file:
+Relevant upstream files:
 
+- Example entrypoint: [example.py](https://github.com/mit-acl/gym-collision-avoidance/blob/master/gym_collision_avoidance/experiments/src/example.py)
+- CADRL policy: [CADRLPolicy.py](https://github.com/mit-acl/gym-collision-avoidance/blob/master/gym_collision_avoidance/envs/policies/CADRLPolicy.py)
+- GA3C-CADRL policy: [GA3CCADRLPolicy.py](https://github.com/mit-acl/gym-collision-avoidance/blob/master/gym_collision_avoidance/envs/policies/GA3CCADRLPolicy.py)
 - RVO policy: [RVOPolicy.py](https://github.com/mit-acl/gym-collision-avoidance/blob/master/gym_collision_avoidance/envs/policies/RVOPolicy.py)
 
 Planner relevance to `robot_sf`:
 
-- Useful benchmark context for classical and learned collision-avoidance baselines.
-- Useful as a reference for how an RVO policy is integrated into a multi-agent benchmark environment.
+- Best historical external reference for the SA-CADRL / GA3C-CADRL family.
+- Strong candidate for a fail-fast source-harness reproduction spike because the repo includes runnable entrypoints and bundled learned checkpoints.
+- Lower value as an ORCA import target because `Python-RVO2` already provides a cleaner upstream-backed ORCA path.
 
 Constraints and limits:
 
-- The architecture differs significantly from `robot_sf`.
-- The dependency and policy stack is older and not a clean drop-in for current benchmark code.
+- The stack is still built around legacy `gym` and TensorFlow-era learned policies.
+- Observation packing and normalization are strongly source-specific.
+- Treat it as `prototype only`: source-harness reproduction first, then a wrapper only if parity is demonstrated.
 
 ## Recommended Benchmark Directions
 

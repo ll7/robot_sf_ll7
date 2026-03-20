@@ -36,11 +36,18 @@ def build_social_navigation_pyenvs_orca_config(
     """
     payload = data or {}
     repo_root_raw = payload.get("repo_root", "output/repos/Social-Navigation-PyEnvs")
+    preferred_speed = float(payload.get("preferred_speed", 1.0))
+    max_linear_speed = float(payload.get("max_linear_speed", 1.0))
+    max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if preferred_speed < 0.0 or max_linear_speed < 0.0 or max_angular_speed < 0.0:
+        raise ValueError(
+            "preferred_speed, max_linear_speed, and max_angular_speed must be non-negative"
+        )
     return SocialNavigationPyEnvsORCAConfig(
         repo_root=Path(str(repo_root_raw)),
-        preferred_speed=float(payload.get("preferred_speed", 1.0)),
-        max_linear_speed=float(payload.get("max_linear_speed", 1.0)),
-        max_angular_speed=float(payload.get("max_angular_speed", 1.0)),
+        preferred_speed=preferred_speed,
+        max_linear_speed=max_linear_speed,
+        max_angular_speed=max_angular_speed,
     )
 
 
@@ -129,7 +136,13 @@ def _current_heading(observation: dict[str, Any]) -> float:
 
 @contextmanager
 def _upstream_import_context(repo_root: Path) -> Iterator[None]:
-    """Temporarily prepend the upstream repo root and restore import state."""
+    """Temporarily prepend the upstream repo root and restore import state.
+
+    Warning:
+        This helper mutates global ``sys.path`` and ``sys.modules`` and is not thread-safe.
+        Use it only in single-threaded contexts or guard concurrent calls with external
+        synchronization if different ``repo_root`` values may be active at the same time.
+    """
     repo_str = str(repo_root)
     original_path = list(sys.path)
     original_modules = {

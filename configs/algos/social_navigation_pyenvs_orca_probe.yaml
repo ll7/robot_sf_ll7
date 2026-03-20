@@ -4,6 +4,7 @@ max_linear_speed: 1.0
 max_angular_speed: 1.0
 provenance:
   upstream_repo: https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs
+  upstream_commit: f9cd244d3e529247ca1031364de22954717b9493
   checkout_path: output/repos/Social-Navigation-PyEnvs
   upstream_policy: crowd_nav.policy_no_train.orca.ORCA
   projection_policy: heading_safe_velocity_to_unicycle_vw

@@ -93,6 +93,8 @@ _SOCNAV_ALGO_KEYS = {
     "sa_cadrl",
     "socnav_bench",
     "hybrid_portfolio",
+    "social_navigation_pyenvs_orca",
+    "social_nav_pyenvs_orca",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",

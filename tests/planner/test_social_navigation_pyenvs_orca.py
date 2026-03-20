@@ -64,6 +64,12 @@ def test_build_config_uses_repo_relative_default() -> None:
     assert cfg.repo_root == Path("output/repos/Social-Navigation-PyEnvs")
 
 
+def test_build_config_rejects_negative_speed_limits() -> None:
+    """Config builder should fail fast on negative speed parameters."""
+    with pytest.raises(ValueError, match="must be non-negative"):
+        build_social_navigation_pyenvs_orca_config({"preferred_speed": -0.1})
+
+
 def test_adapter_maps_flat_observation_into_upstream_policy(tmp_path: Path) -> None:
     """Flat map-runner observations should produce projected unicycle commands."""
     repo_root = tmp_path / "repo"

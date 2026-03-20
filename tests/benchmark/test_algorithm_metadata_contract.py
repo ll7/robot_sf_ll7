@@ -105,6 +105,21 @@ def test_social_navigation_pyenvs_force_model_metadata_exposes_upstream_wrapper_
     )
 
 
+def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract() -> None:
+    """Prototype external HSFM metadata should expose headed upstream command semantics."""
+    meta = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_hsfm_new_guo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert planner["upstream_command_space"] == "body_velocity_xy_plus_omega"
+    assert planner["projection_policy"] == "body_velocity_heading_safe_to_unicycle_vw"
+    assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

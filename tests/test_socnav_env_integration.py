@@ -15,3 +15,12 @@ def test_socnav_policy_runs_single_step():
     new_obs, _, _, _, info = env.step(action)
     assert env.observation_space.contains(new_obs)
     assert "success" in info
+
+
+def test_socnav_structured_observation_exposes_robot_velocity_xy():
+    """Structured SocNav observations should expose explicit world-frame robot velocity."""
+    env = RobotEnv(env_config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT))
+    obs, _ = env.reset()
+
+    assert "velocity_xy" in obs["robot"]
+    assert len(obs["robot"]["velocity_xy"]) == 2

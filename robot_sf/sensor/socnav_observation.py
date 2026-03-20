@@ -69,6 +69,11 @@ def socnav_observation_space(
                         high=speed_bounds,
                         dtype=np.float32,
                     ),
+                    "velocity_xy": spaces.Box(
+                        low=-speed_bounds,
+                        high=speed_bounds,
+                        dtype=np.float32,
+                    ),
                     "radius": spaces.Box(
                         low=radius_bounds,
                         high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
@@ -165,6 +170,25 @@ class SocNavObservationFusion:
         """No-op to match the SensorFusion interface."""
         return None
 
+    def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
+        """Return the robot world-frame planar velocity for the structured observation."""
+        robot = self.simulator.robots[self.robot_index]
+        velocity_xy = getattr(getattr(robot, "state", None), "velocity_xy", None)
+        if velocity_xy is not None:
+            arr = np.asarray(velocity_xy, dtype=np.float32).reshape(-1)
+            if arr.size >= 2:
+                return arr[:2]
+
+        current_speed = np.asarray(robot.current_speed, dtype=np.float32).reshape(-1)
+        linear_speed = float(current_speed[0]) if current_speed.size > 0 else 0.0
+        return np.array(
+            [
+                linear_speed * float(np.cos(wrapped_heading)),
+                linear_speed * float(np.sin(wrapped_heading)),
+            ],
+            dtype=np.float32,
+        )
+
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
@@ -235,11 +259,13 @@ class SocNavObservationFusion:
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
+        robot_velocity_xy = self._robot_velocity_xy(wrapped_heading)
         obs = {
             "robot": {
                 "position": robot_pos_clipped,
                 "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
+                "velocity_xy": robot_velocity_xy,
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),

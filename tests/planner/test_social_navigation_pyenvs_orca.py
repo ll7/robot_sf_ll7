@@ -58,6 +58,42 @@ class ORCA:
     )
 
 
+def _write_velocity_echo_upstream_repo(repo_root: Path) -> None:
+    _write(repo_root / "crowd_nav" / "__init__.py", "")
+    _write(
+        repo_root / "crowd_nav" / "utils" / "action.py",
+        "from collections import namedtuple\nActionXY = namedtuple('ActionXY', ['vx', 'vy'])\n",
+    )
+    _write(
+        repo_root / "crowd_nav" / "utils" / "state.py",
+        """
+class FullState:
+    def __init__(self, px, py, vx, vy, radius, gx, gy, v_pref, theta):
+        self.px=px; self.py=py; self.vx=vx; self.vy=vy
+        self.radius=radius; self.gx=gx; self.gy=gy; self.v_pref=v_pref; self.theta=theta
+        self.position=(px, py); self.goal_position=(gx, gy); self.velocity=(vx, vy)
+
+class ObservableState:
+    def __init__(self, px, py, vx, vy, radius):
+        self.px=px; self.py=py; self.vx=vx; self.vy=vy; self.radius=radius
+
+class JointState:
+    def __init__(self, self_state, human_states):
+        self.self_state=self_state; self.human_states=human_states
+""",
+    )
+    _write(
+        repo_root / "crowd_nav" / "policy_no_train" / "orca.py",
+        """
+from crowd_nav.utils.action import ActionXY
+
+class ORCA:
+    def predict(self, state):
+        return ActionXY(state.self_state.vx, state.self_state.vy)
+""",
+    )
+
+
 def test_build_config_uses_repo_relative_default() -> None:
     """Config builder should keep the upstream checkout path explicit."""
     cfg = build_social_navigation_pyenvs_orca_config({})
@@ -160,6 +196,39 @@ def test_adapter_fails_fast_on_missing_required_fields(tmp_path: Path) -> None:
                 "sim": {"timestep": 0.1},
             }
         )
+
+
+def test_adapter_prefers_explicit_velocity_xy_over_heading_speed(tmp_path: Path) -> None:
+    """Explicit planar self velocity should override heading-plus-speed reconstruction."""
+    repo_root = tmp_path / "repo"
+    _write_velocity_echo_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsORCAAdapter(
+        build_social_navigation_pyenvs_orca_config({"repo_root": str(repo_root)})
+    )
+
+    _command_v, _command_w, meta = adapter.act(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.0],
+                "speed": [0.6, 0.0],
+                "velocity_xy": [0.0, -0.4],
+                "radius": [0.3],
+            },
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {
+                "positions": [],
+                "velocities": [],
+                "count": [0],
+                "radius": [0.3],
+            },
+            "sim": {"timestep": 0.1},
+        },
+        time_step=0.1,
+    )
+
+    assert meta["upstream_action_xy"] == pytest.approx([0.0, -0.4])
+    assert meta["self_velocity_source"] == "robot.velocity_xy"
 
 
 def test_upstream_import_context_restores_crowd_nav_modules(tmp_path: Path) -> None:

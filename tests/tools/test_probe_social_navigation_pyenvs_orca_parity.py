@@ -155,3 +155,33 @@ def test_render_markdown_records_parallel_traffic_failure_mode(tmp_path: Path) -
     assert "parallel_traffic_orca" in markdown
     assert "wrapper mean ActionXY error" in markdown
     assert "self-velocity contract" in markdown
+
+
+def test_render_markdown_updates_interpretation_for_clean_parity(tmp_path: Path) -> None:
+    """Clean parity verdicts should not keep the old mismatch interpretation text."""
+    report = probe.ParityReport(
+        issue=649,
+        repo_root=str(tmp_path / "repo"),
+        repo_remote_url="https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        verdict="adapter appears source-faithful but benchmark-misaligned",
+        root_cause="Raw upstream ActionXY traces match across the tested upstream scenarios.",
+        projection_role=(
+            "Remaining performance differences would then be explained primarily by scenario "
+            "mismatch and downstream unicycle execution."
+        ),
+        scenarios=[
+            _scenario(
+                name="parallel_traffic_orca",
+                wrapper_mean=0.0,
+                wrapper_max=0.0,
+                oracle_mean=0.0,
+                oracle_max=0.0,
+                mismatch_steps=6,
+            )
+        ],
+    )
+
+    markdown = probe._render_markdown(report)
+
+    assert "now also matches upstream raw `ActionXY`" in markdown
+    assert "cannot reconstruct the same self velocity" not in markdown

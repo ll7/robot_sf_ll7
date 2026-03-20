@@ -81,6 +81,12 @@ uv run --with socialforce python -c "from social_gym.social_nav_sim import Socia
 uv run --with socialforce --with-requirements requirements.txt python -c "print('requirements_ok')"
 ```
 
+8. shimmed non-trainable ORCA reset-and-step proof
+
+```bash
+uv run --with socialforce python -c "import configparser; import numpy as np; np.NaN = np.nan; ..."
+```
+
 ## Current result
 
 Verdict: `source harness partially reproducible`
@@ -91,6 +97,8 @@ Observed positive signals:
 - upstream simulator core boots once `socialforce` is injected ephemerally,
 - upstream non-trainable policy registry imports successfully,
 - upstream robot-side `orca` motion-model activation succeeds without patching local source.
+- a narrow local compatibility shim is enough to reset and step the upstream non-trainable `orca`
+  path once.
 
 Primary blocker for full env creation:
 
@@ -109,6 +117,8 @@ Interpretation:
   - missing `socialforce`,
   - `np.NaN` under NumPy 2,
   - and legacy learned-stack pins for a fully faithful reproduction.
+- for non-trainable planners, those compatibility boundaries are now concrete enough to justify a
+  prototype wrapper path.
 
 ## Extracted source contract
 
@@ -154,7 +164,8 @@ What is justified now:
 
 1. treat this repo as the next promising external candidate,
 2. keep wrapper work narrow and benchmark-visible,
-3. decide explicitly between:
+3. treat non-trainable planner integration as a real prototype path rather than another assessment,
+4. decide explicitly between:
    - a minimal local compatibility path (`socialforce` + NumPy 2 patch boundary), or
    - a side environment for stricter upstream pin fidelity.
 

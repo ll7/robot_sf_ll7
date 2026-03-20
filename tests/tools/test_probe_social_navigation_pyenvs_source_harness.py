@@ -122,6 +122,14 @@ def test_run_probe_marks_partial_reproducibility(
             "",
             "requirements are unsatisfiable",
         ),
+        "shimmed_orca_reset_step": probe.CommandResult(
+            "shimmed_orca_reset_step",
+            ["uv"],
+            0,
+            None,
+            "shim_ok 5 ActionXY 5 False False",
+            "",
+        ),
     }
 
     def fake_run(
@@ -140,6 +148,10 @@ def test_run_probe_marks_partial_reproducibility(
     assert report.source_contract["robot_actuation"] == "differential_drive"
     assert report.source_contract["gymnasium_version"] == "0.29.1"
     assert report.source_contract["non_trainable_policies"] == ["bp", "none", "orca", "socialforce"]
+    assert (
+        "install socialforce extra dependency"
+        in report.source_contract["minimal_local_compatibility_shims"]
+    )
 
 
 def test_run_probe_marks_blocked_when_simulator_fails(
@@ -207,10 +219,19 @@ def test_render_markdown_mentions_partial_reproducibility(tmp_path: Path) -> Non
             "orca_preferred_velocity_semantics": "goal_vector_pref_velocity",
             "runtime_bug_signature": "np.NaN removed in NumPy 2",
             "runtime_bug_locations": ["social_gym/src/motion_model_manager.py:264"],
+            "minimal_local_compatibility_shims": ["install socialforce extra dependency"],
             "notes": "stub",
         },
         commands=[
             probe.CommandResult("package_import", ["uv", "run"], 0, None, "import_ok", ""),
+            probe.CommandResult(
+                "shimmed_orca_reset_step",
+                ["uv", "run"],
+                0,
+                None,
+                "shim_ok 5 ActionXY 5 False False",
+                "",
+            ),
         ],
         packaged_weights_present=False,
     )
@@ -218,4 +239,4 @@ def test_render_markdown_mentions_partial_reproducibility(tmp_path: Path) -> Non
     markdown = _render_markdown(report)
     assert "Verdict: `source harness partially reproducible`" in markdown
     assert "Full Gymnasium env creation is still blocked" in markdown
-    assert "Wrapper work is promising" in markdown
+    assert "reset and step the upstream ORCA path once" in markdown

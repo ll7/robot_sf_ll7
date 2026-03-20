@@ -72,6 +72,12 @@ def _extract_contract(repo_root: Path) -> dict[str, Any]:
         ]
         if "np.NaN" in motion_text
         else [],
+        "minimal_local_compatibility_shims": [
+            "install socialforce extra dependency",
+            "restore numpy.NaN alias before upstream import",
+            "set with_theta_and_omega_visible=False on ORCA policy when absent",
+            "call upstream raw env.configure/set_robot/set_robot_policy path before reset",
+        ],
         "notes": (
             "Gymnasium-native package with differential-drive robot support; "
             "learned runtime remains unproven because packaged checkpoints were not found."
@@ -318,6 +324,37 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
             cwd=repo_root,
             timeout_seconds=timeout_seconds,
         ),
+        _run_command(
+            "shimmed_orca_reset_step",
+            [
+                uv,
+                "run",
+                "--with",
+                "socialforce",
+                "python",
+                "-c",
+                (
+                    "import configparser; import numpy as np; np.NaN = np.nan; "
+                    "from social_gym.social_nav_gym import SocialNavGym; "
+                    "from social_gym.src.robot_agent import RobotAgent; "
+                    "env = SocialNavGym(); "
+                    "config = configparser.RawConfigParser(); "
+                    "config.read('crowd_nav/configs/env.config'); "
+                    "env.configure(config); "
+                    "robot = RobotAgent(env); robot.configure(config, 'robot'); env.set_robot(robot); "
+                    "env.set_robot_policy('orca', crowdnav_policy=True); "
+                    "setattr(env.robot.policy, 'with_theta_and_omega_visible', "
+                    "getattr(env.robot.policy, 'with_theta_and_omega_visible', False)); "
+                    "obs, info = env.reset('test'); "
+                    "action = env.robot.act(obs); "
+                    "step = env.step(action); "
+                    "print('shim_ok', len(obs), type(action).__name__, len(step), step[2], step[3]); "
+                    "env.close()"
+                ),
+            ],
+            cwd=repo_root,
+            timeout_seconds=timeout_seconds,
+        ),
     ]
 
     failure_stage = None
@@ -343,6 +380,12 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                 failure_summary = command.failure_summary
                 verdict = "source harness partially reproducible"
                 break
+
+    shimmed_step = next(
+        command for command in commands if command.name == "shimmed_orca_reset_step"
+    )
+    if shimmed_step.returncode != 0 and verdict != "source harness blocked":
+        verdict = "source harness partially reproducible"
 
     return ProbeReport(
         issue=642,
@@ -401,9 +444,10 @@ def _render_markdown(report: ProbeReport) -> str:
             [
                 "- The upstream package and simulator core are runnable here with a narrow extra dependency (`socialforce`).",
                 "- At least one non-trainable planner path (`orca`) executes in the upstream simulator without local source patches.",
+                "- A narrow local compatibility shim is sufficient to reset and step the upstream ORCA path once.",
                 "- Full Gymnasium env creation is still blocked by an upstream NumPy 2 incompatibility (`np.NaN`).",
                 "- The pinned learned stack is not yet reproducible in the current Python 3.13 runtime.",
-                "- Wrapper work is promising, but only after deciding whether to patch around `socialforce` and NumPy 2 locally or reproduce the pinned stack in a side environment.",
+                "- Wrapper work for non-trainable planners is now justified as a prototype path, but learned-path work still needs either stricter side-env reproduction or explicit compatibility boundaries.",
             ]
         )
     else:

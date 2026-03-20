@@ -1,0 +1,32 @@
+name: paper_experiment_matrix_v1_social_navigation_pyenvs_socialforce_only
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+
+workers: 1
+horizon: 150
+stop_on_failure: true
+resume: true
+record_forces: false
+bootstrap_samples: 1000
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+seed_policy: matrix_stable_v1
+seed_offset: 0
+snqi:
+  enabled: true
+  weights: configs/metrics/snqi_v3_publication.yaml
+amv_profile:
+  enabled: true
+  profile: configs/benchmarks/amv_paper_profile_v1.yaml
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: social_navigation_pyenvs_socialforce
+    algo: social_navigation_pyenvs_socialforce
+    planner_group: experimental
+    benchmark_profile: paper_matrix
+    algo_config: configs/algos/social_navigation_pyenvs_socialforce_probe.yaml

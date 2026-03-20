@@ -206,6 +206,43 @@ def test_build_policy_orca_preserves_provenance_metadata() -> None:
     )
 
 
+def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external ORCA prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        _DummyAdapter,
+    )
+    _, meta = _build_policy(
+        "social_navigation_pyenvs_orca",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert (
+        meta["provenance"]["upstream_repo"]
+        == "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs"
+    )
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+    assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"
@@ -567,6 +604,29 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     assert cfg["max_speed"] == 1.0
     assert preflight["status"] == "ok"
     assert captured["robot_kinematics"] == "bicycle_drive"
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the Social-Navigation-PyEnvs ORCA alias."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="social_navigation_pyenvs_orca",
+        algo_config={"repo_root": "output/repos/Social-Navigation-PyEnvs"},
+        benchmark_profile="experimental",
+        missing_prereq_policy="skip-with-warning",
+        robot_kinematics="differential_drive",
+    )
+    assert cfg["repo_root"] == "output/repos/Social-Navigation-PyEnvs"
+    assert preflight["status"] == "skipped"
+    assert preflight["policy"] == "skip-with-warning"
+    assert "missing upstream prereq" in str(preflight["error"])
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:

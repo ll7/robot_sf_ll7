@@ -59,6 +59,17 @@ Second-pass ranking highlights:
 - most likely dead end despite strong reported results:
   - `SoNIC-Social-Nav`
 
+Current `Social-Navigation-PyEnvs` follow-on judgment after source-harness and ORCA prototype work:
+
+- usable next:
+  - non-trainable `socialforce`, `sfm_*`, and `hsfm_*` policies
+- blocked for now:
+  - learned `cadrl`, `lstm_rl`, and `sarl` from this repo
+- blocker:
+  - the checked-out repo does not bundle the expected `social_gym/robot_models/...` assets
+    (`policy.config`, `env.config`, and learned weight files), so learned-policy reuse would not be
+    source-faithful yet
+
 Second-pass execution order:
 
 1. `Python-RVO2`

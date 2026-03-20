@@ -62,6 +62,10 @@ from robot_sf.planner.predictive_mppi import (
     build_predictive_mppi_config,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.social_navigation_pyenvs_orca import (
+    SocialNavigationPyEnvsORCAAdapter,
+    build_social_navigation_pyenvs_orca_config,
+)
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -89,6 +93,8 @@ _SOCNAV_ALGO_KEYS = {
     "sa_cadrl",
     "socnav_bench",
     "hybrid_portfolio",
+    "social_navigation_pyenvs_orca",
+    "social_nav_pyenvs_orca",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1118,6 +1124,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
+        adapter = SocialNavigationPyEnvsORCAAdapter(
+            config=build_social_navigation_pyenvs_orca_config(algo_config)
+        )
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

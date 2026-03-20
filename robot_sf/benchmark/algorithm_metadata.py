@@ -14,6 +14,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
     "social_force": "classical",
     "orca": "classical",
+    "social_navigation_pyenvs_orca": "classical",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
@@ -37,6 +38,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
+    "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -66,6 +68,17 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "then project the selected velocity into Robot SF unicycle_vw commands."
         ),
     },
+    "social_navigation_pyenvs_orca": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "checked_out_local_probe_2026_03_20",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream ORCA predict(), then project ActionXY into "
+            "Robot SF unicycle_vw commands."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -88,6 +101,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_orca": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsORCAAdapter",
         "upstream_command_space": "velocity_vector_xy",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import importlib
 import math
+import sys
+import types
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 import numpy as np
+import torch
 
 from robot_sf.planner.social_navigation_pyenvs_orca import (
     _as_array,
@@ -20,6 +27,100 @@ from robot_sf.planner.social_navigation_pyenvs_orca import (
 )
 
 ForceModelName = Literal["socialforce", "sfm_helbing"]
+
+
+def _import_socialforce_backend() -> Any:
+    """Import the external SocialForce backend or raise a clear runtime error.
+
+    Returns:
+        Any: Imported `socialforce` backend module.
+    """
+    try:
+        return importlib.import_module("socialforce")
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised by integration path
+        raise ModuleNotFoundError(
+            "socialforce runtime dependency is required for "
+            "social_navigation_pyenvs_socialforce; run with `uv run --with socialforce==0.2.3 ...` "
+            "or install a compatible package in the current environment."
+        ) from exc
+
+
+def _to_backend_state(state: Any) -> Any:
+    """Convert an upstream state array into a backend-compatible tensor or array.
+
+    Returns:
+        Any: Tensor or array accepted by the external backend.
+    """
+    return torch.as_tensor(state, dtype=torch.float32)
+
+
+def _backend_to_numpy(state: Any) -> np.ndarray:
+    """Convert a backend state object back into a NumPy array.
+
+    Returns:
+        np.ndarray: NumPy view of the backend state.
+    """
+    current = state
+    for attr in ("detach", "cpu"):
+        method = getattr(current, attr, None)
+        if callable(method):
+            current = method()
+    to_numpy = getattr(current, "numpy", None)
+    if callable(to_numpy):
+        current = to_numpy()
+    return np.asarray(current, dtype=float)
+
+
+def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleType:
+    """Build a CrowdNav-style compatibility layer over the external socialforce backend.
+
+    Returns:
+        types.ModuleType: Module exposing the legacy `Simulator(...).step()` contract.
+    """
+    compat = types.ModuleType("socialforce")
+    compat.__dict__["__doc__"] = "CrowdNav-style compatibility shim over socialforce==0.2.3"
+    compat.__dict__["__version__"] = getattr(backend_socialforce, "__version__", "unknown")
+
+    class CompatSimulator:
+        def __init__(
+            self,
+            state: Any,
+            *,
+            delta_t: float = 0.4,
+            initial_speed: float = 1.0,
+            v0: float = 10.0,
+            sigma: float = 0.3,
+        ) -> None:
+            self._sim = backend_socialforce.Simulator(delta_t=delta_t)
+            self._state = _to_backend_state(state)
+            self.state = np.asarray(state, dtype=float)
+            self.initial_speed = initial_speed
+            self.v0 = v0
+            self.sigma = sigma
+
+        def step(self) -> np.ndarray:
+            out = self._sim.forward(self._state)
+            self._state = out
+            self.state = _backend_to_numpy(out)
+            return self.state
+
+    compat.Simulator = CompatSimulator
+    return compat
+
+
+@contextmanager
+def _socialforce_compat_context(backend_socialforce: Any) -> Iterator[None]:
+    """Temporarily inject the CrowdNav-style SocialForce compatibility module."""
+    original = sys.modules.get("socialforce")
+    sys.modules["socialforce"] = _build_socialforce_compat_module(backend_socialforce)
+    try:
+        yield
+    finally:
+        if original is None:
+            sys.modules.pop("socialforce", None)
+        else:
+            sys.modules["socialforce"] = original
+
 
 _POLICY_SPECS: dict[ForceModelName, tuple[str, str]] = {
     "socialforce": ("crowd_nav.policy_no_train.socialforce", "SocialForce"),
@@ -88,10 +189,21 @@ class SocialNavigationPyEnvsForceModelAdapter:
                 f"{self.config.repo_root}. Clone the upstream repo under output/repos/ first."
             )
         module_name, class_name = _POLICY_SPECS[self.config.policy_name]
+        self.runtime_strategy = "direct_upstream_runtime"
+        self.runtime_dependency = None
         with _upstream_import_context(self.repo_root):
             action_mod = importlib.import_module("crowd_nav.utils.action")
             state_mod = importlib.import_module("crowd_nav.utils.state")
-            policy_mod = importlib.import_module(module_name)
+            if self.config.policy_name == "socialforce":
+                backend_socialforce = _import_socialforce_backend()
+                self.runtime_strategy = "crowdnav_socialforce_compat_shim"
+                self.runtime_dependency = (
+                    f"socialforce=={getattr(backend_socialforce, '__version__', 'unknown')}"
+                )
+                with _socialforce_compat_context(backend_socialforce):
+                    policy_mod = importlib.import_module(module_name)
+            else:
+                policy_mod = importlib.import_module(module_name)
         self._ActionXY = action_mod.ActionXY
         self._FullState = state_mod.FullState
         self._ObservableState = state_mod.ObservableState
@@ -199,6 +311,8 @@ class SocialNavigationPyEnvsForceModelAdapter:
                 "projection_policy": self.projection_policy,
                 "self_velocity_source": getattr(joint_state, "robot_sf_velocity_source", "unknown"),
                 "upstream_policy": self.upstream_policy,
+                "runtime_strategy": self.runtime_strategy,
+                "runtime_dependency": self.runtime_dependency,
             },
         )
 

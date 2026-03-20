@@ -23,6 +23,8 @@ class Frame:
 
     robot_pos: np.ndarray
     robot_heading: float
+    robot_speed: np.ndarray
+    goal_current: np.ndarray
     ped_positions_world: np.ndarray
     ped_velocities_world: np.ndarray
     ped_count: int
@@ -38,6 +40,7 @@ def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
     robot = {
         "position": obs.get("robot_position", [0.0, 0.0]),
         "heading": obs.get("robot_heading", [0.0]),
+        "speed": obs.get("robot_speed", [0.0, 0.0]),
     }
     goal = {"current": obs.get("goal_current", [0.0, 0.0])}
     peds = {
@@ -50,9 +53,11 @@ def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
 
 def _extract_frame(obs: dict, max_agents: int) -> Frame:
     """Convert observation payload to a compact frame container."""
-    robot, _goal, peds = _extract_socnav_blocks(obs)
+    robot, goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
+    robot_speed = np.asarray(robot.get("speed", [0.0, 0.0]), dtype=np.float32).reshape(-1)[:2]
+    goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
 
     ped_positions = np.asarray(peds.get("positions", []), dtype=np.float32)
     ped_velocities = np.asarray(peds.get("velocities", []), dtype=np.float32)
@@ -84,6 +89,8 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
     return Frame(
         robot_pos=robot_pos,
         robot_heading=robot_heading,
+        robot_speed=robot_speed,
+        goal_current=goal_current,
         ped_positions_world=ped_positions,
         ped_velocities_world=ped_velocities,
         ped_count=ped_count,
@@ -164,11 +171,12 @@ def _frames_to_samples(
     *,
     max_agents: int,
     horizon_steps: int,
+    ego_conditioning: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
     if len(frames) <= horizon_steps:
         return (
-            np.zeros((0, max_agents, 4), dtype=np.float32),
+            np.zeros((0, max_agents, 9 if ego_conditioning else 4), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps, 2), dtype=np.float32),
             np.zeros((0, max_agents), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps), dtype=np.float32),
@@ -182,7 +190,7 @@ def _frames_to_samples(
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
         c = min(frame_t.ped_count, max_agents)
-        state = np.zeros((max_agents, 4), dtype=np.float32)
+        state = np.zeros((max_agents, 9 if ego_conditioning else 4), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         target_mask = np.zeros((max_agents, horizon_steps), dtype=np.float32)
@@ -198,6 +206,25 @@ def _frames_to_samples(
                 frame_t.ped_velocities_world[:c],
                 frame_t.robot_heading,
             )
+            if ego_conditioning:
+                goal_rel = _world_to_ego(
+                    frame_t.goal_current.reshape(1, 2),
+                    frame_t.robot_pos,
+                    frame_t.robot_heading,
+                )[0]
+                goal_dist = float(np.linalg.norm(goal_rel))
+                goal_dir = goal_rel / max(goal_dist, 1e-6)
+                ego_features = np.array(
+                    [
+                        float(frame_t.robot_speed[0]) if frame_t.robot_speed.size > 0 else 0.0,
+                        float(frame_t.robot_speed[1]) if frame_t.robot_speed.size > 1 else 0.0,
+                        float(goal_dir[0]),
+                        float(goal_dir[1]),
+                        goal_dist,
+                    ],
+                    dtype=np.float32,
+                )
+                state[:c, 4:9] = ego_features
             mask[:c] = 1.0
 
             for k in range(1, horizon_steps + 1):
@@ -235,6 +262,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--max-agents", type=int, default=16)
     parser.add_argument("--horizon-steps", type=int, default=8)
+    parser.add_argument("--ego-conditioning", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-speed", type=float, default=1.0)
     parser.add_argument("--min-goal-distance", type=float, default=2.0)
@@ -333,6 +361,7 @@ def main() -> int:
             episode_frames,
             max_agents=args.max_agents,
             horizon_steps=args.horizon_steps,
+            ego_conditioning=bool(args.ego_conditioning),
         )
         if states.shape[0] > 0:
             all_states.append(states)
@@ -368,9 +397,11 @@ def main() -> int:
         "max_agents": int(args.max_agents),
         "horizon_steps": int(args.horizon_steps),
         "num_samples": int(states_cat.shape[0]),
+        "state_dim": int(states_cat.shape[2]),
         "active_agent_ratio": float(np.mean(masks_cat)),
         "active_target_ratio": float(np.mean(target_masks_cat)),
         "skipped_reset_failures": int(skipped_resets),
+        "ego_conditioning": bool(args.ego_conditioning),
         "dataset": str(args.output),
     }
     summary_path = args.output.with_suffix(".json")

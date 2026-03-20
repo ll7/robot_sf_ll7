@@ -24,3 +24,12 @@ def test_socnav_structured_observation_exposes_robot_velocity_xy():
 
     assert "velocity_xy" in obs["robot"]
     assert len(obs["robot"]["velocity_xy"]) == 2
+
+
+def test_socnav_structured_observation_exposes_robot_angular_velocity():
+    """Structured SocNav observations should expose explicit robot angular velocity."""
+    env = RobotEnv(env_config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT))
+    obs, _ = env.reset()
+
+    assert "angular_velocity" in obs["robot"]
+    assert len(obs["robot"]["angular_velocity"]) == 1

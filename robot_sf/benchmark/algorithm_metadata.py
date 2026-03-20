@@ -17,6 +17,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_orca": "classical",
     "social_navigation_pyenvs_socialforce": "classical",
     "social_navigation_pyenvs_sfm_helbing": "classical",
+    "social_navigation_pyenvs_hsfm_new_guo": "classical",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
@@ -43,6 +44,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
     "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
     "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
+    "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -90,9 +92,12 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
         "adapter_boundary": (
             "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "JointState contract, run upstream SocialForce predict(), then project ActionXY "
-            "into Robot SF unicycle_vw commands."
+            "JointState contract, run upstream SocialForce predict() through an explicit "
+            "CrowdNav-style compatibility runtime for socialforce==0.2.3, then project "
+            "ActionXY into Robot SF unicycle_vw commands."
         ),
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
     },
     "social_navigation_pyenvs_sfm_helbing": {
         "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
@@ -103,6 +108,17 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
             "JointState contract, run upstream SFM-Helbing predict(), then project ActionXY "
             "into Robot SF unicycle_vw commands."
+        ),
+    },
+    "social_navigation_pyenvs_hsfm_new_guo": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "headed JointState contract, run upstream HSFM-New-Guo predict(), then project "
+            "body-frame ActionXYW or NewHeadedState outputs into Robot SF unicycle_vw commands."
         ),
     },
 }
@@ -153,6 +169,8 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
     },
     "social_navigation_pyenvs_sfm_helbing": {
         "planner_command_space": "unicycle_vw",
@@ -163,6 +181,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_command_space": "velocity_vector_xy",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_hsfm_new_guo": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsHSFMAdapter",
+        "upstream_command_space": "body_velocity_xy_plus_omega",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "body_velocity_heading_safe_to_unicycle_vw",
         "projection_documented": True,
     },
     "ppo": {

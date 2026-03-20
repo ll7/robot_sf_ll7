@@ -97,12 +97,34 @@ def test_social_navigation_pyenvs_force_model_metadata_exposes_upstream_wrapper_
         socialforce["planner_kinematics"]["projection_policy"]
         == "heading_safe_velocity_to_unicycle_vw"
     )
+    assert socialforce["planner_kinematics"]["runtime_strategy"] == (
+        "crowdnav_socialforce_compat_shim"
+    )
+    assert socialforce["planner_kinematics"]["runtime_dependency"] == "socialforce==0.2.3"
     assert socialforce["upstream_reference"]["upstream_policy"] == (
         "crowd_nav.policy_no_train.socialforce.SocialForce"
+    )
+    assert socialforce["upstream_reference"]["runtime_strategy"] == (
+        "crowdnav_socialforce_compat_shim"
     )
     assert sfm["upstream_reference"]["upstream_policy"] == (
         "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
     )
+
+
+def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract() -> None:
+    """Prototype external HSFM metadata should expose headed upstream command semantics."""
+    meta = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_hsfm_new_guo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert planner["upstream_command_space"] == "body_velocity_xy_plus_omega"
+    assert planner["projection_policy"] == "body_velocity_heading_safe_to_unicycle_vw"
+    assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
 
 
 def test_infer_execution_mode_from_counts() -> None:

@@ -74,6 +74,11 @@ def socnav_observation_space(
                         high=speed_bounds,
                         dtype=np.float32,
                     ),
+                    "angular_velocity": spaces.Box(
+                        low=np.array([-np.finfo(np.float32).max], dtype=np.float32),
+                        high=np.array([np.finfo(np.float32).max], dtype=np.float32),
+                        dtype=np.float32,
+                    ),
                     "radius": spaces.Box(
                         low=radius_bounds,
                         high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
@@ -266,6 +271,10 @@ class SocNavObservationFusion:
                 "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
                 "velocity_xy": robot_velocity_xy,
+                "angular_velocity": np.array(
+                    [float(robot_speed[1]) if robot_speed.size > 1 else 0.0],
+                    dtype=np.float32,
+                ),
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),

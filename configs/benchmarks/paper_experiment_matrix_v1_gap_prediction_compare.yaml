@@ -1,0 +1,28 @@
+name: paper_experiment_matrix_v1_gap_prediction_compare
+output_root: output/benchmarks/camera_ready
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+global:
+  horizon: 100
+  dt: 0.1
+  kinematics: differential_drive
+planners:
+  - key: prediction_planner_v2_full
+    algo: prediction_planner
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    socnav_missing_prereq_policy: fail-fast
+  - key: prediction_planner_v2_xl_ego
+    algo: prediction_planner
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready_xl_ego.yaml
+    socnav_missing_prereq_policy: fail-fast
+  - key: gap_prediction
+    algo: gap_prediction
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/gap_prediction_camera_ready.yaml
+    socnav_missing_prereq_policy: fail-fast

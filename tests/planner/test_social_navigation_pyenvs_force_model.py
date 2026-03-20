@@ -150,3 +150,29 @@ def test_sfm_helbing_adapter_maps_goal_direction(tmp_path: Path) -> None:
     assert command_w > 0.0
     assert meta["upstream_action_xy"] == [0.0, 1.0]
     assert meta["upstream_policy"] == "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
+
+
+def test_plan_defaults_invalid_dt_to_safe_fallback(tmp_path: Path) -> None:
+    """Malformed or non-finite timestep payloads should fall back to the safe default."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsForceModelAdapter(
+        build_social_navigation_pyenvs_force_model_config(
+            {"repo_root": str(repo_root), "policy_name": "sfm_helbing"},
+            default_policy_name="sfm_helbing",
+        )
+    )
+    command = adapter.plan(
+        {
+            "robot_position": [0.0, 0.0],
+            "robot_heading": [0.0],
+            "robot_speed": [0.0],
+            "robot_radius": [0.3],
+            "goal_current": [1.0, 0.0],
+            "pedestrians_positions": [],
+            "pedestrians_velocities": [],
+            "dt": [],
+            "sim": {"timestep": float("nan")},
+        }
+    )
+    assert command == pytest.approx((1.0, 0.0))

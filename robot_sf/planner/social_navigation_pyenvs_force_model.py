@@ -211,7 +211,13 @@ class SocialNavigationPyEnvsForceModelAdapter:
         dt_source = observation.get("dt", 0.1)
         if "sim" in observation and isinstance(observation["sim"], dict):
             dt_source = observation["sim"].get("timestep", dt_source)
-        dt = float(np.asarray(dt_source, dtype=float).reshape(-1)[0])
+        try:
+            dt_arr = np.asarray(0.1 if dt_source is None else dt_source, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            dt_arr = np.asarray([0.1], dtype=float)
+        dt = float(dt_arr[0]) if dt_arr.size else 0.1
+        if not math.isfinite(dt) or dt <= 0.0:
+            dt = 0.1
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 

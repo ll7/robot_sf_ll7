@@ -118,6 +118,27 @@ def test_wrapper_accepts_nested_socnav_observation(tmp_path: Path) -> None:
     assert meta["upstream_action_xy"] == [0.0, 1.0]
 
 
+def test_wrapper_fails_fast_on_missing_required_fields(tmp_path: Path) -> None:
+    """Required observation fields should raise instead of being zero-filled."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    wrapper = SocialNavigationPyEnvsORCAWrapper(repo_root)
+
+    with pytest.raises(ValueError, match="goal.current"):
+        wrapper.act(
+            {
+                "robot": {
+                    "position": [0.0, 0.0],
+                    "heading": [0.0],
+                    "speed": [0.0],
+                },
+                "goal": {},
+                "pedestrians": {},
+            },
+            time_step=0.1,
+        )
+
+
 class _FakeRobot:
     pass
 
@@ -135,15 +156,19 @@ class _FakeEnv:
             "Cfg", (), {"sim_config": type("Sim", (), {"time_per_step_in_secs": 0.1})()}
         )()
         self._obs = {
-            "robot_position": np.array([0.0, 0.0]),
-            "robot_heading": np.array([0.0]),
-            "robot_speed": np.array([0.0]),
-            "robot_radius": np.array([0.3]),
-            "goal_current": np.array([1.0, 0.0]),
-            "pedestrians_positions": np.array([[1.0, 0.5]]),
-            "pedestrians_velocities": np.array([[0.0, 0.0]]),
-            "pedestrians_count": np.array([1]),
-            "pedestrians_radius": np.array([0.3]),
+            "robot": {
+                "position": np.array([0.0, 0.0]),
+                "heading": np.array([0.0]),
+                "speed": np.array([0.0]),
+                "radius": np.array([0.3]),
+            },
+            "goal": {"current": np.array([1.0, 0.0])},
+            "pedestrians": {
+                "positions": np.array([[1.0, 0.5]]),
+                "velocities": np.array([[0.0, 0.0]]),
+                "count": np.array([1]),
+                "radius": np.array([0.3]),
+            },
         }
 
     def reset(self, seed: int | None = None) -> tuple[dict, dict]:
@@ -168,15 +193,40 @@ def test_run_probe_executes_robot_sf_loop(monkeypatch: pytest.MonkeyPatch, tmp_p
     """The wrapper probe should execute at least one Robot SF step and report viability."""
     repo_root = tmp_path / "repo"
     _write_fake_upstream_repo(repo_root)
-    monkeypatch.setattr(probe, "make_robot_env", lambda config, debug=False: _FakeEnv())
+    captured: dict[str, object] = {}
+
+    def fake_make_robot_env(config: object, debug: bool = False) -> _FakeEnv:
+        captured["config"] = config
+        return _FakeEnv()
+
+    monkeypatch.setattr(probe, "make_robot_env", fake_make_robot_env)
     monkeypatch.setattr(probe, "PlannerActionAdapter", _FakePlannerActionAdapter)
 
     report = run_probe(repo_root, seed=3, max_steps=2)
 
+    assert captured["config"].observation_mode == probe.ObservationMode.SOCNAV_STRUCT
     assert report.verdict == "wrapper prototype viable"
     assert report.steps_executed == 2
     assert report.upstream_policy == "crowd_nav.policy_no_train.orca.ORCA"
     assert report.projection_policy == "heading_safe_velocity_to_unicycle_vw"
+
+
+def test_upstream_import_context_restores_crowd_nav_modules(tmp_path: Path) -> None:
+    """The upstream import context should restore crowd_nav modules between repos."""
+    repo_root_a = tmp_path / "repo_a"
+    repo_root_b = tmp_path / "repo_b"
+    _write_fake_upstream_repo(repo_root_a)
+    _write_fake_upstream_repo(repo_root_b)
+    _write(repo_root_a / "crowd_nav" / "__init__.py", "MARKER = 'A'\n")
+    _write(repo_root_b / "crowd_nav" / "__init__.py", "MARKER = 'B'\n")
+
+    with probe._upstream_import_context(repo_root_a):
+        mod_a = __import__("crowd_nav")
+        assert mod_a.MARKER == "A"
+
+    with probe._upstream_import_context(repo_root_b):
+        mod_b = __import__("crowd_nav")
+        assert mod_b.MARKER == "B"
 
 
 def test_render_markdown_mentions_real_robot_sf_step(tmp_path: Path) -> None:

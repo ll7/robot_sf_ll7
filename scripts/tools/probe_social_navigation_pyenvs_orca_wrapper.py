@@ -39,6 +39,14 @@ def _as_array(value: Any, *, pad: int, fill: float = 0.0) -> np.ndarray:
     return out
 
 
+def _require_array(value: Any, *, size: int, field: str) -> np.ndarray:
+    """Return a required 1D float array or raise a clear contract error."""
+    arr = np.asarray(value if value is not None else [], dtype=float).reshape(-1)
+    if arr.size < size:
+        raise ValueError(f"Missing or malformed required field: {field}")
+    return arr[:size]
+
+
 def _as_matrix(value: Any, *, cols: int) -> np.ndarray:
     """Return a 2D float array with the requested column count."""
     arr = np.asarray(value if value is not None else [], dtype=float)
@@ -53,10 +61,22 @@ def _upstream_import_context(repo_root: Path) -> Iterator[None]:
     """Temporarily prepend the upstream repo root and restore the import state."""
     repo_str = str(repo_root)
     original_path = list(sys.path)
+    original_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "crowd_nav" or name.startswith("crowd_nav.")
+    }
     sys.path.insert(0, repo_str)
     try:
+        for name in list(sys.modules):
+            if name == "crowd_nav" or name.startswith("crowd_nav."):
+                sys.modules.pop(name, None)
         yield
     finally:
+        for name in list(sys.modules):
+            if name == "crowd_nav" or name.startswith("crowd_nav."):
+                sys.modules.pop(name, None)
+        sys.modules.update(original_modules)
         sys.path[:] = original_path
 
 
@@ -91,10 +111,12 @@ class SocialNavigationPyEnvsORCAWrapper:
             robot_state = observation.get("robot", {})
             goal_state = observation.get("goal", {})
             ped_state = observation.get("pedestrians", {})
-            robot_pos = _as_array(robot_state.get("position"), pad=2)
-            goal_pos = _as_array(goal_state.get("current"), pad=2)
-            heading = float(_as_array(robot_state.get("heading"), pad=1)[0])
-            speed = float(_as_array(robot_state.get("speed"), pad=1)[0])
+            robot_pos = _require_array(robot_state.get("position"), size=2, field="robot.position")
+            goal_pos = _require_array(goal_state.get("current"), size=2, field="goal.current")
+            heading = float(
+                _require_array(robot_state.get("heading"), size=1, field="robot.heading")[0]
+            )
+            speed = float(_require_array(robot_state.get("speed"), size=1, field="robot.speed")[0])
             radius = float(_as_array(robot_state.get("radius"), pad=1, fill=0.3)[0])
             ped_positions = _as_matrix(ped_state.get("positions"), cols=2)
             ped_velocities = _as_matrix(ped_state.get("velocities"), cols=2)
@@ -105,10 +127,16 @@ class SocialNavigationPyEnvsORCAWrapper:
             )
             ped_radius_value = float(_as_array(ped_state.get("radius"), pad=1, fill=0.3)[0])
         else:
-            robot_pos = _as_array(observation.get("robot_position"), pad=2)
-            goal_pos = _as_array(observation.get("goal_current"), pad=2)
-            heading = float(_as_array(observation.get("robot_heading"), pad=1)[0])
-            speed = float(_as_array(observation.get("robot_speed"), pad=1)[0])
+            robot_pos = _require_array(
+                observation.get("robot_position"), size=2, field="robot_position"
+            )
+            goal_pos = _require_array(observation.get("goal_current"), size=2, field="goal_current")
+            heading = float(
+                _require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0]
+            )
+            speed = float(
+                _require_array(observation.get("robot_speed"), size=1, field="robot_speed")[0]
+            )
             radius = float(_as_array(observation.get("robot_radius"), pad=1, fill=0.3)[0])
             ped_positions = _as_matrix(observation.get("pedestrians_positions"), cols=2)
             ped_velocities = _as_matrix(observation.get("pedestrians_velocities"), cols=2)

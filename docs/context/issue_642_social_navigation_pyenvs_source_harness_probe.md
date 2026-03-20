@@ -25,6 +25,10 @@ This issue is intentionally proof-first:
   `output/benchmarks/external/social_navigation_pyenvs_source_harness_probe/report.json`
 - Markdown report:
   `output/benchmarks/external/social_navigation_pyenvs_source_harness_probe/report.md`
+- wrapper JSON report:
+  `output/benchmarks/external/social_navigation_pyenvs_orca_wrapper_probe/report.json`
+- wrapper Markdown report:
+  `output/benchmarks/external/social_navigation_pyenvs_orca_wrapper_probe/report.md`
 
 Generated with:
 
@@ -33,6 +37,15 @@ uv run python scripts/tools/probe_social_navigation_pyenvs_source_harness.py \
   --repo-root output/repos/Social-Navigation-PyEnvs \
   --output-json output/benchmarks/external/social_navigation_pyenvs_source_harness_probe/report.json \
   --output-md output/benchmarks/external/social_navigation_pyenvs_source_harness_probe/report.md
+```
+
+Wrapper proof generated with:
+
+```bash
+uv run python scripts/tools/probe_social_navigation_pyenvs_orca_wrapper.py \
+  --repo-root output/repos/Social-Navigation-PyEnvs \
+  --output-json output/benchmarks/external/social_navigation_pyenvs_orca_wrapper_probe/report.json \
+  --output-md output/benchmarks/external/social_navigation_pyenvs_orca_wrapper_probe/report.md
 ```
 
 ## Commands attempted
@@ -99,6 +112,8 @@ Observed positive signals:
 - upstream robot-side `orca` motion-model activation succeeds without patching local source.
 - a narrow local compatibility shim is enough to reset and step the upstream non-trainable `orca`
   path once.
+- a thin wrapper around upstream `crowd_nav.policy_no_train.orca.ORCA` can drive a real Robot SF
+  step loop.
 
 Primary blocker for full env creation:
 
@@ -168,6 +183,13 @@ What is justified now:
 4. decide explicitly between:
    - a minimal local compatibility path (`socialforce` + NumPy 2 patch boundary), or
    - a side environment for stricter upstream pin fidelity.
+
+Important caveat:
+
+- the live Robot SF wrapper probe currently executes on the default `RobotSimulationConfig`
+  SocNav observation path, whose initial `goal.current` snapshot can be degenerate (`goal ==
+  robot position`), so that specific live report is a loop-integrity proof rather than a
+  performance-quality proof.
 
 What is not justified yet:
 

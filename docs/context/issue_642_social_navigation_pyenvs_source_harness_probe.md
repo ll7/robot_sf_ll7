@@ -21,6 +21,9 @@ This issue is intentionally proof-first:
 
 ## Canonical probe artifacts
 
+- Canonical upstream repository:
+  `https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs`
+
 - JSON report:
   `output/benchmarks/external/social_navigation_pyenvs_source_harness_probe/report.json`
 - Markdown report:
@@ -161,8 +164,8 @@ Observed directly from the checked-out source:
 - upstream ORCA semantics:
   - goal-vector preferred velocity inside the upstream simulator
 - known runtime bug locations under NumPy 2:
-  - `social_gym/src/motion_model_manager.py:264`
-  - `social_gym/src/motion_model_manager.py:271`
+  - derived dynamically from the checked-out upstream file:
+    `social_gym/src/motion_model_manager.py`
 
 Why this matters:
 

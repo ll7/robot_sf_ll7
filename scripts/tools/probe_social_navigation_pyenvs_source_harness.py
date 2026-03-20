@@ -44,6 +44,15 @@ def _extract_policy_names(policy_factory_path: Path) -> list[str]:
     return sorted(set(matches))
 
 
+def _find_line_matches(read_path: Path, display_path: Path, token: str) -> list[str]:
+    """Return file-relative line references for lines containing the token."""
+    return [
+        f"{display_path.as_posix()}:{idx}"
+        for idx, line in enumerate(_safe_read_text(read_path).splitlines(), start=1)
+        if token in line
+    ]
+
+
 def _extract_contract(repo_root: Path) -> dict[str, Any]:
     requirements_path = repo_root / "requirements.txt"
     robot_agent_path = repo_root / "social_gym" / "src" / "robot_agent.py"
@@ -66,10 +75,11 @@ def _extract_contract(repo_root: Path) -> dict[str, Any]:
         or '"orca"' in motion_text,
         "orca_preferred_velocity_semantics": "goal_vector_pref_velocity",
         "runtime_bug_signature": "np.NaN removed in NumPy 2" if "np.NaN" in motion_text else None,
-        "runtime_bug_locations": [
-            "social_gym/src/motion_model_manager.py:264",
-            "social_gym/src/motion_model_manager.py:271",
-        ]
+        "runtime_bug_locations": _find_line_matches(
+            motion_model_path,
+            Path("social_gym/src/motion_model_manager.py"),
+            "np.NaN",
+        )
         if "np.NaN" in motion_text
         else [],
         "minimal_local_compatibility_shims": [
@@ -212,14 +222,12 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
     source_contract = _extract_contract(repo_root)
     uv = _uv_command()
 
-    commands = [
-        _run_command(
+    command_specs: list[tuple[str, list[str]]] = [
+        (
             "package_import",
             [uv, "run", "python", "-c", "import gymnasium, social_gym; print('import_ok')"],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "env_make_main_runtime",
             [
                 uv,
@@ -228,10 +236,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                 "-c",
                 "import social_gym, gymnasium as gym; env = gym.make('SocialGym-v0'); print(type(env).__name__)",
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "simulator_core_with_socialforce",
             [
                 uv,
@@ -250,10 +256,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                     "print('sim_ok', len(sim.humans), sim.robot is not None)"
                 ),
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "env_make_with_socialforce",
             [
                 uv,
@@ -264,10 +268,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                 "-c",
                 "import social_gym, gymnasium as gym; env = gym.make('SocialGym-v0'); print(type(env).__name__)",
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "policy_registry_with_socialforce",
             [
                 uv,
@@ -281,10 +283,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                     "print(sorted(policy_factory.keys()))"
                 ),
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "robot_orca_policy_with_socialforce",
             [
                 uv,
@@ -305,10 +305,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                     "'crowdnav', sim.robot_crowdnav_policy)"
                 ),
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "pinned_requirements_probe",
             [
                 uv,
@@ -321,10 +319,8 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                 "-c",
                 "print('requirements_ok')",
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
-        _run_command(
+        (
             "shimmed_orca_reset_step",
             [
                 uv,
@@ -352,40 +348,34 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
                     "env.close()"
                 ),
             ],
-            cwd=repo_root,
-            timeout_seconds=timeout_seconds,
         ),
     ]
 
+    commands: list[CommandResult] = []
     failure_stage = None
     failure_summary = None
     verdict = "source harness partially reproducible"
+    blocking_failure: CommandResult | None = None
+    partial_failure: CommandResult | None = None
 
-    for command in commands:
-        if command.name == "simulator_core_with_socialforce" and command.returncode != 0:
-            verdict = "source harness blocked"
-            failure_stage = command.name
-            failure_summary = command.failure_summary
+    for name, command in command_specs:
+        result = _run_command(name, command, cwd=repo_root, timeout_seconds=timeout_seconds)
+        commands.append(result)
+        if result.returncode == 0:
+            continue
+        if name in {"simulator_core_with_socialforce", "robot_orca_policy_with_socialforce"}:
+            blocking_failure = result
             break
-        if command.name == "robot_orca_policy_with_socialforce" and command.returncode != 0:
-            verdict = "source harness blocked"
-            failure_stage = command.name
-            failure_summary = command.failure_summary
-            break
+        if name == "env_make_with_socialforce" and partial_failure is None:
+            partial_failure = result
 
-    if verdict != "source harness blocked":
-        for command in commands:
-            if command.name == "env_make_with_socialforce" and command.returncode != 0:
-                failure_stage = command.name
-                failure_summary = command.failure_summary
-                verdict = "source harness partially reproducible"
-                break
-
-    shimmed_step = next(
-        command for command in commands if command.name == "shimmed_orca_reset_step"
-    )
-    if shimmed_step.returncode != 0 and verdict != "source harness blocked":
-        verdict = "source harness partially reproducible"
+    if blocking_failure is not None:
+        verdict = "source harness blocked"
+        failure_stage = blocking_failure.name
+        failure_summary = blocking_failure.failure_summary
+    elif partial_failure is not None:
+        failure_stage = partial_failure.name
+        failure_summary = partial_failure.failure_summary
 
     return ProbeReport(
         issue=642,

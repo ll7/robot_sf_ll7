@@ -166,9 +166,12 @@ def test_run_probe_marks_blocked_when_simulator_fails(
     )
     monkeypatch.setattr(probe, "_packaged_weights_present", lambda _repo_root: False)
 
+    called: list[str] = []
+
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        called.append(name)
         if name == "simulator_core_with_socialforce":
             return probe.CommandResult(
                 name, command, 1, "missing python dependency: socialforce", "", ""
@@ -180,6 +183,11 @@ def test_run_probe_marks_blocked_when_simulator_fails(
 
     assert report.verdict == "source harness blocked"
     assert report.failure_stage == "simulator_core_with_socialforce"
+    assert called == [
+        "package_import",
+        "env_make_main_runtime",
+        "simulator_core_with_socialforce",
+    ]
 
 
 def test_detect_failure_summary_covers_numpy_and_abi() -> None:
@@ -218,7 +226,7 @@ def test_render_markdown_mentions_partial_reproducibility(tmp_path: Path) -> Non
             "orca_available_as_robot_motion_model": True,
             "orca_preferred_velocity_semantics": "goal_vector_pref_velocity",
             "runtime_bug_signature": "np.NaN removed in NumPy 2",
-            "runtime_bug_locations": ["social_gym/src/motion_model_manager.py:264"],
+            "runtime_bug_locations": ["social_gym/src/motion_model_manager.py:7"],
             "minimal_local_compatibility_shims": ["install socialforce extra dependency"],
             "notes": "stub",
         },
@@ -240,3 +248,16 @@ def test_render_markdown_mentions_partial_reproducibility(tmp_path: Path) -> Non
     assert "Verdict: `source harness partially reproducible`" in markdown
     assert "Full Gymnasium env creation is still blocked" in markdown
     assert "reset and step the upstream ORCA path once" in markdown
+
+
+def test_extract_contract_derives_runtime_bug_locations(tmp_path: Path) -> None:
+    """Runtime bug locations should be derived from source content, not hard-coded."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+
+    contract = probe._extract_contract(repo_root)
+
+    assert contract["runtime_bug_locations"] == [
+        "social_gym/src/motion_model_manager.py:7",
+        "social_gym/src/motion_model_manager.py:8",
+    ]

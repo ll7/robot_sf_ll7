@@ -157,6 +157,10 @@ Observed directly from the checked-out source:
   - `socialforce`
   - `sfm_*`
   - `hsfm_*`
+- learned CrowdNav-family policies declared in the upstream registry:
+  - `cadrl`
+  - `lstm_rl`
+  - `sarl`
 - robot actuation:
   - `differential_drive`
 - robot action handling:
@@ -206,3 +210,48 @@ Pragmatic next step:
    family entry), or
 2. create a side-environment learned-path reproduction issue if the learned stack is the real
    target.
+
+## Follow-on use decision
+
+`Social-Navigation-PyEnvs` can support more planner-zoo follow-ons, but the viable set is currently
+split.
+
+Reusable now with bounded wrapper work:
+
+- `socialforce`
+- `sfm_helbing`
+- `sfm_guo`
+- `sfm_moussaid`
+- `hsfm_farina`
+- `hsfm_guo`
+- `hsfm_moussaid`
+- `hsfm_new`
+- `hsfm_new_guo`
+- `hsfm_new_moussaid`
+
+Why these are viable:
+
+- they are present in the checked-out `policy_no_train` registry,
+- they do not require bundled learned checkpoints,
+- and they expose explicit upstream action contracts (`ActionXY` or headed `ActionXYW`) that can be
+  adapted into benchmark-visible command semantics.
+
+Not currently reusable as source-faithful benchmark entries from this checkout:
+
+- `cadrl`
+- `lstm_rl`
+- `sarl`
+
+Why these are blocked:
+
+- `social_gym/social_nav_sim.py` loads learned policies only through `model_dir` assets:
+  `policy.config`, `env.config`, and `rl_model.pth` or `il_model.pth`,
+- the expected `social_gym/robot_models/...` directories are not present in this checkout,
+- so a benchmark wrapper now would either invent missing assets or overclaim family-level fidelity.
+
+Current recommendation:
+
+- create follow-up implementation issues for one non-trainable SFM-family anchor and one HSFM-family
+  anchor,
+- keep the learned CrowdNav-family paths in `assessment only` / asset-gap status until the upstream
+  model bundle is actually available and reproducible.

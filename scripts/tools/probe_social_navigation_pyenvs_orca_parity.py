@@ -165,6 +165,7 @@ def _child_script() -> str:
                         "position": sim.robot.position.copy(),
                         "heading": [actual_heading],
                         "speed": [speed],
+                        "velocity_xy": np.array(sim.robot.linear_velocity, dtype=float),
                         "radius": [float(sim.robot.radius)],
                     },
                     "goal": {"current": np.array(sim.robot.goals[0], dtype=float)},
@@ -182,6 +183,7 @@ def _child_script() -> str:
                         "position": sim.robot.position.copy(),
                         "heading": [inferred_heading],
                         "speed": [speed],
+                        "velocity_xy": np.array(sim.robot.linear_velocity, dtype=float),
                         "radius": [float(sim.robot.radius)],
                     },
                     "goal": {"current": np.array(sim.robot.goals[0], dtype=float)},
@@ -365,6 +367,24 @@ def _render_markdown(report: ParityReport) -> str:
             )
         )
 
+    if report.verdict == "adapter has material contract mismatch":
+        interpretation = [
+            "- `circular_crossing_hsfm_new_guo` stays parity-clean because the robot moves in a straight line, so yaw and velocity heading remain aligned.",
+            "- `parallel_traffic_orca` exposes the real mismatch: once upstream ORCA produces lateral velocity components, the Robot SF wrapper cannot reconstruct the same self velocity from heading plus scalar speed.",
+            "- The oracle-heading control shows the upstream state mapping is otherwise close; the failure is concentrated in the self-velocity contract, not in pedestrian packing.",
+        ]
+    elif report.verdict == "adapter appears source-faithful but benchmark-misaligned":
+        interpretation = [
+            "- `circular_crossing_hsfm_new_guo` remains parity-clean on the straight-line trace.",
+            "- `parallel_traffic_orca` now also matches upstream raw `ActionXY`, even though yaw and velocity heading diverge on several steps.",
+            "- The remaining benchmark gap therefore sits after raw upstream policy inference: scenario mismatch, downstream unicycle execution, or both.",
+        ]
+    else:
+        interpretation = [
+            "- The tested scenarios were not sufficient to separate contract mismatch from downstream execution effects.",
+            "- Use the JSON report and traced samples to decide which scenario or contract dimension needs a tighter probe next.",
+        ]
+
     return "\n".join(
         [
             "# Issue 649 Social-Navigation-PyEnvs ORCA Parity Probe",
@@ -385,9 +405,7 @@ def _render_markdown(report: ParityReport) -> str:
             "",
             "## Interpretation",
             "",
-            "- `circular_crossing_hsfm_new_guo` stays parity-clean because the robot moves in a straight line, so yaw and velocity heading remain aligned.",
-            "- `parallel_traffic_orca` exposes the real mismatch: once upstream ORCA produces lateral velocity components, the Robot SF wrapper cannot reconstruct the same self velocity from heading plus scalar speed.",
-            "- The oracle-heading control shows the upstream state mapping is otherwise close; the failure is concentrated in the self-velocity contract, not in pedestrian packing.",
+            *interpretation,
         ]
     )
 

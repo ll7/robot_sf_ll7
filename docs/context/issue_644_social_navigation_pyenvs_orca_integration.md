@@ -134,6 +134,13 @@ Interpretation:
 
 ## Claim boundary
 
+Superseded note:
+
+- Issue `#651` corrected the adapter self-velocity contract and reran both parity and the paper
+  surface.
+- Treat the paper-surface metrics recorded below as the pre-fix prototype result, not the latest
+  contract-corrected result.
+
 What this issue proves:
 
 - `robot_sf_ll7` can execute a benchmark-facing prototype wrapper around upstream

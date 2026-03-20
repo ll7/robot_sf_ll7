@@ -243,6 +243,84 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
     assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
 
 
+def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external force-model prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        _DummyAdapter,
+    )
+    _, socialforce = _build_policy(
+        "social_navigation_pyenvs_socialforce",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "socialforce",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    _, sfm = _build_policy(
+        "social_navigation_pyenvs_sfm_helbing",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "sfm_helbing",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert socialforce["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.socialforce.SocialForce"
+    )
+    assert sfm["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
+    )
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the new Social-Navigation-PyEnvs aliases."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    for algo, policy_name in (
+        ("social_navigation_pyenvs_socialforce", "socialforce"),
+        ("social_navigation_pyenvs_sfm_helbing", "sfm_helbing"),
+    ):
+        cfg, preflight = _preflight_policy(
+            algo=algo,
+            algo_config={
+                "repo_root": "output/repos/Social-Navigation-PyEnvs",
+                "policy_name": policy_name,
+            },
+            benchmark_profile="experimental",
+            missing_prereq_policy="skip-with-warning",
+            robot_kinematics="differential_drive",
+        )
+        assert cfg["policy_name"] == policy_name
+        assert preflight["status"] == "skipped"
+        assert preflight["policy"] == "skip-with-warning"
+        assert "missing upstream prereq" in str(preflight["error"])
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"

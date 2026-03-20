@@ -27,8 +27,8 @@ def _extract_simple_assignment(text: str, attribute: str) -> Any | None:
         expr = guarded_match.group(1).split("#", 1)[0].strip()
         try:
             return ast.literal_eval(expr)
-        except Exception:
-            if expr == "self.MAX_NUM_AGENTS_IN_ENVIRONMENT - 1":
+        except (ValueError, SyntaxError):
+            if re.fullmatch(r"self\.MAX_NUM_AGENTS_IN_ENVIRONMENT\s*-\s*1", expr):
                 max_agents = _extract_simple_assignment(text, "MAX_NUM_AGENTS_IN_ENVIRONMENT")
                 if isinstance(max_agents, (int, float)):
                     return int(max_agents - 1)
@@ -39,7 +39,7 @@ def _extract_simple_assignment(text: str, attribute: str) -> Any | None:
     expr = match.group(1).split("#", 1)[0].strip()
     try:
         return ast.literal_eval(expr)
-    except Exception:
+    except (ValueError, SyntaxError):
         return None
 
 
@@ -50,7 +50,7 @@ def _extract_default_policies(test_cases_path: Path) -> list[str]:
         return []
     try:
         return list(ast.literal_eval(match.group(1)))
-    except Exception:
+    except (ValueError, SyntaxError):
         return []
 
 

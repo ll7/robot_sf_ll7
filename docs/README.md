@@ -124,6 +124,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
+* **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary
 * **[Prediction Planner PR Readiness (2026-02-20)](./context/predictive_planner_pr_readiness_2026-02-20.md)** - Completed integration checklist and remaining maintainer decisions before final merge
 * **[Issues 485-492 Execution Trace](./context/issues_485_492_execution.md)** - Implementation summary, validation runs, and rollout notes for the benchmark hardening changes

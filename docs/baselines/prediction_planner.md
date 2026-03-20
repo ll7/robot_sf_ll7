@@ -32,7 +32,7 @@ Main parameter groups:
 The planner resolves checkpoints via `model/registry.yaml` using `predictive_model_id`.
 
 Recommended default model id:
-- `predictive_proxy_selected_v1`
+- `predictive_proxy_selected_v2_full`
 
 If the checkpoint cannot be resolved/loaded and fallback is disabled, the planner fails fast.
 

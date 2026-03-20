@@ -54,6 +54,15 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
   --log-level WARNING
 ```
 
+Run the same planner on the canonical paper surface:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_social_navigation_pyenvs_orca_only.yaml \
+  --label issue644_social_navigation_pyenvs_orca_paper_surface \
+  --log-level WARNING
+```
+
 ## Current result
 
 Observed probe verdict:
@@ -85,6 +94,44 @@ Interpretation:
 - provenance and projection semantics are now explicit in benchmark metadata
 - this probe campaign is too small to support paper-facing quality claims
 
+## Same-surface paper comparison
+
+Observed paper-surface run:
+
+- campaign root:
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_social_navigation_pyenvs_orca_only_issue644_social_navigation_pyenvs_orca_paper_surface_20260320_112918`
+- report:
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_social_navigation_pyenvs_orca_only_issue644_social_navigation_pyenvs_orca_paper_surface_20260320_112918/reports/campaign_report.md`
+
+Comparison target:
+
+- frozen canonical ORCA row from
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407/reports/campaign_summary.json`
+
+Key same-surface metrics:
+
+| Metric | Frozen `orca` | `social_navigation_pyenvs_orca` | Delta |
+|---|---:|---:|---:|
+| episodes | 141 | 141 | 0 |
+| success | 0.2340 | 0.0213 | -0.2127 |
+| collisions | 0.0426 | 0.0922 | +0.0496 |
+| runtime_sec | 98.2864 | 31.0010 | -67.2854 |
+| near_misses | 4.6950 | 4.3333 | -0.3617 |
+| time_to_goal_norm | 0.9429 | 0.9979 | +0.0550 |
+| comfort_exposure | 0.0315 | 0.0323 | +0.0008 |
+| jerk | 0.1477 | 0.0502 | -0.0975 |
+| SNQI | -0.2325 | -0.2907 | -0.0582 |
+| projection_rate | 0.8195 | 0.0000 | -0.8195 |
+| infeasible_rate | 0.8195 | 0.0000 | -0.8195 |
+
+Interpretation:
+
+- this upstream-backed ORCA path is much faster and does not hit the current ORCA projection /
+  infeasibility behavior
+- but it is materially worse on the benchmark outcomes that matter most here: success drops sharply,
+  collisions increase, and overall SNQI degrades
+- therefore this is an integration-proof and planner-zoo prototype, not a benchmark-quality upgrade
+
 ## Claim boundary
 
 What this issue proves:
@@ -102,4 +149,6 @@ What this issue does not prove:
 Current recommendation:
 
 - keep this as an `experimental` planner-zoo prototype
-- do not substitute it into paper-facing headline tables without a same-surface comparison first
+- do not replace the frozen paper ORCA row with this variant
+- use it as evidence that upstream-backed `Social-Navigation-PyEnvs` integration is feasible for
+  non-trainable planners, not as evidence that this ORCA variant is benchmark-strong

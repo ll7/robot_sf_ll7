@@ -72,7 +72,9 @@ def test_prediction_planner_camera_ready_config_matches_registry_contract() -> N
     assert config["predictive_phase_logic_enabled"] is True
 
     registry = yaml.safe_load(
-        Path("model/registry.yaml").read_text(encoding="utf-8"),
+        (Path(__file__).resolve().parents[2] / "model" / "registry.yaml").read_text(
+            encoding="utf-8",
+        ),
     )
     model_ids = {entry["model_id"] for entry in registry.get("models", [])}
     assert config["predictive_model_id"] in model_ids

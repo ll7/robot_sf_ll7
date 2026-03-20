@@ -291,6 +291,42 @@ def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_
     )
 
 
+def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external HSFM prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsHSFMAdapter",
+        _DummyAdapter,
+    )
+    _, meta = _build_policy(
+        "social_navigation_pyenvs_hsfm_new_guo",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "hsfm_new_guo",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
+    )
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "body_velocity_heading_safe_to_unicycle_vw"
+    )
+
+
 def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -319,6 +355,32 @@ def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav
         assert preflight["status"] == "skipped"
         assert preflight["policy"] == "skip-with-warning"
         assert "missing upstream prereq" in str(preflight["error"])
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_hsfm_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the HSFM alias too."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="social_navigation_pyenvs_hsfm_new_guo",
+        algo_config={
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "hsfm_new_guo",
+        },
+        benchmark_profile="experimental",
+        missing_prereq_policy="skip-with-warning",
+        robot_kinematics="differential_drive",
+    )
+    assert cfg["policy_name"] == "hsfm_new_guo"
+    assert preflight["status"] == "skipped"
+    assert preflight["policy"] == "skip-with-warning"
+    assert "missing upstream prereq" in str(preflight["error"])
 
 
 def test_suite_seed_selection_and_behavior_sanity() -> None:

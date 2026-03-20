@@ -295,6 +295,8 @@ class SocialNavigationPyEnvsHSFMAdapter:
             tuple[float, float]: Projected ``(linear, angular)`` command.
         """
         dt_source = observation.get("dt", 0.1)
+        if "sim_timestep" in observation:
+            dt_source = observation.get("sim_timestep", dt_source)
         if "sim" in observation and isinstance(observation["sim"], dict):
             dt_source = observation["sim"].get("timestep", dt_source)
         try:

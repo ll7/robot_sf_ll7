@@ -72,6 +72,10 @@ Current `Social-Navigation-PyEnvs` follow-on judgment after source-harness and O
   - the checked-out repo does not bundle the expected `social_gym/robot_models/...` assets
     (`policy.config`, `env.config`, and learned weight files), so learned-policy reuse would not be
     source-faithful yet
+- observed benchmark quality so far:
+  - `social_navigation_pyenvs_orca`, `social_navigation_pyenvs_sfm_helbing`, and
+    `social_navigation_pyenvs_hsfm_new_guo` are all runnable upstream-backed prototypes, but none
+    of them is competitive with the current benchmark leaders on the paper surface
 
 Second-pass execution order:
 

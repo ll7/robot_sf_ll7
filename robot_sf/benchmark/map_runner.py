@@ -66,6 +66,10 @@ from robot_sf.planner.social_navigation_pyenvs_force_model import (
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
 )
+from robot_sf.planner.social_navigation_pyenvs_hsfm import (
+    SocialNavigationPyEnvsHSFMAdapter,
+    build_social_navigation_pyenvs_hsfm_config,
+)
 from robot_sf.planner.social_navigation_pyenvs_orca import (
     SocialNavigationPyEnvsORCAAdapter,
     build_social_navigation_pyenvs_orca_config,
@@ -103,6 +107,8 @@ _SOCNAV_ALGO_KEYS = {
     "social_nav_pyenvs_socialforce",
     "social_navigation_pyenvs_sfm_helbing",
     "social_nav_pyenvs_sfm_helbing",
+    "social_navigation_pyenvs_hsfm_new_guo",
+    "social_nav_pyenvs_hsfm_new_guo",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1148,6 +1154,16 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             config=build_social_navigation_pyenvs_force_model_config(
                 algo_config,
                 default_policy_name="sfm_helbing",
+            )
+        )
+    elif algo_key in {
+        "social_navigation_pyenvs_hsfm_new_guo",
+        "social_nav_pyenvs_hsfm_new_guo",
+    }:
+        adapter = SocialNavigationPyEnvsHSFMAdapter(
+            config=build_social_navigation_pyenvs_hsfm_config(
+                algo_config,
+                default_policy_name="hsfm_new_guo",
             )
         )
     elif algo_key in {"sacadrl", "sa_cadrl"}:

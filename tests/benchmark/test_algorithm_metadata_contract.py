@@ -61,6 +61,24 @@ def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> N
     assert upstream["vendored_path"] == "third_party/python-rvo2"
 
 
+def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
+    """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "classical"
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs"
+    assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

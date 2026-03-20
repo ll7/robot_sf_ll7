@@ -206,6 +206,43 @@ def test_build_policy_orca_preserves_provenance_metadata() -> None:
     )
 
 
+def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external ORCA prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        _DummyAdapter,
+    )
+    _, meta = _build_policy(
+        "social_navigation_pyenvs_orca",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert (
+        meta["provenance"]["upstream_repo"]
+        == "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs"
+    )
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+    assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"

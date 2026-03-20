@@ -40,6 +40,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="ORCA baseline (requires rvo2 or explicit fallback policy).",
     ),
     AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_orca",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable ORCA wrapper.",
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),

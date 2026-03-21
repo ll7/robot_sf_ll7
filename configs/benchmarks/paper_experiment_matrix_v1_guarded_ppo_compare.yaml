@@ -58,12 +58,15 @@ planners:
   - key: orca
     algo: orca
     planner_group: core
-    benchmark_profile: baseline_safe
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
 
   - key: ppo
     algo: ppo
-    planner_group: core
-    benchmark_profile: learning_core
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
 
   - key: guarded_ppo
     algo: guarded_ppo

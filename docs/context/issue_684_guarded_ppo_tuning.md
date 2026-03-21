@@ -49,16 +49,35 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 ## Canonical Artifact
 
-- Pending benchmark completion.
+- `output/benchmarks/camera_ready/paper_experiment_matrix_v1_guarded_ppo_tuning_compare_issue684_guarded_ppo_tuning_compare_20260321_190143`
 
 ## Result
 
-Pending benchmark completion.
+| Planner | Success | Collisions | SNQI | Runtime (s) | Near Misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `ppo` | `0.2695` | `0.1773` | `-0.3512` | `110.0200` | `3.8156` |
+| `guarded_ppo` | `0.0071` | `0.0922` | `-0.2197` | `139.2858` | `2.1631` |
+| `guarded_ppo_relaxed_v1` | `0.0213` | `0.0993` | `-0.2804` | `124.6702` | `2.7589` |
+| `guarded_ppo_relaxed_v2` | `0.0638` | `0.0780` | `-0.3513` | `108.7586` | `3.6383` |
 
 ## Interpretation
 
-Pending benchmark completion.
+`guarded_ppo_relaxed_v2` is the best tuned variant in this pass.
+
+What improved relative to the original guarded profile:
+- success recovered from `0.0071` to `0.0638`
+- runtime dropped from `139.2858s` to `108.7586s`
+- collision rate improved from `0.0922` to `0.0780`
+
+What still failed relative to the actual benchmark leaders:
+- success remains far below canonical `ppo` at `0.2695`
+- collision rate is still worse than canonical `orca` from Issue 602 (`0.0496`)
+- SNQI ended effectively tied with PPO (`-0.3513` vs `-0.3512`), so the safety gain was not strong enough to create a better overall tradeoff
+
+The relaxed tuning demonstrates that the original guard was over-conservative and recoverable, but it does not produce a profile that is benchmark-strong enough to promote.
 
 ## Verdict
 
-Pending benchmark completion.
+Keep `guarded_ppo_relaxed_v2` only as an internal experimental reference if needed.
+
+Do not promote any guarded-PPO profile to a headline benchmark row. Config-only tuning was enough to show the direction of the tradeoff, but not enough to produce a planner that beats the current best baselines.

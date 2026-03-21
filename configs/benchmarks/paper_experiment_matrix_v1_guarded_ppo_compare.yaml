@@ -57,12 +57,12 @@ paper_interpretation_profile: baseline-ready-core
 planners:
   - key: orca
     algo: orca
-    planner_group: geometric
+    planner_group: core
     benchmark_profile: baseline_safe
 
   - key: ppo
     algo: ppo
-    planner_group: learning
+    planner_group: core
     benchmark_profile: learning_core
 
   - key: guarded_ppo

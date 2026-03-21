@@ -1,0 +1,18 @@
+name: paper_experiment_matrix_v1_risk_dwa_compare
+paper_profile: amv-paper-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+parallel_workers: 2
+resume: true
+compute_figures: false
+publication_bundle: false
+paper_facing: true
+planners:
+  - key: prediction_planner_v2_full
+    algo: prediction_planner
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+  - key: prediction_planner_v2_xl_ego
+    algo: prediction_planner
+    algo_config: configs/algos/prediction_planner_camera_ready_xl_ego.yaml
+  - key: risk_dwa
+    algo: risk_dwa
+    algo_config: configs/algos/risk_dwa_camera_ready.yaml

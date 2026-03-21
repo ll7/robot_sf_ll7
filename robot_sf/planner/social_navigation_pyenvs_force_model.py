@@ -61,13 +61,12 @@ def _backend_to_numpy(state: Any) -> np.ndarray:
         np.ndarray: NumPy view of the backend state.
     """
     current = state
-    for attr in ("detach", "cpu"):
-        method = getattr(current, attr, None)
-        if callable(method):
-            current = method()
-    to_numpy = getattr(current, "numpy", None)
-    if callable(to_numpy):
-        current = to_numpy()
+    if hasattr(current, "detach"):
+        current = current.detach()
+    if hasattr(current, "cpu"):
+        current = current.cpu()
+    if hasattr(current, "numpy"):
+        current = current.numpy()
     return np.asarray(current, dtype=float)
 
 

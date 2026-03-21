@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -56,13 +57,25 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        stdout_raw = exc.stdout or ""
+        stderr_raw = exc.stderr or ""
+        stdout_tail = (
+            stdout_raw.decode("utf-8", errors="replace")
+            if isinstance(stdout_raw, bytes)
+            else stdout_raw
+        )
+        stderr_tail = (
+            stderr_raw.decode("utf-8", errors="replace")
+            if isinstance(stderr_raw, bytes)
+            else stderr_raw
+        )
         return CommandResult(
             name=name,
             command=command,
             returncode=None,
             failure_summary=f"command exceeded timeout ({timeout_seconds}s)",
-            stdout_tail=(exc.stdout or "")[-4000:],
-            stderr_tail=(exc.stderr or "")[-4000:],
+            stdout_tail=stdout_tail[-4000:],
+            stderr_tail=stderr_tail[-4000:],
         )
 
     failure_summary = None
@@ -105,6 +118,10 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
         raise FileNotFoundError(f"Missing required upstream files: {', '.join(missing)}")
     if not side_env_python.exists():
         raise FileNotFoundError(f"Side-environment interpreter missing: {side_env_python}")
+    if not side_env_python.is_file() or not os.access(side_env_python, os.X_OK):
+        raise FileNotFoundError(
+            f"Side-environment interpreter is not executable: {side_env_python}"
+        )
 
 
 def _versions_script() -> str:
@@ -183,7 +200,13 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
         (
             result
             for result in commands
-            if result.name in {"upstream_example", "pytest_example_collection"}
+            if result.name
+            in {
+                "side_env_versions",
+                "learned_policy_import",
+                "upstream_example",
+                "pytest_example_collection",
+            }
             and result.returncode != 0
         ),
         None,
@@ -241,8 +264,10 @@ def _render_markdown(report: ProbeReport) -> str:
             "## Interpretation",
             "",
             "- The legacy runtime problem from `#639` is substantially narrowed.",
-            "- `gym`, TensorFlow, and the GA3C-CADRL learned-policy import path now reproduce successfully in the side environment.",
-            "- The remaining blocker is the upstream macOS visualization path forcing `TkAgg`, not missing CADRL-family runtime dependencies.",
+            "- `gym`, TensorFlow, and the GA3C-CADRL learned-policy import path now "
+            "reproduce successfully in the side environment.",
+            "- The remaining blocker is the upstream macOS visualization path forcing "
+            "`TkAgg`, not missing CADRL-family runtime dependencies.",
         ]
     )
 
@@ -250,7 +275,8 @@ def _render_markdown(report: ProbeReport) -> str:
         lines.extend(
             [
                 "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
-                "- The evidence now supports a narrower follow-up around non-visual or headless upstream reproduction, not a generic legacy-runtime rescue.",
+                "- The evidence now supports a narrower follow-up around non-visual or "
+                "headless upstream reproduction, not a generic legacy-runtime rescue.",
             ]
         )
     else:

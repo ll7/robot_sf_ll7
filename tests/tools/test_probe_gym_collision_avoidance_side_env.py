@@ -42,6 +42,17 @@ def test_run_probe_requires_side_env_python(tmp_path: Path) -> None:
         probe.run_probe(repo_root, tmp_path / "missing-python", timeout_seconds=1)
 
 
+def test_run_probe_requires_executable_side_env_python(tmp_path: Path) -> None:
+    """Non-executable interpreter paths should fail fast with a concrete error."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    side_env_python = tmp_path / "python"
+    side_env_python.write_text("", encoding="utf-8")
+    side_env_python.chmod(0o644)
+    with pytest.raises(FileNotFoundError, match="not executable"):
+        probe.run_probe(repo_root, side_env_python, timeout_seconds=1)
+
+
 def test_run_probe_preserves_venv_symlink_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -52,6 +63,7 @@ def test_run_probe_preserves_venv_symlink_path(
     side_env_root.mkdir(parents=True)
     side_env_python = side_env_root / "python"
     side_env_python.write_text("", encoding="utf-8")
+    side_env_python.chmod(0o755)
 
     seen_commands: list[list[str]] = []
 
@@ -81,6 +93,7 @@ def test_run_probe_reports_tkagg_blocker(monkeypatch: pytest.MonkeyPatch, tmp_pa
     _write_fake_repo(repo_root)
     side_env_python = tmp_path / "python"
     side_env_python.write_text("", encoding="utf-8")
+    side_env_python.chmod(0o755)
 
     results = {
         "side_env_versions": probe.CommandResult(
@@ -137,6 +150,7 @@ def test_run_probe_marks_success_when_example_and_pytest_pass(
     _write_fake_repo(repo_root)
     side_env_python = tmp_path / "python"
     side_env_python.write_text("", encoding="utf-8")
+    side_env_python.chmod(0o755)
 
     monkeypatch.setattr(
         probe,
@@ -154,6 +168,63 @@ def test_run_probe_marks_success_when_example_and_pytest_pass(
     report = probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
     assert report.verdict == "source harness reproducible in side environment"
     assert report.failure_stage is None
+
+
+def test_run_probe_treats_preflight_failure_as_blocking(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Preflight failures should keep the probe verdict blocked."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    side_env_python = tmp_path / "python"
+    side_env_python.write_text("", encoding="utf-8")
+    side_env_python.chmod(0o755)
+
+    results = {
+        "side_env_versions": probe.CommandResult(
+            name="side_env_versions",
+            command=["python", "-c", "versions"],
+            returncode=1,
+            failure_summary="missing python dependency: gym",
+            stdout_tail="",
+            stderr_tail="ModuleNotFoundError: No module named 'gym'",
+        ),
+        "learned_policy_import": probe.CommandResult(
+            name="learned_policy_import",
+            command=["python", "-c", "ga3c"],
+            returncode=0,
+            failure_summary=None,
+            stdout_tail="ga3c_ready",
+            stderr_tail="",
+        ),
+        "upstream_example": probe.CommandResult(
+            name="upstream_example",
+            command=["python", "example.py"],
+            returncode=0,
+            failure_summary=None,
+            stdout_tail="ok",
+            stderr_tail="",
+        ),
+        "pytest_example_collection": probe.CommandResult(
+            name="pytest_example_collection",
+            command=["python", "-m", "pytest"],
+            returncode=0,
+            failure_summary=None,
+            stdout_tail="ok",
+            stderr_tail="",
+        ),
+    }
+
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        lambda name, command, cwd, timeout_seconds: results[name],
+    )
+    report = probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
+
+    assert report.verdict == "source harness still blocked"
+    assert report.failure_stage == "side_env_versions"
+    assert report.failure_summary == "missing python dependency: gym"
 
 
 def test_detect_failure_summary_prefers_tkagg() -> None:

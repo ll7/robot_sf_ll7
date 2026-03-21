@@ -160,6 +160,13 @@ def test_parse_json_stdout_reads_last_json_line() -> None:
     assert probe._parse_json_stdout(result) == {"foo": 1}
 
 
+def test_upstream_payload_script_uses_checkpoint_constant() -> None:
+    """The embedded upstream payload should derive its checkpoint prefix from the shared constant."""
+    script = probe._upstream_payload_script()
+    assert probe.CHECKPOINT_PREFIX_RELATIVE.as_posix() in script
+    assert "__CHECKPOINT_PREFIX_RELATIVE__" not in script
+
+
 def test_render_markdown_mentions_observation_mapping_gap(tmp_path: Path) -> None:
     """Successful markdown should make the remaining mapping gap explicit."""
     repo_root = tmp_path / "repo"

@@ -268,7 +268,10 @@ def run_probe(
     contract = _extract_source_contract(repo_root)
     for result in commands:
         if result.returncode == 0 and result.stdout.strip().startswith("{"):
-            payload = json.loads(result.stdout)
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                continue
             if result.name == "backend_signature":
                 contract["backend_version"] = payload.get("backend_version")
                 contract["backend_simulator_signature"] = payload.get("simulator_signature")

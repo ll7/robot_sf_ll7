@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -163,7 +164,6 @@ def test_detect_failure_summary_prefers_tkagg() -> None:
 
 def test_render_markdown_mentions_narrower_follow_up(tmp_path: Path) -> None:
     """Blocked markdown output should preserve the conservative wrapper recommendation."""
-    """Successful example and pytest stages should mark the side harness reproducible."""
     repo_root = tmp_path / "repo"
     _write_fake_repo(repo_root)
     report = probe.ProbeReport(
@@ -181,3 +181,25 @@ def test_render_markdown_mentions_narrower_follow_up(tmp_path: Path) -> None:
     assert "Verdict: `source harness still blocked`" in markdown
     assert "GA3C-CADRL learned-policy import path now reproduce successfully" in markdown
     assert "A Robot SF wrapper is still not justified" in markdown
+
+
+def test_run_command_decodes_timeout_output_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Timeout handling should coerce byte outputs into safe text tails."""
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=["python", "-c", "pass"],
+            timeout=1,
+            output=b"stdout-bytes",
+            stderr=b"stderr-bytes",
+        )
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+
+    result = probe._run_command("timeout", ["python"], tmp_path, timeout_seconds=1)
+
+    assert result.returncode is None
+    assert result.stdout_tail == "stdout-bytes"
+    assert result.stderr_tail == "stderr-bytes"

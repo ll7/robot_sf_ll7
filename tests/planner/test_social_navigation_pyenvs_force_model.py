@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -65,6 +67,36 @@ class SFMHelbing:
     )
 
 
+def _install_fake_socialforce_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install a fake external socialforce backend that needs the compatibility shim."""
+    backend = types.ModuleType("socialforce")
+    backend.__version__ = "0.2.3"
+
+    class FakeSimulator:
+        def __init__(self, *, delta_t: float = 0.4) -> None:
+            self.delta_t = delta_t
+
+        def forward(self, state):
+            class FakeTensor:
+                def __init__(self, value):
+                    self._value = value
+
+                def detach(self):
+                    return self
+
+                def cpu(self):
+                    return self
+
+                def numpy(self):
+                    return self._value
+
+            value = [[0.5, 0.0, 0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.0]]
+            return FakeTensor(value)
+
+    backend.Simulator = FakeSimulator
+    monkeypatch.setitem(sys.modules, "socialforce", backend)
+
+
 def test_build_config_defaults_to_requested_policy() -> None:
     """Config builder should preserve the selected default upstream policy."""
     cfg = build_social_navigation_pyenvs_force_model_config({}, default_policy_name="socialforce")
@@ -90,10 +122,13 @@ def test_build_config_rejects_negative_speed_limits() -> None:
         )
 
 
-def test_socialforce_adapter_uses_explicit_velocity_source(tmp_path: Path) -> None:
+def test_socialforce_adapter_uses_explicit_velocity_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """SocialForce should inherit the explicit planar self-velocity contract."""
     repo_root = tmp_path / "repo"
     _write_fake_upstream_repo(repo_root)
+    _install_fake_socialforce_backend(monkeypatch)
     adapter = SocialNavigationPyEnvsForceModelAdapter(
         build_social_navigation_pyenvs_force_model_config(
             {"repo_root": str(repo_root), "policy_name": "socialforce"},
@@ -120,6 +155,22 @@ def test_socialforce_adapter_uses_explicit_velocity_source(tmp_path: Path) -> No
     assert meta["upstream_action_xy"] == [0.5, 0.0]
     assert meta["self_velocity_source"] == "robot.velocity_xy"
     assert meta["upstream_policy"] == "crowd_nav.policy_no_train.socialforce.SocialForce"
+    assert meta["runtime_strategy"] == "crowdnav_socialforce_compat_shim"
+    assert meta["runtime_dependency"] == "socialforce==0.2.3"
+
+
+def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path) -> None:
+    """A clear runtime error should surface when the external socialforce package is absent."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+
+    with pytest.raises(ModuleNotFoundError, match="uv run --with socialforce==0.2.3"):
+        SocialNavigationPyEnvsForceModelAdapter(
+            build_social_navigation_pyenvs_force_model_config(
+                {"repo_root": str(repo_root), "policy_name": "socialforce"},
+                default_policy_name="socialforce",
+            )
+        )
 
 
 def test_sfm_helbing_adapter_maps_goal_direction(tmp_path: Path) -> None:

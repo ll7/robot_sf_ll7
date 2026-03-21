@@ -64,8 +64,8 @@ Current `Social-Navigation-PyEnvs` follow-on judgment after source-harness and O
 - usable next:
   - non-trainable `sfm_*` and `hsfm_*` policies
 - partially usable now:
-  - `socialforce` runtime compatibility is now reproduced with an explicit shim around
-    `socialforce==0.2.3`; benchmark-facing retry is justified, but quality is still unknown
+  - `socialforce` runtime compatibility is reproduced with an explicit shim around
+    `socialforce==0.2.3`, but the benchmark-facing retry is weak and partially unstable
 - blocked for now:
   - learned `cadrl`, `lstm_rl`, and `sarl` from this repo
 - blocker:
@@ -76,6 +76,8 @@ Current `Social-Navigation-PyEnvs` follow-on judgment after source-harness and O
   - `social_navigation_pyenvs_orca`, `social_navigation_pyenvs_sfm_helbing`, and
     `social_navigation_pyenvs_hsfm_new_guo` are all runnable upstream-backed prototypes, but none
     of them is competitive with the current benchmark leaders on the paper surface
+  - `social_navigation_pyenvs_socialforce` is no longer runtime-blocked, but it still fails
+    partially on the paper surface and is not promising as a benchmark-quality upgrade
 
 Second-pass execution order:
 

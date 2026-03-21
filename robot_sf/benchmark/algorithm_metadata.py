@@ -92,9 +92,12 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
         "adapter_boundary": (
             "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "JointState contract, run upstream SocialForce predict(), then project ActionXY "
-            "into Robot SF unicycle_vw commands."
+            "JointState contract, run upstream SocialForce predict() through an explicit "
+            "CrowdNav-style compatibility runtime for socialforce==0.2.3, then project "
+            "ActionXY into Robot SF unicycle_vw commands."
         ),
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
     },
     "social_navigation_pyenvs_sfm_helbing": {
         "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
@@ -166,6 +169,8 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
     },
     "social_navigation_pyenvs_sfm_helbing": {
         "planner_command_space": "unicycle_vw",

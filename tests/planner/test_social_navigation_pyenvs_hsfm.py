@@ -98,6 +98,15 @@ def test_build_config_rejects_negative_speed_limits() -> None:
         build_social_navigation_pyenvs_hsfm_config({"max_angular_speed": -0.1})
 
 
+@pytest.mark.parametrize(
+    "field,value", [("preferred_speed", float("nan")), ("max_linear_speed", float("inf"))]
+)
+def test_build_config_rejects_non_finite_speed_limits(field: str, value: float) -> None:
+    """Non-finite speed limits should fail fast at config-build time."""
+    with pytest.raises(ValueError, match="must be finite"):
+        build_social_navigation_pyenvs_hsfm_config({field: value})
+
+
 def test_hsfm_adapter_uses_explicit_velocity_and_angular_rate(tmp_path: Path) -> None:
     """HSFM should consume explicit planar velocity and angular rate from the observation."""
     repo_root = tmp_path / "repo"
@@ -166,7 +175,11 @@ def test_hsfm_adapter_requires_explicit_angular_velocity(tmp_path: Path) -> None
     _write_fake_upstream_repo(repo_root)
     adapter = SocialNavigationPyEnvsHSFMAdapter(
         build_social_navigation_pyenvs_hsfm_config(
-            {"repo_root": str(repo_root), "policy_name": "hsfm_new_guo"}
+            {
+                "repo_root": str(repo_root),
+                "policy_name": "hsfm_new_guo",
+                "max_angular_speed": 10.0,
+            }
         )
     )
     with pytest.raises(ValueError, match="robot.angular_velocity"):
@@ -213,3 +226,40 @@ def test_hsfm_adapter_plan_reads_flattened_sim_timestep(tmp_path: Path) -> None:
     )
     assert command_v == pytest.approx(0.5)
     assert command_w == pytest.approx(3.302097501352921)
+
+
+@pytest.mark.parametrize("time_step", [float("nan"), float("inf"), 0.0, -1.0, None])
+def test_hsfm_adapter_act_sanitizes_invalid_timestep(
+    tmp_path: Path, time_step: float | None
+) -> None:
+    """Non-finite or non-positive timesteps should fall back to the safe default."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsHSFMAdapter(
+        build_social_navigation_pyenvs_hsfm_config(
+            {
+                "repo_root": str(repo_root),
+                "policy_name": "hsfm_new_guo",
+                "max_angular_speed": 10.0,
+            }
+        )
+    )
+    command_v, command_w, meta = adapter.act(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.0],
+                "speed": [0.3, 0.2],
+                "velocity_xy": [0.3, 0.0],
+                "angular_velocity": [0.2],
+                "radius": [0.3],
+            },
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {"positions": [], "velocities": []},
+            "sim": {"timestep": 0.1},
+        },
+        time_step=time_step,
+    )
+    assert command_v == pytest.approx(0.5)
+    assert command_w == pytest.approx(6.004195002705842)
+    assert meta["projected_command_vw"] == pytest.approx([0.5, 6.004195002705842])

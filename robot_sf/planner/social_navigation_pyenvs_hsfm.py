@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -23,6 +24,8 @@ _POLICY_SPECS: dict[HSFMPolicyName, tuple[str, str]] = {
     "hsfm_new_guo": ("crowd_nav.policy_no_train.hsfm_new_guo", "HSFMNewGuo"),
     "hsfm_farina": ("crowd_nav.policy_no_train.hsfm_farina", "HSFMFarina"),
 }
+
+_UPSTREAM_IMPORT_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,8 @@ def build_social_navigation_pyenvs_hsfm_config(
     preferred_speed = float(payload.get("preferred_speed", 1.0))
     max_linear_speed = float(payload.get("max_linear_speed", 1.0))
     max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if not all(math.isfinite(v) for v in (preferred_speed, max_linear_speed, max_angular_speed)):
+        raise ValueError("preferred_speed, max_linear_speed, and max_angular_speed must be finite")
     if preferred_speed < 0.0 or max_linear_speed < 0.0 or max_angular_speed < 0.0:
         raise ValueError(
             "preferred_speed, max_linear_speed, and max_angular_speed must be non-negative"
@@ -170,10 +175,11 @@ class SocialNavigationPyEnvsHSFMAdapter:
                 f"{self.config.repo_root}. Clone the upstream repo under output/repos/ first."
             )
         module_name, class_name = _POLICY_SPECS[self.config.policy_name]
-        with _upstream_import_context(self.repo_root):
-            action_mod = importlib.import_module("crowd_nav.utils.action")
-            state_mod = importlib.import_module("crowd_nav.utils.state")
-            policy_mod = importlib.import_module(module_name)
+        with _UPSTREAM_IMPORT_LOCK:
+            with _upstream_import_context(self.repo_root):
+                action_mod = importlib.import_module("crowd_nav.utils.action")
+                state_mod = importlib.import_module("crowd_nav.utils.state")
+                policy_mod = importlib.import_module(module_name)
         self._ActionXYW = action_mod.ActionXYW
         self._NewHeadedState = action_mod.NewHeadedState
         self._FullStateHeaded = state_mod.FullStateHeaded
@@ -252,7 +258,12 @@ class SocialNavigationPyEnvsHSFMAdapter:
     ) -> tuple[float, float, dict[str, Any]]:
         """Return projected `(v, w)` command plus explicit projection metadata."""
         joint_state = self._joint_state(observation)
-        dt = max(float(time_step), 1e-6)
+        try:
+            dt = float(time_step)
+        except (TypeError, ValueError):
+            dt = 0.1
+        if not math.isfinite(dt) or dt <= 0.0:
+            dt = 0.1
         self._policy.time_step = dt
         action = self._policy.predict(joint_state)
 

@@ -160,6 +160,7 @@ class SocNavObservationFusion:
     robot_index: int = 0
     truncation_warned: bool = False
     _predictive_foresight: PredictiveForesightEncoder | None = None
+    _last_heading: float | None = None
 
     def __post_init__(self) -> None:
         """Initialize optional predictive foresight encoder."""
@@ -173,7 +174,7 @@ class SocNavObservationFusion:
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
-        return None
+        self._last_heading = None
 
     def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
         """Return the robot world-frame planar velocity for the structured observation."""
@@ -193,6 +194,29 @@ class SocNavObservationFusion:
             ],
             dtype=np.float32,
         )
+
+    def _robot_angular_velocity(self, wrapped_heading: float) -> np.ndarray:
+        """Return robot angular velocity while avoiding drivetrain-specific contract drift."""
+        robot = self.simulator.robots[self.robot_index]
+        state = getattr(robot, "state", None)
+        velocity_vw = getattr(state, "velocity_vw", None)
+        if velocity_vw is not None:
+            arr = np.asarray(velocity_vw, dtype=np.float32).reshape(-1)
+            if arr.size > 1:
+                return np.array([float(arr[1])], dtype=np.float32)
+
+        velocity = getattr(state, "velocity", None)
+        if isinstance(velocity, tuple) and len(velocity) > 1:
+            return np.array([float(velocity[1])], dtype=np.float32)
+
+        dt = float(getattr(self.simulator.config, "time_per_step_in_secs", 0.0) or 0.0)
+        if self._last_heading is None or dt <= 0.0:
+            angular_velocity = 0.0
+        else:
+            delta = ((wrapped_heading - self._last_heading + np.pi) % (2.0 * np.pi)) - np.pi
+            angular_velocity = float(delta / dt)
+        self._last_heading = float(wrapped_heading)
+        return np.array([angular_velocity], dtype=np.float32)
 
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
@@ -271,10 +295,7 @@ class SocNavObservationFusion:
                 "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
                 "velocity_xy": robot_velocity_xy,
-                "angular_velocity": np.array(
-                    [float(robot_speed[1]) if robot_speed.size > 1 else 0.0],
-                    dtype=np.float32,
-                ),
+                "angular_velocity": self._robot_angular_velocity(wrapped_heading),
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),

@@ -183,3 +183,33 @@ def test_hsfm_adapter_requires_explicit_angular_velocity(tmp_path: Path) -> None
                 "pedestrians": {"positions": [], "velocities": []},
             }
         )
+
+
+def test_hsfm_adapter_plan_reads_flattened_sim_timestep(tmp_path: Path) -> None:
+    """Flattened benchmark observations should preserve the configured timestep."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsHSFMAdapter(
+        build_social_navigation_pyenvs_hsfm_config(
+            {
+                "repo_root": str(repo_root),
+                "policy_name": "hsfm_new_guo",
+                "max_angular_speed": 10.0,
+            }
+        )
+    )
+    command_v, command_w = adapter.plan(
+        {
+            "robot_position": [0.0, 0.0],
+            "robot_heading": [0.0],
+            "robot_velocity_xy": [0.3, 0.0],
+            "robot_angular_velocity": [0.2],
+            "robot_radius": [0.3],
+            "goal_current": [1.0, 0.0],
+            "pedestrians_positions": [],
+            "pedestrians_velocities": [],
+            "sim_timestep": [0.2],
+        }
+    )
+    assert command_v == pytest.approx(0.5)
+    assert command_w == pytest.approx(3.302097501352921)

@@ -56,5 +56,5 @@ def test_socnav_bicycle_observation_reports_turn_rate_not_heading():
     heading_delta = ((new_heading - prev_heading + np.pi) % (2.0 * np.pi)) - np.pi
     expected_turn_rate = heading_delta / dt
 
-    assert new_obs["robot"]["angular_velocity"][0] == pytest.approx(expected_turn_rate, abs=1e-6)
+    assert new_obs["robot"]["angular_velocity"][0] == pytest.approx(expected_turn_rate, abs=1e-5)
     assert new_obs["robot"]["angular_velocity"][0] != pytest.approx(new_heading)

@@ -593,6 +593,65 @@ def test_prediction_adapter_sequence_search_keeps_progress_escape(monkeypatch):
     assert v >= 0.39
 
 
+def test_prediction_adapter_probabilistic_risk_mode_is_deterministic(monkeypatch):
+    """Probabilistic rollout scoring should stay deterministic for a fixed seed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_uncertainty_mode="heuristic_gaussian",
+        predictive_risk_sample_count=4,
+        predictive_risk_seed=13,
+        predictive_risk_objective="cvar",
+        predictive_risk_cvar_alpha=0.5,
+        predictive_candidate_speeds=(0.0, 0.3, 0.6),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+    )
+    obs = _make_obs_with_peds([(1.3, 0.4), (2.1, -0.2)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
+
+
+def test_prediction_adapter_cvar_objective_penalizes_worse_tail() -> None:
+    """CVaR aggregation should be at least as conservative as the mean on the same sample set."""
+    cfg = SocNavPlannerConfig(
+        predictive_risk_objective="cvar",
+        predictive_risk_cvar_alpha=0.5,
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    costs = [1.0, 2.0, 10.0, 20.0]
+    cvar = adapter._aggregate_risk_costs(costs)
+    adapter.config.predictive_risk_objective = "mean"
+    mean = adapter._aggregate_risk_costs(costs)
+    assert cvar >= mean
+
+
+def test_prediction_adapter_mcts_mode_is_deterministic(monkeypatch):
+    """MCTS-lite search should stay deterministic under a fixed planner seed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_mcts_enabled=True,
+        predictive_sequence_segments=3,
+        predictive_mcts_iterations=24,
+        predictive_mcts_branch_factor=3,
+        predictive_mcts_rollout_count=2,
+        predictive_risk_seed=5,
+        predictive_candidate_speeds=(0.0, 0.35, 0.7),
+        predictive_candidate_heading_deltas=(-np.pi / 6, 0.0, np.pi / 6),
+    )
+    obs = _make_obs_with_peds([(1.0, 0.25), (1.8, -0.3)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
+
+
 def test_policy_constructors():
     """Factory helpers build policies without error."""
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)

@@ -64,8 +64,8 @@ Current `Social-Navigation-PyEnvs` follow-on judgment after source-harness and O
 - usable next:
   - non-trainable `sfm_*` and `hsfm_*` policies
 - partially usable now:
-  - `socialforce` is benchmark-wired in Robot SF, but blocked at runtime by the external
-    `socialforce==0.2.3` API mismatch (`Simulator.__init__(..., initial_speed=...)`)
+  - `socialforce` runtime compatibility is now reproduced with an explicit shim around
+    `socialforce==0.2.3`; benchmark-facing retry is justified, but quality is still unknown
 - blocked for now:
   - learned `cadrl`, `lstm_rl`, and `sarl` from this repo
 - blocker:

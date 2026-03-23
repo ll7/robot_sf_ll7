@@ -100,6 +100,40 @@ def test_run_probe_reports_reproduced_mapping(
     assert max(case.max_abs_diff for case in report.cases) == pytest.approx(0.0, abs=1e-6)
 
 
+def test_run_probe_blocks_on_malformed_upstream_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Malformed upstream JSON should produce a blocked report instead of crashing."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    side_env_python = tmp_path / "side" / ".venv" / "bin" / "python"
+    side_env_python.parent.mkdir(parents=True)
+    side_env_python.write_text("", encoding="utf-8")
+
+    result = probe.CommandResult(
+        name="upstream_live_native_state",
+        command=["python"],
+        returncode=0,
+        failure_summary=None,
+        stdout_tail="banner\nnot-json\n",
+        stderr_tail="",
+    )
+    monkeypatch.setattr(probe, "_run_command", lambda *args, **kwargs: result)
+
+    report = probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
+
+    assert report.verdict == "parity blocked"
+    assert report.failure_stage == "upstream_live_native_state"
+
+
+def test_upstream_payload_sets_config_before_env_import() -> None:
+    """The upstream payload should set GYM_CONFIG_CLASS before importing gym_collision_avoidance.envs."""
+    script = probe._upstream_live_payload_script()
+    assert script.index("os.environ['GYM_CONFIG_CLASS'] = 'Example'") < script.index(
+        "from gym_collision_avoidance.envs import test_cases as tc"
+    )
+
+
 def test_render_markdown_recommends_benchmarkable_proxy(tmp_path: Path) -> None:
     """Successful markdown should frame SACADRL as benchmarkable evidence, not a strong planner."""
     repo_root = tmp_path / "repo"

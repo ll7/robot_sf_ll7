@@ -132,6 +132,7 @@ import json
 import os
 
 os.environ['MPLBACKEND'] = 'Agg'
+os.environ['GYM_CONFIG_CLASS'] = 'Example'
 import numpy as np
 if not hasattr(np, 'bool8'):
     np.bool8 = np.bool_
@@ -151,7 +152,6 @@ import gym_collision_avoidance.envs.visualize as viz
 
 viz.animate_episode = lambda *args, **kwargs: None
 gym.logger.set_level(40)
-os.environ['GYM_CONFIG_CLASS'] = 'Example'
 tf.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 tf.Session().__enter__()
 
@@ -436,7 +436,21 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
             commands=commands,
         )
 
-    upstream_payload = _parse_json_stdout(upstream_result)
+    try:
+        upstream_payload = _parse_json_stdout(upstream_result)
+    except ValueError as exc:
+        return ProbeReport(
+            issue=ISSUE_NUMBER,
+            repo_root=str(repo_root),
+            repo_remote_url=UPSTREAM_REPO_URL,
+            side_env_python=str(side_env_python),
+            verdict="parity blocked",
+            failure_stage=upstream_result.name,
+            failure_summary=str(exc),
+            cases=[],
+            source_contract=_extract_source_contract(),
+            commands=commands,
+        )
     live_case = _run_native_roundtrip_case(
         "live_upstream_two_agents_reset",
         upstream_payload["native_state"],

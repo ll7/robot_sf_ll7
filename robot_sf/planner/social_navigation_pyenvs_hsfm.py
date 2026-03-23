@@ -28,6 +28,22 @@ _POLICY_SPECS: dict[HSFMPolicyName, tuple[str, str]] = {
 _UPSTREAM_IMPORT_LOCK = threading.Lock()
 
 
+def _sanitize_time_step(value: Any) -> float:
+    """Normalize an arbitrary timestep payload into a safe positive scalar.
+
+    Returns:
+        float: A finite positive timestep, or the safe default `0.1`.
+    """
+    try:
+        dt_arr = np.asarray(0.1 if value is None else value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return 0.1
+    dt = float(dt_arr[0]) if dt_arr.size else 0.1
+    if not math.isfinite(dt) or dt <= 0.0:
+        return 0.1
+    return dt
+
+
 @dataclass(frozen=True)
 class SocialNavigationPyEnvsHSFMConfig:
     """Configuration for one upstream Social-Navigation-PyEnvs HSFM adapter."""
@@ -112,6 +128,7 @@ def _robot_headed_observation_fields(
         goal_key = "current"
         heading_key = "heading"
         radius_key = "radius"
+        radius_field = "robot.radius"
         velocity_key = "velocity_xy"
         angular_velocity_key = "angular_velocity"
         position_field = "robot.position"
@@ -127,6 +144,7 @@ def _robot_headed_observation_fields(
         goal_key = "goal_current"
         heading_key = "robot_heading"
         radius_key = "robot_radius"
+        radius_field = "robot_radius"
         velocity_key = "robot_velocity_xy"
         angular_velocity_key = "robot_angular_velocity"
         position_field = "robot_position"
@@ -139,7 +157,7 @@ def _robot_headed_observation_fields(
     robot_pos = _require_array(robot_source.get(position_key), size=2, field=position_field)
     goal_pos = _require_array(goal_source.get(goal_key), size=2, field=goal_field)
     heading = float(_require_array(robot_source.get(heading_key), size=1, field=heading_field)[0])
-    radius = float(_as_array(robot_source.get(radius_key), pad=1, fill=0.3)[0])
+    radius = float(_require_array(robot_source.get(radius_key), size=1, field=radius_field)[0])
     velocity_xy = _require_array(robot_source.get(velocity_key), size=2, field=velocity_field)
     body_velocity_xy = _world_to_body(velocity_xy, heading)
     angular_velocity = float(
@@ -210,12 +228,14 @@ class SocialNavigationPyEnvsHSFMAdapter:
             velocities_key = "velocities"
             count_key = "count"
             radius_key = "radius"
+            radius_field = "pedestrians.radius"
         else:
             ped_source = observation
             positions_key = "pedestrians_positions"
             velocities_key = "pedestrians_velocities"
             count_key = "pedestrians_count"
             radius_key = "pedestrians_radius"
+            radius_field = "pedestrians_radius"
 
         ped_positions = _as_matrix(ped_source.get(positions_key), cols=2)
         ped_velocities = _as_matrix(ped_source.get(velocities_key), cols=2)
@@ -224,7 +244,12 @@ class SocialNavigationPyEnvsHSFMAdapter:
             if ped_source.get(count_key) is not None
             else ped_positions.shape[0]
         )
-        ped_radius_value = float(_as_array(ped_source.get(radius_key), pad=1, fill=0.3)[0])
+        if ped_positions.shape[0] == 0:
+            ped_radius_value = 0.3
+        else:
+            ped_radius_value = float(
+                _require_array(ped_source.get(radius_key), size=1, field=radius_field)[0]
+            )
 
         self_state = self._FullStateHeaded(
             float(robot_pos[0]),
@@ -258,12 +283,7 @@ class SocialNavigationPyEnvsHSFMAdapter:
     ) -> tuple[float, float, dict[str, Any]]:
         """Return projected `(v, w)` command plus explicit projection metadata."""
         joint_state = self._joint_state(observation)
-        try:
-            dt = float(time_step)
-        except (TypeError, ValueError):
-            dt = 0.1
-        if not math.isfinite(dt) or dt <= 0.0:
-            dt = 0.1
+        dt = _sanitize_time_step(time_step)
         self._policy.time_step = dt
         action = self._policy.predict(joint_state)
 
@@ -310,13 +330,7 @@ class SocialNavigationPyEnvsHSFMAdapter:
             dt_source = observation.get("sim_timestep", dt_source)
         if "sim" in observation and isinstance(observation["sim"], dict):
             dt_source = observation["sim"].get("timestep", dt_source)
-        try:
-            dt_arr = np.asarray(0.1 if dt_source is None else dt_source, dtype=float).reshape(-1)
-        except (TypeError, ValueError):
-            dt_arr = np.asarray([0.1], dtype=float)
-        dt = float(dt_arr[0]) if dt_arr.size else 0.1
-        if not math.isfinite(dt) or dt <= 0.0:
-            dt = 0.1
+        dt = _sanitize_time_step(dt_source)
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 

@@ -147,6 +147,65 @@ def test_run_probe_reports_material_model_mismatch(
     assert report.verdict == "material model mismatch"
 
 
+def test_run_probe_uses_repo_root_for_local_stage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The local parity stage should run from the repository root, not the caller cwd."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    side_env_python = tmp_path / "side" / ".venv" / "bin" / "python"
+    side_env_python.parent.mkdir(parents=True)
+    side_env_python.write_text("", encoding="utf-8")
+
+    commands: list[tuple[str, list[str], Path]] = []
+    upstream_payload = {
+        "vec_obs": [[0.1, 0.2]],
+        "upstream_probs": [0.1, 0.9],
+        "upstream_argmax": 1,
+        "upstream_raw_action": [1.0, 0.0],
+        "upstream_final_action": [1.0, 0.0],
+        "upstream_actions": [[0.5, 0.0], [1.0, 0.0]],
+        "checkpoint_prefix": "/tmp/checkpoint",
+        "obs_shape": [1, 2],
+        "states_used": ["dist_to_goal", "pref_speed"],
+    }
+    local_payload = {
+        "local_argmax": 1,
+        "local_raw_action": [1.0, 0.0],
+        "prob_max_abs_diff": 0.0,
+        "actions_max_abs_diff": 0.0,
+    }
+
+    def fake_run(
+        name: str, command: list[str], cwd: Path, timeout_seconds: int
+    ) -> probe.CommandResult:
+        commands.append((name, command, cwd))
+        if name == "upstream_native_observation_and_policy":
+            return probe.CommandResult(
+                name=name,
+                command=command,
+                returncode=0,
+                failure_summary=None,
+                stdout_tail=f"banner\n{__import__('json').dumps(upstream_payload)}\n",
+                stderr_tail="",
+            )
+        return probe.CommandResult(
+            name=name,
+            command=command,
+            returncode=0,
+            failure_summary=None,
+            stdout_tail=f"{__import__('json').dumps(local_payload)}\n",
+            stderr_tail="",
+        )
+
+    monkeypatch.setattr(probe, "_run_command", fake_run)
+    probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
+
+    local_stage = next(item for item in commands if item[0] == "local_sacadrl_model_parity")
+    assert local_stage[2] == repo_root.resolve()
+    assert "payload.json" in " ".join(local_stage[1])
+
+
 def test_parse_json_stdout_reads_last_json_line() -> None:
     """The parser should ignore banner noise and recover the trailing JSON payload."""
     result = probe.CommandResult(

@@ -257,7 +257,7 @@ def _render_markdown(report: ProbeReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run the headless-reproduction probe CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, required=True)
@@ -265,7 +265,7 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-md", type=Path, required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     report = run_probe(args.repo_root, args.side_env_python, args.timeout_seconds)
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
@@ -273,7 +273,7 @@ def main() -> int:
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_md.write_text(_render_markdown(report), encoding="utf-8")
     print(json.dumps({"verdict": report.verdict, "failure_summary": report.failure_summary}))
-    return 0
+    return 0 if report.failure_stage is None else 1
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -241,19 +242,16 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
             commands=commands,
         )
 
-    payload_file = Path(
-        "output/benchmarks/external/gym_collision_avoidance_model_parity/payload.json"
-    )
-    payload_file.parent.mkdir(parents=True, exist_ok=True)
     upstream_payload = _parse_json_stdout(upstream_result)
-    payload_file.write_text(json.dumps(upstream_payload, indent=2), encoding="utf-8")
-
-    local_result = _run_command(
-        "local_sacadrl_model_parity",
-        ["uv", "run", "python", "-c", _local_payload_script(payload_file.resolve())],
-        cwd=Path.cwd(),
-        timeout_seconds=timeout_seconds,
-    )
+    with tempfile.TemporaryDirectory(prefix="gym_collision_avoidance_model_parity_") as tmp_dir:
+        payload_file = Path(tmp_dir) / "payload.json"
+        payload_file.write_text(json.dumps(upstream_payload, indent=2), encoding="utf-8")
+        local_result = _run_command(
+            "local_sacadrl_model_parity",
+            ["uv", "run", "python", "-c", _local_payload_script(payload_file.resolve())],
+            cwd=repo_root,
+            timeout_seconds=timeout_seconds,
+        )
     commands.append(local_result)
     if local_result.returncode != 0:
         return ProbeReport(

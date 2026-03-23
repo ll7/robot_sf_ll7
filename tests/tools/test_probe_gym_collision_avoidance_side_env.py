@@ -49,7 +49,7 @@ def test_run_probe_requires_executable_side_env_python(tmp_path: Path) -> None:
     side_env_python = tmp_path / "python"
     side_env_python.write_text("", encoding="utf-8")
     side_env_python.chmod(0o644)
-    with pytest.raises(FileNotFoundError, match="not executable"):
+    with pytest.raises(PermissionError, match="not executable"):
         probe.run_probe(repo_root, side_env_python, timeout_seconds=1)
 
 

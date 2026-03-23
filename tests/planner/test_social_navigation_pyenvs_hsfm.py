@@ -198,6 +198,65 @@ def test_hsfm_adapter_requires_explicit_angular_velocity(tmp_path: Path) -> None
         )
 
 
+def test_hsfm_adapter_requires_explicit_radius_fields(tmp_path: Path) -> None:
+    """Missing radius fields should fail fast instead of defaulting to a guessed value."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsHSFMAdapter(
+        build_social_navigation_pyenvs_hsfm_config(
+            {
+                "repo_root": str(repo_root),
+                "policy_name": "hsfm_new_guo",
+                "max_angular_speed": 10.0,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="robot.radius"):
+        adapter.plan(
+            {
+                "robot": {
+                    "position": [0.0, 0.0],
+                    "heading": [0.0],
+                    "speed": [0.3, 0.0],
+                    "velocity_xy": [0.3, 0.0],
+                    "angular_velocity": [0.2],
+                },
+                "goal": {"current": [1.0, 0.0]},
+                "pedestrians": {"positions": [[1.0, 1.0]], "velocities": [[0.0, 0.0]]},
+            }
+        )
+
+
+def test_hsfm_adapter_requires_explicit_pedestrian_radius_fields(tmp_path: Path) -> None:
+    """Missing pedestrian radius fields should fail fast when pedestrians are present."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SocialNavigationPyEnvsHSFMAdapter(
+        build_social_navigation_pyenvs_hsfm_config(
+            {
+                "repo_root": str(repo_root),
+                "policy_name": "hsfm_new_guo",
+                "max_angular_speed": 10.0,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="pedestrians.radius"):
+        adapter.plan(
+            {
+                "robot": {
+                    "position": [0.0, 0.0],
+                    "heading": [0.0],
+                    "speed": [0.3, 0.0],
+                    "velocity_xy": [0.3, 0.0],
+                    "angular_velocity": [0.2],
+                    "radius": [0.3],
+                },
+                "goal": {"current": [1.0, 0.0]},
+                "pedestrians": {"positions": [[1.0, 1.0]], "velocities": [[0.0, 0.0]]},
+            }
+        )
+
+
 def test_hsfm_adapter_plan_reads_flattened_sim_timestep(tmp_path: Path) -> None:
     """Flattened benchmark observations should preserve the configured timestep."""
     repo_root = tmp_path / "repo"

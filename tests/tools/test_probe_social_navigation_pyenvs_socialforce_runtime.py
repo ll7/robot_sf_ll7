@@ -169,3 +169,35 @@ def test_render_markdown_mentions_compatibility_runtime(tmp_path: Path) -> None:
     assert "Verdict: `compatible runtime reproduced`" in markdown
     assert "compatibility shim" in markdown
     assert "compat simulator state shape" in markdown
+
+
+def test_run_probe_skips_malformed_json_payloads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Malformed JSON payloads should not abort report generation."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    monkeypatch.setattr(probe, "_extract_remote_url", lambda _repo_root: None)
+
+    results = {
+        "backend_signature": probe.CommandResult("backend_signature", ["uv"], 0, None, "{oops", ""),
+        "compat_predict_minimal": probe.CommandResult(
+            "compat_predict_minimal",
+            ["uv"],
+            0,
+            None,
+            json.dumps({"action_xy": [0.1, -0.2], "shim_accepts_initial_speed": True}),
+            "",
+        ),
+    }
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        lambda name, command, cwd, timeout_seconds: results[name],
+    )
+
+    report = probe.run_probe(repo_root, timeout_seconds=5)
+
+    assert report.verdict == "compatible runtime reproduced"
+    assert "backend_version" not in report.source_contract
+    assert report.source_contract["compat_probe_action_xy"] == [0.1, -0.2]

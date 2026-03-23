@@ -80,13 +80,23 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        stdout_raw = exc.stdout or ""
+        stderr_raw = exc.stderr or ""
         return CommandResult(
             name=name,
             command=command,
             returncode=None,
             failure_summary=f"command exceeded timeout ({timeout_seconds}s)",
-            stdout_tail=(exc.stdout or "")[-4000:],
-            stderr_tail=(exc.stderr or "")[-4000:],
+            stdout_tail=(
+                stdout_raw.decode("utf-8", errors="replace")
+                if isinstance(stdout_raw, bytes)
+                else stdout_raw
+            )[-4000:],
+            stderr_tail=(
+                stderr_raw.decode("utf-8", errors="replace")
+                if isinstance(stderr_raw, bytes)
+                else stderr_raw
+            )[-4000:],
         )
     failure_summary = (
         None if result.returncode == 0 else _detect_failure_summary(result.stdout, result.stderr)
@@ -132,6 +142,7 @@ import json
 import os
 
 os.environ['MPLBACKEND'] = 'Agg'
+os.environ['GYM_CONFIG_CLASS'] = 'Example'
 import numpy as np
 if not hasattr(np, 'bool8'):
     np.bool8 = np.bool_
@@ -151,7 +162,6 @@ import gym_collision_avoidance.envs.visualize as viz
 
 viz.animate_episode = lambda *args, **kwargs: None
 gym.logger.set_level(40)
-os.environ['GYM_CONFIG_CLASS'] = 'Example'
 tf.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 tf.Session().__enter__()
 
@@ -436,7 +446,21 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
             commands=commands,
         )
 
-    upstream_payload = _parse_json_stdout(upstream_result)
+    try:
+        upstream_payload = _parse_json_stdout(upstream_result)
+    except ValueError as exc:
+        return ProbeReport(
+            issue=ISSUE_NUMBER,
+            repo_root=str(repo_root),
+            repo_remote_url=UPSTREAM_REPO_URL,
+            side_env_python=str(side_env_python),
+            verdict="parity blocked",
+            failure_stage=upstream_result.name,
+            failure_summary=str(exc),
+            cases=[],
+            source_contract=_extract_source_contract(),
+            commands=commands,
+        )
     live_case = _run_native_roundtrip_case(
         "live_upstream_two_agents_reset",
         upstream_payload["native_state"],

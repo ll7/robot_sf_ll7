@@ -80,13 +80,23 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        stdout_raw = exc.stdout or ""
+        stderr_raw = exc.stderr or ""
         return CommandResult(
             name=name,
             command=command,
             returncode=None,
             failure_summary=f"command exceeded timeout ({timeout_seconds}s)",
-            stdout_tail=(exc.stdout or "")[-4000:],
-            stderr_tail=(exc.stderr or "")[-4000:],
+            stdout_tail=(
+                stdout_raw.decode("utf-8", errors="replace")
+                if isinstance(stdout_raw, bytes)
+                else stdout_raw
+            )[-4000:],
+            stderr_tail=(
+                stderr_raw.decode("utf-8", errors="replace")
+                if isinstance(stderr_raw, bytes)
+                else stderr_raw
+            )[-4000:],
         )
     failure_summary = (
         None if result.returncode == 0 else _detect_failure_summary(result.stdout, result.stderr)

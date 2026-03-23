@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -124,6 +125,25 @@ def test_run_probe_blocks_on_malformed_upstream_json(
 
     assert report.verdict == "parity blocked"
     assert report.failure_stage == "upstream_live_native_state"
+
+
+def test_run_command_decodes_timeout_bytes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Timeout output should be decoded to text before being stored in the report."""
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=["python"],
+            timeout=0.1,
+            output=b"timed-out stdout \xff",
+            stderr=b"timed-out stderr \xfe",
+        )
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    result = probe._run_command("sample", ["python"], tmp_path, timeout_seconds=1)
+
+    assert result.returncode is None
+    assert result.stdout_tail == "timed-out stdout �"
+    assert result.stderr_tail == "timed-out stderr �"
 
 
 def test_upstream_payload_sets_config_before_env_import() -> None:

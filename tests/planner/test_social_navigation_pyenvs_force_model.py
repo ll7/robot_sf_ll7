@@ -169,7 +169,7 @@ def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path
 
     def fake_import_module(name: str, package: str | None = None):
         if name == "socialforce":
-            raise ModuleNotFoundError("No module named 'socialforce'")
+            raise ModuleNotFoundError("No module named 'socialforce'", name="socialforce")
         return real_import_module(name, package)
 
     monkeypatch = pytest.MonkeyPatch()
@@ -188,6 +188,34 @@ def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path
             )
     finally:
         monkeypatch.undo()
+
+
+def test_socialforce_adapter_propagates_transitive_import_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transitive dependency failures should not be mislabeled as a missing socialforce install."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+
+    real_import_module = importlib.import_module
+
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "socialforce":
+            raise ModuleNotFoundError("No module named 'missing_backend_dep'")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(
+        "robot_sf.planner.social_navigation_pyenvs_force_model.importlib.import_module",
+        fake_import_module,
+    )
+
+    with pytest.raises(ModuleNotFoundError, match="missing_backend_dep"):
+        SocialNavigationPyEnvsForceModelAdapter(
+            build_social_navigation_pyenvs_force_model_config(
+                {"repo_root": str(repo_root), "policy_name": "socialforce"},
+                default_policy_name="socialforce",
+            )
+        )
 
 
 def test_socialforce_adapter_rejects_unvalidated_backend_version(tmp_path: Path) -> None:

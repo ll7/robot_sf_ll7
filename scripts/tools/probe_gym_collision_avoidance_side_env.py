@@ -119,9 +119,7 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
     if not side_env_python.exists():
         raise FileNotFoundError(f"Side-environment interpreter missing: {side_env_python}")
     if not side_env_python.is_file() or not os.access(side_env_python, os.X_OK):
-        raise FileNotFoundError(
-            f"Side-environment interpreter is not executable: {side_env_python}"
-        )
+        raise PermissionError(f"Side-environment interpreter is not executable: {side_env_python}")
 
 
 def _versions_script() -> str:

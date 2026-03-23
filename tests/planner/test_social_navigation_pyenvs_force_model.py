@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from pathlib import Path
@@ -164,13 +165,83 @@ def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path
     repo_root = tmp_path / "repo"
     _write_fake_upstream_repo(repo_root)
 
-    with pytest.raises(ModuleNotFoundError, match="uv run --with socialforce==0.2.3"):
+    real_import_module = importlib.import_module
+
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "socialforce":
+            raise ModuleNotFoundError("No module named 'socialforce'", name="socialforce")
+        return real_import_module(name, package)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "robot_sf.planner.social_navigation_pyenvs_force_model.importlib.import_module",
+        fake_import_module,
+    )
+
+    try:
+        with pytest.raises(ModuleNotFoundError, match="uv run --with socialforce==0.2.3"):
+            SocialNavigationPyEnvsForceModelAdapter(
+                build_social_navigation_pyenvs_force_model_config(
+                    {"repo_root": str(repo_root), "policy_name": "socialforce"},
+                    default_policy_name="socialforce",
+                )
+            )
+    finally:
+        monkeypatch.undo()
+
+
+def test_socialforce_adapter_propagates_transitive_import_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transitive dependency failures should not be mislabeled as a missing socialforce install."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+
+    real_import_module = importlib.import_module
+
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "socialforce":
+            raise ModuleNotFoundError("No module named 'missing_backend_dep'")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(
+        "robot_sf.planner.social_navigation_pyenvs_force_model.importlib.import_module",
+        fake_import_module,
+    )
+
+    with pytest.raises(ModuleNotFoundError, match="missing_backend_dep"):
         SocialNavigationPyEnvsForceModelAdapter(
             build_social_navigation_pyenvs_force_model_config(
                 {"repo_root": str(repo_root), "policy_name": "socialforce"},
                 default_policy_name="socialforce",
             )
         )
+
+
+def test_socialforce_adapter_rejects_unvalidated_backend_version(tmp_path: Path) -> None:
+    """The runtime contract should only accept the validated socialforce backend version."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+
+    class FakeBackend:
+        __version__ = "0.2.4"
+
+        class Simulator:
+            def __init__(self, *, delta_t: float = 0.4) -> None:
+                self.delta_t = delta_t
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setitem(sys.modules, "socialforce", FakeBackend())
+    try:
+        with pytest.raises(RuntimeError, match="socialforce==0.2.3"):
+            SocialNavigationPyEnvsForceModelAdapter(
+                build_social_navigation_pyenvs_force_model_config(
+                    {"repo_root": str(repo_root), "policy_name": "socialforce"},
+                    default_policy_name="socialforce",
+                )
+            )
+    finally:
+        monkeypatch.undo()
 
 
 def test_sfm_helbing_adapter_maps_goal_direction(tmp_path: Path) -> None:

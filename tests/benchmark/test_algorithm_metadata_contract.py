@@ -104,6 +104,7 @@ def test_social_navigation_pyenvs_force_model_metadata_exposes_upstream_wrapper_
     assert socialforce["upstream_reference"]["upstream_policy"] == (
         "crowd_nav.policy_no_train.socialforce.SocialForce"
     )
+    assert socialforce["upstream_reference"]["runtime_dependency"] == "socialforce==0.2.3"
     assert socialforce["upstream_reference"]["runtime_strategy"] == (
         "crowdnav_socialforce_compat_shim"
     )

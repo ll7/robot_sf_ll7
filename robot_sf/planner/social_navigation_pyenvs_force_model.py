@@ -37,6 +37,8 @@ def _import_socialforce_backend() -> Any:
     try:
         return importlib.import_module("socialforce")
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised by integration path
+        if exc.name != "socialforce":
+            raise
         raise ModuleNotFoundError(
             "socialforce runtime dependency is required for "
             "social_navigation_pyenvs_socialforce; run with `uv run --with socialforce==0.2.3 ...` "

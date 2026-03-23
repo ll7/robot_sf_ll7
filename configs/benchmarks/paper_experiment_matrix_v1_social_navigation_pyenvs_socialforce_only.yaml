@@ -12,21 +12,52 @@ record_forces: false
 bootstrap_samples: 1000
 bootstrap_confidence: 0.95
 bootstrap_seed: 123
-seed_policy: matrix_stable_v1
-seed_offset: 0
-snqi:
-  enabled: true
-  weights: configs/metrics/snqi_v3_publication.yaml
+
 amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
   enabled: true
-  profile: configs/benchmarks/amv_paper_profile_v1.yaml
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+dt: 0.1
 
 kinematics_matrix:
   - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
 
 planners:
   - key: social_navigation_pyenvs_socialforce
     algo: social_navigation_pyenvs_socialforce
     planner_group: experimental
-    benchmark_profile: paper_matrix
+    benchmark_profile: experimental
     algo_config: configs/algos/social_navigation_pyenvs_socialforce_probe.yaml

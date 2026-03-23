@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 import numpy as np
-import torch
 
 from robot_sf.planner.social_navigation_pyenvs_orca import (
     _as_array,
@@ -51,6 +50,8 @@ def _to_backend_state(state: Any) -> Any:
     Returns:
         Any: Tensor or array accepted by the external backend.
     """
+    import torch  # noqa: PLC0415
+
     return torch.as_tensor(state, dtype=torch.float32)
 
 
@@ -61,13 +62,12 @@ def _backend_to_numpy(state: Any) -> np.ndarray:
         np.ndarray: NumPy view of the backend state.
     """
     current = state
-    for attr in ("detach", "cpu"):
-        method = getattr(current, attr, None)
-        if callable(method):
-            current = method()
-    to_numpy = getattr(current, "numpy", None)
-    if callable(to_numpy):
-        current = to_numpy()
+    if hasattr(current, "detach"):
+        current = current.detach()
+    if hasattr(current, "cpu"):
+        current = current.cpu()
+    if hasattr(current, "numpy"):
+        current = current.numpy()
     return np.asarray(current, dtype=float)
 
 
@@ -196,10 +196,15 @@ class SocialNavigationPyEnvsForceModelAdapter:
             state_mod = importlib.import_module("crowd_nav.utils.state")
             if self.config.policy_name == "socialforce":
                 backend_socialforce = _import_socialforce_backend()
+                version = getattr(backend_socialforce, "__version__", None)
+                if version != "0.2.3":
+                    raise RuntimeError(
+                        "social_navigation_pyenvs_socialforce is only validated against "
+                        "socialforce==0.2.3; found "
+                        f"{version or 'unknown'}."
+                    )
                 self.runtime_strategy = "crowdnav_socialforce_compat_shim"
-                self.runtime_dependency = (
-                    f"socialforce=={getattr(backend_socialforce, '__version__', 'unknown')}"
-                )
+                self.runtime_dependency = "socialforce==0.2.3"
                 with _socialforce_compat_context(backend_socialforce):
                     policy_mod = importlib.import_module(module_name)
             else:

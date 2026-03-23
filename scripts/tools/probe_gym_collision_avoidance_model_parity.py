@@ -12,12 +12,16 @@ from typing import Any
 
 ISSUE_NUMBER = 661
 DEFAULT_TIMEOUT_SECONDS = 180
+COMMAND_OUTPUT_TAIL_LENGTH = 4000
 DEFAULT_SIDE_ENV_PYTHON = Path(
     "output/benchmarks/external/gym_collision_avoidance_side_env/.venv/bin/python"
 )
 UPSTREAM_REPO_URL = "https://github.com/mit-acl/gym-collision-avoidance"
 EXAMPLE_PATH = "gym_collision_avoidance/experiments/src/example.py"
 DEFAULT_UPSTREAM_REPO_ROOT = Path("output/repos/gym-collision-avoidance")
+CHECKPOINT_PREFIX_RELATIVE = Path(
+    "gym_collision_avoidance/envs/policies/GA3C_CADRL/checkpoints/IROS18/network_01900000"
+)
 
 
 @dataclass(frozen=True)
@@ -64,8 +68,8 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
             command=command,
             returncode=None,
             failure_summary=f"command exceeded timeout ({timeout_seconds}s)",
-            stdout_tail=(exc.stdout or "")[-4000:],
-            stderr_tail=(exc.stderr or "")[-4000:],
+            stdout_tail=(exc.stdout or "")[-COMMAND_OUTPUT_TAIL_LENGTH:],
+            stderr_tail=(exc.stderr or "")[-COMMAND_OUTPUT_TAIL_LENGTH:],
         )
     failure_summary = (
         None if result.returncode == 0 else _detect_failure_summary(result.stdout, result.stderr)
@@ -75,8 +79,8 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
         command=command,
         returncode=result.returncode,
         failure_summary=failure_summary,
-        stdout_tail=result.stdout[-4000:],
-        stderr_tail=result.stderr[-4000:],
+        stdout_tail=result.stdout[-COMMAND_OUTPUT_TAIL_LENGTH:],
+        stderr_tail=result.stderr[-COMMAND_OUTPUT_TAIL_LENGTH:],
     )
 
 
@@ -100,7 +104,8 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
         raise FileNotFoundError(f"Side-environment interpreter missing: {side_env_python}")
 
 
-def _upstream_payload_script() -> str:
+def _upstream_payload_script(checkpoint_prefix_relative: Path = CHECKPOINT_PREFIX_RELATIVE) -> str:
+    checkpoint_prefix_relative_str = checkpoint_prefix_relative.as_posix()
     return """
 import json
 import os
@@ -156,11 +161,11 @@ print(json.dumps({
     'upstream_raw_action': raw_action.tolist(),
     'upstream_final_action': action.tolist(),
     'upstream_actions': policy.possible_actions.actions.tolist(),
-    'checkpoint_prefix': str((Path.cwd() / 'gym_collision_avoidance/envs/policies/GA3C_CADRL/checkpoints/IROS18/network_01900000').resolve()),
+    'checkpoint_prefix': str((Path.cwd() / '__CHECKPOINT_PREFIX_RELATIVE__').resolve()),
     'obs_shape': list(vec_obs.shape),
     'states_used': [state for state in Config.STATES_IN_OBS if state not in Config.STATES_NOT_USED_IN_POLICY],
 }))
-"""
+""".replace("__CHECKPOINT_PREFIX_RELATIVE__", checkpoint_prefix_relative_str)
 
 
 def _local_payload_script(payload_file: Path) -> str:
@@ -198,7 +203,7 @@ def _extract_source_contract() -> dict[str, Any]:
     return {
         "learned_policy": "GA3C_CADRL",
         "action_space": "speed_delta_heading",
-        "checkpoint_family": "GA3C_CADRL/checkpoints/IROS18/network_01900000",
+        "checkpoint_family": CHECKPOINT_PREFIX_RELATIVE.as_posix().split("envs/policies/", 1)[1],
         "kinematics": "unicycle_like_speed_plus_delta_heading",
         "parity_boundary": (
             "This issue checks model-level parity on native upstream observations. "

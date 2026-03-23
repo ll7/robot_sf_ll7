@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -185,7 +186,9 @@ def _extract_source_contract(repo_root: Path) -> dict[str, Any]:
     policy_path = repo_root / EXPECTED_POLICY_FILE
     text = policy_path.read_text(encoding="utf-8")
     expected_kwargs = [
-        name for name in ("initial_speed", "v0", "sigma") if f"{name}=self.{name}" in text
+        name
+        for name in ("initial_speed", "v0", "sigma")
+        if re.search(rf"\b{name}\s*=\s*self\.{name}\b", text)
     ]
     return {
         "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
@@ -265,7 +268,10 @@ def run_probe(
     contract = _extract_source_contract(repo_root)
     for result in commands:
         if result.returncode == 0 and result.stdout.strip().startswith("{"):
-            payload = json.loads(result.stdout)
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                continue
             if result.name == "backend_signature":
                 contract["backend_version"] = payload.get("backend_version")
                 contract["backend_simulator_signature"] = payload.get("simulator_signature")

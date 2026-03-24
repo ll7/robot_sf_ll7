@@ -19,9 +19,11 @@ def _get_path_by_id(converter: SvgMapConverter, path_id: str):
 
 def test_self_intersecting_obstacle_paths_are_repaired() -> None:
     """Known self-intersecting obstacle paths should become valid polygons."""
-    converter = SvgMapConverter(
-        str(Path("maps/obstacle_svg_maps/uni_campus_with_lake_as_obstacle_and_routes.svg"))
+    repo_root = Path(__file__).resolve().parents[1]
+    svg_fixture = (
+        repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
     )
+    converter = SvgMapConverter(str(svg_fixture))
 
     for path_id in ("path3", "path1948", "path1951"):
         svg_path = _get_path_by_id(converter, path_id)

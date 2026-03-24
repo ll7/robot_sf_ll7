@@ -47,7 +47,7 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 - `risk_dwa` is faster than both predictive baselines.
 - It also reduces near misses relative to both predictive baselines.
-- That benefit is offset by a very large drop in success and a clear collision increase.
+- That benefit is offset by a 75%+ drop in success versus both predictive baselines and a clear collision increase.
 
 The SNQI lands close to `prediction_planner_v2_xl_ego` only because the faster runtime and lower
 near-miss profile partially compensate for the poor outcome counts. That is not a trustworthy sign

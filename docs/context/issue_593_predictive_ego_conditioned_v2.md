@@ -27,7 +27,7 @@ The 9D state layout matches the existing planner/training path:
 
 1. pedestrian relative position `(x_rel, y_rel)`
 2. pedestrian relative velocity `(vx_rel, vy_rel)`
-3. robot planar self velocity `(v_x, v_y)`
+3. robot planar self-velocity `(v_x, v_y)`
 4. normalized goal direction `(goal_dir_x, goal_dir_y)`
 5. goal distance `(goal_dist)`
 

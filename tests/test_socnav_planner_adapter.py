@@ -616,17 +616,18 @@ def test_prediction_adapter_probabilistic_risk_mode_is_deterministic(monkeypatch
 
 
 def test_prediction_adapter_cvar_objective_penalizes_worse_tail() -> None:
-    """CVaR aggregation should be at least as conservative as the mean on the same sample set."""
-    cfg = SocNavPlannerConfig(
+    """CVaR aggregation should be strictly more conservative than the mean on skewed samples."""
+    cvar_cfg = SocNavPlannerConfig(
         predictive_risk_objective="cvar",
         predictive_risk_cvar_alpha=0.5,
     )
-    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    mean_cfg = SocNavPlannerConfig(predictive_risk_objective="mean")
+    cvar_adapter = PredictionPlannerAdapter(cvar_cfg, allow_fallback=True)
+    mean_adapter = PredictionPlannerAdapter(mean_cfg, allow_fallback=True)
     costs = [1.0, 2.0, 10.0, 20.0]
-    cvar = adapter._aggregate_risk_costs(costs)
-    adapter.config.predictive_risk_objective = "mean"
-    mean = adapter._aggregate_risk_costs(costs)
-    assert cvar >= mean
+    cvar = cvar_adapter._aggregate_risk_costs(costs)
+    mean = mean_adapter._aggregate_risk_costs(costs)
+    assert cvar > mean
 
 
 def test_prediction_adapter_mcts_mode_is_deterministic(monkeypatch):

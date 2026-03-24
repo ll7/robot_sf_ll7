@@ -138,6 +138,8 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
 
 def _upstream_live_payload_script() -> str:
     return """
+\"\"\"Prepare a headless Gym/TF runtime, patch legacy matplotlib/NumPy quirks,
+build the upstream env/policies, and print the native observation payload.\"\"\"
 import json
 import os
 
@@ -386,6 +388,9 @@ def _run_socnav_fusion_case() -> CaseResult:
         allow_fallback=True,
     )
     local_vec, _pref_speed, _dist_to_goal = adapter._build_network_input(observation)
+    # Robot at (1, 1) faces pi/2 with goal at (1, 3); the pedestrian at (2, 1) is therefore
+    # 1.0 m away in the robot frame, with combined radii 0.30 + 0.25 = 0.55, giving
+    # dist_to_other = 1.0 - 0.55 = 0.45 in the hard-coded SACADRL state row below.
     expected = {
         "num_other_agents": 1.0,
         "dist_to_goal": 2.0,

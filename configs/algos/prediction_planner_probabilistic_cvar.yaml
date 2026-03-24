@@ -53,7 +53,7 @@ predictive_phase_align_weight: 0.4
 predictive_phase_recover_weight: 1.5
 
 predictive_uncertainty_mode: heuristic_gaussian
-predictive_risk_sample_count: 5
+predictive_risk_sample_count: 5  # Deliberately capped: ~4x runtime hit already observed in the PR, so 5 preserves benchmark parity despite higher CVaR Monte Carlo variance.
 predictive_risk_objective: cvar
 predictive_risk_cvar_alpha: 0.4
 predictive_risk_seed: 7

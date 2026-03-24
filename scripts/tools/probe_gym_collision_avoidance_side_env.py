@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -107,6 +108,17 @@ def _detect_failure_summary(stdout: str, stderr: str) -> str:
 
 
 def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
+    """Validate required upstream files and the side-environment interpreter.
+
+    Args:
+        repo_root: Path to the checked-out upstream `gym-collision-avoidance` repository.
+        side_env_python: Path to the isolated side-environment interpreter to execute.
+
+    Raises:
+        FileNotFoundError: If the upstream README/example/test/policy files are missing, or if the
+            side-environment interpreter path does not exist.
+        PermissionError: If the side-environment interpreter exists but is not executable.
+    """
     required_files = [
         repo_root / "README.md",
         repo_root / "gym_collision_avoidance/experiments/src/example.py",
@@ -381,7 +393,7 @@ def _render_markdown(report: ProbeReport) -> str:
                 f"### `{command.name}`",
                 "",
                 "```bash",
-                " ".join(command.command),
+                shlex.join(command.command),
                 "```",
                 "",
                 f"- returncode: `{command.returncode}`",

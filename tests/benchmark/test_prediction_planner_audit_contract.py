@@ -106,6 +106,8 @@ def test_prediction_planner_metadata_overrides_expose_search_and_uncertainty_mod
         },
     )
     assert deterministic["prediction_mode"] == "deterministic"
+    assert deterministic["predictive_uncertainty_mode"] == "deterministic"
+    assert deterministic["predictive_risk_sample_count"] == 1
     assert deterministic["predictive_search_mode"] == "sequence_beam"
 
 

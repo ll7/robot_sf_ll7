@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -271,6 +272,10 @@ def run_probe(
             try:
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError:
+                warnings.warn(
+                    f"Skipping malformed JSON payload from {result.name}: {result.stdout}",
+                    stacklevel=2,
+                )
                 continue
             if result.name == "backend_signature":
                 contract["backend_version"] = payload.get("backend_version")

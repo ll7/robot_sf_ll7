@@ -64,4 +64,9 @@ predictive_phase_yield_weight: 2.0
 predictive_phase_align_weight: 0.4
 predictive_phase_recover_weight: 1.5
 
+# Keep the reference row self-describing and pinned to deterministic rollout semantics.
+predictive_uncertainty_mode: deterministic
+predictive_risk_objective: mean
+predictive_risk_sample_count: 1
+
 occupancy_weight: 0.25

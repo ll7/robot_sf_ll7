@@ -15,6 +15,13 @@ surface.
 - Benchmark comparison config:
   `configs/benchmarks/paper_experiment_matrix_v1_guarded_ppo_compare.yaml`
 
+Matrix-level interpretation note:
+
+- `baseline-ready-core` means the matrix is paper-facing and anchored to the core baseline set,
+  but it may still include experimental challenger rows for comparison.
+- It is intentionally separate from planner-level readiness labels such as `planner_group` and
+  `benchmark_profile`.
+
 ## Planner-Facing Contract
 
 `guarded_ppo` keeps PPO as the primary controller but adds a short-horizon near-field safety guard.

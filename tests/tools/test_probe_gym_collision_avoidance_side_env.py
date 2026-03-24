@@ -87,6 +87,42 @@ def test_run_probe_preserves_venv_symlink_path(
     assert all(command[0] == str(side_env_python) for command in seen_commands)
 
 
+def test_run_probe_uses_repo_relative_default_side_env_python(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Default side-env path should resolve from repo_root instead of the caller's cwd."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    default_side_env_python = repo_root / probe.DEFAULT_SIDE_ENV_PYTHON_RELATIVE
+    default_side_env_python.parent.mkdir(parents=True, exist_ok=True)
+    default_side_env_python.write_text("", encoding="utf-8")
+    default_side_env_python.chmod(0o755)
+
+    seen_commands: list[list[str]] = []
+
+    def fake_run(
+        name: str, command: list[str], cwd: Path, timeout_seconds: int
+    ) -> probe.CommandResult:
+        seen_commands.append(command)
+        return probe.CommandResult(
+            name=name,
+            command=command,
+            returncode=0,
+            failure_summary=None,
+            stdout_tail="ok",
+            stderr_tail="",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(probe, "_run_command", fake_run)
+
+    report = probe.run_probe(repo_root, None, timeout_seconds=10)
+
+    assert report.side_env_python == str(default_side_env_python)
+    assert seen_commands
+    assert all(command[0] == str(default_side_env_python) for command in seen_commands)
+
+
 def test_run_probe_reports_tkagg_blocker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """TkAgg backend failures should become the primary blocked verdict."""
     repo_root = tmp_path / "repo"
@@ -140,6 +176,9 @@ def test_run_probe_reports_tkagg_blocker(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert report.verdict == "source harness still blocked"
     assert report.failure_stage == "upstream_example"
     assert report.failure_summary == "upstream macOS visualization path forces TkAgg backend"
+    assert report.source_contract["remaining_blocker_class"] == (
+        "visualization/backend rather than learned-policy runtime"
+    )
 
 
 def test_run_probe_marks_success_when_example_and_pytest_pass(
@@ -168,6 +207,9 @@ def test_run_probe_marks_success_when_example_and_pytest_pass(
     report = probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
     assert report.verdict == "source harness reproducible in side environment"
     assert report.failure_stage is None
+    assert report.source_contract["remaining_blocker_class"] == (
+        "no remaining blocker in the isolated side environment"
+    )
 
 
 def test_run_probe_treats_preflight_failure_as_blocking(
@@ -225,6 +267,7 @@ def test_run_probe_treats_preflight_failure_as_blocking(
     assert report.verdict == "source harness still blocked"
     assert report.failure_stage == "side_env_versions"
     assert report.failure_summary == "missing python dependency: gym"
+    assert report.source_contract["remaining_blocker_class"] == "missing python dependency: gym"
 
 
 def test_detect_failure_summary_prefers_tkagg() -> None:
@@ -245,13 +288,37 @@ def test_render_markdown_mentions_narrower_follow_up(tmp_path: Path) -> None:
         verdict="source harness still blocked",
         failure_stage="upstream_example",
         failure_summary="upstream macOS visualization path forces TkAgg backend",
-        source_contract=probe._extract_source_contract(),
+        source_contract=probe._extract_source_contract(
+            "upstream macOS visualization path forces TkAgg backend"
+        ),
         commands=[],
     )
     markdown = probe._render_markdown(report)
     assert "Verdict: `source harness still blocked`" in markdown
     assert "GA3C-CADRL learned-policy import path now reproduce successfully" in markdown
     assert "A Robot SF wrapper is still not justified" in markdown
+
+
+def test_render_markdown_for_missing_gym_avoids_tkagg_claim(tmp_path: Path) -> None:
+    """Missing gym failures should not be misreported as visualization blockers."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    report = probe.ProbeReport(
+        issue=641,
+        repo_root=str(repo_root),
+        repo_remote_url="https://github.com/mit-acl/gym-collision-avoidance",
+        side_env_python=str(tmp_path / "python"),
+        verdict="source harness still blocked",
+        failure_stage="side_env_versions",
+        failure_summary="missing python dependency: gym",
+        source_contract=probe._extract_source_contract("missing python dependency: gym"),
+        commands=[],
+    )
+
+    markdown = probe._render_markdown(report)
+
+    assert "because `gym` is missing" in markdown
+    assert "forcing `TkAgg`" not in markdown
 
 
 def test_run_command_decodes_timeout_output_bytes(

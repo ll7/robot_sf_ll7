@@ -13,7 +13,7 @@ from typing import Any
 
 ISSUE_NUMBER = 641
 DEFAULT_TIMEOUT_SECONDS = 180
-DEFAULT_SIDE_ENV_PYTHON = Path(
+DEFAULT_SIDE_ENV_PYTHON_RELATIVE = Path(
     "output/benchmarks/external/gym_collision_avoidance_side_env/.venv/bin/python"
 )
 UPSTREAM_REPO_URL = "https://github.com/mit-acl/gym-collision-avoidance"
@@ -138,23 +138,63 @@ def _ga3c_script() -> str:
     )
 
 
-def _extract_source_contract() -> dict[str, Any]:
+def _blocker_category(failure_summary: str | None) -> str:
+    if failure_summary is None:
+        return "success"
+    lowered = failure_summary.lower()
+    if "tkagg" in lowered:
+        return "visualization_backend"
+    if "missing python dependency: gym" in lowered:
+        return "missing_gym"
+    if "missing python dependency: scipy" in lowered:
+        return "missing_scipy"
+    if "command exceeded timeout" in lowered:
+        return "timeout"
+    if "unexpected failure after ga3c initialization" in lowered:
+        return "post_ga3c_failure"
+    return "other_runtime_failure"
+
+
+def _extract_source_contract(failure_summary: str | None) -> dict[str, Any]:
+    blocker_category = _blocker_category(failure_summary)
+    blocker_by_category = {
+        "success": "no remaining blocker in the isolated side environment",
+        "visualization_backend": "visualization/backend rather than learned-policy runtime",
+        "missing_gym": "missing python dependency: gym",
+        "missing_scipy": "missing python dependency: scipy",
+        "timeout": "timeout/hang during side-environment execution",
+        "post_ga3c_failure": "post-initialization runtime failure after GA3C import",
+        "other_runtime_failure": "other upstream/runtime failure in the isolated side environment",
+    }
+    goal_by_category = {
+        "success": "legacy runtime isolated from main robot_sf_ll7 stack with source-harness parity demonstrated",
+        "visualization_backend": "legacy runtime isolated from main robot_sf_ll7 stack with a remaining visualization/backend blocker",
+        "missing_gym": "legacy runtime isolation attempt still blocked on restoring the gym dependency in the side environment",
+        "missing_scipy": "legacy runtime isolation attempt still blocked on restoring the scipy dependency in the side environment",
+        "timeout": "legacy runtime isolation attempt remains inconclusive because the side-environment commands timed out",
+        "post_ga3c_failure": "legacy runtime isolation reaches learned-policy initialization but still blocks later in the upstream runtime",
+        "other_runtime_failure": "legacy runtime isolation remains blocked by another upstream/runtime failure class",
+    }
     return {
         "learned_policy": "GA3C_CADRL",
         "action_space": "speed_delta_heading",
         "checkpoint_family": "GA3C_CADRL/checkpoints/IROS18/network_01900000",
         "kinematics": "unicycle_like_speed_plus_delta_heading",
-        "side_environment_goal": "legacy runtime isolated from main robot_sf_ll7 stack",
-        "remaining_blocker_class": "visualization/backend rather than learned-policy runtime",
+        "side_environment_goal": goal_by_category[blocker_category],
+        "remaining_blocker_class": blocker_by_category[blocker_category],
     }
 
 
-def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> ProbeReport:
+def _resolve_side_env_python(repo_root: Path, side_env_python: Path | None) -> Path:
+    if side_env_python is None:
+        return repo_root / DEFAULT_SIDE_ENV_PYTHON_RELATIVE
+    return side_env_python if side_env_python.is_absolute() else Path.cwd() / side_env_python
+
+
+def run_probe(repo_root: Path, side_env_python: Path | None, timeout_seconds: int) -> ProbeReport:
     """Run the side-environment reproduction probe."""
     repo_root = repo_root.resolve()
-    side_env_python = (
-        side_env_python if side_env_python.is_absolute() else Path.cwd() / side_env_python
-    )
+    side_env_python = _resolve_side_env_python(repo_root, side_env_python)
     _validate_paths(repo_root, side_env_python)
 
     commands = [
@@ -222,9 +262,64 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
         verdict=verdict,
         failure_stage=None if blocking is None else blocking.name,
         failure_summary=None if blocking is None else blocking.failure_summary,
-        source_contract=_extract_source_contract(),
+        source_contract=_extract_source_contract(
+            None if blocking is None else blocking.failure_summary
+        ),
         commands=commands,
     )
+
+
+def _interpretation_lines(report: ProbeReport) -> list[str]:
+    blocker_category = _blocker_category(report.failure_summary)
+    if blocker_category == "success":
+        return [
+            "- The isolated side environment reproduces the learned-policy path and the upstream harness end-to-end.",
+            "- Legacy main-runtime incompatibilities are no longer blocking source-harness parity for this recipe.",
+            "- Full source-harness parity is now demonstrated in the isolated side environment.",
+            "- A wrapper/parity issue is justified after preserving this exact runtime recipe.",
+        ]
+    if blocker_category == "visualization_backend":
+        return [
+            "- The legacy runtime problem from `#639` is substantially narrowed.",
+            "- `gym`, TensorFlow, and the GA3C-CADRL learned-policy import path now reproduce successfully in the side environment.",
+            "- The remaining blocker is the upstream macOS visualization path forcing `TkAgg`, not missing CADRL-family runtime dependencies.",
+            "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+            "- The evidence now supports a narrower follow-up around non-visual or headless upstream reproduction, not a generic legacy-runtime rescue.",
+        ]
+    if blocker_category == "missing_gym":
+        return [
+            "- The isolated side environment still fails before source-harness parity because `gym` is missing.",
+            "- The probe does not yet demonstrate learned-policy or full upstream harness reproducibility.",
+            "- The remaining blocker is dependency restoration inside the side environment, not Robot SF integration logic.",
+            "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+        ]
+    if blocker_category == "missing_scipy":
+        return [
+            "- The isolated side environment still fails before source-harness parity because `scipy` is missing.",
+            "- The probe does not yet demonstrate learned-policy or full upstream harness reproducibility.",
+            "- The remaining blocker is dependency restoration inside the side environment, not Robot SF integration logic.",
+            "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+        ]
+    if blocker_category == "timeout":
+        return [
+            "- The side-environment probe remains inconclusive because one of the upstream commands timed out.",
+            "- The current evidence does not isolate whether the blocker is environmental setup, runtime performance, or an upstream hang.",
+            "- A longer timeout or narrower reproduction step is needed before claiming source-harness parity.",
+            "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+        ]
+    if blocker_category == "post_ga3c_failure":
+        return [
+            "- The side environment gets past learned-policy initialization but still fails later in the upstream runtime.",
+            "- The remaining blocker is after GA3C-CADRL bootstrapping, not the basic dependency restore itself.",
+            "- A narrower follow-up should inspect the post-initialization runtime path before claiming parity.",
+            "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+        ]
+    return [
+        "- The side environment is still blocked by an upstream/runtime failure outside the known TkAgg path.",
+        "- The failure summary should be treated as the current best evidence for the remaining blocker class.",
+        "- A narrower follow-up should inspect the exact failing command before claiming parity.",
+        "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
+    ]
 
 
 def _render_markdown(report: ProbeReport) -> str:
@@ -261,29 +356,9 @@ def _render_markdown(report: ProbeReport) -> str:
             "",
             "## Interpretation",
             "",
-            "- The legacy runtime problem from `#639` is substantially narrowed.",
-            "- `gym`, TensorFlow, and the GA3C-CADRL learned-policy import path now "
-            "reproduce successfully in the side environment.",
-            "- The remaining blocker is the upstream macOS visualization path forcing "
-            "`TkAgg`, not missing CADRL-family runtime dependencies.",
+            *_interpretation_lines(report),
         ]
     )
-
-    if report.verdict == "source harness still blocked":
-        lines.extend(
-            [
-                "- A Robot SF wrapper is still not justified from full source-harness parity yet.",
-                "- The evidence now supports a narrower follow-up around non-visual or "
-                "headless upstream reproduction, not a generic legacy-runtime rescue.",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                "- Full source-harness parity is now demonstrated in the isolated side environment.",
-                "- A wrapper/parity issue is justified after preserving this exact runtime recipe.",
-            ]
-        )
 
     lines.extend(
         [
@@ -321,7 +396,7 @@ def main() -> int:
     """Run the side-environment probe CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, required=True)
-    parser.add_argument("--side-env-python", type=Path, default=DEFAULT_SIDE_ENV_PYTHON)
+    parser.add_argument("--side-env-python", type=Path, default=None)
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-md", type=Path, required=True)

@@ -68,6 +68,9 @@ Current promoted all-planners baseline run:
   - frozen paper-facing execution contract (`paper_profile_version=paper-matrix-v1`)
   - mixed planner matrix with explicit `planner_group` tags (`core|experimental`)
   - differential-drive-only kinematics for v1 paper freeze
+  - `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
+    anchored to the core baseline set, while still allowing experimental challenger rows for
+    comparison
 - `configs/algos/prediction_planner_camera_ready.yaml`
   - explicit `prediction_planner` camera-ready profile used by all-planners presets
   - resolves checkpoint via `predictive_model_id` from `model/registry.yaml`

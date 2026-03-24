@@ -8,9 +8,11 @@ import types
 from pathlib import Path
 
 import pytest
+import torch
 
 from robot_sf.planner.social_navigation_pyenvs_force_model import (
     SocialNavigationPyEnvsForceModelAdapter,
+    _build_socialforce_compat_module,
     build_social_navigation_pyenvs_force_model_config,
 )
 
@@ -188,6 +190,28 @@ def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path
             )
     finally:
         monkeypatch.undo()
+
+
+def test_socialforce_compat_simulator_detaches_state_before_caching() -> None:
+    """The compat shim should not retain autograd history across simulator steps."""
+    backend = types.ModuleType("socialforce")
+
+    class FakeSimulator:
+        def __init__(self, *, delta_t: float = 0.4) -> None:
+            self.delta_t = delta_t
+
+        def forward(self, state):
+            tracked_state = state.clone().detach().requires_grad_(True)
+            return tracked_state * 2.0
+
+    backend.Simulator = FakeSimulator
+    compat = _build_socialforce_compat_module(backend)
+    simulator = compat.Simulator(torch.tensor([[1.0, 0.0]]))
+
+    simulator.step()
+
+    assert simulator._state.requires_grad is False
+    assert simulator.state.tolist() == [[2.0, 0.0]]
 
 
 def test_socialforce_adapter_propagates_transitive_import_errors(

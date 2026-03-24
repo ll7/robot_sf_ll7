@@ -1521,10 +1521,10 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
                 "  seeds: [111]",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "planners:",
-                "  - key: z_exp",
-                "    algo: goal",
+                "  - key: stream_gap",
+                "    algo: stream_gap",
                 "    planner_group: experimental",
-                "  - key: a_core",
+                "  - key: goal",
                 "    algo: goal",
                 "    planner_group: core",
             ],
@@ -1538,7 +1538,7 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
         Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
     )
     planner_keys = [row["planner_key"] for row in matrix_payload["rows"]]
-    assert planner_keys == ["a_core", "z_exp"]
+    assert planner_keys == ["goal", "stream_gap"]
 
 
 def test_prepare_campaign_preflight_writes_amv_and_comparability_artifacts(tmp_path: Path) -> None:
@@ -1697,3 +1697,62 @@ def test_prepare_campaign_preflight_rejects_invalid_comparability_mapping_for_pa
     cfg = load_campaign_config(config_path)
     with pytest.raises(ValueError, match="scenario_family_mapping"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="bad_map")
+
+
+def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_paper(
+    tmp_path: Path,
+) -> None:
+    """Paper-facing preflight should fail when planner comparability coverage is incomplete."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    incomplete_mapping = tmp_path / "incomplete_mapping.yaml"
+    incomplete_mapping.write_text(
+        "\n".join(
+            [
+                "mapping_version: planner-coverage-test-v1",
+                "scenario_family_mapping:",
+                "  smoke: corridor",
+                "metric_comparability:",
+                "  success:",
+                "    classification: comparable",
+                "    alyassi_metric: success_rate",
+                "    rationale: comparable",
+                "planner_key_mapping:",
+                "  prediction_planner_v2_full: predictive-planner-full",
+                "  stream_gap: stream-gap",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: missing_planner_mapping",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"comparability_mapping: {incomplete_mapping.as_posix()}",
+                "planners:",
+                "  - key: prediction_planner_v2_full",
+                "    algo: prediction_planner",
+                "    planner_group: core",
+                "  - key: prediction_planner_v2_xl_ego",
+                "    algo: prediction_planner",
+                "    planner_group: core",
+                "  - key: stream_gap",
+                "    algo: stream_gap",
+                "    planner_group: experimental",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    with pytest.raises(ValueError, match="prediction_planner_v2_xl_ego"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="missing_planner")

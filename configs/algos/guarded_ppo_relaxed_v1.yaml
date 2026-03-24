@@ -1,0 +1,38 @@
+# Guarded PPO relaxed profile v1.
+# Keeps the same PPO backbone but reduces intervention aggressiveness to
+# recover goal-reaching while preserving some near-field safety checks.
+
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+device: auto
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: true
+
+guard_rollout_dt: 0.2
+guard_rollout_steps: 5
+guard_near_field_distance: 1.6
+guard_hard_ped_clearance: 0.48
+guard_first_step_ped_clearance: 0.60
+guard_hard_obstacle_clearance: 0.26
+guard_min_ttc: 0.45
+
+guard_obstacle_threshold: 0.5
+guard_obstacle_search_cells: 12
+
+fallback_risk_dwa:
+  max_linear_speed: 1.05
+  max_angular_speed: 1.2
+  rollout_dt: 0.2
+  rollout_steps: 8
+  near_field_distance: 2.2
+  near_field_speed_cap: 0.65
+  goal_progress_weight: 5.0
+  heading_weight: 0.8
+  ped_clearance_weight: 1.8
+  obstacle_clearance_weight: 1.0
+  smoothness_weight: 0.10
+  ttc_weight: 0.28
+  progress_escape_enabled: true

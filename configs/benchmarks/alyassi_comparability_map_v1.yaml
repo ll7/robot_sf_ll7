@@ -37,3 +37,26 @@ metric_comparability:
     classification: amv_specific
     alyassi_metric: n/a
     rationale: SNQI is a robot_sf composite quality index used as an AMV extension metric.
+
+planner_key_mapping:
+  gap_prediction: gap-prediction
+  goal: goal-seeking
+  guarded_ppo: guarded-ppo
+  guarded_ppo_relaxed_v1: guarded-ppo-relaxed-v1
+  guarded_ppo_relaxed_v2: guarded-ppo-relaxed-v2
+  hybrid_portfolio: hybrid-portfolio
+  mppi_social: mppi-social
+  orca: orca
+  ppo: ppo
+  prediction_planner: prediction-planner
+  prediction_planner_v2_full: predictive-planner-full
+  prediction_planner_v2_xl_ego: predictive-planner-xl-ego
+  predictive_mppi: predictive-mppi
+  risk_dwa: risk-dwa
+  sacadrl: sacadrl
+  social_force: social-force
+  social_navigation_pyenvs_hsfm_new_guo: social-navigation-pyenvs-hsfm-new-guo
+  social_navigation_pyenvs_orca: social-navigation-pyenvs-orca
+  social_navigation_pyenvs_socialforce: social-navigation-pyenvs-socialforce
+  socnav_sampling: socnav-sampling
+  stream_gap: stream-gap

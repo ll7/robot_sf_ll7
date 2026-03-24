@@ -145,3 +145,43 @@ def test_render_markdown_records_wrapper_justification(tmp_path: Path) -> None:
     markdown = probe._render_markdown(report)
     assert "Verdict: `headless source harness reproducible`" in markdown
     assert "a wrapper/parity issue is now justified" in markdown.lower()
+
+
+def test_main_returns_failure_when_final_stage_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The CLI should exit non-zero when the final staged reproduction remains blocked."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    side_env_python = tmp_path / "side" / ".venv" / "bin" / "python"
+    side_env_python.parent.mkdir(parents=True)
+    side_env_python.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        probe,
+        "run_probe",
+        lambda repo_root, side_env_python, timeout_seconds: probe.ProbeReport(
+            issue=659,
+            repo_root=str(repo_root),
+            repo_remote_url="https://github.com/mit-acl/gym-collision-avoidance",
+            side_env_python=str(side_env_python),
+            verdict="still blocked beyond visualization",
+            failure_stage="headless_plus_numpy_bool8_alias_no_animation",
+            failure_summary="blocked",
+            source_contract=probe._extract_source_contract(),
+            shims=[],
+            commands=[],
+        ),
+    )
+
+    args = [
+        "--repo-root",
+        str(repo_root),
+        "--side-env-python",
+        str(side_env_python),
+        "--output-json",
+        str(tmp_path / "out.json"),
+        "--output-md",
+        str(tmp_path / "out.md"),
+    ]
+    assert probe.main(args) == 1

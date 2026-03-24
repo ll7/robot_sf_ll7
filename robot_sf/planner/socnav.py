@@ -467,6 +467,20 @@ class SocNavPlannerConfig:
     predictive_sequence_segments: int = 3
     predictive_sequence_branch_factor: int = 5
     predictive_sequence_beam_width: int = 8
+    predictive_uncertainty_mode: str = "deterministic"
+    predictive_uncertainty_base_std: float = 0.05
+    predictive_uncertainty_growth_per_step: float = 0.03
+    predictive_uncertainty_speed_scale: float = 0.10
+    predictive_uncertainty_density_scale: float = 0.02
+    predictive_risk_objective: str = "mean"
+    predictive_risk_sample_count: int = 1
+    predictive_risk_cvar_alpha: float = 0.25
+    predictive_risk_seed: int = 7
+    predictive_mcts_enabled: bool = False
+    predictive_mcts_iterations: int = 48
+    predictive_mcts_branch_factor: int = 4
+    predictive_mcts_rollout_count: int = 2
+    predictive_mcts_exploration_weight: float = 0.8
     predictive_phase_logic_enabled: bool = True
     predictive_phase_commit_clearance: float = 1.4
     predictive_phase_yield_clearance: float = 0.95
@@ -2747,6 +2761,138 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
         return future
 
+    def _predictive_uncertainty_std(
+        self,
+        *,
+        state: np.ndarray,
+        mask: np.ndarray,
+        future: np.ndarray,
+    ) -> np.ndarray:
+        """Build a heuristic forecast uncertainty envelope around the mean trajectory.
+
+        The current predictive model only emits deterministic mean futures. This helper adds a
+        bounded, config-driven uncertainty estimate so benchmark runs can exercise probability-aware
+        rollout scoring without retraining the predictor.
+
+        Returns:
+            np.ndarray: Standard deviation per agent/time/axis with shape ``(N, T, 2)``.
+        """
+        base = max(float(self.config.predictive_uncertainty_base_std), 0.0)
+        growth = max(float(self.config.predictive_uncertainty_growth_per_step), 0.0)
+        speed_scale = max(float(self.config.predictive_uncertainty_speed_scale), 0.0)
+        density_scale = max(float(self.config.predictive_uncertainty_density_scale), 0.0)
+        steps = future.shape[1]
+        valid_count = max(float(np.sum(mask > 0.5)), 0.0)
+        density = valid_count / max(float(state.shape[0]), 1.0)
+        ped_speed = np.linalg.norm(state[:, 2:4], axis=1, keepdims=True).astype(np.float32)
+        time_std = base + growth * np.arange(1, steps + 1, dtype=np.float32).reshape(1, steps, 1)
+        agent_std = speed_scale * ped_speed[:, None, :] + density_scale * density
+        std = np.broadcast_to(time_std + agent_std, (future.shape[0], steps, 1)).astype(np.float32)
+        std = std * mask[:, None, None].astype(np.float32)
+        return np.repeat(std, 2, axis=2)
+
+    def _sample_future_trajectories(
+        self,
+        *,
+        state: np.ndarray,
+        mask: np.ndarray,
+        future: np.ndarray,
+    ) -> np.ndarray:
+        """Return a batch of future scenarios for risk-aware scoring.
+
+        Returns:
+            np.ndarray: Scenario tensor ``(S, N, T, 2)`` where ``S`` is the sample count.
+        """
+        mode = str(getattr(self.config, "predictive_uncertainty_mode", "deterministic")).strip()
+        sample_count = max(1, int(getattr(self.config, "predictive_risk_sample_count", 1)))
+        if mode == "deterministic" or sample_count <= 1:
+            return future[None, ...]
+
+        std = self._predictive_uncertainty_std(state=state, mask=mask, future=future)
+        rng = np.random.default_rng(int(getattr(self.config, "predictive_risk_seed", 7)))
+        samples = np.repeat(future[None, ...], sample_count, axis=0).astype(np.float32)
+        if sample_count > 1:
+            noise = rng.normal(
+                loc=0.0,
+                scale=std[None, ...],
+                size=(sample_count - 1, future.shape[0], future.shape[1], future.shape[2]),
+            ).astype(np.float32)
+            samples[1:] += noise
+        samples *= mask[None, :, None, None].astype(np.float32)
+        return samples
+
+    def _aggregate_risk_costs(self, costs: list[float]) -> float:
+        """Aggregate scenario costs using the configured risk objective.
+
+        Returns:
+            float: Scalar aggregate cost.
+        """
+        if not costs:
+            return float("inf")
+        arr = np.asarray(costs, dtype=float)
+        objective = str(getattr(self.config, "predictive_risk_objective", "mean")).strip().lower()
+        if objective == "cvar":
+            alpha = float(
+                np.clip(getattr(self.config, "predictive_risk_cvar_alpha", 0.25), 1e-3, 1.0)
+            )
+            tail_count = max(1, int(np.ceil(arr.size * alpha)))
+            return float(np.mean(np.sort(arr)[-tail_count:]))
+        return float(np.mean(arr))
+
+    def _score_action_distribution(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int,
+    ) -> float:
+        """Score a candidate over multiple future scenarios.
+
+        Returns:
+            float: Probability-aware aggregate cost.
+        """
+        costs = [
+            self._score_action(
+                observation=observation,
+                future_peds=future_sample,
+                mask=mask,
+                v=v,
+                w=w,
+                steps=steps,
+            )
+            for future_sample in future_batch
+        ]
+        return self._aggregate_risk_costs(costs)
+
+    def _score_sequence_distribution(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        sequence: list[tuple[float, float]],
+        steps: int,
+    ) -> float:
+        """Score an action sequence over multiple future scenarios.
+
+        Returns:
+            float: Probability-aware aggregate sequence cost.
+        """
+        costs = [
+            self._score_action_sequence(
+                observation=observation,
+                future_peds=future_sample,
+                mask=mask,
+                sequence=sequence,
+                steps=steps,
+            )
+            for future_sample in future_batch
+        ]
+        return self._aggregate_risk_costs(costs)
+
     def _min_predicted_distance(
         self,
         *,
@@ -3254,7 +3400,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self,
         *,
         observation: dict,
-        future: np.ndarray,
+        future_batch: np.ndarray,
         mask: np.ndarray,
         steps: int,
     ) -> tuple[float, float]:
@@ -3263,13 +3409,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: First action from the lowest-cost sequence.
         """
+        future = future_batch[0]
         candidates = self._candidate_set(future_peds=future, mask=mask)
         base_ranked = sorted(
             (
                 (
-                    self._score_action(
+                    self._score_action_distribution(
                         observation=observation,
-                        future_peds=future,
+                        future_batch=future_batch,
                         mask=mask,
                         v=v,
                         w=w,
@@ -3289,9 +3436,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         beam: list[tuple[float, list[tuple[float, float]]]] = []
         for candidate in stage_candidates:
             seq = [candidate]
-            score = self._score_action_sequence(
+            score = self._score_sequence_distribution(
                 observation=observation,
-                future_peds=future,
+                future_batch=future_batch,
                 mask=mask,
                 sequence=seq,
                 steps=steps,
@@ -3305,9 +3452,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             for _prev_score, seq in beam:
                 for candidate in stage_candidates:
                     new_seq = seq + [candidate]
-                    score = self._score_action_sequence(
+                    score = self._score_sequence_distribution(
                         observation=observation,
-                        future_peds=future,
+                        future_batch=future_batch,
                         mask=mask,
                         sequence=new_seq,
                         steps=steps,
@@ -3316,6 +3463,249 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             expanded.sort(key=lambda item: float(item[0]))
             beam = expanded[:beam_width]
         return beam[0][1][0] if beam else (0.0, 0.0)
+
+    def _plan_mcts_lite(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[float, float]:
+        """Run a bounded MCTS-lite search over short action sequences.
+
+        Returns:
+            tuple[float, float]: First action from the best root branch.
+        """
+        future = future_batch[0]
+        candidates = self._candidate_set(future_peds=future, mask=mask)
+        branch = max(1, int(self.config.predictive_mcts_branch_factor))
+        segments = max(1, int(self.config.predictive_sequence_segments))
+        iterations = max(1, int(self.config.predictive_mcts_iterations))
+        rollout_count = max(1, int(self.config.predictive_mcts_rollout_count))
+        exploration = float(self.config.predictive_mcts_exploration_weight)
+        base_ranked = sorted(
+            (
+                (
+                    self._score_action_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        v=v,
+                        w=w,
+                        steps=steps,
+                    ),
+                    (v, w),
+                )
+                for v, w in candidates
+            ),
+            key=lambda item: float(item[0]),
+        )
+        stage_candidates = [cand for _score, cand in base_ranked[:branch]]
+        if not stage_candidates:
+            return (0.0, 0.0)
+
+        rng = np.random.default_rng(int(self.config.predictive_risk_seed) + 17)
+        visits: dict[tuple[int, ...], int] = {(): 0}
+        value_sum: dict[tuple[int, ...], float] = {(): 0.0}
+        untried: dict[tuple[int, ...], list[int]] = {(): list(range(len(stage_candidates)))}
+
+        def _uct(parent: tuple[int, ...], child: tuple[int, ...]) -> float:
+            child_visits = visits.get(child, 0)
+            if child_visits == 0:
+                return float("inf")
+            parent_visits = max(visits.get(parent, 1), 1)
+            mean = value_sum.get(child, 0.0) / child_visits
+            bonus = exploration * np.sqrt(np.log(parent_visits + 1.0) / child_visits)
+            return float(mean + bonus)
+
+        for _ in range(iterations):
+            node: tuple[int, ...] = ()
+            path = [node]
+            while len(node) < segments:
+                choices = untried.setdefault(node, list(range(len(stage_candidates))))
+                if choices:
+                    idx = choices.pop(0)
+                    node = node + (idx,)
+                    visits.setdefault(node, 0)
+                    value_sum.setdefault(node, 0.0)
+                    untried.setdefault(node, list(range(len(stage_candidates))))
+                    path.append(node)
+                    break
+                children = [node + (idx,) for idx in range(len(stage_candidates))]
+                node = max(children, key=lambda child: _uct(path[-1], child))
+                path.append(node)
+            while len(node) < segments:
+                idx = int(rng.integers(0, len(stage_candidates)))
+                node = node + (idx,)
+                path.append(node)
+
+            seq_idx = list(node)
+            rollout_values: list[float] = []
+            for _roll in range(rollout_count):
+                seq = [stage_candidates[idx] for idx in seq_idx]
+                rollout_values.append(
+                    -self._score_sequence_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        sequence=seq,
+                        steps=steps,
+                    )
+                )
+            reward = float(np.mean(rollout_values))
+            for state_idx in path:
+                visits[state_idx] = visits.get(state_idx, 0) + 1
+                value_sum[state_idx] = value_sum.get(state_idx, 0.0) + reward
+
+        root_children = [((idx,), stage_candidates[idx]) for idx in range(len(stage_candidates))]
+        best_child, best_action = max(
+            root_children,
+            key=lambda item: (
+                visits.get(item[0], 0),
+                value_sum.get(item[0], 0.0) / max(visits.get(item[0], 0), 1),
+            ),
+        )
+        _ = best_child
+        return best_action
+
+    def _select_predictive_action(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[tuple[float, float], float]:
+        """Select the lowest-cost first action under the configured predictive search mode.
+
+        Returns:
+            tuple[tuple[float, float], float]: Best command and its aggregated risk-aware cost.
+        """
+        if bool(self.config.predictive_mcts_enabled):
+            best = self._plan_mcts_lite(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                steps=steps,
+            )
+            best_cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=best[0],
+                w=best[1],
+                steps=steps,
+            )
+            return best, best_cost
+
+        if bool(self.config.predictive_sequence_search_enabled):
+            best = self._plan_sequence_search(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                steps=steps,
+            )
+            best_cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=best[0],
+                w=best[1],
+                steps=steps,
+            )
+            return best, best_cost
+
+        best = (0.0, 0.0)
+        best_cost = float("inf")
+        for v, w in self._candidate_set(future_peds=future_batch[0], mask=mask):
+            cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=v,
+                w=w,
+                steps=steps,
+            )
+            if cost < best_cost:
+                best_cost = cost
+                best = (v, w)
+        return best, best_cost
+
+    def _apply_predictive_progress_escape(
+        self,
+        *,
+        observation: dict,
+        robot_heading: float,
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+        best: tuple[float, float],
+    ) -> tuple[tuple[float, float], float]:
+        """Inject a minimum forward-progress action when the predicted field is sufficiently clear.
+
+        Returns:
+            tuple[tuple[float, float], float]: Updated command and its cost.
+        """
+        best_cost = self._score_action_distribution(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            v=best[0],
+            w=best[1],
+            steps=steps,
+        )
+        if not bool(self.config.predictive_progress_escape_enabled):
+            return best, best_cost
+
+        goal_dist = float(np.linalg.norm(goal - robot_pos))
+        if goal_dist <= float(self.config.predictive_progress_escape_distance):
+            return best, best_cost
+
+        clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
+            self.config.predictive_progress_escape_clearance_margin
+        )
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_batch[0],
+            mask=mask,
+            steps=min(max(steps, 1), future_batch[0].shape[1]),
+        )
+        if min_pred_dist < clearance_gate:
+            return best, best_cost
+
+        cap_ratio = self._risk_speed_cap_ratio(future_peds=future_batch[0], mask=mask)
+        max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
+        min_v = float(self.config.max_linear_speed) * float(
+            np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
+        )
+        if best[0] >= min_v:
+            return best, best_cost
+
+        goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
+        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
+        forced_w = float(
+            np.clip(
+                float(self.config.predictive_progress_escape_heading_gain) * float(heading_err),
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
+        )
+        forced = (forced_v, forced_w)
+        forced_cost = self._score_action_distribution(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            v=forced[0],
+            w=forced[1],
+            steps=steps,
+        )
+        if forced_cost < best_cost:
+            return forced, forced_cost
+        return best, best_cost
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """Compute (v, w) via predictive rollout search over learned trajectories.
@@ -3331,89 +3721,24 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         state, mask, _robot_pos, _robot_heading = self._build_model_input(observation)
         future = self._predict_trajectories(state, mask)
-        steps = self._effective_rollout_steps(future_peds=future, mask=mask)
-
-        best = (0.0, 0.0)
-        best_cost = float("inf")
-
-        if bool(self.config.predictive_sequence_search_enabled):
-            best = self._plan_sequence_search(
-                observation=observation,
-                future=future,
-                mask=mask,
-                steps=steps,
-            )
-            best_cost = self._score_action(
-                observation=observation,
-                future_peds=future,
-                mask=mask,
-                v=best[0],
-                w=best[1],
-                steps=steps,
-            )
-        else:
-            for v, w in self._candidate_set(future_peds=future, mask=mask):
-                cost = self._score_action(
-                    observation=observation,
-                    future_peds=future,
-                    mask=mask,
-                    v=v,
-                    w=w,
-                    steps=steps,
-                )
-                if cost < best_cost:
-                    best_cost = cost
-                    best = (v, w)
-
-        if bool(self.config.predictive_progress_escape_enabled):
-            goal_dist = float(np.linalg.norm(goal - robot_pos))
-            if goal_dist > float(self.config.predictive_progress_escape_distance):
-                clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
-                    self.config.predictive_progress_escape_clearance_margin
-                )
-                min_pred_dist = self._min_predicted_distance(
-                    future_peds=future,
-                    mask=mask,
-                    steps=min(max(steps, 1), future.shape[1]),
-                )
-                if min_pred_dist >= clearance_gate:
-                    cap_ratio = self._risk_speed_cap_ratio(future_peds=future, mask=mask)
-                    max_v = float(self.config.max_linear_speed) * float(
-                        np.clip(cap_ratio, 0.1, 1.0)
-                    )
-                    min_v = float(self.config.max_linear_speed) * float(
-                        np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
-                    )
-                    if best[0] < min_v:
-                        robot_heading = float(
-                            self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]
-                        )
-                        goal_heading = float(
-                            np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0])
-                        )
-                        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
-                        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
-                        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
-                        forced_w = float(
-                            np.clip(
-                                float(self.config.predictive_progress_escape_heading_gain)
-                                * float(heading_err),
-                                -float(self.config.max_angular_speed),
-                                float(self.config.max_angular_speed),
-                            )
-                        )
-                        forced = (forced_v, forced_w)
-                        forced_cost = self._score_action(
-                            observation=observation,
-                            future_peds=future,
-                            mask=mask,
-                            v=forced[0],
-                            w=forced[1],
-                            steps=steps,
-                        )
-                        if forced_cost < best_cost:
-                            best_cost = forced_cost
-                            best = forced
+        future_batch = self._sample_future_trajectories(state=state, mask=mask, future=future)
+        steps = self._effective_rollout_steps(future_peds=future_batch[0], mask=mask)
+        best, _best_cost = self._select_predictive_action(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            steps=steps,
+        )
+        best, _best_cost = self._apply_predictive_progress_escape(
+            observation=observation,
+            robot_heading=float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]),
+            robot_pos=robot_pos,
+            goal=goal,
+            future_batch=future_batch,
+            mask=mask,
+            steps=steps,
+            best=best,
+        )
         return best
 
 

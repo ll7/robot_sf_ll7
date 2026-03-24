@@ -56,7 +56,7 @@ runtime increase.
 
 Keep `hybrid_portfolio` as a testing-only exploratory planner.
 
-It is not a credible benchmark upgrade and not a serious candidate to challenge the current
+It is neither a credible benchmark upgrade nor a serious candidate to challenge the current
 headline planners.
 
 ## Follow-Up Recommendation

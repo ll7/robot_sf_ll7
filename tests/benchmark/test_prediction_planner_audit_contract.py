@@ -80,6 +80,37 @@ def test_prediction_planner_camera_ready_config_matches_registry_contract() -> N
     assert config["predictive_model_id"] in model_ids
 
 
+def test_prediction_planner_metadata_overrides_expose_search_and_uncertainty_modes() -> None:
+    """Map-runner metadata should surface predictive planner mode selection explicitly."""
+    from robot_sf.benchmark.map_runner import _prediction_planner_metadata_overrides
+
+    probabilistic = _prediction_planner_metadata_overrides(
+        {
+            "predictive_uncertainty_mode": "heuristic_gaussian",
+            "predictive_risk_sample_count": 5,
+            "predictive_risk_objective": "cvar",
+            "predictive_mcts_enabled": True,
+        },
+    )
+    assert probabilistic["prediction_mode"] == "probabilistic"
+    assert probabilistic["predictive_uncertainty_mode"] == "heuristic_gaussian"
+    assert probabilistic["predictive_risk_objective"] == "cvar"
+    assert probabilistic["predictive_risk_sample_count"] == 5
+    assert probabilistic["predictive_search_mode"] == "mcts_lite"
+
+    deterministic = _prediction_planner_metadata_overrides(
+        {
+            "predictive_sequence_search_enabled": True,
+            "predictive_uncertainty_mode": "deterministic",
+            "predictive_risk_sample_count": 1,
+        },
+    )
+    assert deterministic["prediction_mode"] == "deterministic"
+    assert deterministic["predictive_uncertainty_mode"] == "deterministic"
+    assert deterministic["predictive_risk_sample_count"] == 1
+    assert deterministic["predictive_search_mode"] == "sequence_beam"
+
+
 def test_build_predictive_planner_algo_config_prefers_explicit_checkpoint_override() -> None:
     """Runtime checkpoint override should replace registry selection for direct eval paths."""
     config = build_predictive_planner_algo_config(

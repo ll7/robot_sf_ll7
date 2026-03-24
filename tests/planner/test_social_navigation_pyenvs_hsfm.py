@@ -134,7 +134,7 @@ def test_hsfm_adapter_uses_explicit_velocity_and_angular_rate(tmp_path: Path) ->
     )
     assert command_v == pytest.approx(0.5)
     assert command_w == pytest.approx(1.0)
-    assert meta["upstream_action_body_xyw"] == [0.5, 0.3, 0.6000000000000001]
+    assert meta["upstream_action_body_xyw"] == pytest.approx([0.5, 0.3, 0.6])
     assert meta["upstream_action_kind"] == "ActionXYW"
     assert meta["self_velocity_source"] == "robot.velocity_xy+robot.angular_velocity"
 

@@ -134,38 +134,37 @@ viz.animate_episode = lambda *args, **kwargs: None
 gym.logger.set_level(40)
 os.environ['GYM_CONFIG_CLASS'] = 'Example'
 tf.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-tf.Session().__enter__()
-
-env = gym.make('CollisionAvoidance-v0')
-agents = tc.get_testcase_two_agents()
-for agent in agents:
-    if hasattr(agent.policy, 'initialize_network'):
-        agent.policy.initialize_network()
-env.set_agents(agents)
-reset_out = env.reset()
-obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
-internal_obs = obs[1]
-vec_obs = np.array([])
-for state in Config.STATES_IN_OBS:
-    if state not in Config.STATES_NOT_USED_IN_POLICY:
-        vec_obs = np.hstack([vec_obs, internal_obs[state].flatten()])
-vec_obs = np.expand_dims(vec_obs, axis=0)
-policy = agents[1].policy
-pred = policy.nn.predict_p(vec_obs)[0]
-action_idx = int(np.argmax(pred))
-raw_action = policy.possible_actions.actions[action_idx]
-action = np.array([internal_obs['pref_speed'] * raw_action[0], raw_action[1]])
-print(json.dumps({
-    'vec_obs': vec_obs.tolist(),
-    'upstream_probs': pred.tolist(),
-    'upstream_argmax': action_idx,
-    'upstream_raw_action': raw_action.tolist(),
-    'upstream_final_action': action.tolist(),
-    'upstream_actions': policy.possible_actions.actions.tolist(),
-    'checkpoint_prefix': str((Path.cwd() / '__CHECKPOINT_PREFIX_RELATIVE__').resolve()),
-    'obs_shape': list(vec_obs.shape),
-    'states_used': [state for state in Config.STATES_IN_OBS if state not in Config.STATES_NOT_USED_IN_POLICY],
-}))
+with tf.Session():
+    env = gym.make('CollisionAvoidance-v0')
+    agents = tc.get_testcase_two_agents()
+    for agent in agents:
+        if hasattr(agent.policy, 'initialize_network'):
+            agent.policy.initialize_network()
+    env.set_agents(agents)
+    reset_out = env.reset()
+    obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
+    internal_obs = obs[1]
+    vec_obs = np.array([])
+    for state in Config.STATES_IN_OBS:
+        if state not in Config.STATES_NOT_USED_IN_POLICY:
+            vec_obs = np.hstack([vec_obs, internal_obs[state].flatten()])
+    vec_obs = np.expand_dims(vec_obs, axis=0)
+    policy = agents[1].policy
+    pred = policy.nn.predict_p(vec_obs)[0]
+    action_idx = int(np.argmax(pred))
+    raw_action = policy.possible_actions.actions[action_idx]
+    action = np.array([internal_obs['pref_speed'] * raw_action[0], raw_action[1]])
+    print(json.dumps({
+        'vec_obs': vec_obs.tolist(),
+        'upstream_probs': pred.tolist(),
+        'upstream_argmax': action_idx,
+        'upstream_raw_action': raw_action.tolist(),
+        'upstream_final_action': action.tolist(),
+        'upstream_actions': policy.possible_actions.actions.tolist(),
+        'checkpoint_prefix': str((Path.cwd() / '__CHECKPOINT_PREFIX_RELATIVE__').resolve()),
+        'obs_shape': list(vec_obs.shape),
+        'states_used': [state for state in Config.STATES_IN_OBS if state not in Config.STATES_NOT_USED_IN_POLICY],
+    }))
 """.replace("__CHECKPOINT_PREFIX_RELATIVE__", checkpoint_prefix_relative_str)
 
 
@@ -400,7 +399,7 @@ def main() -> int:
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_md.write_text(_render_markdown(report), encoding="utf-8")
     print(json.dumps({"verdict": report.verdict, "failure_summary": report.failure_summary}))
-    return 0
+    return 0 if report.verdict == "native-model parity reproduced" else 1
 
 
 if __name__ == "__main__":

@@ -241,6 +241,34 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     return data
 
 
+def _prediction_planner_metadata_overrides(algo_config: dict[str, Any]) -> dict[str, Any]:
+    """Expose predictive-planner search and uncertainty modes as first-class metadata.
+
+    Returns:
+        dict[str, Any]: Explicit mode labels for audit-friendly benchmark metadata.
+    """
+    uncertainty_mode = str(algo_config.get("predictive_uncertainty_mode", "deterministic")).strip()
+    search_mode = "mcts_lite"
+    if not bool(algo_config.get("predictive_mcts_enabled", False)):
+        search_mode = (
+            "sequence_beam"
+            if bool(algo_config.get("predictive_sequence_search_enabled", False))
+            else "lattice"
+        )
+    sample_count = int(algo_config.get("predictive_risk_sample_count", 1))
+    return {
+        "prediction_mode": "probabilistic"
+        if uncertainty_mode.lower() != "deterministic" or sample_count > 1
+        else "deterministic",
+        "predictive_uncertainty_mode": uncertainty_mode,
+        "predictive_risk_objective": str(
+            algo_config.get("predictive_risk_objective", "mean")
+        ).strip(),
+        "predictive_risk_sample_count": sample_count,
+        "predictive_search_mode": search_mode,
+    }
+
+
 def _is_socnav_algorithm(algo: str) -> bool:
     return algo.strip().lower() in _SOCNAV_ALGO_KEYS
 
@@ -1172,6 +1200,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key == "prediction_planner":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+        meta.update(_prediction_planner_metadata_overrides(algo_config))
     elif algo_key == "hybrid_portfolio":
         allow_fallback = bool(algo_config.get("allow_fallback", True))
         hybrid_cfg = build_hybrid_portfolio_build_config(algo_config)
@@ -1899,6 +1928,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         missing_prereq_policy=socnav_missing_prereq_policy,
         robot_kinematics=kinematics_tag,
     )
+    if algo.strip().lower() == "prediction_planner":
+        algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
     compatible, incompatible_reason = _planner_kinematics_compatibility(
         algo=algo,
         robot_kinematics=kinematics_tag,

@@ -7,7 +7,7 @@ import math
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -74,6 +74,7 @@ def build_social_navigation_pyenvs_hsfm_config(
             f"Unsupported Social-Navigation-PyEnvs HSFM policy '{policy_name}'. "
             f"Expected one of {sorted(_POLICY_SPECS)}."
         )
+    validated_policy_name = cast("HSFMPolicyName", policy_name)
     preferred_speed = float(payload.get("preferred_speed", 1.0))
     max_linear_speed = float(payload.get("max_linear_speed", 1.0))
     max_angular_speed = float(payload.get("max_angular_speed", 1.0))
@@ -84,7 +85,7 @@ def build_social_navigation_pyenvs_hsfm_config(
             "preferred_speed, max_linear_speed, and max_angular_speed must be non-negative"
         )
     return SocialNavigationPyEnvsHSFMConfig(
-        policy_name=policy_name,
+        policy_name=validated_policy_name,
         repo_root=Path(str(repo_root_raw)),
         preferred_speed=preferred_speed,
         max_linear_speed=max_linear_speed,

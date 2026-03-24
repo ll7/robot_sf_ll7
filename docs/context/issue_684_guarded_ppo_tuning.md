@@ -62,7 +62,7 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 ## Interpretation
 
-`guarded_ppo_relaxed_v2` is the best tuned variant in this pass.
+`guarded_ppo_relaxed_v2` is the best-tuned variant in this pass.
 
 What improved relative to the original guarded profile:
 - success recovered from `0.0071` to `0.0638`

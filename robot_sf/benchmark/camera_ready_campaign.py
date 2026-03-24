@@ -1381,6 +1381,12 @@ def _load_comparability_mapping(path: Path) -> dict[str, Any]:
         raise ValueError("Comparability mapping requires 'metric_comparability' mapping")
     _validate_metric_map(metric_map)
 
+    planner_key_map = payload.get("planner_key_mapping")
+    if planner_key_map is not None:
+        if not isinstance(planner_key_map, dict):
+            raise ValueError("Comparability mapping 'planner_key_mapping' must be a mapping")
+        _validate_planner_key_map(planner_key_map)
+
     extensions = payload.get("amv_specific_extensions", [])
     if not isinstance(extensions, list):
         raise ValueError("Comparability mapping 'amv_specific_extensions' must be a list")
@@ -1411,6 +1417,18 @@ def _validate_metric_map(metric_map: dict[str, Any]) -> None:
             raise ValueError(
                 f"metric_comparability[{metric}] classification must be one of comparable|proxy|amv_specific"
             )
+
+
+def _validate_planner_key_map(planner_key_map: dict[str, Any]) -> None:
+    """Validate planner-key mapping payload."""
+    for key, value in planner_key_map.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("planner_key_mapping entries must be non-empty string->string")
 
 
 def _markdown_rows_from_mapping_rows(
@@ -1447,6 +1465,23 @@ def _build_comparability_summary(
     mapping = _load_comparability_mapping(mapping_path)
     family_map = mapping["scenario_family_mapping"]
     metric_map = mapping["metric_comparability"]
+    planner_key_map = mapping.get("planner_key_mapping")
+    if cfg.paper_facing:
+        if not isinstance(planner_key_map, dict):
+            raise ValueError(
+                "Comparability mapping requires 'planner_key_mapping' mapping for paper-facing campaigns"
+            )
+        missing_planner_keys = [
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled and planner.key not in planner_key_map
+        ]
+        if missing_planner_keys:
+            missing = ", ".join(sorted(missing_planner_keys))
+            raise ValueError(
+                "Comparability mapping is missing planner_key_mapping entries for enabled planners: "
+                f"{missing}"
+            )
 
     family_counts: dict[str, int] = {}
     for scenario in scenarios:

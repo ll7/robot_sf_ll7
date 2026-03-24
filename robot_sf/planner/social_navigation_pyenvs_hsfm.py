@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -23,6 +24,24 @@ _POLICY_SPECS: dict[HSFMPolicyName, tuple[str, str]] = {
     "hsfm_new_guo": ("crowd_nav.policy_no_train.hsfm_new_guo", "HSFMNewGuo"),
     "hsfm_farina": ("crowd_nav.policy_no_train.hsfm_farina", "HSFMFarina"),
 }
+
+_UPSTREAM_IMPORT_LOCK = threading.Lock()
+
+
+def _sanitize_time_step(value: Any) -> float:
+    """Normalize an arbitrary timestep payload into a safe positive scalar.
+
+    Returns:
+        float: A finite positive timestep, or the safe default `0.1`.
+    """
+    try:
+        dt_arr = np.asarray(0.1 if value is None else value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return 0.1
+    dt = float(dt_arr[0]) if dt_arr.size else 0.1
+    if not math.isfinite(dt) or dt <= 0.0:
+        return 0.1
+    return dt
 
 
 @dataclass(frozen=True)
@@ -59,6 +78,8 @@ def build_social_navigation_pyenvs_hsfm_config(
     preferred_speed = float(payload.get("preferred_speed", 1.0))
     max_linear_speed = float(payload.get("max_linear_speed", 1.0))
     max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if not all(math.isfinite(v) for v in (preferred_speed, max_linear_speed, max_angular_speed)):
+        raise ValueError("preferred_speed, max_linear_speed, and max_angular_speed must be finite")
     if preferred_speed < 0.0 or max_linear_speed < 0.0 or max_angular_speed < 0.0:
         raise ValueError(
             "preferred_speed, max_linear_speed, and max_angular_speed must be non-negative"
@@ -102,50 +123,49 @@ def _robot_headed_observation_fields(
         radius, and velocity-source label.
     """
     if "robot" in observation:
-        robot_state = observation.get("robot", {})
-        goal_state = observation.get("goal", {})
-        robot_pos = _require_array(robot_state.get("position"), size=2, field="robot.position")
-        goal_pos = _require_array(goal_state.get("current"), size=2, field="goal.current")
-        heading = float(
-            _require_array(robot_state.get("heading"), size=1, field="robot.heading")[0]
-        )
-        radius = float(_as_array(robot_state.get("radius"), pad=1, fill=0.3)[0])
-        velocity_xy = _require_array(
-            robot_state.get("velocity_xy"), size=2, field="robot.velocity_xy"
-        )
-        body_velocity_xy = _world_to_body(velocity_xy, heading)
-        angular_velocity = float(
-            _require_array(
-                robot_state.get("angular_velocity"),
-                size=1,
-                field="robot.angular_velocity",
-            )[0]
-        )
-        return (
-            robot_pos,
-            goal_pos,
-            heading,
-            body_velocity_xy,
-            angular_velocity,
-            radius,
-            "robot.velocity_xy+robot.angular_velocity",
-        )
+        robot_source = observation.get("robot", {})
+        goal_source = observation.get("goal", {})
+        position_key = "position"
+        goal_key = "current"
+        heading_key = "heading"
+        radius_key = "radius"
+        radius_field = "robot.radius"
+        velocity_key = "velocity_xy"
+        angular_velocity_key = "angular_velocity"
+        position_field = "robot.position"
+        goal_field = "goal.current"
+        heading_field = "robot.heading"
+        velocity_field = "robot.velocity_xy"
+        angular_velocity_field = "robot.angular_velocity"
+        velocity_source_label = "robot.velocity_xy+robot.angular_velocity"
+    else:
+        robot_source = observation
+        goal_source = observation
+        position_key = "robot_position"
+        goal_key = "goal_current"
+        heading_key = "robot_heading"
+        radius_key = "robot_radius"
+        radius_field = "robot_radius"
+        velocity_key = "robot_velocity_xy"
+        angular_velocity_key = "robot_angular_velocity"
+        position_field = "robot_position"
+        goal_field = "goal_current"
+        heading_field = "robot_heading"
+        velocity_field = "robot_velocity_xy"
+        angular_velocity_field = "robot_angular_velocity"
+        velocity_source_label = "robot_velocity_xy+robot_angular_velocity"
 
-    robot_pos = _require_array(observation.get("robot_position"), size=2, field="robot_position")
-    goal_pos = _require_array(observation.get("goal_current"), size=2, field="goal_current")
-    heading = float(
-        _require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0]
-    )
-    radius = float(_as_array(observation.get("robot_radius"), pad=1, fill=0.3)[0])
-    velocity_xy = _require_array(
-        observation.get("robot_velocity_xy"), size=2, field="robot_velocity_xy"
-    )
+    robot_pos = _require_array(robot_source.get(position_key), size=2, field=position_field)
+    goal_pos = _require_array(goal_source.get(goal_key), size=2, field=goal_field)
+    heading = float(_require_array(robot_source.get(heading_key), size=1, field=heading_field)[0])
+    radius = float(_require_array(robot_source.get(radius_key), size=1, field=radius_field)[0])
+    velocity_xy = _require_array(robot_source.get(velocity_key), size=2, field=velocity_field)
     body_velocity_xy = _world_to_body(velocity_xy, heading)
     angular_velocity = float(
         _require_array(
-            observation.get("robot_angular_velocity"),
+            robot_source.get(angular_velocity_key),
             size=1,
-            field="robot_angular_velocity",
+            field=angular_velocity_field,
         )[0]
     )
     return (
@@ -155,7 +175,7 @@ def _robot_headed_observation_fields(
         body_velocity_xy,
         angular_velocity,
         radius,
-        "robot_velocity_xy+robot_angular_velocity",
+        velocity_source_label,
     )
 
 
@@ -174,10 +194,11 @@ class SocialNavigationPyEnvsHSFMAdapter:
                 f"{self.config.repo_root}. Clone the upstream repo under output/repos/ first."
             )
         module_name, class_name = _POLICY_SPECS[self.config.policy_name]
-        with _upstream_import_context(self.repo_root):
-            action_mod = importlib.import_module("crowd_nav.utils.action")
-            state_mod = importlib.import_module("crowd_nav.utils.state")
-            policy_mod = importlib.import_module(module_name)
+        with _UPSTREAM_IMPORT_LOCK:
+            with _upstream_import_context(self.repo_root):
+                action_mod = importlib.import_module("crowd_nav.utils.action")
+                state_mod = importlib.import_module("crowd_nav.utils.state")
+                policy_mod = importlib.import_module(module_name)
         self._ActionXYW = action_mod.ActionXYW
         self._NewHeadedState = action_mod.NewHeadedState
         self._FullStateHeaded = state_mod.FullStateHeaded
@@ -203,25 +224,32 @@ class SocialNavigationPyEnvsHSFMAdapter:
             velocity_source,
         ) = _robot_headed_observation_fields(observation)
         if "robot" in observation:
-            ped_state = observation.get("pedestrians", {})
-            ped_positions = _as_matrix(ped_state.get("positions"), cols=2)
-            ped_velocities = _as_matrix(ped_state.get("velocities"), cols=2)
-            ped_count = (
-                int(_as_array(ped_state.get("count"), pad=1)[0])
-                if ped_state.get("count") is not None
-                else ped_positions.shape[0]
-            )
-            ped_radius_value = float(_as_array(ped_state.get("radius"), pad=1, fill=0.3)[0])
+            ped_source = observation.get("pedestrians", {})
+            positions_key = "positions"
+            velocities_key = "velocities"
+            count_key = "count"
+            radius_key = "radius"
+            radius_field = "pedestrians.radius"
         else:
-            ped_positions = _as_matrix(observation.get("pedestrians_positions"), cols=2)
-            ped_velocities = _as_matrix(observation.get("pedestrians_velocities"), cols=2)
-            ped_count = (
-                int(_as_array(observation.get("pedestrians_count"), pad=1)[0])
-                if observation.get("pedestrians_count") is not None
-                else ped_positions.shape[0]
-            )
+            ped_source = observation
+            positions_key = "pedestrians_positions"
+            velocities_key = "pedestrians_velocities"
+            count_key = "pedestrians_count"
+            radius_key = "pedestrians_radius"
+            radius_field = "pedestrians_radius"
+
+        ped_positions = _as_matrix(ped_source.get(positions_key), cols=2)
+        ped_velocities = _as_matrix(ped_source.get(velocities_key), cols=2)
+        ped_count = (
+            int(_as_array(ped_source.get(count_key), pad=1)[0])
+            if ped_source.get(count_key) is not None
+            else ped_positions.shape[0]
+        )
+        if ped_positions.shape[0] == 0:
+            ped_radius_value = 0.3
+        else:
             ped_radius_value = float(
-                _as_array(observation.get("pedestrians_radius"), pad=1, fill=0.3)[0]
+                _require_array(ped_source.get(radius_key), size=1, field=radius_field)[0]
             )
 
         self_state = self._FullStateHeaded(
@@ -256,32 +284,21 @@ class SocialNavigationPyEnvsHSFMAdapter:
     ) -> tuple[float, float, dict[str, Any]]:
         """Return projected `(v, w)` command plus explicit projection metadata."""
         joint_state = self._joint_state(observation)
-        dt = max(float(time_step), 1e-6)
+        dt = _sanitize_time_step(time_step)
         self._policy.time_step = dt
         action = self._policy.predict(joint_state)
 
-        if isinstance(action, self._ActionXYW):
+        if isinstance(action, (self._ActionXYW, self._NewHeadedState)):
             body_vx = float(action.bvx)
             body_vy = float(action.bvy)
             angular_velocity = float(action.w)
-            action_kind = "ActionXYW"
-        elif isinstance(action, self._NewHeadedState):
-            body_vx = float(action.bvx)
-            body_vy = float(action.bvy)
-            angular_velocity = float(action.w)
-            action_kind = "NewHeadedState"
+            action_kind = "ActionXYW" if isinstance(action, self._ActionXYW) else "NewHeadedState"
         else:
             raise TypeError(f"Unexpected upstream action type: {type(action)}")
 
         body_speed = float(np.hypot(body_vx, body_vy))
         body_heading_offset = float(math.atan2(body_vy, body_vx)) if body_speed > 1e-8 else 0.0
-        linear = float(
-            np.clip(
-                body_speed * max(0.0, math.cos(body_heading_offset)),
-                0.0,
-                float(self.config.max_linear_speed),
-            )
-        )
+        linear = float(np.clip(body_vx, 0.0, float(self.config.max_linear_speed)))
         angular = float(
             np.clip(
                 angular_velocity + (body_heading_offset / dt),
@@ -310,15 +327,11 @@ class SocialNavigationPyEnvsHSFMAdapter:
             tuple[float, float]: Projected ``(linear, angular)`` command.
         """
         dt_source = observation.get("dt", 0.1)
+        if "sim_timestep" in observation:
+            dt_source = observation.get("sim_timestep", dt_source)
         if "sim" in observation and isinstance(observation["sim"], dict):
             dt_source = observation["sim"].get("timestep", dt_source)
-        try:
-            dt_arr = np.asarray(0.1 if dt_source is None else dt_source, dtype=float).reshape(-1)
-        except (TypeError, ValueError):
-            dt_arr = np.asarray([0.1], dtype=float)
-        dt = float(dt_arr[0]) if dt_arr.size else 0.1
-        if not math.isfinite(dt) or dt <= 0.0:
-            dt = 0.1
+        dt = _sanitize_time_step(dt_source)
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 

@@ -43,7 +43,9 @@ The isolated side environment used for the probe was created under:
 Representative setup commands:
 
 ```bash
-uv venv --python <PYTHON_3_10_BIN> \
+PYTHON_INTERPRETER=/path/to/python3.10
+
+uv venv --python "${PYTHON_INTERPRETER}" \
   output/benchmarks/external/gym_collision_avoidance_side_env/.venv
 
 uv pip install --python output/benchmarks/external/gym_collision_avoidance_side_env/.venv/bin/python \

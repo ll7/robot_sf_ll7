@@ -24,6 +24,7 @@ class Frame:
     robot_pos: np.ndarray
     robot_heading: float
     robot_speed: np.ndarray
+    robot_velocity_xy: np.ndarray
     goal_current: np.ndarray
     ped_positions_world: np.ndarray
     ped_velocities_world: np.ndarray
@@ -41,6 +42,7 @@ def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
         "position": obs.get("robot_position", [0.0, 0.0]),
         "heading": obs.get("robot_heading", [0.0]),
         "speed": obs.get("robot_speed", [0.0, 0.0]),
+        "velocity_xy": obs.get("robot_velocity_xy", obs.get("robot_speed", [0.0, 0.0])),
     }
     goal = {"current": obs.get("goal_current", [0.0, 0.0])}
     peds = {
@@ -57,6 +59,9 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
     robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
     robot_speed = np.asarray(robot.get("speed", [0.0, 0.0]), dtype=np.float32).reshape(-1)[:2]
+    robot_velocity_xy = np.asarray(robot.get("velocity_xy", robot_speed), dtype=np.float32).reshape(
+        -1
+    )[:2]
     goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
 
     ped_positions = np.asarray(peds.get("positions", []), dtype=np.float32)
@@ -90,6 +95,7 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
         robot_pos=robot_pos,
         robot_heading=robot_heading,
         robot_speed=robot_speed,
+        robot_velocity_xy=robot_velocity_xy,
         goal_current=goal_current,
         ped_positions_world=ped_positions,
         ped_velocities_world=ped_velocities,
@@ -216,8 +222,12 @@ def _frames_to_samples(
                 goal_dir = goal_rel / max(goal_dist, 1e-6)
                 ego_features = np.array(
                     [
-                        float(frame_t.robot_speed[0]) if frame_t.robot_speed.size > 0 else 0.0,
-                        float(frame_t.robot_speed[1]) if frame_t.robot_speed.size > 1 else 0.0,
+                        float(frame_t.robot_velocity_xy[0])
+                        if frame_t.robot_velocity_xy.size > 0
+                        else 0.0,
+                        float(frame_t.robot_velocity_xy[1])
+                        if frame_t.robot_velocity_xy.size > 1
+                        else 0.0,
                         float(goal_dir[0]),
                         float(goal_dir[1]),
                         goal_dist,

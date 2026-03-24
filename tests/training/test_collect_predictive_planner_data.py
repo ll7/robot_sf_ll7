@@ -12,6 +12,7 @@ def _frame(
     robot_pos: tuple[float, float] = (0.0, 0.0),
     robot_heading: float = 0.0,
     robot_speed: tuple[float, float] = (0.0, 0.0),
+    robot_velocity_xy: tuple[float, float] | None = None,
     goal_current: tuple[float, float] = (1.0, 0.0),
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
@@ -23,10 +24,16 @@ def _frame(
         velocities_source = ped_velocities
     positions = np.asarray(positions_source, dtype=np.float32).reshape(-1, 2)
     velocities = np.asarray(velocities_source, dtype=np.float32).reshape(-1, 2)
+    velocity_xy = (
+        np.asarray(robot_velocity_xy, dtype=np.float32)
+        if robot_velocity_xy is not None
+        else np.asarray(robot_speed, dtype=np.float32)
+    )
     return collect.Frame(
         robot_pos=np.asarray(robot_pos, dtype=np.float32),
         robot_heading=float(robot_heading),
         robot_speed=np.asarray(robot_speed, dtype=np.float32),
+        robot_velocity_xy=velocity_xy,
         goal_current=np.asarray(goal_current, dtype=np.float32),
         ped_positions_world=positions,
         ped_velocities_world=velocities,
@@ -34,12 +41,13 @@ def _frame(
     )
 
 
-def test_extract_frame_reads_robot_speed_and_goal_from_flat_observation() -> None:
-    """Flat observations should expose the extra ego-conditioning features."""
+def test_extract_frame_reads_robot_velocity_xy_and_goal_from_flat_observation() -> None:
+    """Flat observations should expose both speed and planar self-velocity features."""
     obs = {
         "robot_position": [1.0, 2.0],
         "robot_heading": [0.5],
         "robot_speed": [0.4, -0.2],
+        "robot_velocity_xy": [0.3, 0.6],
         "goal_current": [4.0, 6.0],
         "pedestrians_positions": [2.0, 3.0, 5.0, 7.0],
         "pedestrians_velocities": [0.0, 0.1, -0.2, 0.3],
@@ -51,6 +59,7 @@ def test_extract_frame_reads_robot_speed_and_goal_from_flat_observation() -> Non
     assert np.allclose(frame.robot_pos, np.array([1.0, 2.0], dtype=np.float32))
     assert frame.robot_heading == 0.5
     assert np.allclose(frame.robot_speed, np.array([0.4, -0.2], dtype=np.float32))
+    assert np.allclose(frame.robot_velocity_xy, np.array([0.3, 0.6], dtype=np.float32))
     assert np.allclose(frame.goal_current, np.array([4.0, 6.0], dtype=np.float32))
     assert frame.ped_count == 2
 
@@ -87,12 +96,14 @@ def test_frames_to_samples_adds_ego_conditioning_features() -> None:
     frames = [
         _frame(
             robot_speed=(0.5, -0.1),
+            robot_velocity_xy=(0.25, 0.75),
             goal_current=(3.0, 4.0),
             ped_positions=[(1.0, 0.0)],
             ped_velocities=[(0.1, 0.2)],
         ),
         _frame(
             robot_speed=(0.5, -0.1),
+            robot_velocity_xy=(0.25, 0.75),
             goal_current=(3.0, 4.0),
             ped_positions=[(1.2, 0.2)],
             ped_velocities=[(0.1, 0.2)],
@@ -108,7 +119,7 @@ def test_frames_to_samples_adds_ego_conditioning_features() -> None:
 
     assert state.shape == (1, 2, 9)
     assert np.allclose(state[0, 0, 0:4], np.array([1.0, 0.0, 0.1, 0.2], dtype=np.float32))
-    assert np.allclose(state[0, 0, 4:6], np.array([0.5, -0.1], dtype=np.float32))
+    assert np.allclose(state[0, 0, 4:6], np.array([0.25, 0.75], dtype=np.float32))
     assert np.allclose(state[0, 0, 6:8], np.array([0.6, 0.8], dtype=np.float32), atol=1e-6)
     assert state[0, 0, 8] == 5.0
     assert mask[0, 0] == 1.0

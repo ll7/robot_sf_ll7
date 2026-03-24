@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 import numpy as np
-import torch
 
 from robot_sf.planner.social_navigation_pyenvs_orca import (
     _as_array,
@@ -38,6 +37,8 @@ def _import_socialforce_backend() -> Any:
     try:
         return importlib.import_module("socialforce")
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised by integration path
+        if exc.name != "socialforce":
+            raise
         raise ModuleNotFoundError(
             "socialforce runtime dependency is required for "
             "social_navigation_pyenvs_socialforce; run with `uv run --with socialforce==0.2.3 ...` "
@@ -51,6 +52,8 @@ def _to_backend_state(state: Any) -> Any:
     Returns:
         Any: Tensor or array accepted by the external backend.
     """
+    import torch  # noqa: PLC0415
+
     return torch.as_tensor(state, dtype=torch.float32)
 
 
@@ -61,13 +64,12 @@ def _backend_to_numpy(state: Any) -> np.ndarray:
         np.ndarray: NumPy view of the backend state.
     """
     current = state
-    for attr in ("detach", "cpu"):
-        method = getattr(current, attr, None)
-        if callable(method):
-            current = method()
-    to_numpy = getattr(current, "numpy", None)
-    if callable(to_numpy):
-        current = to_numpy()
+    if hasattr(current, "detach"):
+        current = current.detach()
+    if hasattr(current, "cpu"):
+        current = current.cpu()
+    if hasattr(current, "numpy"):
+        current = current.numpy()
     return np.asarray(current, dtype=float)
 
 
@@ -100,7 +102,7 @@ def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleTy
 
         def step(self) -> np.ndarray:
             out = self._sim.forward(self._state)
-            self._state = out
+            self._state = out.detach().clone()
             self.state = _backend_to_numpy(out)
             return self.state
 
@@ -196,10 +198,15 @@ class SocialNavigationPyEnvsForceModelAdapter:
             state_mod = importlib.import_module("crowd_nav.utils.state")
             if self.config.policy_name == "socialforce":
                 backend_socialforce = _import_socialforce_backend()
+                version = getattr(backend_socialforce, "__version__", None)
+                if version != "0.2.3":
+                    raise RuntimeError(
+                        "social_navigation_pyenvs_socialforce is only validated against "
+                        "socialforce==0.2.3; found "
+                        f"{version or 'unknown'}."
+                    )
                 self.runtime_strategy = "crowdnav_socialforce_compat_shim"
-                self.runtime_dependency = (
-                    f"socialforce=={getattr(backend_socialforce, '__version__', 'unknown')}"
-                )
+                self.runtime_dependency = "socialforce==0.2.3"
                 with _socialforce_compat_context(backend_socialforce):
                     policy_mod = importlib.import_module(module_name)
             else:

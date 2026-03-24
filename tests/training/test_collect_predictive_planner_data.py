@@ -16,8 +16,13 @@ def _frame(
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
 ) -> collect.Frame:
-    positions = np.asarray(ped_positions or [(1.0, 0.0)], dtype=np.float32).reshape(-1, 2)
-    velocities = np.asarray(ped_velocities or [(0.1, 0.0)], dtype=np.float32).reshape(-1, 2)
+    positions_source = [(1.0, 0.0)] if ped_positions is None else ped_positions
+    if ped_velocities is None:
+        velocities_source = [(0.1, 0.0)] * len(positions_source)
+    else:
+        velocities_source = ped_velocities
+    positions = np.asarray(positions_source, dtype=np.float32).reshape(-1, 2)
+    velocities = np.asarray(velocities_source, dtype=np.float32).reshape(-1, 2)
     return collect.Frame(
         robot_pos=np.asarray(robot_pos, dtype=np.float32),
         robot_heading=float(robot_heading),

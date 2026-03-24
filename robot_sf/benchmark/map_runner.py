@@ -1928,6 +1928,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         missing_prereq_policy=socnav_missing_prereq_policy,
         robot_kinematics=kinematics_tag,
     )
+    if algo.strip().lower() == "prediction_planner":
+        algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
     compatible, incompatible_reason = _planner_kinematics_compatibility(
         algo=algo,
         robot_kinematics=kinematics_tag,

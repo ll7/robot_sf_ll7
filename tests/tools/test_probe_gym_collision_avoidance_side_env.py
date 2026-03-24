@@ -163,7 +163,6 @@ def test_detect_failure_summary_prefers_tkagg() -> None:
 
 def test_render_markdown_mentions_narrower_follow_up(tmp_path: Path) -> None:
     """Blocked markdown output should preserve the conservative wrapper recommendation."""
-    """Successful example and pytest stages should mark the side harness reproducible."""
     repo_root = tmp_path / "repo"
     _write_fake_repo(repo_root)
     report = probe.ProbeReport(

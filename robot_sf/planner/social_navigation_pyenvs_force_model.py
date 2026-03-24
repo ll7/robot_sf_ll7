@@ -102,7 +102,7 @@ def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleTy
 
         def step(self) -> np.ndarray:
             out = self._sim.forward(self._state)
-            self._state = out
+            self._state = out.detach().clone()
             self.state = _backend_to_numpy(out)
             return self.state
 

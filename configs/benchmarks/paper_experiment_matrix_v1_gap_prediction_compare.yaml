@@ -57,18 +57,18 @@ paper_interpretation_profile: baseline-ready-core
 planners:
   - key: prediction_planner_v2_full
     algo: prediction_planner
-    planner_group: experimental
+    <<: &planner_defaults
+      planner_group: experimental
+      benchmark_profile: experimental
+      socnav_missing_prereq_policy: fail-fast
     algo_config: configs/algos/prediction_planner_camera_ready.yaml
-    benchmark_profile: experimental
 
   - key: prediction_planner_v2_xl_ego
     algo: prediction_planner
-    planner_group: experimental
+    <<: *planner_defaults
     algo_config: configs/algos/prediction_planner_camera_ready_xl_ego.yaml
-    benchmark_profile: experimental
 
   - key: gap_prediction
     algo: gap_prediction
-    planner_group: experimental
+    <<: *planner_defaults
     algo_config: configs/algos/gap_prediction_camera_ready.yaml
-    benchmark_profile: experimental

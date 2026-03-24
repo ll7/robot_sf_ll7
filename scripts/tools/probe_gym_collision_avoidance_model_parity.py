@@ -399,7 +399,7 @@ def main() -> int:
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_md.write_text(_render_markdown(report), encoding="utf-8")
     print(json.dumps({"verdict": report.verdict, "failure_summary": report.failure_summary}))
-    return 0 if report.verdict == "compatible runtime reproduced" else 1
+    return 0 if report.verdict == "native-model parity reproduced" else 1
 
 
 if __name__ == "__main__":

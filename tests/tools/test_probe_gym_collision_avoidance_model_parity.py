@@ -253,3 +253,47 @@ def test_render_markdown_mentions_observation_mapping_gap(tmp_path: Path) -> Non
     )
     markdown = probe._render_markdown(report)
     assert "Robot SF observation mapping and benchmark behavior" in markdown
+
+
+def test_main_returns_zero_for_native_model_parity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CLI exit code should be zero when the parity probe reproduces the native model."""
+    output_json = tmp_path / "report.json"
+    output_md = tmp_path / "report.md"
+    report = probe.ProbeReport(
+        issue=661,
+        repo_root=str(tmp_path / "repo"),
+        repo_remote_url="https://github.com/mit-acl/gym-collision-avoidance",
+        side_env_python=str(tmp_path / "python"),
+        verdict="native-model parity reproduced",
+        failure_stage=None,
+        failure_summary=None,
+        parity_summary={
+            "upstream_argmax": 4,
+            "local_argmax": 4,
+            "prob_max_abs_diff": 0.0,
+            "actions_max_abs_diff": 0.0,
+            "obs_shape": [1, 132],
+            "states_used": ["dist_to_goal"],
+            "upstream_final_action": [1.0, 0.0],
+            "local_raw_action": [1.0, 0.0],
+        },
+        source_contract=probe._extract_source_contract(),
+        commands=[],
+    )
+    monkeypatch.setattr(probe, "run_probe", lambda *_args, **_kwargs: report)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "probe_gym_collision_avoidance_model_parity.py",
+            "--output-json",
+            str(output_json),
+            "--output-md",
+            str(output_md),
+        ],
+    )
+
+    assert probe.main() == 0
+    assert output_json.exists()
+    assert output_md.exists()

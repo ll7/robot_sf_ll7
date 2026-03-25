@@ -13,13 +13,13 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_canonical_ppo_baseline_points_at_promoted_registry_model() -> None:
-    """Benchmark-facing PPO baseline should follow the promoted BR-06 registry entry."""
+def test_canonical_ppo_baseline_points_at_promoted_artifact_path() -> None:
+    """Benchmark-facing PPO baseline should stay path-based and offline-safe."""
     repo_root = Path(__file__).resolve().parents[2]
     baseline_config = _load_yaml(repo_root / "configs" / "baselines" / "ppo_15m_grid_socnav.yaml")
     registry = _load_yaml(repo_root / "model" / "registry.yaml")
 
-    assert baseline_config["model_id"] == PROMOTED_PPO_MODEL_ID
+    assert "model_id" not in baseline_config
 
     promoted_entry = next(
         entry for entry in registry["models"] if entry["model_id"] == PROMOTED_PPO_MODEL_ID

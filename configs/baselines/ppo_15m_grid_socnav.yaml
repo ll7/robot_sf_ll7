@@ -1,9 +1,9 @@
 # PPO baseline config pinned to the promoted BR-06 PPO expert policy.
 #
 # Intended for benchmark/evaluation runs where PPO should use the same
-# occupancy-grid observation setup as the 15M training artifact.
+# occupancy-grid observation setup as the 15M training artifact. This
+# benchmark config stays path-based so offline fallback remains intact.
 
-model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip  # Source run: ll7/robot_sf/b60iopxt (see model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md).
 
 # Device selection for SB3

@@ -316,10 +316,12 @@ def _handle_run(args) -> int:
             return 2
         if benchmark_exit_code != 0:
             availability = summary.get("benchmark_availability")
+            specific_reason = None
+            if isinstance(availability, dict):
+                specific_reason = availability.get("availability_reason")
             reason = (
-                str((availability or {}).get("availability_reason"))
-                if isinstance(availability, dict)
-                and (availability or {}).get("availability_reason") is not None
+                str(specific_reason)
+                if specific_reason is not None
                 else "benchmark run did not satisfy the benchmark availability policy"
             )
             try:

@@ -37,6 +37,7 @@ An issue is template-ready only if it includes, at minimum:
 - definition of done,
 - success metrics,
 - validation or testing,
+- estimate discussion,
 - project metadata.
 
 ## Workflow

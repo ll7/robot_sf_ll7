@@ -14,7 +14,6 @@ scenario:
 
 seed_policy:
   mode: fixed-list
-  seed_set:
   seeds: [111]
   seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
 

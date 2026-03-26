@@ -223,7 +223,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         result["publication_bundle"] = None
 
-    if missing and benchmark_success is False:
+    if missing:
         result["status"] = "missing_required_artifacts"
     release_status = result.get("status")
     if not isinstance(release_status, str) or not release_status:

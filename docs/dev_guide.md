@@ -1098,7 +1098,9 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 Use the following templates for specific tasks.
 
-- [issue template](../.github/ISSUE_TEMPLATE/issue_default.md)
+- [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
+- [issue creator skill](../.codex/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
+- [issue template auditor skill](../.codex/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
 - [design doc template](./templates/design-doc-template.md)
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 

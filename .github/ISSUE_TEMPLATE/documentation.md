@@ -1,24 +1,24 @@
 ---
-name: 📚 Documentation
-about: Improve or add documentation
+name: Documentation
+about: Improve or add repository documentation
 title: "[DOCS] "
 labels: ["documentation"]
 assignees: []
 ---
 
-## 📋 Documentation Request
+## Goal / Problem
 
 **What documentation needs to be created or improved?**
 <!-- Describe the documentation gap or improvement needed -->
 
-**Who is the target audience?**
+**Target audience**
 - [ ] New contributors
 - [ ] End users
-- [ ] Researchers using the project
+- [ ] Researchers
 - [ ] Developers integrating with the project
 - [ ] Other: <!-- specify -->
 
-**Type of documentation:**
+**Type of documentation**
 - [ ] API documentation
 - [ ] Tutorial/How-to guide
 - [ ] Architecture documentation
@@ -27,83 +27,62 @@ assignees: []
 - [ ] Migration guide
 - [ ] Other: <!-- specify -->
 
-## ✅ Acceptance Criteria
+## Scope
 
-**Definition of Done:**
-- [ ] Documentation is clear and well-structured
-- [ ] Examples are working and tested
-- [ ] Follows repository documentation standards
-- [ ] Properly linked from relevant locations
-- [ ] Follows markdown linting standards
+- In scope:
+- Out of scope:
 
-**Content Requirements:**
-- [ ] Includes code examples where applicable
-- [ ] Has clear step-by-step instructions
-- [ ] Covers edge cases and common issues
-- [ ] Links to related documentation
-- [ ] Includes screenshots/diagrams if helpful
+## Added Value Estimation
 
-## 📁 Files and Components
+- User value:
+- Maintenance value:
+- Why now:
 
-**Documentation files to create/modify:**
-- `docs/path/to/file.md` - <!-- Description of content -->
-- `README.md` - <!-- If main README needs updates -->
-- `examples/example_name.py` - <!-- If code examples are needed -->
+## Effort Estimation
 
-**Existing documentation to update:**
-- `docs/existing/file.md` - <!-- What sections need updates -->
+- Rough estimate (hours):
+- Best estimate (hours):
+- Unknowns:
 
-**Code files that need docstring updates:**
-- `robot_sf/module/file.py` - <!-- Specific functions/classes -->
+## Complexity Estimation
 
-## 🔧 Content Guidance
+- Content complexity:
+- Dependencies:
+- Open questions:
 
-**Structure to follow:**
-<!-- Based on existing docs in the repository -->
-- Use the format established in `docs/refactoring/` for technical documentation
-- Follow the pattern in existing example files
-- Include proper markdown formatting with headers, lists, and code blocks
+## Risk Assessment
 
-**Required sections:**
-- [ ] Problem statement or overview
-- [ ] Step-by-step instructions
-- [ ] Code examples with explanations
-- [ ] Common issues and troubleshooting
-- [ ] References and related links
+- Documentation drift risk:
+- Backward-compatibility risk:
+- Mitigation:
 
-**Style guidelines:**
-- Use clear, concise language
-- Include proper code syntax highlighting
-- Add navigation links where appropriate
-- Follow the tone and style of existing documentation
+## Affected Files
 
-## 📚 Related Information
+- `docs/path/to/file.md` - What content changes are needed.
+- `README.md` - If the docs index or main README needs updates.
+- `examples/example_name.py` - If code examples need updates.
 
-**Existing documentation to reference:**
-- [Copilot Instructions](../.github/copilot/instructions.md) - For development standards
-- [Refactoring Docs](../docs/refactoring/) - For technical documentation patterns
-- <!-- Add other relevant documentation -->
+## Definition of Done
 
-**Related issues:**
-- Related to # <!-- Link to related issues -->
+- [ ] Documentation is clear and well-structured.
+- [ ] Examples are working and tested.
+- [ ] Documentation is linked from the relevant entry points.
+- [ ] Markdown linting passes.
 
-**External references:**
-- <!-- Links to external documentation, standards, etc. -->
+## Success Metrics
 
-## 🎯 Additional Context
+- The target audience can complete the documented task without extra context.
+- Links in the docs index are up to date.
+- Example commands are reproducible.
 
-**Priority level:** <!-- High/Medium/Low -->
+## Validation / Testing
 
-**Why is this documentation important?**
-<!-- Explain the value and impact of creating this documentation -->
+- [ ] Confirm the docs build or markdown lint passes.
+- [ ] Verify code examples run if included.
+- [ ] Check that updated docs are linked from the docs index.
 
-**Current pain points:**
-<!-- What problems does the lack of this documentation cause? -->
+## Project Metadata
 
----
-
-<!-- 
-📝 **For GitHub Copilot:** This documentation request follows the repository's standards.
-Check existing documentation patterns in `docs/` and follow the structure used in `docs/refactoring/`.
-Ensure all code examples are tested and working.
--->
+- Priority:
+- Effort (h):
+- Reviewed:

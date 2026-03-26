@@ -54,6 +54,8 @@ def test_campaign_exit_code_uses_benchmark_success_flag() -> None:
     """Campaign CLI should exit non-zero for non-success benchmark results."""
     assert campaign_exit_code({"benchmark_success": True}) == 0
     assert campaign_exit_code({"benchmark_success": False}) == 2
+    assert campaign_exit_code({}) == 2
+    assert campaign_exit_code(None) == 2
 
 
 def test_summarize_benchmark_availability_fails_closed_for_malformed_payload() -> None:

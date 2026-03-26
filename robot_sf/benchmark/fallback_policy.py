@@ -186,9 +186,7 @@ def campaign_exit_code(result: dict[str, Any] | None) -> int:
     if not isinstance(result, dict):
         return 2
     benchmark_success = result.get("benchmark_success")
-    if isinstance(benchmark_success, bool):
-        return 0 if benchmark_success else 2
-    return 0
+    return 0 if benchmark_success is True else 2
 
 
 __all__ = [

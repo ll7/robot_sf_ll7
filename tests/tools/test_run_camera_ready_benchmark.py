@@ -123,7 +123,11 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
         assert cfg is sentinel_cfg
         assert isinstance(kwargs.get("invoked_command"), str)
         called["run"] = True
-        return {"campaign_id": "cid", "campaign_root": str(tmp_path / "out" / "cid")}
+        return {
+            "campaign_id": "cid",
+            "campaign_root": str(tmp_path / "out" / "cid"),
+            "benchmark_success": True,
+        }
 
     monkeypatch.setattr(
         run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config

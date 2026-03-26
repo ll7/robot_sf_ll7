@@ -3,6 +3,10 @@
 Purpose: Define the canonical scenario split, seed policy, baseline categories, and reproducible
 commands for the Robot SF social navigation benchmark.
 
+Canonical benchmark fallback policy:
+
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+
 ## Scope
 
 This spec documents the map-based benchmark workflow driven by scenario manifests under
@@ -55,8 +59,9 @@ Notes:
 * `ppo` is available in both map-based benchmark runs and policy-analysis runs; policy analysis
   remains the preferred path when you need richer learned-policy diagnostics (videos, per-policy
   reports, and policy sweep metadata).
-* ORCA requires the rvo2 binding; install with `uv sync --extra orca` or set `allow_fallback: true`
-  in the algo config to use the heuristic fallback.
+* ORCA requires the rvo2 binding; install with `uv sync --extra orca`.
+* Fallback execution may still be used for explicit diagnostics, but it is not benchmark-success
+  evidence and must fail closed in benchmark mode.
 * `socnav_bench` requires SocNavBench prerequisites (including `skfmm`); install with
   `uv sync --extra socnav` for native upstream execution.
 * `socnav_sampling` uses the in-repo sampling adapter baseline, while `socnav_bench` is the

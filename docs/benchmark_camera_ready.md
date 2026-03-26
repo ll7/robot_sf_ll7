@@ -3,6 +3,10 @@
 This document describes the config-driven campaign workflow for generating
 camera-ready benchmark outputs across multiple planners.
 
+Canonical benchmark fallback policy:
+
+- [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
+
 ## Entry Point
 
 Run the campaign CLI:
@@ -62,6 +66,10 @@ Current promoted all-planners baseline run:
   - baseline + experimental planners on full scenario suite
   - prediction planner runs first for early fail-fast signal
   - `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
+- `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
+  - co-existing holonomic sibling profile for issue 690 feasibility work
+  - keeps the same scenario matrix, seed policy, publication bundle, and report layout
+  - strict fail-closed planner policy: no fallback-to-success behavior in benchmark mode
 - `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
   - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
 - `configs/benchmarks/paper_experiment_matrix_v1.yaml`
@@ -138,6 +146,13 @@ Release publication runbook:
 - `docs/benchmark_camera_ready_release.md`
 
 ## Campaign Summary Semantics
+
+Benchmark mode is fail-closed:
+
+- fallback-only or skipped planners are reported as `not_available`
+- partial-failure planners are reported as non-success
+- campaign CLI exit status is non-zero when any planner row is not benchmark-success
+- diagnostic fallback remains valid only for explicit probe workflows, not for benchmark claims
 
 `reports/campaign_summary.json` contains:
 

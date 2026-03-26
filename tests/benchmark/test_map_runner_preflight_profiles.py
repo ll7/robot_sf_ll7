@@ -167,6 +167,8 @@ def test_socnav_skip_with_warning_policy_returns_skipped_summary(
     assert summary["skipped_jobs"] == 1
     assert summary["preflight"]["status"] == "skipped"
     assert summary["algorithm_metadata_contract"]["canonical_algorithm"] == "socnav_sampling"
+    assert summary["benchmark_availability"]["availability_status"] == "not_available"
+    assert summary["benchmark_availability"]["benchmark_success"] is False
 
 
 def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatch) -> None:
@@ -192,6 +194,8 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
 
     assert summary["written"] == 1
     assert summary["preflight"]["status"] == "fallback"
+    assert summary["benchmark_availability"]["availability_status"] == "not_available"
+    assert summary["benchmark_availability"]["benchmark_success"] is False
 
 
 def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypatch) -> None:

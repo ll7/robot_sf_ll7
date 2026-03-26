@@ -21,6 +21,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     infer_execution_mode_from_counts,
 )
 from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
+from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -84,6 +85,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
+from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -125,6 +127,36 @@ _PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
 _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
 
 
+def _holonomic_world_velocity_command(vx: float, vy: float) -> dict[str, float | str]:
+    """Build an explicit world-frame holonomic velocity command payload.
+
+    Returns:
+        dict[str, float | str]: Structured command payload for holonomic env actions.
+    """
+    return {
+        "command_kind": "holonomic_vxy_world",
+        "vx": float(vx),
+        "vy": float(vy),
+    }
+
+
+def _apply_direct_world_velocity_metadata(
+    meta: dict[str, Any],
+    *,
+    adapter_boundary: str | None = None,
+) -> None:
+    """Mark planner metadata as direct world-velocity execution for holonomic benchmarks."""
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = "holonomic_vxy_world"
+        planner_meta["benchmark_command_space"] = "holonomic_vxy_world"
+        planner_meta["projection_policy"] = "world_velocity_passthrough"
+        planner_meta["execution_detail"] = "direct_holonomic_world_velocity"
+    upstream_reference = meta.get("upstream_reference")
+    if isinstance(upstream_reference, dict) and adapter_boundary is not None:
+        upstream_reference["adapter_boundary"] = adapter_boundary
+
+
 def _default_robot_command_space(
     robot_kinematics: str | None,
     algo_config: dict[str, Any],
@@ -144,7 +176,7 @@ def _default_robot_command_space(
             else algo_config.get("command_mode", "vx_vy")
         )
         mode = str(mode_source).strip().lower()
-        return "holonomic_vxy" if mode == "vx_vy" else "unicycle_vw"
+        return "holonomic_vxy_world" if mode == "vx_vy" else "unicycle_vw"
     return "unicycle_vw"
 
 
@@ -377,7 +409,7 @@ def _evaluate_learned_policy_contract(
     }
 
 
-def _preflight_policy(  # noqa: C901
+def _preflight_policy(  # noqa: C901, PLR0915
     *,
     algo: str,
     algo_config: dict[str, Any],
@@ -404,17 +436,37 @@ def _preflight_policy(  # noqa: C901
             effective_kinematics = str(
                 cfg.get("robot_kinematics", cfg.get("kinematics", _DEFAULT_KINEMATICS))
             )
+        robot_cfg = cfg.get("robot_config") if isinstance(cfg.get("robot_config"), dict) else {}
+        effective_command_mode = None
+        if isinstance(robot_cfg, dict):
+            raw_mode = robot_cfg.get("command_mode")
+            if raw_mode is not None:
+                normalized_mode = str(raw_mode).strip().lower()
+                effective_command_mode = normalized_mode or None
         try:
             policy_fn, _meta = _build_policy(
                 algo,
                 cfg,
                 robot_kinematics=effective_kinematics,
+                robot_command_mode=effective_command_mode,
             )
         except TypeError as exc:
             # Backward compatibility for tests or monkeypatches with legacy _build_policy signatures.
-            if "unexpected keyword argument 'robot_kinematics'" not in str(exc):
+            message = str(exc)
+            if "unexpected keyword argument 'robot_kinematics'" not in message and (
+                "unexpected keyword argument 'robot_command_mode'" not in message
+            ):
                 raise
-            policy_fn, _meta = _build_policy(algo, cfg)
+            try:
+                policy_fn, _meta = _build_policy(
+                    algo,
+                    cfg,
+                    robot_kinematics=effective_kinematics,
+                )
+            except TypeError as legacy_exc:
+                if "unexpected keyword argument 'robot_kinematics'" not in str(legacy_exc):
+                    raise
+                policy_fn, _meta = _build_policy(algo, cfg)
         planner_close = getattr(policy_fn, "_planner_close", None)
         if callable(planner_close):
             planner_close()
@@ -755,7 +807,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
-
+    normalized_robot_command_mode = (
+        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
+    )
     if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
         goal_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -777,7 +831,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -808,7 +862,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -843,7 +897,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -882,7 +936,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -917,7 +971,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -956,7 +1010,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1019,7 +1073,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1113,7 +1167,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1241,12 +1295,68 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         planner_meta["planner_command_space"] = _default_robot_command_space(
             robot_kinematics,
             algo_config,
-            robot_command_mode=robot_command_mode,
+            robot_command_mode=normalized_robot_command_mode,
         )
     adapter_kinematics_model = resolve_benchmark_kinematics_model(
         robot_kinematics=robot_kinematics,
         command_limits=algo_config,
     )
+    holonomic_world_velocity_mode = (
+        algo_key
+        in {
+            "orca",
+            "social_force",
+            "sf",
+            "social_navigation_pyenvs_orca",
+            "social_nav_pyenvs_orca",
+            "social_navigation_pyenvs_socialforce",
+            "social_nav_pyenvs_socialforce",
+            "social_navigation_pyenvs_sfm_helbing",
+            "social_nav_pyenvs_sfm_helbing",
+        }
+        and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+        and normalized_robot_command_mode == "vx_vy"
+    )
+    if holonomic_world_velocity_mode:
+        if algo_key == "orca":
+            adapter_boundary = (
+                "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
+                "coordinates, then forward that world-frame velocity directly into the "
+                "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key == "social_force":
+            adapter_boundary = (
+                "Compute the local social-force translational command as a world-frame velocity "
+                "vector, then forward that world-frame velocity directly into the holonomic "
+                "vx_vy benchmark action space."
+            )
+        elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
+            adapter_boundary = (
+                "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+                "JointState contract, run upstream ORCA predict(), and forward the resulting "
+                "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
+            )
+        else:
+            adapter_boundary = (
+                "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+                "JointState contract, run the upstream force-model policy predict(), and forward "
+                "the resulting ActionXY world velocity directly into the holonomic vx_vy "
+                "benchmark action space."
+            )
+        _apply_direct_world_velocity_metadata(meta, adapter_boundary=adapter_boundary)
+
+        def _policy(obs: dict[str, Any]) -> dict[str, float | str]:
+            velocity_world = np.asarray(adapter.plan_velocity_world(obs), dtype=float).reshape(-1)
+            if velocity_world.size < 2:
+                raise ValueError(
+                    "Holonomic ORCA path expected a world-frame velocity with two components."
+                )
+            return _holonomic_world_velocity_command(
+                float(velocity_world[0]),
+                float(velocity_world[1]),
+            )
+
+        return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         linear, angular = adapter.plan(obs)
@@ -1468,26 +1578,87 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
     return stacked
 
 
-def _policy_command_to_env_action(
+def _command_xy_payload(command: tuple[float, float] | dict[str, Any]) -> np.ndarray:
+    """Extract a world-frame XY payload from tuple or structured commands.
+
+    Returns:
+        np.ndarray: Two-element world-frame XY payload.
+    """
+    if isinstance(command, dict):
+        return np.array(
+            [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
+            dtype=float,
+        )
+    return np.array([float(command[0]), float(command[1])], dtype=float)
+
+
+def _policy_command_to_env_action(  # noqa: C901
     *,
     env: Any,
     config: RobotSimulationConfig,
-    command: tuple[float, float],
+    command: tuple[float, float] | dict[str, Any],
 ) -> np.ndarray:
-    """Convert policy unicycle command into the robot's native environment action space.
+    """Convert a policy command into the robot's native environment action space.
 
     Returns:
         np.ndarray: Action vector compatible with ``env.step``.
     """
-    sim_robots = getattr(env.simulator, "robots", None)
+    simulator = getattr(env, "simulator", None)
+    sim_robots = getattr(simulator, "robots", None)
     if not isinstance(sim_robots, list) or not sim_robots:
-        return np.array([float(command[0]), float(command[1])], dtype=float)
+        return _command_xy_payload(command)
     robot = sim_robots[0]
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
-        return np.array([command[0], command[1]], dtype=float)
+        return _command_xy_payload(command)
+
+    if isinstance(command, dict):
+        command_kind = str(command.get("command_kind", "")).strip().lower()
+        if command_kind != "holonomic_vxy_world":
+            raise ValueError(f"Unsupported structured policy command: {command}")
+        velocity_world = np.array(
+            [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
+            dtype=float,
+        )
+        max_linear_speed = float(
+            getattr(robot_cfg, "max_linear_speed", getattr(robot_cfg, "max_speed", 0.0)) or 0.0
+        )
+        max_angular_speed = float(getattr(robot_cfg, "max_angular_speed", 0.0) or 0.0)
 
     cls_name = robot_cfg.__class__.__name__.lower()
+    if isinstance(command, dict):
+        if "holonomic" in cls_name:
+            mode = str(getattr(robot_cfg, "command_mode", "vx_vy")).strip().lower()
+            if mode == "vx_vy":
+                return velocity_world
+            command_vw = holonomic_to_diff_drive_action(
+                velocity_world,
+                robot.pose,
+                max_linear_speed=max_linear_speed,
+                max_angular_speed=max_angular_speed,
+            )
+            return np.asarray(command_vw, dtype=float)
+
+        command_vw = holonomic_to_diff_drive_action(
+            velocity_world,
+            robot.pose,
+            max_linear_speed=max_linear_speed,
+            max_angular_speed=max_angular_speed,
+        )
+        if "bicycle" in cls_name:
+            adapter = PlannerActionAdapter(
+                robot=robot,
+                action_space=env.action_space,
+                time_step=float(config.sim_config.time_per_step_in_secs),
+            )
+            return np.asarray(
+                adapter.from_velocity_command(tuple(command_vw.tolist())), dtype=float
+            )
+        current_linear, current_angular = robot.current_speed
+        d_linear = float(command_vw[0]) - float(current_linear)
+        d_angular = float(command_vw[1]) - float(current_angular)
+        return np.array([d_linear, d_angular], dtype=float)
+
     if "bicycle" in cls_name:
         adapter = PlannerActionAdapter(
             robot=robot,
@@ -1570,11 +1741,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     goal_vec = np.zeros(2, dtype=float)
     try:
         for step_idx in range(horizon_val):
-            action_v, action_w = policy_fn(obs)
+            policy_command = policy_fn(obs)
             action = _policy_command_to_env_action(
                 env=env,
                 config=config,
-                command=(float(action_v), float(action_w)),
+                command=policy_command,
             )
             obs, _reward, terminated, truncated, info = env.step(action)
 
@@ -1825,6 +1996,72 @@ def _accumulate_batch_metadata(
     return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
+def _merge_runtime_algorithm_contract(  # noqa: C901
+    base_contract: dict[str, Any],
+    runtime_algorithm_metadata: Any,
+) -> dict[str, Any]:
+    """Merge runtime-resolved algorithm contract fields into a batch summary contract.
+
+    Returns:
+        dict[str, Any]: The merged contract mapping, or the original input on mismatch.
+    """
+    if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
+        return base_contract
+
+    def _merge_mapping(target: dict[str, Any], source: dict[str, Any]) -> None:
+        authoritative_keys = {
+            "robot_kinematics",
+            "execution_mode",
+            "adapter_name",
+            "planner_command_space",
+            "benchmark_command_space",
+            "projection_policy",
+            "execution_detail",
+            "adapter_boundary",
+        }
+
+        def _is_placeholder(value: Any) -> bool:
+            if value is None:
+                return True
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                return normalized in {"", "unknown", "unspecified", "mixed"}
+            return False
+
+        for key, value in source.items():
+            current = target.get(key)
+            if _is_placeholder(current):
+                target[key] = value
+                continue
+            if isinstance(current, dict) and isinstance(value, dict):
+                _merge_mapping(current, value)
+                continue
+            if _is_placeholder(value) or current == value:
+                continue
+            if key in authoritative_keys:
+                target[key] = value
+                continue
+            target[key] = "mixed"
+
+    runtime_planner_kinematics = runtime_algorithm_metadata.get("planner_kinematics")
+    if isinstance(runtime_planner_kinematics, dict):
+        planner_kinematics = base_contract.get("planner_kinematics")
+        if not isinstance(planner_kinematics, dict):
+            planner_kinematics = {}
+            base_contract["planner_kinematics"] = planner_kinematics
+        _merge_mapping(planner_kinematics, runtime_planner_kinematics)
+
+    runtime_upstream_reference = runtime_algorithm_metadata.get("upstream_reference")
+    if isinstance(runtime_upstream_reference, dict):
+        upstream_reference = base_contract.get("upstream_reference")
+        if not isinstance(upstream_reference, dict):
+            upstream_reference = {}
+            base_contract["upstream_reference"] = upstream_reference
+        _merge_mapping(upstream_reference, runtime_upstream_reference)
+
+    return base_contract
+
+
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -1941,7 +2178,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         preflight["compatibility_reason"] = incompatible_reason
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
-        return {
+        summary = {
             "total_jobs": 0,
             "written": 0,
             "successful_jobs": 0,
@@ -1957,6 +2194,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "algorithm_metadata_contract": algo_contract,
             "preflight": preflight,
         }
+        summary["benchmark_availability"] = availability_payload(summary)
+        return summary
 
     if resume and out_path.exists():
         existing = index_existing(out_path)
@@ -1993,6 +2232,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     adapter_native_steps = 0
     adapter_adapted_steps = 0
     adapter_samples_seen = False
+    runtime_algorithm_contract: dict[str, Any] | None = None
     feasibility_totals = {
         "commands_evaluated": 0,
         "infeasible_native_count": 0,
@@ -2013,6 +2253,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 adapter_samples_seen = adapter_samples_seen or requested_seen
                 adapter_native_steps += native_steps
                 adapter_adapted_steps += adapted_steps
+                runtime_algorithm_contract = _merge_runtime_algorithm_contract(
+                    runtime_algorithm_contract or {},
+                    rec.get("algorithm_metadata"),
+                )
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -2040,6 +2284,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     adapter_samples_seen = adapter_samples_seen or requested_seen
                     adapter_native_steps += native_steps
                     adapter_adapted_steps += adapted_steps
+                    runtime_algorithm_contract = _merge_runtime_algorithm_contract(
+                        runtime_algorithm_contract or {},
+                        rec.get("algorithm_metadata"),
+                    )
                     _write_validated(out_path, schema, rec)
                     wrote += 1
                 except Exception as exc:  # pragma: no cover
@@ -2077,9 +2325,16 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact_contract["status"] = "not_applicable"
             impact_contract["adapter_fraction"] = 0.0
 
+    algo_contract = _merge_runtime_algorithm_contract(
+        algo_contract,
+        runtime_algorithm_contract,
+    )
     preflight["algorithm_metadata_contract"] = algo_contract
     planner_contract = algo_contract.get("planner_kinematics")
-    if isinstance(planner_contract, dict):
+    if isinstance(planner_contract, dict) and planner_contract.get("planner_command_space") in {
+        None,
+        "unknown",
+    }:
         planner_contract["planner_command_space"] = _default_robot_command_space(
             kinematics_tag,
             policy_cfg,
@@ -2114,7 +2369,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
     }
 
-    return {
+    summary = {
         "total_jobs": total_jobs,
         "written": wrote,
         "successful_jobs": wrote,
@@ -2129,6 +2384,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algorithm_metadata_contract": algo_contract,
         "preflight": preflight,
     }
+    summary["benchmark_availability"] = availability_payload(summary)
+    return summary
 
 
 __all__ = ["run_map_batch"]

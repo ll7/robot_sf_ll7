@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import yaml
@@ -112,3 +113,58 @@ def test_cli_run_allows_partial_success(
 
     rc = bench_cli.cli_main(_run_args(matrix_path, out_path))
     assert rc == 0
+
+
+def test_cli_run_returns_non_zero_for_fallback_only_success(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Benchmark-mode fallback must fail closed even when one episode was written."""
+    matrix_path = _write_minimal_matrix(tmp_path)
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr(
+        bench_cli,
+        "run_batch",
+        lambda **_kwargs: {
+            "status": "ok",
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "fallback", "compatibility_reason": "missing socnav deps"},
+            "out_path": str(out_path),
+        },
+    )
+
+    rc = bench_cli.cli_main(_run_args(matrix_path, out_path))
+    assert rc == 2
+
+
+def test_cli_run_zero_written_structured_summary_includes_benchmark_availability(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Zero-written failures should keep the structured benchmark_availability payload."""
+    matrix_path = _write_minimal_matrix(tmp_path)
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr(
+        bench_cli,
+        "run_batch",
+        lambda **_kwargs: {
+            "total_jobs": 2,
+            "written": 0,
+            "failed_jobs": 2,
+            "failures": [{"scenario_id": "s1"}, {"scenario_id": "s2"}],
+            "preflight": {"status": "fallback", "compatibility_reason": "missing socnav deps"},
+            "out_path": str(out_path),
+        },
+    )
+
+    rc = bench_cli.cli_main(_run_args(matrix_path, out_path) + ["--structured-output", "json"])
+    assert rc == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["benchmark_availability"]["availability_status"] == "not_available"
+    assert payload["benchmark_availability"]["benchmark_success"] is False

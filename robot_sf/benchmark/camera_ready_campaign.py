@@ -2217,7 +2217,7 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
+def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     path: Path, payload: dict[str, Any]
 ) -> None:
     """Write a human-readable campaign report in Markdown."""
@@ -3199,7 +3199,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         warnings.append("Publication bundle export skipped because benchmark_success=false.")
 
     _write_json(summary_json_path, campaign_summary)
-    _write_campaign_report(report_md_path, campaign_summary)
+    write_campaign_report(report_md_path, campaign_summary)
 
     # Add run-level metadata files for publication provenance helpers.
     run_meta = {
@@ -3327,4 +3327,5 @@ __all__ = [
     "load_campaign_config",
     "prepare_campaign_preflight",
     "run_campaign",
+    "write_campaign_report",
 ]

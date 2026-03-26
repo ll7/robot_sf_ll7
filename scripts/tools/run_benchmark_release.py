@@ -13,10 +13,10 @@ from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.camera_ready_campaign import (
-    _write_campaign_report,
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
+    write_campaign_report,
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code
 from robot_sf.benchmark.release_protocol import (
@@ -58,10 +58,13 @@ def _repo_relative(path: Path) -> str:
 
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
     """Inject release provenance into campaign artifacts and refresh the markdown report."""
+    # Campaign summary JSON and its human-readable markdown report.
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     report_md_path = campaign_root / "reports" / "campaign_report.md"
+    # Campaign and benchmark manifests that describe the run contract.
     manifest_path = campaign_root / "campaign_manifest.json"
     benchmark_manifest_path = campaign_root / "manifest.json"
+    # Run metadata consumed by downstream automation and provenance checks.
     run_meta_path = campaign_root / "run_meta.json"
 
     summary = _read_json(summary_path)
@@ -70,6 +73,7 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
     if not isinstance(campaign_block, dict):
         campaign_block = {}
         summary["campaign"] = campaign_block
+    # Inject release identity and manifest pointers into the campaign metadata.
     campaign_block.update(
         {
             "benchmark_protocol_version": release_provenance["benchmark_protocol_version"],
@@ -81,8 +85,9 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
         }
     )
     _write_json(summary_path, summary)
-    _write_campaign_report(report_md_path, summary)
+    write_campaign_report(report_md_path, summary)
 
+    # Stamp every provenance-facing artifact with the benchmark_release payload.
     for path in (manifest_path, benchmark_manifest_path, run_meta_path):
         payload = _read_json(path)
         payload["benchmark_release"] = dict(release_provenance)
@@ -129,12 +134,12 @@ def _build_publication_payload(
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the benchmark release entrypoint and return a POSIX exit code."""
-    args = parse_release_args(list(argv) if argv is not None else list(sys.argv[1:]))
+    raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
+    args = parse_release_args(raw_argv)
 
     logger.remove()
     logger.add(sys.stderr, level="INFO")
 
-    raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
 
     manifest = load_release_manifest(args.manifest)
@@ -214,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         summary = _read_json(summary_path)
         summary["publication_bundle"] = publication_payload
         _write_json(summary_path, summary)
-        _write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+        write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
     else:
         result["publication_bundle"] = None
 

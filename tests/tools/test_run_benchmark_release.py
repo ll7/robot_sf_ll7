@@ -200,9 +200,12 @@ def test_release_run_exports_publication_only_after_benchmark_success(
         run_benchmark_release,
         "_build_publication_payload",
         lambda **kwargs: {
+            "bundle_dir": "output/benchmarks/publication/bundle",
             "archive_path": "output/benchmarks/publication/bundle.tar.gz",
             "checksums_path": "output/benchmarks/publication/bundle/checksums.sha256",
             "manifest_path": "output/benchmarks/publication/bundle/publication_manifest.json",
+            "file_count": 3,
+            "total_bytes": 123,
         },
     )
 

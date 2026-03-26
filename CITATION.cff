@@ -5,8 +5,7 @@ message: >-
   software using this metadata.
 type: software
 authors:
-  - family-names: LL7 Team
-    given-names: Robot SF
+  - name: LL7 Team (Robot SF)
 repository-code: https://github.com/ll7/robot_sf_ll7
 license: MIT
 version: benchmark-protocol-0.1.0

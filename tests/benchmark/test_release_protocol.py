@@ -190,7 +190,7 @@ def test_load_release_manifest_rejects_missing_required_path_and_hash_fields(
         load_release_manifest(manifest_path)
 
 
-def test_validate_release_manifest_reports_mismatches(monkeypatch) -> None:
+def test_validate_release_manifest_reports_mismatches() -> None:
     """Validation should surface config, seed, planner, and asset drift explicitly."""
     manifest = load_release_manifest(
         Path("configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml")
@@ -239,7 +239,7 @@ def test_validate_release_manifest_reports_mismatches(monkeypatch) -> None:
     assert "planners.groups does not match campaign config" in report["problems"]
 
 
-def test_validate_release_manifest_reports_optional_asset_presence_mismatch(monkeypatch) -> None:
+def test_validate_release_manifest_reports_optional_asset_presence_mismatch() -> None:
     """Validation should flag when manifest asset presence diverges from the campaign config."""
     manifest = load_release_manifest(
         Path("configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml")

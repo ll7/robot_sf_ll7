@@ -23,10 +23,10 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _sanitize_git_remote,
     _sanitize_name,
     _sha256_file,
-    _write_campaign_report,
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
+    write_campaign_report,
 )
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -785,7 +785,7 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
             }
         ],
     }
-    _write_campaign_report(report_path, payload)
+    write_campaign_report(report_path, payload)
     report_text = report_path.read_text(encoding="utf-8")
     assert "planner\\|unsafe" in report_text
     assert "holonomic\\|vx_vy" in report_text

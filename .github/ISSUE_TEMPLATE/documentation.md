@@ -59,7 +59,7 @@ assignees: []
 ## Affected Files
 
 - `docs/path/to/file.md` - What content changes are needed.
-- `README.md` - If the docs index or main README needs updates.
+- `docs/README.md` - If the docs index or main README needs updates.
 - `examples/example_name.py` - If code examples need updates.
 
 ## Definition of Done

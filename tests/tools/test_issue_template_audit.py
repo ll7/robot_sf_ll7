@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scripts.tools.issue_template_audit import audit_issue_body, main
+from scripts.tools.issue_template_audit import (
+    audit_issue_body,
+    main,
+    normalize_section_title,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -107,6 +111,31 @@ Add a structured issue workflow.
     assert result.missing_sections == ()
     assert result.present_sections[0] == "Goal / Problem"
     assert result.repaired_body.endswith("\n")
+
+
+def test_issue_template_audit_normalizes_legacy_heading_variants() -> None:
+    """Verify that legacy and punctuation-variant headings map to the canonical section.
+
+    This matters because existing issues use older phrasing and emoji-prefixed
+    headings, and the auditor should not duplicate scaffold sections for them.
+    """
+
+    body = """## 🐛 Problem Description
+
+Legacy issue text.
+
+## Goal/Problem
+
+More legacy text.
+"""
+
+    result = audit_issue_body(body)
+
+    assert normalize_section_title("🐛 Problem Description") == "Goal / Problem"
+    assert normalize_section_title("Goal/Problem") == "Goal / Problem"
+    assert "Goal / Problem" not in result.missing_sections
+    assert result.present_sections.count("Goal / Problem") == 1
+    assert "## Goal / Problem" not in result.repaired_body
 
 
 def test_issue_template_audit_cli_repairs_body(tmp_path: Path, capsys) -> None:

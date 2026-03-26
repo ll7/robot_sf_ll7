@@ -33,8 +33,10 @@ SECTION_ORDER: tuple[str, ...] = (
 
 SECTION_ALIASES: dict[str, str] = {
     "goal / problem": "Goal / Problem",
+    "goal/problem": "Goal / Problem",
     "problem": "Goal / Problem",
     "objective": "Goal / Problem",
+    "problem description": "Goal / Problem",
     "scope": "Scope",
     "added value estimation": "Added Value Estimation",
     "value estimation": "Added Value Estimation",
@@ -80,8 +82,13 @@ class IssueAuditResult:
 def normalize_section_title(raw_title: str) -> str:
     """Map a markdown heading to a canonical template section name."""
 
-    normalized = re.sub(r"\s+", " ", raw_title.strip()).lower()
-    return SECTION_ALIASES.get(normalized, raw_title.strip())
+    cleaned = raw_title.strip()
+    cleaned = re.sub(r"^[^\w]+", "", cleaned)
+    cleaned = re.sub(r"\s*/\s*", " / ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"[:：]+$", "", cleaned)
+    normalized = cleaned.lower()
+    return SECTION_ALIASES.get(normalized, cleaned)
 
 
 def extract_present_sections(body: str) -> tuple[str, ...]:

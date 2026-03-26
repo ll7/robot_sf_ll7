@@ -105,7 +105,10 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Reviewed" in creator_text
 
     auditor_text = SKILL_FILES[1].read_text(encoding="utf-8")
-    assert "scripts/tools/issue_template_audit.py" in auditor_text
+    assert "uv run python scripts/tools/issue_template_audit.py" in auditor_text
     assert "gh issue view" in auditor_text
     assert "gh issue edit" in auditor_text
     assert "decision-required" in auditor_text
+
+    documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
+    assert "docs/README.md" in documentation_text

@@ -46,7 +46,7 @@ An issue is template-ready only if it includes, at minimum:
    - Identify which template the issue should have used.
 
 2. Audit the body
-   - Use `scripts/tools/issue_template_audit.py --body-file <body.md>` to identify missing
+   - Use `uv run python scripts/tools/issue_template_audit.py --body-file <body.md>` to identify missing
      sections.
    - If the issue is only missing headings or obvious placeholders, repair it.
 

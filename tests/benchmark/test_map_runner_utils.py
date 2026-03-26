@@ -1579,5 +1579,5 @@ def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
             {"command_mode": "unicycle_vw"},
             robot_command_mode="vx_vy",
         )
-        == "holonomic_vxy"
+        == "holonomic_vxy_world"
     )

@@ -175,7 +175,7 @@ def _default_robot_command_space(
             else algo_config.get("command_mode", "vx_vy")
         )
         mode = str(mode_source).strip().lower()
-        return "holonomic_vxy" if mode == "vx_vy" else "unicycle_vw"
+        return "holonomic_vxy_world" if mode == "vx_vy" else "unicycle_vw"
     return "unicycle_vw"
 
 
@@ -1305,6 +1305,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         in {
             "orca",
             "social_force",
+            "sf",
             "social_navigation_pyenvs_orca",
             "social_nav_pyenvs_orca",
             "social_navigation_pyenvs_socialforce",
@@ -1313,7 +1314,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "social_nav_pyenvs_sfm_helbing",
         }
         and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
-        and str(robot_command_mode or "vx_vy").strip().lower() == "vx_vy"
+        and normalized_robot_command_mode == "vx_vy"
     )
     if holonomic_world_velocity_mode:
         if algo_key == "orca":
@@ -1994,7 +1995,7 @@ def _accumulate_batch_metadata(
     return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
-def _merge_runtime_algorithm_contract(
+def _merge_runtime_algorithm_contract(  # noqa: C901
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
 ) -> dict[str, Any]:
@@ -2006,13 +2007,48 @@ def _merge_runtime_algorithm_contract(
     if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
         return base_contract
 
+    def _merge_mapping(target: dict[str, Any], source: dict[str, Any]) -> None:
+        authoritative_keys = {
+            "robot_kinematics",
+            "execution_mode",
+            "adapter_name",
+            "planner_command_space",
+            "benchmark_command_space",
+            "projection_policy",
+            "execution_detail",
+            "adapter_boundary",
+        }
+
+        def _is_placeholder(value: Any) -> bool:
+            if value is None:
+                return True
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                return normalized in {"", "unknown", "unspecified", "mixed"}
+            return False
+
+        for key, value in source.items():
+            current = target.get(key)
+            if _is_placeholder(current):
+                target[key] = value
+                continue
+            if isinstance(current, dict) and isinstance(value, dict):
+                _merge_mapping(current, value)
+                continue
+            if _is_placeholder(value) or current == value:
+                continue
+            if key in authoritative_keys:
+                target[key] = value
+                continue
+            target[key] = "mixed"
+
     runtime_planner_kinematics = runtime_algorithm_metadata.get("planner_kinematics")
     if isinstance(runtime_planner_kinematics, dict):
         planner_kinematics = base_contract.get("planner_kinematics")
         if not isinstance(planner_kinematics, dict):
             planner_kinematics = {}
             base_contract["planner_kinematics"] = planner_kinematics
-        planner_kinematics.update(runtime_planner_kinematics)
+        _merge_mapping(planner_kinematics, runtime_planner_kinematics)
 
     runtime_upstream_reference = runtime_algorithm_metadata.get("upstream_reference")
     if isinstance(runtime_upstream_reference, dict):
@@ -2020,7 +2056,7 @@ def _merge_runtime_algorithm_contract(
         if not isinstance(upstream_reference, dict):
             upstream_reference = {}
             base_contract["upstream_reference"] = upstream_reference
-        upstream_reference.update(runtime_upstream_reference)
+        _merge_mapping(upstream_reference, runtime_upstream_reference)
 
     return base_contract
 

@@ -39,14 +39,17 @@ planners:
     algo: prediction_planner
     algo_config: configs/algos/prediction_planner_camera_ready.yaml
     benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
 
   - key: goal
     algo: goal
     benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
 
   - key: social_force
     algo: social_force
     benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
 
   - key: orca
     algo: orca
@@ -58,6 +61,7 @@ planners:
     algo_config: configs/baselines/ppo_15m_grid_socnav_holonomic.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
+    socnav_missing_prereq_policy: fail-fast
 
   - key: socnav_sampling
     algo: socnav_sampling

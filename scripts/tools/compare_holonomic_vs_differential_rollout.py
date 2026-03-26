@@ -202,7 +202,9 @@ def _extract_agent_contract(
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
     agents = _structured_pedestrians(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
-    robot_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_vel = np.asarray(
+        robot.get("velocity_xy", robot.get("velocity", [0.0, 0.0])), dtype=float
+    ).reshape(-1)
     return agents, robot_pos, robot_vel
 
 
@@ -320,23 +322,13 @@ def _compare_policy_inputs(
                 - np.asarray(holo_components["goal"], dtype=float)
             )
         ),
-        "pedestrians_position_l2": float(
-            np.linalg.norm(
-                np.asarray(diff_components.get("agent_positions", []), dtype=float)
-                - np.asarray(holo_components.get("agent_positions", []), dtype=float)
-            )
-            if np.asarray(diff_components.get("agent_positions", [])).size
-            and np.asarray(holo_components.get("agent_positions", [])).size
-            else 0.0
+        "pedestrians_position_l2": _aligned_component_l2(
+            np.asarray(diff_components.get("agent_positions", []), dtype=float),
+            np.asarray(holo_components.get("agent_positions", []), dtype=float),
         ),
-        "pedestrians_velocity_l2": float(
-            np.linalg.norm(
-                np.asarray(diff_components.get("agent_velocities", []), dtype=float)
-                - np.asarray(holo_components.get("agent_velocities", []), dtype=float)
-            )
-            if np.asarray(diff_components.get("agent_velocities", [])).size
-            and np.asarray(holo_components.get("agent_velocities", [])).size
-            else 0.0
+        "pedestrians_velocity_l2": _aligned_component_l2(
+            np.asarray(diff_components.get("agent_velocities", []), dtype=float),
+            np.asarray(holo_components.get("agent_velocities", []), dtype=float),
         ),
         "agent_count_diff": round(
             float(diff_components["agent_count"]) - float(holo_components["agent_count"])
@@ -362,6 +354,14 @@ def _raw_heading_abs(diff_obs: dict[str, Any], holo_obs: dict[str, Any]) -> floa
     delta = _heading(diff_obs) - _heading(holo_obs)
     wrapped = (delta + math.pi) % (2.0 * math.pi) - math.pi
     return abs(wrapped)
+
+
+def _aligned_component_l2(diff_arr: np.ndarray, holo_arr: np.ndarray) -> float:
+    """Compare aligned component vectors without aborting on count drift."""
+    if diff_arr.size == 0 and holo_arr.size == 0:
+        return 0.0
+    aligned_diff, aligned_holo = _aligned_vectors(diff_arr, holo_arr)
+    return float(np.linalg.norm(aligned_diff - aligned_holo))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -551,6 +551,8 @@ def run_pairwise_rollout(
         "tolerance": float(tolerance),
         "diff_policy_status": str((diff_meta or {}).get("status", "unknown")),
         "holo_policy_status": str((holo_meta or {}).get("status", "unknown")),
+        "diff_algo": str(algo_key),
+        "holo_algo": str(algo_key),
         "diff_robot_config": _robot_config_summary(
             _override_robot_config(
                 _build_env_config(scenario, scenario_path=scenario_file),
@@ -651,8 +653,8 @@ def _render_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Policy Status",
         "",
-        f"- differential PPO status: `{payload['diff_policy_status']}`",
-        f"- holonomic PPO status: `{payload['holo_policy_status']}`",
+        f"- differential {payload.get('diff_algo', 'PPO')} status: `{payload['diff_policy_status']}`",
+        f"- holonomic {payload.get('holo_algo', 'PPO')} status: `{payload['holo_policy_status']}`",
         "",
     ]
     if payload.get("first_divergence"):

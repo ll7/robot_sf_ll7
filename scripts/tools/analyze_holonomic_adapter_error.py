@@ -134,6 +134,14 @@ def _read_summary(campaign_root: Path) -> dict[str, Any]:
     return _read_json(summary_path)
 
 
+def _planner_composite_key(planner_key: str, kinematics: Any) -> str:
+    """Build a stable planner/kinematics lookup key."""
+    kin = str(kinematics).strip()
+    if not kin:
+        kin = "unknown"
+    return f"{planner_key}::{kin}"
+
+
 def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     rows = summary_payload.get("planner_rows")
     if not isinstance(rows, list):
@@ -143,8 +151,9 @@ def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str,
         if not isinstance(row, dict):
             continue
         planner_key = row.get("planner_key")
+        kinematics = row.get("kinematics")
         if isinstance(planner_key, str) and planner_key:
-            out[planner_key] = row
+            out[_planner_composite_key(planner_key, kinematics)] = row
     return out
 
 
@@ -160,8 +169,9 @@ def _run_entries_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str, 
         if not isinstance(planner, dict):
             continue
         planner_key = planner.get("key")
+        kinematics = planner.get("kinematics")
         if isinstance(planner_key, str) and planner_key:
-            out[planner_key] = run
+            out[_planner_composite_key(planner_key, kinematics)] = run
     return out
 
 
@@ -327,10 +337,29 @@ def _planner_summary(
     planner_contract = contract.get("planner_kinematics") or {}
     feasibility = contract.get("kinematics_feasibility") or {}
     adapter_impact = contract.get("adapter_impact") or {}
+    row_preflight_status = str((row or {}).get("preflight_status", "unknown"))
+    row_readiness_status = str((row or {}).get("readiness_status", "unknown"))
+    row_status = str((row or {}).get("status", "unknown"))
+    run_status = str((run_entry or {}).get("status", "unknown"))
+    execution_mode = str(planner_contract.get("execution_mode", "unknown"))
+    if row_readiness_status in {"fallback", "degraded"}:
+        execution_mode = row_readiness_status
+    elif row_preflight_status == "fallback":
+        execution_mode = "fallback"
+    elif (
+        row_preflight_status == "skipped"
+        or row_status in {"failed", "partial-failure"}
+        or run_status
+        in {
+            "failed",
+            "partial-failure",
+        }
+    ):
+        execution_mode = "degraded"
     return PlannerCampaignSummary(
         planner_key=planner_key,
         algo=str((run_entry or {}).get("planner", {}).get("algo", planner_key)),
-        execution_mode=str(planner_contract.get("execution_mode", "unknown")),
+        execution_mode=execution_mode,
         adapter_name=(
             str(planner_contract.get("adapter_name"))
             if planner_contract.get("adapter_name") is not None
@@ -360,10 +389,11 @@ def _compare_campaigns(
     run_lookup = _run_entries_by_key(candidate_summary)
     common_planners = sorted(set(base_rows) & set(candidate_rows))
     output: list[dict[str, Any]] = []
-    for planner_key in common_planners:
-        base_row = base_rows[planner_key]
-        candidate_row = candidate_rows[planner_key]
-        run_entry = run_lookup.get(planner_key)
+    for composite_key in common_planners:
+        planner_key = composite_key.split("::", 1)[0]
+        base_row = base_rows[composite_key]
+        candidate_row = candidate_rows[composite_key]
+        run_entry = run_lookup.get(composite_key)
         deltas = {}
         for metric in ("success_mean", "collision_mean", "snqi_mean"):
             if metric == "collision_mean":
@@ -390,6 +420,7 @@ def _compare_campaigns(
         output.append(
             {
                 "planner_key": planner_key,
+                "planner_composite_key": composite_key,
                 "execution_mode": str(planner_contract.get("execution_mode", "unknown")),
                 "adapter_fraction": _safe_float(adapter_impact.get("adapter_fraction")),
                 "projection_rate": _safe_float(feasibility.get("projection_rate")),
@@ -656,7 +687,15 @@ def analyze(  # noqa: PLR0913
                 note = "native execution"
             elif planner_summary.adapter_status == "disabled":
                 note = "adapter impact not requested"
-            planners.append({**asdict(planner_summary), "note": note})
+            planners.append(
+                {
+                    **asdict(planner_summary),
+                    "preflight_status": str(row.get("preflight_status", "unknown")),
+                    "readiness_status": str(row.get("readiness_status", "unknown")),
+                    "run_status": str((run_entry or {}).get("status", "unknown")),
+                    "note": note,
+                }
+            )
         comparison = (
             _compare_campaigns(baseline_summary, candidate_summary)
             if baseline_summary is not None

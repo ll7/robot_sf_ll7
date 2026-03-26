@@ -35,6 +35,7 @@ def _obs(
         "robot": {
             "position": list(position),
             "velocity": list(velocity),
+            "velocity_xy": list(velocity),
             "heading": [heading],
             "goal": list(goal),
             "radius": [0.3],
@@ -42,12 +43,7 @@ def _obs(
         "goal": {"current": list(goal)},
         "agents": agents or [],
         "pedestrians": pedestrians
-        or {
-            "positions": [],
-            "velocities": [],
-            "count": [0],
-            "radius": [0.3],
-        },
+        or {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
     }
 
 

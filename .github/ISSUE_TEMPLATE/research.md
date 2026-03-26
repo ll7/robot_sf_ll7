@@ -1,127 +1,85 @@
 ---
-name: 🔬 Research/Experiment
-about: Propose a research task or experiment
+name: Research / Experiment
+about: Propose a research task or experiment with reproducible validation
 title: "[RESEARCH] "
-labels: ["research", "experiment"]
+labels: ["validation"]
 assignees: []
 ---
 
-## 🔬 Research Objective
+## Goal / Problem
 
-**Research question:**
+**Research question**
 <!-- What specific question are we trying to answer? -->
 
-**Hypothesis:**
+**Hypothesis**
 <!-- What do we expect to find or prove? -->
 
-**Scientific motivation:**
+**Scientific motivation**
 <!-- Why is this research important? What gap does it fill? -->
 
-## ✅ Acceptance Criteria
+## Scope
 
-**Experimental setup:**
-- [ ] Define experimental parameters and variables
-- [ ] Establish baseline measurements
-- [ ] Design control and test conditions
-- [ ] Plan data collection methodology
+- Independent variables:
+- Dependent variables:
+- Control variables:
+- In scope:
+- Out of scope:
 
-**Deliverables:**
-- [ ] Experimental code and configuration
-- [ ] Data collection scripts
-- [ ] Analysis and visualization tools
-- [ ] Results documentation and interpretation
-- [ ] Reproducible experiments
+## Added Value Estimation
 
-**Success metrics:**
-- [ ] Statistical significance achieved (if applicable)
-- [ ] Results are reproducible
-- [ ] Findings are properly documented
-- [ ] Code is well-tested and maintainable
+- Research value:
+- Benchmark value:
+- Publication value:
+- Why now:
 
-## 📁 Files and Components
+## Effort Estimation
 
-**Experiment files to create:**
-- `experiments/experiment_name/` - <!-- Experiment directory structure -->
-- `experiments/experiment_name/run_experiment.py` - <!-- Main experiment script -->
-- `experiments/experiment_name/config.py` - <!-- Experiment configuration -->
-- `experiments/experiment_name/analysis.py` - <!-- Data analysis script -->
+- Rough estimate (hours):
+- Best estimate (hours):
+- Unknowns:
 
-**Data collection and analysis:**
-- `experiments/experiment_name/data/` - <!-- Data storage -->
-- `experiments/experiment_name/results/` - <!-- Results and plots -->
-- `experiments/experiment_name/README.md` - <!-- Experiment documentation -->
+## Complexity Estimation
 
-**Code modifications needed:**
-- `robot_sf/module/file.py` - <!-- If existing code needs modification -->
-- `tests/test_experiment.py` - <!-- Tests for experiment code -->
+- Experimental complexity:
+- Dependencies:
+- Open questions:
 
-## 🔧 Experimental Design
+## Risk Assessment
 
-**Variables to study:**
-- Independent variables: <!-- What we're changing -->
-- Dependent variables: <!-- What we're measuring -->
-- Control variables: <!-- What we're keeping constant -->
+- Statistical risk:
+- Reproducibility risk:
+- Runtime risk:
+- Mitigation:
 
-**Methodology:**
-1. <!-- Step-by-step experimental procedure -->
-2. <!-- Data collection approach -->
-3. <!-- Analysis methodology -->
+## Affected Files
 
-**Expected outcomes:**
-- <!-- What results do we expect? -->
-- <!-- How will we interpret different scenarios? -->
+- `experiments/experiment_name/` - Experiment directory structure.
+- `experiments/experiment_name/run_experiment.py` - Main experiment script.
+- `experiments/experiment_name/config.py` - Experiment configuration.
+- `experiments/experiment_name/analysis.py` - Analysis script.
 
-**Potential challenges:**
-- <!-- What could go wrong? -->
-- <!-- How will we handle edge cases? -->
+## Definition of Done
 
-## 📊 Data and Analysis
+- [ ] Experimental setup is reproducible.
+- [ ] Baseline comparison is documented.
+- [ ] Results are recorded and interpreted.
+- [ ] Analysis artifacts can be regenerated from versioned inputs.
 
-**Data collection plan:**
-- Sample size: <!-- How much data do we need? -->
-- Duration: <!-- How long will experiments run? -->
-- Storage format: <!-- How will data be stored? -->
+## Success Metrics
 
-**Analysis approach:**
-- Statistical methods: <!-- What analysis will be performed? -->
-- Visualization: <!-- What plots/charts will be created? -->
-- Validation: <!-- How will results be validated? -->
+- The experiment can be rerun from a documented command.
+- The results are reproducible across repeated runs with the same seed.
+- The analysis output supports the research question.
 
-**Reproducibility requirements:**
-- [ ] Random seeds are set for reproducible results
-- [ ] Environment configuration is documented
-- [ ] Dependencies are pinned to specific versions
-- [ ] Experiment can be run with a single command
+## Validation / Testing
 
-## 📚 Related Information
+- [ ] Random seeds are set for reproducible results.
+- [ ] Environment configuration is documented.
+- [ ] Dependencies are pinned or versioned.
+- [ ] The experiment runs from a single canonical command.
 
-**Related research:**
-- <!-- Links to relevant papers, research -->
+## Project Metadata
 
-**Existing experiments:**
-- <!-- Reference to similar experiments in the codebase -->
-
-**Baseline implementations:**
-- <!-- What existing code can be used as a starting point? -->
-
-**Related issues:**
-- Related to # <!-- Link to related issues -->
-
-## 🎯 Additional Context
-
-**Timeline:** <!-- Expected duration for this research -->
-
-**Resources needed:** <!-- Computational resources, datasets, etc. -->
-
-**Collaboration:** <!-- Who else should be involved? -->
-
-**Future work:** <!-- How might this research extend? -->
-
----
-
-<!-- 
-📝 **For GitHub Copilot:** This research task follows scientific best practices.
-Ensure experiments are reproducible and well-documented.
-Follow the data analysis patterns established in existing examples.
-Use proper version control for experimental code and data.
--->
+- Priority:
+- Effort (h):
+- Reviewed:

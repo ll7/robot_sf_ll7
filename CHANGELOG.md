@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Default PR template now prompts for summary, validation/proof, risks/rollout, docs/provenance, and follow-up issues so reviews stay proof-first and easier to act on.
 * Repository agent guidance now requires proof-first validation for new planners, metrics, skills, and tests, with task-appropriate executable or reproducible evidence before a change is considered complete.
 * Added a Codex-native repository context stack: strengthened `AGENTS.md`, new `code_review.md` benchmark/provenance checklist, `.agent/PLANS.md` planning convention, repo-local context skills under `.codex/skills/`, and AI-facing overview/decision docs under `docs/ai/`.
 * Promoted predictive planner checkpoint `predictive_proxy_selected_v2_xl_ego` into the model registry with a W&B-backed download entry (`ll7/robot_sf/i17pmely`).

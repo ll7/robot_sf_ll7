@@ -2587,13 +2587,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             records: list[dict[str, Any]] = []
             if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
-                for record in records:
-                    annotated = dict(record)
-                    annotated["planner_key"] = planner.key
-                    annotated["planner_group"] = planner.planner_group
-                    annotated["benchmark_profile"] = planner.benchmark_profile
-                    annotated["kinematics"] = kinematics
-                    seed_variability_records.append(annotated)
+                if status == "ok":
+                    for record in records:
+                        annotated = dict(record)
+                        annotated["planner_key"] = planner.key
+                        annotated["planner_group"] = planner.planner_group
+                        annotated["benchmark_profile"] = planner.benchmark_profile
+                        annotated["kinematics"] = kinematics
+                        seed_variability_records.append(annotated)
                 try:
                     aggregates = compute_aggregates_with_ci(
                         records,
@@ -3159,7 +3160,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     }
 
     publication_payload: dict[str, Any] | None = None
-    if cfg.export_publication_bundle and not skip_publication_bundle and not snqi_hard_fail:
+    if (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and benchmark_success
+    ):
         publication_dir = get_artifact_category_path("benchmarks") / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
@@ -3184,6 +3190,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             campaign_summary["publication_bundle"] = publication_payload
         except Exception as exc:
             warnings.append(f"Publication bundle export failed: {exc}")
+    elif (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and not benchmark_success
+    ):
+        warnings.append("Publication bundle export skipped because benchmark_success=false.")
 
     _write_json(summary_json_path, campaign_summary)
     _write_campaign_report(report_md_path, campaign_summary)

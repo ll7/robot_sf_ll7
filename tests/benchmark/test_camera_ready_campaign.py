@@ -520,7 +520,19 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "release_url" in summary_payload["campaign"]
     assert "release_asset_url" in summary_payload["campaign"]
     assert "doi_url" in summary_payload["campaign"]
-    assert result["publication_bundle"] is not None
+    seed_variability_payload = json.loads(
+        (campaign_root / "reports" / "seed_variability_by_scenario.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    planner_keys = {row["planner_key"] for row in seed_variability_payload["rows"]}
+    assert planner_keys == {"goal"}
+    assert result["publication_bundle"] is None
+    assert "publication_bundle" not in summary_payload
+    assert any(
+        "Publication bundle export skipped because benchmark_success=false." in warning
+        for warning in summary_payload["warnings"]
+    )
 
 
 def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):

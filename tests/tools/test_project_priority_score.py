@@ -34,6 +34,7 @@ class FakeGhProjectClient:
         self._items = items
         self.created_fields: list[str] = []
         self.updated_numbers: list[tuple[str, str, str, float]] = []
+        self.field_list_calls = 0
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return a stable fake project ID for update calls."""
@@ -43,6 +44,7 @@ class FakeGhProjectClient:
     def field_list(self, *, owner: str, project_number: int) -> list[dict]:
         """Return the current fake project field payload."""
 
+        self.field_list_calls += 1
         return self._fields
 
     def ensure_number_field(self, *, owner: str, project_number: int, name: str) -> None:
@@ -169,6 +171,60 @@ def test_sync_scores_ensures_fields_and_writes_updates() -> None:
 
     assert PRIORITY_SCORE_FIELD in client.created_fields
     assert len(previews) == 1
+    assert client.updated_numbers == [
+        ("item-699", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
+    ]
+    assert client.field_list_calls == 2
+
+
+def test_sync_scores_skips_malformed_issue_numbers_when_indexing_items() -> None:
+    """Verify malformed project items cannot collide in the issue lookup map.
+
+    This matters because the sync pass should ignore broken issue payloads
+    rather than folding multiple malformed items onto one synthetic key.
+    """
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *(
+                    "Improvement",
+                    "Success Probability",
+                    "Time Criticality",
+                    "Unlock Factor",
+                    PRIORITY_SCORE_FIELD,
+                ),
+            )
+        ],
+        items=[
+            _item(699, improvement=5, **{lower_first_key(EFFORT_FIELD): 8}),
+            {"id": "broken-a", "status": "Todo", "content": {"type": "Issue", "title": "Broken A"}},
+            {
+                "id": "broken-b",
+                "status": "Todo",
+                "content": {"type": "Issue", "number": -1, "title": "Broken B"},
+            },
+        ],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=50,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=699,
+            dry_run=False,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert [preview.issue_number for preview in previews] == [699]
     assert client.updated_numbers == [
         ("item-699", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
     ]

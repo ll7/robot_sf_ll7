@@ -108,7 +108,7 @@ Useful flags:
 - `--issue-number <n>` updates one issue only
 - `--skip-status Done` skips completed work
 
-### GitHub Actions sync
+### GitHub Actions Sync
 
 The repository workflow
 `/.github/workflows/project-priority-score-sync.yml` runs:

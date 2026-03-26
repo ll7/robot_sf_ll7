@@ -292,10 +292,14 @@ def ensure_required_fields(
     """Create missing numeric fields required by the score model."""
 
     fields = field_map(client.field_list(owner=owner, project_number=project_number))
+    created_missing_field = False
     for name in REQUIRED_NUMBER_FIELDS:
         if name not in fields:
             client.ensure_number_field(owner=owner, project_number=project_number, name=name)
-    return field_map(client.field_list(owner=owner, project_number=project_number))
+            created_missing_field = True
+    if created_missing_field:
+        return field_map(client.field_list(owner=owner, project_number=project_number))
+    return fields
 
 
 def build_previews(
@@ -318,7 +322,10 @@ def build_previews(
         if content.get("type") != "Issue":
             continue
 
-        number = int(content["number"])
+        raw_number = content.get("number")
+        if not isinstance(raw_number, int) or raw_number < 0:
+            continue
+        number = raw_number
         if issue_number is not None and number != issue_number:
             continue
 
@@ -395,11 +402,15 @@ def sync_scores(
         issue_number=options.issue_number,
         skip_statuses=options.skip_statuses,
     )
-    items_by_issue = {
-        int((item.get("content") or {}).get("number", -1)): item
-        for item in items
-        if (item.get("content") or {}).get("type") == "Issue"
-    }
+    items_by_issue: dict[int, dict[str, Any]] = {}
+    for item in items:
+        content = item.get("content")
+        if not isinstance(content, dict) or content.get("type") != "Issue":
+            continue
+        issue_number = content.get("number")
+        if not isinstance(issue_number, int) or issue_number < 0:
+            continue
+        items_by_issue[issue_number] = item
 
     score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
     for preview in previews:

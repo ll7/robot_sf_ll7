@@ -1,0 +1,56 @@
+name: Project Priority Score Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-priority-score-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Require project automation token
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PROJECT_AUTOMATION_TOKEN is required for Project #5 field automation."
+            echo "The repository workflow cannot update the user-owned project without a token that has project scope."
+            exit 1
+          fi
+
+      - name: Sync priority scores
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+        run: |
+          mkdir -p output/project_priority_score
+          python3 scripts/tools/project_priority_score.py sync \
+            --owner ll7 \
+            --project-number 5 \
+            --ensure-fields \
+            --summary-file output/project_priority_score/sync_summary.json
+
+      - name: Upload sync summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-priority-score-summary
+          path: output/project_priority_score/sync_summary.json
+          if-no-files-found: warn

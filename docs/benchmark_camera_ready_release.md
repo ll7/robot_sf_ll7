@@ -5,6 +5,14 @@
 This runbook publishes the campaign publication bundle as a GitHub release asset
 with checksum and manifest verification.
 
+For the full benchmark release protocol, start with:
+
+- `docs/benchmark_release_protocol.md`
+- `docs/benchmark_release_reproducibility.md`
+
+The command in this document is the publication/upload step after a benchmark
+release run has already produced a valid publication bundle.
+
 ## Prerequisites
 
 - Completed camera-ready campaign output containing:

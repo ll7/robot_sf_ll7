@@ -5,6 +5,11 @@
 This guide defines a publication-safe artifact policy for benchmark outputs and
 documents the reproducible export path for camera-ready artifacts.
 
+For the higher-level benchmark release process, see:
+
+- `docs/benchmark_release_protocol.md`
+- `docs/benchmark_release_reproducibility.md`
+
 Use this when you need public, stable references for papers based on
 `robot_sf_ll7` benchmark runs.
 

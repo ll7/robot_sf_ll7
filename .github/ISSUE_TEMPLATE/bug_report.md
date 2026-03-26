@@ -79,6 +79,12 @@ assignees: []
 - [ ] Run the targeted test module.
 - [ ] Run the repository validation gate.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

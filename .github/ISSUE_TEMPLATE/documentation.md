@@ -81,6 +81,12 @@ assignees: []
 - [ ] Verify code examples run if included.
 - [ ] Check that updated docs are linked from the docs index.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

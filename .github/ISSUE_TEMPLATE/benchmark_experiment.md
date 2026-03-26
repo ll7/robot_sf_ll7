@@ -70,6 +70,12 @@ assignees: []
 - [ ] Confirm the output artifacts are created.
 - [ ] Add or update a contract test for the benchmark surface.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

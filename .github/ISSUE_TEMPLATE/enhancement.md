@@ -77,6 +77,12 @@ assignees: []
 - [ ] Existing tests continue to pass.
 - [ ] Targeted validation command is documented.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

@@ -35,8 +35,10 @@ Add a structured issue workflow.
 
     assert "Added Value Estimation" in result.missing_sections
     assert "Effort Estimation" in result.missing_sections
+    assert "Estimate Discussion" in result.missing_sections
     assert "Project Metadata" in result.missing_sections
     assert "## Added Value Estimation" in result.repaired_body
+    assert "## Estimate Discussion" in result.repaired_body
     assert "## Definition of Done" in result.repaired_body
     assert result.repaired_body.endswith("\n")
 
@@ -98,6 +100,12 @@ Add a structured issue workflow.
 ## Validation / Testing
 
 - [ ] Run the repository validation gate.
+
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
 
 ## Project Metadata
 
@@ -162,3 +170,4 @@ Repair the issue template body.
     assert '"missing_sections": [' in captured.out
     assert repair_file.read_text(encoding="utf-8").startswith("## Goal / Problem")
     assert "## Validation / Testing" in repair_file.read_text(encoding="utf-8")
+    assert "## Estimate Discussion" in repair_file.read_text(encoding="utf-8")

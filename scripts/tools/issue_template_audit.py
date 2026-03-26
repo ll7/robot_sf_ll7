@@ -28,6 +28,7 @@ SECTION_ORDER: tuple[str, ...] = (
     "Definition of Done",
     "Success Metrics",
     "Validation / Testing",
+    "Estimate Discussion",
     "Project Metadata",
 )
 
@@ -50,6 +51,8 @@ SECTION_ALIASES: dict[str, str] = {
     "validation / testing": "Validation / Testing",
     "validation": "Validation / Testing",
     "testing": "Validation / Testing",
+    "estimate discussion": "Estimate Discussion",
+    "estimate rationale": "Estimate Discussion",
     "project metadata": "Project Metadata",
 }
 
@@ -64,6 +67,7 @@ SECTION_PLACEHOLDERS: dict[str, str] = {
     "Definition of Done": "- [ ] Fill in the missing acceptance criteria.",
     "Success Metrics": "- What success looks like:",
     "Validation / Testing": "- [ ] Add or run the relevant validation command.",
+    "Estimate Discussion": "- Why these values were proposed:\n- Uncertainty / confidence:\n- What evidence would move the estimate:",
     "Project Metadata": "- Priority:\n- Effort (h):\n- Reviewed:",
 }
 

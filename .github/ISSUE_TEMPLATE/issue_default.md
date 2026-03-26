@@ -70,6 +70,12 @@ assignees: []
 - [ ] Run the repository validation gate.
 - [ ] Record any benchmark or reproducibility evidence if relevant.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

@@ -78,6 +78,12 @@ assignees: []
 - [ ] Dependencies are pinned or versioned.
 - [ ] The experiment runs from a single canonical command.
 
+## Estimate Discussion
+
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
+
 ## Project Metadata
 
 - Priority:

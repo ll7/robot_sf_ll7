@@ -62,6 +62,10 @@ Current promoted all-planners baseline run:
   - baseline + experimental planners on full scenario suite
   - prediction planner runs first for early fail-fast signal
   - `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
+- `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
+  - co-existing holonomic sibling profile for issue 690 feasibility work
+  - keeps the same scenario matrix, seed policy, publication bundle, and report layout
+  - strict fail-closed planner policy: no fallback-to-success behavior in benchmark mode
 - `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
   - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
 - `configs/benchmarks/paper_experiment_matrix_v1.yaml`

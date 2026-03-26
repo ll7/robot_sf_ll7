@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
@@ -209,6 +210,30 @@ def test_load_campaign_config_rejects_non_finite_snqi_thresholds(tmp_path: Path)
 
     with pytest.raises(ValueError, match="must be a finite float"):
         load_campaign_config(config_path)
+
+
+def test_load_holonomic_camera_ready_campaign_config() -> None:
+    """Holonomic camera-ready profile should stay strict and fail closed."""
+    cfg = load_campaign_config(Path("configs/benchmarks/camera_ready_all_planners_holonomic.yaml"))
+
+    assert cfg.name == "camera_ready_all_planners_holonomic"
+    assert cfg.kinematics_matrix == ("holonomic",)
+    assert cfg.holonomic_command_mode == "vx_vy"
+    assert cfg.export_publication_bundle is True
+    assert cfg.stop_on_failure is True
+
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert planners["orca"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["sacadrl"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["socnav_sampling"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["socnav_bench"].socnav_missing_prereq_policy == "fail-fast"
+    assert (
+        planners["ppo"].algo_config_path
+        == Path("configs/baselines/ppo_15m_grid_socnav_holonomic.yaml").resolve()
+    )
+
+    ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert ppo_cfg["fallback_to_goal"] is False
 
 
 def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:
@@ -654,6 +679,10 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
                 "projection_rate": "0.0",
                 "infeasible_rate": "0.0",
                 "execution_mode": "native",
+                "execution_detail": "direct_holonomic_world_velocity",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
                 "readiness_status": "ok",
                 "readiness_tier": "baseline-ready",
                 "preflight_status": "ok",
@@ -666,6 +695,8 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     report_text = report_path.read_text(encoding="utf-8")
     assert "planner\\|unsafe" in report_text
     assert "holonomic\\|vx_vy" in report_text
+    assert "direct_holonomic_world_velocity" in report_text
+    assert "world_velocity_passthrough" in report_text
 
 
 def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
@@ -695,6 +726,39 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
     )
     assert row["execution_mode"] == "adapter"
     assert row["readiness_status"] == "adapter"
+
+
+def test_planner_report_row_exposes_execution_detail_and_command_spaces() -> None:
+    """Row builder should surface direct-world-velocity metadata explicitly."""
+    planner = PlannerSpec(key="orca", algo="orca")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {
+                "execution_mode": "adapter",
+                "execution_detail": "direct_holonomic_world_velocity",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+            },
+        },
+    }
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="holonomic",
+    )
+    assert row["execution_mode"] == "adapter"
+    assert row["execution_detail"] == "direct_holonomic_world_velocity"
+    assert row["planner_command_space"] == "holonomic_vxy_world"
+    assert row["benchmark_command_space"] == "holonomic_vxy_world"
+    assert row["projection_policy"] == "world_velocity_passthrough"
 
 
 def test_planner_report_row_backfills_collision_means_from_termination_reason() -> None:

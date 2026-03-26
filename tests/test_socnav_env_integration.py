@@ -8,6 +8,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.socnav import SocNavPlannerPolicy
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 
 def test_socnav_policy_runs_single_step():
@@ -37,6 +38,27 @@ def test_socnav_structured_observation_exposes_robot_angular_velocity():
 
     assert "angular_velocity" in obs["robot"]
     assert len(obs["robot"]["angular_velocity"]) == 1
+
+
+def test_socnav_holonomic_observation_distinguishes_speed_from_velocity_xy():
+    """Holonomic structured observations should expose world velocity separately from speed."""
+    env = RobotEnv(
+        env_config=RobotSimulationConfig(
+            observation_mode=ObservationMode.SOCNAV_STRUCT,
+            robot_config=HolonomicDriveSettings(
+                radius=0.3,
+                max_speed=2.0,
+                max_angular_speed=2.0,
+                command_mode="vx_vy",
+            ),
+        )
+    )
+    env.reset()
+    obs, _, _, _, _ = env.step(np.array([0.0, 1.0], dtype=np.float32))
+
+    assert obs["robot"]["velocity_xy"] == pytest.approx((0.0, 1.0))
+    assert obs["robot"]["speed"] == pytest.approx((1.0, 0.0))
+    assert obs["robot"]["heading"][0] == pytest.approx(np.pi / 2)
 
 
 def test_socnav_bicycle_observation_reports_turn_rate_not_heading():

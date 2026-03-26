@@ -408,7 +408,7 @@ def _evaluate_learned_policy_contract(
     }
 
 
-def _preflight_policy(  # noqa: C901
+def _preflight_policy(  # noqa: C901, PLR0915
     *,
     algo: str,
     algo_config: dict[str, Any],
@@ -435,17 +435,37 @@ def _preflight_policy(  # noqa: C901
             effective_kinematics = str(
                 cfg.get("robot_kinematics", cfg.get("kinematics", _DEFAULT_KINEMATICS))
             )
+        robot_cfg = cfg.get("robot_config") if isinstance(cfg.get("robot_config"), dict) else {}
+        effective_command_mode = None
+        if isinstance(robot_cfg, dict):
+            raw_mode = robot_cfg.get("command_mode")
+            if raw_mode is not None:
+                normalized_mode = str(raw_mode).strip().lower()
+                effective_command_mode = normalized_mode or None
         try:
             policy_fn, _meta = _build_policy(
                 algo,
                 cfg,
                 robot_kinematics=effective_kinematics,
+                robot_command_mode=effective_command_mode,
             )
         except TypeError as exc:
             # Backward compatibility for tests or monkeypatches with legacy _build_policy signatures.
-            if "unexpected keyword argument 'robot_kinematics'" not in str(exc):
+            message = str(exc)
+            if "unexpected keyword argument 'robot_kinematics'" not in message and (
+                "unexpected keyword argument 'robot_command_mode'" not in message
+            ):
                 raise
-            policy_fn, _meta = _build_policy(algo, cfg)
+            try:
+                policy_fn, _meta = _build_policy(
+                    algo,
+                    cfg,
+                    robot_kinematics=effective_kinematics,
+                )
+            except TypeError as legacy_exc:
+                if "unexpected keyword argument 'robot_kinematics'" not in str(legacy_exc):
+                    raise
+                policy_fn, _meta = _build_policy(algo, cfg)
         planner_close = getattr(policy_fn, "_planner_close", None)
         if callable(planner_close):
             planner_close()
@@ -786,7 +806,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
-
+    normalized_robot_command_mode = (
+        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
+    )
     if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
         goal_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -808,7 +830,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -839,7 +861,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -874,7 +896,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -913,7 +935,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -948,7 +970,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -987,7 +1009,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         adapter_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1050,7 +1072,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1144,7 +1166,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["planner_command_space"] = _default_robot_command_space(
                 robot_kinematics,
                 algo_config,
-                robot_command_mode=robot_command_mode,
+                robot_command_mode=normalized_robot_command_mode,
             )
         ppo_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
@@ -1272,7 +1294,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         planner_meta["planner_command_space"] = _default_robot_command_space(
             robot_kinematics,
             algo_config,
-            robot_command_mode=robot_command_mode,
+            robot_command_mode=normalized_robot_command_mode,
         )
     adapter_kinematics_model = resolve_benchmark_kinematics_model(
         robot_kinematics=robot_kinematics,
@@ -1554,6 +1576,20 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
     return stacked
 
 
+def _command_xy_payload(command: tuple[float, float] | dict[str, Any]) -> np.ndarray:
+    """Extract a world-frame XY payload from tuple or structured commands.
+
+    Returns:
+        np.ndarray: Two-element world-frame XY payload.
+    """
+    if isinstance(command, dict):
+        return np.array(
+            [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
+            dtype=float,
+        )
+    return np.array([float(command[0]), float(command[1])], dtype=float)
+
+
 def _policy_command_to_env_action(  # noqa: C901
     *,
     env: Any,
@@ -1568,21 +1604,11 @@ def _policy_command_to_env_action(  # noqa: C901
     simulator = getattr(env, "simulator", None)
     sim_robots = getattr(simulator, "robots", None)
     if not isinstance(sim_robots, list) or not sim_robots:
-        if isinstance(command, dict):
-            return np.array(
-                [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
-                dtype=float,
-            )
-        return np.array([float(command[0]), float(command[1])], dtype=float)
+        return _command_xy_payload(command)
     robot = sim_robots[0]
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
-        if isinstance(command, dict):
-            return np.array(
-                [float(command.get("vx", 0.0)), float(command.get("vy", 0.0))],
-                dtype=float,
-            )
-        return np.array([command[0], command[1]], dtype=float)
+        return _command_xy_payload(command)
 
     if isinstance(command, dict):
         command_kind = str(command.get("command_kind", "")).strip().lower()

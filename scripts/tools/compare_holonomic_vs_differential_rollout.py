@@ -99,6 +99,47 @@ def _scenario_label(scenario: dict[str, Any]) -> str:
     )
 
 
+def _structured_pedestrians(obs: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize structured or legacy pedestrian data into a list of dicts."""
+    pedestrians = obs.get("pedestrians")
+    if isinstance(pedestrians, dict):
+        positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)
+        velocities = np.asarray(pedestrians.get("velocities", []), dtype=float).reshape(-1, 2)
+        radii = np.asarray(pedestrians.get("radius", []), dtype=float).reshape(-1)
+        count_value = pedestrians.get("count", [positions.shape[0]])
+        count_array = np.asarray(count_value, dtype=float).reshape(-1)
+        count = int(count_array[0]) if count_array.size else positions.shape[0]
+        if positions.size == 0 and velocities.size == 0 and count <= 0:
+            agents = obs.get("agents", [])
+            if isinstance(agents, list):
+                return [agent for agent in agents if isinstance(agent, dict)]
+        agent_list: list[dict[str, Any]] = []
+        for index in range(min(count, positions.shape[0])):
+            agent_list.append(
+                {
+                    "position": positions[index].tolist(),
+                    "velocity": velocities[index].tolist()
+                    if index < velocities.shape[0]
+                    else [0.0, 0.0],
+                    "radius": [float(radii[index]) if index < radii.shape[0] else 0.3],
+                }
+            )
+        return agent_list
+    agents = obs.get("agents", [])
+    if isinstance(agents, list):
+        return [agent for agent in agents if isinstance(agent, dict)]
+    return []
+
+
+def _structured_robot_goal(obs: dict[str, Any]) -> np.ndarray:
+    """Return the robot goal current position from structured or legacy observations."""
+    goal = obs.get("goal", {})
+    if isinstance(goal, dict) and "current" in goal:
+        return np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
+    return np.asarray(robot.get("goal", [0.0, 0.0]), dtype=float).reshape(-1)
+
+
 def _robot_config_summary(config: Any) -> dict[str, Any]:
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
@@ -109,6 +150,18 @@ def _robot_config_summary(config: Any) -> dict[str, Any]:
             payload[key] = getattr(robot_cfg, key)
     payload["robot_type"] = robot_cfg.__class__.__name__
     return payload
+
+
+def _aligned_vectors(diff_vec: np.ndarray, holo_vec: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Pad the shorter vector so comparisons stay defined when shapes drift."""
+    if diff_vec.shape == holo_vec.shape:
+        return diff_vec, holo_vec
+    max_len = max(int(diff_vec.shape[0]), int(holo_vec.shape[0]))
+    aligned_diff = np.zeros(max_len, dtype=float)
+    aligned_holo = np.zeros(max_len, dtype=float)
+    aligned_diff[: diff_vec.shape[0]] = diff_vec
+    aligned_holo[: holo_vec.shape[0]] = holo_vec
+    return aligned_diff, aligned_holo
 
 
 def _override_robot_config(
@@ -147,17 +200,17 @@ def _extract_agent_contract(
     obs: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray]:
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
-    agents = obs.get("agents", []) if isinstance(obs.get("agents"), list) else []
+    agents = _structured_pedestrians(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
     robot_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)
-    return [agent for agent in agents if isinstance(agent, dict)], robot_pos, robot_vel
+    return agents, robot_pos, robot_vel
 
 
 def _flatten_ppo_input(obs: dict[str, Any]) -> tuple[np.ndarray, dict[str, np.ndarray | float]]:
     """Flatten the exact PPO input contract into a numeric vector and components."""
     agents, robot_pos, robot_vel = _extract_agent_contract(obs)
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
-    robot_goal = np.asarray(robot.get("goal", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_goal = _structured_robot_goal(obs)
     robot_radius = float(np.asarray(robot.get("radius", [0.0]), dtype=float).reshape(-1)[0])
 
     values: list[float] = []
@@ -197,8 +250,7 @@ def _flatten_orca_input(obs: dict[str, Any]) -> tuple[np.ndarray, dict[str, np.n
     """Flatten the ORCA/Social-Navigation-PyEnvs input contract into a vector."""
     agents, robot_pos, robot_vel = _extract_agent_contract(obs)
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
-    goal = obs.get("goal", {}) if isinstance(obs.get("goal"), dict) else {}
-    robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_goal = _structured_robot_goal(obs)
     robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     robot_radius = float(np.asarray(robot.get("radius", [0.0]), dtype=float).reshape(-1)[0])
 
@@ -246,10 +298,7 @@ def _compare_policy_inputs(
     else:
         diff_vec, diff_components = _flatten_ppo_input(diff_obs)
         holo_vec, holo_components = _flatten_ppo_input(holo_obs)
-    if diff_vec.shape != holo_vec.shape:
-        raise ValueError(
-            f"Flattened policy input shape mismatch: {diff_vec.shape} vs {holo_vec.shape}"
-        )
+    diff_vec, holo_vec = _aligned_vectors(diff_vec, holo_vec)
     delta = diff_vec - holo_vec
     summary = {
         "policy_input_l2": float(np.linalg.norm(delta)),
@@ -292,6 +341,7 @@ def _compare_policy_inputs(
         "agent_count_diff": round(
             float(diff_components["agent_count"]) - float(holo_components["agent_count"])
         ),
+        "robot_heading_abs": _raw_heading_abs(diff_obs, holo_obs),
     }
     return float(np.linalg.norm(delta)), summary
 
@@ -309,7 +359,9 @@ def _raw_heading_abs(diff_obs: dict[str, Any], holo_obs: dict[str, Any]) -> floa
         robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
         return float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
 
-    return abs(_heading(diff_obs) - _heading(holo_obs))
+    delta = _heading(diff_obs) - _heading(holo_obs)
+    wrapped = (delta + math.pi) % (2.0 * math.pi) - math.pi
+    return abs(wrapped)
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -686,6 +686,14 @@ def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     return "unknown"
 
 
+def _normalized_algorithm_metadata_contract(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return the algorithm metadata contract as a dictionary."""
+    contract = summary.get("algorithm_metadata_contract")
+    if isinstance(contract, dict):
+        return contract
+    return {}
+
+
 def _sanitize_git_remote(remote: str) -> str:
     """Remove credentials from git remote URLs before persisting provenance metadata.
 
@@ -1952,12 +1960,9 @@ def _planner_report_row(  # noqa: C901, PLR0912
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
-    execution_mode = _resolve_execution_mode(
-        summary.get("algorithm_metadata_contract"),
-    )
-    planner_kinematics = (summary.get("algorithm_metadata_contract") or {}).get(
-        "planner_kinematics"
-    )
+    algorithm_metadata_contract = _normalized_algorithm_metadata_contract(summary)
+    execution_mode = _resolve_execution_mode(algorithm_metadata_contract)
+    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
     if not isinstance(planner_kinematics, dict):
         planner_kinematics = {}
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
@@ -2070,7 +2075,7 @@ def _planner_report_row(  # noqa: C901, PLR0912
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
     }
-    feasibility = (summary.get("algorithm_metadata_contract") or {}).get("kinematics_feasibility")
+    feasibility = algorithm_metadata_contract.get("kinematics_feasibility")
     if isinstance(feasibility, dict):
         row["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0) or 0)
         row["projection_rate"] = _safe_float(float(feasibility.get("projection_rate", 0.0) or 0.0))

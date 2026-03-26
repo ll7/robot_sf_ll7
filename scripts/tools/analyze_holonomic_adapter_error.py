@@ -733,7 +733,11 @@ def _build_interpretation(
     native_only = [
         p
         for p in planners
-        if (p.get("adapter_fraction") or 0.0) == 0.0 and (p.get("projection_rate") or 0.0) == 0.0
+        if (
+            (p.get("adapter_fraction") or 0.0) == 0.0
+            and (p.get("projection_rate") or 0.0) == 0.0
+            and str(p.get("execution_mode", "")).strip().lower() == "native"
+        )
     ]
     if adapter_sensitive:
         lines.append(

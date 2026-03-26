@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -27,6 +28,7 @@ def _obs(
     heading: float,
     goal: tuple[float, float] = (5.0, 0.0),
     agents: list[dict] | None = None,
+    pedestrians: dict | None = None,
 ) -> dict:
     return {
         "dt": 0.1,
@@ -39,6 +41,13 @@ def _obs(
         },
         "goal": {"current": list(goal)},
         "agents": agents or [],
+        "pedestrians": pedestrians
+        or {
+            "positions": [],
+            "velocities": [],
+            "count": [0],
+            "radius": [0.3],
+        },
     }
 
 
@@ -86,6 +95,27 @@ def test_flatten_orca_input_preserves_expected_contract() -> None:
     assert stats["agent_count"] == pytest.approx(1.0)
 
 
+def test_flatten_ppo_input_supports_structured_pedestrians() -> None:
+    """Structured pedestrians and goal.current should be accepted directly."""
+    vec, stats = _flatten_ppo_input(
+        _obs(
+            position=(1.0, 2.0),
+            velocity=(0.5, -0.25),
+            heading=0.1,
+            goal=(4.0, 3.0),
+            pedestrians={
+                "positions": [[2.0, 3.0]],
+                "velocities": [[0.1, 0.2]],
+                "count": [1],
+                "radius": [0.3],
+            },
+        ),
+    )
+    assert vec.shape[0] == 1 + 2 + 2 + 2 + 1 + 1 + 5
+    assert tuple(stats["goal"]) == pytest.approx((4.0, 3.0))
+    assert stats["agent_count"] == pytest.approx(1.0)
+
+
 def test_compare_policy_inputs_detects_divergence_for_orca() -> None:
     """ORCA-specific comparison should surface drift in the flattened policy inputs."""
     l2, summary = _compare_policy_inputs(
@@ -96,6 +126,13 @@ def test_compare_policy_inputs_detects_divergence_for_orca() -> None:
     assert l2 > 0.0
     assert summary["robot_position_l2"] > 0.0
     assert summary["robot_velocity_l2"] > 0.0
+
+
+def test_raw_heading_abs_wraps_across_pi_boundary() -> None:
+    """Heading differences should be measured with wraparound handling."""
+    diff = _obs(position=(0.0, 0.0), velocity=(1.0, 0.0), heading=math.pi - 0.01)
+    holo = _obs(position=(0.0, 0.0), velocity=(1.0, 0.0), heading=-math.pi + 0.01)
+    assert _compare_policy_inputs(diff, holo, algo="orca")[1]["robot_heading_abs"] < 0.05
 
 
 @dataclass

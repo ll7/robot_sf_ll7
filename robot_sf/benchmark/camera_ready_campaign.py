@@ -2646,7 +2646,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 },
             )
 
-            if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
+            if status in {"failed", "partial-failure", "not_available"} and cfg.stop_on_failure:
                 logger.warning(
                     "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
                     planner.key,
@@ -2660,6 +2660,20 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                             f"'{planner.key}' ({kinematics}) had partial failures "
                             f"({int(summary.get('failed_jobs', 0))} failed jobs); "
                             "stop_on_failure=true"
+                        ),
+                    )
+                elif status == "not_available":
+                    availability_reason = (
+                        (summary.get("benchmark_availability") or {}).get("availability_reason")
+                        if isinstance(summary.get("benchmark_availability"), dict)
+                        else None
+                    )
+                    warnings.append(
+                        (
+                            "Campaign halted early: planner "
+                            f"'{planner.key}' ({kinematics}) was not available"
+                            + (f" ({availability_reason})" if availability_reason else "")
+                            + "; stop_on_failure=true"
                         ),
                     )
                 stop_requested = True
@@ -2902,7 +2916,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
-    benchmark_success = successful_runs == len(run_entries) if run_entries else True
+    benchmark_success = len(run_entries) > 0 and successful_runs == len(run_entries)
     seed_variability_payload = _build_seed_variability_payload(
         seed_variability_records,
         campaign_id=campaign_id,

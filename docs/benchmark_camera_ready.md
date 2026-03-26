@@ -5,7 +5,7 @@ camera-ready benchmark outputs across multiple planners.
 
 Canonical benchmark fallback policy:
 
-- `docs/context/issue_691_benchmark_fallback_policy.md`
+- [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
 
 ## Entry Point
 

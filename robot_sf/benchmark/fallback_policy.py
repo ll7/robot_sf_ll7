@@ -51,6 +51,10 @@ def _summary_reason(summary: dict[str, Any], preflight: dict[str, Any]) -> str |
     Returns:
         Best-effort human-readable reason for a non-success benchmark outcome.
     """
+    learned_contract_reason = _learned_policy_contract_reason(preflight)
+    if learned_contract_reason is not None:
+        return learned_contract_reason
+
     compatibility_reason = preflight.get("compatibility_reason")
     if compatibility_reason is not None:
         return str(compatibility_reason)
@@ -73,15 +77,37 @@ def _summary_reason(summary: dict[str, Any], preflight: dict[str, Any]) -> str |
     return None
 
 
+def _learned_policy_contract_reason(preflight: dict[str, Any]) -> str | None:
+    """Extract mismatch/warning details from the learned-policy contract payload.
+
+    Returns:
+        Joined learned-policy mismatch/warning details when present.
+    """
+    learned_policy_contract = preflight.get("learned_policy_contract")
+    if not isinstance(learned_policy_contract, dict):
+        return None
+
+    entries: list[str] = []
+    for key in ("critical_mismatches", "warnings"):
+        value = learned_policy_contract.get(key)
+        if isinstance(value, list):
+            entries.extend(str(item) for item in value if item is not None)
+        elif value is not None:
+            entries.append(str(value))
+    if entries:
+        return "; ".join(entries)
+    return None
+
+
 def summarize_benchmark_availability(summary: dict[str, Any] | None) -> BenchmarkAvailability:
     """Return the canonical benchmark availability classification for one run summary."""
     if not isinstance(summary, dict):
         return BenchmarkAvailability(
             execution_mode="unknown",
-            readiness_status="native",
-            availability_status="available",
-            benchmark_success=True,
-            availability_reason=None,
+            readiness_status="degraded",
+            availability_status="failed",
+            benchmark_success=False,
+            availability_reason="malformed_summary_payload",
         )
 
     preflight = summary.get("preflight")

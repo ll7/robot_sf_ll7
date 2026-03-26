@@ -54,3 +54,39 @@ def test_campaign_exit_code_uses_benchmark_success_flag() -> None:
     """Campaign CLI should exit non-zero for non-success benchmark results."""
     assert campaign_exit_code({"benchmark_success": True}) == 0
     assert campaign_exit_code({"benchmark_success": False}) == 2
+
+
+def test_summarize_benchmark_availability_fails_closed_for_malformed_payload() -> None:
+    """Malformed summaries must fail closed instead of defaulting to benchmark success."""
+    availability = summarize_benchmark_availability(None)
+
+    assert availability.execution_mode == "unknown"
+    assert availability.readiness_status == "degraded"
+    assert availability.availability_status == "failed"
+    assert availability.benchmark_success is False
+    assert availability.availability_reason == "malformed_summary_payload"
+    assert benchmark_run_exit_code(None) == 2
+
+
+def test_summarize_benchmark_availability_surfaces_learned_contract_reason() -> None:
+    """Learned-policy mismatch details should populate the availability reason."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {
+            "status": "fallback",
+            "learned_policy_contract": {
+                "critical_mismatches": ["obs_mode=image mismatch"],
+                "warnings": ["determinism not guaranteed"],
+            },
+        },
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.availability_status == "not_available"
+    assert availability.availability_reason == (
+        "obs_mode=image mismatch; determinism not guaranteed"
+    )

@@ -123,5 +123,18 @@
 				"panel": "shared"
 			}
 		},
+		{
+			"label": "Project Priority Score Sync",
+			"type": "shell",
+			"command": "uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project-number 5",
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
 	]
 }

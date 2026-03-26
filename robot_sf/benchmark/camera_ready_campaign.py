@@ -1955,6 +1955,11 @@ def _planner_report_row(  # noqa: C901, PLR0912
     execution_mode = _resolve_execution_mode(
         summary.get("algorithm_metadata_contract"),
     )
+    planner_kinematics = (summary.get("algorithm_metadata_contract") or {}).get(
+        "planner_kinematics"
+    )
+    if not isinstance(planner_kinematics, dict):
+        planner_kinematics = {}
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
     learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
     contract_status = "not_applicable"
@@ -2051,6 +2056,12 @@ def _planner_report_row(  # noqa: C901, PLR0912
         "snqi_ci_low": _safe_float(snqi_ci[0]),
         "snqi_ci_high": _safe_float(snqi_ci[1]),
         "execution_mode": execution_mode,
+        "execution_detail": str(planner_kinematics.get("execution_detail", "unspecified")),
+        "planner_command_space": str(planner_kinematics.get("planner_command_space", "unknown")),
+        "benchmark_command_space": str(
+            planner_kinematics.get("benchmark_command_space", "unknown")
+        ),
+        "projection_policy": str(planner_kinematics.get("projection_policy", "unknown")),
         "readiness_status": readiness_status,
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
@@ -2275,15 +2286,19 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
     if rows:
         lines.append(
-            "| planner | planner group | execution mode | readiness status | tier | preflight | learned contract | run status |"
+            "| planner | planner group | execution mode | execution detail | planner cmd | benchmark cmd | projection policy | readiness status | tier | preflight | learned contract | run status |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
         for row in rows:
             lines.append(
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
                 f"{_escape_markdown_cell(row.get('planner_group'))} | "
                 f"{_escape_markdown_cell(row.get('execution_mode'))} | "
+                f"{_escape_markdown_cell(row.get('execution_detail'))} | "
+                f"{_escape_markdown_cell(row.get('planner_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('benchmark_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('projection_policy'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_status'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
                 f"{_escape_markdown_cell(row.get('preflight_status'))} | "

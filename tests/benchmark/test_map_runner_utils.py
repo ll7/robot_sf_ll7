@@ -38,6 +38,9 @@ from robot_sf.benchmark.map_runner import (
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 
 class _KinematicsStub:
@@ -206,6 +209,40 @@ def test_build_policy_orca_preserves_provenance_metadata() -> None:
     )
 
 
+def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic ORCA should expose an explicit world-frame velocity command payload."""
+
+    class _DummyAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config, allow_fallback
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic ORCA should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.6, -0.2], dtype=float)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.ORCAPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "orca",
+        {"allow_fallback": False},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.6),
+        "vy": pytest.approx(-0.2),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+
+
 def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,6 +278,81 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
         "heading_safe_velocity_to_unicycle_vw"
     )
     assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
+def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic Social-Navigation-PyEnvs ORCA should forward upstream ActionXY as world velocity."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic upstream ORCA should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.3, 0.7], dtype=float)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        _DummyAdapter,
+    )
+    policy, meta = _build_policy(
+        "social_navigation_pyenvs_orca",
+        {"repo_root": "output/repos/Social-Navigation-PyEnvs"},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.3),
+        "vy": pytest.approx(0.7),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
+
+
+def test_build_policy_social_force_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic local SocialForce should forward world-frame velocity directly."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError(
+                "Holonomic social-force path should not call plan() in vx_vy mode."
+            )
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.15, 0.45], dtype=float)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocialForcePlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "social_force",
+        {},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.15),
+        "vy": pytest.approx(0.45),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
 
 
 def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_metadata(
@@ -289,6 +401,53 @@ def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_
     assert sfm["upstream_reference"]["upstream_policy"] == (
         "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
     )
+
+
+@pytest.mark.parametrize(
+    ("algo_key", "policy_name"),
+    [
+        ("social_navigation_pyenvs_socialforce", "socialforce"),
+        ("social_navigation_pyenvs_sfm_helbing", "sfm_helbing"),
+    ],
+)
+def test_build_policy_social_navigation_pyenvs_force_models_holonomic_vx_vy_use_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+    algo_key: str,
+    policy_name: str,
+) -> None:
+    """Holonomic force-model wrappers should forward upstream ActionXY as world velocity."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic force-model path should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.25, -0.4], dtype=float)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        _DummyAdapter,
+    )
+    policy, meta = _build_policy(
+        algo_key,
+        {"repo_root": "output/repos/Social-Navigation-PyEnvs", "policy_name": policy_name},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.25),
+        "vy": pytest.approx(-0.4),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
 
 
 def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadata(
@@ -406,6 +565,61 @@ def test_suite_seed_selection_and_behavior_sanity() -> None:
         }
     )
     assert not ok
+
+
+def test_policy_command_to_env_action_passthroughs_world_velocity_for_holonomic_vx_vy() -> None:
+    """Structured holonomic world-velocity commands should pass straight into vx_vy robots."""
+    config = SimpleNamespace(
+        robot_config=HolonomicDriveSettings(
+            radius=0.3,
+            max_speed=2.0,
+            max_angular_speed=1.5,
+            command_mode="vx_vy",
+        ),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.7), current_speed=(0.0, 0.0))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(
+        env=env,
+        config=config,
+        command={"command_kind": "holonomic_vxy_world", "vx": 0.4, "vy": -0.2},
+    )
+
+    assert np.allclose(action, np.array([0.4, -0.2], dtype=float))
+
+
+def test_policy_command_to_env_action_converts_world_velocity_for_differential_drive() -> None:
+    """Structured world velocities should reuse the differential-drive adapter path."""
+    config = SimpleNamespace(
+        robot_config=DifferentialDriveSettings(
+            radius=0.3,
+            max_linear_speed=2.0,
+            max_angular_speed=1.5,
+            allow_backwards=False,
+        ),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.4), current_speed=(0.3, -0.1))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(
+        env=env,
+        config=config,
+        command={"command_kind": "holonomic_vxy_world", "vx": 0.9, "vy": 0.2},
+    )
+
+    expected_vw = holonomic_to_diff_drive_action(
+        np.array([0.9, 0.2], dtype=float),
+        robot.pose,
+        max_linear_speed=2.0,
+        max_angular_speed=1.5,
+    )
+    assert np.allclose(
+        action,
+        np.array([expected_vw[0] - 0.3, expected_vw[1] + 0.1], dtype=float),
+    )
 
 
 def test_velocity_and_ped_stack_helpers() -> None:
@@ -1272,6 +1486,68 @@ def test_run_map_batch_skips_incompatible_kinematics(
     assert result["written"] == 0
     assert result["preflight"]["status"] == "skipped"
     assert "compatibility_reason" in result["preflight"]
+
+
+def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batch summary should retain runtime-resolved holonomic command contract details."""
+    scenario = {
+        "name": "s1",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    def _fake_worker(job):
+        del job
+        return {
+            "episode_id": "ep1",
+            "algorithm_metadata": {
+                "planner_kinematics": {
+                    "robot_kinematics": "holonomic",
+                    "execution_mode": "adapter",
+                    "planner_command_space": "holonomic_vxy_world",
+                    "benchmark_command_space": "holonomic_vxy_world",
+                    "projection_policy": "world_velocity_passthrough",
+                    "execution_detail": "direct_holonomic_world_velocity",
+                },
+                "upstream_reference": {
+                    "adapter_boundary": "runtime direct world velocity passthrough"
+                },
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        algo="orca",
+        workers=1,
+        resume=False,
+    )
+
+    planner_meta = result["algorithm_metadata_contract"]["planner_kinematics"]
+    assert planner_meta["planner_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["benchmark_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["projection_policy"] == "world_velocity_passthrough"
+    assert planner_meta["execution_detail"] == "direct_holonomic_world_velocity"
+    assert (
+        result["algorithm_metadata_contract"]["upstream_reference"]["adapter_boundary"]
+        == "runtime direct world velocity passthrough"
+    )
 
 
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:

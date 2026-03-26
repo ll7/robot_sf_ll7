@@ -1037,11 +1037,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "Install the fast-pysf dependency."
             )
 
-    def plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using social-force goal + interaction forces.
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity using the social-force model.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
@@ -1056,7 +1056,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         to_goal = goal - robot_pos
         goal_dist = float(np.linalg.norm(to_goal))
         if goal_dist < self.config.goal_tolerance:
-            return 0.0, 0.0
+            return np.zeros(2, dtype=float)
 
         dt = self._resolve_dt(observation)
         desired_speed = min(self.config.social_force_desired_speed, self.config.max_linear_speed)
@@ -1073,16 +1073,29 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             social_force + obstacle_force
         )
 
-        total_force = desired_force + interaction_force
-        total_force = self._clip_force(total_force)
+        total_force = self._clip_force(desired_force + interaction_force)
+        velocity_world = robot_vel + total_force * dt
+        speed = float(np.linalg.norm(velocity_world))
+        if speed < self._EPS:
+            return np.zeros(2, dtype=float)
+        if speed > self.config.max_linear_speed:
+            velocity_world = (
+                velocity_world / (speed + self._EPS) * float(self.config.max_linear_speed)
+            )
+        return np.asarray(velocity_world, dtype=float)
 
-        desired_vel = robot_vel + total_force * dt
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using social-force goal + interaction forces.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        desired_vel = self.plan_velocity_world(observation)
         speed = float(np.linalg.norm(desired_vel))
         if speed < self._EPS:
             return 0.0, 0.0
-        if speed > self.config.max_linear_speed:
-            desired_vel = desired_vel / (speed + self._EPS) * self.config.max_linear_speed
-            speed = self.config.max_linear_speed
 
         desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -1826,24 +1839,23 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             )
         return new_velocity
 
-    def _velocity_to_command(
+    def _velocity_world_to_command(
         self,
         *,
-        velocity: np.ndarray,
+        velocity_world: np.ndarray,
         robot_pos: np.ndarray,
         robot_heading: float,
         observation: dict,
     ) -> tuple[float, float]:
-        """Convert a velocity vector into (v, w) command with occupancy penalty.
+        """Convert a world-frame velocity vector into ``(v, w)`` with occupancy penalty.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        speed = float(np.linalg.norm(velocity))
+        speed = float(np.linalg.norm(velocity_world))
         if speed < self._EPS:
             return 0.0, 0.0
-        world_dir = self._ego_to_world(velocity, robot_heading)
-        world_dir = self._normalize(world_dir)
+        world_dir = self._normalize(np.asarray(velocity_world, dtype=float))
         world_dir, occ_penalty = self._get_safe_heading(robot_pos, world_dir, observation)
         desired_heading = atan2(world_dir[1], world_dir[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -1868,21 +1880,38 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         return linear, angular
 
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity using ORCA or the heuristic fallback.
+
+        Returns:
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
+        """
+        if not self._ensure_rvo2():
+            return self._heuristic_velocity_world(observation)
+        return self._rvo2_velocity_world(observation)
+
     def plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using rvo2 ORCA or a heuristic fallback.
+        """Compute ``(v, w)`` using the ORCA world-velocity plan and unicycle projection.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        if not self._ensure_rvo2():
-            return self._heuristic_plan(observation)
-        return self._rvo2_plan(observation)
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        velocity_world = self.plan_velocity_world(observation)
+        return self._velocity_world_to_command(
+            velocity_world=velocity_world,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            observation=observation,
+        )
 
-    def _rvo2_plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using the rvo2 ORCA solver.
+    def _rvo2_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame velocity using the rvo2 ORCA solver.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
@@ -1990,19 +2019,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
         sim.doStep()
         new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)
-        new_velocity_ego = self._world_to_ego_vec(new_velocity_world, robot_heading)
-        return self._velocity_to_command(
-            velocity=new_velocity_ego,
-            robot_pos=robot_pos,
-            robot_heading=robot_heading,
-            observation=observation,
-        )
+        return new_velocity_world
 
-    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using the legacy ORCA-inspired heuristic.
+    def _heuristic_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame velocity using the legacy ORCA-inspired heuristic.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
@@ -2054,8 +2077,20 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
                 )
             )
         new_velocity = self._solve_orca_velocity(lines, preferred_velocity)
-        return self._velocity_to_command(
-            velocity=new_velocity,
+        return self._ego_to_world(new_velocity, robot_heading)
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute ``(v, w)`` using the legacy ORCA-inspired heuristic.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        velocity_world = self._heuristic_velocity_world(observation)
+        return self._velocity_world_to_command(
+            velocity_world=velocity_world,
             robot_pos=robot_pos,
             robot_heading=robot_heading,
             observation=observation,

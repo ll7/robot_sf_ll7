@@ -281,14 +281,9 @@ class SocialNavigationPyEnvsForceModelAdapter:
         self, observation: dict[str, Any], *, time_step: float
     ) -> tuple[float, float, dict[str, Any]]:
         """Return projected `(v, w)` command plus explicit projection metadata."""
-        joint_state = self._joint_state(observation)
-        self._policy.time_step = float(time_step)
-        action = self._policy.predict(joint_state)
-        if not isinstance(action, self._ActionXY):
-            raise TypeError(f"Unexpected upstream action type: {type(action)}")
-
-        vx = float(action.vx)
-        vy = float(action.vy)
+        velocity_world, meta = self.act_velocity_world(observation, time_step=time_step)
+        vx = float(velocity_world[0])
+        vy = float(velocity_world[1])
         speed = float(np.hypot(vx, vy))
         current_heading = _current_heading(observation)
         desired_heading = float(math.atan2(vy, vx)) if speed > 1e-8 else current_heading
@@ -308,18 +303,36 @@ class SocialNavigationPyEnvsForceModelAdapter:
                 float(self.config.max_angular_speed),
             )
         )
+        meta["projected_command_vw"] = [linear, angular]
+        meta["heading_error_rad"] = heading_error
+        meta["projection_policy"] = self.projection_policy
+        return (linear, angular, meta)
+
+    def act_velocity_world(
+        self, observation: dict[str, Any], *, time_step: float
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Return upstream force-model velocity directly in world coordinates plus metadata.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any]]: World-frame velocity `[vx, vy]` and metadata.
+        """
+        joint_state = self._joint_state(observation)
+        self._policy.time_step = float(time_step)
+        action = self._policy.predict(joint_state)
+        if not isinstance(action, self._ActionXY):
+            raise TypeError(f"Unexpected upstream action type: {type(action)}")
+
+        vx = float(action.vx)
+        vy = float(action.vy)
         return (
-            linear,
-            angular,
+            np.array([vx, vy], dtype=float),
             {
                 "upstream_action_xy": [vx, vy],
-                "projected_command_vw": [linear, angular],
-                "heading_error_rad": heading_error,
-                "projection_policy": self.projection_policy,
                 "self_velocity_source": getattr(joint_state, "robot_sf_velocity_source", "unknown"),
                 "upstream_policy": self.upstream_policy,
                 "runtime_strategy": self.runtime_strategy,
                 "runtime_dependency": self.runtime_dependency,
+                "projection_policy": "world_velocity_passthrough",
             },
         )
 
@@ -341,6 +354,21 @@ class SocialNavigationPyEnvsForceModelAdapter:
             dt = 0.1
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
+
+    def plan_velocity_world(self, observation: dict[str, Any]) -> np.ndarray:
+        """Return the upstream force-model action as a world-frame translational velocity."""
+        dt_source = observation.get("dt", 0.1)
+        if "sim" in observation and isinstance(observation["sim"], dict):
+            dt_source = observation["sim"].get("timestep", dt_source)
+        try:
+            dt_arr = np.asarray(0.1 if dt_source is None else dt_source, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            dt_arr = np.asarray([0.1], dtype=float)
+        dt = float(dt_arr[0]) if dt_arr.size else 0.1
+        if not math.isfinite(dt) or dt <= 0.0:
+            dt = 0.1
+        velocity_world, _meta = self.act_velocity_world(observation, time_step=dt)
+        return velocity_world
 
 
 __all__ = [

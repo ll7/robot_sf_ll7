@@ -39,7 +39,9 @@ and downstream tooling.
 | --- | --- | --- |
 | `robot.position` | `(2,)` | Robot position `(x, y)` clipped to 50m |
 | `robot.heading` | `(1,)` | Heading in radians, wrapped to `[-pi, pi]` |
-| `robot.speed` | `(2,)` | Robot velocity `(vx, vy)` |
+| `robot.speed` | `(2,)` | Robot speed contract `(linear_speed, angular_speed)` |
+| `robot.velocity_xy` | `(2,)` | Robot translational velocity `(vx, vy)` in world coordinates |
+| `robot.angular_velocity` | `(1,)` | Robot yaw rate in radians per second |
 | `robot.radius` | `(1,)` | Robot radius |
 | `goal.current` | `(2,)` | Current goal position |
 | `goal.next` | `(2,)` | Next goal position (or zeros if none) |
@@ -51,6 +53,18 @@ and downstream tooling.
 | `sim.timestep` | `(1,)` | Simulation step duration in seconds |
 
 `max_pedestrians` is derived from `SimulationSettings.max_total_pedestrians` or defaults to 64.
+
+### Frame Semantics
+
+- `robot.position`, `goal.current`, `goal.next`, and `robot.velocity_xy` are expressed in the
+  global/world frame.
+- `pedestrians.velocities` are rotated into the robot ego frame.
+- `robot.heading` is always present, including for holonomic robots.
+- In holonomic `vx_vy` mode, heading is *not* independently actuated. When the robot is moving,
+  heading aligns with the current world-frame velocity direction. With zero translational velocity,
+  the previous heading is retained.
+- `robot.speed` is not a duplicate of `robot.velocity_xy`. It preserves the benchmark-wide
+  `(linear_speed, angular_speed)` contract even when the robot is holonomic.
 
 ### Flattened Keys (SB3 Compatibility)
 

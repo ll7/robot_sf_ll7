@@ -21,6 +21,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     infer_execution_mode_from_counts,
 )
 from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
+from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -2177,7 +2178,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         preflight["compatibility_reason"] = incompatible_reason
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
-        return {
+        summary = {
             "total_jobs": 0,
             "written": 0,
             "successful_jobs": 0,
@@ -2193,6 +2194,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "algorithm_metadata_contract": algo_contract,
             "preflight": preflight,
         }
+        summary["benchmark_availability"] = availability_payload(summary)
+        return summary
 
     if resume and out_path.exists():
         existing = index_existing(out_path)
@@ -2366,7 +2369,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
     }
 
-    return {
+    summary = {
         "total_jobs": total_jobs,
         "written": wrote,
         "successful_jobs": wrote,
@@ -2381,6 +2384,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algorithm_metadata_contract": algo_contract,
         "preflight": preflight,
     }
+    summary["benchmark_availability"] = availability_payload(summary)
+    return summary
 
 
 __all__ = ["run_map_batch"]

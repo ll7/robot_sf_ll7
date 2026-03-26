@@ -32,6 +32,7 @@ from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
+from robot_sf.benchmark.fallback_policy import benchmark_run_exit_code
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
@@ -272,6 +273,7 @@ def _handle_run(args) -> int:
         )
         total_jobs = int(summary.get("total_jobs", 0))
         written = int(summary.get("written", 0))
+        benchmark_exit_code = benchmark_run_exit_code(summary)
         failed = summary.get("failures", [])
         failure_count = (
             len(failed) if isinstance(failed, list) else int(summary.get("failed_jobs", 0))
@@ -312,6 +314,30 @@ def _handle_run(args) -> int:
                 },
             )
             return 2
+        if benchmark_exit_code != 0:
+            availability = summary.get("benchmark_availability")
+            reason = (
+                str((availability or {}).get("availability_reason"))
+                if isinstance(availability, dict)
+                and (availability or {}).get("availability_reason") is not None
+                else "benchmark run did not satisfy the benchmark availability policy"
+            )
+            try:
+                logging.error("Benchmark run marked non-success: %s", reason)
+            except Exception:
+                logging.debug("Logging benchmark availability failure failed", exc_info=True)
+            _emit_structured(
+                {
+                    "event": "benchmark.run.summary",
+                    "exit_code": benchmark_exit_code,
+                    "total_jobs": total_jobs,
+                    "written": written,
+                    "failed_jobs": failure_count,
+                    "out_path": str(summary.get("out_path", args.out)),
+                    "benchmark_availability": availability,
+                },
+            )
+            return benchmark_exit_code
         _emit_structured(
             {
                 "event": "benchmark.run.summary",
@@ -320,6 +346,7 @@ def _handle_run(args) -> int:
                 "written": written,
                 "failed_jobs": failure_count,
                 "out_path": str(summary.get("out_path", args.out)),
+                "benchmark_availability": summary.get("benchmark_availability"),
             },
         )
         return 0

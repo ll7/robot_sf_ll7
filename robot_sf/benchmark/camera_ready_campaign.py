@@ -26,6 +26,13 @@ from shapely.geometry import LineString, Polygon
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.fallback_policy import (
+    availability_payload,
+    summarize_benchmark_availability,
+)
+from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode as _resolve_benchmark_execution_mode,
+)
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_variability_csv_rows,
@@ -663,27 +670,7 @@ def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     Returns:
         Resolved execution mode string, or ``"unknown"`` when unavailable.
     """
-    if not isinstance(algorithm_metadata_contract, dict):
-        return "unknown"
-
-    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
-    if isinstance(planner_kinematics, dict):
-        execution_mode = planner_kinematics.get("execution_mode")
-        if execution_mode is not None:
-            return str(execution_mode)
-
-    # Backward-compatible fallback for older payloads that wrote this at top-level.
-    execution_mode = algorithm_metadata_contract.get("execution_mode")
-    if execution_mode is not None:
-        return str(execution_mode)
-
-    adapter_impact = algorithm_metadata_contract.get("adapter_impact")
-    if isinstance(adapter_impact, dict):
-        execution_mode = adapter_impact.get("execution_mode")
-        if execution_mode is not None:
-            return str(execution_mode)
-
-    return "unknown"
+    return _resolve_benchmark_execution_mode(algorithm_metadata_contract)
 
 
 def _normalized_algorithm_metadata_contract(summary: dict[str, Any]) -> dict[str, Any]:
@@ -1937,7 +1924,7 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(  # noqa: C901, PLR0912
+def _planner_report_row(  # noqa: C901
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
@@ -1961,7 +1948,8 @@ def _planner_report_row(  # noqa: C901, PLR0912
     snqi_ci = _metric_ci(metric_block, "snqi")
 
     algorithm_metadata_contract = _normalized_algorithm_metadata_contract(summary)
-    execution_mode = _resolve_execution_mode(algorithm_metadata_contract)
+    availability = summarize_benchmark_availability(summary)
+    execution_mode = availability.execution_mode
     planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
     if not isinstance(planner_kinematics, dict):
         planner_kinematics = {}
@@ -1979,13 +1967,7 @@ def _planner_report_row(  # noqa: C901, PLR0912
         if isinstance(warning_list, list):
             contract_warnings = len(warning_list)
     status = str(summary.get("status", "unknown"))
-    readiness_status = "native"
-    if preflight_status == "fallback":
-        readiness_status = "fallback"
-    elif preflight_status == "skipped" or status == "failed":
-        readiness_status = "degraded"
-    elif execution_mode in {"adapter", "mixed"}:
-        readiness_status = "adapter"
+    readiness_status = availability.readiness_status
 
     resolved_metrics = {
         "success_mean": _metric_mean(metric_block, "success"),
@@ -2068,6 +2050,9 @@ def _planner_report_row(  # noqa: C901, PLR0912
         ),
         "projection_policy": str(planner_kinematics.get("projection_policy", "unknown")),
         "readiness_status": readiness_status,
+        "availability_status": availability.availability_status,
+        "benchmark_success": str(availability.benchmark_success).lower(),
+        "availability_reason": availability.availability_reason or "",
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
         "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
@@ -2564,11 +2549,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
-                preflight_status = str((summary.get("preflight") or {}).get("status", "")).lower()
-                if preflight_status == "skipped":
-                    status = "skipped"
-                elif int(summary.get("failed_jobs", 0)) > 0:
+                availability = summarize_benchmark_availability(summary)
+                if availability.availability_status == "not_available":
+                    status = "not_available"
+                elif availability.availability_status == "partial-failure":
                     status = "partial-failure"
+                elif availability.availability_status == "failed":
+                    status = "failed"
             except Exception as exc:
                 status = "failed"
                 summary = {
@@ -2594,6 +2581,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
             )
             summary["kinematics"] = kinematics
+            summary["benchmark_availability"] = availability_payload(summary)
             _write_json(planner_dir / "summary.json", summary)
 
             records: list[dict[str, Any]] = []
@@ -2697,6 +2685,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "kinematics",
             "execution_mode",
             "readiness_status",
+            "availability_status",
+            "benchmark_success",
+            "availability_reason",
             "readiness_tier",
             "preflight_status",
             "learned_policy_contract_status",
@@ -2911,6 +2902,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
+    benchmark_success = successful_runs == len(run_entries) if run_entries else True
     seed_variability_payload = _build_seed_variability_payload(
         seed_variability_records,
         campaign_id=campaign_id,
@@ -3070,6 +3062,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "benchmark_success": benchmark_success,
             "paper_interpretation_profile": cfg.paper_interpretation_profile,
             "kinematics_matrix": list(kinematics_matrix),
             "holonomic_command_mode": cfg.holonomic_command_mode,
@@ -3289,6 +3282,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "seed_variability_csv": str(seed_variability_csv_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
+        "benchmark_success": benchmark_success,
         "total_episodes": total_episodes,
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,

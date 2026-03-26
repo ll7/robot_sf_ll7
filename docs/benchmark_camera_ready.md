@@ -3,6 +3,10 @@
 This document describes the config-driven campaign workflow for generating
 camera-ready benchmark outputs across multiple planners.
 
+Canonical benchmark fallback policy:
+
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+
 ## Entry Point
 
 Run the campaign CLI:
@@ -142,6 +146,13 @@ Release publication runbook:
 - `docs/benchmark_camera_ready_release.md`
 
 ## Campaign Summary Semantics
+
+Benchmark mode is fail-closed:
+
+- fallback-only or skipped planners are reported as `not_available`
+- partial-failure planners are reported as non-success
+- campaign CLI exit status is non-zero when any planner row is not benchmark-success
+- diagnostic fallback remains valid only for explicit probe workflows, not for benchmark claims
 
 `reports/campaign_summary.json` contains:
 

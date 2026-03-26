@@ -112,3 +112,29 @@ def test_cli_run_allows_partial_success(
 
     rc = bench_cli.cli_main(_run_args(matrix_path, out_path))
     assert rc == 0
+
+
+def test_cli_run_returns_non_zero_for_fallback_only_success(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Benchmark-mode fallback must fail closed even when one episode was written."""
+    matrix_path = _write_minimal_matrix(tmp_path)
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr(
+        bench_cli,
+        "run_batch",
+        lambda **_kwargs: {
+            "status": "ok",
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "fallback", "compatibility_reason": "missing socnav deps"},
+            "out_path": str(out_path),
+        },
+    )
+
+    rc = bench_cli.cli_main(_run_args(matrix_path, out_path))
+    assert rc == 2

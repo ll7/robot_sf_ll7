@@ -7,8 +7,8 @@ It is everyones guide on how to use this repository effectively.
 
 - Use scriptable interfaces instead of cli interfaces when possible.
 - Make everything reproducible.
-- In benchmark work, treat fallback execution as a failure mode unless the issue explicitly
-  studies fallback behavior. Prefer fail-closed planner statuses with clear error messages.
+- In benchmark work, use the canonical fail-closed fallback policy in
+  `docs/context/issue_691_benchmark_fallback_policy.md`.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.

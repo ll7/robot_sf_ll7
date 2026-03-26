@@ -53,6 +53,8 @@ not just implemented.
 
 Benchmark-specific policy:
 
+- Use the canonical fail-closed benchmark fallback note:
+  `docs/context/issue_691_benchmark_fallback_policy.md`
 - Fallback behavior is **not** acceptable as a successful benchmark outcome unless the task
   explicitly exists to measure that fallback mode.
 - If a planner, environment, or dependency cannot satisfy the contract needed for an accurate

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -463,6 +464,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "fallback" in report_text
     assert "learned contract" in report_text
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
+    assert "availability_status" in table_md
+    assert "benchmark_success" in table_md
+    assert "availability_reason" in table_md
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
     assert "socnav_prereq_policy" in table_md
@@ -477,6 +481,11 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    ppo_row = next(row for row in summary_payload["planner_rows"] if row["algo"] == "ppo")
+    assert ppo_row["status"] == "not_available"
+    assert ppo_row["availability_status"] == "not_available"
+    assert ppo_row["benchmark_success"] == "false"
     assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
     assert summary_payload["artifacts"]["matrix_summary_json"].endswith(
         "reports/matrix_summary.json"
@@ -511,7 +520,19 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "release_url" in summary_payload["campaign"]
     assert "release_asset_url" in summary_payload["campaign"]
     assert "doi_url" in summary_payload["campaign"]
-    assert result["publication_bundle"] is not None
+    seed_variability_payload = json.loads(
+        (campaign_root / "reports" / "seed_variability_by_scenario.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    planner_keys = {row["planner_key"] for row in seed_variability_payload["rows"]}
+    assert planner_keys == {"goal"}
+    assert result["publication_bundle"] is None
+    assert "publication_bundle" not in summary_payload
+    assert any(
+        "Publication bundle export skipped because benchmark_success=false." in warning
+        for warning in summary_payload["warnings"]
+    )
 
 
 def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
@@ -655,6 +676,79 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     assert len(planner_rows) == 1
     assert planner_rows[0]["planner_key"] == "prediction_planner"
     assert planner_rows[0]["status"] == "partial-failure"
+
+
+def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, monkeypatch) -> None:
+    """Campaign should stop after the first not-available planner when stop_on_failure is enabled."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_stop_on_not_available.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_stop_on_not_available",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: true",
+                "planners:",
+                "  - key: ppo",
+                "    algo: ppo",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, out_path, schema_path, benchmark_profile, kwargs
+        call_order.append(algo)
+        if algo == "ppo":
+            return {
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "preflight": {
+                    "status": "fallback",
+                    "learned_policy_contract": {
+                        "critical_mismatches": ["obs_mode=image mismatch"],
+                    },
+                },
+            }
+        raise AssertionError("run_batch must not be called for planners after not_available")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="stop_not_available")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_rows = summary_payload["planner_rows"]
+
+    assert call_order == ["ppo"]
+    assert len(planner_rows) == 1
+    assert planner_rows[0]["planner_key"] == "ppo"
+    assert planner_rows[0]["status"] == "not_available"
+    assert any("obs_mode=image mismatch" in warning for warning in summary_payload["warnings"])
 
 
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
@@ -973,8 +1067,8 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
     assert run_dirs[0] == expected
 
 
-def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeypatch) -> None:
-    """Skipped planner/kinematics combinations should not be marked as successful."""
+def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, monkeypatch) -> None:
+    """Skipped planner/kinematics combinations must fail closed in benchmark reports."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -1019,8 +1113,57 @@ def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeyp
     monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="skipped")
     summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
-    assert summary_payload["planner_rows"][0]["status"] == "skipped"
+    assert summary_payload["planner_rows"][0]["status"] == "not_available"
+    assert summary_payload["planner_rows"][0]["availability_status"] == "not_available"
+    assert summary_payload["planner_rows"][0]["benchmark_success"] == "false"
     assert summary_payload["campaign"]["successful_runs"] == 0
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert result["benchmark_success"] is False
+
+
+def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeypatch) -> None:
+    """Campaigns with zero run entries must fail closed at campaign level."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_empty.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: empty_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = replace(load_campaign_config(config_path), planners=())
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.run_batch",
+        lambda *args, **kwargs: pytest.fail(
+            "run_batch should not be called when no planners exist"
+        ),
+    )
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="empty")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+
+    assert summary_payload["planner_rows"] == []
+    assert summary_payload["campaign"]["successful_runs"] == 0
+    assert summary_payload["campaign"]["total_runs"] == 0
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert result["benchmark_success"] is False
 
 
 def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypatch) -> None:

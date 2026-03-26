@@ -123,7 +123,11 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
         assert cfg is sentinel_cfg
         assert isinstance(kwargs.get("invoked_command"), str)
         called["run"] = True
-        return {"campaign_id": "cid", "campaign_root": str(tmp_path / "out" / "cid")}
+        return {
+            "campaign_id": "cid",
+            "campaign_root": str(tmp_path / "out" / "cid"),
+            "benchmark_success": True,
+        }
 
     monkeypatch.setattr(
         run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
@@ -141,3 +145,45 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     assert called["preflight"] is False
     payload = json.loads(capsys.readouterr().out)
     assert payload["campaign_id"] == "cid"
+
+
+def test_main_run_mode_returns_non_zero_for_non_success_campaign(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Run mode must fail closed when campaign result is not benchmark-success."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    sentinel_cfg = object()
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "load_campaign_config",
+        lambda path: sentinel_cfg if path == config_path else None,
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("prepare_campaign_preflight should not be called in run mode")
+        ),
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "run_campaign",
+        lambda cfg, **kwargs: (
+            {
+                "campaign_id": "cid",
+                "campaign_root": str(tmp_path / "out" / "cid"),
+                "benchmark_success": False,
+            }
+            if cfg is sentinel_cfg and isinstance(kwargs.get("invoked_command"), str)
+            else {}
+        ),
+    )
+
+    exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+    assert exit_code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["benchmark_success"] is False

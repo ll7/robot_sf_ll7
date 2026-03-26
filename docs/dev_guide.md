@@ -132,6 +132,15 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+### Benchmark fallback policy
+
+Benchmark work is fail-closed by default. Use the canonical policy note:
+
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+
+Fallback execution can still be useful for diagnostics and reproduction probes, but it must not be
+reported as a successful benchmark outcome.
+
 ### Environment factory pattern (CRITICAL)
 
 **Always use factory functions** — never instantiate gymnasium environments directly:

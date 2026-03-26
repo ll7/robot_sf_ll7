@@ -51,6 +51,19 @@ not just implemented.
 - New tests must be shown to fail for the right reason before the fix when practical, or otherwise
   justified with direct evidence that they cover the intended contract.
 
+Benchmark-specific policy:
+
+- Fallback behavior is **not** acceptable as a successful benchmark outcome unless the task
+  explicitly exists to measure that fallback mode.
+- If a planner, environment, or dependency cannot satisfy the contract needed for an accurate
+  benchmark run, the run for that planner must fail closed with a clear error and an explicit
+  `not available` or `failed` status.
+- Do not classify fallback execution as benchmark-strengthening evidence; report it as a limitation
+  or exclusion reason with the exact condition that triggered it.
+- Benchmark reports and issue follow-ups should clearly identify whether a planner ran in
+  `native`, `adapter`, `fallback`, or `degraded` mode, and fallback/degraded should be treated as a
+  caveat, not a success condition.
+
 Prefer proof that matches the risk:
 
 - benchmark or planner changes: benchmark run, policy-analysis run, or other executable evidence,

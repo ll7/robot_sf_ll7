@@ -87,6 +87,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
+* **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[SLURM Submission Workflow](./dev/slurm_submission.md)** - Submit batch jobs with the effective partition/QoS max wall time by default
 * **[SLURM Resource Audit](./dev/slurm_resource_audit.md)** - Inspect Slurm allocations, query W&B system metrics correctly, and decide whether CPU, memory, or GPU requests are oversized
@@ -133,6 +134,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
 * **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
+* **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
 * **[Issue #535 Execution Note (Paper Matrix Freeze)](./context/issue_535_paper_matrix_freeze.md)** - Frozen paper-facing experiment matrix contract and canonical command path
 * **[Issue #661 gym-collision-avoidance Model Parity Probe](./context/issue_661_gym_collision_avoidance_model_parity.md)** - Live native-observation parity check showing the current local `_SACADRLModel` already matches upstream GA3C-CADRL checkpoint inference, shifting the remaining risk to Robot SF observation mapping and benchmark behavior
 * **[Issue #663 SACADRL Observation Parity Note](./context/issue_663_sacadrl_observation_parity.md)** - Controlled and live upstream parity probe showing the current `SACADRLPlannerAdapter` reproduces the GA3C-CADRL network input on tested cases, shifting the remaining risk from observation mapping to planner quality and scenario transfer

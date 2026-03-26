@@ -31,9 +31,10 @@ def _load_template(path: Path) -> tuple[dict[str, object], str]:
     """Parse a GitHub issue template into frontmatter and markdown body."""
 
     text = path.read_text(encoding="utf-8")
-    match = re.match(r"^---\n(.*?)\n---\n(.*)\Z", text, re.S)
+    match = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n(.*)\Z", text, re.S)
     assert match is not None, f"{path} does not have YAML frontmatter"
     frontmatter = yaml.safe_load(match.group(1))
+    assert isinstance(frontmatter, dict), f"{path} frontmatter must be a YAML mapping"
     body = match.group(2)
     return frontmatter, body
 

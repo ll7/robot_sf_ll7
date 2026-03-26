@@ -670,9 +670,10 @@ def analyze(  # noqa: PLR0913
         planner_rows = _planner_rows_by_key(candidate_summary)
         run_entries = _run_entries_by_key(candidate_summary)
         planners: list[dict[str, Any]] = []
-        for planner_key in sorted(planner_rows):
-            row = planner_rows[planner_key]
-            run_entry = run_entries.get(planner_key)
+        for composite_key in sorted(planner_rows):
+            planner_key = composite_key.split("::", 1)[0]
+            row = planner_rows[composite_key]
+            run_entry = run_entries.get(composite_key)
             planner_summary = _planner_summary(
                 planner_key=planner_key,
                 row=row,

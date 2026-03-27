@@ -1,8 +1,8 @@
 ---
 name: Research / Experiment
 about: Propose a research task or experiment with reproducible validation
-title: "[RESEARCH] "
-labels: ["validation"]
+title: ""
+labels: ["research"]
 assignees: []
 ---
 

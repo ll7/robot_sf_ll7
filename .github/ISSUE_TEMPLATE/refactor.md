@@ -1,7 +1,7 @@
 ---
 name: Refactor
 about: Improve maintainability without changing behavior
-title: "[REFACTOR] "
+title: ""
 labels: ["refactor"]
 assignees: []
 ---

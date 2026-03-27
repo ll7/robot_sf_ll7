@@ -1,7 +1,7 @@
 ---
 name: Enhancement Request
 about: Suggest a new capability or improvement
-title: "[ENHANCEMENT] "
+title: ""
 labels: ["enhancement"]
 assignees: []
 ---

@@ -23,22 +23,22 @@ Implemented and benchmarkable families today:
 - `goal`
 - `social_force`
 - `orca`
+- `ppo` when provenance and quality-gate requirements are satisfied
 
 Implemented but experimental families today:
 
-- `ppo`
-
-Conceptually adjacent only or testing-only entries:
-
 - `guarded_ppo`
 - `prediction_planner`
-- `predictive_mppi`
-- `risk_dwa`
-- `mppi_social`
-- `hybrid_portfolio`
-- `stream_gap`
-- `gap_prediction`
-- legacy/model-sensitive adapters such as `sacadrl`, `socnav_sampling`, `socnav_bench`
+- testing-only planners such as `predictive_mppi`, `risk_dwa`, `mppi_social`,
+  `hybrid_portfolio`, `stream_gap`, and `gap_prediction`
+- legacy/model-sensitive adapters such as `sacadrl` and `socnav_sampling`
+
+Conceptually adjacent only entries:
+
+- `socnav_bench`
+- DreamerV3 challenger-family training support without a frozen planner row
+- external-family anchors documented for benchmark interpretation only: CrowdNav / SoNIC, Go-MPC,
+  Pred2Nav, and gym-collision-avoidance / CADRL
 
 ## What Makes A Planner Integration Credible
 

@@ -190,6 +190,61 @@ def test_load_release_manifest_rejects_missing_required_path_and_hash_fields(
         load_release_manifest(manifest_path)
 
 
+def test_load_release_manifest_rejects_non_file_required_path(tmp_path: Path) -> None:
+    """Required manifest paths should fail fast when they point at directories."""
+    template_path = Path(
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+    )
+    payload = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    manifest = load_release_manifest(template_path)
+
+    payload["canonical_campaign_config"] = str(manifest.canonical_campaign_config_path)
+    payload["scenario"]["matrix_path"] = str(manifest.scenario_matrix_path)
+    payload["citation_path"] = str(tmp_path / "citation_dir")
+    payload["release_checklist_path"] = str(manifest.release_checklist_path)
+    if manifest.snqi_weights_path is not None:
+        payload["metrics"]["snqi_weights_path"] = str(manifest.snqi_weights_path)
+    if manifest.snqi_baseline_path is not None:
+        payload["metrics"]["snqi_baseline_path"] = str(manifest.snqi_baseline_path)
+
+    directory_target = tmp_path / "citation_dir"
+    directory_target.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="citation_path must be a file path"):
+        load_release_manifest(manifest_path)
+
+
+def test_load_release_manifest_rejects_empty_required_artifact_path(tmp_path: Path) -> None:
+    """Required artifact lists should reject empty or whitespace-only entries."""
+    template_path = Path(
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+    )
+    payload = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    manifest = load_release_manifest(template_path)
+
+    payload["canonical_campaign_config"] = str(manifest.canonical_campaign_config_path)
+    payload["scenario"]["matrix_path"] = str(manifest.scenario_matrix_path)
+    payload["citation_path"] = str(manifest.citation_path)
+    payload["release_checklist_path"] = str(manifest.release_checklist_path)
+    if manifest.snqi_weights_path is not None:
+        payload["metrics"]["snqi_weights_path"] = str(manifest.snqi_weights_path)
+    if manifest.snqi_baseline_path is not None:
+        payload["metrics"]["snqi_baseline_path"] = str(manifest.snqi_baseline_path)
+
+    payload["artifacts"]["required_paths"] = ["reports/campaign_summary.json", "   "]
+
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="artifacts.required_paths must not contain empty values"):
+        load_release_manifest(manifest_path)
+
+
 def test_validate_release_manifest_reports_mismatches() -> None:
     """Validation should surface config, seed, planner, and asset drift explicitly."""
     manifest = load_release_manifest(

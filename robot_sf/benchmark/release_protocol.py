@@ -108,6 +108,8 @@ def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> 
     resolved = _resolve_manifest_side_path(manifest_path, value)
     if not resolved.exists():
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
+    if not resolved.is_file():
+        raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
     return resolved
 
 
@@ -276,7 +278,10 @@ def _load_manifest_artifacts_section(payload: dict[str, Any]) -> tuple[str, ...]
     required_artifact_paths_raw = artifacts.get("required_paths")
     if not isinstance(required_artifact_paths_raw, list) or not required_artifact_paths_raw:
         raise ValueError("artifacts.required_paths must be a non-empty list")
-    return tuple(str(item).strip() for item in required_artifact_paths_raw)
+    required_artifact_paths = tuple(str(item).strip() for item in required_artifact_paths_raw)
+    if any(not path for path in required_artifact_paths):
+        raise ValueError("artifacts.required_paths must not contain empty values")
+    return required_artifact_paths
 
 
 def _load_manifest_provenance_section(payload: dict[str, Any]) -> tuple[str, str]:

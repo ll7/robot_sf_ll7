@@ -1,0 +1,91 @@
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [59621, 59622, 59623]
+
+scenarios:
+  - name: corner_90_turn
+    map_id: atomic_corner_90_test
+    simulation_config:
+      max_episode_steps: 350
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: corner_90_turn
+      label: corner 90 turn
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: topology
+      target_failure_mode: oscillation
+      purpose: Test whether a simple right-angle corridor turn is handled without overshoot or wall clipping.
+      expected_behavior: Slow or align for the turn, round the corner once, and continue along the new corridor segment.
+      expected_pass_criteria: Reach the goal after one clean cornering maneuver without clipping or repeated turn retries.
+      failure_modes:
+        - corner clipping
+        - overshoot into wall
+        - turn hesitation deadlock
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: u_trap_local_minimum
+    map_id: atomic_u_trap_test
+    simulation_config:
+      max_episode_steps: 380
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: u_trap_local_minimum
+      label: u trap local minimum
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: topology
+      target_failure_mode: local_minima
+      purpose: Test whether the planner can escape an attractive but blocked cul-de-sac geometry and find the viable way around.
+      expected_behavior: Back off from the trap mouth, route around the open side, and avoid repeated trap re-entry.
+      expected_pass_criteria: Reach the goal without remaining trapped at the U opening or repeatedly re-entering the trap.
+      failure_modes:
+        - local minimum deadlock
+        - repeated trap oscillation
+        - collision with trap walls
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: corridor_following
+    map_id: atomic_corridor_test
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: corridor_following
+      label: corridor following
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: topology
+      target_failure_mode: oscillation
+      purpose: Test whether the planner can maintain centered progress through a straight constrained corridor.
+      expected_behavior: Follow the corridor axis with low lateral drift and no unnecessary wall interactions.
+      expected_pass_criteria: Reach the goal with steady corridor progress and without repeated wall-to-wall oscillation.
+      failure_modes:
+        - wall hugging
+        - lateral oscillation
+        - avoidable slowdown in clear corridor
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds

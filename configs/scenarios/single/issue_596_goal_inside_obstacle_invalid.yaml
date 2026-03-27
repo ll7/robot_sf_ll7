@@ -1,0 +1,40 @@
+scenarios:
+  - name: goal_inside_obstacle_invalid
+    map_id: atomic_goal_inside_obstacle_invalid
+    simulation_config:
+      max_episode_steps: 120
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: goal_inside_obstacle_invalid
+      label: invalid goal inside obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: robustness
+      target_failure_mode: invalid_geometry
+      purpose: Validate fail-closed handling when the configured goal zone lies inside an obstacle.
+      expected_behavior: Reject execution because no valid goal sample exists outside obstacles.
+      expected_pass_criteria: Goal sampling fails explicitly instead of producing a runnable benchmark episode.
+      failure_modes:
+        - silent acceptance of invalid geometry
+        - fallback to unsafe goal sample
+        - ambiguous runtime failure
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics:
+          min_distance: null
+          mean_distance: null
+          robot_ped_within_5m_frac: null
+          ped_force_mean: null
+          force_q95: null
+    seeds:
+      - 59651
+      - 59652
+      - 59653

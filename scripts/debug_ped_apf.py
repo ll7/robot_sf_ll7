@@ -6,25 +6,23 @@ and a main debug loop that loads a trained PPO model and renders force vectors
 over simulation timesteps.
 """
 
-import logging
 import sys
+from pathlib import Path
 
 import loguru
 import matplotlib.pyplot as plt
 import numpy as np
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.ped_npc.adversial_ped_force import AdversialPedForceConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.sim_config import SimulationSettings
-
-logging.getLogger().setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING)
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 logger = loguru.logger
 
@@ -32,7 +30,114 @@ logger.remove()
 logger.add(sys.stderr, level="WARNING")
 
 
-def make_env(svg_map_path):
+# Model Configuration: Easy to swap different robot models here
+MODEL_NAME = "run_043"
+
+
+def get_model_profile(model_name: str) -> dict:
+    """Return environment/runtime profile settings for a given model.
+
+    Profiles keep robot dynamics and sim defaults aligned with the model's
+    training assumptions.
+    """
+    if model_name == "run_023":
+        # Defensive model profile from examples/advanced/09_defensive_policy.py
+        return {
+            "stack_steps": 1,
+            "difficulty": 0,
+            "ped_density_by_difficulty": [0.06],
+            "robot_config": DifferentialDriveSettings(radius=1.0, max_angular_speed=0.5),
+        }
+
+    # Default profile for run_043
+    return {
+        "stack_steps": 1,
+        "difficulty": 1,
+        "ped_density_by_difficulty": [0.01, 0.02, 0.04, 0.08],
+        "robot_config": BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+    }
+
+
+def load_model(model_name: str):
+    """Load a trained robot policy model.
+
+    Supports both built-in model names and custom paths.
+
+    Parameters
+    ----------
+    model_name : str
+        Model identifier. Can be:
+        - "run_023": defensive policy model (model/run_023.zip)
+        - "run_043": current baseline model (model/run_043.zip)
+        - Full path to custom model file (e.g., "./model/custom_model.zip")
+
+    Returns
+    -------
+    stable_baselines3.PPO or similar
+        Loaded trained policy model.
+
+    Raises:
+        FileNotFoundError: If model file cannot be found.
+    """
+    # Check if it's a built-in model name
+    if model_name in ["run_023", "run_043"]:
+        model_path = Path(__file__).resolve().parents[1] / "model" / f"{model_name}.zip"
+        logger.info(f"Loading built-in model: {model_name} from {model_path}")
+    else:
+        # Assume it's a custom path
+        model_path = Path(model_name)
+        logger.info(f"Loading custom model from: {model_path}")
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+
+    return load_trained_policy(str(model_path))
+
+
+def get_obs_adapter(model_name: str):
+    """Get the observation adapter function for a specific model.
+
+    Different models were trained with different observation formats. This function
+    returns an adapter that converts the current environment's dict observations
+    to the format expected by each model.
+
+    Parameters
+    ----------
+    model_name : str
+        Model identifier ("run_023", "run_043").
+
+    Returns
+    -------
+    callable or None
+        Adapter function that transforms observations, or None if no adaptation needed.
+    """
+    if model_name == "run_023":
+        # Defensive policy was trained with old observation format
+        # Expects: [ray_state, drive_state]
+        def adapt_obs_run_023(obs_dict):
+            """Convert dict observation to flat format expected by run_023."""
+            if isinstance(obs_dict, dict):
+                # Keep key usage consistent with legacy defensive policy adapter.
+                drive_state = np.asarray(obs_dict[OBS_DRIVE_STATE])
+                ray_state = np.asarray(obs_dict[OBS_RAYS])
+
+                # Legacy adapter behavior
+                drive_state = drive_state[:, :-1]
+                drive_state[:, 2] *= 10
+
+                # Ensure both arrays are 1-D before concatenation.
+                drive_state = np.squeeze(drive_state).reshape(-1)
+                ray_state = np.squeeze(ray_state).reshape(-1)
+                return np.concatenate((ray_state, drive_state), axis=0)
+            return obs_dict
+
+        return adapt_obs_run_023
+
+    # run_043 use dict observations directly
+    return None
+
+
+def make_env(svg_map_path: str, model_name: str):
     """Create a robot simulation environment with adversarial pedestrian forces.
 
     Parameters
@@ -46,8 +151,7 @@ def make_env(svg_map_path):
         A configured robot simulation environment with adversarial pedestrian
         forces enabled.
     """
-    ped_densities = [0.01, 0.02, 0.04, 0.08]
-    difficulty = 1
+    profile = get_model_profile(model_name)
 
     map_definition = convert_map(svg_map_path)
 
@@ -56,13 +160,14 @@ def make_env(svg_map_path):
     config = RobotSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty,
-            ped_density_by_difficulty=ped_densities,
+            stack_steps=profile["stack_steps"],
+            difficulty=profile["difficulty"],
+            ped_density_by_difficulty=profile["ped_density_by_difficulty"],
             peds_reset_follow_route_at_start=True,
             apf_config=apf_config,
-            debug_without_robot_movement=True,  # Enable debug mode to prevent robot movement
+            debug_without_robot_movement=False,  # Enable debug mode to prevent robot movement
         ),
-        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+        robot_config=profile["robot_config"],
     )
     env = make_robot_env(
         config=config,
@@ -73,19 +178,37 @@ def make_env(svg_map_path):
     return env
 
 
-def run(svg_map_path: str):
+def run(svg_map_path: str, model_name: str | None = None):
     """Run the debug visualization for adversarial pedestrian forces.
 
     Loads a trained PPO model, runs a simulation with adversarial pedestrian
     forces enabled, renders the environment, and plots force vectors over time.
+
+    Parameters
+    ----------
+    svg_map_path : str
+        Path to the SVG map file to load.
+    model_name : str, optional
+        Robot model to load. If None, uses the MODEL_NAME constant.
+        Can be "run_023", "run_043", or a custom path.
     """
-    env = make_env(svg_map_path)
-    model = PPO.load("./model/run_043", env=env)
-    logger.info("Loading robot model from ./model/run_043")
+    # Use provided model or fall back to global configuration
+    if model_name is None:
+        model_name = MODEL_NAME
+
+    env = make_env(svg_map_path, model_name)
+    model = load_model(model_name)
+    obs_adapter = get_obs_adapter(model_name)
 
     obs, _ = env.reset()
     for _ in range(10000):
-        action, _ = model.predict(obs, deterministic=True)
+        # Adapt observation if needed for the model
+        if obs_adapter is not None:
+            adapted_obs = obs_adapter(obs)
+        else:
+            adapted_obs = obs
+
+        action, _ = model.predict(adapted_obs, deterministic=True)
         obs, _, done, _, _ = env.step(action)
         env.render()
         # sleep(0.1)
@@ -170,7 +293,8 @@ def plot_forces_quiver(forces_over_time, ped_idx=0, force_indices=None, scale=1.
 
 
 if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/debug_05.svg"
-    SVG_MAP = "maps/svg_maps/narrow_corridor2.svg"
+    # SVG_MAP = "maps/svg_maps/debug_05.svg"
+    # SVG_MAP = "maps/svg_maps/narrow_corridor2.svg"
     SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
-    run(SVG_MAP)
+
+    run(SVG_MAP, model_name="run_023")

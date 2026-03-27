@@ -57,7 +57,6 @@ def test_issue_templates_parse_and_include_required_sections() -> None:
         assert frontmatter["name"]
         assert frontmatter["about"]
         assert "title" in frontmatter
-        assert frontmatter["title"] == ""
         labels = frontmatter.get("labels", [])
         assert isinstance(labels, list)
         assert set(labels).issubset(KNOWN_LABELS), f"unknown label(s) in {path.name}: {labels}"

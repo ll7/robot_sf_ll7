@@ -116,6 +116,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
+* **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership
+* **[Issue #596 ORCA Failure Analysis](./context/issue_596_orca_failure_analysis.md)** - Targeted ORCA probe results showing which atomic scenarios still fail and why
+* **[Issue #596 Testing-Only Planner Promotion Matrix](./context/issue_596_testing_only_planner_promotion_matrix.md)** - Planner-specific promotion blockers, evidence links, and next-proof requirements for the testing-only planners
 * **[Benchmark Release Protocol v0.1](./benchmark_release_protocol.md)** - Canonical benchmark release model, versioning policy, and manifest/entrypoint contract for paper-facing releases
 * **[Benchmark Release Reproducibility](./benchmark_release_reproducibility.md)** - Reproduce a benchmark release from a tag, canonical manifest, and reduced smoke validation path
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles

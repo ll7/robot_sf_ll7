@@ -1,7 +1,7 @@
 ---
 name: Bug Report
 about: Report a reproducible bug with validation details
-title: "[BUG] "
+title: ""
 labels: ["bug"]
 assignees: []
 ---

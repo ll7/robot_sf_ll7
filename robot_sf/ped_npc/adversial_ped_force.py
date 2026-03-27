@@ -186,20 +186,12 @@ def adversial_ped_force(  # noqa: PLR0913
         ped_pos = ped_positions[idx]
         distance = euclid_dist(attraction_point, ped_pos)
 
-        desired = True
+        if distance > 1e-6:  # avoid division by zero
+            # Desired direction
+            direction = (attraction_point - ped_pos) / distance
 
-        if desired:
-            if distance > 1e-6:  # avoid division by zero
-                # Desired direction
-                direction = (attraction_point - ped_pos) / distance
+            # Desired velocity toward attraction point
+            v_desired = direction * ped_max_speeds[idx]
 
-                # Desired velocity toward attraction point
-                v_desired = direction * ped_max_speeds[idx]
-
-                # Social force style: relaxation toward desired velocity
-                out_forces[idx] = v_desired - ped_velocities[idx] / relaxation_time
-
-        elif distance < threshold:
-            direction = attraction_point - ped_pos
-            if distance > 1e-6:
-                out_forces[idx] = direction / distance * (threshold - distance)
+            # relaxation toward desired velocity
+            out_forces[idx] = v_desired - ped_velocities[idx] / relaxation_time

@@ -8,7 +8,6 @@ over simulation timesteps.
 
 import logging
 import sys
-from time import sleep
 
 import loguru
 import matplotlib.pyplot as plt
@@ -85,11 +84,11 @@ def run(svg_map_path: str):
     logger.info("Loading robot model from ./model/run_043")
 
     obs, _ = env.reset()
-    for _ in range(50):
+    for _ in range(10000):
         action, _ = model.predict(obs, deterministic=True)
         obs, _, done, _, _ = env.step(action)
         env.render()
-        sleep(0.1)
+        # sleep(0.1)
 
         if done:
             obs, _ = env.reset()
@@ -173,4 +172,5 @@ def plot_forces_quiver(forces_over_time, ped_idx=0, force_indices=None, scale=1.
 if __name__ == "__main__":
     SVG_MAP = "maps/svg_maps/debug_05.svg"
     SVG_MAP = "maps/svg_maps/narrow_corridor2.svg"
+    SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
     run(SVG_MAP)

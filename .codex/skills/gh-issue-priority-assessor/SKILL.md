@@ -13,6 +13,7 @@ inputs or when you want an LLM-backed estimate of the current issue fields.
 ## Read First
 
 - `docs/project_prioritization.md`
+- `docs/context/issue_713_batch_first_issue_workflow.md`
 - `.github/ISSUE_TEMPLATE/issue_default.md`
 - `.github/ISSUE_TEMPLATE/enhancement.md`
 - `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
@@ -43,8 +44,9 @@ inputs or when you want an LLM-backed estimate of the current issue fields.
      user explicitly asks to apply them.
    - If writeback is requested, update the relevant Project #5 fields with
      `gh project item-edit`.
-   - After changing inputs, run the score sync helper so `Priority Score`
-     stays derived from the latest values.
+   - If you are reviewing multiple issues, batch the writebacks and run the
+     score sync helper once so `Priority Score` stays derived from the latest
+     values.
 
 4. Keep the rubric static
    - Use `docs/project_prioritization.md` as the canonical reference for scales

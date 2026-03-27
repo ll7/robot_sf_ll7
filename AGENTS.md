@@ -103,6 +103,19 @@ For non-trivial work, follow `.agent/PLANS.md`:
 
 Do not treat plans as throwaway scratch text when they influence benchmark semantics, model provenance, or public docs.
 
+## GitHub Workflow Batching
+
+When working issue batches or Project #5 updates:
+
+- clean up issue text and labels first,
+- route Project #5 metadata in a separate pass,
+- run derived score sync once at the end of the batch,
+- cache project and field IDs once per shell session.
+
+Canonical note:
+
+- `docs/context/issue_713_batch_first_issue_workflow.md`
+
 ## Key Codex Skills
 
 For issue management and delivery, use these local skills:

@@ -22,6 +22,7 @@ rewritten if it is missing the sections needed for agent-ready execution.
 - `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
 - `scripts/tools/issue_template_audit.py`
 - `.codex/skills/gh-issue-clarifier/SKILL.md`
+- `docs/context/issue_713_batch_first_issue_workflow.md`
 
 ## What to Check
 
@@ -62,6 +63,8 @@ An issue is template-ready only if it includes, at minimum:
      guess.
    - Add `decision-required` and move it to `Tracked` if project metadata is in use.
    - Comment with the missing pieces and the narrowest recommended fix.
+   - Keep Project #5 updates in a separate pass after the body repair if the issue also needs
+     metadata cleanup.
 
 5. Close the loop
    - If the issue now fits the template contract, say which sections were added or corrected.

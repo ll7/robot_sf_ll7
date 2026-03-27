@@ -45,6 +45,21 @@ It reuses the existing Project #5 field:
 - `Expected Duration in Hours`
   This is the effort input. No duplicate `Effort Hours` field is created.
 
+## Batch-First Workflow
+
+When processing a batch of issues, keep the GitHub work in three separate passes:
+
+1. Clean up issue text, labels, and comments first.
+2. Update Project #5 fields second, after resolving the project and field IDs once for the batch.
+3. Run the derived score sync last, once per batch, rather than after every individual issue.
+
+This keeps issue cleanup independent from project routing and makes it easier to avoid GraphQL
+quota exhaustion mid-batch.
+
+Canonical workflow note:
+
+- `docs/context/issue_713_batch_first_issue_workflow.md`
+
 ## Defaults and Clamping
 
 When fields are missing or malformed, the sync helper uses conservative defaults

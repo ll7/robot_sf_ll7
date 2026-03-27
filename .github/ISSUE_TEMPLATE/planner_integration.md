@@ -1,8 +1,8 @@
 ---
 name: Planner Integration
 about: Integrate a planner family or external planner path
-title: "[PLANNER] "
-labels: ["enhancement", "local navigation"]
+title: ""
+labels: ["enhancement", "local planner"]
 assignees: []
 ---
 

@@ -1,8 +1,8 @@
 ---
 name: Agent Task
 about: Agent-ready issue template for a small, executable task
-title: "[TASK] "
-labels: []
+title: ""
+labels: ["agent"]
 assignees: []
 ---
 

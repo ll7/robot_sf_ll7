@@ -1,8 +1,8 @@
 ---
 name: Benchmark Experiment
 about: Add or update a benchmark scenario, comparison, or experiment
-title: "[BENCHMARK] "
-labels: ["benchmark", "validation"]
+title: ""
+labels: ["benchmark"]
 assignees: []
 ---
 

@@ -1,0 +1,66 @@
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: paper_experiment_matrix_v1_v0_1_0
+release_tag: paper-benchmark-v0.1.0
+maturity: pre-1.0
+canonical_campaign_config: ../paper_experiment_matrix_v1.yaml
+campaign_config_sha256: "32a1c8f4d2cb69ed4ef3ddc41ed1bae4b40d9eadf3de5d1caf2823ba5fc46af2"
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: baseline-ready-core
+
+scenario:
+  matrix_path: ../../scenarios/classic_interactions_francis2023.yaml
+  matrix_sha256: "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seeds: []
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+
+planners:
+  keys:
+    - prediction_planner
+    - goal
+    - social_force
+    - orca
+    - ppo
+    - socnav_sampling
+    - sacadrl
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+
+kinematics:
+  matrix: [differential_drive]
+
+artifacts:
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - reports/campaign_summary.json
+    - reports/campaign_report.md
+    - reports/matrix_summary.json
+    - reports/campaign_table.md
+    - reports/snqi_diagnostics.json
+
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: 10.5281/zenodo.<record-id>
+
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../RELEASE.md

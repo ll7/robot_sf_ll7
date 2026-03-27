@@ -1,7 +1,7 @@
 ---
 name: Documentation
 about: Improve or add repository documentation
-title: "[DOCS] "
+title: ""
 labels: ["documentation"]
 assignees: []
 ---

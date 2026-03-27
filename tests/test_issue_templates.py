@@ -24,7 +24,9 @@ KNOWN_LABELS = {
     "refactor",
     "benchmark",
     "validation",
-    "local navigation",
+    "agent",
+    "research",
+    "local planner",
 }
 
 
@@ -54,7 +56,7 @@ def test_issue_templates_parse_and_include_required_sections() -> None:
         frontmatter, body = _load_template(path)
         assert frontmatter["name"]
         assert frontmatter["about"]
-        assert frontmatter["title"]
+        assert "title" in frontmatter
         labels = frontmatter.get("labels", [])
         assert isinstance(labels, list)
         assert set(labels).issubset(KNOWN_LABELS), f"unknown label(s) in {path.name}: {labels}"

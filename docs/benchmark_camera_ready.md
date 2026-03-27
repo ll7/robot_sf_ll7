@@ -128,6 +128,8 @@ Expected tree:
     comparability_matrix.md
     seed_variability_by_scenario.json
     seed_variability_by_scenario.csv
+    seed_episode_rows.csv
+    statistical_sufficiency.json
     snqi_diagnostics.json
     snqi_diagnostics.md
     snqi_sensitivity.csv
@@ -179,6 +181,8 @@ Benchmark mode is fail-closed:
 - AMV scope coverage summary (`reports/amv_coverage_summary.{json,md}`)
 - Alyassi comparability summary (`reports/comparability_matrix.{json,md}`)
 - seed variability by scenario/planner (`reports/seed_variability_by_scenario.{json,csv}`)
+- planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
+- statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
 - SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
 - warning list
 - publication bundle paths (if export enabled)
@@ -225,9 +229,82 @@ Primary locations:
 - `output/benchmarks/camera_ready/<campaign_id>/preflight/preview_scenarios.json`
 - `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.json`
 - `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.csv`
+- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.json`
+- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.csv`
+- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_episode_rows.csv`
+- `output/benchmarks/camera_ready/<campaign_id>/reports/statistical_sufficiency.json`
 - `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
   - command in header
   - per-planner timing columns in the summary table
+
+## Fixed-Scenario Multi-Seed Variability
+
+Use the camera-ready campaign stack as the canonical upstream contract for paper-side seed
+variability analysis.
+
+Required config shape:
+
+- one fixed scenario manifest
+- one explicit planner set
+- explicit `seed_policy`
+- bootstrap settings recorded in config
+
+Recommended seed policy for paper-facing variability work:
+
+```yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118]
+bootstrap_samples: 1000
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+```
+
+Grouping semantics:
+
+- raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
+- `reports/seed_episode_rows.csv` is the paper-facing flat export for grouping by
+  `scenario_id`, `planner_key`, `seed`, and deterministic `repeat_index`
+- `reports/seed_variability_by_scenario.json` is the aggregate export grouped by
+  `(scenario_id, planner_key)` across seeds
+
+Confidence semantics:
+
+- the seed-variability export uses bootstrap over per-seed means
+- the JSON payload records:
+  - method
+  - confidence level
+  - bootstrap sample count
+  - bootstrap seed
+- each metric summary records:
+  - `mean`
+  - `std`
+  - `cv`
+  - `count`
+  - `ci_low`
+  - `ci_high`
+  - `ci_half_width`
+
+Artifact bundle expected by paper consumers:
+
+- `campaign_manifest.json`
+- `run_meta.json`
+- `reports/seed_variability_by_scenario.json`
+- `reports/seed_variability_by_scenario.csv`
+- `reports/seed_episode_rows.csv`
+- `reports/statistical_sufficiency.json`
+
+Recommended pilot for downstream manuscript issue `amv_benchmark_paper#74`:
+
+- benchmark config: `configs/benchmarks/paper_seed_variability_pilot_v1.yaml`
+- scenarios:
+  - `classic_crossing_low`
+  - `classic_head_on_corridor_low`
+  - `classic_overtaking_low`
+  - `classic_t_intersection_low`
+- planners:
+  - `orca`
+  - `ppo`
 
 Quick inspection example:
 

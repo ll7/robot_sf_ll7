@@ -437,6 +437,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "comparability_matrix.md").exists()
     assert (campaign_root / "reports" / "seed_variability_by_scenario.json").exists()
     assert (campaign_root / "reports" / "seed_variability_by_scenario.csv").exists()
+    assert (campaign_root / "reports" / "seed_episode_rows.csv").exists()
+    assert (campaign_root / "reports" / "statistical_sufficiency.json").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.json").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.md").exists()
     assert (campaign_root / "reports" / "snqi_sensitivity.csv").exists()
@@ -503,6 +505,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert summary_payload["artifacts"]["seed_variability_csv"].endswith(
         "reports/seed_variability_by_scenario.csv"
     )
+    assert summary_payload["artifacts"]["seed_episode_rows_csv"].endswith(
+        "reports/seed_episode_rows.csv"
+    )
+    assert summary_payload["artifacts"]["statistical_sufficiency_json"].endswith(
+        "reports/statistical_sufficiency.json"
+    )
     assert summary_payload["artifacts"]["snqi_diagnostics_json"].endswith(
         "reports/snqi_diagnostics.json"
     )
@@ -525,8 +533,28 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
             encoding="utf-8"
         )
     )
+    assert seed_variability_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
+    assert seed_variability_payload["source"]["campaign_manifest_path"] == "campaign_manifest.json"
     planner_keys = {row["planner_key"] for row in seed_variability_payload["rows"]}
     assert planner_keys == {"goal"}
+    success_summary = seed_variability_payload["rows"][0]["summary"]["success"]
+    assert "ci_low" in success_summary
+    assert "ci_high" in success_summary
+    assert "ci_half_width" in success_summary
+    seed_episode_rows_csv = (campaign_root / "reports" / "seed_episode_rows.csv").read_text(
+        encoding="utf-8"
+    )
+    assert "scenario_id" in seed_episode_rows_csv
+    assert "planner_key" in seed_episode_rows_csv
+    assert "seed" in seed_episode_rows_csv
+    assert "repeat_index" in seed_episode_rows_csv
+    statistical_sufficiency_payload = json.loads(
+        (campaign_root / "reports" / "statistical_sufficiency.json").read_text(encoding="utf-8")
+    )
+    assert (
+        statistical_sufficiency_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
+    )
+    assert statistical_sufficiency_payload["row_count"] == 1
     assert result["publication_bundle"] is None
     assert "publication_bundle" not in summary_payload
     assert any(
@@ -571,6 +599,30 @@ def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
         cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
     )
     assert cfg.kinematics_matrix == ("differential_drive",)
+
+
+def test_load_seed_variability_pilot_config_and_scenarios() -> None:
+    """Seed-variability pilot config should stay narrow and deterministic."""
+    cfg = load_campaign_config(Path("configs/benchmarks/paper_seed_variability_pilot_v1.yaml"))
+
+    assert cfg.paper_facing is True
+    assert cfg.paper_profile_version == "paper-seed-variability-v1"
+    assert cfg.export_publication_bundle is False
+    assert cfg.kinematics_matrix == ("differential_drive",)
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111, 112, 113, 114, 115, 116, 117, 118]
+    assert [planner.key for planner in cfg.planners] == ["orca", "ppo"]
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == [
+        "classic_crossing_low",
+        "classic_head_on_corridor_low",
+        "classic_overtaking_low",
+        "classic_t_intersection_low",
+    ]
+    assert all(
+        scenario["seeds"] == [111, 112, 113, 114, 115, 116, 117, 118] for scenario in scenarios
+    )
 
 
 def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp_path: Path):

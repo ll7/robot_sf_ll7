@@ -1,0 +1,74 @@
+scenarios:
+  - name: classic_crossing_low
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: crossing
+      label: cross plaza circulation
+      density: low
+      flow: bi
+      groups: 0.0
+      plausibility:
+        status: verified
+        verified_on: "2026-01-29"
+        verified_by: ll7
+        method: null
+        notes: null
+    seeds: [111]
+  - name: classic_head_on_corridor_low
+    map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+      density: low
+      flow: bi
+      groups: 0.0
+      plausibility:
+        status: verified
+        verified_on: "2026-01-30"
+        verified_by: ll7
+        method: null
+        notes: null
+    seeds: [111]
+  - name: classic_overtaking_low
+    map_file: ../../../maps/svg_maps/classic_overtaking.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: overtaking
+      density: low
+      flow: uni
+      groups: 0.0
+      plausibility:
+        status: verified
+        verified_on: "2026-01-30"
+        verified_by: ll7
+        method: null
+        notes: null
+    seeds: [111]
+  - name: classic_t_intersection_low
+    map_file: ../../../maps/svg_maps/classic_t_intersection.svg
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: t_intersection
+      density: low
+      flow: bi
+      groups: 0.0
+      plausibility:
+        status: verified
+        verified_on: "2026-01-30"
+        verified_by: ll7
+        method: null
+        notes: null
+    seeds: [111]

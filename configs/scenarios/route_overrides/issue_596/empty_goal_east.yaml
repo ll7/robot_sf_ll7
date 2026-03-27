@@ -2,4 +2,5 @@ robot_routes:
   - spawn_id: 0
     goal_id: 0
     waypoints:
+      - [13.5, 10.0]
       - [17.5, 10.0]

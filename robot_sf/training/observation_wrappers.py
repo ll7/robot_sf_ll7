@@ -24,11 +24,17 @@ from loguru import logger
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 __all__ = [
+    "adapt_dict_observation_to_policy_space",
     "maybe_flatten_env_observations",
     "resolve_policy_obs_adapter",
     "resolve_policy_stack_steps",
     "sync_policy_spaces",
 ]
+
+_DICT_OBS_COMPAT_ALIASES: dict[str, tuple[str, ...]] = {
+    "robot_speed": ("robot_velocity_xy",),
+    "robot_velocity_xy": ("robot_speed",),
+}
 
 
 def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> Any:
@@ -107,6 +113,68 @@ def _make_ray_obs_adapter(
     return _adapter
 
 
+def _reshape_to_target_shape(
+    arr: np.ndarray,
+    *,
+    key: str,
+    target_shape: tuple[int, ...] | None,
+) -> np.ndarray:
+    """Return ``arr`` reshaped to the policy-declared target shape when compatible."""
+    if target_shape is None or tuple(arr.shape) == tuple(target_shape):
+        return arr
+    target_size = int(np.prod(target_shape))
+    if int(arr.size) != target_size:
+        raise ValueError(
+            f"Dict observation key '{key}' shape mismatch: got {tuple(arr.shape)}, "
+            f"expected {tuple(target_shape)}."
+        )
+    return np.asarray(arr).reshape(target_shape)
+
+
+def adapt_dict_observation_to_policy_space(
+    obs: Mapping[str, Any],
+    policy_model: Any | None,
+) -> Mapping[str, Any]:
+    """Filter and reshape dict observations to match a loaded PPO policy space.
+
+    Stable-Baselines3 multi-input policies reject unexpected dict keys. This helper
+    keeps only the checkpoint-declared keys, reshapes values to the declared subspace
+    shapes, and backfills a small alias set for renamed robot kinematics fields.
+
+    Returns:
+        Mapping[str, Any]: Observation payload aligned to the model-declared Dict space.
+    """
+    if policy_model is None:
+        return obs
+    obs_space = getattr(policy_model, "observation_space", None)
+    if not isinstance(obs_space, gym_spaces.Dict):
+        return obs
+
+    aligned: dict[str, np.ndarray] = {}
+    missing: list[str] = []
+    source_obs = dict(obs)
+    for key, subspace in obs_space.spaces.items():
+        value = source_obs.get(key)
+        if value is None:
+            for alias in _DICT_OBS_COMPAT_ALIASES.get(key, ()):
+                if alias in source_obs:
+                    value = source_obs[alias]
+                    break
+        if value is None:
+            missing.append(str(key))
+            continue
+        arr = np.asarray(value, dtype=getattr(subspace, "dtype", None))
+        aligned[str(key)] = _reshape_to_target_shape(
+            arr,
+            key=str(key),
+            target_shape=getattr(subspace, "shape", None),
+        )
+    if missing:
+        missing_preview = ", ".join(sorted(missing)[:5])
+        raise ValueError(f"Missing required dict observation keys: {missing_preview}")
+    return aligned
+
+
 def resolve_policy_obs_adapter(
     policy_model: Any | None,
     *,
@@ -125,8 +193,10 @@ def resolve_policy_obs_adapter(
             logger.warning("PPO policy missing observation_space; using fallback adapter.")
         return fallback_adapter
     if isinstance(obs_space, gym_spaces.Dict):
-        logger.info("PPO policy expects dict observations; skipping adapter.")
-        return None
+        logger.info(
+            "PPO policy expects dict observations; aligning runtime dict keys to model space."
+        )
+        return lambda orig_obs: adapt_dict_observation_to_policy_space(orig_obs, policy_model)
     if isinstance(obs_space, gym_spaces.Box):
         shape = tuple(obs_space.shape)
         if shape and shape[-1] == 5:

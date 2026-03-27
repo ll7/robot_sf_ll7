@@ -1,0 +1,105 @@
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [59631, 59632, 59633]
+
+scenarios:
+  - name: single_ped_crossing_orthogonal
+    map_id: francis2023_intersection_no_gesture
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      archetype: single_ped_crossing_orthogonal
+      label: single pedestrian crossing
+      source_archetype: francis2023_intersection_no_gesture
+      flow: perpendicular
+      behavior: single_ped
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: dynamic_interaction
+      target_failure_mode: social_collision
+      purpose: Test whether the planner negotiates an orthogonal crossing with one pedestrian without overreacting.
+      expected_behavior: Yield or pass with clear timing, maintain safe spacing, and avoid stop-go thrashing.
+      expected_pass_criteria: Reach the goal without contacting the pedestrian and without prolonged crossing hesitation.
+      failure_modes:
+        - social collision
+        - crossing deadlock
+        - excessive hesitation
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: head_on_interaction
+    map_id: francis2023_frontal_approach
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+    robot_config: {}
+    metadata:
+      archetype: head_on_interaction
+      label: head on interaction
+      source_archetype: francis2023_frontal_approach
+      flow: bi
+      behavior: single_ped
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: dynamic_interaction
+      target_failure_mode: deadlock
+      purpose: Test whether the planner can handle a sparse head-on encounter with a single pedestrian.
+      expected_behavior: Resolve the encounter with one clean passing decision and continued goal progress.
+      expected_pass_criteria: Reach the goal without frontal collision or reciprocal freeze during the encounter.
+      failure_modes:
+        - frontal collision
+        - reciprocal avoidance oscillation
+        - freeze in open space
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: overtaking_interaction
+    map_id: francis2023_robot_overtaking
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        speed_m_s: 0.3
+        note: slow walker
+    robot_config: {}
+    metadata:
+      archetype: overtaking_interaction
+      label: overtaking interaction
+      source_archetype: francis2023_robot_overtaking
+      flow: uni
+      behavior: single_ped
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: dynamic_interaction
+      target_failure_mode: social_collision
+      purpose: Test whether the planner can pass a slower pedestrian without tailgating or deadlocking behind it.
+      expected_behavior: Modulate speed, choose a side if needed, and complete the overtake without unsafe squeeze behavior.
+      expected_pass_criteria: Reach the goal after a clean overtake without unsafe close-following or no-pass deadlock.
+      failure_modes:
+        - rear-end crowding
+        - no-pass deadlock
+        - unstable lateral weaving
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds

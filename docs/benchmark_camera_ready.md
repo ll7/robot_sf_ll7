@@ -6,6 +6,7 @@ camera-ready benchmark outputs across multiple planners.
 Canonical benchmark fallback policy:
 
 - [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
+- [Experimental Planner Guardrails](./benchmark_experimental_planners.md)
 
 ## Entry Point
 
@@ -85,6 +86,10 @@ Current promoted all-planners baseline run:
 
 `prediction_planner` is now part of all-planners campaign presets as an experimental planner.
 For reproducible runs, verify that the configured model id exists and resolves to a valid local checkpoint before launching the campaign.
+
+Testing-only planners remain opt-in only under the guardrail policy in
+`docs/benchmark_experimental_planners.md`. Issue 596 adds a verified-simple stage gate for any
+future reconsideration, but does not remove the opt-in requirement by itself.
 
 SNQI calibration assets used by camera-ready presets:
 

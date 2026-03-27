@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from gymnasium import spaces
 from loguru import logger
 
 from scripts.tools import policy_analysis_run
@@ -707,3 +709,38 @@ def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> N
     assert robot_x == [1.0, 2.0, 3.0]
     assert ped_x == [1.0, 2.0, 3.0]
     assert force_y == [1.0, 2.0, 3.0]
+
+
+def test_reset_env_aligns_dict_observation_to_loaded_policy_space() -> None:
+    """Policy-analysis reset path should trim extra dict keys for MultiInput PPO."""
+
+    class _Env:
+        def reset(self, *, seed: int):
+            assert seed == 123
+            return (
+                {
+                    "robot_speed": [0.0, 0.0],
+                    "goal_current": [1.0, 0.0],
+                    "robot_velocity_xy": [0.0, 0.0],
+                },
+                {},
+            )
+
+    policy_model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "robot_speed": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                "goal_current": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+            }
+        )
+    )
+    adapter = policy_analysis_run.resolve_policy_obs_adapter(policy_model)
+
+    obs = policy_analysis_run._reset_env(
+        _Env(),
+        seed=123,
+        policy_model=policy_model,
+        policy_obs_adapter=adapter,
+    )
+
+    assert set(obs) == {"robot_speed", "goal_current"}

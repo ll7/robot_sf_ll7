@@ -1,0 +1,91 @@
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [59641, 59642, 59643]
+
+scenarios:
+  - name: start_near_obstacle
+    map_id: atomic_start_near_obstacle_test
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: start_near_obstacle
+      label: start near obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: robustness
+      target_failure_mode: clearance_regression
+      purpose: Test whether the planner can recover from a constrained initial pose near a static obstacle.
+      expected_behavior: Clear the nearby obstacle quickly without collision or long hesitation.
+      expected_pass_criteria: Reach the goal without immediate obstacle contact and without prolonged launch hesitation.
+      failure_modes:
+        - immediate collision on launch
+        - inability to clear initial obstacle
+        - unstable escape oscillation
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: goal_very_close
+    map_id: atomic_goal_close_test
+    simulation_config:
+      max_episode_steps: 120
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: goal_very_close
+      label: goal very close
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: robustness
+      target_failure_mode: goal_termination
+      purpose: Test whether a near-field goal is handled cleanly without overshoot or pointless circling.
+      expected_behavior: Reach the nearby goal promptly with minimal motion and no extra loop.
+      expected_pass_criteria: Terminate at the nearby goal promptly without overshoot loops or timeout.
+      failure_modes:
+        - overshoot
+        - orbiting around goal
+        - failure to terminate near target
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: symmetry_ambiguous_choice
+    map_id: atomic_symmetry_split_test
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: symmetry_ambiguous_choice
+      label: symmetry ambiguous choice
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: robustness
+      target_failure_mode: deadlock
+      purpose: Test whether a symmetric left-right bypass remains stable when both detours are equally valid.
+      expected_behavior: Commit to one side and avoid repeated side switching in the symmetric geometry.
+      expected_pass_criteria: Reach the goal after one committed bypass choice without persistent left-right dithering.
+      failure_modes:
+        - left-right dithering
+        - indecision deadlock
+        - unnecessary path thrashing
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds

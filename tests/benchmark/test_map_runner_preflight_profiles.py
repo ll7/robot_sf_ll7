@@ -229,6 +229,32 @@ def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypat
     assert summary["algorithm_readiness"]["tier"] == "experimental"
 
 
+def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Issue-596 planners must not silently graduate without explicit policy updates."""
+    _patch_lightweight_batch(monkeypatch)
+    out_path = tmp_path / "episodes.jsonl"
+
+    for algo in (
+        "risk_dwa",
+        "mppi_social",
+        "predictive_mppi",
+        "hybrid_portfolio",
+        "stream_gap",
+        "gap_prediction",
+    ):
+        with pytest.raises(ValueError, match="experimental-testing"):
+            map_runner.run_map_batch(
+                [_scenario()],
+                out_path,
+                schema_path=SCHEMA_PATH,
+                algo=algo,
+                benchmark_profile="experimental",
+                resume=False,
+            )
+
+
 def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:
     """Adapter-impact mode should be represented in summary metadata contract."""
     _patch_lightweight_batch(monkeypatch)

@@ -5,17 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW_NOTE = ROOT / "docs" / "context" / "issue_713_batch_first_issue_workflow.md"
+WORKFLOW_NOTE_PATH_STR = "docs/context/issue_713_batch_first_issue_workflow.md"
+WORKFLOW_NOTE = ROOT / WORKFLOW_NOTE_PATH_STR
 SURFACE_PATHS = {
     ROOT / "docs" / "README.md": "./context/issue_713_batch_first_issue_workflow.md",
-    ROOT / "docs" / "dev_guide.md": "docs/context/issue_713_batch_first_issue_workflow.md",
-    ROOT / "AGENTS.md": "docs/context/issue_713_batch_first_issue_workflow.md",
-    ROOT
-    / ".github"
-    / "copilot-instructions.md": "docs/context/issue_713_batch_first_issue_workflow.md",
-    ROOT
-    / "docs"
-    / "project_prioritization.md": "docs/context/issue_713_batch_first_issue_workflow.md",
+    ROOT / "docs" / "dev_guide.md": WORKFLOW_NOTE_PATH_STR,
+    ROOT / "AGENTS.md": WORKFLOW_NOTE_PATH_STR,
+    ROOT / ".github" / "copilot-instructions.md": WORKFLOW_NOTE_PATH_STR,
+    ROOT / "docs" / "project_prioritization.md": WORKFLOW_NOTE_PATH_STR,
 }
 SKILL_PATHS = [
     ROOT / ".codex" / "skills" / "gh-issue-autopilot" / "SKILL.md",
@@ -45,7 +42,7 @@ def test_batch_first_workflow_note_is_linked_from_repo_guidance() -> None:
 
     for path in SKILL_PATHS:
         text = path.read_text(encoding="utf-8")
-        assert "issue_713_batch_first_issue_workflow.md" in text, (
+        assert WORKFLOW_NOTE.relative_to(ROOT).as_posix() in text, (
             f"missing note link in {path.name}"
         )
         assert "batch" in text.lower(), f"missing batch guidance in {path.name}"

@@ -1122,6 +1122,7 @@ Use the following templates for specific tasks.
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - [issue creator skill](../.codex/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
 - [issue template auditor skill](../.codex/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
+- [priority assessor skill](../.codex/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
 - [design doc template](./templates/design-doc-template.md)
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 

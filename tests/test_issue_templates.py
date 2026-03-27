@@ -15,6 +15,7 @@ DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
 SKILL_FILES = [
     ROOT / ".codex" / "skills" / "gh-issue-creator" / "SKILL.md",
     ROOT / ".codex" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
+    ROOT / ".codex" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
 ]
 KNOWN_LABELS = {
     "bug",
@@ -93,6 +94,14 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "../.github/ISSUE_TEMPLATE/issue_default.md" in docs_text
     assert "../.codex/skills/gh-issue-creator/SKILL.md" in docs_text
     assert "../.codex/skills/gh-issue-template-auditor/SKILL.md" in docs_text
+    assert "../.codex/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
+
+    prioritization_text = (ROOT / "docs" / "project_prioritization.md").read_text(encoding="utf-8")
+    assert "Plausibility Checks" in prioritization_text
+    assert "Assessment Workflow" in prioritization_text
+    assert "Expected Duration in Hours" in prioritization_text
+    assert "High `Improvement`" in prioritization_text
+    assert "High `Success Probability`" in prioritization_text
 
     creator_text = SKILL_FILES[0].read_text(encoding="utf-8")
     assert "gh issue create" in creator_text
@@ -110,6 +119,15 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "gh issue view" in auditor_text
     assert "gh issue edit" in auditor_text
     assert "decision-required" in auditor_text
+
+    assessor_text = SKILL_FILES[2].read_text(encoding="utf-8")
+    assert "docs/project_prioritization.md" in assessor_text
+    assert "gh issue view" in assessor_text
+    assert "gh project item-list" in assessor_text
+    assert "gh project item-edit" in assessor_text
+    assert "Priority Score" in assessor_text
+    assert "Estimate Discussion" in assessor_text
+    assert "plausibility" in assessor_text.lower()
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text

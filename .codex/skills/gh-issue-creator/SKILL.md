@@ -51,6 +51,7 @@ assumption you made.
      - effort estimate,
      - complexity estimate,
      - risk assessment,
+     - estimate discussion,
      - definition of done,
      - success metrics,
      - validation/testing.

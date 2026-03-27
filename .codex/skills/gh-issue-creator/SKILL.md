@@ -21,6 +21,7 @@ into a repo-ready issue body with the right template, labels, and project metada
 - `.github/ISSUE_TEMPLATE/planner_integration.md`
 - `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
 - `docs/dev_guide.md`
+- `docs/context/issue_713_batch_first_issue_workflow.md`
 
 ## Template Selection
 
@@ -79,6 +80,8 @@ assumption you made.
      - `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --number <hours>`
      - `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --date <YYYY-MM-DD>`
    - Use the current Project #5 schema; do not invent missing fields.
+   - When creating many issues, batch the project writes after the issue cleanup pass and run
+     score sync once at the end rather than after each issue.
 
 5. Finalize the issue
    - Link dependencies or follow-ups only when they are concrete.

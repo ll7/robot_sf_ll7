@@ -123,6 +123,12 @@ Summary line
 EOF
 ```
 
+For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
+
+- `docs/context/issue_713_batch_first_issue_workflow.md`
+- Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
+- Cache project and field IDs once per shell session instead of rediscovering them for every issue.
+
 On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
 validation wrappers hanging after child processes should have exited. Override with

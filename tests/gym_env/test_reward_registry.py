@@ -13,6 +13,7 @@ from robot_sf.gym_env.reward import (
     simple_ped_reward,
     snqi_step_reward,
     social_quality_v1_reward,
+    stationary_collision_ped_reward,
 )
 
 
@@ -163,12 +164,34 @@ def test_simple_ped_reward_ignores_legacy_robot_goal_flag_without_route_complete
     assert simple_ped_reward(legacy_meta) == simple_ped_reward(base_meta)
 
 
+def test_stationary_collision_ped_reward_only_rewards_stationary_collision() -> None:
+    """Pedestrian collision bonus should apply only when ego pedestrian speed is near zero."""
+    stationary_meta = {
+        "max_sim_steps": 100,
+        "distance_to_robot": 1.5,
+        "is_pedestrian_collision": True,
+        "is_obstacle_collision": False,
+        "is_robot_collision": False,
+        "is_route_complete": False,
+        "ego_ped_speed": 0.0,
+    }
+    moving_meta = dict(stationary_meta)
+    moving_meta["ego_ped_speed"] = 0.2
+
+    stationary_reward = stationary_collision_ped_reward(stationary_meta)
+    moving_reward = stationary_collision_ped_reward(moving_meta)
+
+    assert stationary_reward > moving_reward
+
+
 def test_build_reward_function_accepts_new_aliases_and_rejects_unknown() -> None:
     """Registry should resolve new aliases and reject unsupported names."""
     assert callable(build_reward_function("route_completion"))
     assert callable(build_reward_function("social_quality"))
     assert callable(build_reward_function("simple"))
     assert callable(build_reward_function("punish_action"))
+    assert callable(build_reward_function("stationary_collision_ped"))
+    assert callable(build_reward_function("ped_stationary_collision"))
     try:
         build_reward_function("unknown-reward")
     except ValueError as exc:

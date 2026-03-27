@@ -113,6 +113,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
         # Store reward function
         self.reward_func = reward_func or simple_ped_reward
+        self.logger.info(f"Using reward function: {self.reward_func.__name__}")
 
         self.robot_action_space = None
         self._robot_action_space_valid = True

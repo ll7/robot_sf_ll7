@@ -5,6 +5,7 @@ sensor fusion, and simulation time. It also tracks various conditions such as co
 timeout condition, simulation time elapsed, and timestep count.
 """
 
+import math
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -50,6 +51,7 @@ class PedestrianState:
     is_collision_robot_with_pedestrian: bool = field(init=False, default=False)
     is_timeout: bool = field(init=False, default=False)
     distance_to_robot: float = field(init=False, default=0.0)
+    ego_ped_speed: float = field(init=False, default=0.0)
     sim_time_elapsed: float = field(init=False, default=0.0)
     timestep: int = field(init=False, default=0)
 
@@ -94,6 +96,7 @@ class PedestrianState:
         self.is_collision_robot_with_pedestrian = False
         self.is_timeout = False
         self.distance_to_robot = np.inf
+        self.ego_ped_speed = 0.0
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
@@ -116,6 +119,7 @@ class PedestrianState:
         self.is_collision_robot_with_pedestrian = self.robot_occupancy.is_pedestrian_collision
         self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
+        self.ego_ped_speed = math.hypot(*self.sensors.robot_speed_sensor())
         return self.sensors.next_obs()
 
     def meta_dict(self) -> dict:
@@ -136,6 +140,7 @@ class PedestrianState:
             "is_robot_collision": self.is_collision_with_robot,
             "is_obstacle_collision": self.is_collision_with_obst,
             "distance_to_robot": self.distance_to_robot,
+            "ego_ped_speed": self.ego_ped_speed,
             # For pedestrian-side observations, robot goal completion is a single-stage flag.
             # Emit route/waypoint aliases so downstream consumers can use canonical keys.
             "is_waypoint_complete": self.is_robot_at_goal,

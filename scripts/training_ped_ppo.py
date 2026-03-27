@@ -15,6 +15,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
+from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
@@ -72,6 +73,7 @@ def training(svg_map_path: str):
             robot_model=robot_model,
             debug=False,
             recording_enabled=False,
+            reward_func=simple_ped_reward,
         )
         return env
 

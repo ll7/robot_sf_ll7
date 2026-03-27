@@ -832,7 +832,7 @@ def test_build_policy_for_portfolio_adapters_tracks_feasibility(
         _GapPredictionStub,
     )
 
-    for algo_name in ("risk_dwa", "stream_gap", "gap_prediction", "mppi_social"):
+    for algo_name in ("risk_dwa", "safety_barrier", "stream_gap", "gap_prediction", "mppi_social"):
         policy, meta = _build_policy(
             algo_name,
             {"max_linear_speed": 0.8, "max_angular_speed": 0.5},

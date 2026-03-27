@@ -44,6 +44,21 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["adapted_steps"] == 0
 
 
+def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
+    """Safety-barrier metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="safety_barrier",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "native_barrier_style_safety_filter"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "SafetyBarrierPlannerAdapter"
+
+
 def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
     """ORCA metadata should make the upstream source and projection policy explicit."""
     meta = enrich_algorithm_metadata(

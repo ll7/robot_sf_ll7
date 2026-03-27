@@ -132,6 +132,18 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+For paper-facing benchmark release runs, use the dedicated release wrapper:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+```
+
+Release-process references:
+
+- `docs/benchmark_release_protocol.md`
+- `docs/benchmark_release_reproducibility.md`
+
 ### Benchmark fallback policy
 
 Benchmark work is fail-closed by default. Use the canonical policy note:

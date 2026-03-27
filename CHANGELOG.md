@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Added benchmark release protocol v0.1 surfaces: canonical release manifests for the paper-facing matrix, a `run_benchmark_release.py` entrypoint layered on the camera-ready workflow, release/reproducibility docs, `CITATION.cff`, and a benchmark-focused `RELEASE.md` checklist.
 * Added Project #5 task prioritization support: a documented benchmark-oriented scoring model, a `project_priority_score.py` sync helper, and a GitHub Actions workflow for manual/scheduled/issue-event score synchronization into a numeric `Priority Score` field.
 * Default PR template now prompts for summary, validation/proof, risks/rollout, docs/provenance, and follow-up issues so reviews stay proof-first and easier to act on.
 * Canonical benchmark fallback policy note (`docs/context/issue_691_benchmark_fallback_policy.md`) plus shared availability helpers so benchmark CLI and camera-ready campaigns fail closed on fallback, degraded, skipped, and partial-failure outcomes.

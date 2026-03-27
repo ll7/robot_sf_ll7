@@ -245,6 +245,7 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
     """
 
     ego_ped_config: UnicycleDriveSettings = field(default_factory=UnicycleDriveSettings)
+    ego_ped_lidar_config: LidarScannerSettings | None = None
     spawn_near_robot: bool = True  # Whether to spawn the ego pedestrian near the robot
 
     def __post_init__(self):

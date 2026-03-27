@@ -321,6 +321,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             record_video=self.record_video,
             video_path=self.video_path,
             video_fps=self.video_fps if self.video_fps is not None else 10.0,
+            show_lidar=True,  # Enable lidar visualization in debug mode
         )
 
     def step(self, action):
@@ -449,10 +450,15 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
         # Ego pedestrian LIDAR visualization
         ego_ped_pos = self.simulator.ego_ped_pos
+        ego_ped_lidar_config = (
+            self.config.ego_ped_lidar_config
+            if self.config.ego_ped_lidar_config is not None
+            else self.config.lidar_config
+        )
         distances, directions = lidar_ray_scan(
             self.simulator.ego_ped_pose,
             self.ped_state.ego_ped_occupancy,
-            self.config.lidar_config,
+            ego_ped_lidar_config,
         )
         ego_ped_ray_vecs = render_lidar(ego_ped_pos, distances, directions)
 

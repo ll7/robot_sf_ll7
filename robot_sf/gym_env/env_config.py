@@ -183,6 +183,8 @@ class PedEnvSettings(EnvSettings):
     Attributes:
         ego_ped_config: Control and dynamics settings for the ego pedestrian,
             using unicycle model (forward velocity and angular velocity).
+        ego_ped_lidar_config: Optional separate lidar configuration for the ego pedestrian.
+            When None, uses the default lidar_config.
 
     Note:
         The ego pedestrian's collision radius is automatically synchronized with
@@ -194,6 +196,7 @@ class PedEnvSettings(EnvSettings):
     """
 
     ego_ped_config: UnicycleDriveSettings = field(default_factory=UnicycleDriveSettings)
+    ego_ped_lidar_config: LidarScannerSettings | None = None
     spawn_near_robot: bool = True  # Whether to spawn the ego pedestrian near the robot
 
     def __post_init__(self):

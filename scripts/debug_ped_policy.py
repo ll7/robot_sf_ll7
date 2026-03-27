@@ -11,6 +11,7 @@ from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
 logger = loguru.logger
@@ -30,20 +31,25 @@ def make_env(svg_map_path):
         Pedestrian simulation environment with loaded robot model.
     """
     ped_densities = [0.01, 0.02, 0.04, 0.08]
-    difficulty = 2
+    difficulty = 0
 
     map_definition = convert_map(svg_map_path)
-    robot_model = PPO.load("./model/run_043", env=None)
+    robot_model = PPO.load("./model/run_043", env=None)  # 043, 023
+    # robot_model = PPO.load("./model/ppo_model_retrained_10m_2024-09-17.zip", env=None)
+
+    ego_ped_lidar = LidarScannerSettings.ego_pedestrian_lidar()
 
     config = PedestrianSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
             difficulty=difficulty,
             ped_density_by_difficulty=ped_densities,
-            debug_without_robot_movement=True,
+            debug_without_robot_movement=False,
+            peds_reset_follow_route_at_start=True,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
-        spawn_near_robot=False,
+        spawn_near_robot=True,
+        ego_ped_lidar_config=ego_ped_lidar,
     )
     env = make_pedestrian_env(
         config=config,
@@ -72,7 +78,8 @@ def run():
     creates a pedestrian simulation environment, and runs the model
     for 10000 steps while collecting episode statistics.
     """
-    env = make_env("maps/svg_maps/debug_06.svg")
+    # env = make_env("maps/svg_maps/debug_06.svg")
+    env = make_env("maps/svg_maps/masterthesis/headon.svg")
     filename = get_file()
     # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
     logger.info(f"Loading pedestrian model from {filename}")

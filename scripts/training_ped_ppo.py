@@ -19,6 +19,7 @@ from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.tb_logging import AdversialPedestrianMetricsCallback
 
@@ -53,6 +54,9 @@ def training(svg_map_path: str):
         map_definition = convert_map(svg_map_path)
         robot_model = PPO.load("./model/run_043", env=None)
 
+        # Configure ego pedestrian lidar with longer range and 120 degree view
+        ego_ped_lidar = LidarScannerSettings.ego_pedestrian_lidar()
+
         config = PedestrianSimulationConfig(
             map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
             sim_config=SimulationSettings(
@@ -61,6 +65,7 @@ def training(svg_map_path: str):
             ),
             robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
             spawn_near_robot=True,
+            ego_ped_lidar_config=ego_ped_lidar,
         )
         env = make_pedestrian_env(
             config=config,

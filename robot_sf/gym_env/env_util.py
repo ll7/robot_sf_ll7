@@ -295,12 +295,18 @@ def create_spaces(
     # Get the action space from the agent
     action_space = agent.action_space
 
+    # Select the appropriate lidar config for this agent
+    lidar_config = env_config.lidar_config
+    if agent_type == AgentType.PEDESTRIAN and hasattr(env_config, "ego_ped_lidar_config"):
+        if env_config.ego_ped_lidar_config is not None:  # type: ignore[union-attr]
+            lidar_config = env_config.ego_ped_lidar_config  # type: ignore[union-attr]
+
     # Extend the agent's observation space with additional sensors
     observation_space, orig_obs_space = fused_sensor_space(
         env_config.sim_config.stack_steps,
         agent.observation_space,
         target_sensor_space(map_def.max_target_dist),
-        lidar_sensor_space(env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist),
+        lidar_sensor_space(lidar_config.num_rays, lidar_config.max_scan_dist),
     )
     # If registry-defined sensors are configured, extend spaces with their declared spaces
     sensor_cfgs: list[dict] = getattr(env_config, "sensors", []) or []
@@ -421,6 +427,11 @@ def init_ped_collision_and_sensors(
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
     ego_ped_config = env_config.ego_ped_config
+    ego_ped_lidar_config = (
+        env_config.ego_ped_lidar_config
+        if env_config.ego_ped_lidar_config is not None
+        else lidar_config
+    )
 
     occupancies: list[ContinuousOccupancy | EgoPedContinuousOccupancy] = []
     sensor_fusions: list[SensorFusion] = []
@@ -509,7 +520,7 @@ def init_ped_collision_and_sensors(
         Returns:
             np.ndarray: Ray scan distances from lidar for ego pedestrian.
         """
-        return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
+        return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], ego_ped_lidar_config)[0]
 
     def target_sensor_ego_ped():
         """Capture target/goal sensor observations for the ego pedestrian.

@@ -301,6 +301,42 @@ def test_make_hrvo_policy_wraps_hrvo_adapter():
     assert np.isfinite(w)
 
 
+def test_hrvo_responds_to_static_obstacle_in_grid():
+    """HRVO should incorporate occupied grid cells as static obstacles in its solve."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, orca_obstacle_range=4.0))
+    obs_free = _with_occupancy_grid(_make_obs(goal=(5.0, 0.0), heading=0.0))
+    free_velocity = adapter.plan_velocity_world(obs_free)
+    obs_blocked = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3)],
+    )
+    blocked_velocity = adapter.plan_velocity_world(obs_blocked)
+    assert blocked_velocity[0] < free_velocity[0] or abs(blocked_velocity[1]) > 1e-3
+
+
+def test_hrvo_coalesces_adjacent_static_obstacle_cells():
+    """Adjacent occupied cells should be reduced before entering the HRVO solve."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 1), (2, 2), (2, 3)],
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] < 3
+    assert centers.shape[0] == radii.shape[0]
+    assert centers.shape[0] > 0
+
+
 def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):
     """Head-on bias should inject a turn instead of preserving a straight collision course."""
     adapter = _orca_fallback_adapter(

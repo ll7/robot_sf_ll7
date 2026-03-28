@@ -1318,6 +1318,95 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        dist_sq = np.einsum(
+            "ij,ij->i", result_centers - robot_pos[None, :], result_centers - robot_pos[None, :]
+        )
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1806,6 +1895,94 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        offsets = result_centers - robot_pos[None, :]
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1857,7 +2034,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         if np.any(corner_mask):
             radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
-        return centers, radii
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=resolution,
+        )
 
     def _orca_corner_obstacle_mask(
         self,
@@ -2779,25 +2962,57 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
             time_step = 0.1
 
         ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
-        if ped_count <= 0:
+        if ped_count > 0:
+            cos_h = float(np.cos(robot_heading))
+            sin_h = float(np.sin(robot_heading))
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+            ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+            ped_pref_vel_world = ped_vel_world.copy()
+            ped_radii = np.full((ped_positions.shape[0],), float(ped_radius), dtype=float)
+        else:
+            ped_positions = np.zeros((0, 2), dtype=float)
+            ped_vel_world = np.zeros((0, 2), dtype=float)
+            ped_pref_vel_world = np.zeros((0, 2), dtype=float)
+            ped_radii = np.zeros((0,), dtype=float)
+
+        obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
+            observation,
+            robot_pos,
+            robot_heading,
+        )
+        if obstacle_positions.size:
+            obstacle_offsets = obstacle_positions - robot_pos[None, :]
+            obstacle_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+            obstacle_pref_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+        else:
+            obstacle_offsets = np.zeros((0, 2), dtype=float)
+            obstacle_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_pref_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_radii = np.zeros((0,), dtype=float)
+
+        if ped_positions.size or obstacle_offsets.size:
+            other_positions = np.concatenate(
+                [ped_positions - robot_pos[None, :], obstacle_offsets],
+                axis=0,
+            )
+            other_velocities_world = np.concatenate([ped_vel_world, obstacle_vel_world], axis=0)
+            other_pref_velocities_world = np.concatenate(
+                [ped_pref_vel_world, obstacle_pref_vel_world],
+                axis=0,
+            )
+            other_radii = np.concatenate([ped_radii, obstacle_radii], axis=0)
+        else:
             return preferred_velocity_world
 
-        cos_h = float(np.cos(robot_heading))
-        sin_h = float(np.sin(robot_heading))
-        ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
-        ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
-        ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
-        ped_pref_vel_world = ped_vel_world.copy()
-
-        ped_radii = np.full((ped_positions.shape[0],), float(ped_radius), dtype=float)
         velocity_obstacles = self._build_hrvo_obstacles(
             robot_velocity_world=robot_velocity_world,
             preferred_velocity_world=preferred_velocity_world,
-            other_positions=ped_positions - robot_pos[None, :],
-            other_velocities_world=ped_vel_world,
-            other_pref_velocities_world=ped_pref_vel_world,
+            other_positions=other_positions,
+            other_velocities_world=other_velocities_world,
+            other_pref_velocities_world=other_pref_velocities_world,
             robot_radius=robot_radius,
-            other_radii=ped_radii,
+            other_radii=other_radii,
             time_step=time_step,
         )
         if not velocity_obstacles:

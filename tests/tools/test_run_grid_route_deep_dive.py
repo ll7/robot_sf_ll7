@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 import scripts.validation.run_grid_route_deep_dive as deep_dive
 
 if TYPE_CHECKING:
@@ -20,7 +22,7 @@ def test_manifest_path_label_falls_back_for_external_path(tmp_path: Path) -> Non
 
 
 def test_main_returns_nonzero_when_any_set_errors(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """Return a failing exit code while still writing summary artifacts on set errors."""
@@ -69,3 +71,4 @@ def test_main_returns_nonzero_when_any_set_errors(
     assert payload["overall"]["sets_failed"] == 1
     assert payload["sets"][0]["manifest"] == str(scenario_set)
     assert payload["sets"][0]["status"] == "error"
+    assert payload["sets"][0]["error"] == "not_available: episodes output not written"

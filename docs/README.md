@@ -176,6 +176,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #629 Planner Zoo Research Prompt](./context/issue_629_planner_zoo_research_prompt.md)** - Deep-research prompt, evaluation rubric, and execution sequence for external local planner candidates
 * **[Issue #626 SoNIC Source Harness Probe](./context/issue_626_sonic_source_harness_probe.md)** - Fail-fast source-harness reproduction command, captured SoNIC contract, blocked verdict, and model-only reuse follow-up
 * **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
+* **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 

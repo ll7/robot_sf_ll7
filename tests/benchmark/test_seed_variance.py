@@ -98,6 +98,30 @@ def test_build_seed_variability_rows_adds_confidence_metadata() -> None:
     assert success_summary["ci_half_width"] >= 0.0
 
 
+def test_build_seed_variability_rows_no_bootstrap_ci_uses_group_mean() -> None:
+    """Disabling bootstrap should collapse CI bounds to the across-seed mean."""
+    rows = build_seed_variability_rows(
+        _sample_records(),
+        metrics=("success",),
+        campaign_id="campaign-1",
+        config_hash="cfg-hash",
+        git_hash="git-hash",
+        seed_policy={"mode": "fixed-list", "resolved_seeds": [111, 112]},
+        confidence_settings={
+            "method": "bootstrap_mean_over_seed_means",
+            "confidence": 0.95,
+            "bootstrap_samples": 0,
+            "bootstrap_seed": 7,
+        },
+    )
+
+    success_summary = rows[0]["summary"]["success"]
+    assert success_summary["mean"] == pytest.approx(0.75)
+    assert success_summary["ci_low"] == pytest.approx(0.75)
+    assert success_summary["ci_high"] == pytest.approx(0.75)
+    assert success_summary["ci_half_width"] == pytest.approx(0.0)
+
+
 def test_build_seed_variability_csv_rows_retains_ci_columns() -> None:
     """CSV export should carry CI-bearing aggregate columns for each metric."""
     rows = build_seed_variability_rows(
@@ -139,6 +163,40 @@ def test_build_seed_episode_rows_assigns_repeat_index_deterministically() -> Non
     assert rows[0]["time_to_goal"] == pytest.approx(0.90)
 
 
+def test_build_seed_episode_rows_groups_repeat_index_by_kinematics() -> None:
+    """Repeat indices should restart when the same planner runs under other kinematics."""
+    records = _sample_records() + [
+        {
+            "episode_id": "ep-z",
+            "scenario_id": "classic_crossing_low",
+            "seed": 111,
+            "algo": "orca",
+            "planner_key": "orca",
+            "planner_group": "core",
+            "benchmark_profile": "baseline-safe",
+            "kinematics": "holonomic",
+            "metrics": {
+                "success": 1.0,
+                "collisions": 0.0,
+                "near_misses": 0.0,
+                "time_to_goal_norm": 0.20,
+                "snqi": 0.30,
+            },
+        }
+    ]
+
+    rows = build_seed_episode_rows(records)
+    holonomic_rows = [row for row in rows if row["kinematics"] == "holonomic"]
+    differential_rows = [row for row in rows if row["kinematics"] == "differential_drive"]
+
+    assert len(holonomic_rows) == 1
+    assert holonomic_rows[0]["episode_id"] == "ep-z"
+    assert holonomic_rows[0]["repeat_index"] == 0
+    assert holonomic_rows[0]["success"] == pytest.approx(1.0)
+    assert holonomic_rows[0]["time_to_goal"] == pytest.approx(0.20)
+    assert [row["repeat_index"] for row in differential_rows[:2]] == [0, 1]
+
+
 def test_build_statistical_sufficiency_rows_exposes_half_widths() -> None:
     """Sufficiency rows should surface per-metric CI half-widths and counts."""
     rows = build_seed_variability_rows(
@@ -168,3 +226,4 @@ def test_build_statistical_sufficiency_rows_exposes_half_widths() -> None:
     assert row["metric_half_widths"]["near_miss"] >= 0.0
     assert row["metric_half_widths"]["time_to_goal"] >= 0.0
     assert row["metrics"]["success"]["n"] == pytest.approx(2.0)
+    assert row["kinematics"] == "differential_drive"

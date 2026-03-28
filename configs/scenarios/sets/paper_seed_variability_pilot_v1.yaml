@@ -26,6 +26,7 @@ scenarios:
     robot_config: {}
     metadata:
       archetype: head_on_corridor
+      label: head-on corridor circulation
       density: low
       flow: bi
       groups: 0.0
@@ -44,6 +45,7 @@ scenarios:
     robot_config: {}
     metadata:
       archetype: overtaking
+      label: overtaking corridor circulation
       density: low
       flow: uni
       groups: 0.0
@@ -62,6 +64,7 @@ scenarios:
     robot_config: {}
     metadata:
       archetype: t_intersection
+      label: t-intersection circulation
       density: low
       flow: bi
       groups: 0.0

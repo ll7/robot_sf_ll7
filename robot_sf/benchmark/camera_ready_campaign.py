@@ -2978,14 +2978,15 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "bootstrap_samples": int(cfg.bootstrap_samples),
         "bootstrap_seed": int(cfg.bootstrap_seed),
     }
+    successful_seed_run_entries = [
+        entry for entry in run_entries if str(entry.get("status", "")) == "ok"
+    ]
     seed_source_paths = {
-        "campaign_manifest_path": "campaign_manifest.json",
-        "run_meta_path": "run_meta.json",
+        "campaign_manifest_path": _repo_relative(campaign_root / "campaign_manifest.json"),
+        "run_meta_path": _repo_relative(campaign_root / "run_meta.json"),
         "episodes_paths": [
-            _repo_relative(Path(entry.get("episodes_path", "")))
-            if Path(str(entry.get("episodes_path", ""))).is_absolute()
-            else str(entry.get("episodes_path", ""))
-            for entry in run_entries
+            _repo_relative(Path(str(entry.get("episodes_path", ""))))
+            for entry in successful_seed_run_entries
             if str(entry.get("episodes_path", "")).strip()
         ],
     }

@@ -534,7 +534,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         )
     )
     assert seed_variability_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
-    assert seed_variability_payload["source"]["campaign_manifest_path"] == "campaign_manifest.json"
+    assert seed_variability_payload["source"]["campaign_manifest_path"].endswith(
+        "campaign_manifest.json"
+    )
+    assert seed_variability_payload["source"]["run_meta_path"].endswith("run_meta.json")
+    assert seed_variability_payload["source"]["episodes_paths"]
+    assert all("episodes" in path for path in seed_variability_payload["source"]["episodes_paths"])
     planner_keys = {row["planner_key"] for row in seed_variability_payload["rows"]}
     assert planner_keys == {"goal"}
     success_summary = seed_variability_payload["rows"][0]["summary"]["success"]
@@ -546,6 +551,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
     assert "scenario_id" in seed_episode_rows_csv
     assert "planner_key" in seed_episode_rows_csv
+    assert "kinematics" in seed_episode_rows_csv
     assert "seed" in seed_episode_rows_csv
     assert "repeat_index" in seed_episode_rows_csv
     statistical_sufficiency_payload = json.loads(
@@ -555,6 +561,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         statistical_sufficiency_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
     )
     assert statistical_sufficiency_payload["row_count"] == 1
+    assert statistical_sufficiency_payload["rows"][0]["kinematics"] == "differential_drive"
     assert result["publication_bundle"] is None
     assert "publication_bundle" not in summary_payload
     assert any(

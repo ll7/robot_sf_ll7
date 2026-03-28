@@ -137,10 +137,13 @@ def _bootstrap_mean_ci(
     """
     if not vals:
         return float("nan"), float("nan")
-    if len(vals) == 1 or bootstrap_samples <= 0:
+    if len(vals) == 1:
         value = float(vals[0])
         return value, value
     arr = np.asarray(vals, dtype=float)
+    if bootstrap_samples <= 0:
+        mean = float(np.mean(arr))
+        return mean, mean
     rng = np.random.default_rng(bootstrap_seed)
     indices = rng.integers(0, len(arr), size=(int(bootstrap_samples), len(arr)))
     sampled_means = arr[indices].mean(axis=1)
@@ -420,7 +423,10 @@ def build_seed_episode_rows(
     Returns:
         One flat row per executed episode with deterministic repeat indices.
     """
-    grouped: dict[tuple[str, str, int], list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+    grouped: dict[
+        tuple[str, str, str, int],
+        list[tuple[int, str, dict[str, Any]]],
+    ] = defaultdict(list)
     for index, record in enumerate(records):
         flattened = flatten_metrics(record)
         scenario_id = str(record.get("scenario_id") or "unknown")
@@ -430,19 +436,20 @@ def build_seed_episode_rows(
             or record.get("algo")
             or _get_nested(record, "scenario_params.algo", default="unknown")
         )
+        kinematics = str(record.get("kinematics") or flattened.get("kinematics") or "unknown")
         seed = int(record.get("seed", -1))
-        grouped[(scenario_id, planner_key, seed)].append((index, flattened))
+        grouped[(scenario_id, planner_key, kinematics, seed)].append((index, kinematics, flattened))
 
     rows: list[dict[str, Any]] = []
-    for (_, _, _), group_rows in sorted(grouped.items()):
+    for (_, _, _, _), group_rows in sorted(grouped.items()):
         ordered = sorted(
             group_rows,
             key=lambda item: (
-                str(item[1].get("episode_id", "")),
+                str(item[2].get("episode_id", "")),
                 int(item[0]),
             ),
         )
-        for repeat_index, (_, flat) in enumerate(ordered):
+        for repeat_index, (_, kinematics, flat) in enumerate(ordered):
             rows.append(
                 {
                     "episode_id": flat.get("episode_id"),
@@ -450,6 +457,7 @@ def build_seed_episode_rows(
                     "planner_key": flat.get("planner_key")
                     or _get_nested(flat, "scenario_params.planner_key", default=None)
                     or flat.get("algo"),
+                    "kinematics": kinematics,
                     "algo": flat.get("algo")
                     or _get_nested(flat, "scenario_params.algo", default="unknown"),
                     "seed": flat.get("seed"),
@@ -465,6 +473,7 @@ def build_seed_episode_rows(
         key=lambda row: (
             str(row.get("scenario_id", "")),
             str(row.get("planner_key", "")),
+            str(row.get("kinematics", "")),
             int(row.get("seed", -1) or -1),
             int(row.get("repeat_index", -1) or -1),
         )
@@ -499,6 +508,7 @@ def build_statistical_sufficiency_rows(
             {
                 "scenario_id": row.get("scenario_id"),
                 "planner_key": row.get("planner_key"),
+                "kinematics": row.get("kinematics"),
                 "algo": row.get("algo"),
                 "seed_count": row.get("seed_count"),
                 "episode_count": row.get("episode_count"),

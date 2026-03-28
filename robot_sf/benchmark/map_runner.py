@@ -1386,6 +1386,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
     if hasattr(adapter, "reset"):
         _policy._planner_reset = lambda seed=None: adapter.reset()
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
     return _policy, meta
 
 
@@ -1746,6 +1752,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
+    planner_stats = getattr(policy_fn, "_planner_stats", None)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -1884,6 +1891,14 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
     _finalize_feasibility_metadata(algo_meta)
+    if callable(planner_stats):
+        try:
+            planner_runtime = planner_stats()
+        except (RuntimeError, ValueError, TypeError):
+            logger.debug("Planner stats hook failed", exc_info=True)
+            planner_runtime = None
+        if isinstance(planner_runtime, dict):
+            algo_meta["planner_runtime"] = planner_runtime
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,

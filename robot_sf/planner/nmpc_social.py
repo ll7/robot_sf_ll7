@@ -21,20 +21,24 @@ class NMPCSocialConfig:
     horizon_steps: int = 6
     rollout_dt: float = 0.25
     goal_tolerance: float = 0.25
+    waypoint_switch_distance: float = 0.75
 
     path_goal_weight: float = 1.8
     terminal_goal_weight: float = 4.5
     progress_reward_weight: float = 2.0
-    heading_weight: float = 0.35
-    control_effort_weight: float = 0.05
-    smoothness_weight: float = 0.12
+    heading_weight: float = 0.65
+    control_effort_weight: float = 0.06
+    smoothness_weight: float = 0.2
 
-    pedestrian_clearance_weight: float = 3.8
-    obstacle_clearance_weight: float = 3.2
+    pedestrian_clearance_weight: float = 4.5
+    obstacle_clearance_weight: float = 4.2
     occupancy_cost_weight: float = 1.2
     collision_cost_kappa: float = 10.0
     pedestrian_margin: float = 0.55
     obstacle_margin: float = 0.45
+    desired_obstacle_clearance: float = 0.9
+    min_turn_speed_scale: float = 0.3
+    min_obstacle_speed_scale: float = 0.25
 
     obstacle_threshold: float = 0.5
     obstacle_search_cells: int = 12
@@ -75,6 +79,15 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def reset(self) -> None:
         """Clear any per-episode optimizer warm-start state."""
         self._last_solution: np.ndarray | None = None
+        self._stats = {
+            "calls": 0,
+            "solver_successes": 0,
+            "solver_failures": 0,
+            "fallback_stop_count": 0,
+            "sum_abs_linear": 0.0,
+            "sum_abs_angular": 0.0,
+            "nonzero_command_count": 0,
+        }
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -93,7 +106,13 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.25]), pad=1)[0])
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > self._EPS else goal_current
+        current_distance = float(np.linalg.norm(goal_current - robot_pos))
+        if current_distance > float(self.config.waypoint_switch_distance):
+            goal = goal_current
+        elif np.linalg.norm(goal_next - robot_pos) > self._EPS:
+            goal = goal_next
+        else:
+            goal = goal_current
 
         ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
         ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
@@ -133,6 +152,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         current_speed: float,
         goal_distance: float,
         preferred_turn: float,
+        speed_cap: float,
     ) -> np.ndarray:
         """Build the optimizer initial guess, optionally warm-started from prior solve.
 
@@ -151,12 +171,10 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             return shifted
 
         desired_speed = min(
-            float(self.config.max_linear_speed),
+            float(speed_cap),
             max(0.15, min(goal_distance / max(horizon * float(self.config.rollout_dt), 1e-3), 1.0)),
         )
-        desired_speed = max(
-            desired_speed, min(current_speed + 0.1, float(self.config.max_linear_speed))
-        )
+        desired_speed = max(desired_speed, min(current_speed + 0.1, float(speed_cap)))
         desired_turn = np.clip(
             goal_heading_error / max(horizon * float(self.config.rollout_dt), 1e-3),
             -float(self.config.max_angular_speed),
@@ -173,6 +191,28 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         guess[0::2] = desired_speed
         guess[1::2] = desired_turn
         return guess
+
+    def _speed_cap(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        goal_heading_error: float,
+        observation: dict[str, Any],
+    ) -> float:
+        """Return a conservative per-step speed cap from heading and local clearance.
+
+        Returns:
+            float: Local speed cap in meters per second.
+        """
+        heading_scale = 1.0 - min(abs(goal_heading_error), np.pi / 2.0) / (np.pi / 2.0)
+        heading_scale = max(float(self.config.min_turn_speed_scale), heading_scale)
+        obstacle_clearance = self._min_obstacle_clearance(robot_pos, observation)
+        obstacle_scale = min(
+            1.0,
+            obstacle_clearance / max(float(self.config.desired_obstacle_clearance), 1e-6),
+        )
+        obstacle_scale = max(float(self.config.min_obstacle_speed_scale), obstacle_scale)
+        return float(float(self.config.max_linear_speed) * min(heading_scale, obstacle_scale))
 
     def _predict_pedestrians(
         self, ped_positions: np.ndarray, ped_velocities: np.ndarray, step_idx: int
@@ -362,6 +402,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the first command of the locally optimized NMPC sequence."""
+        self._stats["calls"] = int(self._stats.get("calls", 0)) + 1
         (
             robot_pos,
             heading,
@@ -375,10 +416,16 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_delta = goal - robot_pos
         goal_distance = float(np.linalg.norm(goal_delta))
         if goal_distance <= float(self.config.goal_tolerance):
+            self._record_command(0.0, 0.0)
             return 0.0, 0.0
 
         goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
         goal_heading_error = _wrap_angle(goal_heading - heading)
+        speed_cap = self._speed_cap(
+            robot_pos=robot_pos,
+            goal_heading_error=goal_heading_error,
+            observation=observation,
+        )
         preferred_turn = self._preferred_avoidance_turn(
             robot_pos=robot_pos,
             heading=heading,
@@ -401,12 +448,13 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             current_speed=speed,
             goal_distance=goal_distance,
             preferred_turn=preferred_turn,
+            speed_cap=speed_cap,
         )
         horizon = max(int(self.config.horizon_steps), 1)
         lower = np.empty(horizon * 2, dtype=float)
         upper = np.empty(horizon * 2, dtype=float)
         lower[0::2] = 0.0
-        upper[0::2] = float(self.config.max_linear_speed)
+        upper[0::2] = float(speed_cap)
         lower[1::2] = -float(self.config.max_angular_speed)
         upper[1::2] = float(self.config.max_angular_speed)
 
@@ -423,23 +471,57 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         if not bool(result.success):
             self._last_solution = None
+            self._stats["solver_failures"] = int(self._stats.get("solver_failures", 0)) + 1
             if bool(self.config.fallback_to_stop):
+                self._stats["fallback_stop_count"] = (
+                    int(self._stats.get("fallback_stop_count", 0)) + 1
+                )
+                self._record_command(0.0, 0.0)
                 return 0.0, 0.0
             action = np.asarray(result.x if result.x is not None else x0, dtype=float)
         else:
+            self._stats["solver_successes"] = int(self._stats.get("solver_successes", 0)) + 1
             action = np.asarray(result.x, dtype=float)
             self._last_solution = action.copy()
 
-        return (
-            float(np.clip(action[0], 0.0, float(self.config.max_linear_speed))),
-            float(
-                np.clip(
-                    action[1],
-                    -float(self.config.max_angular_speed),
-                    float(self.config.max_angular_speed),
-                )
-            ),
+        linear = float(np.clip(action[0], 0.0, float(speed_cap)))
+        angular = float(
+            np.clip(
+                action[1],
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
         )
+        self._record_command(linear, angular)
+        return (linear, angular)
+
+    def _record_command(self, linear: float, angular: float) -> None:
+        """Accumulate simple command-level diagnostics for one emitted NMPC action."""
+        self._stats["sum_abs_linear"] = float(self._stats.get("sum_abs_linear", 0.0)) + abs(linear)
+        self._stats["sum_abs_angular"] = float(self._stats.get("sum_abs_angular", 0.0)) + abs(
+            angular
+        )
+        if abs(linear) > self._EPS or abs(angular) > self._EPS:
+            self._stats["nonzero_command_count"] = (
+                int(self._stats.get("nonzero_command_count", 0)) + 1
+            )
+
+    def diagnostics(self) -> dict[str, float | int]:
+        """Return episode-local runtime diagnostics for the planner.
+
+        Returns:
+            dict[str, float | int]: Aggregated solve and command statistics.
+        """
+        calls = max(int(self._stats.get("calls", 0)), 1)
+        return {
+            "calls": int(self._stats.get("calls", 0)),
+            "solver_successes": int(self._stats.get("solver_successes", 0)),
+            "solver_failures": int(self._stats.get("solver_failures", 0)),
+            "fallback_stop_count": int(self._stats.get("fallback_stop_count", 0)),
+            "nonzero_command_count": int(self._stats.get("nonzero_command_count", 0)),
+            "mean_abs_linear": float(self._stats.get("sum_abs_linear", 0.0)) / calls,
+            "mean_abs_angular": float(self._stats.get("sum_abs_angular", 0.0)) / calls,
+        }
 
 
 def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
@@ -457,6 +539,7 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "horizon_steps": int,
         "rollout_dt": float,
         "goal_tolerance": float,
+        "waypoint_switch_distance": float,
         "path_goal_weight": float,
         "terminal_goal_weight": float,
         "progress_reward_weight": float,
@@ -469,6 +552,9 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "collision_cost_kappa": float,
         "pedestrian_margin": float,
         "obstacle_margin": float,
+        "desired_obstacle_clearance": float,
+        "min_turn_speed_scale": float,
+        "min_obstacle_speed_scale": float,
         "obstacle_threshold": float,
         "obstacle_search_cells": int,
         "avoidance_turn_bias_weight": float,

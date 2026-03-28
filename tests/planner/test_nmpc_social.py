@@ -73,6 +73,16 @@ def test_nmpc_social_moves_toward_goal_in_open_space() -> None:
     assert abs(w) <= planner.config.max_angular_speed
 
 
+def test_nmpc_social_prioritizes_current_waypoint_until_close() -> None:
+    """The planner should steer toward the current waypoint before jumping to the next one."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4, solver_max_iterations=12))
+    obs = _obs(robot=(0.0, 0.0), heading=0.0, goal=(3.0, 0.0))
+    obs["goal"]["current"] = np.asarray((0.0, 2.0), dtype=float)
+    obs["goal"]["next"] = np.asarray((3.0, 0.0), dtype=float)
+    _v, w = planner.plan(obs)
+    assert w > 0.05
+
+
 def test_nmpc_social_turns_away_from_head_on_pedestrian() -> None:
     """A head-on pedestrian should produce a non-zero steering command."""
     planner = NMPCSocialPlannerAdapter(
@@ -96,6 +106,7 @@ def test_nmpc_social_reset_clears_warm_start_solution() -> None:
     assert planner._last_solution is not None
     planner.reset()
     assert planner._last_solution is None
+    assert planner.diagnostics()["calls"] == 0
 
 
 def test_nmpc_social_optimizer_failure_stops(monkeypatch) -> None:
@@ -106,3 +117,7 @@ def test_nmpc_social_optimizer_failure_stops(monkeypatch) -> None:
         lambda *args, **kwargs: SimpleNamespace(success=False, x=np.zeros(8, dtype=float)),
     )
     assert planner.plan(_obs(goal=(3.0, 0.0))) == (0.0, 0.0)
+    stats = planner.diagnostics()
+    assert stats["solver_failures"] == 1
+    assert stats["fallback_stop_count"] == 1
+    assert stats["nonzero_command_count"] == 0

@@ -209,3 +209,25 @@ If a separate `sanity-simple` promotion gate is introduced, it should likely exc
 
 Those scenarios are still useful in the broader atomic suite because they surface planner-specific
 failure structure clearly.
+
+## Issue 707 Follow-Up (2026-03-27)
+
+A later tuned ORCA rerun is recorded in:
+
+- `docs/context/issue_707_orca_atomic_tuning.md`
+- `output/benchmarks/camera_ready/issue707_orca_atomic_issue707_orca_atomic_rerun_20260327_222351`
+
+That rerun materially improved several of the failures documented above:
+
+- `head_on_interaction`: improved from `3/3` collisions to `3/3` success
+- `corner_90_turn`: improved from `2/3` collisions to `3/3` success
+- `start_near_obstacle`: improved from `3/3` collisions to `2/3` success
+
+But it did **not** solve every issue:
+
+- `narrow_passage`: unchanged stall / no-success behavior
+- `symmetry_ambiguous_choice`: unchanged stall / no-success behavior
+- `u_trap_local_minimum`: worsened from mixed stall/collision to `3/3` collisions
+
+Interpret the issue-707 tuning as a real ORCA improvement with explicit tradeoffs, not a blanket
+resolution of all issue-596 failure structure.

@@ -132,6 +132,28 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_teb_wires_native_testing_only_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The TEB-inspired key should build the new adapter instead of placeholder sampling."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.4, 0.2)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.TEBCommitmentPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy("teb", {"commit_gain": 0.8})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+    assert (linear, angular) == (0.4, 0.2)
+    assert meta["status"] == "ok"
+    assert meta["policy_semantics"] == "corridor_commitment_local_planner"
+
+
 def test_build_policy_socnav_bench_forwards_allow_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

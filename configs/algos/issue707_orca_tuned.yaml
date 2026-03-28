@@ -1,0 +1,17 @@
+allow_fallback: false
+orca_symmetry_bias: 0.28
+orca_head_on_bias: 0.42
+orca_stall_speed_threshold: 0.14
+orca_stall_progress_epsilon: 0.025
+orca_stall_cycles_before_commit: 2
+orca_commit_persistence_steps: 12
+orca_commit_distance: 1.8
+orca_commit_lateral_gain: 0.55
+orca_forward_probe_distance: 1.15
+orca_side_probe_offset: 0.5
+orca_obstacle_margin: 0.18
+orca_corner_clearance_scale: 1.5
+provenance:
+  issue: 707
+  motivation: "issue_596_orca_atomic_failure_slice"
+  projection_policy: heading_safe_velocity_to_unicycle_vw

@@ -85,6 +85,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
+from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -548,7 +549,7 @@ def _planner_kinematics_compatibility(
     """Return explicit compatibility status for planner/kinematics combinations."""
     algo_key = algo.strip().lower()
     kin = robot_kinematics.strip().lower()
-    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa", "teb"}:
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa"}:
         return (
             False,
             f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
@@ -1270,7 +1271,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"rvo", "dwa", "teb"}:
+    elif algo_key == "teb":
+        adapter = TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config))
+    elif algo_key in {"rvo", "dwa"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
     else:

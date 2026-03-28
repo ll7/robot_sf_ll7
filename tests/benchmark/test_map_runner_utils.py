@@ -132,6 +132,29 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_teb_wires_teb_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The TEB-inspired key should build the new adapter instead of placeholder sampling."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.4, 0.2)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.TEBCommitmentPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy("teb", {"commit_gain": 0.8})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+    assert (linear, angular) == (0.4, 0.2)
+    assert meta["status"] == "ok"
+    assert meta["policy_semantics"] == "corridor_commitment_local_planner"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
 def test_build_policy_socnav_bench_forwards_allow_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1115,6 +1138,91 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(feasibility, dict)
     assert "projection_rate" in feasibility
     assert "infeasible_rate" in feasibility
+
+
+def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Episode start should reset stateful planner adapters before stepping."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, 0.0, True, False, {"success": True}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    reset_calls: list[int] = []
+
+    def _build_policy_stub(*args, **kwargs):
+        _ = args, kwargs
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            _ = obs
+            return 0.0, 0.0
+
+        _policy._planner_reset = lambda seed=None: reset_calls.append(int(seed))
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 1}},
+        seed=7,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert reset_calls == [7]
+    assert record["scenario_id"] == "s1"
 
 
 def test_run_map_episode_does_not_stop_on_waypoint_only_success(

@@ -10,6 +10,7 @@ import yaml
 from robot_sf.training.scenario_loader import (
     _apply_route_overrides,
     build_robot_config_from_scenario,
+    load_scenarios,
     resolve_map_definition,
 )
 
@@ -98,6 +99,24 @@ def test_build_robot_config_from_scenario_supports_route_overrides_file(tmp_path
     _map_name, updated_map = next(iter(config.map_pool.map_defs.items()))
     assert updated_map.robot_routes[0].waypoints == [(4.0, 4.0), (8.0, 8.0), (12.0, 12.0)]
     assert updated_map.ped_routes[0].waypoints == [(5.0, 16.0), (10.0, 10.0), (15.0, 4.0)]
+
+
+def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() -> None:
+    """Included issue-596 archetypes should resolve route override paths into repo-root form."""
+    scenarios = load_scenarios(
+        Path("configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml")
+    )
+    target = next(
+        (item for item in scenarios if item.get("name") == "empty_map_8_directions_east"),
+        None,
+    )
+    assert target is not None, "Scenario 'empty_map_8_directions_east' was not found."
+    route_path = Path(str(target["route_overrides_file"]))
+    assert route_path.is_absolute()
+    assert route_path.as_posix().endswith(
+        "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
+    )
+    assert route_path.exists()
 
 
 def test_build_robot_config_applies_bicycle_robot_overrides() -> None:

@@ -257,6 +257,32 @@ class OccupancyAwarePlannerMixin:
             return 1.0
         return float(grid[channel_idx, row, col])
 
+    def _obstacle_grid_payload(
+        self, observation: dict
+    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
+        """Return validated obstacle-grid payload shared by obstacle-aware planners.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
+            channel, and resolution when available.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta = payload
+        if grid.ndim < 3:
+            return None
+        channel_idx = self._grid_channel_index(meta, "obstacles")
+        if channel_idx < 0:
+            channel_idx = self._grid_channel_index(meta, "combined")
+        if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            return None
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        resolution = float(resolution_arr[0])
+        if resolution <= 0.0:
+            return None
+        return grid, meta, channel_idx, resolution
+
     def _path_penalty(
         self,
         robot_pos: np.ndarray,
@@ -383,6 +409,22 @@ class SocNavPlannerConfig:
     orca_obstacle_max_points: int = 80
     orca_obstacle_radius_scale: float = 1.0
     orca_heading_slowdown: float = 0.2
+    orca_symmetry_bias: float = 0.22
+    orca_head_on_bias: float = 0.32
+    orca_stall_speed_threshold: float = 0.12
+    orca_stall_progress_epsilon: float = 0.03
+    orca_stall_cycles_before_commit: int = 3
+    orca_commit_persistence_steps: int = 10
+    orca_commit_distance: float = 1.6
+    orca_commit_lateral_gain: float = 0.45
+    orca_forward_probe_distance: float = 1.1
+    orca_side_probe_offset: float = 0.45
+    orca_corner_probe_forward_scale: float = 1.5
+    orca_corner_probe_side_scale: float = 1.5
+    orca_head_on_probe_side_scale: float = 1.5
+    orca_stall_nudge_factor: float = 0.15
+    orca_obstacle_margin: float = 0.12
+    orca_corner_clearance_scale: float = 1.35
     social_force_repulsion_weight: float = 0.8
     social_force_desired_speed: float = 1.0
     social_force_tau: float = 0.5
@@ -1280,24 +1322,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._extract_grid_payload(observation)
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        grid, meta = payload
-        if grid.ndim < 3:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        grid, meta, channel_idx, resolution = payload
 
         obstacle_mask = grid[channel_idx] >= float(self.config.social_force_obstacle_threshold)
         if not np.any(obstacle_mask):
@@ -1362,6 +1390,14 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear per-episode commitment and stall tracking state."""
+        self._stall_cycles = 0
+        self._last_goal_distance: float | None = None
+        self._commit_side = 0
+        self._commit_side_ttl = 0
 
     def _ensure_rvo2(self) -> bool:
         """Return True when rvo2 is available, else handle fallback/error behavior.
@@ -1571,6 +1607,15 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         sin_h = np.sin(heading)
         return np.array([cos_h * vec[0] + sin_h * vec[1], -sin_h * vec[0] + cos_h * vec[1]])
 
+    @staticmethod
+    def _side_sign(value: float) -> int:
+        """Return deterministic sign for a scalar."""
+        if value > 0.0:
+            return 1
+        if value < 0.0:
+            return -1
+        return 1
+
     @classmethod
     def _preferred_velocity(
         cls, goal: np.ndarray, robot_pos: np.ndarray, robot_heading: float, max_speed: float
@@ -1765,24 +1810,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._extract_grid_payload(observation)
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        grid, meta = payload
-        if grid.ndim < 3:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        grid, meta, channel_idx, resolution = payload
 
         obstacle_mask = grid[channel_idx] >= float(self.config.orca_obstacle_threshold)
         if not np.any(obstacle_mask):
@@ -1810,8 +1841,249 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         base_radius = (
             0.5 * np.sqrt(2.0) * resolution * float(self.config.orca_obstacle_radius_scale)
         )
-        radii = np.full((centers.shape[0],), base_radius, dtype=float)
+        radii = np.full(
+            (centers.shape[0],),
+            base_radius + float(self.config.orca_obstacle_margin),
+            dtype=float,
+        )
+        corner_mask = self._orca_corner_obstacle_mask(
+            centers=centers,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+        )
+        if np.any(corner_mask):
+            radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
         return centers, radii
+
+    def _orca_corner_obstacle_mask(
+        self,
+        *,
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> np.ndarray:
+        """Return a mask for obstacle points that should receive corner-clearance inflation.
+
+        Returns:
+            np.ndarray: Boolean mask aligned with ``centers``.
+        """
+        if centers.shape[0] == 0:
+            return np.zeros((0,), dtype=bool)
+        forward = self._normalize(np.array([np.cos(robot_heading), np.sin(robot_heading)]))
+        offsets = centers - robot_pos[None, :]
+        forward_dist = offsets @ forward
+        lateral = np.abs(offsets[:, 0] * forward[1] - offsets[:, 1] * forward[0])
+        return (
+            (forward_dist > 0.0)
+            & (
+                forward_dist
+                <= float(self.config.orca_forward_probe_distance)
+                * float(self.config.orca_corner_probe_forward_scale)
+            )
+            & (
+                lateral
+                <= float(self.config.orca_side_probe_offset)
+                * float(self.config.orca_corner_probe_side_scale)
+            )
+        )
+
+    def _direct_path_blocked(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        goal_direction_world: np.ndarray,
+        observation: dict,
+    ) -> bool:
+        """Check whether the immediate forward corridor looks blocked.
+
+        Returns:
+            bool: True when the occupancy probe ahead of the robot is blocked.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return False
+        grid, meta = payload
+        channel = self._preferred_channel(meta)
+        if channel < 0 or channel >= grid.shape[0]:
+            return False
+        forward = self._normalize(goal_direction_world)
+        if np.linalg.norm(forward) < self._EPS:
+            forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        probe_distance = float(self.config.orca_forward_probe_distance)
+        side_offset = float(self.config.orca_side_probe_offset)
+        probe_points = (
+            robot_pos + forward * probe_distance,
+            robot_pos + forward * probe_distance + lateral * side_offset,
+            robot_pos + forward * probe_distance - lateral * side_offset,
+        )
+        values = [self._grid_value(point, grid, meta, channel) for point in probe_points]
+        return max(values, default=0.0) >= float(self.config.orca_obstacle_threshold)
+
+    def _select_commit_side(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        ped_positions: np.ndarray,
+        goal_direction_world: np.ndarray,
+        observation: dict,
+    ) -> int:
+        """Choose a deterministic lateral side for bypassing stalls or symmetry.
+
+        Returns:
+            int: ``1`` for left-bias, ``-1`` for right-bias.
+        """
+        if self._commit_side_ttl > 0 and self._commit_side != 0:
+            return self._commit_side
+
+        forward = self._normalize(goal_direction_world)
+        if np.linalg.norm(forward) < self._EPS:
+            forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        score = float(self.config.orca_symmetry_bias)
+
+        if ped_positions.size:
+            offsets = ped_positions - robot_pos[None, :]
+            forward_dist = offsets @ forward
+            near = (forward_dist > 0.0) & (forward_dist <= float(self.config.orca_commit_distance))
+            if np.any(near):
+                lateral_offsets = offsets[near] @ lateral
+                score += -float(np.sum(lateral_offsets))
+
+        payload = self._extract_grid_payload(observation)
+        if payload is not None:
+            grid, meta = payload
+            channel = self._preferred_channel(meta)
+            if channel >= 0:
+                probe_distance = float(self.config.orca_forward_probe_distance)
+                side_offset = float(self.config.orca_side_probe_offset)
+                left_point = robot_pos + forward * probe_distance + lateral * side_offset
+                right_point = robot_pos + forward * probe_distance - lateral * side_offset
+                left_occ = self._grid_value(left_point, grid, meta, channel)
+                right_occ = self._grid_value(right_point, grid, meta, channel)
+                score += right_occ - left_occ
+
+        side = self._side_sign(score)
+        self._commit_side = side
+        self._commit_side_ttl = max(int(self.config.orca_commit_persistence_steps), 1)
+        return side
+
+    def _update_stall_state(
+        self, *, goal_distance: float, current_speed: float, blocked: bool
+    ) -> bool:
+        """Track repeated low-progress cycles and return whether commit mode should activate.
+
+        Returns:
+            bool: True when the stall counter has crossed the commit threshold.
+        """
+        progress = 0.0
+        if self._last_goal_distance is not None:
+            progress = self._last_goal_distance - goal_distance
+        stalled = current_speed <= float(
+            self.config.orca_stall_speed_threshold
+        ) and progress <= float(self.config.orca_stall_progress_epsilon)
+        if stalled:
+            self._stall_cycles += 1
+        else:
+            self._stall_cycles = 0
+            if self._commit_side_ttl > 0:
+                self._commit_side_ttl -= 1
+            if self._commit_side_ttl <= 0:
+                self._commit_side = 0
+        self._last_goal_distance = goal_distance
+        return self._stall_cycles >= int(self.config.orca_stall_cycles_before_commit)
+
+    def _apply_commit_bias(
+        self,
+        *,
+        preferred_velocity_world: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        ped_positions: np.ndarray,
+        observation: dict,
+        current_speed: float,
+        goal: np.ndarray,
+    ) -> np.ndarray:
+        """Adjust preferred world velocity for head-on, symmetry, and stall cases.
+
+        Returns:
+            np.ndarray: Bias-adjusted preferred world velocity.
+        """
+        goal_direction_world = self._normalize(goal - robot_pos)
+        if np.linalg.norm(goal_direction_world) < self._EPS:
+            return preferred_velocity_world
+
+        blocked = self._direct_path_blocked(
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            goal_direction_world=goal_direction_world,
+            observation=observation,
+        )
+        goal_distance = float(np.linalg.norm(goal - robot_pos))
+        commit_active = self._update_stall_state(
+            goal_distance=goal_distance,
+            current_speed=current_speed,
+            blocked=blocked,
+        )
+        lateral = np.array([-goal_direction_world[1], goal_direction_world[0]], dtype=float)
+        side_sign = 0
+
+        if ped_positions.size:
+            offsets = ped_positions - robot_pos[None, :]
+            forward_dist = offsets @ goal_direction_world
+            lateral_dist = np.abs(offsets @ lateral)
+            head_on = (
+                (forward_dist > 0.0)
+                & (forward_dist <= float(self.config.orca_commit_distance))
+                & (
+                    lateral_dist
+                    <= float(self.config.orca_side_probe_offset)
+                    * float(self.config.orca_head_on_probe_side_scale)
+                )
+            )
+            if np.any(head_on):
+                side_sign = self._select_commit_side(
+                    robot_pos=robot_pos,
+                    robot_heading=robot_heading,
+                    ped_positions=ped_positions,
+                    goal_direction_world=goal_direction_world,
+                    observation=observation,
+                )
+                preferred_velocity_world = preferred_velocity_world + (
+                    lateral
+                    * side_sign
+                    * float(self.config.orca_head_on_bias)
+                    * float(self.config.max_linear_speed)
+                )
+
+        if blocked or commit_active:
+            side_sign = side_sign or self._select_commit_side(
+                robot_pos=robot_pos,
+                robot_heading=robot_heading,
+                ped_positions=ped_positions,
+                goal_direction_world=goal_direction_world,
+                observation=observation,
+            )
+            preferred_velocity_world = preferred_velocity_world + (
+                lateral
+                * side_sign
+                * float(self.config.orca_commit_lateral_gain)
+                * float(self.config.max_linear_speed)
+            )
+            if current_speed <= float(self.config.orca_stall_speed_threshold):
+                preferred_velocity_world = preferred_velocity_world + (
+                    goal_direction_world
+                    * float(self.config.orca_stall_nudge_factor)
+                    * float(self.config.max_linear_speed)
+                )
+
+        speed = np.linalg.norm(preferred_velocity_world)
+        max_speed = float(self.config.max_linear_speed)
+        if speed > max_speed:
+            preferred_velocity_world = preferred_velocity_world / max(speed, self._EPS) * max_speed
+        return preferred_velocity_world
 
     def _solve_orca_velocity(
         self, lines: list[_OrcaLine], preferred_velocity: np.ndarray
@@ -1946,6 +2218,15 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
 
         ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        preferred_velocity_world = self._apply_commit_bias(
+            preferred_velocity_world=preferred_velocity_world,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            ped_positions=ped_positions,
+            observation=observation,
+            current_speed=robot_speed,
+            goal=goal,
+        )
         if ped_count > 0:
             ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
             ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
@@ -2041,6 +2322,16 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         ped_positions, ped_velocities, _ped_count, ped_radius = self._extract_pedestrians(ped_state)
         robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
         robot_velocity = np.array([robot_speed, 0.0], dtype=float)
+        preferred_velocity_world = self._apply_commit_bias(
+            preferred_velocity_world=self._ego_to_world(preferred_velocity, robot_heading),
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            ped_positions=ped_positions,
+            observation=observation,
+            current_speed=robot_speed,
+            goal=goal,
+        )
+        preferred_velocity = self._world_to_ego_vec(preferred_velocity_world, robot_heading)
 
         time_step = float(
             np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]

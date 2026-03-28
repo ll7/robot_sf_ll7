@@ -85,6 +85,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
+from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -548,7 +549,7 @@ def _planner_kinematics_compatibility(
     """Return explicit compatibility status for planner/kinematics combinations."""
     algo_key = algo.strip().lower()
     kin = robot_kinematics.strip().lower()
-    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa", "teb"}:
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa"}:
         return (
             False,
             f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
@@ -877,6 +878,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     if algo_key == "stream_gap":
@@ -912,6 +915,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     if algo_key == "gap_prediction":
@@ -951,6 +956,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     if algo_key == "mppi_social":
@@ -986,6 +993,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     if algo_key == "predictive_mppi":
@@ -1025,6 +1034,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     socnav_cfg = _build_socnav_config(algo_config)
@@ -1270,7 +1281,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"rvo", "dwa", "teb"}:
+    elif algo_key == "teb":
+        adapter = TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config))
+    elif algo_key in {"rvo", "dwa"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
     else:
@@ -1356,6 +1369,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 float(velocity_world[1]),
             )
 
+        if hasattr(adapter, "reset"):
+            _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -1366,6 +1381,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
         )
 
+    if hasattr(adapter, "reset"):
+        _policy._planner_reset = lambda seed=None: adapter.reset()
     return _policy, meta
 
 
@@ -1725,9 +1742,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         adapter_impact_eval=adapter_impact_eval,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
+    planner_reset = getattr(policy_fn, "_planner_reset", None)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
+    if callable(planner_reset):
+        planner_reset(seed=int(seed))
 
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []

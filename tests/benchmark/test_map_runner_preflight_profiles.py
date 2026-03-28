@@ -237,6 +237,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
     out_path = tmp_path / "episodes.jsonl"
 
     for algo in (
+        "hrvo",
         "risk_dwa",
         "mppi_social",
         "predictive_mppi",

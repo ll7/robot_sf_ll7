@@ -76,6 +76,7 @@ from robot_sf.planner.social_navigation_pyenvs_orca import (
     build_social_navigation_pyenvs_orca_config,
 )
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -99,6 +100,7 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_sampling",
     "sampling",
     "orca",
+    "hrvo",
     "sacadrl",
     "prediction_planner",
     "sa_cadrl",
@@ -1231,6 +1233,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
         adapter = SocialNavigationPyEnvsORCAAdapter(
             config=build_social_navigation_pyenvs_orca_config(algo_config)
@@ -1318,6 +1322,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         algo_key
         in {
             "orca",
+            "hrvo",
             "social_force",
             "sf",
             "social_navigation_pyenvs_orca",
@@ -1336,6 +1341,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
                 "coordinates, then forward that world-frame velocity directly into the "
                 "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key == "hrvo":
+            adapter_boundary = (
+                "Run the local HRVO geometry solver in world velocity space, then forward the "
+                "selected world-frame velocity directly into the holonomic vx_vy benchmark "
+                "action space."
             )
         elif algo_key == "social_force":
             adapter_boundary = (

@@ -61,6 +61,26 @@ def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> N
     assert upstream["vendored_path"] == "third_party/python-rvo2"
 
 
+def test_hrvo_metadata_exposes_local_provenance_boundary() -> None:
+    """HRVO metadata should describe the local implementation and its references honestly."""
+    meta = enrich_algorithm_metadata(
+        algo="hrvo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "hybrid_reciprocal_velocity_obstacle"
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/snape/HRVO"
+    assert upstream["provenance_note"] == (
+        "Local implementation informed by upstream references; not a wrapped upstream runtime."
+    )
+
+
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
     """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
     meta = enrich_algorithm_metadata(

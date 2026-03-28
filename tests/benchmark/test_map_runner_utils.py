@@ -232,6 +232,58 @@ def test_build_policy_orca_preserves_provenance_metadata() -> None:
     )
 
 
+def test_build_policy_hrvo_preserves_local_provenance_metadata() -> None:
+    """HRVO metadata should expose its local implementation boundary explicitly."""
+    _, meta = _build_policy(
+        "hrvo",
+        {
+            "allow_testing_algorithms": True,
+            "provenance": {
+                "reference_repo": "https://github.com/snape/HRVO",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["provenance"]["reference_repo"] == "https://github.com/snape/HRVO"
+    assert meta["policy_semantics"] == "hybrid_reciprocal_velocity_obstacle"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+
+
+def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic HRVO should expose an explicit world-frame velocity command payload."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            del config
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic HRVO should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.3, 0.4], dtype=float)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "hrvo",
+        {"allow_testing_algorithms": True},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": 0.3,
+        "vy": 0.4,
+    }
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["projection_policy"] == ("world_velocity_passthrough")
+
+
 def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

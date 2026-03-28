@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -15,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -241,6 +243,62 @@ def test_orca_responds_to_static_obstacle_in_grid(monkeypatch):
     )
     v_blocked, w_blocked = adapter.plan(obs_blocked)
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
+
+
+def test_hrvo_adapter_returns_finite_action():
+    """HRVO adapter should emit a bounded unicycle command."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, max_angular_speed=1.2))
+    obs = _make_obs_with_peds([(1.6, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
+    assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+
+
+def test_hrvo_builds_hybrid_apex_distinct_from_vo_and_rvo():
+    """HRVO should build an asymmetric apex instead of plain VO or midpoint RVO."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, hrvo_time_horizon=4.0))
+    obs = _make_obs_with_peds([(1.5, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    obs["pedestrians"]["velocities"][0] = np.array([-0.8, 0.0], dtype=np.float32)
+    robot_state, goal_state, ped_state = adapter._socnav_fields(obs)
+    robot_pos = np.asarray(robot_state["position"], dtype=float)
+    robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+    goal = np.asarray(goal_state["current"], dtype=float)
+    preferred_velocity = adapter._ego_to_world(
+        adapter._preferred_velocity(
+            goal,
+            robot_pos,
+            robot_heading,
+            float(adapter.config.max_linear_speed),
+        ),
+        robot_heading,
+    )
+    ped_positions, ped_velocities, _ped_count, ped_radius = adapter._extract_pedestrians(ped_state)
+    ped_vel_world = ped_velocities.astype(float)
+    obstacles = adapter._build_hrvo_obstacles(
+        robot_velocity_world=np.zeros(2, dtype=float),
+        preferred_velocity_world=preferred_velocity,
+        other_positions=ped_positions - robot_pos[None, :],
+        other_velocities_world=ped_vel_world,
+        other_pref_velocities_world=ped_vel_world.copy(),
+        robot_radius=float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0]),
+        other_radii=np.full((ped_positions.shape[0],), float(ped_radius), dtype=float),
+        time_step=0.1,
+    )
+    assert len(obstacles) == 1
+    vo_apex = ped_vel_world[0]
+    rvo_apex = 0.5 * ped_vel_world[0]
+    assert not np.allclose(obstacles[0].apex, vo_apex)
+    assert not np.allclose(obstacles[0].apex, rvo_apex)
+    assert abs(float(obstacles[0].apex[1])) > 1e-4
+
+
+def test_make_hrvo_policy_wraps_hrvo_adapter():
+    """Convenience constructor should expose the HRVO adapter."""
+    policy = make_hrvo_policy(SocNavPlannerConfig(max_linear_speed=0.9))
+    obs = _make_obs_with_peds([(1.2, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    v, w = policy.act(obs)
+    assert v >= 0.0
+    assert np.isfinite(w)
 
 
 def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):

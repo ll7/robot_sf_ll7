@@ -2979,15 +2979,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "bootstrap_seed": int(cfg.bootstrap_seed),
     }
     successful_seed_run_entries = [
-        entry for entry in run_entries if str(entry.get("status", "")) == "ok"
+        entry
+        for entry in run_entries
+        if str(entry.get("status", "")) == "ok" and str(entry.get("episodes_path", "")).strip()
     ]
     seed_source_paths = {
         "campaign_manifest_path": _repo_relative(campaign_root / "campaign_manifest.json"),
         "run_meta_path": _repo_relative(campaign_root / "run_meta.json"),
         "episodes_paths": [
-            _repo_relative(Path(str(entry.get("episodes_path", ""))))
+            _repo_relative(campaign_root / str(entry.get("episodes_path", "")))
             for entry in successful_seed_run_entries
-            if str(entry.get("episodes_path", "")).strip()
         ],
     }
     seed_variability_payload = _build_seed_variability_payload(
@@ -3334,6 +3335,18 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "seed_variability": {
             "metrics": list(_SEED_VARIABILITY_METRICS),
             "row_count": int(seed_variability_payload.get("row_count", 0)),
+            "bootstrap_method": str(
+                seed_variability_payload.get("confidence", {}).get("method", "")
+            ),
+            "bootstrap_level": float(
+                seed_variability_payload.get("confidence", {}).get("confidence", 0.0) or 0.0
+            ),
+            "bootstrap_samples": int(
+                seed_variability_payload.get("confidence", {}).get("bootstrap_samples", 0) or 0
+            ),
+            "seed": int(
+                seed_variability_payload.get("confidence", {}).get("bootstrap_seed", 0) or 0
+            ),
         },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
@@ -3366,6 +3379,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+            },
+            "seed_variability": {
+                **dict(run_meta.get("seed_variability") or {}),
             },
         },
     )

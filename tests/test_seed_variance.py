@@ -101,6 +101,29 @@ def test_build_seed_variability_rows_groups_by_scenario_and_planner():
     assert row["provenance"]["campaign_id"] == "cid"
 
 
+def test_build_seed_variability_rows_accepts_missing_seed_policy():
+    """Legacy callers should still work when seed_policy is omitted."""
+    rows = build_seed_variability_rows(
+        [
+            {
+                "episode_id": "s1-a-111",
+                "scenario_id": "s1",
+                "seed": 111,
+                "algo": "ppo",
+                "planner_key": "ppo_candidate",
+                "metrics": {"success": 1.0},
+            }
+        ],
+        metrics=("success",),
+        campaign_id="cid",
+        config_hash="cfg123",
+        git_hash="deadbeef",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["provenance"]["seed_policy"] == {}
+
+
 def test_build_seed_variability_csv_rows_flattens_per_seed_metrics():
     """CSV export should flatten per-seed and across-seed values for downstream paper use."""
     rows = [

@@ -256,7 +256,7 @@ def build_seed_variability_rows(
     campaign_id: str,
     config_hash: str,
     git_hash: str,
-    seed_policy: dict[str, Any],
+    seed_policy: dict[str, Any] | None = None,
     confidence_settings: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build paper-facing seed-variability rows from benchmark episode records.
@@ -265,6 +265,7 @@ def build_seed_variability_rows(
         Aggregate rows grouped by scenario and planner across seeds.
     """
     confidence_settings = dict(confidence_settings or {})
+    seed_policy = dict(seed_policy or {})
     confidence_settings.setdefault("method", _BOOTSTRAP_METHOD)
     confidence_settings.setdefault("confidence", 0.95)
     confidence_settings.setdefault("bootstrap_samples", 0)

@@ -562,6 +562,30 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
     assert statistical_sufficiency_payload["row_count"] == 1
     assert statistical_sufficiency_payload["rows"][0]["kinematics"] == "differential_drive"
+    expected_confidence = seed_variability_payload["confidence"]
+    assert run_meta["seed_variability"]["bootstrap_method"] == expected_confidence["method"]
+    assert run_meta["seed_variability"]["bootstrap_level"] == pytest.approx(
+        expected_confidence["confidence"]
+    )
+    assert (
+        run_meta["seed_variability"]["bootstrap_samples"]
+        == expected_confidence["bootstrap_samples"]
+    )
+    assert run_meta["seed_variability"]["seed"] == expected_confidence["bootstrap_seed"]
+    campaign_manifest = json.loads(
+        (campaign_root / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
+    assert (
+        campaign_manifest["seed_variability"]["bootstrap_method"] == expected_confidence["method"]
+    )
+    assert campaign_manifest["seed_variability"]["bootstrap_level"] == pytest.approx(
+        expected_confidence["confidence"]
+    )
+    assert (
+        campaign_manifest["seed_variability"]["bootstrap_samples"]
+        == expected_confidence["bootstrap_samples"]
+    )
+    assert campaign_manifest["seed_variability"]["seed"] == expected_confidence["bootstrap_seed"]
     assert result["publication_bundle"] is None
     assert "publication_bundle" not in summary_payload
     assert any(

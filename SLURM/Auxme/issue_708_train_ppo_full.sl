@@ -107,6 +107,6 @@ echo "[issue708] TRAIN_CONFIG=${TRAIN_CONFIG}"
 echo "[issue708] ROBOT_SF_ARTIFACT_ROOT=${ROBOT_SF_ARTIFACT_ROOT}"
 echo "[issue708] RESULTS_ROOT=${RESULTS_ROOT}"
 
-srun --kill-on-bad-exit=1 uv run python scripts/training/train_ppo.py \
+uv run python scripts/training/train_ppo.py \
   --config "${TRAIN_CONFIG}" \
   --log-level "${LOG_LEVEL}"

@@ -244,6 +244,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
         "hybrid_portfolio",
         "stream_gap",
         "gap_prediction",
+        "teb",
     ):
         with pytest.raises(ValueError, match="experimental-testing"):
             map_runner.run_map_batch(
@@ -254,6 +255,21 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
                 benchmark_profile="experimental",
                 resume=False,
             )
+
+    algo_cfg_path = tmp_path / "teb_opt_in.yaml"
+    algo_cfg_path.write_text("allow_testing_algorithms: true\n", encoding="utf-8")
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        algo="teb",
+        algo_config_path=str(algo_cfg_path),
+        benchmark_profile="experimental",
+        resume=False,
+    )
+    assert summary["written"] == 1
+    assert summary["algorithm_readiness"]["tier"] == "experimental"
 
 
 def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:

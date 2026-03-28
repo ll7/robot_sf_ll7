@@ -243,6 +243,60 @@ def test_orca_responds_to_static_obstacle_in_grid(monkeypatch):
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
 
 
+def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):
+    """Head-on bias should inject a turn instead of preserving a straight collision course."""
+    adapter = _orca_fallback_adapter(
+        monkeypatch,
+        SocNavPlannerConfig(
+            orca_head_on_bias=0.5,
+            orca_symmetry_bias=0.3,
+            orca_commit_distance=2.5,
+        ),
+    )
+    obs = _make_obs_with_peds([(1.1, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    _v, w = adapter.plan(obs)
+    assert abs(w) > 1e-3
+
+
+def test_orca_stall_commit_bias_turns_when_forward_corridor_is_blocked(monkeypatch):
+    """Repeated low-progress blocked steps should trigger persistent side commitment."""
+    adapter = _orca_fallback_adapter(
+        monkeypatch,
+        SocNavPlannerConfig(
+            orca_stall_cycles_before_commit=1,
+            orca_commit_persistence_steps=4,
+            orca_commit_lateral_gain=0.7,
+            orca_side_probe_offset=0.6,
+            orca_forward_probe_distance=1.0,
+        ),
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3), (2, 2)],
+    )
+    obs["robot"]["speed"] = np.array([0.0], dtype=np.float32)
+    _v1, w1 = adapter.plan(obs)
+    _v2, w2 = adapter.plan(obs)
+    assert abs(w1) > 1e-3 or abs(w2) > 1e-3
+    assert adapter._commit_side_ttl > 0
+
+
+def test_orca_reset_clears_commit_and_stall_state(monkeypatch):
+    """Episode reset should clear ORCA's sticky stall/commit state."""
+    adapter = _orca_fallback_adapter(monkeypatch)
+    adapter._stall_cycles = 3
+    adapter._last_goal_distance = 1.4
+    adapter._commit_side = -1
+    adapter._commit_side_ttl = 7
+
+    adapter.reset()
+
+    assert adapter._stall_cycles == 0
+    assert adapter._last_goal_distance is None
+    assert adapter._commit_side == 0
+    assert adapter._commit_side_ttl == 0
+
+
 def test_orca_adapter_requires_rvo2_when_fallback_disabled(monkeypatch):
     """ORCA adapter should fail fast without fallback if rvo2 is missing."""
     from robot_sf.planner import socnav

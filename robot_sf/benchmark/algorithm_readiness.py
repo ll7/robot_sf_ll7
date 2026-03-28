@@ -169,9 +169,10 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     ),
     AlgorithmReadiness(
         canonical_name="teb",
-        tier="placeholder",
+        tier="experimental",
         aliases=("teb",),
-        note="Placeholder adapter; not benchmark-validated.",
+        note="Native corridor-commitment planner inspired by TEB-style local optimization.",
+        requires_explicit_opt_in=True,
     ),
 )
 

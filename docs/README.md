@@ -116,6 +116,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
 * **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
@@ -177,6 +178,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #629 Planner Zoo Research Prompt](./context/issue_629_planner_zoo_research_prompt.md)** - Deep-research prompt, evaluation rubric, and execution sequence for external local planner candidates
 * **[Issue #626 SoNIC Source Harness Probe](./context/issue_626_sonic_source_harness_probe.md)** - Fail-fast source-harness reproduction command, captured SoNIC contract, blocked verdict, and model-only reuse follow-up
 * **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
+* **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 

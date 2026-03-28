@@ -65,7 +65,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "social_force_reference",
     "rvo": "placeholder_adapter",
     "dwa": "placeholder_adapter",
-    "teb": "placeholder_adapter",
+    "teb": "corridor_commitment_local_planner",
 }
 
 _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -328,7 +328,10 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_native_commands": False,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
-        "default_adapter_name": "SamplingPlannerAdapter",
+        "default_adapter_name": "TEBCommitmentPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_corridor_commitment_unicycle_vw",
+        "projection_documented": True,
     },
 }
 

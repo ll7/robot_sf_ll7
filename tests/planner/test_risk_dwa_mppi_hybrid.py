@@ -231,12 +231,17 @@ class _DummyHead:
     def __init__(self, name: str) -> None:
         self.name = name
         self.calls = 0
+        self.reset_calls = 0
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """Return constant command and count calls."""
         _ = observation
         self.calls += 1
         return (1.0 if self.name == "risk" else 0.5, 0.0)
+
+    def reset(self) -> None:
+        """Track reset propagation from the hybrid adapter."""
+        self.reset_calls += 1
 
 
 def test_hybrid_switches_to_orca_on_emergency_clearance() -> None:
@@ -355,3 +360,29 @@ def test_hybrid_builder_applies_full_subhead_fields() -> None:
     assert abs(build.risk_dwa.progress_escape_speed - 0.9) < 1e-9
     assert abs(build.mppi.smoothness_weight - 0.77) < 1e-9
     assert abs(build.mppi.progress_escape_speed - 0.88) < 1e-9
+
+
+def test_hybrid_reset_clears_hysteresis_and_resets_child_heads() -> None:
+    """Episode reset should clear active-head stickiness and child planner state."""
+    risk = _DummyHead("risk")
+    orca = _DummyHead("orca")
+    pred = _DummyHead("pred")
+    mppi = _DummyHead("mppi")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(hysteresis_steps=3),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=mppi,
+    )
+    hybrid._active_head = "prediction"
+    hybrid._hold_remaining = 2
+
+    hybrid.reset()
+
+    assert hybrid._active_head == "risk_dwa"
+    assert hybrid._hold_remaining == 0
+    assert risk.reset_calls == 1
+    assert orca.reset_calls == 1
+    assert pred.reset_calls == 1
+    assert mppi.reset_calls == 1

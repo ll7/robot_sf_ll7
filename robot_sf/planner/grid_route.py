@@ -309,6 +309,42 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                 return float(distance)
         return float("inf")
 
+    def _route_target(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+        radius: float,
+        grid: np.ndarray,
+        meta: dict[str, Any],
+    ) -> np.ndarray | None:
+        """Resolve the local waypoint target from the occupancy-grid route.
+
+        Returns:
+            np.ndarray | None: Selected waypoint target, or ``None`` when no valid
+            routed target can be determined.
+        """
+        blocked = self._blocked_grid(grid, meta, radius)
+        if blocked is None:
+            return None
+
+        start_rc = self._world_to_grid(robot_pos, meta, (blocked.shape[0], blocked.shape[1]))
+        goal_rc = self._world_to_grid(goal, meta, (blocked.shape[0], blocked.shape[1]))
+        if start_rc is None or goal_rc is None:
+            return None
+
+        free_start = self._nearest_free(blocked, start_rc, int(self.config.clearance_search_cells))
+        free_goal = self._nearest_free(blocked, goal_rc, int(self.config.clearance_search_cells))
+        if free_start is None or free_goal is None:
+            return None
+
+        path = self._astar(blocked, free_start, free_goal)
+        if len(path) < 2:
+            return goal
+
+        waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
+        return self._grid_to_world(path[waypoint_idx], meta)
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a bounded ``(v, omega)`` command from grid routing and waypoint tracking."""
         try:
@@ -330,36 +366,20 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             return linear, angular
 
         grid, meta = payload
-        blocked = self._blocked_grid(grid, meta, radius)
-        if blocked is None:
+        waypoint = self._route_target(
+            robot_pos=robot_pos,
+            goal=goal,
+            radius=radius,
+            grid=grid,
+            meta=meta,
+        )
+        if waypoint is None:
             linear, angular, _heading_error = self._nominal_command(
                 robot_pos=robot_pos,
                 heading=heading,
                 target=goal,
             )
             return linear, angular
-
-        start_rc = self._world_to_grid(robot_pos, meta, (blocked.shape[0], blocked.shape[1]))
-        goal_rc = self._world_to_grid(goal, meta, (blocked.shape[0], blocked.shape[1]))
-        if start_rc is None or goal_rc is None:
-            linear, angular, _heading_error = self._nominal_command(
-                robot_pos=robot_pos,
-                heading=heading,
-                target=goal,
-            )
-            return linear, angular
-
-        free_start = self._nearest_free(blocked, start_rc, int(self.config.clearance_search_cells))
-        free_goal = self._nearest_free(blocked, goal_rc, int(self.config.clearance_search_cells))
-        if free_start is None or free_goal is None:
-            return 0.0, 0.0
-
-        path = self._astar(blocked, free_start, free_goal)
-        if len(path) >= 2:
-            waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
-            waypoint = self._grid_to_world(path[waypoint_idx], meta)
-        else:
-            waypoint = goal
 
         linear, angular, heading_error = self._nominal_command(
             robot_pos=robot_pos,

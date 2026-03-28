@@ -97,11 +97,11 @@ Interpretation:
 
 ### Different planner design contrast
 
-Occupancy-grid route planner (`grid_route_iter2`):
+Occupancy-grid route planner (`grid_route_iter4` retained state):
 - episodes: `18`
 - success rate: `0.7778`
-- collision rate: `0.0556`
-- terminations: `14 success`, `1 collision`, `3 terminated`
+- collision rate: `0.2222`
+- terminations: `14 success`, `4 collision`
 
 Per scenario:
 - `empty_map_8_directions_east`: `3/3` success
@@ -109,7 +109,15 @@ Per scenario:
 - `single_obstacle_rectangle`: `3/3` success
 - `line_wall_detour`: `3/3` success
 - `single_obstacle_circle`: `2/3` success, `1/3` collision
-- `narrow_passage`: `0/3` success, all `terminated`
+- `narrow_passage`: `0/3` success, all `collision`
+
+Earlier route-planner snapshot (`grid_route_iter2`):
+- reached the same `14/18` success ceiling,
+- but failed `narrow_passage` by timeout instead of collision (`1 collision`, `3 terminated` total).
+
+Rejected route-planner refinement (`grid_route_iter3`):
+- line-of-sight waypoint skipping reduced the slice to `11/18`,
+- and turned `line_wall_detour` into `0/3` collision.
 
 Quick config sweep:
 - `obstacle_inflation_cells = 0` produced the same `14/18` result as the default config.
@@ -119,8 +127,9 @@ Interpretation:
 - The route-planning design outperformed the best `safety_barrier` result on the same proof slice.
 - That is strong evidence that the remaining hard cases are topology-sensitive, not just reactive
   steering failures.
-- `narrow_passage` is still unresolved, so the route planner is not ready for broader benchmark
-  claims either, but it is a substantially stronger next direction than continuing to patch the
+- `narrow_passage` is still unresolved, and the exact failure mode there is not yet stable, so the
+  route planner is not ready for broader benchmark claims either.
+- Even with that caveat, it is a substantially stronger next direction than continuing to patch the
   barrier controller.
 
 Reference `risk_dwa` run on the same slice:
@@ -175,6 +184,8 @@ Recommended next focus:
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --output-dir output/validation/safety_barrier_static_slice/issue718_iter17`
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo risk_dwa --algo-config configs/algos/risk_dwa_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/risk_dwa_reference`
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter2`
+- `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter3`
+- `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter4`
 
 Artifacts:
 - `output/validation/safety_barrier_static_slice/issue717_iter3/summary.json`
@@ -193,6 +204,10 @@ Artifacts:
 - `output/validation/safety_barrier_static_slice/risk_dwa_reference/summary.md`
 - `output/validation/safety_barrier_static_slice/grid_route_iter2/summary.json`
 - `output/validation/safety_barrier_static_slice/grid_route_iter2/summary.md`
+- `output/validation/safety_barrier_static_slice/grid_route_iter3/summary.json`
+- `output/validation/safety_barrier_static_slice/grid_route_iter3/summary.md`
+- `output/validation/safety_barrier_static_slice/grid_route_iter4/summary.json`
+- `output/validation/safety_barrier_static_slice/grid_route_iter4/summary.md`
 
 ## Risks / Follow-ups
 

@@ -69,6 +69,30 @@ def test_safety_barrier_stops_at_goal() -> None:
     assert planner.plan(_observation(goal=(0.1, 0.0))) == (0.0, 0.0)
 
 
+def test_safety_barrier_keeps_current_goal_until_waypoint_is_reached() -> None:
+    """Planner should not switch to the next-goal sentinel before reaching the current waypoint."""
+    planner = SafetyBarrierPlannerAdapter(SafetyBarrierPlannerConfig(goal_tolerance=0.25))
+    observation = _observation(goal=(2.0, 0.0))
+    observation["goal"] = {"current": [2.0, 0.0], "next": [0.0, 0.0]}
+
+    linear, angular = planner.plan(observation)
+
+    assert linear > 0.0
+    assert abs(angular) < 0.2
+
+
+def test_safety_barrier_advances_to_next_goal_after_current_waypoint() -> None:
+    """Planner should use the next waypoint once the current waypoint is already satisfied."""
+    planner = SafetyBarrierPlannerAdapter(SafetyBarrierPlannerConfig(goal_tolerance=0.25))
+    observation = _observation(goal=(0.1, 0.0))
+    observation["goal"] = {"current": [0.1, 0.0], "next": [2.0, 0.0]}
+
+    linear, angular = planner.plan(observation)
+
+    assert linear > 0.0
+    assert abs(angular) < 0.2
+
+
 def test_safety_barrier_stops_and_turns_on_immediate_obstacle() -> None:
     """Immediate frontal occupancy should collapse forward speed and trigger recovery turn."""
     planner = SafetyBarrierPlannerAdapter()
@@ -85,6 +109,15 @@ def test_safety_barrier_turns_away_from_more_blocked_side() -> None:
     )
     assert linear >= 0.0
     assert angular < 0.0
+
+
+def test_safety_barrier_reacts_to_shallow_front_right_obstacle() -> None:
+    """A shallow front-right obstacle should trigger an earlier left-turn bias."""
+    planner = SafetyBarrierPlannerAdapter()
+    linear, angular = planner.plan(_observation(occupied_cells=[(8, 13), (9, 13), (10, 14)]))
+
+    assert linear >= 0.0
+    assert angular > 0.0
 
 
 def test_safety_barrier_fails_safe_on_malformed_observation() -> None:

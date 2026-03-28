@@ -19,6 +19,10 @@ from robot_sf.nav.occupancy_grid_utils import ego_to_world
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
+_DEFAULT_GRID_RESOLUTION = 0.2
+_MIN_RESOLUTION = 1e-6
+_ROBOT_RADIUS_MARGIN_CELLS = 1
+
 
 @dataclass
 class GridRoutePlannerConfig:
@@ -124,13 +128,20 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return linear, angular, heading_error
 
-    def _inflate_obstacles(self, blocked: np.ndarray) -> np.ndarray:
+    def _inflate_obstacles(
+        self, blocked: np.ndarray, *, inflation_cells: int | None = None
+    ) -> np.ndarray:
         """Dilate blocked cells by a small integer radius.
 
         Returns:
             np.ndarray: Inflated binary occupancy grid.
         """
-        radius = max(int(self.config.obstacle_inflation_cells), 0)
+        radius = max(
+            int(
+                self.config.obstacle_inflation_cells if inflation_cells is None else inflation_cells
+            ),
+            0,
+        )
         if radius <= 0 or blocked.size == 0:
             return blocked
 
@@ -158,16 +169,15 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             return None
         channel_grid = np.asarray(grid[channel_idx], dtype=float)
         blocked = channel_grid >= float(self.config.obstacle_threshold)
-        resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        dynamic_radius = max(int(np.ceil(radius / max(resolution, 1e-6))) - 1, 0)
-        if dynamic_radius > int(self.config.obstacle_inflation_cells):
-            original = int(self.config.obstacle_inflation_cells)
-            self.config.obstacle_inflation_cells = dynamic_radius
-            try:
-                return self._inflate_obstacles(blocked)
-            finally:
-                self.config.obstacle_inflation_cells = original
-        return self._inflate_obstacles(blocked)
+        resolution = float(
+            self._as_1d_float(meta.get("resolution", [_DEFAULT_GRID_RESOLUTION]), pad=1)[0]
+        )
+        dynamic_radius = max(
+            int(np.ceil(radius / max(resolution, _MIN_RESOLUTION))) - _ROBOT_RADIUS_MARGIN_CELLS,
+            0,
+        )
+        effective_inflation = max(dynamic_radius, int(self.config.obstacle_inflation_cells))
+        return self._inflate_obstacles(blocked, inflation_cells=effective_inflation)
 
     @staticmethod
     def _nearest_free(

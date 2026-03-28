@@ -59,6 +59,21 @@ def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
     assert planner["adapter_name"] == "SafetyBarrierPlannerAdapter"
 
 
+def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
+    """Grid-route metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="grid_route",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "occupancy_grid_route_tracking"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "GridRoutePlannerAdapter"
+
+
 def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
     """ORCA metadata should make the upstream source and projection policy explicit."""
     meta = enrich_algorithm_metadata(

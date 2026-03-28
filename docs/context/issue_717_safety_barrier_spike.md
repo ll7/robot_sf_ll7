@@ -88,7 +88,7 @@ Rejected follow-up redesigns:
 - repulsive obstacle-field steering
 
 Interpretation:
-- none of those variants improved the best known `9/18` static-slice result,
+- none of those variants improved the best-known `9/18` static-slice result,
 - the sampler only matched `9/18` after fixing its activation bug,
 - and the other variants either regressed unit behavior or reduced the slice to `6/18` or
   other worse outcomes.
@@ -171,6 +171,9 @@ Recommended next focus:
 - use `narrow_passage` as the next acceptance gate for any continuation,
 - do not revisit local-reactive `safety_barrier` redesigns without a new, explicit structural
   hypothesis.
+
+Standalone `grid_route` deep-dive note:
+- `docs/context/issue_717_grid_route_deep_dive.md`
 
 ## Validation
 

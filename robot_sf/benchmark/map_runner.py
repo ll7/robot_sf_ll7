@@ -58,6 +58,7 @@ from robot_sf.planner.hybrid_portfolio import (
 )
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
 from robot_sf.planner.mppi_social import MPPISocialPlannerAdapter, build_mppi_social_config
+from robot_sf.planner.nmpc_social import NMPCSocialPlannerAdapter, build_nmpc_social_config
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
@@ -1283,6 +1284,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key == "teb":
         adapter = TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config))
+    elif algo_key in {"nmpc_social", "nmpc"}:
+        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
     elif algo_key in {"rvo", "dwa"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})

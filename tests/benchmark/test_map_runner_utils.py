@@ -155,6 +155,29 @@ def test_build_policy_teb_wires_teb_adapter(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_nmpc_social_wires_nmpc_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The NMPC key should build the native optimizer adapter."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.3, -0.1)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.NMPCSocialPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy("nmpc_social", {"horizon_steps": 4})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+    assert (linear, angular) == (0.3, -0.1)
+    assert meta["status"] == "ok"
+    assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
 def test_build_policy_socnav_bench_forwards_allow_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -244,6 +244,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
         "stream_gap",
         "gap_prediction",
         "teb",
+        "nmpc_social",
     ):
         with pytest.raises(ValueError, match="experimental-testing"):
             map_runner.run_map_batch(

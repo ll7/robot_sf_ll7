@@ -1,0 +1,23 @@
+# Native NMPC-style local planner.
+allow_testing_algorithms: true
+max_linear_speed: 0.95
+max_angular_speed: 1.15
+horizon_steps: 6
+rollout_dt: 0.25
+goal_tolerance: 0.25
+path_goal_weight: 1.9
+terminal_goal_weight: 4.8
+progress_reward_weight: 2.2
+heading_weight: 0.35
+control_effort_weight: 0.05
+smoothness_weight: 0.14
+pedestrian_clearance_weight: 4.0
+obstacle_clearance_weight: 3.3
+occupancy_cost_weight: 1.2
+collision_cost_kappa: 10.0
+pedestrian_margin: 0.55
+obstacle_margin: 0.45
+avoidance_turn_bias_weight: 0.25
+symmetry_break_bias: 0.2
+solver_ftol: 0.001
+solver_max_iterations: 32

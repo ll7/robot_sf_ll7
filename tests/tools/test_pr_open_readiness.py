@@ -77,17 +77,17 @@ def test_pr_ready_freshness_write_then_status_succeeds(tmp_path: Path) -> None:
     assert payload["reason"] == "fresh"
 
 
-def test_pr_ready_freshness_rejects_stale_or_mismatched_head(tmp_path: Path) -> None:
-    """Freshness should fail closed on stale or non-matching evidence."""
+def test_pr_ready_freshness_rejects_mismatched_head(tmp_path: Path) -> None:
+    """Freshness should fail closed on a non-matching head SHA."""
     stamp_path = tmp_path / "ready.json"
-    stale_payload = {
+    payload = {
         "branch": "codex/712-pr-open-skill",
         "base_ref": "origin/main",
         "head_sha": "oldsha",
-        "recorded_at_utc": (datetime.now(UTC) - timedelta(hours=30)).isoformat(),
+        "recorded_at_utc": datetime.now(UTC).isoformat(),
         "status": "passed",
     }
-    stamp_path.write_text(json.dumps(stale_payload), encoding="utf-8")
+    stamp_path.write_text(json.dumps(payload), encoding="utf-8")
 
     result = _run(
         "status",
@@ -105,3 +105,33 @@ def test_pr_ready_freshness_rejects_stale_or_mismatched_head(tmp_path: Path) -> 
     payload = json.loads(result.stdout)
     assert payload["fresh"] is False
     assert payload["reason"] == "head_sha_mismatch"
+
+
+def test_pr_ready_freshness_rejects_stale_stamp(tmp_path: Path) -> None:
+    """Freshness should fail closed on stale evidence."""
+    stamp_path = tmp_path / "ready.json"
+    stale_payload = {
+        "branch": "codex/712-pr-open-skill",
+        "base_ref": "origin/main",
+        "head_sha": "abc123",
+        "recorded_at_utc": (datetime.now(UTC) - timedelta(hours=30)).isoformat(),
+        "status": "passed",
+    }
+    stamp_path.write_text(json.dumps(stale_payload), encoding="utf-8")
+
+    result = _run(
+        "status",
+        "--branch",
+        "codex/712-pr-open-skill",
+        "--head-sha",
+        "abc123",
+        "--base-ref",
+        "origin/main",
+        "--stamp-path",
+        str(stamp_path),
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["fresh"] is False
+    assert payload["reason"] == "expired"

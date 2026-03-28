@@ -100,18 +100,16 @@ def _freshness_result(
         return False, result
 
     result["stamp"] = stamp
-    if str(stamp.get("status")) != "passed":
-        result["reason"] = "status_not_passed"
-        return False, result
-    if str(stamp.get("branch")) != branch:
-        result["reason"] = "branch_mismatch"
-        return False, result
-    if str(stamp.get("base_ref")) != base_ref:
-        result["reason"] = "base_ref_mismatch"
-        return False, result
-    if str(stamp.get("head_sha")) != head_sha:
-        result["reason"] = "head_sha_mismatch"
-        return False, result
+    checks = [
+        ("status", "passed", "status_not_passed"),
+        ("branch", branch, "branch_mismatch"),
+        ("base_ref", base_ref, "base_ref_mismatch"),
+        ("head_sha", head_sha, "head_sha_mismatch"),
+    ]
+    for key, expected, reason in checks:
+        if str(stamp.get(key)) != str(expected):
+            result["reason"] = reason
+            return False, result
 
     try:
         recorded_at = datetime.fromisoformat(str(stamp.get("recorded_at_utc")))

@@ -69,6 +69,14 @@ def _set_paths(args: argparse.Namespace) -> list[Path]:
     return [(args.scenario_dir / name).resolve() for name in DEFAULT_SET_NAMES]
 
 
+def _manifest_path_label(path: Path) -> str:
+    """Return a repo-relative manifest label when possible, else the absolute path."""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _scenario_name(row: dict[str, Any]) -> str:
     scenario_payload = row.get("scenario")
     if isinstance(scenario_payload, dict) and scenario_payload.get("name"):
@@ -204,6 +212,7 @@ def main() -> int:
     set_summaries: list[dict[str, Any]] = []
     for set_path in _set_paths(args):
         set_name = set_path.stem
+        manifest_label = _manifest_path_label(set_path)
         episodes_path = out_dir / set_name / "episodes.jsonl"
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
         if episodes_path.exists():
@@ -235,7 +244,7 @@ def main() -> int:
                 set_summaries.append(
                     {
                         "set_name": set_name,
-                        "manifest": str(set_path.relative_to(ROOT)),
+                        "manifest": manifest_label,
                         "scenario_count": len(scenarios),
                         "status": "error",
                         "error": f"{availability_status}: {availability_reason}",
@@ -247,7 +256,7 @@ def main() -> int:
             set_summaries.append(
                 {
                     "set_name": set_name,
-                    "manifest": str(set_path.relative_to(ROOT)),
+                    "manifest": manifest_label,
                     "scenario_count": len(scenarios),
                     "status": "ok",
                     "batch_summary": batch_summary,
@@ -258,7 +267,7 @@ def main() -> int:
             set_summaries.append(
                 {
                     "set_name": set_name,
-                    "manifest": str(set_path.relative_to(ROOT)),
+                    "manifest": manifest_label,
                     "scenario_count": len(scenarios) if "scenarios" in locals() else 0,
                     "status": "error",
                     "error": f"{type(exc).__name__}: {exc}",
@@ -269,7 +278,7 @@ def main() -> int:
     (out_dir / "summary.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     _write_markdown(payload, out_dir / "summary.md")
     print(json.dumps(payload, indent=2))
-    return 0
+    return 1 if int(payload["overall"]["sets_failed"]) > 0 else 0
 
 
 if __name__ == "__main__":

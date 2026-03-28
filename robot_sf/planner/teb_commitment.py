@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from math import atan2, pi
 from typing import Any
 
@@ -68,7 +68,9 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_positions = ped_positions.reshape(-1, 2)
         if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
             return np.zeros((0, 2), dtype=float)
-        return ped_positions
+        count = int(self._as_1d_float(ped_state.get("count", [ped_positions.shape[0]]), pad=1)[0])
+        count = max(0, min(count, ped_positions.shape[0]))
+        return ped_positions[:count]
 
     def _forward_blocked(
         self, observation: dict[str, Any], robot_pos: np.ndarray, forward: np.ndarray
@@ -201,20 +203,27 @@ def build_teb_commitment_config(cfg: dict[str, Any] | None) -> TEBCommitmentConf
     """
     if not isinstance(cfg, dict):
         return TEBCommitmentConfig()
-    return TEBCommitmentConfig(
-        max_linear_speed=float(cfg.get("max_linear_speed", 0.9)),
-        max_angular_speed=float(cfg.get("max_angular_speed", 1.2)),
-        angular_gain=float(cfg.get("angular_gain", 1.4)),
-        goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
-        probe_distance=float(cfg.get("probe_distance", 1.0)),
-        side_offset=float(cfg.get("side_offset", 0.5)),
-        occupancy_threshold=float(cfg.get("occupancy_threshold", 0.5)),
-        commit_gain=float(cfg.get("commit_gain", 0.6)),
-        commit_persistence_steps=int(cfg.get("commit_persistence_steps", 10)),
-        progress_epsilon=float(cfg.get("progress_epsilon", 0.03)),
-        low_speed_threshold=float(cfg.get("low_speed_threshold", 0.12)),
-        clearance_speed_gain=float(cfg.get("clearance_speed_gain", 0.45)),
-    )
+    defaults = TEBCommitmentConfig()
+    numeric_casts = {
+        "max_linear_speed": float,
+        "max_angular_speed": float,
+        "angular_gain": float,
+        "goal_tolerance": float,
+        "probe_distance": float,
+        "side_offset": float,
+        "occupancy_threshold": float,
+        "commit_gain": float,
+        "commit_persistence_steps": int,
+        "progress_epsilon": float,
+        "low_speed_threshold": float,
+        "clearance_speed_gain": float,
+    }
+    kwargs = {}
+    for field in fields(TEBCommitmentConfig):
+        value = cfg.get(field.name, getattr(defaults, field.name))
+        caster = numeric_casts.get(field.name)
+        kwargs[field.name] = caster(value) if caster is not None else value
+    return TEBCommitmentConfig(**kwargs)
 
 
 __all__ = [

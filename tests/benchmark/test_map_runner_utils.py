@@ -132,7 +132,7 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
-def test_build_policy_teb_wires_native_testing_only_adapter(
+def test_build_policy_teb_wires_teb_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The TEB-inspired key should build the new adapter instead of placeholder sampling."""
@@ -152,6 +152,7 @@ def test_build_policy_teb_wires_native_testing_only_adapter(
     assert (linear, angular) == (0.4, 0.2)
     assert meta["status"] == "ok"
     assert meta["policy_semantics"] == "corridor_commitment_local_planner"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
 def test_build_policy_socnav_bench_forwards_allow_fallback(

@@ -106,7 +106,11 @@ def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() 
     scenarios = load_scenarios(
         Path("configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml")
     )
-    target = next(item for item in scenarios if item.get("name") == "empty_map_8_directions_east")
+    target = next(
+        (item for item in scenarios if item.get("name") == "empty_map_8_directions_east"),
+        None,
+    )
+    assert target is not None, "Scenario 'empty_map_8_directions_east' was not found."
     route_path = Path(str(target["route_overrides_file"]))
     assert route_path.is_absolute()
     assert route_path.as_posix().endswith(

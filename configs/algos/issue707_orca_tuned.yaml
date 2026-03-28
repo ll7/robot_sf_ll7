@@ -9,6 +9,10 @@ orca_commit_distance: 1.8
 orca_commit_lateral_gain: 0.55
 orca_forward_probe_distance: 1.15
 orca_side_probe_offset: 0.5
+orca_corner_probe_forward_scale: 1.5
+orca_corner_probe_side_scale: 1.5
+orca_head_on_probe_side_scale: 1.5
+orca_stall_nudge_factor: 0.15
 orca_obstacle_margin: 0.18
 orca_corner_clearance_scale: 1.5
 provenance:

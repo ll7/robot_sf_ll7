@@ -257,6 +257,32 @@ class OccupancyAwarePlannerMixin:
             return 1.0
         return float(grid[channel_idx, row, col])
 
+    def _obstacle_grid_payload(
+        self, observation: dict
+    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
+        """Return validated obstacle-grid payload shared by obstacle-aware planners.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
+            channel, and resolution when available.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta = payload
+        if grid.ndim < 3:
+            return None
+        channel_idx = self._grid_channel_index(meta, "obstacles")
+        if channel_idx < 0:
+            channel_idx = self._grid_channel_index(meta, "combined")
+        if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            return None
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        resolution = float(resolution_arr[0])
+        if resolution <= 0.0:
+            return None
+        return grid, meta, channel_idx, resolution
+
     def _path_penalty(
         self,
         robot_pos: np.ndarray,
@@ -393,6 +419,10 @@ class SocNavPlannerConfig:
     orca_commit_lateral_gain: float = 0.45
     orca_forward_probe_distance: float = 1.1
     orca_side_probe_offset: float = 0.45
+    orca_corner_probe_forward_scale: float = 1.5
+    orca_corner_probe_side_scale: float = 1.5
+    orca_head_on_probe_side_scale: float = 1.5
+    orca_stall_nudge_factor: float = 0.15
     orca_obstacle_margin: float = 0.12
     orca_corner_clearance_scale: float = 1.35
     social_force_repulsion_weight: float = 0.8
@@ -1284,32 +1314,6 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
-    def _orca_obstacle_grid_payload(
-        self, observation: dict
-    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
-        """Return validated obstacle-grid payload for ORCA obstacle extraction.
-
-        Returns:
-            tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
-            channel, and resolution when available.
-        """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
-            return None
-        grid, meta = payload
-        if grid.ndim < 3:
-            return None
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return None
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return None
-        return grid, meta, channel_idx, resolution
-
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1318,7 +1322,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._orca_obstacle_grid_payload(observation)
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
         grid, meta, channel_idx, resolution = payload
@@ -1802,7 +1806,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._orca_obstacle_grid_payload(observation)
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
         grid, meta, channel_idx, resolution = payload
@@ -1847,32 +1851,6 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
         return centers, radii
 
-    def _orca_obstacle_grid_payload(
-        self, observation: dict
-    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
-        """Return validated obstacle-grid payload for ORCA obstacle extraction.
-
-        Returns:
-            tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
-            channel, and resolution when available.
-        """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
-            return None
-        grid, meta = payload
-        if grid.ndim < 3:
-            return None
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return None
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return None
-        return grid, meta, channel_idx, resolution
-
     def _orca_corner_obstacle_mask(
         self,
         *,
@@ -1893,8 +1871,16 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         lateral = np.abs(offsets[:, 0] * forward[1] - offsets[:, 1] * forward[0])
         return (
             (forward_dist > 0.0)
-            & (forward_dist <= float(self.config.orca_forward_probe_distance) * 1.5)
-            & (lateral <= float(self.config.orca_side_probe_offset) * 1.5)
+            & (
+                forward_dist
+                <= float(self.config.orca_forward_probe_distance)
+                * float(self.config.orca_corner_probe_forward_scale)
+            )
+            & (
+                lateral
+                <= float(self.config.orca_side_probe_offset)
+                * float(self.config.orca_corner_probe_side_scale)
+            )
         )
 
     def _direct_path_blocked(
@@ -1994,7 +1980,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         stalled = current_speed <= float(
             self.config.orca_stall_speed_threshold
         ) and progress <= float(self.config.orca_stall_progress_epsilon)
-        if stalled or blocked:
+        if stalled:
             self._stall_cycles += 1
         else:
             self._stall_cycles = 0
@@ -2047,7 +2033,11 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             head_on = (
                 (forward_dist > 0.0)
                 & (forward_dist <= float(self.config.orca_commit_distance))
-                & (lateral_dist <= float(self.config.orca_side_probe_offset) * 1.5)
+                & (
+                    lateral_dist
+                    <= float(self.config.orca_side_probe_offset)
+                    * float(self.config.orca_head_on_probe_side_scale)
+                )
             )
             if np.any(head_on):
                 side_sign = self._select_commit_side(
@@ -2080,7 +2070,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             )
             if current_speed <= float(self.config.orca_stall_speed_threshold):
                 preferred_velocity_world = preferred_velocity_world + (
-                    goal_direction_world * 0.15 * float(self.config.max_linear_speed)
+                    goal_direction_world
+                    * float(self.config.orca_stall_nudge_factor)
+                    * float(self.config.max_linear_speed)
                 )
 
         speed = np.linalg.norm(preferred_velocity_world)

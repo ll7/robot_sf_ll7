@@ -221,13 +221,31 @@ That rerun materially improved several of the failures documented above:
 
 - `head_on_interaction`: improved from `3/3` collisions to `3/3` success
 - `corner_90_turn`: improved from `2/3` collisions to `3/3` success
-- `start_near_obstacle`: improved from `3/3` collisions to `2/3` success
+- `start_near_obstacle`: improved from `3/3` collisions to `2/3` success, but still kept a
+  `1/3` obstacle collision
 
 But it did **not** solve every issue:
 
 - `narrow_passage`: unchanged stall / no-success behavior
 - `symmetry_ambiguous_choice`: unchanged stall / no-success behavior
 - `u_trap_local_minimum`: worsened from mixed stall/collision to `3/3` collisions
+- `line_wall_detour`: newly regressed to `2/3` obstacle collisions and `1/3` max-steps
+
+The issue-707 changes that drove those tradeoffs were:
+
+- stronger head-on lateral bias and symmetry breaking, which matter because they turn the prior
+  centerline collision cases into decisive bypass behavior,
+- stall-commit persistence and forward-corridor probing, which matter because they help ORCA keep
+  moving through some previously indecisive local interactions,
+- obstacle margin and corner-clearance inflation, which matter because they reduce immediate
+  clipping at constrained starts and inside corners.
+
+The remaining limitation is that the same local-commit machinery still trades one failure mode for
+another on topology-heavy scenes: some cases continue to stall (`narrow_passage`,
+`symmetry_ambiguous_choice`), while others become more collision-prone (`u_trap_local_minimum`,
+`line_wall_detour`) when the commit bias picks a bad side or stays too aggressive near walls.
 
 Interpret the issue-707 tuning as a real ORCA improvement with explicit tradeoffs, not a blanket
-resolution of all issue-596 failure structure.
+resolution of all issue-596 failure structure. See
+`docs/context/issue_707_orca_atomic_tuning.md` for the full regression and benchmark tradeoff
+summary.

@@ -43,8 +43,8 @@ class AdversialPedForceConfig:
     relaxation_time: float = 0.5
     robot_radius: float = 1.0
     activation_threshold: float = 50.0
-    force_multiplier: float = 3.0
-    offset: float = 0.0
+    force_multiplier: float = 4.0
+    offset: float = 3.0
     target_ped_idx: int = -1
 
 
@@ -186,7 +186,7 @@ def adversial_ped_force(  # noqa: PLR0913
         ped_pos = ped_positions[idx]
         distance = euclid_dist(attraction_point, ped_pos)
 
-        if distance > 1e-6:  # avoid division by zero
+        if distance <= threshold and distance > 1:  # avoid division by zero
             # Desired direction
             direction = (attraction_point - ped_pos) / distance
 
@@ -194,4 +194,4 @@ def adversial_ped_force(  # noqa: PLR0913
             v_desired = direction * ped_max_speeds[idx]
 
             # relaxation toward desired velocity
-            out_forces[idx] = v_desired - ped_velocities[idx] / relaxation_time
+            out_forces[idx] = (v_desired - ped_velocities[idx]) / relaxation_time

@@ -51,7 +51,7 @@ def get_model_profile(model_name: str) -> dict:
 
     # Default profile for run_043
     return {
-        "stack_steps": 1,
+        "stack_steps": 3,
         "difficulty": 1,
         "ped_density_by_difficulty": [0.01, 0.02, 0.04, 0.08],
         "robot_config": BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
@@ -155,7 +155,7 @@ def make_env(svg_map_path: str, model_name: str):
 
     map_definition = convert_map(svg_map_path)
 
-    apf_config = AdversialPedForceConfig(is_active=True, offset=10.0)
+    apf_config = AdversialPedForceConfig(is_active=True, offset=5.0)
 
     config = RobotSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
@@ -297,4 +297,4 @@ if __name__ == "__main__":
     # SVG_MAP = "maps/svg_maps/narrow_corridor2.svg"
     SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
 
-    run(SVG_MAP, model_name="run_023")
+    run(SVG_MAP, model_name="run_043")

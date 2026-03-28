@@ -1390,6 +1390,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear per-episode commitment and stall tracking state."""
         self._stall_cycles = 0
         self._last_goal_distance: float | None = None
         self._commit_side = 0

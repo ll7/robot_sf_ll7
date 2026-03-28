@@ -281,6 +281,22 @@ def test_orca_stall_commit_bias_turns_when_forward_corridor_is_blocked(monkeypat
     assert adapter._commit_side_ttl > 0
 
 
+def test_orca_reset_clears_commit_and_stall_state(monkeypatch):
+    """Episode reset should clear ORCA's sticky stall/commit state."""
+    adapter = _orca_fallback_adapter(monkeypatch)
+    adapter._stall_cycles = 3
+    adapter._last_goal_distance = 1.4
+    adapter._commit_side = -1
+    adapter._commit_side_ttl = 7
+
+    adapter.reset()
+
+    assert adapter._stall_cycles == 0
+    assert adapter._last_goal_distance is None
+    assert adapter._commit_side == 0
+    assert adapter._commit_side_ttl == 0
+
+
 def test_orca_adapter_requires_rvo2_when_fallback_disabled(monkeypatch):
     """ORCA adapter should fail fast without fallback if rvo2 is missing."""
     from robot_sf.planner import socnav

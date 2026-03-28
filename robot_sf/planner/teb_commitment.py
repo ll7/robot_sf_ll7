@@ -33,6 +33,7 @@ class TEBCommitmentConfig:
     occupancy_threshold: float = 0.5
     commit_gain: float = 0.6
     commit_persistence_steps: int = 10
+    symmetry_bias: float = 0.1
     progress_epsilon: float = 0.03
     low_speed_threshold: float = 0.12
     clearance_speed_gain: float = 0.45
@@ -46,8 +47,13 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: TEBCommitmentConfig | None = None) -> None:
         """Initialize the planner with optional config overrides."""
         self.config = config or TEBCommitmentConfig()
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear per-episode progress and commitment state."""
         self._last_goal_distance: float | None = None
-        self._commit_side = 1
+        self._last_goal: np.ndarray | None = None
+        self._commit_side = 0
         self._commit_ttl = 0
 
     @staticmethod
@@ -132,8 +138,11 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         observation: dict[str, Any],
     ) -> int:
         if self._commit_ttl > 0:
+            self._commit_ttl -= 1
+        if self._commit_ttl > 0:
             return self._commit_side
-        score = 0.1
+        # Positive score means the left corridor looks more favorable than the right.
+        score = float(self.config.symmetry_bias)
         if ped_positions.size:
             offsets = ped_positions - robot_pos[None, :]
             score += -float(np.sum(offsets @ lateral))
@@ -151,7 +160,7 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
                 score += self._grid_value(right, grid, meta, channel)
                 score -= self._grid_value(left, grid, meta, channel)
         self._commit_side = 1 if score >= 0.0 else -1
-        self._commit_ttl = max(int(self.config.commit_persistence_steps), 1)
+        self._commit_ttl = max(int(self.config.commit_persistence_steps) - 1, 0)
         return self._commit_side
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
@@ -165,6 +174,11 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         robot_speed = float(self._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
         goal = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+        if self._last_goal is not None and np.linalg.norm(goal - self._last_goal) > self._EPS:
+            self._last_goal_distance = None
+            self._commit_side = 0
+            self._commit_ttl = 0
+        self._last_goal = goal.copy()
         goal_delta = goal - robot_pos
         goal_distance = float(np.linalg.norm(goal_delta))
         if goal_distance <= float(self.config.goal_tolerance):
@@ -187,8 +201,6 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
                 observation=observation,
             )
             forward = self._normalize(forward + lateral * side * float(self.config.commit_gain))
-        elif self._commit_ttl > 0:
-            self._commit_ttl -= 1
 
         return self._command_from_heading(
             forward=forward, robot_heading=robot_heading, blocked=blocked
@@ -214,6 +226,7 @@ def build_teb_commitment_config(cfg: dict[str, Any] | None) -> TEBCommitmentConf
         "occupancy_threshold": float,
         "commit_gain": float,
         "commit_persistence_steps": int,
+        "symmetry_bias": float,
         "progress_epsilon": float,
         "low_speed_threshold": float,
         "clearance_speed_gain": float,

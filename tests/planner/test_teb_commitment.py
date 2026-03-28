@@ -44,9 +44,12 @@ def _obs(*, robot=(0.0, 0.0), heading=0.0, speed=0.0, goal=(2.0, 0.0), obstacle_
 
 def test_build_teb_commitment_config_overrides_fields() -> None:
     """Config builder should thread explicit planner settings through."""
-    cfg = build_teb_commitment_config({"commit_gain": 0.9, "probe_distance": 1.4})
+    cfg = build_teb_commitment_config(
+        {"commit_gain": 0.9, "probe_distance": 1.4, "symmetry_bias": -0.25}
+    )
     assert cfg.commit_gain == 0.9
     assert cfg.probe_distance == 1.4
+    assert cfg.symmetry_bias == -0.25
 
 
 def test_teb_commitment_planner_moves_toward_goal_in_open_space() -> None:
@@ -66,3 +69,33 @@ def test_teb_commitment_planner_commits_side_when_blocked() -> None:
     _v, w = planner.plan(obs)
     assert abs(w) > 1e-3
     assert planner._commit_ttl > 0
+
+
+def test_teb_goal_change_resets_commit_state() -> None:
+    """Switching to a new waypoint should drop stale side commitment state."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(commit_gain=0.8, commit_persistence_steps=5)
+    )
+    blocked = _obs(goal=(3.0, 0.0), obstacle_cells=[(2, 3), (2, 2)])
+    planner.plan(blocked)
+    assert planner._commit_ttl > 0
+
+    planner.plan(_obs(goal=(0.0, 3.0)))
+
+    assert planner._commit_ttl == 0
+    assert planner._commit_side == 0
+
+
+def test_teb_blocked_commit_ttl_ages_each_blocked_step() -> None:
+    """Persistent blockage should eventually force a fresh side evaluation."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(commit_gain=0.8, commit_persistence_steps=3, symmetry_bias=0.2)
+    )
+    obs = _obs(goal=(3.0, 0.0), obstacle_cells=[(2, 3), (2, 2)])
+
+    planner.plan(obs)
+    assert planner._commit_ttl == 2
+    planner.plan(obs)
+    assert planner._commit_ttl == 1
+    planner.plan(obs)
+    assert planner._commit_ttl == 2

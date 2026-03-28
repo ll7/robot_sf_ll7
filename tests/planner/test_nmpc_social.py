@@ -9,6 +9,7 @@ import numpy as np
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
     NMPCSocialPlannerAdapter,
+    _RolloutContext,
     build_nmpc_social_config,
 )
 
@@ -97,6 +98,42 @@ def test_nmpc_social_turns_away_from_head_on_pedestrian() -> None:
     )
     assert v >= 0.0
     assert abs(w) > 1e-3
+
+
+def test_nmpc_social_truncates_extra_pedestrian_velocities() -> None:
+    """Velocity rows beyond the active pedestrian count should be ignored, not zero all motion."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig())
+    obs = _obs(
+        ped_positions=[(1.0, 0.0)],
+        ped_velocities=[(-0.2, 0.0), (9.0, 9.0)],
+    )
+    *_prefix, ped_positions, ped_velocities, _robot_radius, _ped_radius = planner._extract_state(
+        obs
+    )
+    assert ped_positions.shape == (1, 2)
+    assert ped_velocities.shape == (1, 2)
+    np.testing.assert_allclose(ped_velocities[0], np.asarray([-0.2, 0.0]))
+
+
+def test_nmpc_social_rollout_cost_respects_context_speed_cap() -> None:
+    """The rollout objective should clip linear speed using the per-step dynamic speed cap."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(max_linear_speed=0.9, horizon_steps=1))
+    obs = _obs(goal=(3.0, 0.0))
+    context = _RolloutContext(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([3.0, 0.0], dtype=float),
+        ped_positions=np.zeros((0, 2), dtype=float),
+        ped_velocities=np.zeros((0, 2), dtype=float),
+        robot_radius=0.25,
+        ped_radius=0.25,
+        observation=obs,
+        speed_cap=0.2,
+    )
+    limited = planner._rollout_cost(np.asarray([0.2, 0.0]), context=context)
+    saturated = planner._rollout_cost(np.asarray([0.9, 0.0]), context=context)
+    assert saturated == limited
 
 
 def test_nmpc_social_reset_clears_warm_start_solution() -> None:

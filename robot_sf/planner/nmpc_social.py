@@ -64,6 +64,7 @@ class _RolloutContext:
     robot_radius: float
     ped_radius: float
     observation: dict[str, Any]
+    speed_cap: float
 
 
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -127,10 +128,10 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         count = int(self._as_1d_float(ped_state.get("count", [ped_positions.shape[0]]), pad=1)[0])
         count = max(0, min(count, ped_positions.shape[0]))
         ped_positions = ped_positions[:count]
-        if ped_velocities.shape[0] != ped_positions.shape[0]:
+        if ped_velocities.shape[0] < ped_positions.shape[0]:
             ped_velocities = np.zeros_like(ped_positions)
         else:
-            ped_velocities = ped_velocities[:count]
+            ped_velocities = ped_velocities[: ped_positions.shape[0]]
         ped_radius = float(
             self._as_1d_float(ped_state.get("radius", [0.25]), pad=1, default=0.25)[0]
         )
@@ -344,7 +345,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_velocities=context.ped_velocities,
         )
         for step_idx, (v_raw, w_raw) in enumerate(controls):
-            v = float(np.clip(v_raw, 0.0, float(self.config.max_linear_speed)))
+            v = float(np.clip(v_raw, 0.0, float(context.speed_cap)))
             w = float(
                 np.clip(
                     w_raw,
@@ -442,6 +443,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             robot_radius=robot_radius,
             ped_radius=ped_radius,
             observation=observation,
+            speed_cap=speed_cap,
         )
         x0 = self._initial_guess(
             goal_heading_error=goal_heading_error,

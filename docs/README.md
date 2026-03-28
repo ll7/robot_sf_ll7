@@ -268,7 +268,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
-* **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
+* **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, station-platform, and group crossing archetypes for benchmark coverage.
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
   scenario matrix in [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml).
 * **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).

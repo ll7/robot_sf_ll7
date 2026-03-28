@@ -116,6 +116,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
 * **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
 * **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership

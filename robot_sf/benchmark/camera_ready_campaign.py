@@ -35,8 +35,10 @@ from robot_sf.benchmark.fallback_policy import (
 )
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
+    build_seed_episode_rows,
     build_seed_variability_csv_rows,
     build_seed_variability_rows,
+    build_statistical_sufficiency_rows,
 )
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
@@ -83,14 +85,8 @@ _REPORT_METRICS: tuple[str, ...] = (
 _SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "success",
     "collisions",
-    "ped_collision_count",
-    "obstacle_collision_count",
-    "total_collision_count",
     "near_misses",
     "time_to_goal_norm",
-    "path_efficiency",
-    "comfort_exposure",
-    "jerk_mean",
     "snqi",
 )
 _PLANNER_GROUPS = {"core", "experimental"}
@@ -1167,6 +1163,8 @@ def _build_seed_variability_payload(
     config_hash: str,
     git_hash: str,
     seed_policy: dict[str, Any],
+    confidence_settings: dict[str, Any],
+    source_paths: dict[str, Any],
 ) -> dict[str, Any]:
     """Build paper-facing seed-variability export payload from campaign episodes.
 
@@ -1180,12 +1178,15 @@ def _build_seed_variability_payload(
         config_hash=config_hash,
         git_hash=git_hash,
         seed_policy=seed_policy,
+        confidence_settings=confidence_settings,
     )
     return {
         "schema_version": "benchmark-seed-variability-by-scenario.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": generated_at_utc,
         "metrics": list(_SEED_VARIABILITY_METRICS),
+        "confidence": dict(confidence_settings),
+        "source": source_paths,
         "row_count": len(rows),
         "rows": rows,
     }
@@ -1209,6 +1210,59 @@ def _write_seed_variability_artifacts(
     )
     _write_csv(csv_path, csv_rows)
     return json_path, csv_path
+
+
+def _write_seed_episode_rows_artifact(
+    reports_dir: Path,
+    rows: list[dict[str, Any]],
+) -> Path:
+    """Write flat planner-aware per-episode seed traceability CSV.
+
+    Returns:
+        Path to the generated CSV artifact.
+    """
+    csv_path = reports_dir / "seed_episode_rows.csv"
+    _write_csv(csv_path, rows)
+    return csv_path
+
+
+def _build_statistical_sufficiency_payload(
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+    seed_variability_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a thin statistical-sufficiency summary from seed-variability rows.
+
+    Returns:
+        JSON-serializable statistical sufficiency payload.
+    """
+    rows = build_statistical_sufficiency_rows(
+        seed_variability_payload.get("rows") or [],
+        metrics=seed_variability_payload.get("metrics") or [],
+    )
+    return {
+        "schema_version": "benchmark-seed-statistical-sufficiency.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "confidence": dict(seed_variability_payload.get("confidence") or {}),
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_statistical_sufficiency_artifact(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> Path:
+    """Write statistical sufficiency JSON artifact.
+
+    Returns:
+        Path to the generated JSON artifact.
+    """
+    json_path = reports_dir / "statistical_sufficiency.json"
+    _write_json(json_path, payload)
+    return json_path
 
 
 def _scenario_family_from_scenario(scenario: dict[str, Any]) -> str:
@@ -2918,6 +2972,24 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
     benchmark_success = len(run_entries) > 0 and successful_runs == len(run_entries)
+    confidence_settings = {
+        "method": "bootstrap_mean_over_seed_means",
+        "confidence": float(cfg.bootstrap_confidence),
+        "bootstrap_samples": int(cfg.bootstrap_samples),
+        "bootstrap_seed": int(cfg.bootstrap_seed),
+    }
+    successful_seed_run_entries = [
+        entry for entry in run_entries if str(entry.get("status", "")) == "ok"
+    ]
+    seed_source_paths = {
+        "campaign_manifest_path": _repo_relative(campaign_root / "campaign_manifest.json"),
+        "run_meta_path": _repo_relative(campaign_root / "run_meta.json"),
+        "episodes_paths": [
+            _repo_relative(Path(str(entry.get("episodes_path", ""))))
+            for entry in successful_seed_run_entries
+            if str(entry.get("episodes_path", "")).strip()
+        ],
+    }
     seed_variability_payload = _build_seed_variability_payload(
         seed_variability_records,
         campaign_id=campaign_id,
@@ -2929,10 +3001,23 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "seed_set": cfg.seed_policy.seed_set,
             "resolved_seeds": list(resolved_seeds),
         },
+        confidence_settings=confidence_settings,
+        source_paths=seed_source_paths,
     )
     seed_variability_json_path, seed_variability_csv_path = _write_seed_variability_artifacts(
         reports_dir,
         seed_variability_payload,
+    )
+    seed_episode_rows = build_seed_episode_rows(seed_variability_records)
+    seed_episode_rows_csv_path = _write_seed_episode_rows_artifact(reports_dir, seed_episode_rows)
+    statistical_sufficiency_payload = _build_statistical_sufficiency_payload(
+        campaign_id=campaign_id,
+        generated_at_utc=campaign_finished_at_utc,
+        seed_variability_payload=seed_variability_payload,
+    )
+    statistical_sufficiency_json_path = _write_statistical_sufficiency_artifact(
+        reports_dir,
+        statistical_sufficiency_payload,
     )
     release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
@@ -3142,6 +3227,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             ),
             "seed_variability_json": _repo_relative(seed_variability_json_path),
             "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -3230,6 +3317,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             ),
             "seed_variability_json": _repo_relative(seed_variability_json_path),
             "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
         },
         "snqi_artifacts": {
             "diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
@@ -3239,6 +3328,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "seed_variability_artifacts": {
             "json": _repo_relative(seed_variability_json_path),
             "csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
         },
         "seed_variability": {
             "metrics": list(_SEED_VARIABILITY_METRICS),
@@ -3270,6 +3361,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 **dict(manifest_payload.get("artifacts") or {}),
                 "seed_variability_json": _repo_relative(seed_variability_json_path),
                 "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+                "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+                "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
@@ -3307,6 +3400,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "matrix_summary_csv": str(matrix_summary_csv_path),
         "seed_variability_json": str(seed_variability_json_path),
         "seed_variability_csv": str(seed_variability_csv_path),
+        "seed_episode_rows_csv": str(seed_episode_rows_csv_path),
+        "statistical_sufficiency_json": str(statistical_sufficiency_json_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
         "benchmark_success": benchmark_success,

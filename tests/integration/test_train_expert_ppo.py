@@ -11,16 +11,20 @@ import pytest
 import yaml
 
 from robot_sf import common
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 from scripts.training.train_ppo import (
+    _apply_env_overrides,
     _BestCheckpointCandidate,
     _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
     _describe_num_envs_resolution,
+    _deterministic_eval_seed_for_episode,
     _DirectWandbMetricsCallback,
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
@@ -77,6 +81,12 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     )
     assert isinstance(training_payload.get("perf_summary_path"), str)
     assert training_payload["perf_summary_path"].startswith("benchmarks/ppo_imitation/perf/")
+    assert isinstance(training_payload.get("eval_per_scenario_path"), str)
+    assert training_payload["eval_per_scenario_path"].startswith(
+        "benchmarks/ppo_imitation/eval_by_scenario/"
+    )
+    assert isinstance(training_payload.get("evaluation_scenario_config"), str)
+    assert training_payload["evaluation_scenario_config"].startswith("configs/")
     notes = training_payload.get("notes", [])
     assert any(str(note).startswith("snqi_formula=") for note in notes)
     assert any(str(note).startswith("snqi_weights_source=") for note in notes)
@@ -86,6 +96,8 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert any(log_dir.glob("episodes/*.jsonl"))
     assert any(log_dir.glob("eval_timeline/*.json"))
     assert any(log_dir.glob("eval_timeline/*.csv"))
+    assert any(log_dir.glob("eval_by_scenario/*.json"))
+    assert any(log_dir.glob("eval_by_scenario/*.csv"))
     assert any(log_dir.glob("perf/*.json"))
 
 
@@ -182,6 +194,205 @@ def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path)
 
     config = load_expert_training_config(config_path)
     assert config.randomize_seeds is False
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_allows_eval_seed_randomness_override(tmp_path) -> None:
+    """Evaluation seed handling should be independently configurable."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_override.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_override_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "randomize_seeds": False,
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_supports_eval_scenario_config(tmp_path) -> None:
+    """Evaluation surface overrides should resolve independently from training scenarios."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    eval_scenario_config = Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml").resolve()
+    config_path = tmp_path / "eval_surface_override.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_surface_override_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 350,
+                    "hold_out_scenarios": [],
+                    "randomize_seeds": False,
+                    "scenario_config": str(eval_scenario_config),
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.scenario_config == scenario_config
+    assert config.evaluation.scenario_config == eval_scenario_config
+
+
+def test_load_expert_training_config_inherits_eval_seed_randomness_by_default(
+    tmp_path,
+) -> None:
+    """Evaluation randomness should inherit the legacy top-level flag when omitted."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_inherit.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_inherit_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is True
+
+
+@pytest.mark.parametrize(
+    ("episode_idx", "expected_seed"),
+    [
+        (0, 11),
+        (69, 11),
+        (70, 17),
+        (139, 17),
+        (140, 29),
+        (209, 29),
+        (210, 11),
+    ],
+)
+def test_deterministic_eval_seed_schedule_advances_per_full_scenario_cycle(
+    episode_idx: int, expected_seed: int
+) -> None:
+    """Deterministic eval should cover all scenarios before advancing to the next seed block."""
+    config = ExpertTrainingConfig(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(11, 17, 29),
+        total_timesteps=1000,
+        policy_id="ppo_eval_seed_schedule_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=100,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=350,
+            hold_out_scenarios=(),
+            step_schedule=((None, 20_000),),
+            randomize_seeds=False,
+        ),
+    )
+
+    assert (
+        _deterministic_eval_seed_for_episode(
+            config,
+            episode_idx=episode_idx,
+            scenario_cycle_length=70,
+        )
+        == expected_seed
+    )
+
+
+def test_full_maintained_eval_manifest_loads_unique_scenarios() -> None:
+    """The maintained eval surface should expose one unique row per maintained positive scenario."""
+    scenarios = load_scenarios(Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"))
+    scenario_ids = [
+        str(scenario.get("name") or scenario.get("scenario_id")) for scenario in scenarios
+    ]
+
+    assert len(scenarios) == 70
+    assert len(set(scenario_ids)) == 70
+
+
+def test_issue_708_predictive_foresight_override_enables_predictive_observation() -> None:
+    """The issue-708 config should now expose predictive foresight features on reset."""
+    config_path = Path(
+        "configs/training/ppo/expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml"
+    ).resolve()
+    config = load_expert_training_config(config_path)
+    scenario = load_scenarios(config.scenario_config)[0]
+    env_config = build_robot_config_from_scenario(scenario, scenario_path=config.scenario_config)
+
+    assert getattr(env_config, "predictive_foresight_enabled", False) is False
+    _apply_env_overrides(env_config, config.env_overrides)
+    assert getattr(env_config, "predictive_foresight_enabled", False) is True
+
+    env = make_robot_env(
+        config=env_config,
+        seed=config.seeds[0],
+        suite_name="ppo_issue738_smoke",
+        scenario_name="issue738_smoke",
+        algorithm_name=config.policy_id,
+        **config.env_factory_kwargs,
+    )
+    try:
+        obs, _ = env.reset()
+    finally:
+        env.close()
+
+    predictive_keys = sorted(key for key in obs if str(key).startswith("predictive_"))
+    assert predictive_keys == [
+        "predictive_crossing_count",
+        "predictive_flow_alignment",
+        "predictive_gap_scores",
+        "predictive_min_clearance",
+        "predictive_ttc_risk",
+        "predictive_uncertainty",
+    ]
 
 
 def test_load_expert_training_config_defaults_best_checkpoint_metric_to_success_rate(

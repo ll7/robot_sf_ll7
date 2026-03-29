@@ -100,6 +100,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
+* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Canonical issue-708 PPO retrain config, SLURM submission path, deterministic eval surface, and promotion checklist.
 * **[Predictive Planner Complete Tutorial](./training/predictive_planner_complete_tutorial.md)** - Full concept-to-code tutorial (model, scoring, risk-adaptive search, diagnostics, and reproducibility)
 * **[DreamerV3 RLlib Runbook (`drive_state` + `rays`)](./training/dreamerv3_rllib_drive_state_rays.md)** - Config-first training flow for RLlib DreamerV3 without image observations.
 * **[Global Planner Quickstart (WIP)](../specs/342-svg-global-planner/quickstart.md)** - Placeholder for the upcoming SVG-based global planner documentation and examples.

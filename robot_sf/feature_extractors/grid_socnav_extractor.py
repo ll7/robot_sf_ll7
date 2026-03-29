@@ -16,12 +16,14 @@ if TYPE_CHECKING:
 class GridSocNavExtractor(BaseFeaturesExtractor):
     """CNN+MLP extractor for occupancy grid plus flattened SocNav inputs."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         observation_space: spaces.Dict,
         *,
         grid_key: str = "occupancy_grid",
         exclude_prefixes: tuple[str, ...] = ("occupancy_grid_meta_",),
+        include_socnav_keys: list[str] | tuple[str, ...] | None = None,
+        exclude_socnav_keys: list[str] | tuple[str, ...] | None = None,
         grid_channels: list[int] | None = None,
         grid_kernel_sizes: list[int] | None = None,
         socnav_hidden_dims: list[int] | None = None,
@@ -48,11 +50,23 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         if len(grid_space.shape) != 3:
             raise ValueError("Grid observation must be shaped (C, H, W).")
 
+        exclude_key_set = set(exclude_socnav_keys or ())
         socnav_keys = [
             key
             for key in observation_space.spaces.keys()
-            if key != grid_key and not any(key.startswith(prefix) for prefix in exclude_prefixes)
+            if key != grid_key
+            and not any(key.startswith(prefix) for prefix in exclude_prefixes)
+            and key not in exclude_key_set
         ]
+        if include_socnav_keys is not None:
+            include_key_set = set(include_socnav_keys)
+            unknown_keys = include_key_set.difference(observation_space.spaces.keys())
+            if unknown_keys:
+                raise ValueError(
+                    "GridSocNavExtractor include_socnav_keys contains unknown observation keys: "
+                    f"{sorted(unknown_keys)}"
+                )
+            socnav_keys = [key for key in socnav_keys if key in include_key_set]
         self._socnav_keys = tuple(sorted(socnav_keys))
         self._grid_key = grid_key
 

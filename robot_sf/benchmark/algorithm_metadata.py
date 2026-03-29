@@ -37,6 +37,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "rvo": "classical",
     "dwa": "classical",
     "teb": "classical",
+    "nmpc_social": "classical",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -66,6 +67,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "rvo": "placeholder_adapter",
     "dwa": "placeholder_adapter",
     "teb": "corridor_commitment_local_planner",
+    "nmpc_social": "nonlinear_model_predictive_local_planner",
 }
 
 _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -331,6 +333,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "TEBCommitmentPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "native_corridor_commitment_unicycle_vw",
+        "projection_documented": True,
+    },
+    "nmpc_social": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "NMPCSocialPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_nmpc_unicycle_vw",
         "projection_documented": True,
     },
 }

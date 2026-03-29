@@ -182,6 +182,76 @@ def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path)
 
     config = load_expert_training_config(config_path)
     assert config.randomize_seeds is False
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_allows_eval_seed_randomness_override(tmp_path) -> None:
+    """Evaluation seed handling should be independently configurable."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_override.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_override_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "randomize_seeds": False,
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_inherits_eval_seed_randomness_by_default(
+    tmp_path,
+) -> None:
+    """Evaluation randomness should inherit the legacy top-level flag when omitted."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_inherit.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_inherit_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is True
 
 
 def test_load_expert_training_config_defaults_best_checkpoint_metric_to_success_rate(

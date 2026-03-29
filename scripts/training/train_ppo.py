@@ -760,6 +760,9 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
+        randomize_seeds=bool(
+            evaluation_raw.get("randomize_seeds", data.get("randomize_seeds", False))
+        ),
     )
     if "frequency_episodes" in evaluation_raw:
         _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
@@ -853,7 +856,7 @@ def _log_startup_summary(
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
         "total_timesteps={} reward_profile={} requested_num_envs={} num_envs={} worker_mode={} "
-        "randomize_seeds={} resume_from={} scenario_sampling={}",
+        "randomize_seeds={} evaluation_randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
@@ -863,6 +866,7 @@ def _log_startup_summary(
         num_envs,
         worker_mode,
         _randomize_seeds(config),
+        _randomize_eval_seeds(config),
         (
             str(config.resume_from)
             if config.resume_from is not None
@@ -1090,8 +1094,16 @@ def _reapply_resumed_ppo_hyperparams(model: PPO, config: ExpertTrainingConfig) -
 
 
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
-    """Return True when training/evaluation should avoid deterministic seeding."""
+    """Return True when training should avoid deterministic seeding."""
     return bool(getattr(config, "randomize_seeds", False))
+
+
+def _randomize_eval_seeds(config: ExpertTrainingConfig) -> bool:
+    """Return True when evaluation should avoid deterministic seeding."""
+    evaluation = getattr(config, "evaluation", None)
+    if evaluation is None:
+        return _randomize_seeds(config)
+    return bool(getattr(evaluation, "randomize_seeds", _randomize_seeds(config)))
 
 
 def _resolve_tensorboard_logdir(run_id: str) -> Path:
@@ -1138,6 +1150,7 @@ def _init_wandb(
             "total_timesteps": config.total_timesteps,
             "seeds": list(config.seeds),
             "randomize_seeds": bool(config.randomize_seeds),
+            "evaluation_randomize_seeds": bool(_randomize_eval_seeds(config)),
             "scenario_config": str(config.scenario_config),
             "feature_extractor": config.feature_extractor,
             "ppo_hyperparams": dict(config.ppo_hyperparams),
@@ -2112,7 +2125,7 @@ def _evaluate_policy(
     metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
 
-    use_random = _randomize_seeds(config)
+    use_random = _randomize_eval_seeds(config)
     sampler_seed = None if use_random else 0
     sampler_strategy = "random" if use_random else "cycle"
     if scenario_id:
@@ -2204,7 +2217,7 @@ def _simulate_dry_run_metrics(
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
-    use_random = _randomize_seeds(config)
+    use_random = _randomize_eval_seeds(config)
     rng = np.random.default_rng(None if use_random else 123)
 
     for eval_step in eval_steps:
@@ -2311,12 +2324,10 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
 
 
 def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
-    """Apply seed configuration and warn when randomization is enabled."""
+    """Apply training seed configuration and warn when randomness overrides it."""
     if _randomize_seeds(config):
         if config.seeds:
-            logger.warning(
-                "randomize_seeds enabled; ignoring provided seeds for training/evaluation."
-            )
+            logger.warning("randomize_seeds enabled; ignoring provided seeds for training.")
     elif config.seeds:
         common.set_global_seed(int(config.seeds[0]))
 
@@ -2366,6 +2377,12 @@ def _build_training_notes(
     ]
     if _randomize_seeds(config):
         notes.append("randomize_seeds=true")
+    else:
+        notes.append("randomize_seeds=false")
+    if _randomize_eval_seeds(config):
+        notes.append("evaluation.randomize_seeds=true")
+    else:
+        notes.append("evaluation.randomize_seeds=false")
     if outputs.tensorboard_log is not None:
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     notes.append(f"startup_sec={outputs.startup_sec:.3f}")

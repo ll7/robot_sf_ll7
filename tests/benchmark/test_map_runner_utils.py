@@ -279,9 +279,11 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
 ) -> None:
     """Holonomic HRVO should expose an explicit world-frame velocity command payload."""
 
+    bind_calls: list[tuple[np.ndarray, float]] = []
+
     class _DummyAdapter:
         def __init__(self, config) -> None:
-            del config
+            self.config = SimpleNamespace(orca_obstacle_margin=0.15)
 
         def plan(self, _obs):
             raise AssertionError("Holonomic HRVO should not call plan() in vx_vy mode.")
@@ -289,7 +291,21 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
         def plan_velocity_world(self, _obs):
             return np.array([0.3, 0.4], dtype=float)
 
+        def bind_static_obstacle_points(self, points, *, spacing):
+            bind_calls.append((np.asarray(points, dtype=float), float(spacing)))
+
+    class _DummySim:
+        def iter_obstacle_segments(self):
+            return [((0.0, 0.0), (1.0, 0.0))]
+
+    class _DummyEnv:
+        simulator = _DummySim()
+
     monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
+    )
     policy, meta = _build_policy(
         "hrvo",
         {"allow_testing_algorithms": True},
@@ -297,7 +313,12 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
         robot_command_mode="vx_vy",
     )
 
+    assert hasattr(policy, "_planner_bind_env")
+    policy._planner_bind_env(_DummyEnv())
     command = policy({})
+    assert len(bind_calls) == 1
+    np.testing.assert_allclose(bind_calls[0][0], np.array([[0.5, 0.0]], dtype=float))
+    assert bind_calls[0][1] == pytest.approx(0.3)
     assert command == {
         "command_kind": "holonomic_vxy_world",
         "vx": 0.3,
@@ -1931,6 +1952,127 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
         result["algorithm_metadata_contract"]["upstream_reference"]["adapter_boundary"]
         == "runtime direct world velocity passthrough"
     )
+
+
+def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HRVO should run through the batch runner and emit an episodes.jsonl record."""
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+        def iter_obstacle_segments(self):
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    scenario = {
+        "name": "hrvo_smoke",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    schema_path = tmp_path / "episode.schema.json"
+    schema_path.write_text('{"type":"object"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=schema_path,
+        algo="hrvo",
+        algo_config_path="configs/algos/hrvo_camera_ready.yaml",
+        benchmark_profile="experimental",
+        workers=1,
+        resume=False,
+    )
+
+    assert result["written"] == 1
+    assert out_path.exists()
+    lines = out_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    assert "hrvo_smoke" in lines[0]
 
 
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:

@@ -250,8 +250,12 @@ def test_hrvo_adapter_returns_finite_action():
     adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, max_angular_speed=1.2))
     obs = _make_obs_with_peds([(1.6, 0.0)], goal=(5.0, 0.0), heading=0.0)
     v, w = adapter.plan(obs)
+    vx, vy = adapter.plan_velocity_world(obs)
     assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
     assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+    assert np.isfinite(vx)
+    assert np.isfinite(vy)
+    assert abs(vy) > 1e-4
 
 
 def test_hrvo_builds_hybrid_apex_distinct_from_vo_and_rvo():

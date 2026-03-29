@@ -1306,6 +1306,24 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         robot_kinematics=robot_kinematics,
         command_limits=algo_config,
     )
+    planner_bind_env = None
+    if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
+
+        def _bind_env(env: Any) -> None:
+            simulator = getattr(env, "simulator", None)
+            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
+                return
+            spacing = max(
+                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
+                0.25,
+            )
+            points = sample_obstacle_points(
+                simulator.iter_obstacle_segments(),
+                spacing=spacing,
+            )
+            adapter.bind_static_obstacle_points(points, spacing=spacing)
+
+        planner_bind_env = _bind_env
     holonomic_world_velocity_mode = (
         algo_key
         in {
@@ -1370,6 +1388,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         if hasattr(adapter, "reset"):
             _policy._planner_reset = lambda seed=None: adapter.reset()
+        if planner_bind_env is not None:
+            _policy._planner_bind_env = planner_bind_env
         return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -1382,23 +1402,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
     if hasattr(adapter, "reset"):
         _policy._planner_reset = lambda seed=None: adapter.reset()
-    if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
-
-        def _bind_env(env: Any) -> None:
-            simulator = getattr(env, "simulator", None)
-            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
-                return
-            spacing = max(
-                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
-                0.25,
-            )
-            points = sample_obstacle_points(
-                simulator.iter_obstacle_segments(),
-                spacing=spacing,
-            )
-            adapter.bind_static_obstacle_points(points, spacing=spacing)
-
-        _policy._planner_bind_env = _bind_env
+    if planner_bind_env is not None:
+        _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):
 
         def _planner_stats() -> dict[str, Any]:

@@ -1483,6 +1483,8 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+        self._bound_static_obstacle_spacing = 0.0
         self.reset()
 
     def reset(self) -> None:
@@ -1491,6 +1493,67 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._last_goal_distance: float | None = None
         self._commit_side = 0
         self._commit_side_ttl = 0
+
+    def bind_static_obstacle_points(self, points: Any, *, spacing: float) -> None:
+        """Bind sampled exact static obstacle points for use during planning."""
+        arr = np.asarray(points, dtype=float)
+        if arr.size == 0:
+            self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+            self._bound_static_obstacle_spacing = 0.0
+            return
+        if arr.ndim == 1:
+            if arr.size % 2 != 0:
+                raise ValueError("Static obstacle points must have an even number of coordinates.")
+            arr = arr.reshape(-1, 2)
+        elif arr.ndim != 2 or arr.shape[1] < 2:
+            raise ValueError("Static obstacle points must be convertible to an (N, 2) array.")
+        self._bound_static_obstacle_points = np.asarray(arr[:, :2], dtype=float)
+        self._bound_static_obstacle_spacing = float(max(spacing, self._EPS))
+
+    def _extract_bound_static_obstacle_points(
+        self,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract nearby obstacle points from bound exact map geometry.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
+        """
+        points = self._bound_static_obstacle_points
+        if points.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        centers, _dist_sq = self._select_nearby_points(
+            points,
+            robot_pos,
+            float(self.config.orca_obstacle_range),
+            max(int(self.config.orca_obstacle_max_points), 0),
+        )
+        if centers.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        spacing = float(max(self._bound_static_obstacle_spacing, self._EPS))
+        base_radius = 0.5 * spacing * float(self.config.orca_obstacle_radius_scale)
+        radii = np.full(
+            (centers.shape[0],),
+            base_radius + float(self.config.orca_obstacle_margin),
+            dtype=float,
+        )
+        corner_mask = self._orca_corner_obstacle_mask(
+            centers=centers,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+        )
+        if np.any(corner_mask):
+            radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=spacing,
+        )
 
     def _ensure_rvo2(self) -> bool:
         """Return True when rvo2 is available, else handle fallback/error behavior.
@@ -1991,6 +2054,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
+        bound_centers, bound_radii = self._extract_bound_static_obstacle_points(
+            robot_pos,
+            robot_heading,
+        )
+        if bound_centers.size:
+            return bound_centers, bound_radii
+
         payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)

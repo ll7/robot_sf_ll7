@@ -337,6 +337,30 @@ def test_hrvo_coalesces_adjacent_static_obstacle_cells():
     assert centers.shape[0] > 0
 
 
+def test_hrvo_extracts_bound_exact_static_obstacle_points():
+    """HRVO should use bound exact obstacle geometry even without an occupancy grid."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+    adapter.bind_static_obstacle_points(
+        np.array([[1.5, 0.0], [1.75, 0.0], [2.0, 0.0]], dtype=float),
+        spacing=0.25,
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] > 0
+    assert centers.shape[0] == radii.shape[0]
+    assert np.all(centers[:, 0] > 1.0)
+
+
 def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):
     """Head-on bias should inject a turn instead of preserving a straight collision course."""
     adapter = _orca_fallback_adapter(

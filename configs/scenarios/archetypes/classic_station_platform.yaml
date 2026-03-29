@@ -4,10 +4,43 @@ scenarios:
   simulation_config:
     max_episode_steps: 650
     ped_density: 0.05
+  single_pedestrians:
+  - id: p1
+    goal: null
+    trajectory:
+    - - 24.0
+      - 21.5
+    - - 24.0
+      - 12.4
+    - - 40.0
+      - 21.5
+    - - 73.0
+      - 21.5
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 6.0
+      note: wait near the first train door before continuing
+    note: left-to-right boarding pause
+  - id: p3
+    goal: null
+    trajectory:
+    - - 59.0
+      - 21.0
+    - - 59.0
+      - 15.9
+    - - 44.0
+      - 21.0
+    - - 11.0
+      - 21.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 5.0
+      note: short dwell near the opposite platform door
+    note: right-to-left alighting pause
   robot_config: {}
   metadata:
     archetype: station_platform
-    label: station platform passing corridor with bench islands
+    label: station platform with train edge, waiting pockets, and concourse pinch points
     density: medium
     flow: bi
     groups: 0.0

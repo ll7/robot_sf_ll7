@@ -3,17 +3,26 @@
 ## What this adds
 
 `maps/svg_maps/classic_station_platform.svg` adds a station/platform-inspired classic interaction
-scenario with an asymmetric platform aisle: a blocked upper edge (train/platform boundary), a clear
-robot corridor near the concourse edge, and bench/column obstacles that force pedestrians to weave
-instead of simply traversing an empty rectangle.
+scenario with a visible train/track edge, a long narrow platform, repeated door-side columns, and
+concourse-side furniture/kiosk pinch points. The robot keeps to the concourse edge while the main
+pedestrian stream uses the platform band closer to the train.
 
 ## Why it belongs in the benchmark set
 
 - It expands the classic interaction matrix with a real-world-inspired elongated passing corridor.
 - It exercises asymmetric obstacle placement rather than the symmetric bottleneck and crossing
   layouts already in the pack.
+- It uses the existing single-pedestrian `wait_at` contract for a small deterministic waiting
+  component, which is plausible for a station platform without inventing a new crowd model.
 - It keeps the benchmark contract simple: one canonical layout, parser-safe labels, and direct
   inclusion in `configs/scenarios/classic_interactions.yaml`.
+
+## Behavioral boundary
+
+This issue does not implement general route-population waiting or stochastic dwell-time modeling.
+What is included is the already-supported deterministic waiting path for selected
+`single_pedestrians`, which is enough to capture a limited "pause near a train door" behavior.
+Broader station-crowd behavior would be a separate modeling issue.
 
 ## Validation path
 

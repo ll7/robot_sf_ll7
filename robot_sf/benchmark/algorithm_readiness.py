@@ -40,6 +40,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="ORCA baseline (requires rvo2 or explicit fallback policy).",
     ),
     AlgorithmReadiness(
+        canonical_name="hrvo",
+        tier="experimental",
+        aliases=("hrvo",),
+        note="Local hybrid reciprocal velocity obstacles planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_orca",
         tier="experimental",
         aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),
@@ -108,6 +115,20 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="safety_barrier",
+        tier="experimental",
+        aliases=("safety_barrier",),
+        note="Testing-only clean-room static-obstacle safety-barrier planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="grid_route",
+        tier="experimental",
+        aliases=("grid_route",),
+        note="Testing-only occupancy-grid route planner for static obstacle slices.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="mppi_social",
         tier="experimental",
         aliases=("mppi_social",),
@@ -158,6 +179,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("teb",),
         note="Native corridor-commitment planner inspired by TEB-style local optimization.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="nmpc_social",
+        tier="experimental",
+        aliases=("nmpc_social", "nmpc"),
+        note="Native NMPC-style local planner with short-horizon nonlinear optimization.",
         requires_explicit_opt_in=True,
     ),
 )

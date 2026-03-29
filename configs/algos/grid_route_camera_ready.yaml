@@ -1,0 +1,15 @@
+# Testing-only occupancy-grid route planner.
+allow_testing_algorithms: true
+max_linear_speed: 0.9
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+heading_gain: 1.8
+turn_in_place_angle: 0.8
+waypoint_lookahead_cells: 5
+waypoint_reached_distance: 0.3
+obstacle_threshold: 0.5
+obstacle_inflation_cells: 1
+clearance_search_cells: 5
+stop_distance: 0.25
+progress_weight: 1.0
+heading_weight: 1.0

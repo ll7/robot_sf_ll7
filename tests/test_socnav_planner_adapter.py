@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -15,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -237,10 +239,133 @@ def test_orca_responds_to_static_obstacle_in_grid(monkeypatch):
     v_free, w_free = adapter.plan(obs_free)
     obs_blocked = _with_occupancy_grid(
         _make_obs(goal=(5.0, 0.0), heading=0.0),
-        obstacle_cells=[(2, 3)],
+        obstacle_cells=[(1, 3), (2, 3)],
     )
     v_blocked, w_blocked = adapter.plan(obs_blocked)
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
+
+
+def test_hrvo_adapter_returns_finite_action():
+    """HRVO adapter should emit a bounded unicycle command."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, max_angular_speed=1.2))
+    obs = _make_obs_with_peds([(1.6, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    vx, vy = adapter.plan_velocity_world(obs)
+    assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
+    assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+    assert np.isfinite(vx)
+    assert np.isfinite(vy)
+    assert abs(vy) > 1e-4
+
+
+def test_hrvo_builds_hybrid_apex_distinct_from_vo_and_rvo():
+    """HRVO should build an asymmetric apex instead of plain VO or midpoint RVO."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, hrvo_time_horizon=4.0))
+    obs = _make_obs_with_peds([(1.5, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    obs["pedestrians"]["velocities"][0] = np.array([-0.8, 0.0], dtype=np.float32)
+    robot_state, goal_state, ped_state = adapter._socnav_fields(obs)
+    robot_pos = np.asarray(robot_state["position"], dtype=float)
+    robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+    goal = np.asarray(goal_state["current"], dtype=float)
+    preferred_velocity = adapter._ego_to_world(
+        adapter._preferred_velocity(
+            goal,
+            robot_pos,
+            robot_heading,
+            float(adapter.config.max_linear_speed),
+        ),
+        robot_heading,
+    )
+    ped_positions, ped_velocities, _ped_count, ped_radius = adapter._extract_pedestrians(ped_state)
+    ped_vel_world = ped_velocities.astype(float)
+    obstacles = adapter._build_hrvo_obstacles(
+        robot_velocity_world=np.zeros(2, dtype=float),
+        preferred_velocity_world=preferred_velocity,
+        other_positions=ped_positions - robot_pos[None, :],
+        other_velocities_world=ped_vel_world,
+        other_pref_velocities_world=ped_vel_world.copy(),
+        robot_radius=float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0]),
+        other_radii=np.full((ped_positions.shape[0],), float(ped_radius), dtype=float),
+        time_step=0.1,
+    )
+    assert len(obstacles) == 1
+    vo_apex = ped_vel_world[0]
+    rvo_apex = 0.5 * ped_vel_world[0]
+    assert not np.allclose(obstacles[0].apex, vo_apex)
+    assert not np.allclose(obstacles[0].apex, rvo_apex)
+    assert abs(float(obstacles[0].apex[1])) > 1e-4
+
+
+def test_make_hrvo_policy_wraps_hrvo_adapter():
+    """Convenience constructor should expose the HRVO adapter."""
+    policy = make_hrvo_policy(SocNavPlannerConfig(max_linear_speed=0.9))
+    obs = _make_obs_with_peds([(1.2, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    v, w = policy.act(obs)
+    assert v >= 0.0
+    assert np.isfinite(w)
+
+
+def test_hrvo_responds_to_static_obstacle_in_grid():
+    """HRVO should extract occupied grid cells into static obstacle constraints."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, orca_obstacle_range=4.0))
+    obs_blocked = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(1, 3), (2, 3)],
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs_blocked,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] > 0
+    assert centers.shape[0] == radii.shape[0]
+
+
+def test_hrvo_coalesces_adjacent_static_obstacle_cells():
+    """Adjacent occupied cells should be reduced before entering the HRVO solve."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 1), (2, 2), (2, 3)],
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] < 3
+    assert centers.shape[0] == radii.shape[0]
+    assert centers.shape[0] > 0
+
+
+def test_hrvo_extracts_bound_exact_static_obstacle_points():
+    """HRVO should use bound exact obstacle geometry even without an occupancy grid."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+    adapter.bind_static_obstacle_points(
+        np.array([[1.5, 0.0], [1.75, 0.0], [2.0, 0.0]], dtype=float),
+        spacing=0.25,
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] > 0
+    assert centers.shape[0] == radii.shape[0]
+    assert np.all(centers[:, 0] > 1.0)
 
 
 def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):

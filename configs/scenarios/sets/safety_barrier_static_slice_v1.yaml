@@ -1,0 +1,176 @@
+scenarios:
+  - name: empty_map_8_directions_east
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_east.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map east
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify open-space forward progress before obstacle handling is considered.
+      expected_behavior: Move directly toward the east goal with no spurious curvature.
+      expected_pass_criteria: Reach the east goal without collision or timeout.
+      failure_modes: [open-space oscillation, directional bias, heading instability]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59601, 59602, 59603]
+
+  - name: goal_behind_robot
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/goal_behind_robot.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: goal_behind_robot
+      label: goal behind robot
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: angle_wrap
+      purpose: Verify stable turnaround behavior before obstacle avoidance is introduced.
+      expected_behavior: Commit to a controlled turn-around and then progress to the goal.
+      expected_pass_criteria: Reach the rearward goal without repeated spin oscillation.
+      failure_modes: [turn-in-place oscillation, angle-wrap instability, timeout]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59601, 59602, 59603]
+
+  - name: single_obstacle_circle
+    map_id: atomic_single_circle_obstacle
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: single_obstacle_circle
+      label: single circular obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Verify that the safety filter causes a stable bypass instead of direct collision.
+      expected_behavior: Choose a detour around the obstacle and recover toward goal progress.
+      expected_pass_criteria: Reach the goal without obstacle contact and without repeated side switching.
+      failure_modes: [obstacle collision, oscillatory detour, deadlock in front of obstacle]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]
+
+  - name: single_obstacle_rectangle
+    map_id: atomic_single_rectangle_obstacle
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: single_obstacle_rectangle
+      label: single rectangular obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Verify that the safety filter avoids sharp corners without simply freezing.
+      expected_behavior: Avoid the rectangle with one stable bypass and continue progress.
+      expected_pass_criteria: Reach the goal without clipping corners or stalling in front of the obstacle.
+      failure_modes: [corner clipping, deadlock, unnecessary path oscillation]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]
+
+  - name: line_wall_detour
+    map_id: atomic_line_wall_obstacle
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: line_wall_detour
+      label: line wall detour
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: oscillation
+      purpose: Diagnose whether the planner can commit to one side of a thin wall.
+      expected_behavior: Choose one side around the wall and keep making progress.
+      expected_pass_criteria: Reach the goal after one committed detour or fail in a reproducible way.
+      failure_modes: [side-switch oscillation, wall collision, deadlock]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]
+
+  - name: narrow_passage
+    map_id: atomic_narrow_passage_test
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: narrow_passage
+      label: narrow passage
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Diagnose whether the planner can align early enough to traverse a single narrow gap.
+      expected_behavior: Approach, align, and pass through once without repeated retries.
+      expected_pass_criteria: Reach the goal without wall contact or document a reproducible failure mode.
+      failure_modes: [passage collision, entrance oscillation, refusal to enter viable gap]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]

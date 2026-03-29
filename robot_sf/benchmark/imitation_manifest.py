@@ -45,7 +45,10 @@ def _path_to_manifest(path: Path) -> str:
     """Deserialise ``path`` to a portable string, relative to the artefact root when possible.
 
     Returns:
-        Portable path string relative to artifact root if possible, otherwise absolute.
+        Portable path string relative to artifact root or repository root.
+
+    Raises:
+        ValueError: If ``path`` is absolute and outside both the artifact root and repository root.
     """
 
     path_obj = Path(path)
@@ -59,7 +62,9 @@ def _path_to_manifest(path: Path) -> str:
         try:
             return str(path_obj.resolve(strict=False).relative_to(repo_root))
         except ValueError:
-            return str(path_obj)
+            raise ValueError(
+                f"Path '{path_obj}' is outside allowed roots: '{root}' and '{repo_root}'"
+            ) from None
 
 
 def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:

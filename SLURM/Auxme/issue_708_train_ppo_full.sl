@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT=${SLURM_SUBMIT_DIR}
+PROJECT_ROOT=${SLURM_SUBMIT_DIR:-$(pwd)}
 LOCAL_OUTPUT_ROOT=${PROJECT_ROOT}/output/slurm
 SCRATCH_ROOT=${AUXME_SCRATCH_ROOT:-${LOCAL_OUTPUT_ROOT}}
 ENV_DIR=${UV_ENV_DIR:-${SCRATCH_ROOT}/robot_sf_uv}
@@ -26,8 +26,8 @@ LOG_LEVEL=${ISSUE708_LOG_LEVEL:-INFO}
 MODULES_AVAILABLE=0
 RUN_OUTPUT_DIR=""
 
-if [[ ! -d ${PROJECT_ROOT}/.git ]]; then
-  echo "[issue708] Run this script from within the repository." >&2
+if ! git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "[issue708] PROJECT_ROOT is not inside a git work tree: ${PROJECT_ROOT}" >&2
   exit 1
 fi
 

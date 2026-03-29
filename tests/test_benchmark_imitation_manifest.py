@@ -175,6 +175,14 @@ def test_training_run_manifest_writes_to_runs_folder(
     assert payload["notes"] == ["warm start converged"]
 
 
+def test_path_to_manifest_fails_closed_for_absolute_paths_outside_repo() -> None:
+    """Absolute paths outside the repo and artifact root should not serialize host paths."""
+    outside_path = Path("/tmp/robot-sf-outside-artifact.json")
+
+    with pytest.raises(ValueError, match="outside allowed roots"):
+        imitation_manifest._path_to_manifest(outside_path)
+
+
 @pytest.mark.parametrize(
     "manifest_path",
     [None, Path("custom/output/expert.json")],

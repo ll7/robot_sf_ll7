@@ -643,6 +643,16 @@ class EvaluationContext:
 
 
 @dataclass(slots=True)
+class TrainingRuntimeContext:
+    """Runtime-only parameters for one PPO training invocation."""
+
+    run_id: str
+    dry_run: bool
+    resume_from: Path | None
+    config_path: Path | None
+
+
+@dataclass(slots=True)
 class BestCheckpointSummary:
     """Snapshot describing the best checkpoint chosen during training."""
 
@@ -1447,17 +1457,14 @@ def _resolve_evaluation_context(
     )
 
 
-def _execute_training(  # noqa: PLR0913
+def _execute_training(
     *,
     config: ExpertTrainingConfig,
     scenario_ctx: ScenarioContext,
     evaluation_ctx: EvaluationContext,
     scenario_definitions: Sequence[Mapping[str, Any]],
     eval_steps: Sequence[int],
-    run_id: str,
-    dry_run: bool,
-    resume_from: Path | None,
-    config_path: Path | None,
+    runtime_ctx: TrainingRuntimeContext,
 ) -> TrainingOutputs:
     """Run training (or dry-run) and return raw metrics + episode records."""
     startup_t0 = time.perf_counter()
@@ -1465,7 +1472,7 @@ def _execute_training(  # noqa: PLR0913
     worker_mode = _resolve_worker_mode(config, num_envs)
     _log_startup_summary(
         config=config,
-        config_path=config_path,
+        config_path=runtime_ctx.config_path,
         num_envs=num_envs,
         worker_mode=worker_mode,
     )
@@ -1479,11 +1486,11 @@ def _execute_training(  # noqa: PLR0913
             snqi_context.baseline_fallback_keys,
         )
     tensorboard_log = (
-        _resolve_tensorboard_logdir(run_id)
+        _resolve_tensorboard_logdir(runtime_ctx.run_id)
         if bool(config.tracking.get("tensorboard", True))
         else None
     )
-    if dry_run:
+    if runtime_ctx.dry_run:
         metrics_raw, episode_records = _simulate_dry_run_metrics(
             config,
             eval_steps=eval_steps,
@@ -1512,13 +1519,13 @@ def _execute_training(  # noqa: PLR0913
         scenario=scenario_ctx.selected_scenario,
         scenario_definitions=scenario_definitions,
         exclude_scenarios=scenario_ctx.training_exclude,
-        run_id=run_id,
+        run_id=runtime_ctx.run_id,
         tensorboard_log=tensorboard_log,
-        resume_from=resume_from,
+        resume_from=runtime_ctx.resume_from,
     )
     wandb_run, wandb_callback = _init_wandb(
         tracking=config.tracking,
-        run_id=run_id,
+        run_id=runtime_ctx.run_id,
         config=config,
         tensorboard_log=tensorboard_log,
     )
@@ -2649,8 +2656,13 @@ def run_expert_training(
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
+    runtime_ctx = TrainingRuntimeContext(
+        run_id=run_id,
+        dry_run=dry_run,
+        resume_from=_resolve_resume_checkpoint(config=config, resume_from=resume_from),
+        config_path=config_path,
+    )
     eval_steps = _build_eval_steps(config.total_timesteps, config.evaluation.step_schedule)
-    resolved_resume_from = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
 
     outputs = _execute_training(
         config=config,
@@ -2658,10 +2670,7 @@ def run_expert_training(
         evaluation_ctx=evaluation_ctx,
         scenario_definitions=scenario_definitions,
         eval_steps=eval_steps,
-        run_id=run_id,
-        dry_run=dry_run,
-        resume_from=resolved_resume_from,
-        config_path=config_path,
+        runtime_ctx=runtime_ctx,
     )
 
     aggregates = _aggregate_metrics(outputs.metrics_raw)

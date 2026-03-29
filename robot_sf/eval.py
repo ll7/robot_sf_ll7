@@ -290,14 +290,10 @@ class PedEnvMetrics:
     avg_distance: deque[float] = field(default_factory=lambda: deque(maxlen=10))
     route_distances: list[float] = field(default_factory=list)
     ego_ped_speed_at_collision: deque[float] = field(default_factory=lambda: deque(maxlen=10))
-    collision_impact_speed_at_collision: deque[float] = field(
-        default_factory=lambda: deque(maxlen=10)
-    )
     collision_impact_angle_rad_at_collision: deque[float] = field(
         default_factory=lambda: deque(maxlen=10)
     )
     _last_ego_ped_speed: float = field(default=0.0, init=False, repr=False)
-    _last_collision_impact_speed: float = field(default=0.0, init=False, repr=False)
     _last_collision_impact_angle_rad: float = field(default=0.0, init=False, repr=False)
 
     @property
@@ -306,7 +302,8 @@ class PedEnvMetrics:
 
         Returns:
             float: Mean of recorded ``ego_ped_speed`` values observed when
-            ``is_robot_collision`` ended a route, or 0.0 if no such event exists.
+            ``is_robot_pedestrian_collision`` ended a route, or 0.0 if no
+            such event exists.
         """
         return mean(self.ego_ped_speed_at_collision) if self.ego_ped_speed_at_collision else 0.0
 
@@ -314,15 +311,6 @@ class PedEnvMetrics:
     def avg_ego_ped_speed(self) -> float:
         """Backward-compatible alias for average ego pedestrian collision speed."""
         return self.avg_ego_ped_speed_at_collision
-
-    @property
-    def avg_collision_impact_speed_at_collision(self) -> float:
-        """Average impact speed recorded for terminal collision outcomes."""
-        return (
-            mean(self.collision_impact_speed_at_collision)
-            if self.collision_impact_speed_at_collision
-            else 0.0
-        )
 
     @property
     def avg_collision_impact_angle_rad_at_collision(self) -> float:
@@ -496,7 +484,6 @@ class PedEnvMetrics:
         """
         self.route_distances.append(meta["distance_to_robot"])
         self._last_ego_ped_speed = float(meta.get("ego_ped_speed", 0.0))
-        self._last_collision_impact_speed = float(meta.get("collision_impact_speed", 0.0))
         self._last_collision_impact_angle_rad = float(meta.get("collision_impact_angle_rad", 0.0))
 
         if not self._is_end_of_route(meta):
@@ -537,9 +524,9 @@ class PedEnvMetrics:
         """
         # Check collisions first (highest priority)
         collision_checks = [
-            ("is_robot_collision", EnvOutcome.ROBOT_COLLISION),
             ("is_robot_pedestrian_collision", EnvOutcome.ROBOT_PEDESTRIAN_COLLISION),
             ("is_robot_obstacle_collision", EnvOutcome.ROBOT_OBSTACLE_COLLISION),
+            ("is_robot_collision", EnvOutcome.ROBOT_COLLISION),
             ("is_pedestrian_collision", EnvOutcome.PEDESTRIAN_COLLISION),
             ("is_obstacle_collision", EnvOutcome.OBSTACLE_COLLISION),
         ]
@@ -564,8 +551,7 @@ class PedEnvMetrics:
         """Finalize the route outcome and update metrics."""
         self.route_outcomes.append(outcome)
         if outcome == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION:
-            self.avg_ego_ped_speed_at_collision.append(self._last_ego_ped_speed)
-            self.collision_impact_speed_at_collision.append(self._last_collision_impact_speed)
+            self.ego_ped_speed_at_collision.append(self._last_ego_ped_speed)
             self.collision_impact_angle_rad_at_collision.append(
                 self._last_collision_impact_angle_rad
             )
@@ -673,13 +659,6 @@ class PedVecEnvMetrics:
     def avg_ego_ped_speed(self) -> float:
         """Backward-compatible alias for average ego pedestrian collision speed."""
         return self.avg_ego_ped_speed_at_collision
-
-    @property
-    def avg_collision_impact_speed_at_collision(self) -> float:
-        """Average impact speed across environments for collision outcomes."""
-        return sum(m.avg_collision_impact_speed_at_collision for m in self.metrics) / len(
-            self.metrics
-        )
 
     @property
     def avg_collision_impact_angle_rad_at_collision(self) -> float:

@@ -178,11 +178,6 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
                 self.num_timesteps,
             )
             self.writer.add_scalar(
-                "metrics/avg_collision_impact_speed",
-                self.metrics.avg_collision_impact_speed_at_collision,
-                self.num_timesteps,
-            )
-            self.writer.add_scalar(
                 "metrics/avg_collision_impact_angle_rad",
                 self.metrics.avg_collision_impact_angle_rad_at_collision,
                 self.num_timesteps,

@@ -108,6 +108,20 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="safety_barrier",
+        tier="experimental",
+        aliases=("safety_barrier",),
+        note="Testing-only clean-room static-obstacle safety-barrier planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="grid_route",
+        tier="experimental",
+        aliases=("grid_route",),
+        note="Testing-only occupancy-grid route planner for static obstacle slices.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="mppi_social",
         tier="experimental",
         aliases=("mppi_social",),

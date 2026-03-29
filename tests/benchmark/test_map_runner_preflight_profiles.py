@@ -238,6 +238,8 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
 
     for algo in (
         "risk_dwa",
+        "safety_barrier",
+        "grid_route",
         "mppi_social",
         "predictive_mppi",
         "hybrid_portfolio",

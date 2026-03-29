@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from types import SimpleNamespace
 
 import numpy as np
@@ -64,6 +65,15 @@ def test_build_nmpc_social_config_overrides_fields() -> None:
     assert cfg.horizon_steps == 5
     assert cfg.rollout_dt == 0.2
     assert cfg.solver_max_iterations == 16
+
+
+def test_build_nmpc_social_config_invalid_numeric_uses_default() -> None:
+    """Invalid numeric overrides should warn and fall back to the dataclass default."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = build_nmpc_social_config({"rollout_dt": "bad-value"})
+    assert cfg.rollout_dt == NMPCSocialConfig().rollout_dt
+    assert any("Invalid NMPC config value for 'rollout_dt'" in str(item.message) for item in caught)
 
 
 def test_nmpc_social_moves_toward_goal_in_open_space() -> None:
@@ -158,3 +168,23 @@ def test_nmpc_social_optimizer_failure_stops(monkeypatch) -> None:
     assert stats["solver_failures"] == 1
     assert stats["fallback_stop_count"] == 1
     assert stats["nonzero_command_count"] == 0
+
+
+def test_nmpc_social_optimizer_failure_without_stop_fallback_warns(monkeypatch) -> None:
+    """Solver failures without stop fallback should warn and reuse the initial guess."""
+    planner = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(horizon_steps=4, solver_max_iterations=8, fallback_to_stop=False)
+    )
+    monkeypatch.setattr(
+        "robot_sf.planner.nmpc_social.minimize",
+        lambda *args, **kwargs: SimpleNamespace(success=False, x=None),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        command = planner.plan(_obs(goal=(3.0, 0.0)))
+    assert command[0] > 0.0
+    assert planner._last_solution is not None
+    stats = planner.diagnostics()
+    assert stats["solver_failures"] == 1
+    assert stats["fallback_stop_count"] == 0
+    assert any("reusing the initial guess" in str(item.message) for item in caught)

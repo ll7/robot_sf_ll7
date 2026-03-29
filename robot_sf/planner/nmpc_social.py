@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, fields
 from typing import Any
 
@@ -480,7 +481,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
                 self._record_command(0.0, 0.0)
                 return 0.0, 0.0
+            if result.x is None:
+                warnings.warn(
+                    "NMPC solver failed without a fallback solution; reusing the initial guess.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             action = np.asarray(result.x if result.x is not None else x0, dtype=float)
+            self._last_solution = action.copy()
         else:
             self._stats["solver_successes"] = int(self._stats.get("solver_successes", 0)) + 1
             action = np.asarray(result.x, dtype=float)
@@ -570,5 +578,20 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
     for field in fields(NMPCSocialConfig):
         value = cfg.get(field.name, getattr(defaults, field.name))
         caster = numeric_casts.get(field.name)
-        kwargs[field.name] = caster(value) if caster is not None else value
+        if caster is None:
+            kwargs[field.name] = value
+            continue
+        try:
+            kwargs[field.name] = caster(value)
+        except (TypeError, ValueError):
+            default_value = getattr(defaults, field.name)
+            warnings.warn(
+                (
+                    f"Invalid NMPC config value for '{field.name}': {value!r}; "
+                    f"falling back to default {default_value!r}."
+                ),
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            kwargs[field.name] = default_value
     return NMPCSocialConfig(**kwargs)

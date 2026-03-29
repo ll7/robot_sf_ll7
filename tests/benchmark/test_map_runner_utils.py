@@ -1336,6 +1336,97 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
     }
 
 
+def test_run_map_episode_snapshots_planner_runtime_before_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planner runtime stats should be captured before planner teardown mutates state."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, 0.0, True, False, {"success": False}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+
+    def _build_policy_stub(*args, **kwargs):
+        _ = args, kwargs
+        closed = {"value": False}
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            _ = obs
+            return 0.0, 0.0
+
+        _policy._planner_stats = lambda: (
+            {"solver_failures": 0} if closed["value"] else {"solver_failures": 3}
+        )
+        _policy._planner_close = lambda: closed.__setitem__("value", True)
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 1}},
+        seed=1,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert record["algorithm_metadata"]["planner_runtime"] == {"solver_failures": 3}
+
+
 def test_run_map_episode_does_not_stop_on_waypoint_only_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

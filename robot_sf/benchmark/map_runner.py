@@ -1754,6 +1754,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_stats = getattr(policy_fn, "_planner_stats", None)
 
+    planner_runtime_snapshot: dict[str, Any] | None = None
+
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
     if callable(planner_reset):
@@ -1826,6 +1828,14 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             map_def = env.simulator.map_def
             goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
+        if callable(planner_stats):
+            try:
+                planner_runtime = planner_stats()
+            except (RuntimeError, ValueError, TypeError):
+                logger.debug("Planner stats hook failed before close", exc_info=True)
+                planner_runtime = None
+            if isinstance(planner_runtime, dict):
+                planner_runtime_snapshot = dict(planner_runtime)
         if callable(planner_close):
             try:
                 planner_close()
@@ -1891,14 +1901,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
     _finalize_feasibility_metadata(algo_meta)
-    if callable(planner_stats):
-        try:
-            planner_runtime = planner_stats()
-        except (RuntimeError, ValueError, TypeError):
-            logger.debug("Planner stats hook failed", exc_info=True)
-            planner_runtime = None
-        if isinstance(planner_runtime, dict):
-            algo_meta["planner_runtime"] = planner_runtime
+    if isinstance(planner_runtime_snapshot, dict):
+        algo_meta["planner_runtime"] = planner_runtime_snapshot
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,

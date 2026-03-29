@@ -425,6 +425,10 @@ class SocNavPlannerConfig:
     orca_stall_nudge_factor: float = 0.15
     orca_obstacle_margin: float = 0.12
     orca_corner_clearance_scale: float = 1.35
+    hrvo_neighbor_dist: float = 8.0
+    hrvo_max_neighbors: int = 8
+    hrvo_time_horizon: float = 4.0
+    hrvo_uncertainty_offset: float = 0.05
     social_force_repulsion_weight: float = 0.8
     social_force_desired_speed: float = 1.0
     social_force_tau: float = 0.5
@@ -1314,6 +1318,95 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        dist_sq = np.einsum(
+            "ij,ij->i", result_centers - robot_pos[None, :], result_centers - robot_pos[None, :]
+        )
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1390,6 +1483,8 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+        self._bound_static_obstacle_spacing = 0.0
         self.reset()
 
     def reset(self) -> None:
@@ -1398,6 +1493,67 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._last_goal_distance: float | None = None
         self._commit_side = 0
         self._commit_side_ttl = 0
+
+    def bind_static_obstacle_points(self, points: Any, *, spacing: float) -> None:
+        """Bind sampled exact static obstacle points for use during planning."""
+        arr = np.asarray(points, dtype=float)
+        if arr.size == 0:
+            self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+            self._bound_static_obstacle_spacing = 0.0
+            return
+        if arr.ndim == 1:
+            if arr.size % 2 != 0:
+                raise ValueError("Static obstacle points must have an even number of coordinates.")
+            arr = arr.reshape(-1, 2)
+        elif arr.ndim != 2 or arr.shape[1] < 2:
+            raise ValueError("Static obstacle points must be convertible to an (N, 2) array.")
+        self._bound_static_obstacle_points = np.asarray(arr[:, :2], dtype=float)
+        self._bound_static_obstacle_spacing = float(max(spacing, self._EPS))
+
+    def _extract_bound_static_obstacle_points(
+        self,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract nearby obstacle points from bound exact map geometry.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
+        """
+        points = self._bound_static_obstacle_points
+        if points.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        centers, _dist_sq = self._select_nearby_points(
+            points,
+            robot_pos,
+            float(self.config.orca_obstacle_range),
+            max(int(self.config.orca_obstacle_max_points), 0),
+        )
+        if centers.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        spacing = float(max(self._bound_static_obstacle_spacing, self._EPS))
+        base_radius = 0.5 * spacing * float(self.config.orca_obstacle_radius_scale)
+        radii = np.full(
+            (centers.shape[0],),
+            base_radius + float(self.config.orca_obstacle_margin),
+            dtype=float,
+        )
+        corner_mask = self._orca_corner_obstacle_mask(
+            centers=centers,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+        )
+        if np.any(corner_mask):
+            radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=spacing,
+        )
 
     def _ensure_rvo2(self) -> bool:
         """Return True when rvo2 is available, else handle fallback/error behavior.
@@ -1802,6 +1958,94 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        offsets = result_centers - robot_pos[None, :]
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1810,6 +2054,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
+        bound_centers, bound_radii = self._extract_bound_static_obstacle_points(
+            robot_pos,
+            robot_heading,
+        )
+        if bound_centers.size:
+            return bound_centers, bound_radii
+
         payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
@@ -1853,7 +2104,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         if np.any(corner_mask):
             radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
-        return centers, radii
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=resolution,
+        )
 
     def _orca_corner_obstacle_mask(
         self,
@@ -2385,6 +2642,475 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             robot_pos=robot_pos,
             robot_heading=robot_heading,
             observation=observation,
+        )
+
+
+class HRVOPlannerAdapter(ORCAPlannerAdapter):
+    """Hybrid Reciprocal Velocity Obstacles local planner.
+
+    This is a local, benchmark-facing HRVO-inspired implementation informed by the
+    upstream `snape/HRVO` geometry and the lightweight VO reference linked in
+    issue `#726`. It remains an in-repo implementation rather than an upstream
+    wrapper and should therefore be treated conservatively in benchmark claims.
+    """
+
+    @dataclass
+    class _VelocityObstacle:
+        """Hybrid reciprocal velocity obstacle with apex and side rays."""
+
+        apex: np.ndarray
+        side1: np.ndarray
+        side2: np.ndarray
+
+    @dataclass
+    class _Candidate:
+        """Candidate velocity and the VO boundaries that generated it."""
+
+        position: np.ndarray
+        obstacle1: int
+        obstacle2: int
+
+    @staticmethod
+    def _clip_arcsin_ratio(numerator: float, denominator: float) -> float:
+        """Return a numerically safe ratio for ``asin``."""
+        if denominator <= 0.0:
+            return 1.0
+        return float(np.clip(numerator / denominator, -1.0, 1.0))
+
+    @classmethod
+    def _tangent_direction(cls, angle: float) -> np.ndarray:
+        """Return a unit ray direction for a tangent boundary angle."""
+        return cls._normalize(np.array([np.cos(angle), np.sin(angle)], dtype=float))
+
+    @classmethod
+    def _project_onto_side(
+        cls, apex: np.ndarray, side: np.ndarray, point: np.ndarray
+    ) -> np.ndarray:
+        """Project a point onto the forward ray starting at ``apex`` along ``side``.
+
+        Returns:
+            np.ndarray: Closest point on the forward ray.
+        """
+        t = max(float(np.dot(point - apex, side)), 0.0)
+        return apex + t * side
+
+    @classmethod
+    def _circle_side_intersections(
+        cls,
+        apex: np.ndarray,
+        side: np.ndarray,
+        radius: float,
+    ) -> list[np.ndarray]:
+        """Return intersections between a forward ray and the speed circle."""
+        d = cls._det(apex, side)
+        discriminant = radius * radius - d * d
+        if discriminant <= 0.0:
+            return []
+        offset = float(np.dot(apex, side))
+        root = float(np.sqrt(discriminant))
+        intersections: list[np.ndarray] = []
+        for t in (-offset - root, -offset + root):
+            if t >= 0.0:
+                intersections.append(apex + t * side)
+        return intersections
+
+    @classmethod
+    def _ray_intersection(
+        cls,
+        apex1: np.ndarray,
+        side1: np.ndarray,
+        apex2: np.ndarray,
+        side2: np.ndarray,
+    ) -> np.ndarray | None:
+        """Return the intersection of two forward rays when it lies on both rays."""
+        determinant = cls._det(side1, side2)
+        if abs(determinant) <= cls._EPS:
+            return None
+        delta = apex2 - apex1
+        s = cls._det(delta, side2) / determinant
+        t = cls._det(delta, side1) / determinant
+        if s < 0.0 or t < 0.0:
+            return None
+        return apex1 + s * side1
+
+    @classmethod
+    def _inside_velocity_obstacle(
+        cls,
+        obstacle: _VelocityObstacle,
+        velocity: np.ndarray,
+    ) -> bool:
+        """Return whether a velocity lies inside the HRVO forbidden cone."""
+        rel = velocity - obstacle.apex
+        return (
+            cls._det(obstacle.side2, rel) <= cls._EPS and cls._det(obstacle.side1, rel) >= -cls._EPS
+        )
+
+    def _build_hrvo_obstacles(
+        self,
+        *,
+        robot_velocity_world: np.ndarray,
+        preferred_velocity_world: np.ndarray,
+        other_positions: np.ndarray,
+        other_velocities_world: np.ndarray,
+        other_pref_velocities_world: np.ndarray,
+        robot_radius: float,
+        other_radii: np.ndarray,
+        time_step: float,
+    ) -> list[_VelocityObstacle]:
+        """Construct HRVO cones for nearby dynamic neighbors.
+
+        Returns:
+            list[_VelocityObstacle]: HRVO cones in world-velocity space.
+        """
+        neighbor_dist = max(float(self.config.hrvo_neighbor_dist), 0.0)
+        max_neighbors = max(int(self.config.hrvo_max_neighbors), 0)
+        effective_time_horizon = max(float(self.config.hrvo_time_horizon), self._EPS)
+        uncertainty_offset = max(float(self.config.hrvo_uncertainty_offset), 0.0)
+        if other_positions.size == 0:
+            return []
+
+        offsets = other_positions
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        if neighbor_dist > 0.0:
+            keep = dist_sq <= neighbor_dist * neighbor_dist
+        else:
+            keep = np.ones((other_positions.shape[0],), dtype=bool)
+        if not np.any(keep):
+            return []
+
+        order = np.argsort(dist_sq[keep])
+        if max_neighbors > 0:
+            order = order[:max_neighbors]
+        kept_positions = other_positions[keep][order]
+        kept_velocities = other_velocities_world[keep][order]
+        kept_pref_velocities = other_pref_velocities_world[keep][order]
+        kept_radii = other_radii[keep][order]
+
+        velocity_obstacles: list[self._VelocityObstacle] = []
+        for other_position, other_velocity, other_pref_velocity, other_radius in zip(
+            kept_positions,
+            kept_velocities,
+            kept_pref_velocities,
+            kept_radii,
+            strict=True,
+        ):
+            relative_position = np.asarray(other_position, dtype=float)
+            relative_velocity = robot_velocity_world - np.asarray(other_velocity, dtype=float)
+            combined_radius = robot_radius + float(other_radius)
+            distance = float(np.linalg.norm(relative_position))
+            if distance < self._EPS:
+                continue
+            speed_horizon = (
+                np.linalg.norm(robot_velocity_world)
+                + np.linalg.norm(other_velocity)
+                + np.linalg.norm(other_pref_velocity)
+                + float(self.config.max_linear_speed)
+            ) * effective_time_horizon
+            if distance > combined_radius + speed_horizon:
+                continue
+
+            if distance > combined_radius:
+                angle = float(np.arctan2(relative_position[1], relative_position[0]))
+                opening = float(np.arcsin(self._clip_arcsin_ratio(combined_radius, distance)))
+                side1 = self._tangent_direction(angle - opening)
+                side2 = self._tangent_direction(angle + opening)
+                side_det = max(2.0 * np.sin(opening) * np.cos(opening), self._EPS)
+                pref_delta = preferred_velocity_world - np.asarray(other_pref_velocity, dtype=float)
+                if self._det(relative_position, pref_delta) > 0.0:
+                    scale = 0.5 * self._det(relative_velocity, side2) / side_det
+                    apex = other_velocity + scale * side1
+                else:
+                    scale = 0.5 * self._det(relative_velocity, side1) / side_det
+                    apex = other_velocity + scale * side2
+                apex = apex - (
+                    uncertainty_offset * distance / max(combined_radius, self._EPS)
+                ) * self._normalize(relative_position)
+            else:
+                apex = 0.5 * (np.asarray(other_velocity, dtype=float) + robot_velocity_world) - (
+                    uncertainty_offset
+                    + 0.5 * (combined_radius - distance) / max(time_step, self._EPS)
+                ) * self._normalize(relative_position)
+                normal = self._normalize(np.array([-relative_position[1], relative_position[0]]))
+                side1 = normal
+                side2 = -normal
+
+            velocity_obstacles.append(
+                self._VelocityObstacle(
+                    apex=np.asarray(apex, dtype=float),
+                    side1=np.asarray(side1, dtype=float),
+                    side2=np.asarray(side2, dtype=float),
+                )
+            )
+        return velocity_obstacles
+
+    def _seed_hrvo_candidate(self, preferred_velocity_world: np.ndarray) -> np.ndarray:
+        """Return the bounded preferred velocity used to seed HRVO candidate search.
+
+        Returns:
+            np.ndarray: Preferred velocity clipped to the planner speed limit.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        preferred_speed = float(np.linalg.norm(preferred_velocity_world))
+        if preferred_speed <= max_speed:
+            return preferred_velocity_world.copy()
+        return preferred_velocity_world / max(preferred_speed, self._EPS) * max_speed
+
+    def _hrvo_boundary_candidates(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+    ) -> list[_Candidate]:
+        """Enumerate candidates from individual obstacle boundaries and the speed circle.
+
+        Returns:
+            list[_Candidate]: Candidate velocities sourced from one obstacle at a time.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        candidates: list[self._Candidate] = []
+        for index, obstacle in enumerate(velocity_obstacles):
+            for side in (obstacle.side1, obstacle.side2):
+                projected = self._project_onto_side(obstacle.apex, side, preferred_velocity_world)
+                if np.linalg.norm(projected) <= max_speed + self._EPS:
+                    candidates.append(
+                        self._Candidate(position=projected, obstacle1=index, obstacle2=index)
+                    )
+                for point in self._circle_side_intersections(obstacle.apex, side, max_speed):
+                    candidates.append(
+                        self._Candidate(position=point, obstacle1=-1, obstacle2=index)
+                    )
+        return candidates
+
+    def _hrvo_intersection_candidates(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+    ) -> list[_Candidate]:
+        """Enumerate candidates from intersections between obstacle boundary rays.
+
+        Returns:
+            list[_Candidate]: Candidate velocities defined by paired obstacle boundaries.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        candidates: list[self._Candidate] = []
+        for left_index, left_obstacle in enumerate(velocity_obstacles[:-1]):
+            for right_index, right_obstacle in enumerate(
+                velocity_obstacles[left_index + 1 :],
+                start=left_index + 1,
+            ):
+                for left_side in (left_obstacle.side1, left_obstacle.side2):
+                    for right_side in (right_obstacle.side1, right_obstacle.side2):
+                        point = self._ray_intersection(
+                            left_obstacle.apex,
+                            left_side,
+                            right_obstacle.apex,
+                            right_side,
+                        )
+                        if point is None:
+                            continue
+                        if np.linalg.norm(point) <= max_speed + self._EPS:
+                            candidates.append(
+                                self._Candidate(
+                                    position=point,
+                                    obstacle1=left_index,
+                                    obstacle2=right_index,
+                                )
+                            )
+        return candidates
+
+    def _preferred_lateral_axis(self, preferred_velocity_world: np.ndarray) -> np.ndarray:
+        """Return a rotation-invariant lateral axis relative to the preferred velocity.
+
+        Returns:
+            np.ndarray: Unit vector perpendicular to the preferred velocity.
+        """
+        norm = float(np.linalg.norm(preferred_velocity_world))
+        if norm < self._EPS:
+            return np.array([0.0, 1.0], dtype=float)
+        pref_unit = preferred_velocity_world / norm
+        return np.array([-pref_unit[1], pref_unit[0]], dtype=float)
+
+    def _solve_hrvo_velocity(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+    ) -> np.ndarray:
+        """Select the feasible candidate nearest to the preferred velocity.
+
+        Returns:
+            np.ndarray: Chosen HRVO world-frame velocity.
+        """
+        seed = self._seed_hrvo_candidate(preferred_velocity_world)
+        candidates = [self._Candidate(position=seed, obstacle1=-1, obstacle2=-1)]
+        candidates.extend(
+            self._hrvo_boundary_candidates(velocity_obstacles, preferred_velocity_world)
+        )
+        candidates.extend(self._hrvo_intersection_candidates(velocity_obstacles))
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
+
+        candidates.sort(
+            key=lambda candidate: (
+                float(np.linalg.norm(candidate.position - preferred_velocity_world)),
+                float(abs(float(np.dot(candidate.position, lateral_axis))) < 1e-6),
+                -float(abs(float(np.dot(candidate.position, lateral_axis)))),
+            )
+        )
+        best_invalid: np.ndarray | None = None
+        best_invalid_cover = -1
+        for candidate in candidates:
+            valid = True
+            for obstacle_index, obstacle in enumerate(velocity_obstacles):
+                if obstacle_index in {candidate.obstacle1, candidate.obstacle2}:
+                    continue
+                if self._inside_velocity_obstacle(obstacle, candidate.position):
+                    valid = False
+                    if obstacle_index > best_invalid_cover:
+                        best_invalid = candidate.position
+                        best_invalid_cover = obstacle_index
+                    break
+            if valid:
+                return candidate.position
+        return best_invalid if best_invalid is not None else seed
+
+    def _break_hrvo_symmetry(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+        solved_velocity_world: np.ndarray,
+    ) -> np.ndarray:
+        """Resolve exact symmetric ties by committing to one obstacle boundary.
+
+        Returns:
+            np.ndarray: Symmetry-broken world-frame velocity.
+        """
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
+        solved_lateral = float(np.dot(solved_velocity_world, lateral_axis))
+        if abs(solved_lateral) > 1e-6 or not velocity_obstacles:
+            return solved_velocity_world
+        if not any(
+            self._inside_velocity_obstacle(obstacle, preferred_velocity_world)
+            or self._inside_velocity_obstacle(obstacle, solved_velocity_world)
+            for obstacle in velocity_obstacles
+        ):
+            return solved_velocity_world
+
+        choices: list[np.ndarray] = []
+        max_speed = float(self.config.max_linear_speed)
+        for obstacle in velocity_obstacles:
+            for side in (obstacle.side1, obstacle.side2):
+                candidate = self._project_onto_side(obstacle.apex, side, preferred_velocity_world)
+                candidate_lateral = float(np.dot(candidate, lateral_axis))
+                if (
+                    np.linalg.norm(candidate) <= max_speed + self._EPS
+                    and abs(candidate_lateral) > 1e-6
+                ):
+                    choices.append(candidate)
+        if not choices:
+            return solved_velocity_world
+        choices.sort(
+            key=lambda candidate: (
+                float(np.linalg.norm(candidate - preferred_velocity_world)),
+                -float(abs(float(np.dot(candidate, lateral_axis)))),
+                -float(np.dot(candidate, lateral_axis)),
+            )
+        )
+        return choices[0]
+
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity with the local HRVO solver.
+
+        Returns:
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
+        """
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        preferred_velocity_ego = self._preferred_velocity(
+            goal,
+            robot_pos,
+            robot_heading,
+            float(self.config.max_linear_speed),
+        )
+        if np.linalg.norm(preferred_velocity_ego) < self._EPS:
+            return np.zeros(2, dtype=float)
+        preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
+
+        robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
+        robot_velocity_world = np.array(
+            [
+                robot_speed * float(np.cos(robot_heading)),
+                robot_speed * float(np.sin(robot_heading)),
+            ],
+            dtype=float,
+        )
+        robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
+        time_step = float(
+            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
+        )
+        if time_step <= self._EPS:
+            time_step = 0.1
+
+        ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        if ped_count > 0:
+            cos_h = float(np.cos(robot_heading))
+            sin_h = float(np.sin(robot_heading))
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+            ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+            ped_pref_vel_world = ped_vel_world.copy()
+            ped_radii = np.full((ped_positions.shape[0],), float(ped_radius), dtype=float)
+        else:
+            ped_positions = np.zeros((0, 2), dtype=float)
+            ped_vel_world = np.zeros((0, 2), dtype=float)
+            ped_pref_vel_world = np.zeros((0, 2), dtype=float)
+            ped_radii = np.zeros((0,), dtype=float)
+
+        obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
+            observation,
+            robot_pos,
+            robot_heading,
+        )
+        if obstacle_positions.size:
+            obstacle_offsets = obstacle_positions - robot_pos[None, :]
+            obstacle_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+            obstacle_pref_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+        else:
+            obstacle_offsets = np.zeros((0, 2), dtype=float)
+            obstacle_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_pref_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_radii = np.zeros((0,), dtype=float)
+
+        if ped_positions.size or obstacle_offsets.size:
+            other_positions = np.concatenate(
+                [ped_positions - robot_pos[None, :], obstacle_offsets],
+                axis=0,
+            )
+            other_velocities_world = np.concatenate([ped_vel_world, obstacle_vel_world], axis=0)
+            other_pref_velocities_world = np.concatenate(
+                [ped_pref_vel_world, obstacle_pref_vel_world],
+                axis=0,
+            )
+            other_radii = np.concatenate([ped_radii, obstacle_radii], axis=0)
+        else:
+            return preferred_velocity_world
+
+        velocity_obstacles = self._build_hrvo_obstacles(
+            robot_velocity_world=robot_velocity_world,
+            preferred_velocity_world=preferred_velocity_world,
+            other_positions=other_positions,
+            other_velocities_world=other_velocities_world,
+            other_pref_velocities_world=other_pref_velocities_world,
+            robot_radius=robot_radius,
+            other_radii=other_radii,
+            time_step=time_step,
+        )
+        if not velocity_obstacles:
+            return preferred_velocity_world
+        solved = self._solve_hrvo_velocity(velocity_obstacles, preferred_velocity_world)
+        return self._break_hrvo_symmetry(
+            velocity_obstacles,
+            preferred_velocity_world,
+            solved,
         )
 
 
@@ -4092,6 +4818,17 @@ def make_orca_policy(
     return SocNavPlannerPolicy(
         adapter=ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
     )
+
+
+def make_hrvo_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for the local HRVO planner policy.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping HRVOPlannerAdapter.
+    """
+
+    return SocNavPlannerPolicy(adapter=HRVOPlannerAdapter(config=config))
 
 
 def make_sacadrl_policy(

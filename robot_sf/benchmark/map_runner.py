@@ -82,6 +82,7 @@ from robot_sf.planner.social_navigation_pyenvs_orca import (
     build_social_navigation_pyenvs_orca_config,
 )
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -105,6 +106,7 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_sampling",
     "sampling",
     "orca",
+    "hrvo",
     "sacadrl",
     "prediction_planner",
     "sa_cadrl",
@@ -1217,6 +1219,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
         adapter = SocialNavigationPyEnvsORCAAdapter(
             config=build_social_navigation_pyenvs_orca_config(algo_config)
@@ -1302,10 +1306,29 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         robot_kinematics=robot_kinematics,
         command_limits=algo_config,
     )
+    planner_bind_env = None
+    if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
+
+        def _bind_env(env: Any) -> None:
+            simulator = getattr(env, "simulator", None)
+            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
+                return
+            spacing = max(
+                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
+                0.25,
+            )
+            points = sample_obstacle_points(
+                simulator.iter_obstacle_segments(),
+                spacing=spacing,
+            )
+            adapter.bind_static_obstacle_points(points, spacing=spacing)
+
+        planner_bind_env = _bind_env
     holonomic_world_velocity_mode = (
         algo_key
         in {
             "orca",
+            "hrvo",
             "social_force",
             "sf",
             "social_navigation_pyenvs_orca",
@@ -1324,6 +1347,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
                 "coordinates, then forward that world-frame velocity directly into the "
                 "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key == "hrvo":
+            adapter_boundary = (
+                "Run the local HRVO geometry solver in world velocity space, then forward the "
+                "selected world-frame velocity directly into the holonomic vx_vy benchmark "
+                "action space."
             )
         elif algo_key == "social_force":
             adapter_boundary = (
@@ -1359,6 +1388,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         if hasattr(adapter, "reset"):
             _policy._planner_reset = lambda seed=None: adapter.reset()
+        if planner_bind_env is not None:
+            _policy._planner_bind_env = planner_bind_env
         return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -1371,6 +1402,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
     if hasattr(adapter, "reset"):
         _policy._planner_reset = lambda seed=None: adapter.reset()
+    if planner_bind_env is not None:
+        _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):
 
         def _planner_stats() -> dict[str, Any]:
@@ -1737,12 +1770,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
+    planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
     planner_stats = getattr(policy_fn, "_planner_stats", None)
 
     planner_runtime_snapshot: dict[str, Any] | None = None
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
+    if callable(planner_bind_env):
+        planner_bind_env(env)
     if callable(planner_reset):
         planner_reset(seed=int(seed))
 

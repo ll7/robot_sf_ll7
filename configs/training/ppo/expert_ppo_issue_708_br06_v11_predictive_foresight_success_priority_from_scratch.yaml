@@ -97,9 +97,11 @@ convergence:
   collision_rate: 0.05
   plateau_window: 3000
 evaluation:
-  evaluation_episodes: 235
+  # 70 maintained scenarios x 5 fixed seeds for deterministic checkpoint comparison.
+  evaluation_episodes: 350
   hold_out_scenarios: []
   randomize_seeds: false
+  scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
   full_policy_analysis_on_new_best: true
   full_policy_analysis_videos: false
   step_schedule:

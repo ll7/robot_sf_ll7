@@ -31,6 +31,10 @@ It is not a multi-variant sweep branch.
 ### Scenario surfaces
 
 - training surface: `configs/scenarios/classic_interactions_francis2023.yaml`
+- deterministic promotion eval surface: `configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml`
+  - `70` unique maintained positive scenarios
+  - `47` classic/francis benchmark scenarios + `23` maintained atomic scenarios
+  - excludes the intentionally invalid validation fixture set
 - secondary regression gate: `configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml`
 
 ## Locked Campaign Semantics
@@ -47,6 +51,8 @@ It is not a multi-variant sweep branch.
 - `observation_mode: socnav_struct`
 - occupancy grid enabled and included in dict observations
 - predictive foresight enabled with `predictive_proxy_selected_v2_full`
+- predictive foresight must be applied through the PPO env override path and expose
+  `predictive_*` observation keys during a real env reset
 - no XL ego-conditioned foresight in this issue
 
 ### Robot contract
@@ -117,6 +123,8 @@ Key outputs to inspect after training:
   - `benchmarks/ppo_imitation/runs/<run_id>.json`
 - eval timeline:
   - `benchmarks/ppo_imitation/eval_timeline/<run_id>.json`
+- eval by scenario:
+  - `benchmarks/ppo_imitation/eval_by_scenario/<run_id>.json`
 - performance summary:
   - `benchmarks/ppo_imitation/perf/<run_id>.json`
 - W&B logs:
@@ -204,6 +212,9 @@ Do not promote a checkpoint that is clearly worse on success/collision just beca
 
 ## Notes
 
+- deterministic eval now uses the full maintained eval surface with fixed seeds
+- with `5` fixed seeds and `70` scenarios, set `evaluation_episodes: 350` so each checkpoint covers
+  the full scenario-seed cross product once
 - If the latest W&B checkpoint is not the intended issue-708 run, narrow the `evaluate_latest_ppo_candidate.py`
   selection further with `--wandb-name-prefix` or stricter tags.
 - If the full run proves unstable or unexpectedly weak, capture that as a follow-up issue instead of broadening

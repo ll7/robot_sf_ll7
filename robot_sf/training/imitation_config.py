@@ -27,6 +27,7 @@ class EvaluationSchedule:
     hold_out_scenarios: tuple[str, ...] = ()
     step_schedule: tuple[tuple[int | None, int], ...] = ()
     randomize_seeds: bool = False
+    scenario_config: Path | None = None
 
 
 @dataclass(slots=True)

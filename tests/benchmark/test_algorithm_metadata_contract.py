@@ -178,6 +178,21 @@ def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract(
     assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
 
 
+def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
+    """NMPC metadata should classify the planner as a native optimizer-style adapter."""
+    meta = enrich_algorithm_metadata(
+        algo="nmpc_social",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "NMPCSocialPlannerAdapter"
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

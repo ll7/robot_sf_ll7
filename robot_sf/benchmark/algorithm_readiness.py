@@ -181,6 +181,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Native corridor-commitment planner inspired by TEB-style local optimization.",
         requires_explicit_opt_in=True,
     ),
+    AlgorithmReadiness(
+        canonical_name="nmpc_social",
+        tier="experimental",
+        aliases=("nmpc_social", "nmpc"),
+        note="Native NMPC-style local planner with short-horizon nonlinear optimization.",
+        requires_explicit_opt_in=True,
+    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

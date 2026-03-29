@@ -882,23 +882,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         if hasattr(adapter, "reset"):
             _policy._planner_reset = lambda seed=None: adapter.reset()
-        if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
-
-            def _bind_env(env: Any) -> None:
-                simulator = getattr(env, "simulator", None)
-                if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
-                    return
-                spacing = max(
-                    float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
-                    0.25,
-                )
-                points = sample_obstacle_points(
-                    simulator.iter_obstacle_segments(),
-                    spacing=spacing,
-                )
-                adapter.bind_static_obstacle_points(points, spacing=spacing)
-
-            _policy._planner_bind_env = _bind_env
         return _policy, meta
 
     if algo_key == "stream_gap":

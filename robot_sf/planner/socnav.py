@@ -2792,9 +2792,9 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
             kept_velocities,
             kept_pref_velocities,
             kept_radii,
-            strict=False,
+            strict=True,
         ):
-            relative_position = -np.asarray(other_position, dtype=float)
+            relative_position = np.asarray(other_position, dtype=float)
             relative_velocity = robot_velocity_world - np.asarray(other_velocity, dtype=float)
             combined_radius = robot_radius + float(other_radius)
             distance = float(np.linalg.norm(relative_position))
@@ -2916,6 +2916,18 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
                             )
         return candidates
 
+    def _preferred_lateral_axis(self, preferred_velocity_world: np.ndarray) -> np.ndarray:
+        """Return a rotation-invariant lateral axis relative to the preferred velocity.
+
+        Returns:
+            np.ndarray: Unit vector perpendicular to the preferred velocity.
+        """
+        norm = float(np.linalg.norm(preferred_velocity_world))
+        if norm < self._EPS:
+            return np.array([0.0, 1.0], dtype=float)
+        pref_unit = preferred_velocity_world / norm
+        return np.array([-pref_unit[1], pref_unit[0]], dtype=float)
+
     def _solve_hrvo_velocity(
         self,
         velocity_obstacles: list[_VelocityObstacle],
@@ -2932,12 +2944,13 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
             self._hrvo_boundary_candidates(velocity_obstacles, preferred_velocity_world)
         )
         candidates.extend(self._hrvo_intersection_candidates(velocity_obstacles))
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
 
         candidates.sort(
             key=lambda candidate: (
                 float(np.linalg.norm(candidate.position - preferred_velocity_world)),
-                float(abs(candidate.position[1]) < 1e-6),
-                -float(abs(candidate.position[1])),
+                float(abs(float(np.dot(candidate.position, lateral_axis))) < 1e-6),
+                -float(abs(float(np.dot(candidate.position, lateral_axis)))),
             )
         )
         best_invalid: np.ndarray | None = None
@@ -2968,7 +2981,9 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
         Returns:
             np.ndarray: Symmetry-broken world-frame velocity.
         """
-        if abs(float(solved_velocity_world[1])) > 1e-6 or not velocity_obstacles:
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
+        solved_lateral = float(np.dot(solved_velocity_world, lateral_axis))
+        if abs(solved_lateral) > 1e-6 or not velocity_obstacles:
             return solved_velocity_world
         if not any(
             self._inside_velocity_obstacle(obstacle, preferred_velocity_world)
@@ -2982,15 +2997,19 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
         for obstacle in velocity_obstacles:
             for side in (obstacle.side1, obstacle.side2):
                 candidate = self._project_onto_side(obstacle.apex, side, preferred_velocity_world)
-                if np.linalg.norm(candidate) <= max_speed + self._EPS and abs(candidate[1]) > 1e-6:
+                candidate_lateral = float(np.dot(candidate, lateral_axis))
+                if (
+                    np.linalg.norm(candidate) <= max_speed + self._EPS
+                    and abs(candidate_lateral) > 1e-6
+                ):
                     choices.append(candidate)
         if not choices:
             return solved_velocity_world
         choices.sort(
             key=lambda candidate: (
                 float(np.linalg.norm(candidate - preferred_velocity_world)),
-                -float(abs(candidate[1])),
-                -float(candidate[1]),
+                -float(abs(float(np.dot(candidate, lateral_axis)))),
+                -float(np.dot(candidate, lateral_axis)),
             )
         )
         return choices[0]

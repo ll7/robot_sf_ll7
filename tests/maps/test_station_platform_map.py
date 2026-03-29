@@ -27,8 +27,8 @@ def test_station_platform_map_parses_with_bidirectional_platform_flow() -> None:
     """The map should parse and expose station-like route, zone, and obstacle primitives."""
     map_def = convert_map(str(MAP_PATH))
 
-    assert map_def.obstacles, "Expected obstacles defining train edge, benches, and columns"
-    assert len(map_def.obstacles) >= 9, "Expected walls plus platform furniture obstacles"
+    assert map_def.obstacles, "Expected obstacles defining station walls and interior cores"
+    assert len(map_def.obstacles) >= 7, "Expected boundary walls plus stair/elevator cores"
     assert map_def.robot_spawn_zones, "Expected at least one robot spawn zone"
     assert map_def.robot_goal_zones, "Expected at least one robot goal zone"
     assert map_def.robot_routes, "Expected a robot route through the concourse edge"

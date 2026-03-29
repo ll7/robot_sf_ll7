@@ -20,7 +20,7 @@ import numba
 import numpy as np
 
 from robot_sf.common.geometry import euclid_dist
-from robot_sf.common.types import Circle2D, Line2D, Vec2D
+from robot_sf.common.types import Circle2D, Line2D, RobotPose, Vec2D
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -168,6 +168,8 @@ class ContinuousOccupancy:
         A function to get the obstacle coordinates.
     get_pedestrian_coords : Callable[[], np.ndarray]
         A function to get the pedestrian coordinates.
+    get_agent_pose : Callable[[], RobotPose] | None
+        Optional callback returning the full agent pose ``((x, y), heading)``.
     agent_radius : float, optional
         The robot radius, by default 1.0.
     ped_radius : float, optional
@@ -182,10 +184,22 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
+    get_agent_pose: Callable[[], RobotPose] | None = None
     get_dynamic_objects: Callable[[], list[Circle2D]] | None = None
     agent_radius: float = 1.0
     ped_radius: float = 0.4
     goal_radius: float = 1.0
+
+    @property
+    def agent_heading(self) -> float | None:
+        """Return agent heading when full pose callback is available.
+
+        Returns:
+            float | None: Agent heading in radians, or ``None`` when unavailable.
+        """
+        if self.get_agent_pose is None:
+            return None
+        return float(self.get_agent_pose()[1])
 
     @property
     def obstacle_coords(self) -> np.ndarray:

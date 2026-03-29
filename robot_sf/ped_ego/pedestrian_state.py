@@ -52,6 +52,9 @@ class PedestrianState:
     is_timeout: bool = field(init=False, default=False)
     distance_to_robot: float = field(init=False, default=0.0)
     ego_ped_speed: float = field(init=False, default=0.0)
+    collision_impact_speed: float = field(init=False, default=0.0)  # speed of robot at collision
+    collision_impact_angle_rad: float = field(init=False, default=0.0)
+    robot_ped_collision_zone: str = field(init=False, default="none")
     sim_time_elapsed: float = field(init=False, default=0.0)
     timestep: int = field(init=False, default=0)
 
@@ -97,6 +100,9 @@ class PedestrianState:
         self.is_timeout = False
         self.distance_to_robot = np.inf
         self.ego_ped_speed = 0.0
+        self.collision_impact_speed = 0.0
+        self.collision_impact_angle_rad = 0.0
+        self.robot_ped_collision_zone = "none"
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
@@ -120,7 +126,52 @@ class PedestrianState:
         self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
         self.ego_ped_speed = math.hypot(*self.sensors.robot_speed_sensor())
+        if self.is_collision_robot_with_pedestrian:
+            impact_speed, impact_angle, zone = self._compute_robot_ped_impact_metrics()
+            self.collision_impact_speed = impact_speed
+            self.collision_impact_angle_rad = impact_angle
+            self.robot_ped_collision_zone = zone
         return self.sensors.next_obs()
+
+    def _compute_robot_ped_impact_metrics(
+        self,
+    ) -> tuple[float, float, float, str]:
+        """Compute impact metrics for robot-pedestrian collisions only.
+
+        Returns:
+            tuple[float, float, float, str]:
+                ``(ped_speed_m_s, abs_relative_angle_rad, signed_relative_angle_rad, zone)``
+                where zone is one of ``front``, ``side``, ``back``, ``unknown``, ``none``.
+        """
+        v_x, v_y = self.sensors.robot_speed_sensor()
+        speed = float(math.hypot(v_x, v_y))
+        if not self.is_collision_robot_with_pedestrian:
+            return 0.0, 0.0, 0.0, "none"
+
+        robot_x, robot_y = self.robot_occupancy.get_agent_coords()
+        ego_x, ego_y = self.ego_ped_occupancy.get_agent_coords()
+        rel_x = float(ego_x - robot_x)
+        rel_y = float(ego_y - robot_y)
+        bearing_world = float(math.atan2(rel_y, rel_x))
+
+        robot_heading = self.robot_occupancy.agent_heading
+        if robot_heading is None:
+            return speed, 0.0, 0.0, "unknown"
+
+        rel_angle = float(
+            math.atan2(
+                math.sin(bearing_world - robot_heading),
+                math.cos(bearing_world - robot_heading),
+            )
+        )
+        abs_angle = abs(rel_angle)
+        if abs_angle <= (math.pi / 4):
+            zone = "front"
+        elif abs_angle >= (3 * math.pi / 4):
+            zone = "back"
+        else:
+            zone = "side"
+        return speed, abs_angle, zone
 
     def meta_dict(self) -> dict:
         """
@@ -141,6 +192,10 @@ class PedestrianState:
             "is_obstacle_collision": self.is_collision_with_obst,
             "distance_to_robot": self.distance_to_robot,
             "ego_ped_speed": self.ego_ped_speed,
+            "collision_impact_speed": self.collision_impact_speed,
+            "collision_impact_angle_rad": self.collision_impact_angle_rad,
+            "collision_impact_angle_deg": math.degrees(self.collision_impact_angle_rad),
+            "robot_ped_collision_zone": self.robot_ped_collision_zone,
             # For pedestrian-side observations, robot goal completion is a single-stage flag.
             # Emit route/waypoint aliases so downstream consumers can use canonical keys.
             "is_waypoint_complete": self.is_robot_at_goal,

@@ -26,6 +26,25 @@ class _DummyRobotOccupancy:
     is_obstacle_collision = False
     is_pedestrian_collision = False
 
+    def __init__(self) -> None:
+        self._agent = (3.0, 0.0)
+        self._heading = 0.0
+
+    def get_agent_coords(self) -> tuple[float, float]:
+        return self._agent
+
+    @property
+    def obstacle_coords(self):
+        return []
+
+    @property
+    def pedestrian_coords(self):
+        return []
+
+    @property
+    def agent_heading(self) -> float:
+        return self._heading
+
 
 class _DummyEgoPedOccupancy:
     """Occupancy stub exposing ego-pedestrian-facing flags used by PedestrianState."""
@@ -34,6 +53,27 @@ class _DummyEgoPedOccupancy:
     is_obstacle_collision = False
     is_agent_agent_collision = False
     distance_to_robot = 3.0
+
+    def __init__(self) -> None:
+        self._agent = (0.0, 0.0)
+        self._enemy = (3.0, 0.0)
+
+    def get_agent_coords(self) -> tuple[float, float]:
+        return self._agent
+
+    def set_agent_coords(self, x: float, y: float) -> None:
+        self._agent = (x, y)
+
+    def get_enemy_coords(self) -> tuple[float, float]:
+        return self._enemy
+
+    @property
+    def obstacle_coords(self):
+        return []
+
+    @property
+    def pedestrian_coords(self):
+        return []
 
 
 def test_pedestrian_state_meta_includes_ego_ped_speed() -> None:
@@ -50,4 +90,32 @@ def test_pedestrian_state_meta_includes_ego_ped_speed() -> None:
     state.step()
     meta = state.meta_dict()
 
-    assert meta["ego_ped_speed"] == 0.42
+    assert meta["ego_ped_speed"] == 0.0
+    assert meta["collision_type"] == "none"
+    assert meta["collision_impact_speed"] == 0.0
+    assert meta["collision_impact_angle_rad"] == 0.0
+    assert meta["robot_ped_collision_zone"] == "none"
+
+
+def test_pedestrian_state_collision_meta_includes_impact_kinematics() -> None:
+    """Robot-ped collision metadata should include impact speed and side-of-impact zone."""
+    robot_occ = _DummyRobotOccupancy()
+    robot_occ.is_pedestrian_collision = True
+    ego_occ = _DummyEgoPedOccupancy()
+    state = PedestrianState(
+        robot_occupancy=robot_occ,
+        ego_ped_occupancy=ego_occ,
+        sensors=_DummySensors(speed=0.5),
+        d_t=0.1,
+        sim_time_limit=10.0,
+    )
+
+    state.reset()
+    ego_occ.set_agent_coords(0.2, 0.0)
+    state.step()
+    meta = state.meta_dict()
+
+    assert meta["collision_type"] == "robot_pedestrian"
+    assert meta["collision_impact_speed"] > 1.5
+    assert meta["robot_ped_collision_zone"] == "back"
+    assert 2.9 <= meta["collision_impact_angle_rad"] <= 3.2

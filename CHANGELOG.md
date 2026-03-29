@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Pedestrian collision telemetry now records `collision_type`, `collision_impact_speed`, and `collision_impact_angle_rad/deg` in per-step metadata, with aggregated TensorBoard scalars and histograms for overall and per-collision-type impact kinematics.
 * APF model comparison benchmark script (`scripts/benchmark_ped_apf_models.py`) to run `run_023` and `run_043` with APF off/on (100 episodes each by default) and report aggregated episode metrics (steps, collisions, success/timeout, rewards) with JSON export under `output/benchmarks/`.
 * `ClassicGlobalPlanner.plan_random_path()` now supports `allow_inflation_fallback=False` to keep the configured inflated area instead of shrinking inflation during random path sampling.
 * Unified configs now support `map_id` for deterministic map selection when building environments.

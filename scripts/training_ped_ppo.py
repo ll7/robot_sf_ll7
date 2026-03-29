@@ -15,7 +15,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
-from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.reward import stationary_collision_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
@@ -47,7 +47,7 @@ def training(svg_map_path: str):
         FileNotFoundError: If ``svg_map_path`` or the pretrained model path is invalid.
         OSError: If the environment cannot spawn subprocesses or write output files.
     """
-    n_envs = 10
+    n_envs = 8
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
@@ -73,7 +73,7 @@ def training(svg_map_path: str):
             robot_model=robot_model,
             debug=False,
             recording_enabled=False,
-            reward_func=simple_ped_reward,
+            reward_func=stationary_collision_ped_reward,
         )
         return env
 
@@ -95,6 +95,6 @@ def training(svg_map_path: str):
 
 
 if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/debug_06.svg"
+    SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
 
     training(SVG_MAP)

@@ -508,6 +508,7 @@ class PedSimulator(Simulator):
             nav.update_position(robot.pos)
 
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
+        # Update state for social force calculation
         self.pysf_state.pysf_states()[-1, 0:2] = self.ego_ped.pos
         self.pysf_state.pysf_states()[-1, 2:4] = self.ego_ped.current_speed
 

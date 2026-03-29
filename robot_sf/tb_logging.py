@@ -172,5 +172,20 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
                 self.metrics.route_end_distance,
                 self.num_timesteps,
             )
+            self.writer.add_scalar(
+                "metrics/avg_ego_ped_speed_at_collision",
+                self.metrics.avg_ego_ped_speed_at_collision,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/avg_collision_impact_speed",
+                self.metrics.avg_collision_impact_speed_at_collision,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/avg_collision_impact_angle_rad",
+                self.metrics.avg_collision_impact_angle_rad_at_collision,
+                self.num_timesteps,
+            )
             self.writer.flush()
         return True  # info: don't request early abort

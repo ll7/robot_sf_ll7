@@ -7,6 +7,7 @@ import loguru
 from stable_baselines3 import PPO
 
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
+from robot_sf.gym_env.reward import stationary_collision_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
@@ -56,6 +57,7 @@ def make_env(svg_map_path):
         robot_model=robot_model,
         debug=True,
         recording_enabled=False,
+        reward_func=stationary_collision_ped_reward,
     )
 
     return env
@@ -82,6 +84,7 @@ def run():
     env = make_env("maps/svg_maps/masterthesis/headon.svg")
     filename = get_file()
     # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
+    filename = "./model_ped/ppo_2026-03-28_01-21-41.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)

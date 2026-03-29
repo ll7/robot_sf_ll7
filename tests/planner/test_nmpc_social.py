@@ -76,6 +76,22 @@ def test_build_nmpc_social_config_invalid_numeric_uses_default() -> None:
     assert any("Invalid NMPC config value for 'rollout_dt'" in str(item.message) for item in caught)
 
 
+def test_build_nmpc_social_config_parses_boolean_strings() -> None:
+    """Boolean config strings should use explicit parsing rather than Python truthiness."""
+    cfg = build_nmpc_social_config({"warm_start": "false", "fallback_to_stop": "yes"})
+    assert cfg.warm_start is False
+    assert cfg.fallback_to_stop is True
+
+
+def test_build_nmpc_social_config_invalid_boolean_uses_default() -> None:
+    """Invalid boolean strings should warn and fall back to the dataclass default."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = build_nmpc_social_config({"warm_start": "maybe"})
+    assert cfg.warm_start is NMPCSocialConfig().warm_start
+    assert any("Invalid NMPC config value for 'warm_start'" in str(item.message) for item in caught)
+
+
 def test_nmpc_social_moves_toward_goal_in_open_space() -> None:
     """Open-space behavior should remain goal directed and bounded."""
     planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4, solver_max_iterations=12))
@@ -90,6 +106,21 @@ def test_nmpc_social_prioritizes_current_waypoint_until_close() -> None:
     obs = _obs(robot=(0.0, 0.0), heading=0.0, goal=(3.0, 0.0))
     obs["goal"]["current"] = np.asarray((0.0, 2.0), dtype=float)
     obs["goal"]["next"] = np.asarray((3.0, 0.0), dtype=float)
+    _v, w = planner.plan(obs)
+    assert w > 0.05
+
+
+def test_nmpc_social_does_not_switch_to_origin_when_next_waypoint_is_missing() -> None:
+    """A single-goal observation should keep tracking goal.current during the final approach."""
+    planner = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            horizon_steps=4,
+            solver_max_iterations=12,
+            waypoint_switch_distance=1.0,
+        )
+    )
+    obs = _obs(robot=(0.0, 1.6), heading=0.0, goal=(0.0, 2.0))
+    del obs["goal"]["next"]
     _v, w = planner.plan(obs)
     assert w > 0.05
 

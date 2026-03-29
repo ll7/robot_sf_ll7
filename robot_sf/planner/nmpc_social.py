@@ -13,6 +13,25 @@ from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 
+def _parse_bool(value: Any) -> bool:
+    """Parse a config boolean while rejecting ambiguous string truthiness.
+
+    Returns:
+        bool: Parsed boolean value from a strict set of accepted inputs.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"Invalid boolean value: {value!r}")
+
+
 @dataclass
 class NMPCSocialConfig:
     """Configuration for the native NMPC-style social local planner."""
@@ -106,12 +125,20 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         speed = float(self._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.25]), pad=1)[0])
-        goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+        raw_goal_next: Any | None = None
+        if isinstance(observation.get("goal"), dict):
+            raw_goal_next = observation["goal"].get("next")
+        elif "goal_next" in observation:
+            raw_goal_next = observation.get("goal_next")
+        goal_next = self._as_1d_float(
+            raw_goal_next if raw_goal_next is not None else goal_current,
+            pad=2,
+        )[:2]
         current_distance = float(np.linalg.norm(goal_current - robot_pos))
         if current_distance > float(self.config.waypoint_switch_distance):
             goal = goal_current
-        elif np.linalg.norm(goal_next - robot_pos) > self._EPS:
+        elif raw_goal_next is not None and np.linalg.norm(goal_next - robot_pos) > self._EPS:
             goal = goal_next
         else:
             goal = goal_current
@@ -571,8 +598,8 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "symmetry_break_bias": float,
         "solver_ftol": float,
         "solver_max_iterations": int,
-        "warm_start": bool,
-        "fallback_to_stop": bool,
+        "warm_start": _parse_bool,
+        "fallback_to_stop": _parse_bool,
     }
     kwargs = {}
     for field in fields(NMPCSocialConfig):

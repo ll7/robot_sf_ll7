@@ -77,6 +77,8 @@ Artifacts:
 - `output/validation/issue_739_stage1_ablations/iter4_obs_only/summary.md`
 - `output/validation/issue_739_stage1_ablations/iter5_obs_selective/summary.json`
 - `output/validation/issue_739_stage1_ablations/iter5_obs_selective/summary.md`
+- `output/validation/issue_739_stage1_ablations/iter6_reward_tuned/summary.json`
+- `output/validation/issue_739_stage1_ablations/iter6_reward_tuned/summary.md`
 
 Observed screening result after `8,192` training steps and one deterministic full-surface eval:
 
@@ -86,6 +88,7 @@ Observed screening result after `8,192` training steps and one deterministic ful
 | reward_core | `0.0571` | `0.8857` | `-2.3080` | `-13.2681` |
 | obs_grid_goal | `0.1143` | `0.8143` | `-2.1082` | `-7.4426` |
 | obs_selective | `0.0143` | `0.9000` | `-2.3900` | `-22.3000` |
+| reward_tuned | `0.0143` | `0.9000` | `-2.3200` | `-16.1000` |
 
 Interpretation:
 
@@ -94,8 +97,11 @@ Interpretation:
 - The observation-lite variant reduced collisions relative to baseline, but it also reduced success
   and did not improve SNQI or return.
 - The selective observation reduction is much worse than baseline on every primary metric.
+- The narrower reward retuning also failed the screening gate and landed in the same low-success
+  regime as the weakest observation variants.
 - That does **not** prove the current issue-708 stack is globally optimal, but it does show that
-  neither blunt reward pruning nor the tested observation-pruning variants are easy wins.
+  neither blunt reward pruning, the tested observation-pruning variants, nor this first reward
+  retuning pass are easy wins.
 
 ## Stage-2 Recommendation
 
@@ -103,6 +109,8 @@ The next high-value ablation should be narrower and should keep the broad observ
 
 - keep the current reward stack and current observation stack as the control,
 - keep predictive foresight enabled,
-- prefer targeted reward-term retuning over term removal,
+- stop broad reward changes for now,
 - if observation work continues, test additive feature normalization or weighting before further
-  feature removal.
+  feature removal,
+- shift the next hypothesis toward scenario sampling / curriculum or optimizer-scale changes rather
+  than more feature or reward removal.

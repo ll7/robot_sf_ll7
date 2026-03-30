@@ -79,6 +79,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ## 📚 Documentation Index
 
 ### Getting Started
+
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, sync workflow, and GitHub Actions limitations
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
@@ -112,7 +113,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,   `watch`,   `list`,   `summary`,   `export`,   `perf-tests`,   `enable-tensorboard`)
 
 ### Benchmarking & Metrics
 
@@ -147,6 +148,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
 * **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
+* **[Issue #603 Alyassi Planner Reference Set](./context/issue_603_alyassi_reference_set_2026-03-06.md)** - Canonical paper-side planner anchors, citekeys, local clone locations, and current SoNIC provenance caveats
 * **[Issue #600 DSRNN Stretch Follow-up](./context/issue_600_dsrnn_stretch_follow_up.md)** - Canonical DSRNN source anchors, dependency ordering behind the first attention/prediction spikes, and the extra graph/recurrent integration burden that keeps this family in assessment-only status
 * **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
 * **[Issue #535 Execution Note (Paper Matrix Freeze)](./context/issue_535_paper_matrix_freeze.md)** - Frozen paper-facing experiment matrix contract and canonical command path
@@ -406,7 +408,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 * Report: Top 10 slowest tests printed with guidance at session end
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,  `ROBOT_SF_PERF_HARD`.
+* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 

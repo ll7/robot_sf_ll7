@@ -21,6 +21,8 @@ from robot_sf.planner import PlanningError
 from robot_sf.planner.visibility_planner import PlanningFailedError
 
 _PLANNER_RETRY_ATTEMPTS = 5
+_DEGENERATE_SEGMENT_LENGTH_TOLERANCE = 1e-9
+_DEGENERATE_SEGMENT_LENGTH_SQ_TOLERANCE = _DEGENERATE_SEGMENT_LENGTH_TOLERANCE**2
 
 
 @dataclass(frozen=True)
@@ -79,10 +81,10 @@ def _project_point_onto_segment(
         segment length.
     """
     segment = segment_end - segment_start
-    segment_length = float(np.linalg.norm(segment))
-    if segment_length <= 1e-9:
+    segment_length_sq = float(np.dot(segment, segment))
+    if segment_length_sq <= _DEGENERATE_SEGMENT_LENGTH_SQ_TOLERANCE:
         return segment_start.copy(), 0.0, 0.0
-    segment_length_sq = segment_length * segment_length
+    segment_length = float(np.sqrt(segment_length_sq))
     projection_fraction = float(
         np.clip(np.dot(point - segment_start, segment) / segment_length_sq, 0.0, 1.0)
     )
@@ -134,7 +136,7 @@ def _resolve_spawn_handoff_route(
             segment_start,
             segment_end,
         )
-        if segment_length <= 1e-9:
+        if segment_length <= _DEGENERATE_SEGMENT_LENGTH_TOLERANCE:
             continue
 
         lateral_distance_sq = float(np.dot(start - projection, start - projection))
@@ -152,7 +154,7 @@ def _resolve_spawn_handoff_route(
             handoff_target = projection + unit_direction * required_forward_distance
 
         resolved = [_as_vec2d(handoff_target)]
-        resolved.extend(_as_vec2d(point) for point in route_points[segment_index + 1 :])
+        resolved.extend(route[segment_index + 1 :])
         if len(resolved) >= 2 and dist(resolved[0], resolved[1]) <= 1e-9:
             return resolved[1:]
         return resolved

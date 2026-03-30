@@ -37,7 +37,7 @@ def test_simulation(map_definition: MapDefinition):
     logger.info("Creating the environment.")
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
-        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.04]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
 
@@ -47,14 +47,14 @@ def test_simulation(map_definition: MapDefinition):
         env_config,
         robot_model=robot_model,
         debug=True,
-        recording_enabled=False,
+        recording_enabled=True,
         peds_have_obstacle_forces=True,
     )
 
     _, _ = env.reset()
 
     logger.info("Simulating the random policy.")
-    for _ in range(10000):
+    for _ in range(1000):
         action_ped = env.action_space.sample()
         _, _, done, _, _ = env.step(action_ped)
         env.render()

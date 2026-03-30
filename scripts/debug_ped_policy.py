@@ -83,7 +83,7 @@ def run():
     # env = make_env("maps/svg_maps/debug_06.svg")
     env = make_env("maps/svg_maps/masterthesis/intersection.svg")
     filename = get_file()
-    filename = "./model_ped/ppo_2026-03-30_15-35-36.zip"
+    filename = "./model_ped/ppo_intersection.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)

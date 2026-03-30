@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Added adversial pedestrian policy demo (`examples/advanced/32_demo_adversial_pedestrian.py`) with factory-based environment setup, CLI overrides for map/model paths, and per-episode collision/kinematics summary logging.
 * Added pedestrian policy collision benchmark script (`scripts/benchmark_ped_policy_collisions.py`) to evaluate pedestrian checkpoints with episode metrics plus collision kinematics (robot speed, pedestrian speed, and impact angle at robot-pedestrian collision), front/back/side collision-zone percentages, explicit timeout/robot-goal counts, and a console outcome-breakdown log line.
 * Added differential-drive pedestrian policy debug runner (`scripts/debug_ped_policy_differential_drive.py`) combining the pedestrian debug loop with run_023-compatible differential-drive robot profile and observation adapter behavior.
 * Added differential-drive pedestrian PPO training entrypoint (`scripts/training_ped_ppo_differential_drive.py`) mirroring the existing pedestrian PPO workflow with `DifferentialDriveSettings`.

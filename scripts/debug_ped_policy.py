@@ -49,7 +49,7 @@ def make_env(svg_map_path):
             peds_reset_follow_route_at_start=True,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
-        spawn_near_robot=True,
+        spawn_near_robot=False,
         ego_ped_lidar_config=ego_ped_lidar,
     )
     env = make_pedestrian_env(
@@ -83,8 +83,7 @@ def run():
     # env = make_env("maps/svg_maps/debug_06.svg")
     env = make_env("maps/svg_maps/masterthesis/headon.svg")
     filename = get_file()
-    # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
-    filename = "./model_ped/ppo_2026-03-28_01-21-41.zip"
+    filename = "./model_ped/ppo_2026-03-30_08-43-10.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)
@@ -97,11 +96,15 @@ def run():
             obs = obs[0]
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, _, meta = env.step(action)
+        robot_speed = env.simulator.robots[0].current_speed
+        ego_speed = env.simulator.ego_ped.current_speed
         ep_rewards += reward
         env.render()
 
         if done:
             logger.info(extract_info(meta, ep_rewards))
+            logger.info(f"Robot speed {robot_speed}")
+            logger.info(f"Ego speed {ego_speed}")
             ep_rewards = 0
             obs = env.reset()
             env.render()
@@ -129,7 +132,10 @@ def extract_info(meta: dict, reward: float) -> str:
     steps = meta["step_of_episode"]
     done = [key for key, value in meta.items() if value is True]
     dis = meta["distance_to_robot"]
-    return f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, Distance: {dis}"
+    angle = meta["collision_impact_angle_deg"]
+    zone = meta["robot_ped_collision_zone"]
+    speed = meta["ego_ped_speed"]
+    return f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, Distance: {dis}, Angle: {angle}, Zone: {zone}, speed: {speed}"
 
 
 if __name__ == "__main__":

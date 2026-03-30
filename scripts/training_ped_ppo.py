@@ -48,8 +48,8 @@ def training(svg_map_path: str):
         OSError: If the environment cannot spawn subprocesses or write output files.
     """
     n_envs = 8
-    ped_densities = [0.01, 0.02, 0.04, 0.08]
-    difficulty = 2
+    ped_densities = [0.04]
+    difficulty = 0
 
     def make_env():
         map_definition = convert_map(svg_map_path)
@@ -87,7 +87,7 @@ def training(svg_map_path: str):
     collect_metrics_callback = AdversialPedestrianMetricsCallback(n_envs)
     combined_callback = CallbackList([save_model_callback, collect_metrics_callback])
 
-    model.learn(total_timesteps=1_000_000, progress_bar=True, callback=combined_callback)
+    model.learn(total_timesteps=1_500_000, progress_bar=True, callback=combined_callback)
     now = datetime.datetime.now()
     filename = now.strftime("%Y-%m-%d_%H-%M-%S")
     model.save(f"./model_ped/ppo_{filename}")
@@ -95,6 +95,6 @@ def training(svg_map_path: str):
 
 
 if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/masterthesis/corner.svg"
+    SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
 
     training(SVG_MAP)

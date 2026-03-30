@@ -120,13 +120,11 @@ class PedestrianState:
         self.is_collision_with_robot = self.ego_ped_occupancy.is_agent_agent_collision
         self.is_robot_at_goal = self.robot_occupancy.is_robot_at_goal
         self.is_collision_robot_with_obstacle = self.robot_occupancy.is_obstacle_collision
-        self.is_collision_robot_with_pedestrian = (
-            self.robot_occupancy.is_pedestrian_collision and not self.is_collision_with_robot
-        )
+        self.is_collision_robot_with_pedestrian = self.robot_occupancy.is_pedestrian_collision
         self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
+        self.ego_ped_speed = math.hypot(*self.sensors.robot_speed_sensor())
         if self.is_collision_with_robot:
-            self.ego_ped_speed = math.hypot(*self.sensors.robot_speed_sensor())
             impact_angle, zone = self._compute_robot_ped_impact_metrics()
             self.collision_impact_angle_rad = impact_angle
             self.robot_ped_collision_zone = zone
@@ -142,6 +140,9 @@ class PedestrianState:
                 ``(ped_speed_m_s, abs_relative_angle_rad, zone)``
                 where zone is one of ``front``, ``side``, ``back``, ``unknown``, ``none``.
         """
+        if not self.is_collision_with_robot:
+            return 0.0, "none"
+
         robot_x, robot_y = self.robot_occupancy.get_agent_coords()
         ego_x, ego_y = self.ego_ped_occupancy.get_agent_coords()
         rel_x = float(ego_x - robot_x)

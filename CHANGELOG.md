@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Added pedestrian policy collision benchmark script (`scripts/benchmark_ped_policy_collisions.py`) to evaluate pedestrian checkpoints with episode metrics plus collision kinematics (robot speed, pedestrian speed, and impact angle at robot-pedestrian collision), front/back/side collision-zone percentages, explicit timeout/robot-goal counts, and a console outcome-breakdown log line.
 * Added differential-drive pedestrian policy debug runner (`scripts/debug_ped_policy_differential_drive.py`) combining the pedestrian debug loop with run_023-compatible differential-drive robot profile and observation adapter behavior.
 * Added differential-drive pedestrian PPO training entrypoint (`scripts/training_ped_ppo_differential_drive.py`) mirroring the existing pedestrian PPO workflow with `DifferentialDriveSettings`.
 * Pedestrian collision telemetry now records `collision_type`, `collision_impact_speed`, and `collision_impact_angle_rad/deg` in per-step metadata, with aggregated TensorBoard scalars and histograms for overall and per-collision-type impact kinematics.

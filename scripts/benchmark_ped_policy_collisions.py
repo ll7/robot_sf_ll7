@@ -50,6 +50,8 @@ class PedPolicyMetrics:
     std_sim_steps: float
     avg_episode_reward: float
     std_episode_reward: float
+    timeout_count: int
+    robot_reached_goal_count: int
     timeout_rate: float
     pedestrian_collision_rate: float
     obstacle_collision_rate: float
@@ -341,6 +343,8 @@ def run_benchmark(
         std_sim_steps=_safe_std(episode_steps),
         avg_episode_reward=_safe_mean(episode_rewards),
         std_episode_reward=_safe_std(episode_rewards),
+        timeout_count=int(outcome_counts["timeout"]),
+        robot_reached_goal_count=int(outcome_counts["robot_at_goal"]),
         timeout_rate=_safe_rate(outcome_counts["timeout"], num_episodes),
         pedestrian_collision_rate=_safe_rate(outcome_counts["ped_collision"], num_episodes),
         obstacle_collision_rate=_safe_rate(outcome_counts["obst_collision"], num_episodes),
@@ -379,6 +383,21 @@ def _print_results(metrics: PedPolicyMetrics) -> None:
         metrics.avg_sim_steps,
         metrics.avg_episode_reward,
         metrics.robot_collision_rate,
+    )
+    logger.info(
+        "timeouts={} ({:.2%}) | robot_reached_goal={} ({:.2%})",
+        metrics.timeout_count,
+        metrics.timeout_rate,
+        metrics.robot_reached_goal_count,
+        metrics.robot_at_goal_rate,
+    )
+    logger.info(
+        "outcome_breakdown robot_collision={:.2%} | pedestrian_collision={:.2%} | obstacle_collision={:.2%} | timeout={:.2%} | robot_goal={:.2%}",
+        metrics.robot_collision_rate,
+        metrics.pedestrian_collision_rate,
+        metrics.obstacle_collision_rate,
+        metrics.timeout_rate,
+        metrics.robot_at_goal_rate,
     )
     logger.info(
         "collision_events={} | avg_robot_speed={:.3f} | avg_ped_speed={:.3f} | avg_angle_deg={:.2f}",

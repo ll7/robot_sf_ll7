@@ -64,15 +64,15 @@ def get_model_profile(model_name: str) -> dict[str, Any]:
         return {
             "stack_steps": 1,
             "difficulty": 0,
-            "ped_density_by_difficulty": [0.06],
+            "ped_density_by_difficulty": [0.04],
             "robot_config": DifferentialDriveSettings(radius=1.0, max_angular_speed=0.5),
         }
 
     if model_name == "run_043":
         return {
             "stack_steps": 3,
-            "difficulty": 1,
-            "ped_density_by_difficulty": [0.01, 0.02, 0.04, 0.08],
+            "difficulty": 0,
+            "ped_density_by_difficulty": [0.04],
             "robot_config": BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
         }
 
@@ -176,6 +176,7 @@ def run_condition(
     obs_adapter = get_obs_adapter(model_name)
 
     episode_steps: list[float] = []
+    success_episode_steps: list[float] = []
     episode_rewards: list[float] = []
     end_distances: list[float] = []
 
@@ -216,6 +217,8 @@ def run_condition(
             any_collision = is_ped_collision or is_obst_collision or is_robot_collision
 
             episode_steps.append(float(step_of_episode))
+            if is_success:
+                success_episode_steps.append(float(step_of_episode))
             episode_rewards.append(float(reward_sum))
             end_distances.append(float(meta.get("distance_to_goal", math.nan)))
 
@@ -250,8 +253,8 @@ def run_condition(
         wall_time_seconds=wall_time,
         total_sim_steps=total_steps,
         steps_per_second=float(total_steps / max(wall_time, 1e-9)),
-        avg_sim_steps=_safe_mean(episode_steps),
-        std_sim_steps=_safe_std(episode_steps),
+        avg_sim_steps=_safe_mean(success_episode_steps),
+        std_sim_steps=_safe_std(success_episode_steps),
         avg_episode_reward=_safe_mean(episode_rewards),
         std_episode_reward=_safe_std(episode_rewards),
         success_rate=_safe_rate(success_count, num_episodes),

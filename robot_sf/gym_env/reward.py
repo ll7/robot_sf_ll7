@@ -9,7 +9,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 import numpy as np
-from loguru import logger
 
 from robot_sf.gym_env.reward_alyassi import alyassi_reward
 
@@ -143,13 +142,12 @@ def stationary_collision_ped_reward(
     max_episode_step_discount: float = -0.1,
     ped_coll_penalty: float = -5,
     obst_coll_penalty: float = -5,
-    robot_npc_ped_coll_reward: float = 10,
     stationary_collision_reward: float = 10,
-    slow_coll_reward: float = 5,
-    robot_coll_reward: float = 2,
-    robot_route_complete_penalty: float = -1,
-    stationary_speed_epsilon: float = 1e-3,
-    slow_speed: float = 0.5,
+    slow_coll_reward: float = 8,
+    robot_coll_reward: float = 5,
+    robot_route_complete_penalty: float = -2,
+    stationary_speed_epsilon: float = 0.1,
+    slow_speed: float = 1.0,
 ) -> float:
     """Pedestrian reward that grants bonus for collisions while ego pedestrian is stationary.
 
@@ -179,17 +177,14 @@ def stationary_collision_ped_reward(
     is_robot_collision = meta["is_robot_collision"]
 
     if is_robot_collision and is_stationary:
-        logger.warning(
-            f"Stationary collision detected at speed {ego_speed:.4f} m/s, granting reward."
-        )
+        # logger.warning(
+        #     f"Stationary collision detected at speed {ego_speed:.4f} m/s, granting reward."
+        # )
         reward += stationary_collision_reward
     elif is_robot_collision and is_slow:
         reward += slow_coll_reward
     elif is_robot_collision:
         reward += robot_coll_reward
-
-    if meta["is_robot_pedestrian_collision"] and not is_robot_collision:
-        reward += robot_npc_ped_coll_reward
 
     if meta["is_pedestrian_collision"]:
         reward += ped_coll_penalty

@@ -132,12 +132,12 @@ class PedestrianState:
 
     def _compute_robot_ped_impact_metrics(
         self,
-    ) -> tuple[float, float, str]:
+    ) -> tuple[float, str]:
         """Compute impact metrics for robot-pedestrian collisions only.
 
         Returns:
-            tuple[float, float, str]:
-                ``(ped_speed_m_s, abs_relative_angle_rad, zone)``
+            tuple[float, str]:
+                ``(abs_relative_angle_rad, zone)``
                 where zone is one of ``front``, ``side``, ``back``, ``unknown``, ``none``.
         """
         if not self.is_collision_with_robot:

@@ -95,7 +95,7 @@ class AdversialPedForce:
         self.peds = peds
         self.get_robot_pose = get_robot_pose
         self.last_forces = 0.0
-        self.target_ped_idx = [0, -1]
+        self.target_ped_idx = config.target_ped_idx
         """Even if the target_idx restricts to one ped, groups forces may pull more pedestrians
             towards the robot"""
 
@@ -186,7 +186,7 @@ def adversial_ped_force(  # noqa: PLR0913
         ped_pos = ped_positions[idx]
         distance = euclid_dist(attraction_point, ped_pos)
 
-        if distance <= threshold and distance > 1:  # avoid division by zero
+        if distance <= threshold and distance > 1:  # avoid division by zero and not too accurate
             # Desired direction
             direction = (attraction_point - ped_pos) / distance
 

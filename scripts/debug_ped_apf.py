@@ -236,7 +236,7 @@ def plot_forces_over_time2(forces_over_time):
     print(forces_over_time.shape)
     timesteps = np.arange(forces_over_time.shape[0])
 
-    # F[time,force,ped,:]=(Fx​,Fy​)
+    # F[time,force,ped,:]=(Fx, Fy)
     Fx = forces_over_time[:, 0, 2, 0]  # x-component
     Fy = forces_over_time[:, 0, 2, 1]  # y-component
 

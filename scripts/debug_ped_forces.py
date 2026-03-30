@@ -15,6 +15,7 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePede
 from robot_sf.nav.nav_types import SvgRectangle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
+from svg_conv.svg_conv import convert_map
 
 logger = loguru.logger
 
@@ -102,7 +103,7 @@ def make_env(svg_map_path):
     gym.Env
         Pedestrian simulation environment with loaded robot model.
     """
-    # map_definition = convert_map(svg_map_path)
+    map_definition = convert_map(svg_map_path)
     map_definition = dummy_map()
     robot_model = PPO.load("./model/run_043", env=None)
 

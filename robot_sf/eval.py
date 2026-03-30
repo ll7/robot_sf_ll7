@@ -647,11 +647,10 @@ class PedVecEnvMetrics:
 
     @property
     def avg_ego_ped_speed_at_collision(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average ego pedestrian speed at robot-collision outcomes across all environments.
 
         Returns:
-            TODO docstring.
+            float: The mean of average ego pedestrian speeds at collision.
         """
         return sum(m.avg_ego_ped_speed_at_collision for m in self.metrics) / len(self.metrics)
 

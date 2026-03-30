@@ -91,4 +91,4 @@ issue should be limited to:
 2. run the upstream `test.py` path with one bundled checkpoint,
 3. document the exact observation tensor, recurrent-state, and action contracts,
 4. decide whether Robot SF can support a thin wrapper without turning the result into a local
-   reimplementation.
+    reimplementation.

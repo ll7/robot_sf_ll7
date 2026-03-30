@@ -67,6 +67,99 @@ def _apply_waypoint_noise(
     return [tuple(point) for point in (waypoints_array + noise)]
 
 
+def _project_point_onto_segment(
+    point: np.ndarray,
+    segment_start: np.ndarray,
+    segment_end: np.ndarray,
+) -> tuple[np.ndarray, float, float]:
+    """Project a point onto a line segment.
+
+    Returns:
+        tuple[np.ndarray, float, float]: Projected point, clamped segment fraction, and
+        segment length.
+    """
+    segment = segment_end - segment_start
+    segment_length = float(np.linalg.norm(segment))
+    if segment_length <= 1e-9:
+        return segment_start.copy(), 0.0, 0.0
+    segment_length_sq = segment_length * segment_length
+    projection_fraction = float(
+        np.clip(np.dot(point - segment_start, segment) / segment_length_sq, 0.0, 1.0)
+    )
+    projection = segment_start + projection_fraction * segment
+    return projection, projection_fraction, segment_length
+
+
+def _as_vec2d(point: np.ndarray) -> Vec2D:
+    """Convert a numpy point to the project Vec2D tuple type.
+
+    Returns:
+        Vec2D: Point as a plain ``(x, y)`` tuple.
+    """
+    return (float(point[0]), float(point[1]))
+
+
+def _resolve_spawn_handoff_route(
+    route: list[Vec2D],
+    *,
+    start_pos: Vec2D,
+    proximity_threshold: float,
+) -> list[Vec2D]:
+    """Push the initial local target forward along the route when spawn starts too close.
+
+    The sampled robot spawn can land inside the completion radius of the nominal first
+    waypoint. In that case, use the earliest point on the route polyline that lies just
+    outside the completion radius so local planners receive a meaningful initial target
+    instead of instantly skipping waypoint 0 or backtracking toward it.
+
+    Returns:
+        list[Vec2D]: Route with an adjusted first handoff target when needed.
+    """
+    if len(route) < 2 or proximity_threshold <= 0.0:
+        return list(route)
+
+    start = np.asarray(start_pos, dtype=float)
+    first_waypoint = np.asarray(route[0], dtype=float)
+    if float(np.linalg.norm(first_waypoint - start)) > proximity_threshold:
+        return list(route)
+
+    target_distance = float(proximity_threshold) + 1e-6
+    route_points = [np.asarray(point, dtype=float) for point in route]
+
+    for segment_index in range(len(route_points) - 1):
+        segment_start = route_points[segment_index]
+        segment_end = route_points[segment_index + 1]
+        projection, projection_fraction, segment_length = _project_point_onto_segment(
+            start,
+            segment_start,
+            segment_end,
+        )
+        if segment_length <= 1e-9:
+            continue
+
+        lateral_distance_sq = float(np.dot(start - projection, start - projection))
+        target_distance_sq = target_distance * target_distance
+        if lateral_distance_sq >= target_distance_sq:
+            handoff_target = projection
+        else:
+            required_forward_distance = float(
+                np.sqrt(max(target_distance_sq - lateral_distance_sq, 0.0))
+            )
+            remaining_segment_distance = (1.0 - projection_fraction) * segment_length
+            if required_forward_distance > remaining_segment_distance + 1e-9:
+                continue
+            unit_direction = (segment_end - segment_start) / segment_length
+            handoff_target = projection + unit_direction * required_forward_distance
+
+        resolved = [_as_vec2d(handoff_target)]
+        resolved.extend(_as_vec2d(point) for point in route_points[segment_index + 1 :])
+        if len(resolved) >= 2 and dist(resolved[0], resolved[1]) <= 1e-9:
+            return resolved[1:]
+        return resolved
+
+    return list(route)
+
+
 def _select_spawn_id(map_def: MapDefinition, spawn_id: int | None) -> int:
     """Pick a spawn id, falling back to first available or zero.
 
@@ -265,11 +358,19 @@ class RouteNavigator:
 
     @property
     def initial_orientation(self) -> float:
-        """Initial heading from the first to the second waypoint.
+        """Initial heading from the first route segment.
 
         Returns:
             float: Orientation in radians.
         """
+
+        if not self.waypoints:
+            raise ValueError("RouteNavigator has no waypoints; cannot compute initial heading.")
+        if len(self.waypoints) == 1:
+            return atan2(
+                self.waypoints[0][1] - self.pos[1],
+                self.waypoints[0][0] - self.pos[0],
+            )
 
         return atan2(
             self.waypoints[1][1] - self.waypoints[0][1],
@@ -297,15 +398,26 @@ class RouteNavigator:
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
-    def new_route(self, route: list[Vec2D]):
+    def new_route(self, route: list[Vec2D], *, start_pos: Vec2D | None = None):
         """Replace the active route and reset progress.
 
         Args:
             route: Ordered list of waypoints to follow.
+            start_pos: Optional spawn position used to derive a stable first handoff target.
         """
-        self.waypoints = route
+        self.waypoints = (
+            _resolve_spawn_handoff_route(
+                route,
+                start_pos=start_pos,
+                proximity_threshold=self.proximity_threshold,
+            )
+            if start_pos is not None
+            else list(route)
+        )
         self.waypoint_id = 0
         self.reached_waypoint = False
+        if start_pos is not None:
+            self.pos = start_pos
 
 
 def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Vec2D]:

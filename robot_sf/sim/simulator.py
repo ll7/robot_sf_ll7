@@ -214,7 +214,7 @@ class Simulator:
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:])
+                nav.new_route(waypoints[1:], start_pos=waypoints[0])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: list[RobotAction]):
@@ -380,7 +380,7 @@ class PedSimulator(Simulator):
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:])
+                nav.new_route(waypoints[1:], start_pos=waypoints[0])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
         robot_spawn = self.robot_pos[0]

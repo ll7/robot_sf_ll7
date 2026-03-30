@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Robot route resets now derive a spawn-aware first-segment handoff target so topology-heavy scenarios do not begin inside waypoint 0's completion radius or force planners to backtrack toward an awkward initial point.
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
 * Auxme GPU SLURM submissions now default to `48G` host memory instead of the previous `120G`, matching the documented PPO host-memory sizing guidance more closely while preserving headroom for `num_envs` auto-resolution on 24-CPU jobs.

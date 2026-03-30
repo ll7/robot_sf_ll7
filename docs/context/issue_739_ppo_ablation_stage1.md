@@ -114,3 +114,5 @@ The next high-value ablation should be narrower and should keep the broad observ
   feature removal,
 - shift the next hypothesis toward scenario sampling / curriculum or optimizer-scale changes rather
   than more feature or reward removal.
+
+See [Stage 2 documentation](issue_739_ppo_ablation_stage2.md) for the follow-up ablations.

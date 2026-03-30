@@ -74,7 +74,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * [🔗 External Links](#-external-links)
 * [🤝 Contributing](#-contributing)
 * [📞 Support](#-support)
-* [Helper Catalog](#helper-catalog)
+* [Planner Documentation](#planner-documentation)
 
 ## 📚 Documentation Index
 
@@ -113,7 +113,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,   `watch`,   `list`,   `summary`,   `export`,   `perf-tests`,   `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
 
 ### Benchmarking & Metrics
 
@@ -143,21 +143,21 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary
 * **[Prediction Planner PR Readiness (2026-02-20)](./context/predictive_planner_pr_readiness_2026-02-20.md)** - Completed integration checklist and remaining maintainer decisions before final merge
-* **[Issues 485-492 Execution Trace](./context/issues_485_492_execution.md)** - Implementation summary, validation runs, and rollout notes for the benchmark hardening changes
-* **[Issues 500-504 Execution Notes](./context/issues_500_501_504_execution.md)** - Metadata enrichment, time-to-goal contract extensions, and adapter-impact probing implementation
-* **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
-* **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
-* **[Issue #603 Alyassi Planner Reference Set](./context/issue_603_alyassi_reference_set_2026-03-06.md)** - Canonical paper-side planner anchors, citekeys, local clone locations, and current SoNIC provenance caveats
-* **[Issue #600 DSRNN Stretch Follow-up](./context/issue_600_dsrnn_stretch_follow_up.md)** - Canonical DSRNN source anchors, dependency ordering behind the first attention/prediction spikes, and the extra graph/recurrent integration burden that keeps this family in assessment-only status
-* **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
+* **[Issues 485-492 Execution Trace](./context/issues_485_492_execution.md)** - Implementation summary, validation runs, and rollout notes for the benchmark hardening changes
+* **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
+* **[Issues 500-504 Execution Notes](./context/issues_500_501_504_execution.md)** - Metadata enrichment, time-to-goal contract extensions, and adapter-impact probing implementation
+* **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #535 Execution Note (Paper Matrix Freeze)](./context/issue_535_paper_matrix_freeze.md)** - Frozen paper-facing experiment matrix contract and canonical command path
+* **[Issue #600 DSRNN Stretch Follow-up](./context/issue_600_dsrnn_stretch_follow_up.md)** - Canonical DSRNN source anchors, dependency ordering behind the first attention/prediction spikes, and the extra graph/recurrent integration burden that keeps this family in assessment-only status
+* **[Issue #603 Alyassi Planner Reference Set](./context/issue_603_alyassi_reference_set_2026-03-06.md)** - Canonical paper-side planner anchors, citekeys, local clone locations, and current SoNIC provenance caveats
+* **[Issue #651 Social-Navigation-PyEnvs ORCA Self-Velocity Contract Note](./context/issue_651_social_navigation_pyenvs_orca_self_velocity.md)** - Explicit planar self-velocity contract fix for the upstream ORCA adapter, restored raw `ActionXY` parity on upstream scenarios, and paper-surface rerun showing the corrected prototype remains weak
+* **[Issue #653 Social-Navigation-PyEnvs SocialForce Runtime Reproduction Note](./context/issue_653_social_navigation_pyenvs_socialforce_runtime.md)** - Compatibility-runtime probe proving the upstream SocialForce policy can run unchanged against `socialforce==0.2.3` through an explicit shim, which justifies a benchmark-facing retry
+* **[Issue #656 Social-Navigation-PyEnvs SocialForce Retry Note](./context/issue_656_social_navigation_pyenvs_socialforce_retry.md)** - Benchmark-facing SocialForce retry showing the constructor blocker is fixed through an explicit shim, but the planner remains weak and partially unstable on the paper surface
+* **[Issue #659 gym-collision-avoidance Headless Reproduction](./context/issue_659_gym_collision_avoidance_headless.md)** - Explicit headless compatibility shims that let the upstream GA3C-CADRL example complete in the isolated side environment, turning this family from generic runtime-blocked into wrapper/parity-justified
 * **[Issue #661 gym-collision-avoidance Model Parity Probe](./context/issue_661_gym_collision_avoidance_model_parity.md)** - Live native-observation parity check showing the current local `_SACADRLModel` already matches upstream GA3C-CADRL checkpoint inference, shifting the remaining risk to Robot SF observation mapping and benchmark behavior
 * **[Issue #663 SACADRL Observation Parity Note](./context/issue_663_sacadrl_observation_parity.md)** - Controlled and live upstream parity probe showing the current `SACADRLPlannerAdapter` reproduces the GA3C-CADRL network input on tested cases, shifting the remaining risk from observation mapping to planner quality and scenario transfer
-* **[Issue #659 gym-collision-avoidance Headless Reproduction](./context/issue_659_gym_collision_avoidance_headless.md)** - Explicit headless compatibility shims that let the upstream GA3C-CADRL example complete in the isolated side environment, turning this family from generic runtime-blocked into wrapper/parity-justified
-* **[Issue #656 Social-Navigation-PyEnvs SocialForce Retry Note](./context/issue_656_social_navigation_pyenvs_socialforce_retry.md)** - Benchmark-facing SocialForce retry showing the constructor blocker is fixed through an explicit shim, but the planner remains weak and partially unstable on the paper surface
-* **[Issue #653 Social-Navigation-PyEnvs SocialForce Runtime Reproduction Note](./context/issue_653_social_navigation_pyenvs_socialforce_runtime.md)** - Compatibility-runtime probe proving the upstream SocialForce policy can run unchanged against `socialforce==0.2.3` through an explicit shim, which justifies a benchmark-facing retry
-* **[Issue #651 Social-Navigation-PyEnvs ORCA Self-Velocity Contract Note](./context/issue_651_social_navigation_pyenvs_orca_self_velocity.md)** - Explicit planar self-velocity contract fix for the upstream ORCA adapter, restored raw `ActionXY` parity on upstream scenarios, and paper-surface rerun showing the corrected prototype remains weak
+* **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
 * **[Issue #649 Social-Navigation-PyEnvs ORCA Parity Note](./context/issue_649_social_navigation_pyenvs_orca_parity.md)** - Same-snapshot upstream-versus-wrapper parity probe showing the pre-fix self-velocity contract mismatch in the original ORCA adapter before downstream unicycle projection
 * **[Issue #647 Social-Navigation-PyEnvs HSFM Integration Note](./context/issue_647_social_navigation_pyenvs_hsfm_integration.md)** - Benchmark-facing headed-force-model prototype for upstream HSFM-New-Guo with explicit body-frame action contract, angular-rate observation extension, and benchmark validation path
 * **[Issue #646 Social-Navigation-PyEnvs SocialForce and SFM Integration Note](./context/issue_646_social_navigation_pyenvs_force_models_integration.md)** - Benchmark-facing force-model split showing SFM-Helbing runs as an upstream-backed sanity-surface prototype while SocialForce is blocked by an external package API mismatch
@@ -408,7 +408,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 * Report: Top 10 slowest tests printed with guidance at session end
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
+* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,     `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 

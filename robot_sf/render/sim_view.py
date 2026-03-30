@@ -898,11 +898,7 @@ class SimulationView:
             if ped_sprite is not None:
                 self._draw_sprite(ped_sprite, center, radius_px)
             else:
-                if i == len(ped_pos) - 1:
-                    color = (0, 200, 0)
-                else:
-                    color = PED_COLOR
-                pygame.draw.circle(self.screen, color, center, radius_px)
+                pygame.draw.circle(self.screen, PED_COLOR, center, radius_px)
 
             # If we have an action for this ped, draw a direction line
             if action_map:

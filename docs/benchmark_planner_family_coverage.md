@@ -6,23 +6,23 @@ support that is only partial, experimental, or still roadmap-only.
 
 Use this matrix conservatively:
 
-- Treat `implemented and benchmarkable` rows as the only rows safe to cite as currently runnable
+* Treat `implemented and benchmarkable` rows as the only rows safe to cite as currently runnable
   benchmark support.
-- Treat `implemented but experimental` rows as available for controlled benchmark experiments, but
+* Treat `implemented but experimental` rows as available for controlled benchmark experiments, but
   not baseline-ready by default.
-- Treat `conceptually adjacent only` rows as partial proxies, external anchors, or preparatory
+* Treat `conceptually adjacent only` rows as partial proxies, external anchors, or preparatory
   infrastructure, not as evidence that the corresponding literature family is fully covered.
-- Treat `missing` rows as roadmap items only.
+* Treat `missing` rows as roadmap items only.
 
-The matrix is benchmark-facing. It reflects current entrypoints, config surfaces, readiness guards,
+The matrix is benchmark-facing. It reflects current entrypoints, config surfaces, readiness guards, 
 and kinematics/adapters in this repository, not a generic literature survey.
 
 ## How To Use This Matrix
 
-- Current in-repo runnable support appears only in the `Current In-Repo Support` section below.
-- External-family anchor rows are useful for manuscript interpretation and benchmark-roadmap
+* Current in-repo runnable support appears only in the `Current In-Repo Support` section below.
+* External-family anchor rows are useful for manuscript interpretation and benchmark-roadmap
   context, but they must not be cited as implemented in-repo benchmark support.
-- Conceptual adjacency is not a support claim. If a row depends on a source-harness reproduction,
+* Conceptual adjacency is not a support claim. If a row depends on a source-harness reproduction, 
   wrapper spike, or design overlap rather than a current repo entrypoint, keep the claim boundary
   conservative.
 
@@ -30,26 +30,27 @@ and kinematics/adapters in this repository, not a generic literature survey.
 
 | Alyassi-style family | Coverage status | Planner / config entrypoint | Planner-facing input / observation contract | Kinematics / adapter status | Benchmark note |
 | --- | --- | --- | --- | --- | --- |
-| Goal-following heuristic baseline | implemented and benchmarkable | `algo=goal`; no planner-specific config path | Structured state: robot pose/velocity/goal/radius, agent pose/velocity/radius, obstacle segments | Native unicycle command output; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline |
-| Force-based interaction baseline | implemented and benchmarkable | `algo=social_force`; adapter metadata emitted by benchmark runner | Same structured state fields as `goal`; force-based interaction adapter | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline |
-| Reciprocal-avoidance interaction baseline | implemented and benchmarkable | `algo=orca`; adapter metadata emitted by benchmark runner | Same structured state fields as `goal`; reciprocal-avoidance adapter | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline, dependency-sensitive to `rvo2` availability |
-| Hybrid reciprocal-avoidance local planning | implemented but experimental | `algo=hrvo`; canonical config `configs/algos/hrvo_camera_ready.yaml` | Structured state: robot pose/velocity/goal/radius plus nearby pedestrian pose/velocity/radius; local HRVO cone construction runs in world-velocity space | Adapter emits unicycle commands; differential-drive compatible in current benchmark stack | Testing-only local implementation informed by upstream HRVO references; static obstacles still rely on final heading-safe projection and this row is not headline-ready |
-| End-to-end learned navigation baseline | implemented and benchmarkable | `algo=ppo`; canonical benchmark configs under `configs/training/ppo/` and benchmark algo config under `configs/baselines/ppo_15m_grid_socnav.yaml` | Dict observation keyed to the trained model input contract, for example `occupancy_grid`, `goal_current`, `robot_position`, and optional predictive foresight fields | Native mixed command path with adapter support; benchmark output contract normalizes to unicycle semantics; differential-drive compatible in the frozen paper profile | Benchmarkable when provenance and quality-gate requirements are met; still tracked conservatively in generic readiness metadata |
-| Safety-aware learned navigation | implemented but experimental | `algo=guarded_ppo`; canonical benchmark config under `configs/algos/guarded_ppo_camera_ready.yaml` | PPO dict observation contract plus short-horizon safety veto metadata | Mixed native/adapter path; differential-drive compatible in current benchmark stack | Internal experimental safety-aware representative only; not a justified SoNIC-family equivalence claim |
-| Prediction-aware local planning | implemented but experimental | `algo=prediction_planner`; canonical config `configs/algos/prediction_planner_camera_ready.yaml` | Structured state plus predictive-planning parameters such as horizon, clearance, TTC, rollout lattice, and predictive checkpoint id | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Implemented and benchmark-runnable, but still experimental and checkpoint-dependent |
-| Prediction-aware sequence optimization | implemented but experimental | `algo=predictive_mppi`; config `configs/algos/predictive_mppi_camera_ready.yaml` | Structured state plus learned prediction rollout terms and short sequence-optimization controls | Adapter emits unicycle commands; differential-drive compatible in principle | Explicit testing-only planner; blocked unless `allow_testing_algorithms: true` |
-| Non-learning dynamic-window / sampling local planning | implemented but experimental | `algo=risk_dwa`, `algo=mppi_social`, `algo=hybrid_portfolio`, `algo=stream_gap`, `algo=gap_prediction`; configs under `configs/algos/` | Structured state plus planner-specific local risk, TTC, lattice, or veto parameters | Adapter emits unicycle commands; differential-drive compatible in principle | Implemented for controlled R&D, but guarded as testing-only because benchmark value is still unstable |
-| Corridor-commitment / TEB-inspired local planning | implemented but experimental | `algo=teb`; canonical config `configs/algos/teb_commitment_camera_ready.yaml` | Structured state plus short-horizon occupancy-grid probes and persistent side-commit state | Native unicycle command output; differential-drive compatible in current benchmark stack | Testing-only native concept planner; sanity-bench runnable, not benchmark-promoted |
-| Human-state-aware / crowd-aware deep RL proxies | implemented but experimental | `algo=sacadrl`, `algo=socnav_sampling`; no paper-facing frozen config | Structured state through legacy adapter/model-specific contracts | Adapter emits unicycle commands; differential-drive compatibility depends on adapter path | Present as adapter/model-sensitive legacy baselines, but not part of the frozen paper-facing matrix |
-| SocNavBench adapter family | conceptually adjacent only | `algo=socnav_bench`; dependency-sensitive adapter path | External benchmark-style observation/adapter contract | Adapter emits unicycle commands when dependencies are present | Present as a bridge/proxy, not as fully integrated benchmark-facing family support |
-| World-model RL challenger family | conceptually adjacent only | DreamerV3 BR-08 configs under `configs/training/rllib_dreamerv3/` | RLlib observation contract (`drive_state + rays` and benchmark-aligned `socnav_struct + occupancy_grid` challenger profiles) | Uses RLlib env-runner stack rather than the PPO rollout stack; no frozen paper-facing planner row yet | Training and parity support exist, but benchmark evidence is still pending; do not claim benchmarked family support yet |
+| Goal-following heuristic baseline | implemented and benchmarkable | `algo=goal` ; no planner-specific config path | Structured state: robot pose/velocity/goal/radius, agent pose/velocity/radius, obstacle segments | Native unicycle command output; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline |
+| Force-based interaction baseline | implemented and benchmarkable | `algo=social_force` ; adapter metadata emitted by benchmark runner | Same structured state fields as `goal` ; force-based interaction adapter | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline |
+| Reciprocal-avoidance interaction baseline | implemented and benchmarkable | `algo=orca` ; adapter metadata emitted by benchmark runner | Same structured state fields as `goal` ; reciprocal-avoidance adapter | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Baseline-ready; canonical paper baseline, dependency-sensitive to `rvo2` availability |
+| Hybrid reciprocal-avoidance local planning | implemented but experimental | `algo=hrvo` ; canonical config `configs/algos/hrvo_camera_ready.yaml` | Structured state: robot pose/velocity/goal/radius plus nearby pedestrian pose/velocity/radius; local HRVO cone construction runs in world-velocity space | Adapter emits unicycle commands; differential-drive compatible in current benchmark stack | Testing-only local implementation informed by upstream HRVO references; static obstacles still rely on final heading-safe projection and this row is not headline-ready |
+| End-to-end learned navigation baseline | implemented and benchmarkable | `algo=ppo` ; canonical benchmark configs under `configs/training/ppo/` and benchmark algo config under `configs/baselines/ppo_15m_grid_socnav.yaml` | Dict observation keyed to the trained model input contract, for example `occupancy_grid` , `goal_current` , `robot_position` , and optional predictive foresight fields | Native mixed command path with adapter support; benchmark output contract normalizes to unicycle semantics; differential-drive compatible in the frozen paper profile | Benchmarkable when provenance and quality-gate requirements are met; still tracked conservatively in generic readiness metadata |
+| Safety-aware learned navigation | implemented but experimental | `algo=guarded_ppo` ; canonical benchmark config under `configs/algos/guarded_ppo_camera_ready.yaml` | PPO dict observation contract plus short-horizon safety veto metadata | Mixed native/adapter path; differential-drive compatible in current benchmark stack | Internal experimental safety-aware representative only; not a justified SoNIC-family equivalence claim |
+| Prediction-aware local planning | implemented but experimental | `algo=prediction_planner` ; canonical config `configs/algos/prediction_planner_camera_ready.yaml` | Structured state plus predictive-planning parameters such as horizon, clearance, TTC, rollout lattice, and predictive checkpoint id | Adapter emits unicycle commands; differential-drive compatible in the frozen paper profile | Implemented and benchmark-runnable, but still experimental and checkpoint-dependent |
+| Prediction-aware sequence optimization | implemented but experimental | `algo=predictive_mppi` ; config `configs/algos/predictive_mppi_camera_ready.yaml` | Structured state plus learned prediction rollout terms and short sequence-optimization controls | Adapter emits unicycle commands; differential-drive compatible in principle | Explicit testing-only planner; blocked unless `allow_testing_algorithms: true` |
+| Non-learning dynamic-window / sampling local planning | implemented but experimental | `algo=risk_dwa` , `algo=mppi_social` , `algo=hybrid_portfolio` , `algo=stream_gap` , `algo=gap_prediction` ; configs under `configs/algos/` | Structured state plus planner-specific local risk, TTC, lattice, or veto parameters | Adapter emits unicycle commands; differential-drive compatible in principle | Implemented for controlled R&D, but guarded as testing-only because benchmark value is still unstable |
+| Corridor-commitment / TEB-inspired local planning | implemented but experimental | `algo=teb` ; canonical config `configs/algos/teb_commitment_camera_ready.yaml` | Structured state plus short-horizon occupancy-grid probes and persistent side-commit state | Native unicycle command output; differential-drive compatible in current benchmark stack | Testing-only native concept planner; sanity-bench runnable, not benchmark-promoted |
+| Human-state-aware / crowd-aware deep RL proxies | implemented but experimental | `algo=sacadrl` , `algo=socnav_sampling` ; no paper-facing frozen config | Structured state through legacy adapter/model-specific contracts | Adapter emits unicycle commands; differential-drive compatibility depends on adapter path | Present as adapter/model-sensitive legacy baselines, but not part of the frozen paper-facing matrix |
+| SocNavBench adapter family | conceptually adjacent only | `algo=socnav_bench` ; dependency-sensitive adapter path | External benchmark-style observation/adapter contract | Adapter emits unicycle commands when dependencies are present | Present as a bridge/proxy, not as fully integrated benchmark-facing family support |
+| World-model RL challenger family | conceptually adjacent only | DreamerV3 BR-08 configs under `configs/training/rllib_dreamerv3/` | RLlib observation contract ( `drive_state + rays` and benchmark-aligned `socnav_struct + occupancy_grid` challenger profiles) | Uses RLlib env-runner stack rather than the PPO rollout stack; no frozen paper-facing planner row yet | Training and parity support exist, but benchmark evidence is still pending; do not claim benchmarked family support yet |
 
 ## External Family Anchors / Prototype References
 
 | Alyassi-style family | Coverage status | Planner / config entrypoint | Planner-facing input / observation contract | Kinematics / adapter status | Benchmark note |
 | --- | --- | --- | --- | --- | --- |
 | CrowdNav family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md` | CrowdNav-family joint robot/human state packing with source-simulator normalization and temporal context | Adapter-heavy; source policy semantics are simulator-native rather than Robot SF `unicycle_vw` | External anchor only; historical family anchor, not current in-repo benchmark support |
-| SoNIC safety-aware family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md`, `docs/context/issue_602_guarded_ppo_profile.md` | SoNIC-family model-specific observation stack with bundled predictor/policy checkpoints; not the same as internal PPO dict observations | Adapter-heavy; source semantics remain model/simulator-specific, while internal `guarded_ppo` stays native `unicycle_vw` with a reactive guard | Prototype only; do not treat internal `guarded_ppo` as SoNIC-family support |
+| DSRNN-style graph-attention family | conceptually adjacent only | `docs/context/issue_600_dsrnn_stretch_follow_up.md` | CrowdNav-descended graph and temporal state packing with recurrent neighborhood encoding layered on top of source simulator observations | Adapter-heavy and history-sensitive; source policy semantics remain simulator-native and require source-harness proof before any `unicycle_vw` wrapper claim | Stretch roadmap anchor only; keep behind the first attention and prediction-family spikes |
+| SoNIC safety-aware family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md` , `docs/context/issue_602_guarded_ppo_profile.md` | SoNIC-family model-specific observation stack with bundled predictor/policy checkpoints; not the same as internal PPO dict observations | Adapter-heavy; source semantics remain model/simulator-specific, while internal `guarded_ppo` stays native `unicycle_vw` with a reactive guard | Prototype only; do not treat internal `guarded_ppo` as SoNIC-family support |
 | Go-MPC | conceptually adjacent only | `docs/context/issue_599_go_mpc_assessment.md` | Kinodynamic MPC stack requiring robot state `(x, y, theta, v, w)` plus ordered obstacle states and RL guidance inputs | Solver-locked and adapter-heavy; differential-drive / kinodynamic family shape, but tied to FORCESPro runtime | Reference only; not current repo support and not pursued now |
 | `safe_control` safety-controller family | conceptually adjacent only | `docs/context/issue_695_safe_control_feasibility_note.md` | Waypoint-tracking controller loop requiring model-specific robot state, waypoint lists, and explicit obstacle arrays | Closest path is unicycle-compatible in principle, but adapter-heavy and blocked by missing optional runtime dependencies in the current repo environment | Reference only; not current repo support and not pursued now |
 | Pred2Nav | conceptually adjacent only | `docs/context/issue_604_pred2nav_assessment.md` | Legacy crowd-simulation state with trajectory-history-aware predictive rollout scoring and predictor-pluggable controller terms | Holonomic / `ActionXY` controller boundary with explicit projection burden to Robot SF `unicycle_vw` | Reference only; license-blocked and not current repo support |
@@ -64,13 +65,15 @@ and kinematics/adapters in this repository, not a generic literature survey.
 
 ## Notes On Interpretation
 
-- `baseline-ready` in the benchmark stack currently means `goal`, `social_force`, and `orca`.
-- `ppo` is benchmarkable and paper-facing when provenance and quality-gate requirements are
+* `baseline-ready` in the benchmark stack currently means `goal`,  `social_force`, and `orca`.
+* `ppo` is benchmarkable and paper-facing when provenance and quality-gate requirements are
   satisfied, but it is still tracked conservatively in the generic readiness catalog because the
   benchmark stack distinguishes generic availability from paper-grade promotion.
-- Testing-only planners (`risk_dwa`, `mppi_social`, `predictive_mppi`, `hybrid_portfolio`,
-  `stream_gap`, `gap_prediction`) are intentionally guarded by
-  `allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
-- Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should
+* Testing-only planners (`risk_dwa`,  `mppi_social`,  `predictive_mppi`,  `hybrid_portfolio`, 
+`stream_gap` , `gap_prediction` ) are intentionally guarded by
+`allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
+* `DSRNN-style graph-attention family` is currently a sequencing note, not an implementation plan:
+  keep it behind the first attention-family and prediction-family source-harness spikes.
+* Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should
   not infer that a partially related planner family is fully covered unless it appears above as
-  `implemented and benchmarkable`.
+`implemented and benchmarkable` .

@@ -132,6 +132,8 @@ def _make_env(svg_map_path: str, robot_model_name_or_path: str):
     map_definition = convert_map(svg_map_path)
     robot_model_path = _resolve_model_path(robot_model_name_or_path, base_dir_name="model")
     robot_model = load_trained_policy(str(robot_model_path))
+    if robot_model_path.stem != "run_043":
+        raise ValueError(f"Unsupported robot model for this benchmark: {robot_model_path.stem!r}")
 
     config = PedestrianSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"benchmark_map": map_definition}),

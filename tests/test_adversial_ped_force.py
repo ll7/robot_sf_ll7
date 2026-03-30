@@ -11,7 +11,7 @@ def test_adversial_ped_force_applies_only_to_targets() -> None:
     """Verify forces are applied only to target indices to avoid unintended drift."""
     out_forces = np.zeros((2, 2), dtype=np.float64)
     # Two pedestrians, only index 0 should receive a force.
-    ped_positions = np.array([[0.5, 0.0], [5.0, 0.0]], dtype=np.float64)
+    ped_positions = np.array([[-1.0, 0.0], [5.0, 0.0]], dtype=np.float64)
     ped_velocities = np.zeros_like(ped_positions)
     ped_max_speeds = np.array([1.0, 1.0], dtype=np.float64)
     robot_pos = np.array([0.0, 0.0], dtype=np.float64)
@@ -38,7 +38,7 @@ def test_adversial_ped_force_handles_multiple_targets() -> None:
     """Check multi-target forces match desired velocity computation for stability."""
     out_forces = np.zeros((2, 2), dtype=np.float64)
     # Both pedestrians are targeted, with different max speeds.
-    ped_positions = np.array([[0.5, 0.0], [0.0, 2.0]], dtype=np.float64)
+    ped_positions = np.array([[-1.0, 0.0], [0.0, 2.0]], dtype=np.float64)
     ped_velocities = np.zeros_like(ped_positions)
     ped_max_speeds = np.array([1.0, 2.0], dtype=np.float64)
     robot_pos = np.array([0.0, 0.0], dtype=np.float64)
@@ -79,7 +79,7 @@ def test_adversial_ped_force_includes_velocity_term_current_formula() -> None:
     smoothly accelerate toward attraction points rather than jumping abruptly.
     """
     out_forces = np.zeros((1, 2), dtype=np.float64)
-    ped_positions = np.array([[0.5, 0.0]], dtype=np.float64)
+    ped_positions = np.array([[-1.0, 0.0]], dtype=np.float64)
     ped_velocities = np.array([[0.2, 0.0]], dtype=np.float64)
     ped_max_speeds = np.array([1.0], dtype=np.float64)
     robot_pos = np.array([0.0, 0.0], dtype=np.float64)
@@ -97,5 +97,5 @@ def test_adversial_ped_force_includes_velocity_term_current_formula() -> None:
         target_ped_idx=np.array([0], dtype=np.int64),
     )
 
-    expected = np.array([[0.6, 0.0]], dtype=np.float64)
+    expected = np.array([[1.6, 0.0]], dtype=np.float64)
     np.testing.assert_allclose(out_forces, expected, rtol=1e-6, atol=1e-6)

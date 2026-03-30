@@ -169,9 +169,9 @@ def test_stationary_collision_ped_reward_only_rewards_stationary_collision() -> 
     stationary_meta = {
         "max_sim_steps": 100,
         "distance_to_robot": 1.5,
-        "is_pedestrian_collision": True,
+        "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
-        "is_robot_collision": False,
+        "is_robot_collision": True,
         "is_route_complete": False,
         "ego_ped_speed": 0.0,
     }

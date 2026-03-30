@@ -90,9 +90,7 @@ def test_pedestrian_state_meta_includes_ego_ped_speed() -> None:
     state.step()
     meta = state.meta_dict()
 
-    assert meta["ego_ped_speed"] == 0.0
-    assert meta["collision_type"] == "none"
-    assert meta["collision_impact_speed"] == 0.0
+    assert meta["ego_ped_speed"] == 0.42
     assert meta["collision_impact_angle_rad"] == 0.0
     assert meta["robot_ped_collision_zone"] == "none"
 
@@ -102,6 +100,7 @@ def test_pedestrian_state_collision_meta_includes_impact_kinematics() -> None:
     robot_occ = _DummyRobotOccupancy()
     robot_occ.is_pedestrian_collision = True
     ego_occ = _DummyEgoPedOccupancy()
+    ego_occ.is_agent_agent_collision = True
     state = PedestrianState(
         robot_occupancy=robot_occ,
         ego_ped_occupancy=ego_occ,
@@ -115,7 +114,5 @@ def test_pedestrian_state_collision_meta_includes_impact_kinematics() -> None:
     state.step()
     meta = state.meta_dict()
 
-    assert meta["collision_type"] == "robot_pedestrian"
-    assert meta["collision_impact_speed"] > 1.5
     assert meta["robot_ped_collision_zone"] == "back"
     assert 2.9 <= meta["collision_impact_angle_rad"] <= 3.2

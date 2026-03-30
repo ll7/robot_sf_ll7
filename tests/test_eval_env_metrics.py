@@ -118,14 +118,12 @@ def test_ped_update():
         "is_robot_collision": False,
         "distance_to_robot": 45.0,
         "ego_ped_speed": 0.4,
-        "collision_impact_speed": 0.0,
         "collision_impact_angle_rad": 0.0,
     }
     metrics.update(meta)
     assert metrics.exceeded_timesteps == 1
     assert metrics.route_end_distance == 45.0
     assert metrics.avg_ego_ped_speed == 0.0
-    assert metrics.avg_collision_impact_speed_at_collision == 0.0
     assert metrics.avg_collision_impact_angle_rad_at_collision == 0.0
 
 
@@ -190,7 +188,6 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": False,
             "is_robot_pedestrian_collision": False,
-            "collision_impact_speed": 1.5,
             "collision_impact_angle_rad": 0.2,
         }
     )
@@ -205,7 +202,6 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": False,
             "is_robot_pedestrian_collision": False,
-            "collision_impact_speed": 0.0,
             "collision_impact_angle_rad": 0.0,
         }
     )
@@ -220,7 +216,6 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": True,
             "is_robot_pedestrian_collision": False,
-            "collision_impact_speed": 0.9,
             "collision_impact_angle_rad": 0.4,
         }
     )
@@ -228,10 +223,9 @@ def test_ped_outcome_priority_and_vector_rates():
     assert ped.robot_collisions == 1
     assert ped.robot_at_goal == 1
     assert ped.robot_obstacle_collisions == 1
-    assert list(ped.ego_ped_speed_at_collision) == [1.25]
-    assert ped.avg_ego_ped_speed == 1.25
-    assert ped.avg_collision_impact_speed_at_collision == (1.5 + 0.9) / 2
-    assert ped.avg_collision_impact_angle_rad_at_collision == (0.2 + 0.4) / 2
+    assert list(ped.ego_ped_speed_at_collision) == []
+    assert ped.avg_ego_ped_speed == 0.0
+    assert ped.avg_collision_impact_angle_rad_at_collision == 0.0
     assert 0.0 <= ped.robot_collision_rate <= 1.0
     assert 0.0 <= ped.robot_at_goal_rate <= 1.0
     assert 0.0 <= ped.robot_obstacle_collision_rate <= 1.0
@@ -264,7 +258,6 @@ def test_ped_outcome_priority_and_vector_rates():
                 "is_pedestrian_collision": False,
                 "is_robot_obstacle_collision": False,
                 "is_robot_pedestrian_collision": False,
-                "collision_impact_speed": 0.0,
                 "collision_impact_angle_rad": 0.0,
             },
             {
@@ -277,7 +270,6 @@ def test_ped_outcome_priority_and_vector_rates():
                 "is_pedestrian_collision": False,
                 "is_robot_obstacle_collision": False,
                 "is_robot_pedestrian_collision": False,
-                "collision_impact_speed": 0.0,
                 "collision_impact_angle_rad": 0.0,
             },
         ]

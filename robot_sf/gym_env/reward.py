@@ -137,7 +137,7 @@ def simple_ped_reward(
     return float(reward)
 
 
-def stationary_collision_ped_reward(
+def stationary_collision_ped_reward(  # noqa: PLR0913
     meta: dict,
     max_episode_step_discount: float = -0.1,
     ped_coll_penalty: float = -5,
@@ -157,9 +157,11 @@ def stationary_collision_ped_reward(
         ped_coll_penalty: Penalty applied when colliding with pedestrians while moving.
         obst_coll_penalty: Penalty applied when colliding with obstacles.
         stationary_collision_reward: Bonus granted when pedestrian collision occurs at zero speed.
+        slow_coll_reward: Bonus granted when pedestrian collision occurs at low speed.
         robot_coll_reward: Reward granted when colliding with the robot.
         robot_route_complete_penalty: Penalty applied if the robot completes its route.
         stationary_speed_epsilon: Speed threshold to consider the ego pedestrian stationary.
+        slow_speed: Speed threshold to consider the ego pedestrian moving slowly.
 
     Returns:
         float: Scalar reward for the timestep.

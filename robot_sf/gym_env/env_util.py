@@ -265,7 +265,7 @@ def init_spaces(env_config: EnvSettings | RobotSimulationConfig, map_def: MapDef
     return action_space, obs_space, orig_obs_space
 
 
-def create_spaces(
+def create_spaces(  # noqa: C901
     env_config: EnvSettings | PedEnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,

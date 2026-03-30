@@ -69,27 +69,55 @@ def _apply_waypoint_noise(
     return [tuple(point) for point in (waypoints_array + noise)]
 
 
-def _project_point_onto_segment(
-    point: np.ndarray,
+def _first_point_at_distance_on_segment(
+    center: np.ndarray,
     segment_start: np.ndarray,
     segment_end: np.ndarray,
-) -> tuple[np.ndarray, float, float]:
-    """Project a point onto a line segment.
+    target_distance: float,
+) -> np.ndarray | None:
+    """Return the earliest point on a segment at the requested distance from a center.
 
     Returns:
-        tuple[np.ndarray, float, float]: Projected point, clamped segment fraction, and
-        segment length.
+        np.ndarray | None: First point on the segment whose distance from ``center`` is
+        ``target_distance``, or ``None`` when the segment never exits the circle.
     """
     segment = segment_end - segment_start
     segment_length_sq = float(np.dot(segment, segment))
     if segment_length_sq <= _DEGENERATE_SEGMENT_LENGTH_SQ_TOLERANCE:
-        return segment_start.copy(), 0.0, 0.0
-    segment_length = float(np.sqrt(segment_length_sq))
-    projection_fraction = float(
-        np.clip(np.dot(point - segment_start, segment) / segment_length_sq, 0.0, 1.0)
-    )
-    projection = segment_start + projection_fraction * segment
-    return projection, projection_fraction, segment_length
+        return None
+
+    target_distance_sq = target_distance * target_distance
+    start_offset = segment_start - center
+    start_distance_sq = float(np.dot(start_offset, start_offset))
+    if start_distance_sq >= target_distance_sq:
+        return segment_start.copy()
+
+    end_offset = segment_end - center
+    end_distance_sq = float(np.dot(end_offset, end_offset))
+    if end_distance_sq < target_distance_sq:
+        return None
+
+    quadratic_b = 2.0 * float(np.dot(start_offset, segment))
+    quadratic_c = start_distance_sq - target_distance_sq
+    discriminant = quadratic_b * quadratic_b - 4.0 * segment_length_sq * quadratic_c
+    if discriminant < 0.0:
+        if discriminant > -1e-9:
+            discriminant = 0.0
+        else:
+            return None
+
+    sqrt_discriminant = float(np.sqrt(discriminant))
+    denominator = 2.0 * segment_length_sq
+    for root in sorted(
+        (
+            (-quadratic_b - sqrt_discriminant) / denominator,
+            (-quadratic_b + sqrt_discriminant) / denominator,
+        )
+    ):
+        if -1e-9 <= root <= 1.0 + 1e-9:
+            clamped_root = min(max(root, 0.0), 1.0)
+            return segment_start + clamped_root * segment
+    return None
 
 
 def _as_vec2d(point: np.ndarray) -> Vec2D:
@@ -131,27 +159,14 @@ def _resolve_spawn_handoff_route(
     for segment_index in range(len(route_points) - 1):
         segment_start = route_points[segment_index]
         segment_end = route_points[segment_index + 1]
-        projection, projection_fraction, segment_length = _project_point_onto_segment(
+        handoff_target = _first_point_at_distance_on_segment(
             start,
             segment_start,
             segment_end,
+            target_distance,
         )
-        if segment_length <= _DEGENERATE_SEGMENT_LENGTH_TOLERANCE:
+        if handoff_target is None:
             continue
-
-        lateral_distance_sq = float(np.dot(start - projection, start - projection))
-        target_distance_sq = target_distance * target_distance
-        if lateral_distance_sq >= target_distance_sq:
-            handoff_target = projection
-        else:
-            required_forward_distance = float(
-                np.sqrt(max(target_distance_sq - lateral_distance_sq, 0.0))
-            )
-            remaining_segment_distance = (1.0 - projection_fraction) * segment_length
-            if required_forward_distance > remaining_segment_distance + 1e-9:
-                continue
-            unit_direction = (segment_end - segment_start) / segment_length
-            handoff_target = projection + unit_direction * required_forward_distance
 
         resolved = [_as_vec2d(handoff_target)]
         resolved.extend(route[segment_index + 1 :])

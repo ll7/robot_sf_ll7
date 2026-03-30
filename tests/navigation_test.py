@@ -76,6 +76,22 @@ def test_new_route_rebases_initial_handoff_target_when_spawn_starts_inside_thres
     assert spawn[0] < navi.current_waypoint[0] < route[-1][0]
 
 
+def test_new_route_rebases_from_endpoint_clamped_projection():
+    """Endpoint-clamped projections should still exit the threshold on the first segment."""
+    route = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+    spawn = (-1.0, 1.0)
+
+    navi = RouteNavigator(proximity_threshold=2.0)
+    navi.new_route(route, start_pos=spawn)
+
+    assert navi.current_waypoint[1] == pytest.approx(0.0)
+    assert 0.0 < navi.current_waypoint[0] < 1.0
+    assert dist(navi.current_waypoint, spawn) == pytest.approx(
+        navi.proximity_threshold + 1e-6,
+        abs=1e-5,
+    )
+
+
 def test_new_route_keeps_first_waypoint_when_spawn_starts_outside_threshold():
     """Route reset should preserve the original first waypoint when no rebasing is needed."""
     route = [(2.0, 1.0), (4.0, 1.0)]

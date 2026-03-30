@@ -1,0 +1,2 @@
+include:
+  - single/planner_sanity_simple.yaml

@@ -115,6 +115,81 @@ def test_evaluate_snqi_contract_returns_pass_for_well_aligned_data() -> None:
     assert evaluation.status == "pass"
     assert evaluation.rank_alignment_spearman > 0.5
     assert evaluation.outcome_separation > 0.05
+    assert evaluation.dominant_component
+    assert evaluation.dominant_component_mean_abs >= 0.0
+
+
+def test_evaluate_snqi_contract_warns_on_component_dominance() -> None:
+    """Contract should warn when one component exceeds the configured dominance cap."""
+    evaluation = evaluate_snqi_contract(
+        _sample_rows(),
+        _sample_episodes(),
+        weights={
+            "w_success": 0.1,
+            "w_time": 0.8,
+            "w_collisions": 0.02,
+            "w_near": 0.02,
+            "w_comfort": 0.02,
+            "w_force_exceed": 0.02,
+            "w_jerk": 0.02,
+        },
+        baseline=_baseline(),
+        thresholds=SnqiContractThresholds(
+            rank_alignment_warn=0.5,
+            rank_alignment_fail=0.3,
+            outcome_separation_warn=0.05,
+            outcome_separation_fail=0.0,
+            max_component_dominance_warn=0.2,
+            max_component_dominance_fail=0.95,
+        ),
+    )
+    assert evaluation.status == "warn"
+    assert evaluation.dominant_component == "time_penalty"
+    assert evaluation.dominant_component_mean_abs > 0.2
+
+
+def test_evaluate_snqi_contract_uses_none_when_dominance_is_zero() -> None:
+    """Zero-valued dominance vectors should not report an arbitrary component name."""
+    evaluation = evaluate_snqi_contract(
+        [
+            {
+                "planner_key": "goal",
+                "kinematics": "differential_drive",
+                "success_mean": 0.0,
+                "collisions_mean": 0.0,
+                "near_misses_mean": 0.0,
+                "comfort_exposure_mean": 0.0,
+            }
+        ],
+        [
+            {
+                "planner_key": "goal",
+                "kinematics": "differential_drive",
+                "metrics": {
+                    "success": float("nan"),
+                    "time_to_goal_norm": float("nan"),
+                    "collisions": float("nan"),
+                    "near_misses": float("nan"),
+                    "comfort_exposure": float("nan"),
+                    "force_exceed_events": float("nan"),
+                    "jerk_mean": float("nan"),
+                },
+            }
+        ],
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+        thresholds=SnqiContractThresholds(),
+    )
+    assert evaluation.dominant_component == "none"
+    assert evaluation.dominant_component_mean_abs == 0.0
 
 
 def test_calibrate_weights_is_deterministic_for_fixed_seed() -> None:

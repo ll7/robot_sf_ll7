@@ -257,6 +257,32 @@ class OccupancyAwarePlannerMixin:
             return 1.0
         return float(grid[channel_idx, row, col])
 
+    def _obstacle_grid_payload(
+        self, observation: dict
+    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
+        """Return validated obstacle-grid payload shared by obstacle-aware planners.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any], int, float] | None: Grid, metadata, obstacle
+            channel, and resolution when available.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta = payload
+        if grid.ndim < 3:
+            return None
+        channel_idx = self._grid_channel_index(meta, "obstacles")
+        if channel_idx < 0:
+            channel_idx = self._grid_channel_index(meta, "combined")
+        if channel_idx < 0 or channel_idx >= grid.shape[0]:
+            return None
+        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
+        resolution = float(resolution_arr[0])
+        if resolution <= 0.0:
+            return None
+        return grid, meta, channel_idx, resolution
+
     def _path_penalty(
         self,
         robot_pos: np.ndarray,
@@ -383,6 +409,26 @@ class SocNavPlannerConfig:
     orca_obstacle_max_points: int = 80
     orca_obstacle_radius_scale: float = 1.0
     orca_heading_slowdown: float = 0.2
+    orca_symmetry_bias: float = 0.22
+    orca_head_on_bias: float = 0.32
+    orca_stall_speed_threshold: float = 0.12
+    orca_stall_progress_epsilon: float = 0.03
+    orca_stall_cycles_before_commit: int = 3
+    orca_commit_persistence_steps: int = 10
+    orca_commit_distance: float = 1.6
+    orca_commit_lateral_gain: float = 0.45
+    orca_forward_probe_distance: float = 1.1
+    orca_side_probe_offset: float = 0.45
+    orca_corner_probe_forward_scale: float = 1.5
+    orca_corner_probe_side_scale: float = 1.5
+    orca_head_on_probe_side_scale: float = 1.5
+    orca_stall_nudge_factor: float = 0.15
+    orca_obstacle_margin: float = 0.12
+    orca_corner_clearance_scale: float = 1.35
+    hrvo_neighbor_dist: float = 8.0
+    hrvo_max_neighbors: int = 8
+    hrvo_time_horizon: float = 4.0
+    hrvo_uncertainty_offset: float = 0.05
     social_force_repulsion_weight: float = 0.8
     social_force_desired_speed: float = 1.0
     social_force_tau: float = 0.5
@@ -413,6 +459,7 @@ class SocNavPlannerConfig:
     predictive_device: str = "cpu"
     predictive_max_agents: int = 16
     predictive_horizon_steps: int = 8
+    predictive_ego_conditioning: bool = False
     predictive_rollout_dt: float = 0.2
     predictive_goal_weight: float = 1.0
     predictive_collision_weight: float = 6.0
@@ -462,6 +509,33 @@ class SocNavPlannerConfig:
     predictive_progress_escape_min_speed_ratio: float = 0.35
     predictive_progress_escape_heading_gain: float = 1.4
     predictive_progress_escape_clearance_margin: float = 0.2
+    predictive_sequence_search_enabled: bool = False
+    predictive_sequence_segments: int = 3
+    predictive_sequence_branch_factor: int = 5
+    predictive_sequence_beam_width: int = 8
+    predictive_uncertainty_mode: str = "deterministic"
+    predictive_uncertainty_base_std: float = 0.05
+    predictive_uncertainty_growth_per_step: float = 0.03
+    predictive_uncertainty_speed_scale: float = 0.10
+    predictive_uncertainty_density_scale: float = 0.02
+    predictive_risk_objective: str = "mean"
+    predictive_risk_sample_count: int = 1
+    predictive_risk_cvar_alpha: float = 0.25
+    predictive_risk_seed: int = 7
+    predictive_mcts_enabled: bool = False
+    predictive_mcts_iterations: int = 48
+    predictive_mcts_branch_factor: int = 4
+    predictive_mcts_rollout_count: int = 2
+    predictive_mcts_exploration_weight: float = 0.8
+    predictive_phase_logic_enabled: bool = True
+    predictive_phase_commit_clearance: float = 1.4
+    predictive_phase_yield_clearance: float = 0.95
+    predictive_phase_recover_clearance: float = 1.8
+    predictive_phase_recover_progress: float = 0.25
+    predictive_phase_commit_weight: float = 1.4
+    predictive_phase_yield_weight: float = 2.0
+    predictive_phase_align_weight: float = 0.4
+    predictive_phase_recover_weight: float = 1.5
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -1009,11 +1083,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "Install the fast-pysf dependency."
             )
 
-    def plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using social-force goal + interaction forces.
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity using the social-force model.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
@@ -1028,7 +1102,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         to_goal = goal - robot_pos
         goal_dist = float(np.linalg.norm(to_goal))
         if goal_dist < self.config.goal_tolerance:
-            return 0.0, 0.0
+            return np.zeros(2, dtype=float)
 
         dt = self._resolve_dt(observation)
         desired_speed = min(self.config.social_force_desired_speed, self.config.max_linear_speed)
@@ -1045,16 +1119,29 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             social_force + obstacle_force
         )
 
-        total_force = desired_force + interaction_force
-        total_force = self._clip_force(total_force)
+        total_force = self._clip_force(desired_force + interaction_force)
+        velocity_world = robot_vel + total_force * dt
+        speed = float(np.linalg.norm(velocity_world))
+        if speed < self._EPS:
+            return np.zeros(2, dtype=float)
+        if speed > self.config.max_linear_speed:
+            velocity_world = (
+                velocity_world / (speed + self._EPS) * float(self.config.max_linear_speed)
+            )
+        return np.asarray(velocity_world, dtype=float)
 
-        desired_vel = robot_vel + total_force * dt
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """Compute (v, w) using social-force goal + interaction forces.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        desired_vel = self.plan_velocity_world(observation)
         speed = float(np.linalg.norm(desired_vel))
         if speed < self._EPS:
             return 0.0, 0.0
-        if speed > self.config.max_linear_speed:
-            desired_vel = desired_vel / (speed + self._EPS) * self.config.max_linear_speed
-            speed = self.config.max_linear_speed
 
         desired_heading = atan2(desired_vel[1], desired_vel[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -1231,6 +1318,95 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        dist_sq = np.einsum(
+            "ij,ij->i", result_centers - robot_pos[None, :], result_centers - robot_pos[None, :]
+        )
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1239,24 +1415,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._extract_grid_payload(observation)
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        grid, meta = payload
-        if grid.ndim < 3:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        grid, meta, channel_idx, resolution = payload
 
         obstacle_mask = grid[channel_idx] >= float(self.config.social_force_obstacle_threshold)
         if not np.any(obstacle_mask):
@@ -1321,6 +1483,77 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+        self._bound_static_obstacle_spacing = 0.0
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear per-episode commitment and stall tracking state."""
+        self._stall_cycles = 0
+        self._last_goal_distance: float | None = None
+        self._commit_side = 0
+        self._commit_side_ttl = 0
+
+    def bind_static_obstacle_points(self, points: Any, *, spacing: float) -> None:
+        """Bind sampled exact static obstacle points for use during planning."""
+        arr = np.asarray(points, dtype=float)
+        if arr.size == 0:
+            self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
+            self._bound_static_obstacle_spacing = 0.0
+            return
+        if arr.ndim == 1:
+            if arr.size % 2 != 0:
+                raise ValueError("Static obstacle points must have an even number of coordinates.")
+            arr = arr.reshape(-1, 2)
+        elif arr.ndim != 2 or arr.shape[1] < 2:
+            raise ValueError("Static obstacle points must be convertible to an (N, 2) array.")
+        self._bound_static_obstacle_points = np.asarray(arr[:, :2], dtype=float)
+        self._bound_static_obstacle_spacing = float(max(spacing, self._EPS))
+
+    def _extract_bound_static_obstacle_points(
+        self,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract nearby obstacle points from bound exact map geometry.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
+        """
+        points = self._bound_static_obstacle_points
+        if points.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        centers, _dist_sq = self._select_nearby_points(
+            points,
+            robot_pos,
+            float(self.config.orca_obstacle_range),
+            max(int(self.config.orca_obstacle_max_points), 0),
+        )
+        if centers.size == 0:
+            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+
+        spacing = float(max(self._bound_static_obstacle_spacing, self._EPS))
+        base_radius = 0.5 * spacing * float(self.config.orca_obstacle_radius_scale)
+        radii = np.full(
+            (centers.shape[0],),
+            base_radius + float(self.config.orca_obstacle_margin),
+            dtype=float,
+        )
+        corner_mask = self._orca_corner_obstacle_mask(
+            centers=centers,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+        )
+        if np.any(corner_mask):
+            radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=spacing,
+        )
 
     def _ensure_rvo2(self) -> bool:
         """Return True when rvo2 is available, else handle fallback/error behavior.
@@ -1530,6 +1763,15 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         sin_h = np.sin(heading)
         return np.array([cos_h * vec[0] + sin_h * vec[1], -sin_h * vec[0] + cos_h * vec[1]])
 
+    @staticmethod
+    def _side_sign(value: float) -> int:
+        """Return deterministic sign for a scalar."""
+        if value > 0.0:
+            return 1
+        if value < 0.0:
+            return -1
+        return 1
+
     @classmethod
     def _preferred_velocity(
         cls, goal: np.ndarray, robot_pos: np.ndarray, robot_heading: float, max_speed: float
@@ -1716,6 +1958,94 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             dist_sq = dist_sq[order]
         return centers, dist_sq
 
+    @staticmethod
+    def _forward_lateral_components(
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Project world-space obstacle centers onto robot-forward and lateral axes.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Forward and lateral distances.
+        """
+        forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        offsets = centers - robot_pos[None, :]
+        return offsets @ forward, offsets @ lateral
+
+    def _coalesce_static_obstacle_points(
+        self,
+        *,
+        centers: np.ndarray,
+        radii: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        resolution: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Reduce dense occupied-cell clouds into a smaller static obstacle set.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Coalesced obstacle centers and radii.
+        """
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_dist, lateral_dist = self._forward_lateral_components(
+            centers,
+            robot_pos,
+            robot_heading,
+        )
+        ahead_mask = forward_dist >= -resolution
+        if np.any(ahead_mask):
+            centers = centers[ahead_mask]
+            radii = radii[ahead_mask]
+            forward_dist = forward_dist[ahead_mask]
+            lateral_dist = lateral_dist[ahead_mask]
+        if centers.shape[0] <= 1:
+            return centers, radii
+
+        forward_bin = max(resolution * 2.0, float(self.config.orca_forward_probe_distance) * 0.5)
+        lateral_bin = max(resolution * 2.0, float(self.config.orca_side_probe_offset) * 1.5)
+        clusters: dict[tuple[int, int], list[int]] = {}
+        for index, (forward_value, lateral_value) in enumerate(
+            zip(forward_dist, lateral_dist, strict=False)
+        ):
+            key = (
+                int(np.floor(forward_value / max(forward_bin, self._EPS))),
+                int(np.floor(lateral_value / max(lateral_bin, self._EPS))),
+            )
+            clusters.setdefault(key, []).append(index)
+
+        coalesced_centers: list[np.ndarray] = []
+        coalesced_radii: list[float] = []
+        for member_indices in clusters.values():
+            cluster_centers = centers[member_indices]
+            cluster_radii = radii[member_indices]
+            center = np.mean(cluster_centers, axis=0)
+            spread = (
+                float(np.max(np.linalg.norm(cluster_centers - center[None, :], axis=1)))
+                if cluster_centers.shape[0] > 1
+                else 0.0
+            )
+            radius = float(np.max(cluster_radii) + spread)
+            coalesced_centers.append(center)
+            coalesced_radii.append(radius)
+
+        result_centers = np.asarray(coalesced_centers, dtype=float)
+        result_radii = np.asarray(coalesced_radii, dtype=float)
+        if result_centers.shape[0] <= 1:
+            return result_centers, result_radii
+
+        offsets = result_centers - robot_pos[None, :]
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        max_points = max(int(self.config.orca_obstacle_max_points), 0)
+        if max_points > 0 and result_centers.shape[0] > max_points:
+            order = np.argsort(dist_sq)[:max_points]
+            result_centers = result_centers[order]
+            result_radii = result_radii[order]
+        return result_centers, result_radii
+
     def _extract_obstacles_from_grid(
         self, observation: dict, robot_pos: np.ndarray, robot_heading: float
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -1724,24 +2054,17 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[np.ndarray, np.ndarray]: World-space obstacle centers and per-point radii.
         """
-        payload = self._extract_grid_payload(observation)
+        bound_centers, bound_radii = self._extract_bound_static_obstacle_points(
+            robot_pos,
+            robot_heading,
+        )
+        if bound_centers.size:
+            return bound_centers, bound_radii
+
+        payload = self._obstacle_grid_payload(observation)
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        grid, meta = payload
-        if grid.ndim < 3:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        channel_idx = self._grid_channel_index(meta, "obstacles")
-        if channel_idx < 0:
-            channel_idx = self._grid_channel_index(meta, "combined")
-        if channel_idx < 0 or channel_idx >= grid.shape[0]:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
-
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
-            return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
+        grid, meta, channel_idx, resolution = payload
 
         obstacle_mask = grid[channel_idx] >= float(self.config.orca_obstacle_threshold)
         if not np.any(obstacle_mask):
@@ -1769,8 +2092,255 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         base_radius = (
             0.5 * np.sqrt(2.0) * resolution * float(self.config.orca_obstacle_radius_scale)
         )
-        radii = np.full((centers.shape[0],), base_radius, dtype=float)
-        return centers, radii
+        radii = np.full(
+            (centers.shape[0],),
+            base_radius + float(self.config.orca_obstacle_margin),
+            dtype=float,
+        )
+        corner_mask = self._orca_corner_obstacle_mask(
+            centers=centers,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+        )
+        if np.any(corner_mask):
+            radii[corner_mask] *= float(self.config.orca_corner_clearance_scale)
+        return self._coalesce_static_obstacle_points(
+            centers=centers,
+            radii=radii,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            resolution=resolution,
+        )
+
+    def _orca_corner_obstacle_mask(
+        self,
+        *,
+        centers: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> np.ndarray:
+        """Return a mask for obstacle points that should receive corner-clearance inflation.
+
+        Returns:
+            np.ndarray: Boolean mask aligned with ``centers``.
+        """
+        if centers.shape[0] == 0:
+            return np.zeros((0,), dtype=bool)
+        forward = self._normalize(np.array([np.cos(robot_heading), np.sin(robot_heading)]))
+        offsets = centers - robot_pos[None, :]
+        forward_dist = offsets @ forward
+        lateral = np.abs(offsets[:, 0] * forward[1] - offsets[:, 1] * forward[0])
+        return (
+            (forward_dist > 0.0)
+            & (
+                forward_dist
+                <= float(self.config.orca_forward_probe_distance)
+                * float(self.config.orca_corner_probe_forward_scale)
+            )
+            & (
+                lateral
+                <= float(self.config.orca_side_probe_offset)
+                * float(self.config.orca_corner_probe_side_scale)
+            )
+        )
+
+    def _direct_path_blocked(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        goal_direction_world: np.ndarray,
+        observation: dict,
+    ) -> bool:
+        """Check whether the immediate forward corridor looks blocked.
+
+        Returns:
+            bool: True when the occupancy probe ahead of the robot is blocked.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return False
+        grid, meta = payload
+        channel = self._preferred_channel(meta)
+        if channel < 0 or channel >= grid.shape[0]:
+            return False
+        forward = self._normalize(goal_direction_world)
+        if np.linalg.norm(forward) < self._EPS:
+            forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        probe_distance = float(self.config.orca_forward_probe_distance)
+        side_offset = float(self.config.orca_side_probe_offset)
+        probe_points = (
+            robot_pos + forward * probe_distance,
+            robot_pos + forward * probe_distance + lateral * side_offset,
+            robot_pos + forward * probe_distance - lateral * side_offset,
+        )
+        values = [self._grid_value(point, grid, meta, channel) for point in probe_points]
+        return max(values, default=0.0) >= float(self.config.orca_obstacle_threshold)
+
+    def _select_commit_side(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        ped_positions: np.ndarray,
+        goal_direction_world: np.ndarray,
+        observation: dict,
+    ) -> int:
+        """Choose a deterministic lateral side for bypassing stalls or symmetry.
+
+        Returns:
+            int: ``1`` for left-bias, ``-1`` for right-bias.
+        """
+        if self._commit_side_ttl > 0 and self._commit_side != 0:
+            return self._commit_side
+
+        forward = self._normalize(goal_direction_world)
+        if np.linalg.norm(forward) < self._EPS:
+            forward = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        score = float(self.config.orca_symmetry_bias)
+
+        if ped_positions.size:
+            offsets = ped_positions - robot_pos[None, :]
+            forward_dist = offsets @ forward
+            near = (forward_dist > 0.0) & (forward_dist <= float(self.config.orca_commit_distance))
+            if np.any(near):
+                lateral_offsets = offsets[near] @ lateral
+                score += -float(np.sum(lateral_offsets))
+
+        payload = self._extract_grid_payload(observation)
+        if payload is not None:
+            grid, meta = payload
+            channel = self._preferred_channel(meta)
+            if channel >= 0:
+                probe_distance = float(self.config.orca_forward_probe_distance)
+                side_offset = float(self.config.orca_side_probe_offset)
+                left_point = robot_pos + forward * probe_distance + lateral * side_offset
+                right_point = robot_pos + forward * probe_distance - lateral * side_offset
+                left_occ = self._grid_value(left_point, grid, meta, channel)
+                right_occ = self._grid_value(right_point, grid, meta, channel)
+                score += right_occ - left_occ
+
+        side = self._side_sign(score)
+        self._commit_side = side
+        self._commit_side_ttl = max(int(self.config.orca_commit_persistence_steps), 1)
+        return side
+
+    def _update_stall_state(
+        self, *, goal_distance: float, current_speed: float, blocked: bool
+    ) -> bool:
+        """Track repeated low-progress cycles and return whether commit mode should activate.
+
+        Returns:
+            bool: True when the stall counter has crossed the commit threshold.
+        """
+        progress = 0.0
+        if self._last_goal_distance is not None:
+            progress = self._last_goal_distance - goal_distance
+        stalled = current_speed <= float(
+            self.config.orca_stall_speed_threshold
+        ) and progress <= float(self.config.orca_stall_progress_epsilon)
+        if stalled:
+            self._stall_cycles += 1
+        else:
+            self._stall_cycles = 0
+            if self._commit_side_ttl > 0:
+                self._commit_side_ttl -= 1
+            if self._commit_side_ttl <= 0:
+                self._commit_side = 0
+        self._last_goal_distance = goal_distance
+        return self._stall_cycles >= int(self.config.orca_stall_cycles_before_commit)
+
+    def _apply_commit_bias(
+        self,
+        *,
+        preferred_velocity_world: np.ndarray,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        ped_positions: np.ndarray,
+        observation: dict,
+        current_speed: float,
+        goal: np.ndarray,
+    ) -> np.ndarray:
+        """Adjust preferred world velocity for head-on, symmetry, and stall cases.
+
+        Returns:
+            np.ndarray: Bias-adjusted preferred world velocity.
+        """
+        goal_direction_world = self._normalize(goal - robot_pos)
+        if np.linalg.norm(goal_direction_world) < self._EPS:
+            return preferred_velocity_world
+
+        blocked = self._direct_path_blocked(
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            goal_direction_world=goal_direction_world,
+            observation=observation,
+        )
+        goal_distance = float(np.linalg.norm(goal - robot_pos))
+        commit_active = self._update_stall_state(
+            goal_distance=goal_distance,
+            current_speed=current_speed,
+            blocked=blocked,
+        )
+        lateral = np.array([-goal_direction_world[1], goal_direction_world[0]], dtype=float)
+        side_sign = 0
+
+        if ped_positions.size:
+            offsets = ped_positions - robot_pos[None, :]
+            forward_dist = offsets @ goal_direction_world
+            lateral_dist = np.abs(offsets @ lateral)
+            head_on = (
+                (forward_dist > 0.0)
+                & (forward_dist <= float(self.config.orca_commit_distance))
+                & (
+                    lateral_dist
+                    <= float(self.config.orca_side_probe_offset)
+                    * float(self.config.orca_head_on_probe_side_scale)
+                )
+            )
+            if np.any(head_on):
+                side_sign = self._select_commit_side(
+                    robot_pos=robot_pos,
+                    robot_heading=robot_heading,
+                    ped_positions=ped_positions,
+                    goal_direction_world=goal_direction_world,
+                    observation=observation,
+                )
+                preferred_velocity_world = preferred_velocity_world + (
+                    lateral
+                    * side_sign
+                    * float(self.config.orca_head_on_bias)
+                    * float(self.config.max_linear_speed)
+                )
+
+        if blocked or commit_active:
+            side_sign = side_sign or self._select_commit_side(
+                robot_pos=robot_pos,
+                robot_heading=robot_heading,
+                ped_positions=ped_positions,
+                goal_direction_world=goal_direction_world,
+                observation=observation,
+            )
+            preferred_velocity_world = preferred_velocity_world + (
+                lateral
+                * side_sign
+                * float(self.config.orca_commit_lateral_gain)
+                * float(self.config.max_linear_speed)
+            )
+            if current_speed <= float(self.config.orca_stall_speed_threshold):
+                preferred_velocity_world = preferred_velocity_world + (
+                    goal_direction_world
+                    * float(self.config.orca_stall_nudge_factor)
+                    * float(self.config.max_linear_speed)
+                )
+
+        speed = np.linalg.norm(preferred_velocity_world)
+        max_speed = float(self.config.max_linear_speed)
+        if speed > max_speed:
+            preferred_velocity_world = preferred_velocity_world / max(speed, self._EPS) * max_speed
+        return preferred_velocity_world
 
     def _solve_orca_velocity(
         self, lines: list[_OrcaLine], preferred_velocity: np.ndarray
@@ -1798,24 +2368,23 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             )
         return new_velocity
 
-    def _velocity_to_command(
+    def _velocity_world_to_command(
         self,
         *,
-        velocity: np.ndarray,
+        velocity_world: np.ndarray,
         robot_pos: np.ndarray,
         robot_heading: float,
         observation: dict,
     ) -> tuple[float, float]:
-        """Convert a velocity vector into (v, w) command with occupancy penalty.
+        """Convert a world-frame velocity vector into ``(v, w)`` with occupancy penalty.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        speed = float(np.linalg.norm(velocity))
+        speed = float(np.linalg.norm(velocity_world))
         if speed < self._EPS:
             return 0.0, 0.0
-        world_dir = self._ego_to_world(velocity, robot_heading)
-        world_dir = self._normalize(world_dir)
+        world_dir = self._normalize(np.asarray(velocity_world, dtype=float))
         world_dir, occ_penalty = self._get_safe_heading(robot_pos, world_dir, observation)
         desired_heading = atan2(world_dir[1], world_dir[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -1840,21 +2409,38 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         return linear, angular
 
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity using ORCA or the heuristic fallback.
+
+        Returns:
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
+        """
+        if not self._ensure_rvo2():
+            return self._heuristic_velocity_world(observation)
+        return self._rvo2_velocity_world(observation)
+
     def plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using rvo2 ORCA or a heuristic fallback.
+        """Compute ``(v, w)`` using the ORCA world-velocity plan and unicycle projection.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        if not self._ensure_rvo2():
-            return self._heuristic_plan(observation)
-        return self._rvo2_plan(observation)
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        velocity_world = self.plan_velocity_world(observation)
+        return self._velocity_world_to_command(
+            velocity_world=velocity_world,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            observation=observation,
+        )
 
-    def _rvo2_plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using the rvo2 ORCA solver.
+    def _rvo2_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame velocity using the rvo2 ORCA solver.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
@@ -1889,6 +2475,15 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
 
         ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        preferred_velocity_world = self._apply_commit_bias(
+            preferred_velocity_world=preferred_velocity_world,
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            ped_positions=ped_positions,
+            observation=observation,
+            current_speed=robot_speed,
+            goal=goal,
+        )
         if ped_count > 0:
             ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
             ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
@@ -1962,19 +2557,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
         sim.doStep()
         new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)
-        new_velocity_ego = self._world_to_ego_vec(new_velocity_world, robot_heading)
-        return self._velocity_to_command(
-            velocity=new_velocity_ego,
-            robot_pos=robot_pos,
-            robot_heading=robot_heading,
-            observation=observation,
-        )
+        return new_velocity_world
 
-    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
-        """Compute (v, w) using the legacy ORCA-inspired heuristic.
+    def _heuristic_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame velocity using the legacy ORCA-inspired heuristic.
 
         Returns:
-            tuple[float, float]: Linear and angular velocity command.
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
@@ -1990,6 +2579,16 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         ped_positions, ped_velocities, _ped_count, ped_radius = self._extract_pedestrians(ped_state)
         robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
         robot_velocity = np.array([robot_speed, 0.0], dtype=float)
+        preferred_velocity_world = self._apply_commit_bias(
+            preferred_velocity_world=self._ego_to_world(preferred_velocity, robot_heading),
+            robot_pos=robot_pos,
+            robot_heading=robot_heading,
+            ped_positions=ped_positions,
+            observation=observation,
+            current_speed=robot_speed,
+            goal=goal,
+        )
+        preferred_velocity = self._world_to_ego_vec(preferred_velocity_world, robot_heading)
 
         time_step = float(
             np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
@@ -2026,11 +2625,492 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
                 )
             )
         new_velocity = self._solve_orca_velocity(lines, preferred_velocity)
-        return self._velocity_to_command(
-            velocity=new_velocity,
+        return self._ego_to_world(new_velocity, robot_heading)
+
+    def _heuristic_plan(self, observation: dict) -> tuple[float, float]:
+        """Compute ``(v, w)`` using the legacy ORCA-inspired heuristic.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state, _goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        velocity_world = self._heuristic_velocity_world(observation)
+        return self._velocity_world_to_command(
+            velocity_world=velocity_world,
             robot_pos=robot_pos,
             robot_heading=robot_heading,
             observation=observation,
+        )
+
+
+class HRVOPlannerAdapter(ORCAPlannerAdapter):
+    """Hybrid Reciprocal Velocity Obstacles local planner.
+
+    This is a local, benchmark-facing HRVO-inspired implementation informed by the
+    upstream `snape/HRVO` geometry and the lightweight VO reference linked in
+    issue `#726`. It remains an in-repo implementation rather than an upstream
+    wrapper and should therefore be treated conservatively in benchmark claims.
+    """
+
+    @dataclass
+    class _VelocityObstacle:
+        """Hybrid reciprocal velocity obstacle with apex and side rays."""
+
+        apex: np.ndarray
+        side1: np.ndarray
+        side2: np.ndarray
+
+    @dataclass
+    class _Candidate:
+        """Candidate velocity and the VO boundaries that generated it."""
+
+        position: np.ndarray
+        obstacle1: int
+        obstacle2: int
+
+    @staticmethod
+    def _clip_arcsin_ratio(numerator: float, denominator: float) -> float:
+        """Return a numerically safe ratio for ``asin``."""
+        if denominator <= 0.0:
+            return 1.0
+        return float(np.clip(numerator / denominator, -1.0, 1.0))
+
+    @classmethod
+    def _tangent_direction(cls, angle: float) -> np.ndarray:
+        """Return a unit ray direction for a tangent boundary angle."""
+        return cls._normalize(np.array([np.cos(angle), np.sin(angle)], dtype=float))
+
+    @classmethod
+    def _project_onto_side(
+        cls, apex: np.ndarray, side: np.ndarray, point: np.ndarray
+    ) -> np.ndarray:
+        """Project a point onto the forward ray starting at ``apex`` along ``side``.
+
+        Returns:
+            np.ndarray: Closest point on the forward ray.
+        """
+        t = max(float(np.dot(point - apex, side)), 0.0)
+        return apex + t * side
+
+    @classmethod
+    def _circle_side_intersections(
+        cls,
+        apex: np.ndarray,
+        side: np.ndarray,
+        radius: float,
+    ) -> list[np.ndarray]:
+        """Return intersections between a forward ray and the speed circle."""
+        d = cls._det(apex, side)
+        discriminant = radius * radius - d * d
+        if discriminant <= 0.0:
+            return []
+        offset = float(np.dot(apex, side))
+        root = float(np.sqrt(discriminant))
+        intersections: list[np.ndarray] = []
+        for t in (-offset - root, -offset + root):
+            if t >= 0.0:
+                intersections.append(apex + t * side)
+        return intersections
+
+    @classmethod
+    def _ray_intersection(
+        cls,
+        apex1: np.ndarray,
+        side1: np.ndarray,
+        apex2: np.ndarray,
+        side2: np.ndarray,
+    ) -> np.ndarray | None:
+        """Return the intersection of two forward rays when it lies on both rays."""
+        determinant = cls._det(side1, side2)
+        if abs(determinant) <= cls._EPS:
+            return None
+        delta = apex2 - apex1
+        s = cls._det(delta, side2) / determinant
+        t = cls._det(delta, side1) / determinant
+        if s < 0.0 or t < 0.0:
+            return None
+        return apex1 + s * side1
+
+    @classmethod
+    def _inside_velocity_obstacle(
+        cls,
+        obstacle: _VelocityObstacle,
+        velocity: np.ndarray,
+    ) -> bool:
+        """Return whether a velocity lies inside the HRVO forbidden cone."""
+        rel = velocity - obstacle.apex
+        return (
+            cls._det(obstacle.side2, rel) <= cls._EPS and cls._det(obstacle.side1, rel) >= -cls._EPS
+        )
+
+    def _build_hrvo_obstacles(
+        self,
+        *,
+        robot_velocity_world: np.ndarray,
+        preferred_velocity_world: np.ndarray,
+        other_positions: np.ndarray,
+        other_velocities_world: np.ndarray,
+        other_pref_velocities_world: np.ndarray,
+        robot_radius: float,
+        other_radii: np.ndarray,
+        time_step: float,
+    ) -> list[_VelocityObstacle]:
+        """Construct HRVO cones for nearby dynamic neighbors.
+
+        Returns:
+            list[_VelocityObstacle]: HRVO cones in world-velocity space.
+        """
+        neighbor_dist = max(float(self.config.hrvo_neighbor_dist), 0.0)
+        max_neighbors = max(int(self.config.hrvo_max_neighbors), 0)
+        effective_time_horizon = max(float(self.config.hrvo_time_horizon), self._EPS)
+        uncertainty_offset = max(float(self.config.hrvo_uncertainty_offset), 0.0)
+        if other_positions.size == 0:
+            return []
+
+        offsets = other_positions
+        dist_sq = np.einsum("ij,ij->i", offsets, offsets)
+        if neighbor_dist > 0.0:
+            keep = dist_sq <= neighbor_dist * neighbor_dist
+        else:
+            keep = np.ones((other_positions.shape[0],), dtype=bool)
+        if not np.any(keep):
+            return []
+
+        order = np.argsort(dist_sq[keep])
+        if max_neighbors > 0:
+            order = order[:max_neighbors]
+        kept_positions = other_positions[keep][order]
+        kept_velocities = other_velocities_world[keep][order]
+        kept_pref_velocities = other_pref_velocities_world[keep][order]
+        kept_radii = other_radii[keep][order]
+
+        velocity_obstacles: list[self._VelocityObstacle] = []
+        for other_position, other_velocity, other_pref_velocity, other_radius in zip(
+            kept_positions,
+            kept_velocities,
+            kept_pref_velocities,
+            kept_radii,
+            strict=True,
+        ):
+            relative_position = np.asarray(other_position, dtype=float)
+            relative_velocity = robot_velocity_world - np.asarray(other_velocity, dtype=float)
+            combined_radius = robot_radius + float(other_radius)
+            distance = float(np.linalg.norm(relative_position))
+            if distance < self._EPS:
+                continue
+            speed_horizon = (
+                np.linalg.norm(robot_velocity_world)
+                + np.linalg.norm(other_velocity)
+                + np.linalg.norm(other_pref_velocity)
+                + float(self.config.max_linear_speed)
+            ) * effective_time_horizon
+            if distance > combined_radius + speed_horizon:
+                continue
+
+            if distance > combined_radius:
+                angle = float(np.arctan2(relative_position[1], relative_position[0]))
+                opening = float(np.arcsin(self._clip_arcsin_ratio(combined_radius, distance)))
+                side1 = self._tangent_direction(angle - opening)
+                side2 = self._tangent_direction(angle + opening)
+                side_det = max(2.0 * np.sin(opening) * np.cos(opening), self._EPS)
+                pref_delta = preferred_velocity_world - np.asarray(other_pref_velocity, dtype=float)
+                if self._det(relative_position, pref_delta) > 0.0:
+                    scale = 0.5 * self._det(relative_velocity, side2) / side_det
+                    apex = other_velocity + scale * side1
+                else:
+                    scale = 0.5 * self._det(relative_velocity, side1) / side_det
+                    apex = other_velocity + scale * side2
+                apex = apex - (
+                    uncertainty_offset * distance / max(combined_radius, self._EPS)
+                ) * self._normalize(relative_position)
+            else:
+                apex = 0.5 * (np.asarray(other_velocity, dtype=float) + robot_velocity_world) - (
+                    uncertainty_offset
+                    + 0.5 * (combined_radius - distance) / max(time_step, self._EPS)
+                ) * self._normalize(relative_position)
+                normal = self._normalize(np.array([-relative_position[1], relative_position[0]]))
+                side1 = normal
+                side2 = -normal
+
+            velocity_obstacles.append(
+                self._VelocityObstacle(
+                    apex=np.asarray(apex, dtype=float),
+                    side1=np.asarray(side1, dtype=float),
+                    side2=np.asarray(side2, dtype=float),
+                )
+            )
+        return velocity_obstacles
+
+    def _seed_hrvo_candidate(self, preferred_velocity_world: np.ndarray) -> np.ndarray:
+        """Return the bounded preferred velocity used to seed HRVO candidate search.
+
+        Returns:
+            np.ndarray: Preferred velocity clipped to the planner speed limit.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        preferred_speed = float(np.linalg.norm(preferred_velocity_world))
+        if preferred_speed <= max_speed:
+            return preferred_velocity_world.copy()
+        return preferred_velocity_world / max(preferred_speed, self._EPS) * max_speed
+
+    def _hrvo_boundary_candidates(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+    ) -> list[_Candidate]:
+        """Enumerate candidates from individual obstacle boundaries and the speed circle.
+
+        Returns:
+            list[_Candidate]: Candidate velocities sourced from one obstacle at a time.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        candidates: list[self._Candidate] = []
+        for index, obstacle in enumerate(velocity_obstacles):
+            for side in (obstacle.side1, obstacle.side2):
+                projected = self._project_onto_side(obstacle.apex, side, preferred_velocity_world)
+                if np.linalg.norm(projected) <= max_speed + self._EPS:
+                    candidates.append(
+                        self._Candidate(position=projected, obstacle1=index, obstacle2=index)
+                    )
+                for point in self._circle_side_intersections(obstacle.apex, side, max_speed):
+                    candidates.append(
+                        self._Candidate(position=point, obstacle1=-1, obstacle2=index)
+                    )
+        return candidates
+
+    def _hrvo_intersection_candidates(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+    ) -> list[_Candidate]:
+        """Enumerate candidates from intersections between obstacle boundary rays.
+
+        Returns:
+            list[_Candidate]: Candidate velocities defined by paired obstacle boundaries.
+        """
+        max_speed = float(self.config.max_linear_speed)
+        candidates: list[self._Candidate] = []
+        for left_index, left_obstacle in enumerate(velocity_obstacles[:-1]):
+            for right_index, right_obstacle in enumerate(
+                velocity_obstacles[left_index + 1 :],
+                start=left_index + 1,
+            ):
+                for left_side in (left_obstacle.side1, left_obstacle.side2):
+                    for right_side in (right_obstacle.side1, right_obstacle.side2):
+                        point = self._ray_intersection(
+                            left_obstacle.apex,
+                            left_side,
+                            right_obstacle.apex,
+                            right_side,
+                        )
+                        if point is None:
+                            continue
+                        if np.linalg.norm(point) <= max_speed + self._EPS:
+                            candidates.append(
+                                self._Candidate(
+                                    position=point,
+                                    obstacle1=left_index,
+                                    obstacle2=right_index,
+                                )
+                            )
+        return candidates
+
+    def _preferred_lateral_axis(self, preferred_velocity_world: np.ndarray) -> np.ndarray:
+        """Return a rotation-invariant lateral axis relative to the preferred velocity.
+
+        Returns:
+            np.ndarray: Unit vector perpendicular to the preferred velocity.
+        """
+        norm = float(np.linalg.norm(preferred_velocity_world))
+        if norm < self._EPS:
+            return np.array([0.0, 1.0], dtype=float)
+        pref_unit = preferred_velocity_world / norm
+        return np.array([-pref_unit[1], pref_unit[0]], dtype=float)
+
+    def _solve_hrvo_velocity(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+    ) -> np.ndarray:
+        """Select the feasible candidate nearest to the preferred velocity.
+
+        Returns:
+            np.ndarray: Chosen HRVO world-frame velocity.
+        """
+        seed = self._seed_hrvo_candidate(preferred_velocity_world)
+        candidates = [self._Candidate(position=seed, obstacle1=-1, obstacle2=-1)]
+        candidates.extend(
+            self._hrvo_boundary_candidates(velocity_obstacles, preferred_velocity_world)
+        )
+        candidates.extend(self._hrvo_intersection_candidates(velocity_obstacles))
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
+
+        candidates.sort(
+            key=lambda candidate: (
+                float(np.linalg.norm(candidate.position - preferred_velocity_world)),
+                float(abs(float(np.dot(candidate.position, lateral_axis))) < 1e-6),
+                -float(abs(float(np.dot(candidate.position, lateral_axis)))),
+            )
+        )
+        best_invalid: np.ndarray | None = None
+        best_invalid_cover = -1
+        for candidate in candidates:
+            valid = True
+            for obstacle_index, obstacle in enumerate(velocity_obstacles):
+                if obstacle_index in {candidate.obstacle1, candidate.obstacle2}:
+                    continue
+                if self._inside_velocity_obstacle(obstacle, candidate.position):
+                    valid = False
+                    if obstacle_index > best_invalid_cover:
+                        best_invalid = candidate.position
+                        best_invalid_cover = obstacle_index
+                    break
+            if valid:
+                return candidate.position
+        return best_invalid if best_invalid is not None else seed
+
+    def _break_hrvo_symmetry(
+        self,
+        velocity_obstacles: list[_VelocityObstacle],
+        preferred_velocity_world: np.ndarray,
+        solved_velocity_world: np.ndarray,
+    ) -> np.ndarray:
+        """Resolve exact symmetric ties by committing to one obstacle boundary.
+
+        Returns:
+            np.ndarray: Symmetry-broken world-frame velocity.
+        """
+        lateral_axis = self._preferred_lateral_axis(preferred_velocity_world)
+        solved_lateral = float(np.dot(solved_velocity_world, lateral_axis))
+        if abs(solved_lateral) > 1e-6 or not velocity_obstacles:
+            return solved_velocity_world
+        if not any(
+            self._inside_velocity_obstacle(obstacle, preferred_velocity_world)
+            or self._inside_velocity_obstacle(obstacle, solved_velocity_world)
+            for obstacle in velocity_obstacles
+        ):
+            return solved_velocity_world
+
+        choices: list[np.ndarray] = []
+        max_speed = float(self.config.max_linear_speed)
+        for obstacle in velocity_obstacles:
+            for side in (obstacle.side1, obstacle.side2):
+                candidate = self._project_onto_side(obstacle.apex, side, preferred_velocity_world)
+                candidate_lateral = float(np.dot(candidate, lateral_axis))
+                if (
+                    np.linalg.norm(candidate) <= max_speed + self._EPS
+                    and abs(candidate_lateral) > 1e-6
+                ):
+                    choices.append(candidate)
+        if not choices:
+            return solved_velocity_world
+        choices.sort(
+            key=lambda candidate: (
+                float(np.linalg.norm(candidate - preferred_velocity_world)),
+                -float(abs(float(np.dot(candidate, lateral_axis)))),
+                -float(np.dot(candidate, lateral_axis)),
+            )
+        )
+        return choices[0]
+
+    def plan_velocity_world(self, observation: dict) -> np.ndarray:
+        """Compute a world-frame translational velocity with the local HRVO solver.
+
+        Returns:
+            np.ndarray: World-frame ``[vx, vy]`` translational velocity.
+        """
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        preferred_velocity_ego = self._preferred_velocity(
+            goal,
+            robot_pos,
+            robot_heading,
+            float(self.config.max_linear_speed),
+        )
+        if np.linalg.norm(preferred_velocity_ego) < self._EPS:
+            return np.zeros(2, dtype=float)
+        preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
+
+        robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
+        robot_velocity_world = np.array(
+            [
+                robot_speed * float(np.cos(robot_heading)),
+                robot_speed * float(np.sin(robot_heading)),
+            ],
+            dtype=float,
+        )
+        robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
+        time_step = float(
+            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
+        )
+        if time_step <= self._EPS:
+            time_step = 0.1
+
+        ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
+        if ped_count > 0:
+            cos_h = float(np.cos(robot_heading))
+            sin_h = float(np.sin(robot_heading))
+            ped_vel_world = np.zeros_like(ped_velocities, dtype=float)
+            ped_vel_world[:, 0] = cos_h * ped_velocities[:, 0] - sin_h * ped_velocities[:, 1]
+            ped_vel_world[:, 1] = sin_h * ped_velocities[:, 0] + cos_h * ped_velocities[:, 1]
+            ped_pref_vel_world = ped_vel_world.copy()
+            ped_radii = np.full((ped_positions.shape[0],), float(ped_radius), dtype=float)
+        else:
+            ped_positions = np.zeros((0, 2), dtype=float)
+            ped_vel_world = np.zeros((0, 2), dtype=float)
+            ped_pref_vel_world = np.zeros((0, 2), dtype=float)
+            ped_radii = np.zeros((0,), dtype=float)
+
+        obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
+            observation,
+            robot_pos,
+            robot_heading,
+        )
+        if obstacle_positions.size:
+            obstacle_offsets = obstacle_positions - robot_pos[None, :]
+            obstacle_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+            obstacle_pref_vel_world = np.zeros_like(obstacle_offsets, dtype=float)
+        else:
+            obstacle_offsets = np.zeros((0, 2), dtype=float)
+            obstacle_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_pref_vel_world = np.zeros((0, 2), dtype=float)
+            obstacle_radii = np.zeros((0,), dtype=float)
+
+        if ped_positions.size or obstacle_offsets.size:
+            other_positions = np.concatenate(
+                [ped_positions - robot_pos[None, :], obstacle_offsets],
+                axis=0,
+            )
+            other_velocities_world = np.concatenate([ped_vel_world, obstacle_vel_world], axis=0)
+            other_pref_velocities_world = np.concatenate(
+                [ped_pref_vel_world, obstacle_pref_vel_world],
+                axis=0,
+            )
+            other_radii = np.concatenate([ped_radii, obstacle_radii], axis=0)
+        else:
+            return preferred_velocity_world
+
+        velocity_obstacles = self._build_hrvo_obstacles(
+            robot_velocity_world=robot_velocity_world,
+            preferred_velocity_world=preferred_velocity_world,
+            other_positions=other_positions,
+            other_velocities_world=other_velocities_world,
+            other_pref_velocities_world=other_pref_velocities_world,
+            robot_radius=robot_radius,
+            other_radii=other_radii,
+            time_step=time_step,
+        )
+        if not velocity_obstacles:
+            return preferred_velocity_world
+        solved = self._solve_hrvo_velocity(velocity_obstacles, preferred_velocity_world)
+        return self._break_hrvo_symmetry(
+            velocity_obstacles,
+            preferred_velocity_world,
+            solved,
         )
 
 
@@ -2655,13 +3735,20 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             tuple[np.ndarray, np.ndarray, np.ndarray, float]:
             ``(state, mask, robot_pos, robot_heading)``.
         """
-        robot_state, _goal_state, ped_state = self._socnav_fields(observation)
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        robot_speed = self._as_1d_float(robot_state.get("speed", [0.0, 0.0]), pad=2)[:2]
         ped_positions, ped_velocities_ego = self._normalize_pedestrians(ped_state)
 
         max_agents = max(1, int(self.config.predictive_max_agents))
-        state = np.zeros((max_agents, 4), dtype=np.float32)
+        expected_dim = 4
+        if bool(self.config.predictive_ego_conditioning):
+            expected_dim = 9
+        model = self._ensure_model()
+        if model is not None:
+            expected_dim = int(getattr(model.config, "input_dim", expected_dim))
+        state = np.zeros((max_agents, expected_dim), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         count = min(max_agents, ped_positions.shape[0])
         if count > 0:
@@ -2673,6 +3760,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             state[:count, 0] = rel_x
             state[:count, 1] = rel_y
             state[:count, 2:4] = ped_velocities_ego[:count]
+            if expected_dim >= 9:
+                goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+                goal_rel_world = goal_current - robot_pos
+                goal_rel = np.array(
+                    [
+                        cos_h * goal_rel_world[0] + sin_h * goal_rel_world[1],
+                        -sin_h * goal_rel_world[0] + cos_h * goal_rel_world[1],
+                    ],
+                    dtype=np.float32,
+                )
+                goal_dist = float(np.linalg.norm(goal_rel))
+                goal_dir = goal_rel / max(goal_dist, 1e-6)
+                state[:count, 4] = float(robot_speed[0]) if robot_speed.size > 0 else 0.0
+                state[:count, 5] = float(robot_speed[1]) if robot_speed.size > 1 else 0.0
+                state[:count, 6] = float(goal_dir[0])
+                state[:count, 7] = float(goal_dir[1])
+                state[:count, 8] = goal_dist
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 
@@ -2708,6 +3812,138 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             out = model(state_t, mask_t)
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
         return future
+
+    def _predictive_uncertainty_std(
+        self,
+        *,
+        state: np.ndarray,
+        mask: np.ndarray,
+        future: np.ndarray,
+    ) -> np.ndarray:
+        """Build a heuristic forecast uncertainty envelope around the mean trajectory.
+
+        The current predictive model only emits deterministic mean futures. This helper adds a
+        bounded, config-driven uncertainty estimate so benchmark runs can exercise probability-aware
+        rollout scoring without retraining the predictor.
+
+        Returns:
+            np.ndarray: Standard deviation per agent/time/axis with shape ``(N, T, 2)``.
+        """
+        base = max(float(self.config.predictive_uncertainty_base_std), 0.0)
+        growth = max(float(self.config.predictive_uncertainty_growth_per_step), 0.0)
+        speed_scale = max(float(self.config.predictive_uncertainty_speed_scale), 0.0)
+        density_scale = max(float(self.config.predictive_uncertainty_density_scale), 0.0)
+        steps = future.shape[1]
+        valid_count = max(float(np.sum(mask > 0.5)), 0.0)
+        density = valid_count / max(float(state.shape[0]), 1.0)
+        ped_speed = np.linalg.norm(state[:, 2:4], axis=1, keepdims=True).astype(np.float32)
+        time_std = base + growth * np.arange(1, steps + 1, dtype=np.float32).reshape(1, steps, 1)
+        agent_std = speed_scale * ped_speed[:, None, :] + density_scale * density
+        std = np.broadcast_to(time_std + agent_std, (future.shape[0], steps, 1)).astype(np.float32)
+        std = std * mask[:, None, None].astype(np.float32)
+        return np.repeat(std, 2, axis=2)
+
+    def _sample_future_trajectories(
+        self,
+        *,
+        state: np.ndarray,
+        mask: np.ndarray,
+        future: np.ndarray,
+    ) -> np.ndarray:
+        """Return a batch of future scenarios for risk-aware scoring.
+
+        Returns:
+            np.ndarray: Scenario tensor ``(S, N, T, 2)`` where ``S`` is the sample count.
+        """
+        mode = str(getattr(self.config, "predictive_uncertainty_mode", "deterministic")).strip()
+        sample_count = max(1, int(getattr(self.config, "predictive_risk_sample_count", 1)))
+        if mode == "deterministic" or sample_count <= 1:
+            return future[None, ...]
+
+        std = self._predictive_uncertainty_std(state=state, mask=mask, future=future)
+        rng = np.random.default_rng(int(getattr(self.config, "predictive_risk_seed", 7)))
+        samples = np.repeat(future[None, ...], sample_count, axis=0).astype(np.float32)
+        if sample_count > 1:
+            noise = rng.normal(
+                loc=0.0,
+                scale=std[None, ...],
+                size=(sample_count - 1, future.shape[0], future.shape[1], future.shape[2]),
+            ).astype(np.float32)
+            samples[1:] += noise
+        samples *= mask[None, :, None, None].astype(np.float32)
+        return samples
+
+    def _aggregate_risk_costs(self, costs: list[float]) -> float:
+        """Aggregate scenario costs using the configured risk objective.
+
+        Returns:
+            float: Scalar aggregate cost.
+        """
+        if not costs:
+            return float("inf")
+        arr = np.asarray(costs, dtype=float)
+        objective = str(getattr(self.config, "predictive_risk_objective", "mean")).strip().lower()
+        if objective == "cvar":
+            alpha = float(
+                np.clip(getattr(self.config, "predictive_risk_cvar_alpha", 0.25), 1e-3, 1.0)
+            )
+            tail_count = max(1, int(np.ceil(arr.size * alpha)))
+            return float(np.mean(np.sort(arr)[-tail_count:]))
+        return float(np.mean(arr))
+
+    def _score_action_distribution(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        v: float,
+        w: float,
+        steps: int,
+    ) -> float:
+        """Score a candidate over multiple future scenarios.
+
+        Returns:
+            float: Probability-aware aggregate cost.
+        """
+        costs = [
+            self._score_action(
+                observation=observation,
+                future_peds=future_sample,
+                mask=mask,
+                v=v,
+                w=w,
+                steps=steps,
+            )
+            for future_sample in future_batch
+        ]
+        return self._aggregate_risk_costs(costs)
+
+    def _score_sequence_distribution(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        sequence: list[tuple[float, float]],
+        steps: int,
+    ) -> float:
+        """Score an action sequence over multiple future scenarios.
+
+        Returns:
+            float: Probability-aware aggregate sequence cost.
+        """
+        costs = [
+            self._score_action_sequence(
+                observation=observation,
+                future_peds=future_sample,
+                mask=mask,
+                sequence=sequence,
+                steps=steps,
+            )
+            for future_sample in future_batch
+        ]
+        return self._aggregate_risk_costs(costs)
 
     def _min_predicted_distance(
         self,
@@ -3067,6 +4303,462 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.occupancy_weight) * occ_penalty
         )
 
+    def _rollout_robot_sequence(
+        self,
+        *,
+        sequence: list[tuple[float, float]],
+        segment_steps: int,
+        dt: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Roll out a piecewise-constant action sequence in the robot local frame.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Local positions and headings for rollout steps.
+        """
+        pos = np.zeros(2, dtype=float)
+        heading = 0.0
+        traj = np.zeros((max(1, len(sequence) * max(1, segment_steps)), 2), dtype=float)
+        headings = np.zeros((traj.shape[0],), dtype=float)
+        idx = 0
+        for v, w in sequence:
+            for _ in range(max(1, segment_steps)):
+                heading += float(w) * dt
+                pos[0] += float(v) * np.cos(heading) * dt
+                pos[1] += float(v) * np.sin(heading) * dt
+                traj[idx] = pos
+                headings[idx] = heading
+                idx += 1
+        return traj[:idx], headings[:idx]
+
+    def _score_action_sequence(
+        self,
+        *,
+        observation: dict,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        sequence: list[tuple[float, float]],
+        steps: int,
+    ) -> float:
+        """Score a short piecewise-constant action sequence; lower is better.
+
+        Returns:
+            float: Scalar sequence cost.
+        """
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        segments = max(1, len(sequence))
+        segment_steps = max(1, int(np.ceil(max(1, steps) / segments)))
+        local_traj, local_headings = self._rollout_robot_sequence(
+            sequence=sequence,
+            segment_steps=segment_steps,
+            dt=dt,
+        )
+        horizon = min(local_traj.shape[0], int(steps), int(future_peds.shape[1]))
+        local_traj = local_traj[:horizon]
+        local_headings = local_headings[:horizon]
+
+        radius_margin = float(self.config.predictive_robot_radius) + float(
+            self.config.predictive_pedestrian_radius
+        )
+        min_clearance = float("inf")
+        collision_pen = 0.0
+        near_pen = 0.0
+        ttc_pen = 0.0
+        safe_dist = float(self.config.predictive_safe_distance) + radius_margin
+        near_dist = max(float(self.config.predictive_near_distance) + radius_margin, safe_dist)
+        ttc_threshold = float(self.config.predictive_ttc_distance) + radius_margin
+
+        for t in range(horizon):
+            delta = future_peds[:, t, :] - local_traj[t].reshape(1, 2)
+            dist = np.linalg.norm(delta, axis=1)
+            valid_dist = dist[mask > 0.5]
+            if valid_dist.size == 0:
+                continue
+            min_clearance = min(min_clearance, float(np.min(valid_dist)))
+            collision_pen += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
+            near_pen += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+            shortfall = np.maximum(0.0, ttc_threshold - valid_dist)
+            ttc_pen += float(np.sum(shortfall / (float(t + 1) * dt + self._EPS)))
+
+        cos_h = float(np.cos(robot_heading))
+        sin_h = float(np.sin(robot_heading))
+        final_local = local_traj[-1] if horizon > 0 else np.zeros(2, dtype=float)
+        final_world = robot_pos + np.array(
+            [
+                cos_h * final_local[0] - sin_h * final_local[1],
+                sin_h * final_local[0] + cos_h * final_local[1],
+            ],
+            dtype=float,
+        )
+        initial_dist = float(np.linalg.norm(goal - robot_pos))
+        final_dist = float(np.linalg.norm(goal - final_world))
+        goal_progress = initial_dist - final_dist
+
+        direction = final_world - robot_pos
+        if np.linalg.norm(direction) <= self._EPS:
+            direction = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        _, occ_penalty = self._path_penalty(
+            robot_pos=robot_pos,
+            direction=direction,
+            observation=observation,
+            base_distance=max(float(np.linalg.norm(final_world - robot_pos)), 1e-3),
+            num_samples=max(2, horizon),
+        )
+
+        velocity_pen = float(sum(abs(v) for v, _ in sequence))
+        turn_pen = float(sum(abs(w) for _, w in sequence))
+        progress_risk_shortfall = max(
+            0.0, float(self.config.predictive_progress_risk_distance) - float(min_clearance)
+        )
+        progress_risk_pen = max(0.0, goal_progress) * progress_risk_shortfall
+        hard_clearance_shortfall = max(
+            0.0, float(self.config.predictive_hard_clearance_distance) - float(min_clearance)
+        )
+
+        phase_cost = 0.0
+        if bool(self.config.predictive_phase_logic_enabled):
+            first_v, _first_w = sequence[0]
+            first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
+            first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
+            goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+            heading_err = abs((goal_heading - first_heading + np.pi) % (2.0 * np.pi) - np.pi)
+            phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
+            if min_clearance >= float(self.config.predictive_phase_commit_clearance):
+                phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
+            if min_clearance < float(self.config.predictive_phase_yield_clearance):
+                phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
+            if min_clearance >= float(
+                self.config.predictive_phase_recover_clearance
+            ) and goal_progress < float(self.config.predictive_phase_recover_progress):
+                phase_cost += float(self.config.predictive_phase_recover_weight)
+
+        return (
+            -float(self.config.predictive_goal_weight) * goal_progress
+            + float(self.config.predictive_collision_weight) * collision_pen
+            + float(self.config.predictive_near_miss_weight) * near_pen
+            + float(self.config.predictive_progress_risk_weight) * progress_risk_pen
+            + float(self.config.predictive_hard_clearance_weight) * hard_clearance_shortfall
+            + float(self.config.predictive_velocity_weight) * velocity_pen
+            + float(self.config.predictive_turn_weight) * turn_pen
+            + float(self.config.predictive_ttc_weight) * ttc_pen
+            + float(self.config.occupancy_weight) * occ_penalty
+            + phase_cost
+        )
+
+    def _plan_sequence_search(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[float, float]:
+        """Run deterministic beam search over short piecewise-constant control sequences.
+
+        Returns:
+            tuple[float, float]: First action from the lowest-cost sequence.
+        """
+        future = future_batch[0]
+        candidates = self._candidate_set(future_peds=future, mask=mask)
+        base_ranked = sorted(
+            (
+                (
+                    self._score_action_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        v=v,
+                        w=w,
+                        steps=steps,
+                    ),
+                    (v, w),
+                )
+                for v, w in candidates
+            ),
+            key=lambda item: float(item[0]),
+        )
+        branch = max(1, int(self.config.predictive_sequence_branch_factor))
+        beam_width = max(1, int(self.config.predictive_sequence_beam_width))
+        segments = max(1, int(self.config.predictive_sequence_segments))
+        stage_candidates = [cand for _score, cand in base_ranked[:branch]]
+
+        beam: list[tuple[float, list[tuple[float, float]]]] = []
+        for candidate in stage_candidates:
+            seq = [candidate]
+            score = self._score_sequence_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                sequence=seq,
+                steps=steps,
+            )
+            beam.append((score, seq))
+        beam.sort(key=lambda item: float(item[0]))
+        beam = beam[:beam_width]
+
+        for _ in range(1, segments):
+            expanded: list[tuple[float, list[tuple[float, float]]]] = []
+            for _prev_score, seq in beam:
+                for candidate in stage_candidates:
+                    new_seq = seq + [candidate]
+                    score = self._score_sequence_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        sequence=new_seq,
+                        steps=steps,
+                    )
+                    expanded.append((score, new_seq))
+            expanded.sort(key=lambda item: float(item[0]))
+            beam = expanded[:beam_width]
+        return beam[0][1][0] if beam else (0.0, 0.0)
+
+    def _plan_mcts_lite(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[float, float]:
+        """Run a bounded MCTS-lite search over short action sequences.
+
+        Returns:
+            tuple[float, float]: First action from the best root branch.
+        """
+        future = future_batch[0]
+        candidates = self._candidate_set(future_peds=future, mask=mask)
+        branch = max(1, int(self.config.predictive_mcts_branch_factor))
+        segments = max(1, int(self.config.predictive_sequence_segments))
+        iterations = max(1, int(self.config.predictive_mcts_iterations))
+        rollout_count = max(1, int(self.config.predictive_mcts_rollout_count))
+        exploration = float(self.config.predictive_mcts_exploration_weight)
+        base_ranked = sorted(
+            (
+                (
+                    self._score_action_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        v=v,
+                        w=w,
+                        steps=steps,
+                    ),
+                    (v, w),
+                )
+                for v, w in candidates
+            ),
+            key=lambda item: float(item[0]),
+        )
+        stage_candidates = [cand for _score, cand in base_ranked[:branch]]
+        if not stage_candidates:
+            return (0.0, 0.0)
+
+        rng = np.random.default_rng(int(self.config.predictive_risk_seed) + 17)
+        visits: dict[tuple[int, ...], int] = {(): 0}
+        value_sum: dict[tuple[int, ...], float] = {(): 0.0}
+        untried: dict[tuple[int, ...], list[int]] = {(): list(range(len(stage_candidates)))}
+
+        def _uct(parent: tuple[int, ...], child: tuple[int, ...]) -> float:
+            child_visits = visits.get(child, 0)
+            if child_visits == 0:
+                return float("inf")
+            parent_visits = max(visits.get(parent, 1), 1)
+            mean = value_sum.get(child, 0.0) / child_visits
+            bonus = exploration * np.sqrt(np.log(parent_visits + 1.0) / child_visits)
+            return float(mean + bonus)
+
+        for _ in range(iterations):
+            node: tuple[int, ...] = ()
+            path = [node]
+            while len(node) < segments:
+                choices = untried.setdefault(node, list(range(len(stage_candidates))))
+                if choices:
+                    idx = choices.pop(0)
+                    node = node + (idx,)
+                    visits.setdefault(node, 0)
+                    value_sum.setdefault(node, 0.0)
+                    untried.setdefault(node, list(range(len(stage_candidates))))
+                    path.append(node)
+                    break
+                children = [node + (idx,) for idx in range(len(stage_candidates))]
+                node = max(children, key=lambda child: _uct(path[-1], child))
+                path.append(node)
+            while len(node) < segments:
+                idx = int(rng.integers(0, len(stage_candidates)))
+                node = node + (idx,)
+                path.append(node)
+
+            seq_idx = list(node)
+            rollout_values: list[float] = []
+            for _roll in range(rollout_count):
+                seq = [stage_candidates[idx] for idx in seq_idx]
+                rollout_values.append(
+                    -self._score_sequence_distribution(
+                        observation=observation,
+                        future_batch=future_batch,
+                        mask=mask,
+                        sequence=seq,
+                        steps=steps,
+                    )
+                )
+            reward = float(np.mean(rollout_values))
+            for state_idx in path:
+                visits[state_idx] = visits.get(state_idx, 0) + 1
+                value_sum[state_idx] = value_sum.get(state_idx, 0.0) + reward
+
+        root_children = [((idx,), stage_candidates[idx]) for idx in range(len(stage_candidates))]
+        best_child, best_action = max(
+            root_children,
+            key=lambda item: (
+                visits.get(item[0], 0),
+                value_sum.get(item[0], 0.0) / max(visits.get(item[0], 0), 1),
+            ),
+        )
+        _ = best_child
+        return best_action
+
+    def _select_predictive_action(
+        self,
+        *,
+        observation: dict,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+    ) -> tuple[tuple[float, float], float]:
+        """Select the lowest-cost first action under the configured predictive search mode.
+
+        Returns:
+            tuple[tuple[float, float], float]: Best command and its aggregated risk-aware cost.
+        """
+        if bool(self.config.predictive_mcts_enabled):
+            best = self._plan_mcts_lite(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                steps=steps,
+            )
+            best_cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=best[0],
+                w=best[1],
+                steps=steps,
+            )
+            return best, best_cost
+
+        if bool(self.config.predictive_sequence_search_enabled):
+            best = self._plan_sequence_search(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                steps=steps,
+            )
+            best_cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=best[0],
+                w=best[1],
+                steps=steps,
+            )
+            return best, best_cost
+
+        best = (0.0, 0.0)
+        best_cost = float("inf")
+        for v, w in self._candidate_set(future_peds=future_batch[0], mask=mask):
+            cost = self._score_action_distribution(
+                observation=observation,
+                future_batch=future_batch,
+                mask=mask,
+                v=v,
+                w=w,
+                steps=steps,
+            )
+            if cost < best_cost:
+                best_cost = cost
+                best = (v, w)
+        return best, best_cost
+
+    def _apply_predictive_progress_escape(
+        self,
+        *,
+        observation: dict,
+        robot_heading: float,
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+        future_batch: np.ndarray,
+        mask: np.ndarray,
+        steps: int,
+        best: tuple[float, float],
+    ) -> tuple[tuple[float, float], float]:
+        """Inject a minimum forward-progress action when the predicted field is sufficiently clear.
+
+        Returns:
+            tuple[tuple[float, float], float]: Updated command and its cost.
+        """
+        best_cost = self._score_action_distribution(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            v=best[0],
+            w=best[1],
+            steps=steps,
+        )
+        if not bool(self.config.predictive_progress_escape_enabled):
+            return best, best_cost
+
+        goal_dist = float(np.linalg.norm(goal - robot_pos))
+        if goal_dist <= float(self.config.predictive_progress_escape_distance):
+            return best, best_cost
+
+        clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
+            self.config.predictive_progress_escape_clearance_margin
+        )
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_batch[0],
+            mask=mask,
+            steps=min(max(steps, 1), future_batch[0].shape[1]),
+        )
+        if min_pred_dist < clearance_gate:
+            return best, best_cost
+
+        cap_ratio = self._risk_speed_cap_ratio(future_peds=future_batch[0], mask=mask)
+        max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
+        min_v = float(self.config.max_linear_speed) * float(
+            np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
+        )
+        if best[0] >= min_v:
+            return best, best_cost
+
+        goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
+        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
+        forced_w = float(
+            np.clip(
+                float(self.config.predictive_progress_escape_heading_gain) * float(heading_err),
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
+        )
+        forced = (forced_v, forced_w)
+        forced_cost = self._score_action_distribution(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            v=forced[0],
+            w=forced[1],
+            steps=steps,
+        )
+        if forced_cost < best_cost:
+            return forced, forced_cost
+        return best, best_cost
+
     def plan(self, observation: dict) -> tuple[float, float]:
         """Compute (v, w) via predictive rollout search over learned trajectories.
 
@@ -3081,72 +4773,24 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         state, mask, _robot_pos, _robot_heading = self._build_model_input(observation)
         future = self._predict_trajectories(state, mask)
-        steps = self._effective_rollout_steps(future_peds=future, mask=mask)
-
-        best = (0.0, 0.0)
-        best_cost = float("inf")
-        for v, w in self._candidate_set(future_peds=future, mask=mask):
-            cost = self._score_action(
-                observation=observation,
-                future_peds=future,
-                mask=mask,
-                v=v,
-                w=w,
-                steps=steps,
-            )
-            if cost < best_cost:
-                best_cost = cost
-                best = (v, w)
-
-        if bool(self.config.predictive_progress_escape_enabled):
-            goal_dist = float(np.linalg.norm(goal - robot_pos))
-            if goal_dist > float(self.config.predictive_progress_escape_distance):
-                clearance_gate = float(self.config.predictive_hard_clearance_distance) + float(
-                    self.config.predictive_progress_escape_clearance_margin
-                )
-                min_pred_dist = self._min_predicted_distance(
-                    future_peds=future,
-                    mask=mask,
-                    steps=min(max(steps, 1), future.shape[1]),
-                )
-                if min_pred_dist >= clearance_gate:
-                    cap_ratio = self._risk_speed_cap_ratio(future_peds=future, mask=mask)
-                    max_v = float(self.config.max_linear_speed) * float(
-                        np.clip(cap_ratio, 0.1, 1.0)
-                    )
-                    min_v = float(self.config.max_linear_speed) * float(
-                        np.clip(self.config.predictive_progress_escape_min_speed_ratio, 0.0, 1.0)
-                    )
-                    if best[0] < min_v:
-                        robot_heading = float(
-                            self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]
-                        )
-                        goal_heading = float(
-                            np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0])
-                        )
-                        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
-                        heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
-                        forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
-                        forced_w = float(
-                            np.clip(
-                                float(self.config.predictive_progress_escape_heading_gain)
-                                * float(heading_err),
-                                -float(self.config.max_angular_speed),
-                                float(self.config.max_angular_speed),
-                            )
-                        )
-                        forced = (forced_v, forced_w)
-                        forced_cost = self._score_action(
-                            observation=observation,
-                            future_peds=future,
-                            mask=mask,
-                            v=forced[0],
-                            w=forced[1],
-                            steps=steps,
-                        )
-                        if forced_cost < best_cost:
-                            best_cost = forced_cost
-                            best = forced
+        future_batch = self._sample_future_trajectories(state=state, mask=mask, future=future)
+        steps = self._effective_rollout_steps(future_peds=future_batch[0], mask=mask)
+        best, _best_cost = self._select_predictive_action(
+            observation=observation,
+            future_batch=future_batch,
+            mask=mask,
+            steps=steps,
+        )
+        best, _best_cost = self._apply_predictive_progress_escape(
+            observation=observation,
+            robot_heading=float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0]),
+            robot_pos=robot_pos,
+            goal=goal,
+            future_batch=future_batch,
+            mask=mask,
+            steps=steps,
+            best=best,
+        )
         return best
 
 
@@ -3174,6 +4818,17 @@ def make_orca_policy(
     return SocNavPlannerPolicy(
         adapter=ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
     )
+
+
+def make_hrvo_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for the local HRVO planner policy.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping HRVOPlannerAdapter.
+    """
+
+    return SocNavPlannerPolicy(adapter=HRVOPlannerAdapter(config=config))
 
 
 def make_sacadrl_policy(

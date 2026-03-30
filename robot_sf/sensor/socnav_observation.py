@@ -15,6 +15,11 @@ from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.planner.predictive_foresight import (
+    PredictiveForesightEncoder,
+    predictive_foresight_config_from_source,
+    predictive_foresight_spaces,
+)
 from robot_sf.sim.simulator import Simulator
 
 DEFAULT_MAX_PEDS = 64
@@ -62,6 +67,16 @@ def socnav_observation_space(
                     "speed": spaces.Box(
                         low=-speed_bounds,
                         high=speed_bounds,
+                        dtype=np.float32,
+                    ),
+                    "velocity_xy": spaces.Box(
+                        low=-speed_bounds,
+                        high=speed_bounds,
+                        dtype=np.float32,
+                    ),
+                    "angular_velocity": spaces.Box(
+                        low=np.array([-np.finfo(np.float32).max], dtype=np.float32),
+                        high=np.array([np.finfo(np.float32).max], dtype=np.float32),
                         dtype=np.float32,
                     ),
                     "radius": spaces.Box(
@@ -119,7 +134,19 @@ def socnav_observation_space(
                     ),
                 },
             ),
-        },
+            **(
+                {
+                    "predictive": predictive_foresight_spaces(
+                        predictive_foresight_config_from_source(
+                            env_config,
+                            default_max_agents=max_pedestrians,
+                        )
+                    )
+                }
+                if getattr(env_config, "predictive_foresight_enabled", False)
+                else {}
+            ),
+        }
     )
 
 
@@ -132,10 +159,64 @@ class SocNavObservationFusion:
     max_pedestrians: int
     robot_index: int = 0
     truncation_warned: bool = False
+    _predictive_foresight: PredictiveForesightEncoder | None = None
+    _last_heading: float | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize optional predictive foresight encoder."""
+        if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
+            self._predictive_foresight = PredictiveForesightEncoder(
+                predictive_foresight_config_from_source(
+                    self.env_config,
+                    default_max_agents=self.max_pedestrians,
+                )
+            )
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
-        return None
+        self._last_heading = None
+
+    def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
+        """Return the robot world-frame planar velocity for the structured observation."""
+        robot = self.simulator.robots[self.robot_index]
+        velocity_xy = getattr(getattr(robot, "state", None), "velocity_xy", None)
+        if velocity_xy is not None:
+            arr = np.asarray(velocity_xy, dtype=np.float32).reshape(-1)
+            if arr.size >= 2:
+                return arr[:2]
+
+        current_speed = np.asarray(robot.current_speed, dtype=np.float32).reshape(-1)
+        linear_speed = float(current_speed[0]) if current_speed.size > 0 else 0.0
+        return np.array(
+            [
+                linear_speed * float(np.cos(wrapped_heading)),
+                linear_speed * float(np.sin(wrapped_heading)),
+            ],
+            dtype=np.float32,
+        )
+
+    def _robot_angular_velocity(self, wrapped_heading: float) -> np.ndarray:
+        """Return robot angular velocity while avoiding drivetrain-specific contract drift."""
+        robot = self.simulator.robots[self.robot_index]
+        state = getattr(robot, "state", None)
+        velocity_vw = getattr(state, "velocity_vw", None)
+        if velocity_vw is not None:
+            arr = np.asarray(velocity_vw, dtype=np.float32).reshape(-1)
+            if arr.size > 1:
+                return np.array([float(arr[1])], dtype=np.float32)
+
+        velocity = getattr(state, "velocity", None)
+        if isinstance(velocity, tuple) and len(velocity) > 1:
+            return np.array([float(velocity[1])], dtype=np.float32)
+
+        dt = float(getattr(self.simulator.config, "time_per_step_in_secs", 0.0) or 0.0)
+        if self._last_heading is None or dt <= 0.0:
+            angular_velocity = 0.0
+        else:
+            delta = ((wrapped_heading - self._last_heading + np.pi) % (2.0 * np.pi)) - np.pi
+            angular_velocity = float(delta / dt)
+        self._last_heading = float(wrapped_heading)
+        return np.array([angular_velocity], dtype=np.float32)
 
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
@@ -207,11 +288,14 @@ class SocNavObservationFusion:
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
-        return {
+        robot_velocity_xy = self._robot_velocity_xy(wrapped_heading)
+        obs = {
             "robot": {
                 "position": robot_pos_clipped,
                 "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
+                "velocity_xy": robot_velocity_xy,
+                "angular_velocity": self._robot_angular_velocity(wrapped_heading),
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),
@@ -240,3 +324,6 @@ class SocNavObservationFusion:
                 ),
             },
         }
+        if self._predictive_foresight is not None:
+            obs["predictive"] = self._predictive_foresight.encode(obs)
+        return obs

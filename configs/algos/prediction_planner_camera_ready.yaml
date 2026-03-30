@@ -10,7 +10,7 @@
 #   --algo prediction_planner \
 #   --algo-config configs/algos/prediction_planner_camera_ready.yaml
 
-predictive_model_id: predictive_proxy_selected_v1
+predictive_model_id: predictive_proxy_selected_v2_full
 predictive_device: cpu
 predictive_max_agents: 16
 predictive_horizon_steps: 8
@@ -54,5 +54,18 @@ predictive_near_field_heading_deltas: [-1.570796, -1.047198, -0.785398, -0.52359
 # Baseline lattice.
 predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
 predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
+predictive_sequence_search_enabled: true
+predictive_sequence_segments: 3
+predictive_sequence_branch_factor: 5
+predictive_sequence_beam_width: 8
+predictive_phase_logic_enabled: true
+predictive_phase_commit_clearance: 1.4
+predictive_phase_yield_clearance: 0.95
+predictive_phase_recover_clearance: 1.8
+predictive_phase_recover_progress: 0.25
+predictive_phase_commit_weight: 1.4
+predictive_phase_yield_weight: 2.0
+predictive_phase_align_weight: 0.4
+predictive_phase_recover_weight: 1.5
 
 occupancy_weight: 0.25

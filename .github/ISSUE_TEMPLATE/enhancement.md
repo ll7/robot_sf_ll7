@@ -1,110 +1,90 @@
 ---
-name: 🚀 Enhancement Request
-about: Suggest an enhancement or new feature for GitHub Copilot development
-title: "[ENHANCEMENT] "
+name: Enhancement Request
+about: Suggest a new capability or improvement
+title: ""
 labels: ["enhancement"]
 assignees: []
 ---
 
-## 📋 Problem Description
+## Goal / Problem
 
-<!-- Provide a clear and concise description of the problem to be solved or work required -->
+<!-- Provide a clear and concise description of the capability to add -->
 
 **What problem does this solve?**
-<!-- Example: Users need to be able to visualize robot trajectories in real-time -->
+<!-- Example: Users need to visualize robot trajectories in real time -->
 
-**Current situation:**
-<!-- Describe the current state and what's lacking -->
+**Current situation**
+<!-- Describe the current state and what is lacking -->
 
 **Why is this important?**
 <!-- Explain the impact and value of solving this problem -->
 
-## ✅ Acceptance Criteria
+## Scope
 
-<!-- Define what a complete solution looks like. Be specific and measurable. -->
+- In scope:
+- Out of scope:
 
-**Definition of Done:**
-- [ ] <!-- Example: Feature works as expected with unit tests -->
-- [ ] <!-- Example: Integration tests cover main use cases -->
-- [ ] <!-- Example: Documentation is updated -->
-- [ ] <!-- Example: No breaking changes to existing API -->
+## Added Value Estimation
 
-**Success Metrics:**
-<!-- How will we know this is successful? -->
-- [ ] <!-- Example: Performance improves by X% -->
-- [ ] <!-- Example: User can complete task in Y steps -->
+- User value:
+- Benchmark value:
+- Maintenance value:
+- Why now:
 
-**Testing Requirements:**
-- [ ] Unit tests added for new functionality
-- [ ] Integration tests verify end-to-end behavior
-- [ ] Existing tests continue to pass
-- [ ] <!-- Add specific testing requirements -->
+## Effort Estimation
 
-## 📁 Files and Components
+- Rough estimate (hours):
+- Best estimate (hours):
+- Unknowns:
 
-<!-- Provide specific guidance about which files need to be changed -->
+## Complexity Estimation
 
-**Primary files to modify:**
-- `path/to/file.py` - <!-- Brief description of what needs to change -->
-- `path/to/another/file.py` - <!-- Brief description -->
+- Implementation complexity:
+- Dependencies:
+- Open questions:
 
-**Additional files that may be affected:**
-- `tests/test_*.py` - <!-- Testing requirements -->
-- `docs/*.md` - <!-- Documentation updates -->
-- `examples/*.py` - <!-- Example updates -->
+## Risk Assessment
 
-**New files to create:**
-- `path/to/new/file.py` - <!-- Description of new file -->
+- Functional risk:
+- Compatibility risk:
+- Rollout risk:
+- Mitigation:
 
-## 🔧 Implementation Guidance
+## Affected Files
 
-**Suggested approach:**
-<!-- Provide architectural guidance for GitHub Copilot -->
-1. <!-- Step-by-step approach -->
-2. <!-- Consider existing patterns in the codebase -->
-3. <!-- Integration points with current system -->
+- `path/to/file.py` - Brief description of what changes.
+- `tests/test_*.py` - Testing requirements.
+- `docs/*.md` - Documentation updates.
+- `examples/*.py` - Example updates.
 
-**Code patterns to follow:**
-<!-- Reference existing patterns in the codebase -->
-- Follow patterns established in `robot_sf/gym_env/abstract_envs.py`
-- Use configuration approach from `robot_sf/gym_env/unified_config.py`
-- Apply factory pattern like in `robot_sf/gym_env/environment_factory.py`
+## Definition of Done
 
-**Dependencies and constraints:**
-- <!-- Any external dependencies needed -->
-- <!-- Compatibility requirements -->
-- <!-- Performance constraints -->
+- [ ] Feature is implemented.
+- [ ] User-visible behavior is covered by tests.
+- [ ] Documentation is updated.
+- [ ] No breaking changes are introduced without a migration note.
 
-## 📚 Related Information
+## Success Metrics
 
-**Related issues:**
-- Fixes # <!-- Link to any related issues -->
-- Related to # <!-- Link to related issues -->
+- The feature can be exercised via a documented command or API.
+- Benchmark or runtime goals are met when applicable.
+- Regression coverage exists for the new behavior.
 
-**Documentation references:**
-- [Refactoring Documentation](../docs/refactoring/) - For architecture patterns
-- [Examples](../examples/) - For usage patterns
-- <!-- Add specific documentation links -->
+## Validation / Testing
 
-**External references:**
-- <!-- Links to research papers, documentation, etc. -->
+- [ ] Unit tests added for new functionality.
+- [ ] Integration tests cover the main path.
+- [ ] Existing tests continue to pass.
+- [ ] Targeted validation command is documented.
 
-## 🎯 Additional Context
+## Estimate Discussion
 
-**Priority level:** <!-- High/Medium/Low -->
+- Why these values were proposed:
+- Uncertainty / confidence:
+- What evidence would move the estimate:
 
-**Estimated complexity:** <!-- Simple/Medium/Complex -->
+## Project Metadata
 
-**Screenshots or mockups:**
-<!-- Add any visual aids that help explain the enhancement -->
-
-**Alternative solutions considered:**
-<!-- What other approaches were considered and why was this chosen? -->
-
----
-
-<!-- 
-📝 **For GitHub Copilot:** This issue follows the repository's development workflow.
-Check the `.github/copilot/instructions.md` file for coding standards and practices.
-Refer to existing patterns in the `docs/refactoring/` directory for architectural guidance.
--->
+- Priority:
+- Effort (h):
+- Reviewed:

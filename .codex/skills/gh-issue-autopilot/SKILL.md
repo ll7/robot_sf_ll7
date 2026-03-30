@@ -21,6 +21,7 @@ Typical invocation:
 - Base branch: `main`
 - Branch prefix: `codex/`
 - Validation gate: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+- Batch-first workflow note: `docs/context/issue_713_batch_first_issue_workflow.md`
 
 ## Selection Policy: Next Best Issue
 
@@ -50,6 +51,8 @@ Use `gh project item-list` as the source of truth before falling back to plain `
    - Extract:
      - `Status` field ID and option IDs (`Tracked`, `Todo`, `Ready`, `In progress`, `Done`)
      - `Priority` field ID and option IDs (`Very Low` .. `Very High`)
+   - Cache those IDs once per shell session when processing a batch, then reuse them for all
+     project writes.
 
 3. Select next candidate issue
    - Query project items:
@@ -105,6 +108,8 @@ Use `gh project item-list` as the source of truth before falling back to plain `
      - `gh project item-add 5 --owner ll7 --url <issue_url>`
    - Set `Priority` + `Status` fields on follow-up issue item.
    - Reference follow-up issue IDs in PR description and parent issue comment.
+   - If you are processing a larger batch, finish all issue cleanup before the project-write pass
+     and run score sync once at the end.
 
 11. Close loop metadata
    - Parent issue:

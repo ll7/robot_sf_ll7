@@ -1,0 +1,4 @@
+max_linear_speed: 2.0
+social_force_obstacle_factor: 1.0
+social_force_obstacle_range: 2.0
+social_force_repulsion_weight: 0.4

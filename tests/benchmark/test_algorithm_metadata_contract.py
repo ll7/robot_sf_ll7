@@ -44,6 +44,155 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["adapted_steps"] == 0
 
 
+def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
+    """Safety-barrier metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="safety_barrier",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "native_barrier_style_safety_filter"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "SafetyBarrierPlannerAdapter"
+
+
+def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
+    """Grid-route metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="grid_route",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "occupancy_grid_route_tracking"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "GridRoutePlannerAdapter"
+
+
+def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
+    """ORCA metadata should make the upstream source and projection policy explicit."""
+    meta = enrich_algorithm_metadata(
+        algo="orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/mit-acl/Python-RVO2"
+    assert upstream["vendored_path"] == "third_party/python-rvo2"
+
+
+def test_hrvo_metadata_exposes_local_provenance_boundary() -> None:
+    """HRVO metadata should describe the local implementation and its references honestly."""
+    meta = enrich_algorithm_metadata(
+        algo="hrvo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "hybrid_reciprocal_velocity_obstacle"
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/snape/HRVO"
+    assert upstream["provenance_note"] == (
+        "Local implementation informed by upstream references; not a wrapped upstream runtime."
+    )
+
+
+def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
+    """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "classical"
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs"
+    assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
+def test_social_navigation_pyenvs_force_model_metadata_exposes_upstream_wrapper_contract() -> None:
+    """Prototype external force-model metadata should expose upstream repo and policy path."""
+    socialforce = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_socialforce",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    sfm = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_sfm_helbing",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    assert (
+        socialforce["planner_kinematics"]["projection_policy"]
+        == "heading_safe_velocity_to_unicycle_vw"
+    )
+    assert socialforce["planner_kinematics"]["runtime_strategy"] == (
+        "crowdnav_socialforce_compat_shim"
+    )
+    assert socialforce["planner_kinematics"]["runtime_dependency"] == "socialforce==0.2.3"
+    assert socialforce["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.socialforce.SocialForce"
+    )
+    assert socialforce["upstream_reference"]["runtime_dependency"] == "socialforce==0.2.3"
+    assert socialforce["upstream_reference"]["runtime_strategy"] == (
+        "crowdnav_socialforce_compat_shim"
+    )
+    assert sfm["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
+    )
+
+
+def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract() -> None:
+    """Prototype external HSFM metadata should expose headed upstream command semantics."""
+    meta = enrich_algorithm_metadata(
+        algo="social_navigation_pyenvs_hsfm_new_guo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert planner["upstream_command_space"] == "body_velocity_xy_plus_omega"
+    assert planner["projection_policy"] == "body_velocity_heading_safe_to_unicycle_vw"
+    assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
+
+
+def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
+    """NMPC metadata should classify the planner as a native optimizer-style adapter."""
+    meta = enrich_algorithm_metadata(
+        algo="nmpc_social",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "NMPCSocialPlannerAdapter"
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

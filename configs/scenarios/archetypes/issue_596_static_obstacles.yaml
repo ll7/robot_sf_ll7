@@ -1,0 +1,116 @@
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [59611, 59612, 59613]
+
+scenarios:
+  - name: single_obstacle_circle
+    map_id: atomic_single_circle_obstacle
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: single_obstacle_circle
+      label: single circular obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Test whether a single central round obstacle is avoided without creating unstable detours.
+      expected_behavior: Choose a clean detour around the obstacle and recover the nominal path quickly.
+      expected_pass_criteria: Reach the goal without obstacle contact and with one stable bypass around the circle.
+      failure_modes:
+        - obstacle collision
+        - obstacle-grazing instability
+        - unnecessary oscillatory detour
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: single_obstacle_rectangle
+    map_id: atomic_single_rectangle_obstacle
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: single_obstacle_rectangle
+      label: single rectangular obstacle
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Test detour quality around a sharp-edged rectangular obstacle with a clear bypass path.
+      expected_behavior: Avoid the rectangle with a smooth, non-oscillatory turn and resume progress.
+      expected_pass_criteria: Reach the goal without clipping rectangle corners or stalling in front of the obstacle.
+      failure_modes:
+        - corner clipping
+        - deadlock in front of obstacle
+        - excessive path elongation
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: line_wall_detour
+    map_id: atomic_line_wall_obstacle
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: line_wall_detour
+      label: line wall detour
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: oscillation
+      purpose: Test whether a thin wall-like obstacle triggers a stable top-or-bottom detour instead of repeated side switching.
+      expected_behavior: Commit to a single side around the wall and continue to goal progress.
+      expected_pass_criteria: Reach the goal after one committed wall detour without side-switch dithering.
+      failure_modes:
+        - side-switch oscillation
+        - wall collision
+        - indecision deadlock
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: narrow_passage
+    map_id: atomic_narrow_passage_test
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: narrow_passage
+      label: narrow passage
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Test whether the planner can center itself and traverse a single narrow gap without scraping either side.
+      expected_behavior: Align with the opening early, pass through once, and avoid repeated gap re-approach.
+      expected_pass_criteria: Reach the goal without wall contact and without repeated retries at the gap entrance.
+      failure_modes:
+        - passage collision
+        - opening oscillation
+        - refusal to enter viable gap
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds

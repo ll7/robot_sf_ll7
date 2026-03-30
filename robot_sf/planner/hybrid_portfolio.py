@@ -117,6 +117,15 @@ class HybridPortfolioAdapter:
             return self.prediction.plan(observation)
         return self.orca.plan(observation)
 
+    def reset(self) -> None:
+        """Clear portfolio hysteresis and reset any stateful child heads."""
+        self._active_head = "risk_dwa"
+        self._hold_remaining = 0
+        for head in (self.risk_dwa, self.orca, self.prediction, self.mppi):
+            reset = getattr(head, "reset", None)
+            if callable(reset):
+                reset()
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return command from selected planner head."""
         desired = self._desired_head(observation)

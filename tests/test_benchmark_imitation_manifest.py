@@ -148,7 +148,9 @@ def test_training_run_manifest_writes_to_runs_folder(
         episode_log_path=episode_log,
         wall_clock_hours=5.25,
         status=TrainingRunStatus.COMPLETED,
+        eval_per_scenario_path=get_imitation_report_dir() / "eval_by_scenario" / "run_001.json",
         scenario_coverage={"scenario_a": 3, "scenario_b": 1},
+        evaluation_scenario_config=Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"),
         notes=["warm start converged"],
     )
 
@@ -160,10 +162,25 @@ def test_training_run_manifest_writes_to_runs_folder(
     assert payload["run_id"] == artifact.run_id
     assert payload["episode_log_path"].startswith("benchmarks/ppo_imitation/")
     assert payload["eval_timeline_path"] is None
+    assert payload["eval_per_scenario_path"].startswith(
+        "benchmarks/ppo_imitation/eval_by_scenario/"
+    )
     assert payload["perf_summary_path"] is None
+    assert (
+        payload["evaluation_scenario_config"]
+        == "configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"
+    )
     assert payload["status"] == TrainingRunStatus.COMPLETED.value
     assert payload["scenario_coverage"] == {"scenario_a": 3, "scenario_b": 1}
     assert payload["notes"] == ["warm start converged"]
+
+
+def test_path_to_manifest_fails_closed_for_absolute_paths_outside_repo() -> None:
+    """Absolute paths outside the repo and artifact root should not serialize host paths."""
+    outside_path = Path("/tmp/robot-sf-outside-artifact.json")
+
+    with pytest.raises(ValueError, match="outside allowed roots"):
+        imitation_manifest._path_to_manifest(outside_path)
 
 
 @pytest.mark.parametrize(

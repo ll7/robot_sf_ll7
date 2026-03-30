@@ -42,6 +42,10 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
+from robot_sf.planner.predictive_foresight import (
+    PredictiveForesightEncoder,
+    predictive_foresight_config_from_source,
+)
 
 
 @dataclass
@@ -67,6 +71,17 @@ class PPOPlannerConfig:
 
     # Robustness
     fallback_to_goal: bool = True
+    predictive_foresight_enabled: bool = False
+    predictive_foresight_model_id: str = "predictive_proxy_selected_v2_full"
+    predictive_foresight_checkpoint_path: str | None = None
+    predictive_foresight_device: str = "cpu"
+    predictive_foresight_max_agents: int = 16
+    predictive_foresight_horizon_steps: int = 8
+    predictive_foresight_rollout_dt: float = 0.2
+    predictive_foresight_ego_conditioning: bool = False
+    predictive_foresight_near_distance: float = 0.7
+    predictive_foresight_front_corridor_length: float = 3.0
+    predictive_foresight_front_corridor_half_width: float = 1.0
 
 
 class PPOPlanner:
@@ -97,7 +112,9 @@ class PPOPlanner:
         self._model = None
         self._status = "ok"
         self._fallback_reason: str | None = None
+        self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._load_model()
+        self._init_predictive_foresight()
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -202,6 +219,18 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         # Need to reload the model if model_path changed
         self._load_model()
+        self._init_predictive_foresight()
+
+    def _init_predictive_foresight(self) -> None:
+        """(Re)build the optional predictive foresight encoder from current config."""
+        self._predictive_foresight = None
+        foresight_cfg = predictive_foresight_config_from_source(
+            self.config,
+            default_max_agents=self.config.predictive_foresight_max_agents,
+        )
+        if not foresight_cfg.enabled:
+            return
+        self._predictive_foresight = PredictiveForesightEncoder(foresight_cfg)
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
@@ -307,15 +336,26 @@ class PPOPlanner:
         if not isinstance(spaces, dict):
             return {str(k): np.asarray(v) for k, v in obs.items()}
 
+        source_obs = dict(obs)
+        if self._predictive_foresight is not None:
+            missing_predictive = [
+                key for key in spaces if key.startswith("predictive_") and key not in source_obs
+            ]
+            if missing_predictive:
+                payload = self._predictive_feature_payload(source_obs)
+                source_obs.update(
+                    {key: value for key, value in payload.items() if key in missing_predictive}
+                )
+
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
         for key, sub_space in spaces.items():
-            if key not in obs:
+            if key not in source_obs:
                 missing.append(str(key))
                 continue
             target_shape = getattr(sub_space, "shape", None)
             target_dtype = getattr(sub_space, "dtype", None)
-            arr = np.asarray(obs[key], dtype=target_dtype)
+            arr = np.asarray(source_obs[key], dtype=target_dtype)
             if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
                 target_size = int(np.prod(target_shape))
                 if int(arr.size) != target_size:
@@ -329,6 +369,60 @@ class PPOPlanner:
             missing_preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {missing_preview}")
         return converted
+
+    def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Map nested predictive foresight outputs to flat PPO observation keys.
+
+        Returns:
+            dict[str, np.ndarray]: Flat `predictive_*` feature payload.
+        """
+        if self._predictive_foresight is None:
+            return {}
+        feature_block = self._predictive_foresight.encode(
+            self._normalize_predictive_foresight_obs(obs)
+        )
+        return {f"predictive_{key}": value for key, value in feature_block.items()}
+
+    def _normalize_predictive_foresight_obs(self, obs: dict[str, Any]) -> dict[str, Any]:
+        """Adapt flat PPO dict observations into the structured SocNav format for foresight.
+
+        Returns:
+            dict[str, Any]: Structured observation block compatible with the foresight encoder.
+        """
+        if "robot" in obs and "goal" in obs and "pedestrians" in obs:
+            return obs
+
+        def _arr(key: str, default: list[float] | list[list[float]], *, dtype=float) -> np.ndarray:
+            return np.asarray(obs.get(key, default), dtype=dtype)
+
+        return {
+            "robot": {
+                "position": _arr("robot_position", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "heading": _arr("robot_heading", [0.0], dtype=np.float32).reshape(-1)[:1],
+                "speed": _arr("robot_speed", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "radius": _arr("robot_radius", [0.3], dtype=np.float32).reshape(-1)[:1],
+            },
+            "goal": {
+                "current": _arr("goal_current", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+                "next": _arr("goal_next", [0.0, 0.0], dtype=np.float32).reshape(-1)[:2],
+            },
+            "pedestrians": {
+                "positions": _arr(
+                    "pedestrians_positions", np.zeros((0, 2), dtype=np.float32), dtype=np.float32
+                ),
+                "velocities": _arr(
+                    "pedestrians_velocities", np.zeros((0, 2), dtype=np.float32), dtype=np.float32
+                ),
+                "count": _arr("pedestrians_count", [0.0], dtype=np.float32).reshape(-1)[:1],
+                "radius": _arr("pedestrians_radius", [0.3], dtype=np.float32).reshape(-1)[:1],
+            },
+            "map": {
+                "size": _arr("map_size", [20.0, 20.0], dtype=np.float32).reshape(-1)[:2],
+            },
+            "sim": {
+                "timestep": _arr("sim_timestep", [0.1], dtype=np.float32).reshape(-1)[:1],
+            },
+        }
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         """Convert the benchmark observation into model input format.
@@ -472,7 +566,10 @@ class PPOPlanner:
         """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
-        cfg["model_path"] = str(Path(self.config.model_path))
+        cfg["model_path"] = Path(self.config.model_path).name
+        checkpoint_path = cfg.get("predictive_foresight_checkpoint_path")
+        if isinstance(checkpoint_path, str) and checkpoint_path:
+            cfg["predictive_foresight_checkpoint_path"] = Path(checkpoint_path).name
         meta = {"algorithm": "ppo", "config": cfg, "status": self._status}
         if self._fallback_reason:
             meta["fallback_reason"] = self._fallback_reason

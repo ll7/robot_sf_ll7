@@ -167,6 +167,8 @@ def test_socnav_skip_with_warning_policy_returns_skipped_summary(
     assert summary["skipped_jobs"] == 1
     assert summary["preflight"]["status"] == "skipped"
     assert summary["algorithm_metadata_contract"]["canonical_algorithm"] == "socnav_sampling"
+    assert summary["benchmark_availability"]["availability_status"] == "not_available"
+    assert summary["benchmark_availability"]["benchmark_success"] is False
 
 
 def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatch) -> None:
@@ -192,6 +194,8 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
 
     assert summary["written"] == 1
     assert summary["preflight"]["status"] == "fallback"
+    assert summary["benchmark_availability"]["availability_status"] == "not_available"
+    assert summary["benchmark_availability"]["benchmark_success"] is False
 
 
 def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypatch) -> None:
@@ -223,6 +227,53 @@ def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypat
 
     assert summary["written"] == 1
     assert summary["algorithm_readiness"]["tier"] == "experimental"
+
+
+def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Issue-596 planners must not silently graduate without explicit policy updates."""
+    _patch_lightweight_batch(monkeypatch)
+    out_path = tmp_path / "episodes.jsonl"
+
+    for algo in (
+        "hrvo",
+        "risk_dwa",
+        "safety_barrier",
+        "grid_route",
+        "mppi_social",
+        "predictive_mppi",
+        "hybrid_portfolio",
+        "stream_gap",
+        "gap_prediction",
+        "teb",
+        "nmpc_social",
+    ):
+        with pytest.raises(ValueError, match="experimental-testing"):
+            map_runner.run_map_batch(
+                [_scenario()],
+                out_path,
+                schema_path=SCHEMA_PATH,
+                algo=algo,
+                benchmark_profile="experimental",
+                resume=False,
+            )
+
+    algo_cfg_path = tmp_path / "testing_only_opt_in.yaml"
+    algo_cfg_path.write_text("allow_testing_algorithms: true\n", encoding="utf-8")
+
+    for algo in ("teb", "nmpc_social", "nmpc"):
+        summary = map_runner.run_map_batch(
+            [_scenario()],
+            out_path,
+            schema_path=SCHEMA_PATH,
+            algo=algo,
+            algo_config_path=str(algo_cfg_path),
+            benchmark_profile="experimental",
+            resume=False,
+        )
+        assert summary["written"] == 1
+        assert summary["algorithm_readiness"]["tier"] == "experimental"
 
 
 def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:

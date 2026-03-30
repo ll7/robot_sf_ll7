@@ -21,6 +21,7 @@ randomize_seeds: true
 # - total_timesteps is the final post-resume target, not the number of extra
 #   timesteps to add.
 total_timesteps: 30000000
+best_checkpoint_metric: success_rate
 feature_extractor: grid_socnav
 feature_extractor_kwargs:
   grid_channels: [32, 64, 64]

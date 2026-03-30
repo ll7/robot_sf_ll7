@@ -81,11 +81,23 @@ uv run python scripts/training/train_ppo.py \
 ```
 
 ### CPU scaling (automatic)
-By default, training uses **one environment per CPU core minus one**. This is controlled by:
+By default, PPO training uses the host-aware throughput heuristic. This is controlled by:
 ```yaml
 num_envs: auto
 worker_mode: auto
 ```
+
+`num_envs: auto` resolves to `auto_throughput`, which aims for a high env count
+while still leaving a small learner/OS margin and respecting a memory-based cap.
+
+For a more conservative long-run setting, use:
+```yaml
+num_envs: auto_stable
+worker_mode: auto
+```
+
+Use explicit integers when exact run-to-run reproducibility matters:
+
 You can override it:
 ```yaml
 num_envs: 8

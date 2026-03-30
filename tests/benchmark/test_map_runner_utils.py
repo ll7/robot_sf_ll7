@@ -38,6 +38,9 @@ from robot_sf.benchmark.map_runner import (
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 
 class _KinematicsStub:
@@ -106,6 +109,18 @@ def test_goal_policy_and_build_policy() -> None:
     assert abs(angular) <= 1.0
 
 
+def test_goal_policy_supports_flat_map_runner_observation() -> None:
+    """Goal baseline should work with the flat observation keys emitted by the env."""
+    obs = {
+        "robot_position": [0.0, 0.0],
+        "robot_heading": [0.0],
+        "goal_current": [1.0, 0.0],
+    }
+    linear, angular = _goal_policy(obs, max_speed=1.5)
+    assert linear > 0.0
+    assert abs(angular) <= 1.0
+
+
 def test_build_policy_handles_unknown_and_placeholder() -> None:
     """Ensure unknown algorithms raise and placeholders emit metadata."""
     with pytest.raises(ValueError):
@@ -114,6 +129,52 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     _, meta = _build_policy("rvo", {})
     assert meta["status"] == "placeholder"
     assert meta["fallback_reason"] == "unimplemented"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_build_policy_teb_wires_teb_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The TEB-inspired key should build the new adapter instead of placeholder sampling."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.4, 0.2)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.TEBCommitmentPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy("teb", {"commit_gain": 0.8})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+    assert (linear, angular) == (0.4, 0.2)
+    assert meta["status"] == "ok"
+    assert meta["policy_semantics"] == "corridor_commitment_local_planner"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_build_policy_nmpc_social_wires_nmpc_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The NMPC key should build the native optimizer adapter."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.3, -0.1)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.NMPCSocialPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy("nmpc_social", {"horizon_steps": 4})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+    assert (linear, angular) == (0.3, -0.1)
+    assert meta["status"] == "ok"
+    assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
@@ -175,6 +236,431 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_orca_preserves_provenance_metadata() -> None:
+    """Ensure ORCA metadata carries explicit upstream provenance and projection fields."""
+    _, meta = _build_policy(
+        "orca",
+        {
+            "allow_fallback": False,
+            "provenance": {
+                "upstream_repo": "https://github.com/mit-acl/Python-RVO2",
+                "upstream_commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["provenance"]["upstream_repo"] == "https://github.com/mit-acl/Python-RVO2"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+
+
+def test_build_policy_hrvo_preserves_local_provenance_metadata() -> None:
+    """HRVO metadata should expose its local implementation boundary explicitly."""
+    _, meta = _build_policy(
+        "hrvo",
+        {
+            "allow_testing_algorithms": True,
+            "provenance": {
+                "reference_repo": "https://github.com/snape/HRVO",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["provenance"]["reference_repo"] == "https://github.com/snape/HRVO"
+    assert meta["policy_semantics"] == "hybrid_reciprocal_velocity_obstacle"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+
+
+def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic HRVO should expose an explicit world-frame velocity command payload."""
+
+    bind_calls: list[tuple[np.ndarray, float]] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = SimpleNamespace(orca_obstacle_margin=0.15)
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic HRVO should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.3, 0.4], dtype=float)
+
+        def bind_static_obstacle_points(self, points, *, spacing):
+            bind_calls.append((np.asarray(points, dtype=float), float(spacing)))
+
+    class _DummySim:
+        def iter_obstacle_segments(self):
+            return [((0.0, 0.0), (1.0, 0.0))]
+
+    class _DummyEnv:
+        simulator = _DummySim()
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
+    )
+    policy, meta = _build_policy(
+        "hrvo",
+        {"allow_testing_algorithms": True},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    assert hasattr(policy, "_planner_bind_env")
+    policy._planner_bind_env(_DummyEnv())
+    command = policy({})
+    assert len(bind_calls) == 1
+    np.testing.assert_allclose(bind_calls[0][0], np.array([[0.5, 0.0]], dtype=float))
+    assert bind_calls[0][1] == pytest.approx(0.3)
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": 0.3,
+        "vy": 0.4,
+    }
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["projection_policy"] == ("world_velocity_passthrough")
+
+
+def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic ORCA should expose an explicit world-frame velocity command payload."""
+
+    class _DummyAdapter:
+        def __init__(self, config, allow_fallback: bool = False) -> None:
+            del config, allow_fallback
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic ORCA should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.6, -0.2], dtype=float)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.ORCAPlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "orca",
+        {"allow_fallback": False},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.6),
+        "vy": pytest.approx(-0.2),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+
+
+def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external ORCA prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        _DummyAdapter,
+    )
+    _, meta = _build_policy(
+        "social_navigation_pyenvs_orca",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert (
+        meta["provenance"]["upstream_repo"]
+        == "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs"
+    )
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "heading_safe_velocity_to_unicycle_vw"
+    )
+    assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
+
+
+def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic Social-Navigation-PyEnvs ORCA should forward upstream ActionXY as world velocity."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic upstream ORCA should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.3, 0.7], dtype=float)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        _DummyAdapter,
+    )
+    policy, meta = _build_policy(
+        "social_navigation_pyenvs_orca",
+        {"repo_root": "output/repos/Social-Navigation-PyEnvs"},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.3),
+        "vy": pytest.approx(0.7),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
+
+
+def test_build_policy_social_force_holonomic_vx_vy_uses_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic local SocialForce should forward world-frame velocity directly."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError(
+                "Holonomic social-force path should not call plan() in vx_vy mode."
+            )
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.15, 0.45], dtype=float)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocialForcePlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "social_force",
+        {},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.15),
+        "vy": pytest.approx(0.45),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
+
+
+def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external force-model prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        _DummyAdapter,
+    )
+    _, socialforce = _build_policy(
+        "social_navigation_pyenvs_socialforce",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "socialforce",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    _, sfm = _build_policy(
+        "social_navigation_pyenvs_sfm_helbing",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "sfm_helbing",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert socialforce["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.socialforce.SocialForce"
+    )
+    assert sfm["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing"
+    )
+
+
+@pytest.mark.parametrize(
+    ("algo_key", "policy_name"),
+    [
+        ("social_navigation_pyenvs_socialforce", "socialforce"),
+        ("social_navigation_pyenvs_sfm_helbing", "sfm_helbing"),
+    ],
+)
+def test_build_policy_social_navigation_pyenvs_force_models_holonomic_vx_vy_use_world_velocity_command(
+    monkeypatch: pytest.MonkeyPatch,
+    algo_key: str,
+    policy_name: str,
+) -> None:
+    """Holonomic force-model wrappers should forward upstream ActionXY as world velocity."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            raise AssertionError("Holonomic force-model path should not call plan() in vx_vy mode.")
+
+        def plan_velocity_world(self, _obs):
+            return np.array([0.25, -0.4], dtype=float)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        _DummyAdapter,
+    )
+    policy, meta = _build_policy(
+        algo_key,
+        {"repo_root": "output/repos/Social-Navigation-PyEnvs", "policy_name": policy_name},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+
+    command = policy({})
+    assert command == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.25),
+        "vy": pytest.approx(-0.4),
+    }
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["benchmark_command_space"] == "holonomic_vxy_world"
+    assert meta["planner_kinematics"]["projection_policy"] == "world_velocity_passthrough"
+    assert meta["planner_kinematics"]["execution_detail"] == "direct_holonomic_world_velocity"
+
+
+def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure external HSFM prototype metadata carries explicit upstream provenance."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.2, 0.1)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsHSFMAdapter",
+        _DummyAdapter,
+    )
+    _, meta = _build_policy(
+        "social_navigation_pyenvs_hsfm_new_guo",
+        {
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "hsfm_new_guo",
+            "provenance": {
+                "upstream_repo": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+                "upstream_policy": "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["upstream_reference"]["upstream_policy"] == (
+        "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
+    )
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "body_velocity_heading_safe_to_unicycle_vw"
+    )
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the new Social-Navigation-PyEnvs aliases."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    for algo, policy_name in (
+        ("social_navigation_pyenvs_socialforce", "socialforce"),
+        ("social_navigation_pyenvs_sfm_helbing", "sfm_helbing"),
+    ):
+        cfg, preflight = _preflight_policy(
+            algo=algo,
+            algo_config={
+                "repo_root": "output/repos/Social-Navigation-PyEnvs",
+                "policy_name": policy_name,
+            },
+            benchmark_profile="experimental",
+            missing_prereq_policy="skip-with-warning",
+            robot_kinematics="differential_drive",
+        )
+        assert cfg["policy_name"] == policy_name
+        assert preflight["status"] == "skipped"
+        assert preflight["policy"] == "skip-with-warning"
+        assert "missing upstream prereq" in str(preflight["error"])
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_hsfm_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the HSFM alias too."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="social_navigation_pyenvs_hsfm_new_guo",
+        algo_config={
+            "repo_root": "output/repos/Social-Navigation-PyEnvs",
+            "policy_name": "hsfm_new_guo",
+        },
+        benchmark_profile="experimental",
+        missing_prereq_policy="skip-with-warning",
+        robot_kinematics="differential_drive",
+    )
+    assert cfg["policy_name"] == "hsfm_new_guo"
+    assert preflight["status"] == "skipped"
+    assert preflight["policy"] == "skip-with-warning"
+    assert "missing upstream prereq" in str(preflight["error"])
+
+
 def test_suite_seed_selection_and_behavior_sanity() -> None:
     """Check suite key selection and behavior sanity validation."""
     assert _suite_key(Path("classic_interactions.yaml")) == "classic_interactions"
@@ -198,6 +684,61 @@ def test_suite_seed_selection_and_behavior_sanity() -> None:
         }
     )
     assert not ok
+
+
+def test_policy_command_to_env_action_passthroughs_world_velocity_for_holonomic_vx_vy() -> None:
+    """Structured holonomic world-velocity commands should pass straight into vx_vy robots."""
+    config = SimpleNamespace(
+        robot_config=HolonomicDriveSettings(
+            radius=0.3,
+            max_speed=2.0,
+            max_angular_speed=1.5,
+            command_mode="vx_vy",
+        ),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.7), current_speed=(0.0, 0.0))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(
+        env=env,
+        config=config,
+        command={"command_kind": "holonomic_vxy_world", "vx": 0.4, "vy": -0.2},
+    )
+
+    assert np.allclose(action, np.array([0.4, -0.2], dtype=float))
+
+
+def test_policy_command_to_env_action_converts_world_velocity_for_differential_drive() -> None:
+    """Structured world velocities should reuse the differential-drive adapter path."""
+    config = SimpleNamespace(
+        robot_config=DifferentialDriveSettings(
+            radius=0.3,
+            max_linear_speed=2.0,
+            max_angular_speed=1.5,
+            allow_backwards=False,
+        ),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.4), current_speed=(0.3, -0.1))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(
+        env=env,
+        config=config,
+        command={"command_kind": "holonomic_vxy_world", "vx": 0.9, "vy": 0.2},
+    )
+
+    expected_vw = holonomic_to_diff_drive_action(
+        np.array([0.9, 0.2], dtype=float),
+        robot.pose,
+        max_linear_speed=2.0,
+        max_angular_speed=1.5,
+    )
+    assert np.allclose(
+        action,
+        np.array([expected_vw[0] - 0.3, expected_vw[1] + 0.1], dtype=float),
+    )
 
 
 def test_velocity_and_ped_stack_helpers() -> None:
@@ -409,8 +950,29 @@ def test_build_policy_for_portfolio_adapters_tracks_feasibility(
         "robot_sf.benchmark.map_runner.GapAwarePredictionAdapter",
         _GapPredictionStub,
     )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.RiskDWAPlannerAdapter", _GapPredictionStub)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.SafetyBarrierPlannerAdapter",
+        _GapPredictionStub,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.GridRoutePlannerAdapter", _GapPredictionStub)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.StreamGapPlannerAdapter",
+        _GapPredictionStub,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.MPPISocialPlannerAdapter",
+        _GapPredictionStub,
+    )
 
-    for algo_name in ("risk_dwa", "stream_gap", "gap_prediction", "mppi_social"):
+    for algo_name in (
+        "risk_dwa",
+        "safety_barrier",
+        "grid_route",
+        "stream_gap",
+        "gap_prediction",
+        "mppi_social",
+    ):
         policy, meta = _build_policy(
             algo_name,
             {"max_linear_speed": 0.8, "max_angular_speed": 0.5},
@@ -536,6 +1098,29 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     assert cfg["max_speed"] == 1.0
     assert preflight["status"] == "ok"
     assert captured["robot_kinematics"] == "bicycle_drive"
+
+
+def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to the Social-Navigation-PyEnvs ORCA alias."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="social_navigation_pyenvs_orca",
+        algo_config={"repo_root": "output/repos/Social-Navigation-PyEnvs"},
+        benchmark_profile="experimental",
+        missing_prereq_policy="skip-with-warning",
+        robot_kinematics="differential_drive",
+    )
+    assert cfg["repo_root"] == "output/repos/Social-Navigation-PyEnvs"
+    assert preflight["status"] == "skipped"
+    assert preflight["policy"] == "skip-with-warning"
+    assert "missing upstream prereq" in str(preflight["error"])
 
 
 def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
@@ -670,6 +1255,270 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(feasibility, dict)
     assert "projection_rate" in feasibility
     assert "infeasible_rate" in feasibility
+
+
+def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Episode start should reset stateful planner adapters before stepping."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, 0.0, True, False, {"success": True}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    reset_calls: list[int] = []
+
+    def _build_policy_stub(*args, **kwargs):
+        _ = args, kwargs
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            _ = obs
+            return 0.0, 0.0
+
+        _policy._planner_reset = lambda seed=None: reset_calls.append(int(seed))
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 1}},
+        seed=7,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert reset_calls == [7]
+    assert record["scenario_id"] == "s1"
+
+
+def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Episode records should include optional planner runtime diagnostics when available."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, 0.0, True, False, {"success": False}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+
+    def _build_policy_stub(*args, **kwargs):
+        _ = args, kwargs
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            _ = obs
+            return 0.0, 0.0
+
+        _policy._planner_stats = lambda: {"solver_failures": 2, "fallback_stop_count": 2}
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 1}},
+        seed=1,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert record["algorithm_metadata"]["planner_runtime"] == {
+        "solver_failures": 2,
+        "fallback_stop_count": 2,
+    }
+
+
+def test_run_map_episode_snapshots_planner_runtime_before_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planner runtime stats should be captured before planner teardown mutates state."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 0.0]},
+            }
+            return obs, 0.0, True, False, {"success": False}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+
+    def _build_policy_stub(*args, **kwargs):
+        _ = args, kwargs
+        closed = {"value": False}
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            _ = obs
+            return 0.0, 0.0
+
+        _policy._planner_stats = lambda: (
+            {"solver_failures": 0} if closed["value"] else {"solver_failures": 3}
+        )
+        _policy._planner_close = lambda: closed.__setitem__("value", True)
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 1}},
+        seed=1,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert record["algorithm_metadata"]["planner_runtime"] == {"solver_failures": 3}
 
 
 def test_run_map_episode_does_not_stop_on_waypoint_only_success(
@@ -1043,6 +1892,189 @@ def test_run_map_batch_skips_incompatible_kinematics(
     assert "compatibility_reason" in result["preflight"]
 
 
+def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batch summary should retain runtime-resolved holonomic command contract details."""
+    scenario = {
+        "name": "s1",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    def _fake_worker(job):
+        del job
+        return {
+            "episode_id": "ep1",
+            "algorithm_metadata": {
+                "planner_kinematics": {
+                    "robot_kinematics": "holonomic",
+                    "execution_mode": "adapter",
+                    "planner_command_space": "holonomic_vxy_world",
+                    "benchmark_command_space": "holonomic_vxy_world",
+                    "projection_policy": "world_velocity_passthrough",
+                    "execution_detail": "direct_holonomic_world_velocity",
+                },
+                "upstream_reference": {
+                    "adapter_boundary": "runtime direct world velocity passthrough"
+                },
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        algo="orca",
+        workers=1,
+        resume=False,
+    )
+
+    planner_meta = result["algorithm_metadata_contract"]["planner_kinematics"]
+    assert planner_meta["planner_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["benchmark_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["projection_policy"] == "world_velocity_passthrough"
+    assert planner_meta["execution_detail"] == "direct_holonomic_world_velocity"
+    assert (
+        result["algorithm_metadata_contract"]["upstream_reference"]["adapter_boundary"]
+        == "runtime direct world velocity passthrough"
+    )
+
+
+def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HRVO should run through the batch runner and emit an episodes.jsonl record."""
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+        def iter_obstacle_segments(self):
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    scenario = {
+        "name": "hrvo_smoke",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    schema_path = tmp_path / "episode.schema.json"
+    schema_path.write_text('{"type":"object"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=schema_path,
+        algo="hrvo",
+        algo_config_path="configs/algos/hrvo_camera_ready.yaml",
+        benchmark_profile="experimental",
+        workers=1,
+        resume=False,
+    )
+
+    assert result["written"] == 1
+    assert out_path.exists()
+    lines = out_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    assert "hrvo_smoke" in lines[0]
+
+
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
     """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
 
@@ -1072,5 +2104,5 @@ def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
             {"command_mode": "unicycle_vw"},
             robot_command_mode="vx_vy",
         )
-        == "holonomic_vxy"
+        == "holonomic_vxy_world"
     )

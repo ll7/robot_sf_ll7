@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: robot_sf_ll7
+message: >-
+  If you use this repository or its benchmark release protocol, please cite the
+  software using this metadata.
+type: software
+authors:
+  - name: Lennart Luttkus
+repository-code: https://github.com/ll7/robot_sf_ll7
+license: MIT
+version: benchmark-protocol-0.1.0
+date-released: 2026-03-26
+abstract: >-
+  Social navigation simulation and benchmark tooling with a paper-facing,
+  pre-1.0 benchmark release protocol.

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from gymnasium import spaces
 from loguru import logger
 
 from scripts.tools import policy_analysis_run
@@ -138,6 +140,78 @@ def test_summarize_records_prefers_termination_reason_for_rates() -> None:
     assert summary["success_rate"] == pytest.approx(0.0)
     assert summary["collision_rate"] == pytest.approx(1.0)
     assert summary["termination_reason_counts"]["collision"] == 1
+
+
+def test_summarize_records_backfills_collision_means_from_termination_reason() -> None:
+    """Collision summaries should not stay zero when the episode terminated as collision."""
+    records = [
+        {
+            "status": "collision",
+            "termination_reason": "collision",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 0.0,
+                "ped_collision_count": 0.0,
+                "obstacle_collision_count": 0.0,
+                "agent_collision_count": 0.0,
+            },
+        }
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+
+    assert summary["collision_rate"] == pytest.approx(1.0)
+    assert summary["total_collision_rate"] == pytest.approx(1.0)
+    assert summary["unclassified_collision_rate"] == pytest.approx(1.0)
+    assert summary["warnings"]
+
+
+def test_summarize_records_zero_fills_missing_collision_split_metrics() -> None:
+    """Collision split means should use all episodes, not only records with explicit counters."""
+    records = [
+        {
+            "status": "collision",
+            "termination_reason": "collision",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 1.0,
+                "ped_collision_count": 1.0,
+                "obstacle_collision_count": 0.0,
+                "agent_collision_count": 0.0,
+            },
+        },
+        {
+            "status": "error",
+            "termination_reason": "error",
+            "metrics": {
+                "success": 0.0,
+                "collisions": 0.0,
+            },
+        },
+    ]
+    summary = policy_analysis_run._summarize_records(records)
+
+    assert summary["total_collision_rate"] == pytest.approx(0.5)
+    assert summary["ped_collision_rate"] == pytest.approx(0.5)
+    assert summary["obstacle_collision_rate"] == pytest.approx(0.0)
+    assert summary["agent_collision_rate"] == pytest.approx(0.0)
+
+
+def test_resolved_total_collision_value_prefers_split_counts_over_termination_fallback() -> None:
+    """Split collision counters should be used before forcing a 1.0 termination fallback."""
+    total, used_fallback = policy_analysis_run._resolved_total_collision_value(
+        {
+            "termination_reason": "collision",
+            "metrics": {
+                "collisions": 0.0,
+                "ped_collision_count": 0.0,
+                "obstacle_collision_count": 1.0,
+                "agent_collision_count": 0.0,
+            },
+        }
+    )
+
+    assert total == pytest.approx(1.0)
+    assert used_fallback is False
 
 
 def test_summarize_records_does_not_count_waypoint_only_success() -> None:
@@ -379,6 +453,199 @@ def test_build_episode_record_metric_collision_overrides_route_complete(monkeypa
     assert record["outcome"]["collision_event"] is True
 
 
+def test_build_episode_record_backfills_collision_split_metrics_from_meta(monkeypatch) -> None:
+    """Collision split counters should be inferred from terminal meta flags when metrics miss them."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {
+            "success": 0.0,
+            "collisions": 0.0,
+            "ped_collision_count": 0.0,
+            "obstacle_collision_count": 0.0,
+            "agent_collision_count": 0.0,
+            "time_to_goal_norm": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+    record = policy_analysis_run._build_episode_record(
+        {"id": "s1"},
+        seed=13,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=None,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        robot_radius=1.0,
+        ped_radius=0.4,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": False, "is_obstacle_collision": True}},
+        reached_max_steps=False,
+    )
+
+    assert record["termination_reason"] == "collision"
+    assert record["metrics"]["collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["ped_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["agent_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["success"] is False
+
+
+def test_build_episode_record_backfills_split_metrics_when_total_collision_is_present(
+    monkeypatch,
+) -> None:
+    """Split collision counters should backfill from meta even when aggregate collisions are present."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {
+            "success": 0.0,
+            "collisions": 1.0,
+            "ped_collision_count": 0.0,
+            "obstacle_collision_count": 0.0,
+            "agent_collision_count": 0.0,
+            "time_to_goal_norm": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+    record = policy_analysis_run._build_episode_record(
+        {"id": "s1"},
+        seed=14,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=None,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        robot_radius=1.0,
+        ped_radius=0.4,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": False, "is_obstacle_collision": True}},
+        reached_max_steps=False,
+    )
+
+    assert record["termination_reason"] == "collision"
+    assert record["metrics"]["collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["ped_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["agent_collision_count"] == pytest.approx(0.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["success"] is False
+
+
+def test_build_episode_record_backfills_missing_terminal_split_when_other_splits_exist(
+    monkeypatch,
+) -> None:
+    """Terminal collision subtype should backfill even if another split counter is already present."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {
+            "success": 0.0,
+            "collisions": 2.0,
+            "ped_collision_count": 1.0,
+            "obstacle_collision_count": 0.0,
+            "agent_collision_count": 0.0,
+            "wall_collisions": 0.0,
+            "time_to_goal_norm": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+    record = policy_analysis_run._build_episode_record(
+        {"id": "s1"},
+        seed=15,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=None,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        robot_radius=1.0,
+        ped_radius=0.4,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=True,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": False, "is_obstacle_collision": True}},
+        reached_max_steps=False,
+    )
+
+    assert record["termination_reason"] == "collision"
+    assert record["metrics"]["collisions"] == pytest.approx(2.0)
+    assert record["metrics"]["ped_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["success"] is False
+
+
 def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> None:
     """Trajectory collection must copy mutable simulator arrays per timestep."""
 
@@ -442,3 +709,38 @@ def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> N
     assert robot_x == [1.0, 2.0, 3.0]
     assert ped_x == [1.0, 2.0, 3.0]
     assert force_y == [1.0, 2.0, 3.0]
+
+
+def test_reset_env_aligns_dict_observation_to_loaded_policy_space() -> None:
+    """Policy-analysis reset path should trim extra dict keys for MultiInput PPO."""
+
+    class _Env:
+        def reset(self, *, seed: int):
+            assert seed == 123
+            return (
+                {
+                    "robot_speed": [0.0, 0.0],
+                    "goal_current": [1.0, 0.0],
+                    "robot_velocity_xy": [0.0, 0.0],
+                },
+                {},
+            )
+
+    policy_model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "robot_speed": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                "goal_current": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+            }
+        )
+    )
+    adapter = policy_analysis_run.resolve_policy_obs_adapter(policy_model)
+
+    obs = policy_analysis_run._reset_env(
+        _Env(),
+        seed=123,
+        policy_model=policy_model,
+        policy_obs_adapter=adapter,
+    )
+
+    assert set(obs) == {"robot_speed", "goal_current"}

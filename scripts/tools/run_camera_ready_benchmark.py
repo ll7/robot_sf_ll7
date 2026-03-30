@@ -17,6 +17,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     prepare_campaign_preflight,
     run_campaign,
 )
+from robot_sf.benchmark.fallback_policy import campaign_exit_code
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -112,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             invoked_command=invoked_command,
         )
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if args.mode == "preflight" else campaign_exit_code(result)
 
 
 if __name__ == "__main__":

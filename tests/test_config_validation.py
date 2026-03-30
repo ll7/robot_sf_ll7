@@ -203,6 +203,17 @@ class TestIntegratedValidation:
         # Warning is logged (visible in test output) but we test behavior, not logging
         # Note: strict=False only affects unknown keys, not backend/sensor validation
 
+    def test_predictive_foresight_numeric_validation(self):
+        """Predictive foresight numeric fields should reject invalid values at config creation."""
+        with pytest.raises(ValueError, match="predictive_foresight_max_agents"):
+            RobotSimulationConfig(predictive_foresight_max_agents=0)
+        with pytest.raises(ValueError, match="predictive_foresight_horizon_steps"):
+            RobotSimulationConfig(predictive_foresight_horizon_steps=0)
+        with pytest.raises(ValueError, match="predictive_foresight_rollout_dt"):
+            RobotSimulationConfig(predictive_foresight_rollout_dt=0.0)
+        with pytest.raises(ValueError, match="predictive_foresight_near_distance"):
+            RobotSimulationConfig(predictive_foresight_near_distance=-0.1)
+
 
 class TestValidationErrorMessages:
     """Test error message quality and actionability."""

@@ -426,24 +426,24 @@ def _rebase_scenario_paths(
         rel = os.path.relpath(resolved, search_root)
         updated = dict(scenario)
         updated["map_file"] = Path(rel).as_posix()
-        return updated
+        return _rebase_route_override_path(updated, source=source)
 
     map_file = scenario.get("map_file")
     if not isinstance(map_file, str):
-        return scenario
+        return _rebase_route_override_path(scenario, source=source)
     candidate = Path(map_file)
     if candidate.is_absolute():
-        return scenario
+        return _rebase_route_override_path(scenario, source=source)
     probe = (search_root / candidate).resolve()
     if probe.exists():
-        return scenario
+        return _rebase_route_override_path(scenario, source=source)
     if source.parent != search_root:
         abs_target = (source.parent / candidate).resolve()
         if abs_target.exists():
             rel = os.path.relpath(abs_target, search_root)
             updated = dict(scenario)
             updated["map_file"] = Path(rel).as_posix()
-            return updated
+            return _rebase_route_override_path(updated, source=source)
     resolved = _resolve_map_with_search_paths(
         map_file,
         map_search_paths=map_search_paths,
@@ -457,10 +457,34 @@ def _rebase_scenario_paths(
             root=search_root,
             source=source,
         )
-        return scenario
+        return _rebase_route_override_path(scenario, source=source)
     rel = os.path.relpath(resolved, search_root)
     updated = dict(scenario)
     updated["map_file"] = Path(rel).as_posix()
+    return _rebase_route_override_path(updated, source=source)
+
+
+def _rebase_route_override_path(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+) -> Mapping[str, Any]:
+    """Rewrite relative route override paths to the root scenario manifest base.
+
+    Returns:
+        Mapping[str, Any]: Scenario entry with a rebased ``route_overrides_file`` when needed.
+    """
+    route_file = scenario.get("route_overrides_file")
+    if not isinstance(route_file, str):
+        return scenario
+    candidate = Path(route_file)
+    if candidate.is_absolute():
+        return scenario
+    abs_target = (source.parent / candidate).resolve()
+    if not abs_target.exists():
+        return scenario
+    updated = dict(scenario)
+    updated["route_overrides_file"] = abs_target.as_posix()
     return updated
 
 

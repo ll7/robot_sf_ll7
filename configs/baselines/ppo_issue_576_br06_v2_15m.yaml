@@ -1,8 +1,9 @@
-# PPO baseline config for Issue 576 BR-06 retraining v2 artifact.
+# PPO baseline config for Issue 576 BR-06 closeout.
 # This file is intentionally fail-closed for paper-baseline gating until
 # measured_success_rate is updated from benchmark/policy-analysis results.
 
-model_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps/model.zip
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
 
 # Device selection for SB3
 device: auto
@@ -24,12 +25,12 @@ fallback_to_goal: true
 # Paper-baseline contract metadata used by map-runner gating.
 profile: paper
 provenance:
-  training_config: configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
-  training_commit: TO_FILL_AFTER_TRAINING
+  training_config: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+  training_commit: 9fb131b6d7ff062887caab33ca8713ae05167ebe
   dataset_version: classic_interactions_francis2023_v1
-  checkpoint_id: TO_FILL_AFTER_TRAINING
-  normalization_id: route_completion_v2
+  checkpoint_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+  normalization_id: route_completion_v3
   deterministic_seed_set: "123,231,777,992,1337"
 quality_gate:
   min_success_rate: 0.90
-  measured_success_rate: 0.0
+  measured_success_rate: 0.8723

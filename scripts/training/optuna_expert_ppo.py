@@ -113,8 +113,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trials", type=int, default=10, help="Number of Optuna trials.")
     parser.add_argument(
         "--metric",
-        default="eval_episode_return",
-        help="Metric to optimize (e.g., eval_episode_return, snqi, success_rate, collision_rate).",
+        default="success_rate",
+        help="Metric to optimize (e.g., success_rate, collision_rate, snqi, eval_episode_return).",
     )
     parser.add_argument(
         "--objective-mode",

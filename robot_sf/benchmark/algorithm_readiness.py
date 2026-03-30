@@ -40,6 +40,37 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="ORCA baseline (requires rvo2 or explicit fallback policy).",
     ),
     AlgorithmReadiness(
+        canonical_name="hrvo",
+        tier="experimental",
+        aliases=("hrvo",),
+        note="Local hybrid reciprocal velocity obstacles planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_orca",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable ORCA wrapper.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_socialforce",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable SocialForce wrapper.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_sfm_helbing",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="social_navigation_pyenvs_hsfm_new_guo",
+        tier="experimental",
+        aliases=("social_navigation_pyenvs_hsfm_new_guo", "social_nav_pyenvs_hsfm_new_guo"),
+        note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),
@@ -81,6 +112,20 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("risk_dwa",),
         note="Risk-aware dynamic-window planner (non-learning).",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="safety_barrier",
+        tier="experimental",
+        aliases=("safety_barrier",),
+        note="Testing-only clean-room static-obstacle safety-barrier planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="grid_route",
+        tier="experimental",
+        aliases=("grid_route",),
+        note="Testing-only occupancy-grid route planner for static obstacle slices.",
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
@@ -131,9 +176,17 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     ),
     AlgorithmReadiness(
         canonical_name="teb",
-        tier="placeholder",
+        tier="experimental",
         aliases=("teb",),
-        note="Placeholder adapter; not benchmark-validated.",
+        note="Native corridor-commitment planner inspired by TEB-style local optimization.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="nmpc_social",
+        tier="experimental",
+        aliases=("nmpc_social", "nmpc"),
+        note="Native NMPC-style local planner with short-horizon nonlinear optimization.",
+        requires_explicit_opt_in=True,
     ),
 )
 

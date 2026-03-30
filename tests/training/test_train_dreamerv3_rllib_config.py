@@ -271,3 +271,43 @@ algorithm:
     assert runtime_env["py_executable"]
     assert runtime_env["working_dir"]
     assert ".git" in runtime_env["excludes"]
+
+
+@pytest.mark.parametrize(
+    ("config_relpath", "expected_run_id", "expected_group", "expected_mode"),
+    [
+        (
+            "configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml",
+            "dreamerv3_br08_drive_state_rays_gate",
+            "br08-drive-state-rays-gate",
+            "offline",
+        ),
+        (
+            "configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml",
+            "dreamerv3_br08_drive_state_rays_full",
+            "br08-drive-state-rays-full",
+            "online",
+        ),
+    ],
+)
+def test_repo_br08_configs_load_with_expected_reward_contract(
+    config_relpath: str,
+    expected_run_id: str,
+    expected_group: str,
+    expected_mode: str,
+) -> None:
+    """BR-08 Dreamer configs should load with the intended reward and tracking contract."""
+    run_config = load_run_config(Path(config_relpath))
+
+    assert run_config.experiment.run_id == expected_run_id
+    assert run_config.tracking.wandb.group == expected_group
+    assert run_config.tracking.wandb.mode == expected_mode
+    assert run_config.env.factory_kwargs["reward_name"] == "route_completion_v3"
+
+    reward_kwargs = run_config.env.factory_kwargs["reward_kwargs"]
+    assert isinstance(reward_kwargs, dict)
+    weights = reward_kwargs["weights"]
+    assert isinstance(weights, dict)
+    assert weights["terminal_bonus"] == 20.0
+    assert weights["collision"] == -15.0
+    assert run_config.env.config_overrides["randomize_seeds"] is True

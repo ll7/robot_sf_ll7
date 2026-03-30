@@ -1,0 +1,17 @@
+# Local HRVO baseline for controlled benchmark experiments.
+allow_testing_algorithms: true
+max_linear_speed: 1.0
+max_angular_speed: 1.2
+angular_gain: 1.5
+goal_tolerance: 0.25
+
+hrvo_neighbor_dist: 8.0
+hrvo_max_neighbors: 8
+hrvo_time_horizon: 4.0
+hrvo_uncertainty_offset: 0.05
+
+provenance:
+  issue: 726
+  reference_repo: https://github.com/snape/HRVO
+  reference_repo_secondary: https://github.com/atb033/multi_agent_path_planning
+  implementation_note: local_hrvo_geometry_adapter

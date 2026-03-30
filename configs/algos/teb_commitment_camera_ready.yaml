@@ -1,0 +1,14 @@
+# Native TEB-inspired corridor-commitment planner.
+allow_testing_algorithms: true
+max_linear_speed: 0.95
+max_angular_speed: 1.2
+angular_gain: 1.5
+goal_tolerance: 0.25
+probe_distance: 1.05
+side_offset: 0.55
+occupancy_threshold: 0.5
+commit_gain: 0.72
+commit_persistence_steps: 12
+progress_epsilon: 0.025
+low_speed_threshold: 0.14
+clearance_speed_gain: 0.5

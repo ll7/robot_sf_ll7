@@ -14,6 +14,11 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
     "social_force": "classical",
     "orca": "classical",
+    "hrvo": "classical",
+    "social_navigation_pyenvs_orca": "classical",
+    "social_navigation_pyenvs_socialforce": "classical",
+    "social_navigation_pyenvs_sfm_helbing": "classical",
+    "social_navigation_pyenvs_hsfm_new_guo": "classical",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
@@ -21,6 +26,8 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "prediction_planner": "learning",
     "predictive_mppi": "learning",
     "risk_dwa": "classical",
+    "safety_barrier": "classical",
+    "grid_route": "classical",
     "mppi_social": "classical",
     "hybrid_portfolio": "classical",
     "stream_gap": "classical",
@@ -31,12 +38,18 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "rvo": "classical",
     "dwa": "classical",
     "teb": "classical",
+    "nmpc_social": "classical",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
+    "hrvo": "hybrid_reciprocal_velocity_obstacle",
+    "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
+    "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
+    "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
+    "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -44,6 +57,8 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "prediction_planner": "predictive_model_based_adapter",
     "predictive_mppi": "predictive_sequence_optimizer",
     "risk_dwa": "risk_aware_dynamic_window",
+    "safety_barrier": "native_barrier_style_safety_filter",
+    "grid_route": "occupancy_grid_route_tracking",
     "mppi_social": "sampled_sequence_optimizer",
     "hybrid_portfolio": "risk_regime_hybrid_switcher",
     "stream_gap": "gap_acceptance_local_planner",
@@ -53,7 +68,83 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "social_force_reference",
     "rvo": "placeholder_adapter",
     "dwa": "placeholder_adapter",
-    "teb": "placeholder_adapter",
+    "teb": "corridor_commitment_local_planner",
+    "nmpc_social": "nonlinear_model_predictive_local_planner",
+}
+
+_UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
+    "orca": {
+        "repo_url": "https://github.com/mit-acl/Python-RVO2",
+        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+        "vendored_path": "third_party/python-rvo2",
+        "adapter_boundary": (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
+            "then project the selected velocity into Robot SF unicycle_vw commands."
+        ),
+    },
+    "hrvo": {
+        "repo_url": "https://github.com/snape/HRVO",
+        "license": "Apache-2.0",
+        "reference_repo_url": (
+            "https://github.com/atb033/multi_agent_path_planning/blob/master/"
+            "decentralized/velocity_obstacle/velocity_obstacle.py"
+        ),
+        "adapter_boundary": (
+            "Run the local Robot SF HRVO geometry solver inspired by the upstream HRVO library "
+            "and VO reference, then project the selected world-frame velocity into "
+            "Robot SF unicycle_vw commands."
+        ),
+        "provenance_note": (
+            "Local implementation informed by upstream references; not a wrapped upstream runtime."
+        ),
+    },
+    "social_navigation_pyenvs_orca": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "checked_out_local_probe_2026_03_20",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream ORCA predict(), then project ActionXY into "
+            "Robot SF unicycle_vw commands."
+        ),
+    },
+    "social_navigation_pyenvs_socialforce": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream SocialForce predict() through an explicit "
+            "CrowdNav-style compatibility runtime for socialforce==0.2.3, then project "
+            "ActionXY into Robot SF unicycle_vw commands."
+        ),
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
+    },
+    "social_navigation_pyenvs_sfm_helbing": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream SFM-Helbing predict(), then project ActionXY "
+            "into Robot SF unicycle_vw commands."
+        ),
+    },
+    "social_navigation_pyenvs_hsfm_new_guo": {
+        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
+        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
+        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
+        "upstream_policy": "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "headed JointState contract, run upstream HSFM-New-Guo predict(), then project "
+            "body-frame ActionXYW or NewHeadedState outputs into Robot SF unicycle_vw commands."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -76,6 +167,67 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "hrvo": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "HRVOPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_orca": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsORCAAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_socialforce": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+        "runtime_dependency": "socialforce==0.2.3",
+        "runtime_strategy": "crowdnav_socialforce_compat_shim",
+    },
+    "social_navigation_pyenvs_sfm_helbing": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "social_navigation_pyenvs_hsfm_new_guo": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SocialNavigationPyEnvsHSFMAdapter",
+        "upstream_command_space": "body_velocity_xy_plus_omega",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "body_velocity_heading_safe_to_unicycle_vw",
+        "projection_documented": True,
     },
     "ppo": {
         "planner_command_space": "mixed_vw_or_vxy",
@@ -125,6 +277,20 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "RiskDWAPlannerAdapter",
+    },
+    "safety_barrier": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SafetyBarrierPlannerAdapter",
+    },
+    "grid_route": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "GridRoutePlannerAdapter",
     },
     "mppi_social": {
         "planner_command_space": "unicycle_vw",
@@ -193,7 +359,20 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_native_commands": False,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
-        "default_adapter_name": "SamplingPlannerAdapter",
+        "default_adapter_name": "TEBCommitmentPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_corridor_commitment_unicycle_vw",
+        "projection_documented": True,
+    },
+    "nmpc_social": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "NMPCSocialPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_nmpc_unicycle_vw",
+        "projection_documented": True,
     },
 }
 
@@ -237,6 +416,9 @@ def _base_kinematics_metadata(
         "execution_mode": execution_mode or profile.get("default_execution_mode", "unknown"),
         "adapter_name": adapter_name or profile.get("default_adapter_name", "none"),
     }
+    for key, value in profile.items():
+        if key not in metadata and not key.startswith("default_"):
+            metadata[key] = value
     metadata["adapter_active"] = metadata["execution_mode"] in {"adapter", "mixed"}
     return metadata
 
@@ -278,6 +460,9 @@ def enrich_algorithm_metadata(
         "policy_semantics",
         _POLICY_SEMANTICS_BY_CANONICAL.get(canonical, "unspecified"),
     )
+    upstream_reference = _UPSTREAM_REFERENCE_BY_CANONICAL.get(canonical)
+    if upstream_reference is not None:
+        enriched.setdefault("upstream_reference", dict(upstream_reference))
 
     current_kinematics = enriched.get("planner_kinematics")
     base_kinematics = _base_kinematics_metadata(

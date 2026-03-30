@@ -26,6 +26,30 @@ maps:
   path: svg_maps/classic_t_intersection.svg
 - map_id: crossing
   path: svg_maps/crossing.svg
+- map_id: atomic_corner_90_test
+  path: svg_maps/atomic_corner_90_test.svg
+- map_id: atomic_corridor_test
+  path: svg_maps/atomic_corridor_test.svg
+- map_id: atomic_empty_frame_test
+  path: svg_maps/atomic_empty_frame_test.svg
+- map_id: atomic_goal_close_test
+  path: svg_maps/atomic_goal_close_test.svg
+- map_id: atomic_goal_inside_obstacle_invalid
+  path: svg_maps/atomic_goal_inside_obstacle_invalid.svg
+- map_id: atomic_line_wall_obstacle
+  path: svg_maps/atomic_line_wall_obstacle.svg
+- map_id: atomic_narrow_passage_test
+  path: svg_maps/atomic_narrow_passage_test.svg
+- map_id: atomic_single_circle_obstacle
+  path: svg_maps/atomic_single_circle_obstacle.svg
+- map_id: atomic_single_rectangle_obstacle
+  path: svg_maps/atomic_single_rectangle_obstacle.svg
+- map_id: atomic_start_near_obstacle_test
+  path: svg_maps/atomic_start_near_obstacle_test.svg
+- map_id: atomic_symmetry_split_test
+  path: svg_maps/atomic_symmetry_split_test.svg
+- map_id: atomic_u_trap_test
+  path: svg_maps/atomic_u_trap_test.svg
 - map_id: debug_05
   path: svg_maps/debug_05.svg
 - map_id: debug_06

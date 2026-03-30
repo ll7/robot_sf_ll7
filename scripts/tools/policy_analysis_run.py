@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -89,7 +90,7 @@ from scripts.tools.render_scenario_videos import _defensive_obs_adapter
 from scripts.training.train_ppo import _apply_env_overrides, load_expert_training_config
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Sequence
 
 
 _POLICY_CHOICES = (
@@ -120,7 +121,16 @@ _SUMMARY_METRICS = (
     "low_speed_frac",
     "ped_collision_count",
     "obstacle_collision_count",
+    "agent_collision_count",
     "collisions",
+)
+
+_COLLISION_SPLIT_METRICS = frozenset(
+    {
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "agent_collision_count",
+    }
 )
 
 _TERMINATION_REASON_CHOICES = tuple(TERMINATION_REASONS)
@@ -613,6 +623,114 @@ def _episode_video_metadata(video_path: Path | None, *, frames: int) -> dict[str
     }
 
 
+def _summary_metric_means(records: list[dict[str, Any]]) -> dict[str, float]:
+    """Compute finite mean values for the configured summary metrics.
+
+    Returns:
+        Mapping of metric name to finite mean value across episode records.
+    """
+    metric_means: dict[str, float] = {}
+    for metric in _SUMMARY_METRICS:
+        values: list[float] = []
+        for rec in records:
+            raw = rec.get("metrics", {}).get(metric)
+            if raw is None:
+                if metric in _COLLISION_SPLIT_METRICS:
+                    values.append(0.0)
+                continue
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                if metric in _COLLISION_SPLIT_METRICS:
+                    values.append(0.0)
+                continue
+            if math.isfinite(val):
+                values.append(val)
+            elif metric in _COLLISION_SPLIT_METRICS:
+                values.append(0.0)
+        if values:
+            metric_means[metric] = float(np.mean(values))
+    return metric_means
+
+
+def _resolved_total_collision_value(record: dict[str, Any]) -> tuple[float, bool]:
+    """Resolve one episode's total collision value with termination fallback.
+
+    Returns:
+        Tuple of ``(total_collision_value, used_fallback)``.
+    """
+    metrics = record.get("metrics", {})
+    total = None
+    raw_total = metrics.get("collisions")
+    try:
+        if raw_total is not None:
+            numeric_total = float(raw_total)
+            if math.isfinite(numeric_total):
+                total = numeric_total
+    except (TypeError, ValueError):
+        total = None
+    split_total = 0.0
+    for metric_name in (
+        "ped_collision_count",
+        "obstacle_collision_count",
+        "agent_collision_count",
+    ):
+        raw_split = metrics.get(metric_name)
+        try:
+            if raw_split is None:
+                continue
+            numeric_split = float(raw_split)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric_split):
+            split_total += numeric_split
+    if total is None or total <= 0.0:
+        total = split_total if split_total > 0.0 else (0.0 if total is None else total)
+    if total <= 0.0 and str(record.get("termination_reason", "")).strip() == "collision":
+        return 1.0, True
+    return float(total), False
+
+
+def _collision_summary_fields(
+    records: list[dict[str, Any]],
+    metric_means: dict[str, float],
+) -> dict[str, Any]:
+    """Build collision split summary fields with mismatch-aware fallback.
+
+    Returns:
+        Collision summary fields suitable for the top-level report summary.
+    """
+    ped_collision_rate = float(metric_means.get("ped_collision_count", 0.0))
+    obstacle_collision_rate = float(metric_means.get("obstacle_collision_count", 0.0))
+    agent_collision_rate = float(metric_means.get("agent_collision_count", 0.0))
+    total_collision_values: list[float] = []
+    fallback_episodes = 0
+    for record in records:
+        total, used_fallback = _resolved_total_collision_value(record)
+        total_collision_values.append(total)
+        fallback_episodes += int(used_fallback)
+    total_collision_rate = float(np.mean(total_collision_values)) if total_collision_values else 0.0
+    unclassified_collision_rate = max(
+        0.0,
+        total_collision_rate - ped_collision_rate - obstacle_collision_rate - agent_collision_rate,
+    )
+    warnings: list[str] = []
+    if fallback_episodes > 0:
+        warnings.append(
+            "Collision accounting fallback used for "
+            f"{fallback_episodes} episode(s): termination_reason=collision "
+            "but metrics.collisions and split collision counts were non-positive."
+        )
+    return {
+        "ped_collision_rate": ped_collision_rate,
+        "obstacle_collision_rate": obstacle_collision_rate,
+        "agent_collision_rate": agent_collision_rate,
+        "total_collision_rate": total_collision_rate,
+        "unclassified_collision_rate": unclassified_collision_rate,
+        "warnings": warnings,
+    }
+
+
 def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Produce a compact summary payload from episode records."""
     if not records:
@@ -634,21 +752,8 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     collisions = int(reason_counts.get("collision", 0))
     failures = max(0, len(records) - successes - collisions)
     reason_rates = {reason: count / len(records) for reason, count in reason_counts.items()}
-    metric_means: dict[str, float] = {}
-    for metric in _SUMMARY_METRICS:
-        values: list[float] = []
-        for rec in records:
-            raw = rec.get("metrics", {}).get(metric)
-            if raw is None:
-                continue
-            try:
-                val = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(val):
-                values.append(val)
-        if values:
-            metric_means[metric] = float(np.mean(values))
+    metric_means = _summary_metric_means(records)
+    collision_summary = _collision_summary_fields(records, metric_means)
     return {
         "episodes": len(records),
         "success_rate": successes / len(records),
@@ -657,9 +762,7 @@ def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "termination_reason_counts": reason_counts,
         "termination_reason_rates": reason_rates,
         "metric_means": metric_means,
-        "ped_collision_rate": float(metric_means.get("ped_collision_count", 0.0)),
-        "obstacle_collision_rate": float(metric_means.get("obstacle_collision_count", 0.0)),
-        "total_collision_rate": float(metric_means.get("collisions", 0.0)),
+        **collision_summary,
     }
 
 
@@ -695,6 +798,8 @@ def _find_problem_episodes(
     for rec in records:
         metrics = rec.get("metrics", {})
         collisions = float(metrics.get("collisions", 0.0) or 0.0)
+        if collisions <= 0.0 and str(rec.get("termination_reason", "")).strip() == "collision":
+            collisions = 1.0
         comfort = float(metrics.get("comfort_exposure", 0.0) or 0.0)
         failure = 1.0 if rec.get("status") == "failure" else 0.0
         score = collisions * 10.0 + comfort * 2.0 + failure
@@ -751,6 +856,8 @@ def _write_report(  # noqa: C901
         f"- Collision rate: {summary.get('collision_rate', 0.0):.3f}",
         f"- Ped collision rate: {summary.get('ped_collision_rate', 0.0):.3f}",
         f"- Obstacle collision rate: {summary.get('obstacle_collision_rate', 0.0):.3f}",
+        f"- Agent collision rate: {summary.get('agent_collision_rate', 0.0):.3f}",
+        f"- Unclassified collision rate: {summary.get('unclassified_collision_rate', 0.0):.3f}",
         f"- Total collision count mean: {summary.get('total_collision_rate', 0.0):.3f}",
         "",
         "## Termination reasons",
@@ -764,6 +871,11 @@ def _write_report(  # noqa: C901
             lines.append(f"- {reason}: count={count}, rate={rate:.3f}")
     else:
         lines.append("- none")
+    summary_warnings = summary.get("warnings", []) or []
+    if summary_warnings:
+        lines.extend(["", "## Summary warnings"])
+        for warning in summary_warnings:
+            lines.append(f"- {warning}")
 
     lines.extend(
         [
@@ -1301,7 +1413,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: PLR0913
+def _build_episode_record(  # noqa: C901,PLR0913,PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,
@@ -1377,6 +1489,35 @@ def _build_episode_record(  # noqa: PLR0913
 
     metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
     meta = last_info.get("meta")
+    if isinstance(meta, Mapping):
+        total_collision = float(metrics.get("collisions", 0.0) or 0.0)
+        ped_collision_count = float(metrics.get("ped_collision_count", 0.0) or 0.0)
+        obstacle_collision_count = float(metrics.get("obstacle_collision_count", 0.0) or 0.0)
+        agent_collision_count = float(metrics.get("agent_collision_count", 0.0) or 0.0)
+        inferred_ped_collision = float(bool(meta.get("is_pedestrian_collision")))
+        inferred_obstacle_collision = float(bool(meta.get("is_obstacle_collision")))
+        inferred_agent_collision = float(bool(meta.get("is_robot_collision")))
+        updated_split = False
+        if ped_collision_count <= 0.0 and inferred_ped_collision > 0.0:
+            metrics["ped_collision_count"] = inferred_ped_collision
+            updated_split = True
+        if obstacle_collision_count <= 0.0 and inferred_obstacle_collision > 0.0:
+            metrics["obstacle_collision_count"] = inferred_obstacle_collision
+            metrics["wall_collisions"] = inferred_obstacle_collision
+            updated_split = True
+        if agent_collision_count <= 0.0 and inferred_agent_collision > 0.0:
+            metrics["agent_collision_count"] = inferred_agent_collision
+            updated_split = True
+        if updated_split:
+            inferred_total = (
+                inferred_ped_collision + inferred_obstacle_collision + inferred_agent_collision
+            )
+            metrics["success"] = False
+            if "success_rate" in metrics:
+                metrics["success_rate"] = 0.0
+            if total_collision <= 0.0 and inferred_total > 0.0:
+                metrics["collisions"] = inferred_total
+                metrics["total_collision_count"] = inferred_total
     # Canonical episode collision: event-stream collision OR metric-level collision evidence.
     # This keeps success/outcome semantics aligned with benchmark metrics.
     metric_collisions = float(metrics.get("collisions", 0.0) or 0.0)

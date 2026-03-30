@@ -12,7 +12,7 @@ from scripts.training.optuna_expert_ppo import _build_trial_config
 @dataclass
 class _BaseConfigStub:
     policy_id: str = "ppo_expert_reference"
-    best_checkpoint_metric: str = "eval_episode_return"
+    best_checkpoint_metric: str = "success_rate"
     total_timesteps: int = 100_000
     evaluation: EvaluationSchedule = field(
         default_factory=lambda: EvaluationSchedule(
@@ -63,7 +63,7 @@ def test_build_trial_config_enables_and_groups_wandb_by_default():
     config = _build_trial_config(
         _FakeTrial(number=7),
         base_config=_BaseConfigStub(),
-        metric_name="eval_episode_return",
+        metric_name="success_rate",
         objective_mode="last_n_mean",
         study_name="weekend_optuna_test",
         args=_args(disable_wandb=False),
@@ -76,7 +76,7 @@ def test_build_trial_config_enables_and_groups_wandb_by_default():
     assert wandb_cfg["group"] == "weekend_optuna_test"
     assert wandb_cfg["job_type"] == "optuna-trial-last_n_mean"
     assert "optuna" in wandb_cfg["tags"]
-    assert "metric:eval_episode_return" in wandb_cfg["tags"]
+    assert "metric:success_rate" in wandb_cfg["tags"]
     assert str(wandb_cfg["name"]).endswith("_optuna_007")
 
 
@@ -86,7 +86,7 @@ def test_build_trial_config_can_disable_wandb():
     config = _build_trial_config(
         _FakeTrial(number=1),
         base_config=base,
-        metric_name="eval_episode_return",
+        metric_name="success_rate",
         objective_mode="auc",
         study_name="weekend_optuna_test",
         args=_args(disable_wandb=True),

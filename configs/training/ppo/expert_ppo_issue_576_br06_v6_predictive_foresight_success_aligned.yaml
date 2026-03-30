@@ -1,0 +1,121 @@
+# BR-06 v6 PPO retraining with compact predictor-derived foresight features
+# and a stronger success-aligned reward tradeoff.
+policy_id: ppo_expert_br06_v6_predictive_foresight_success_aligned
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+num_envs: 8
+worker_mode: subproc
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+randomize_seeds: true
+total_timesteps: 30000000
+best_checkpoint_metric: success_rate
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  socnav_hidden_dims: [128, 128]
+  dropout_rate: 0.1
+policy_net_arch: [256, 256]
+ppo_hyperparams:
+  learning_rate: 7.5e-5
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.008
+  clip_range: 0.1
+  target_kl: 0.02
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  predictive_foresight_enabled: true
+  predictive_foresight_model_id: predictive_proxy_selected_v2_full
+  predictive_foresight_device: cpu
+  predictive_foresight_max_agents: 16
+  predictive_foresight_horizon_steps: 8
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.0
+      living: -0.015
+      collision: -15.0
+      near_miss: -3.0
+      ttc_risk: -2.8
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -8.0
+      stagnation: -2.0
+      terminal_bonus: 10.0
+  peds_have_obstacle_forces: true
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+  weights:
+    classic_crossing_medium: 3.0
+    classic_crossing_high: 4.0
+    classic_doorway_low: 3.0
+    classic_doorway_high: 4.0
+    classic_bottleneck_medium: 3.0
+    classic_bottleneck_high: 3.5
+    classic_realworld_double_bottleneck_high: 4.0
+    classic_group_crossing_medium: 2.5
+    classic_group_crossing_high: 3.0
+    classic_merging_medium: 2.5
+    classic_overtaking_medium: 2.5
+    classic_head_on_corridor_medium: 2.0
+    classic_t_intersection_medium: 2.0
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 3000
+evaluation:
+  evaluation_episodes: 30
+  hold_out_scenarios: []
+  step_schedule:
+    - until_step: 3000000
+      every_steps: 250000
+    - until_step: 9000000
+      every_steps: 500000
+    - every_steps: 1000000
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-576-br06-v6-predictive-foresight-success-aligned
+    job_type: expert-ppo-predictive-foresight-v6
+    tags:
+      - issue-576
+      - br-06
+      - ppo
+      - predictive-foresight
+      - success-aligned-reward
+      - v6
+      - route-completion-v3
+      - randomized

@@ -1,4 +1,4 @@
-"""Dataclasses describing configuration for PPO imitation workflows."""
+"""Dataclasses for PPO training, fine-tuning, and imitation pipeline workflows."""
 
 from __future__ import annotations
 
@@ -20,17 +20,19 @@ class ConvergenceCriteria:
 
 @dataclass(slots=True)
 class EvaluationSchedule:
-    """Parameters governing periodic evaluation during training."""
+    """Parameters governing periodic evaluation during PPO training workflows."""
 
     frequency_episodes: int
     evaluation_episodes: int
     hold_out_scenarios: tuple[str, ...] = ()
     step_schedule: tuple[tuple[int | None, int], ...] = ()
+    randomize_seeds: bool = False
+    scenario_config: Path | None = None
 
 
 @dataclass(slots=True)
 class ExpertTrainingConfig:
-    """Configuration inputs for training an expert PPO policy."""
+    """Configuration inputs for expert PPO training runs."""
 
     scenario_config: Path
     seeds: tuple[int, ...]
@@ -39,7 +41,7 @@ class ExpertTrainingConfig:
     convergence: ConvergenceCriteria
     evaluation: EvaluationSchedule
     ppo_hyperparams: dict[str, object] = field(default_factory=dict)
-    best_checkpoint_metric: str = "eval_episode_return"
+    best_checkpoint_metric: str = "success_rate"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     randomize_seeds: bool = False
@@ -51,7 +53,8 @@ class ExpertTrainingConfig:
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     scenario_sampling: dict[str, object] = field(default_factory=dict)
-    num_envs: int | None = None
+    num_envs: int | str | None = None
+    num_envs_reserve_cores: int = 0
     worker_mode: str = "auto"
     socnav_orca_time_horizon: float | None = None
     socnav_orca_neighbor_dist: float | None = None
@@ -71,7 +74,7 @@ class ExpertTrainingConfig:
         convergence: ConvergenceCriteria,
         evaluation: EvaluationSchedule,
         ppo_hyperparams: dict[str, object] | None = None,
-        best_checkpoint_metric: str = "eval_episode_return",
+        best_checkpoint_metric: str = "success_rate",
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
         scenario_id: str | None = None,
@@ -82,7 +85,8 @@ class ExpertTrainingConfig:
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
         scenario_sampling: dict[str, object] | None = None,
-        num_envs: int | None = None,
+        num_envs: int | str | None = None,
+        num_envs_reserve_cores: int = 0,
         worker_mode: str = "auto",
         socnav_orca_time_horizon: float | None = None,
         socnav_orca_neighbor_dist: float | None = None,
@@ -124,6 +128,7 @@ class ExpertTrainingConfig:
             env_factory_kwargs=resolved_env_factory_kwargs,
             scenario_sampling=dict(scenario_sampling or {}),
             num_envs=num_envs,
+            num_envs_reserve_cores=int(num_envs_reserve_cores),
             worker_mode=str(worker_mode),
             socnav_orca_time_horizon=socnav_orca_time_horizon,
             socnav_orca_neighbor_dist=socnav_orca_neighbor_dist,

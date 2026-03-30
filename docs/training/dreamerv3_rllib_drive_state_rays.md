@@ -3,6 +3,14 @@
 This runbook documents a reproducible RLlib DreamerV3 workflow for Robot SF using
 the default non-image observation contract (`drive_state`, `rays`).
 
+Current scope note:
+
+- BR-08 prep is reproducible and benchmark-reset-v2 aligned.
+- The current launcher is still built on the unified env/map-pool surface, not the
+  scenario-matrix/all-SVG pipeline used by PPO benchmark runs.
+- Treat DreamerV3 here as a challenger training track with a clean launch/eval contract,
+  not yet as full scenario-matrix parity with PPO.
+
 ## 1) Prerequisites
 
 Install dependencies and include RLlib:
@@ -24,11 +32,11 @@ export SDL_VIDEODRIVER=dummy
 
 ## 2) Canonical Command
 
-Use this as the default launch command:
+Use this as the default full launch command:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
 ```
 
 Why this command is canonical:
@@ -37,16 +45,25 @@ Why this command is canonical:
 - disables `uv run` runtime-env propagation in Ray (`ray.disable_uv_run_runtime_env: true`)
 - uses curated runtime package excludes to avoid large uploads (`ray.runtime_env.excludes`)
 
-Use `configs/training/rllib_dreamerv3/drive_state_rays.yaml` for local smoke runs.
+Use `configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml` for the gate run.
+
+Canonical BR-08 gate command:
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml
+```
 
 ## 3) Config Notes
 
-Both Dreamer configs include these reliability settings:
+Both BR-08 Dreamer configs include these reliability settings:
 
 - `ray.disable_uv_run_runtime_env: true`
 - `ray.runtime_env.working_dir: .`
 - `ray.runtime_env.excludes: [...]` (e.g. `.git`, `.venv`, `output`, caches, large media)
 - action/observation contract fixes for float32-compatible env outputs
+- `env.factory_kwargs.reward_name: route_completion_v3`
+- success-priority reward weights aligned with the current benchmark-reset PPO runs
 
 These prevent worker-side uv rebuild loops and reduce startup package overhead.
 
@@ -56,7 +73,7 @@ Use dry-run to validate YAML parsing and resolved settings:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays.yaml \
+  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml \
   --dry-run
 ```
 
@@ -70,7 +87,7 @@ tmux new -s dreamer
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
 ```
 
 Detach/reattach:
@@ -96,9 +113,25 @@ set -euo pipefail
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
 EOF
 ```
+
+## 5.3 BR-08 evaluation contract
+
+DreamerV3 promotion should follow the same success-first philosophy as PPO:
+
+1. train the gate/full run,
+2. benchmark the best exported checkpoint,
+3. compare against the current promoted PPO champion on success, collision split,
+   timeout rate, and then SNQI,
+4. only promote if the full benchmark result is a genuine improvement.
+
+Current limitation:
+
+- `train_dreamerv3_rllib.py` does not yet expose the full scenario-matrix training surface.
+- Benchmark comparison should therefore be treated as a challenger evaluation step after
+  training, not proof that Dreamer trained on the same all-scenarios curriculum as PPO.
 
 ## 6) Monitoring Checklist
 

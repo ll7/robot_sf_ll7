@@ -1,8 +1,9 @@
-"""TODO docstring. Document this module."""
+"""Integration and helper tests for the PPO training entrypoint."""
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,18 +11,31 @@ import pytest
 import yaml
 
 from robot_sf import common
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 from scripts.training.train_ppo import (
+    _apply_env_overrides,
+    _BestCheckpointCandidate,
+    _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
+    _describe_num_envs_resolution,
+    _deterministic_eval_seed_for_episode,
     _DirectWandbMetricsCallback,
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
+    _finalize_best_checkpoint,
+    _parse_num_envs,
+    _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
+    _resolve_num_envs,
     _resolve_resume_checkpoint,
+    _update_wandb_best_checkpoint_summary,
+    _upload_wandb_best_checkpoint_artifact,
     load_expert_training_config,
     run_expert_training,
 )
@@ -67,6 +81,12 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     )
     assert isinstance(training_payload.get("perf_summary_path"), str)
     assert training_payload["perf_summary_path"].startswith("benchmarks/ppo_imitation/perf/")
+    assert isinstance(training_payload.get("eval_per_scenario_path"), str)
+    assert training_payload["eval_per_scenario_path"].startswith(
+        "benchmarks/ppo_imitation/eval_by_scenario/"
+    )
+    assert isinstance(training_payload.get("evaluation_scenario_config"), str)
+    assert training_payload["evaluation_scenario_config"].startswith("configs/")
     notes = training_payload.get("notes", [])
     assert any(str(note).startswith("snqi_formula=") for note in notes)
     assert any(str(note).startswith("snqi_weights_source=") for note in notes)
@@ -76,6 +96,8 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert any(log_dir.glob("episodes/*.jsonl"))
     assert any(log_dir.glob("eval_timeline/*.json"))
     assert any(log_dir.glob("eval_timeline/*.csv"))
+    assert any(log_dir.glob("eval_by_scenario/*.json"))
+    assert any(log_dir.glob("eval_by_scenario/*.csv"))
     assert any(log_dir.glob("perf/*.json"))
 
 
@@ -172,6 +194,238 @@ def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path)
 
     config = load_expert_training_config(config_path)
     assert config.randomize_seeds is False
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_allows_eval_seed_randomness_override(tmp_path) -> None:
+    """Evaluation seed handling should be independently configurable."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_override.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_override_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "randomize_seeds": False,
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is False
+
+
+def test_load_expert_training_config_supports_eval_scenario_config(tmp_path) -> None:
+    """Evaluation surface overrides should resolve independently from training scenarios."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    eval_scenario_config = Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml").resolve()
+    config_path = tmp_path / "eval_surface_override.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_surface_override_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 350,
+                    "hold_out_scenarios": [],
+                    "randomize_seeds": False,
+                    "scenario_config": str(eval_scenario_config),
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.scenario_config == scenario_config
+    assert config.evaluation.scenario_config == eval_scenario_config
+
+
+def test_load_expert_training_config_inherits_eval_seed_randomness_by_default(
+    tmp_path,
+) -> None:
+    """Evaluation randomness should inherit the legacy top-level flag when omitted."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "eval_seed_inherit.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_eval_seed_inherit_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123, 231],
+                "randomize_seeds": True,
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 94,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.randomize_seeds is True
+    assert config.evaluation.randomize_seeds is True
+
+
+@pytest.mark.parametrize(
+    ("episode_idx", "expected_seed"),
+    [
+        (0, 11),
+        (69, 11),
+        (70, 17),
+        (139, 17),
+        (140, 29),
+        (209, 29),
+        (210, 11),
+    ],
+)
+def test_deterministic_eval_seed_schedule_advances_per_full_scenario_cycle(
+    episode_idx: int, expected_seed: int
+) -> None:
+    """Deterministic eval should cover all scenarios before advancing to the next seed block."""
+    config = ExpertTrainingConfig(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(11, 17, 29),
+        total_timesteps=1000,
+        policy_id="ppo_eval_seed_schedule_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=100,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=350,
+            hold_out_scenarios=(),
+            step_schedule=((None, 20_000),),
+            randomize_seeds=False,
+        ),
+    )
+
+    assert (
+        _deterministic_eval_seed_for_episode(
+            config,
+            episode_idx=episode_idx,
+            scenario_cycle_length=70,
+        )
+        == expected_seed
+    )
+
+
+def test_full_maintained_eval_manifest_loads_unique_scenarios() -> None:
+    """The maintained eval surface should expose one unique row per maintained positive scenario."""
+    scenarios = load_scenarios(Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"))
+    scenario_ids = [
+        str(scenario.get("name") or scenario.get("scenario_id")) for scenario in scenarios
+    ]
+
+    assert len(scenarios) == 70
+    assert len(set(scenario_ids)) == 70
+
+
+def test_issue_708_predictive_foresight_override_enables_predictive_observation() -> None:
+    """The issue-708 config should now expose predictive foresight features on reset."""
+    config_path = Path(
+        "configs/training/ppo/expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml"
+    ).resolve()
+    config = load_expert_training_config(config_path)
+    scenario = load_scenarios(config.scenario_config)[0]
+    env_config = build_robot_config_from_scenario(scenario, scenario_path=config.scenario_config)
+
+    assert getattr(env_config, "predictive_foresight_enabled", False) is False
+    _apply_env_overrides(env_config, config.env_overrides)
+    assert getattr(env_config, "predictive_foresight_enabled", False) is True
+
+    env = make_robot_env(
+        config=env_config,
+        seed=config.seeds[0],
+        suite_name="ppo_issue738_smoke",
+        scenario_name="issue738_smoke",
+        algorithm_name=config.policy_id,
+        **config.env_factory_kwargs,
+    )
+    try:
+        obs, _ = env.reset()
+    finally:
+        env.close()
+
+    predictive_keys = sorted(key for key in obs if str(key).startswith("predictive_"))
+    assert predictive_keys == [
+        "predictive_crossing_count",
+        "predictive_flow_alignment",
+        "predictive_gap_scores",
+        "predictive_min_clearance",
+        "predictive_ttc_risk",
+        "predictive_uncertainty",
+    ]
+
+
+def test_load_expert_training_config_defaults_best_checkpoint_metric_to_success_rate(
+    tmp_path,
+) -> None:
+    """Configs without an explicit best-checkpoint metric should now prefer success rate."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "default_best_metric.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_default_best_metric_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.best_checkpoint_metric == "success_rate"
 
 
 def test_load_expert_training_config_requires_step_schedule(tmp_path) -> None:
@@ -202,6 +456,126 @@ def test_load_expert_training_config_requires_step_schedule(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="evaluation.step_schedule is required"):
         load_expert_training_config(config_path)
+
+
+def test_load_expert_training_config_allows_missing_frequency_episodes(tmp_path) -> None:
+    """Configs should load when evaluation uses only the step_schedule contract."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "missing_frequency.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_missing_frequency_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    assert config.evaluation.frequency_episodes == 0
+    assert config.evaluation.step_schedule == ((None, 20000),)
+
+
+def test_parse_num_envs_supports_host_aware_auto_modes() -> None:
+    """Loader helper should normalize supported auto num_envs tokens."""
+
+    assert _parse_num_envs(None) is None
+    assert _parse_num_envs("auto") == "auto_throughput"
+    assert _parse_num_envs("auto_throughput") == "auto_throughput"
+    assert _parse_num_envs("auto_stable") == "auto_stable"
+    assert _parse_num_envs(8) == 8
+
+
+def test_load_expert_training_config_supports_auto_stable_num_envs(tmp_path) -> None:
+    """Configs should preserve host-aware auto num_envs modes."""
+
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "auto_stable.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_auto_stable_test",
+                "scenario_config": str(scenario_config),
+                "num_envs": "auto_stable",
+                "worker_mode": "auto",
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.num_envs == "auto_stable"
+
+
+def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> None:
+    """Auto env modes should resolve to throughput and stable host-aware counts."""
+
+    monkeypatch.setattr("scripts.training.train_ppo.os.cpu_count", lambda: 32)
+    monkeypatch.setattr(
+        "scripts.training.train_ppo._host_memory_gib",
+        lambda: 36.8,
+    )
+
+    base_kwargs = {
+        "scenario_config": Path(
+            "configs/scenarios/classic_interactions_francis2023.yaml"
+        ).resolve(),
+        "seeds": (123,),
+        "total_timesteps": 1000,
+        "policy_id": "ppo_auto_test",
+        "convergence": ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=100,
+        ),
+        "evaluation": EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            hold_out_scenarios=(),
+            step_schedule=((1000, 1000),),
+        ),
+    }
+
+    throughput_cfg = ExpertTrainingConfig(**base_kwargs, num_envs="auto_throughput")
+    stable_cfg = ExpertTrainingConfig(**base_kwargs, num_envs="auto_stable")
+
+    assert _resolve_num_envs(throughput_cfg) == 27
+    assert _resolve_num_envs(stable_cfg) == 13
+
+    throughput_details = _describe_num_envs_resolution(throughput_cfg)
+    stable_details = _describe_num_envs_resolution(stable_cfg)
+    assert throughput_details["mode"] == "auto_throughput"
+    assert throughput_details["decision"] == "throughput heuristic; limited by memory cap"
+    assert throughput_details["memory_cap"] == 27
+    assert stable_details["mode"] == "auto_stable"
+    assert stable_details["decision"] == "stable headroom heuristic; limited by memory cap"
+    assert stable_details["memory_cap"] == 13
 
 
 def test_load_expert_training_config_supports_resume_model_id(tmp_path) -> None:
@@ -501,3 +875,224 @@ def test_direct_wandb_metrics_callback_logs_core_training_series() -> None:
     assert payload["time/total_timesteps"] == 150
     assert payload["rollout/ep_rew_mean"] == 12.5
     assert payload["train/value_loss"] == 0.2
+
+
+def test_finalize_best_checkpoint_writes_summary_sidecar(tmp_path) -> None:
+    """Best-checkpoint finalization should persist a machine-readable summary file."""
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    source = checkpoint_dir / "ppo_test_step17000000.zip"
+    source.write_text("checkpoint", encoding="utf-8")
+    tracker = _BestCheckpointTracker(
+        metric_name="success_rate",
+        higher_is_better=True,
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+    )
+    tracker.best_overall = _BestCheckpointCandidate(
+        eval_step=17_000_000,
+        score=0.9667,
+        metrics={"success_rate": 0.9667, "collision_rate": 0.0333, "snqi": 0.39},
+        meets_convergence=True,
+    )
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(1,),
+        total_timesteps=30_000_000,
+        policy_id="ppo_test",
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 1_000_000),),
+        ),
+    )
+
+    summary = _finalize_best_checkpoint(tracker, config=config, checkpoint_dir=checkpoint_dir)
+
+    assert summary is not None
+    assert summary.checkpoint_path.exists()
+    assert summary.report_path is not None
+    payload = json.loads(summary.report_path.read_text(encoding="utf-8"))
+    assert payload["eval_step"] == 17_000_000
+    assert payload["metric"] == "success_rate"
+    assert payload["metrics"]["success_rate"] == pytest.approx(0.9667)
+
+
+def test_update_wandb_best_checkpoint_summary_mirrors_metrics() -> None:
+    """W&B summary should expose the selected best-checkpoint metadata."""
+    run = SimpleNamespace(summary={})
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(1,),
+        total_timesteps=30_000_000,
+        policy_id="ppo_test",
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 1_000_000),),
+        ),
+    )
+    best = SimpleNamespace(
+        metric="success_rate",
+        value=0.9667,
+        eval_step=17_000_000,
+        checkpoint_path=Path("/tmp/model_best.zip"),
+        report_path=Path("/tmp/model_best.summary.json"),
+        meets_convergence=True,
+        metrics={"success_rate": 0.9667, "collision_rate": 0.0333, "snqi": 0.39},
+    )
+
+    _update_wandb_best_checkpoint_summary(run, config=config, best_summary=best)
+
+    assert run.summary["best/checkpoint_metric"] == "success_rate"
+    assert run.summary["best/eval_step"] == 17_000_000
+    assert run.summary["best/success_rate"] == pytest.approx(0.9667)
+    assert run.summary["best/collision_rate"] == pytest.approx(0.0333)
+
+
+def test_upload_wandb_best_checkpoint_artifact_logs_model_with_aliases(
+    tmp_path, monkeypatch
+) -> None:
+    """Best checkpoint upload should publish a W&B model artifact with stable aliases."""
+
+    class _Artifact:
+        def __init__(self, name, artifact_type=None, metadata=None, **kwargs):
+            if artifact_type is None:
+                artifact_type = kwargs.get("type")
+            self.name = name
+            self.type = artifact_type
+            self.metadata = metadata
+            self.description = None
+            self.files: list[tuple[str, str | None]] = []
+
+        def add_file(self, path, name=None):
+            self.files.append((str(path), name))
+
+    class _Run:
+        def __init__(self) -> None:
+            self.logged: list[tuple[object, list[str] | None]] = []
+
+        def log_artifact(self, artifact, aliases=None):
+            self.logged.append((artifact, aliases))
+
+    model_path = tmp_path / "model_best.zip"
+    report_path = tmp_path / "model_best.summary.json"
+    model_path.write_text("checkpoint", encoding="utf-8")
+    report_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(Artifact=_Artifact))
+    run = _Run()
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(1,),
+        total_timesteps=30_000_000,
+        policy_id="ppo_test",
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 1_000_000),),
+        ),
+    )
+    best = SimpleNamespace(
+        metric="success_rate",
+        value=0.9667,
+        eval_step=17_000_000,
+        checkpoint_path=model_path,
+        report_path=report_path,
+        meets_convergence=True,
+        metrics={"success_rate": 0.9667, "collision_rate": 0.0333},
+    )
+
+    _upload_wandb_best_checkpoint_artifact(run, config=config, best_summary=best)
+
+    assert len(run.logged) == 1
+    artifact, aliases = run.logged[0]
+    assert artifact.name == "ppo_test-best-success"
+    assert aliases == ["best-success", "step-17000000"]
+    assert (f"{model_path}", "model.zip") in artifact.files
+    assert (f"{report_path}", "best_checkpoint_summary.json") in artifact.files
+
+
+def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkeypatch) -> None:
+    """Best checkpoints should be persisted as soon as a new best eval appears."""
+
+    class _Artifact:
+        def __init__(self, name, artifact_type=None, metadata=None, **kwargs):
+            if artifact_type is None:
+                artifact_type = kwargs.get("type")
+            self.name = name
+            self.type = artifact_type
+            self.metadata = metadata
+            self.description = None
+            self.files: list[tuple[str, str | None]] = []
+
+        def add_file(self, path, name=None):
+            self.files.append((str(path), name))
+
+    class _Run:
+        def __init__(self) -> None:
+            self.summary: dict[str, object] = {}
+            self.logged: list[tuple[object, list[str] | None]] = []
+
+        def log_artifact(self, artifact, aliases=None):
+            self.logged.append((artifact, aliases))
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    source = checkpoint_dir / "ppo_test_step17000000.zip"
+    source.write_text("checkpoint", encoding="utf-8")
+    tracker = _BestCheckpointTracker(
+        metric_name="success_rate",
+        higher_is_better=True,
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+    )
+    tracker.best_overall = _BestCheckpointCandidate(
+        eval_step=17_000_000,
+        score=0.9667,
+        metrics={"success_rate": 0.9667, "collision_rate": 0.0333, "snqi": 0.39},
+        meets_convergence=True,
+    )
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve(),
+        seeds=(1,),
+        total_timesteps=30_000_000,
+        policy_id="ppo_test",
+        convergence=ConvergenceCriteria(0.9, 0.1, 100),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 1_000_000),),
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(Artifact=_Artifact))
+    run = _Run()
+
+    best, eval_step = _persist_best_checkpoint_if_updated(
+        tracker,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+        wandb_run=run,
+        last_persisted_eval_step=None,
+    )
+
+    assert best is not None
+    assert eval_step == 17_000_000
+    assert best.checkpoint_path.exists()
+    assert run.summary["best/eval_step"] == 17_000_000
+    assert len(run.logged) == 1
+    artifact, aliases = run.logged[0]
+    assert artifact.name == "ppo_test-best-success"
+    assert aliases == ["best-success", "step-17000000"]
+
+    second_best, second_eval_step = _persist_best_checkpoint_if_updated(
+        tracker,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+        wandb_run=run,
+        last_persisted_eval_step=eval_step,
+    )
+
+    assert second_best is None
+    assert second_eval_step == 17_000_000
+    assert len(run.logged) == 1

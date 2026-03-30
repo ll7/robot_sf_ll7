@@ -1,0 +1,6 @@
+includes:
+  - ../archetypes/issue_596_frame_consistency.yaml
+  - ../archetypes/issue_596_static_obstacles.yaml
+  - ../archetypes/issue_596_topology.yaml
+  - ../archetypes/issue_596_dynamic.yaml
+  - ../archetypes/issue_596_robustness.yaml

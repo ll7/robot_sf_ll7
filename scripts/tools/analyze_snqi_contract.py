@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -35,6 +36,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rank-fail-threshold", type=float, default=0.3)
     parser.add_argument("--outcome-warn-threshold", type=float, default=0.05)
     parser.add_argument("--outcome-fail-threshold", type=float, default=0.0)
+    parser.add_argument("--dominance-warn-threshold", type=float, default=0.24)
+    parser.add_argument("--dominance-fail-threshold", type=float, default=0.27)
     parser.add_argument("--output-json", type=Path, default=None)
     parser.add_argument("--output-md", type=Path, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
@@ -44,6 +47,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "rank_fail_threshold",
         "outcome_warn_threshold",
         "outcome_fail_threshold",
+        "dominance_warn_threshold",
+        "dominance_fail_threshold",
     ):
         if not math.isfinite(getattr(args, name)):
             parser.error(f"--{name.replace('_', '-')} must be a finite number")
@@ -51,7 +56,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--rank-warn-threshold must be greater than --rank-fail-threshold")
     if args.outcome_warn_threshold <= args.outcome_fail_threshold:
         parser.error("--outcome-warn-threshold must be greater than --outcome-fail-threshold")
+    if args.dominance_warn_threshold >= args.dominance_fail_threshold:
+        parser.error("--dominance-warn-threshold must be less than --dominance-fail-threshold")
     return args
+
+
+def _sha256_file(path: Path) -> str:
+    """Return a SHA-256 digest for one file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _payload_hash(payload: dict[str, Any]) -> str:
+    """Return a stable hash for an in-memory payload."""
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
@@ -63,6 +84,17 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
         f"- Rank alignment (Spearman): `{payload.get('rank_alignment_spearman', 0.0):.4f}`",
         f"- Outcome separation: `{payload.get('outcome_separation', 0.0):.4f}`",
         f"- Objective score: `{payload.get('objective_score', 0.0):.4f}`",
+        f"- Dominant component: `{payload.get('dominant_component', 'unknown')}`",
+        f"- Dominant component mean |contribution|: `{payload.get('dominant_component_mean_abs', 0.0):.4f}`",
+        "",
+        "## SNQI Assets",
+        "",
+        f"- Weights path: `{payload.get('weights_path', 'derived')}`",
+        f"- Weights version: `{payload.get('weights_version', 'unknown')}`",
+        f"- Weights SHA-256: `{payload.get('weights_sha256', 'unknown')}`",
+        f"- Baseline path: `{payload.get('baseline_path', 'derived')}`",
+        f"- Baseline version: `{payload.get('baseline_version', 'unknown')}`",
+        f"- Baseline SHA-256: `{payload.get('baseline_sha256', 'unknown')}`",
         "",
         "## Component Dominance",
         "",
@@ -125,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         rank_alignment_fail=args.rank_fail_threshold,
         outcome_separation_warn=args.outcome_warn_threshold,
         outcome_separation_fail=args.outcome_fail_threshold,
+        max_component_dominance_warn=args.dominance_warn_threshold,
+        max_component_dominance_fail=args.dominance_fail_threshold,
     )
     evaluation = evaluate_snqi_contract(
         planner_rows,
@@ -145,6 +179,18 @@ def main(argv: list[str] | None = None) -> int:
         weights=configured_weights,
         baseline=baseline,
     )
+    weights_path = str(args.weights.resolve()) if args.weights is not None else "derived"
+    baseline_path = str(args.baseline.resolve()) if args.baseline is not None else "derived"
+    weights_sha256 = (
+        _sha256_file(args.weights.resolve())
+        if args.weights is not None
+        else _payload_hash(configured_weights)
+    )
+    baseline_sha256 = (
+        _sha256_file(args.baseline.resolve())
+        if args.baseline is not None
+        else _payload_hash(baseline)
+    )
 
     payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",
@@ -155,12 +201,22 @@ def main(argv: list[str] | None = None) -> int:
         "rank_alignment_spearman": evaluation.rank_alignment_spearman,
         "outcome_separation": evaluation.outcome_separation,
         "objective_score": evaluation.objective_score,
+        "dominant_component": evaluation.dominant_component,
+        "dominant_component_mean_abs": evaluation.dominant_component_mean_abs,
         "thresholds": {
             "rank_alignment_warn": args.rank_warn_threshold,
             "rank_alignment_fail": args.rank_fail_threshold,
             "outcome_separation_warn": args.outcome_warn_threshold,
             "outcome_separation_fail": args.outcome_fail_threshold,
+            "max_component_dominance_warn": args.dominance_warn_threshold,
+            "max_component_dominance_fail": args.dominance_fail_threshold,
         },
+        "weights_path": weights_path,
+        "weights_version": args.weights.stem if args.weights is not None else "default",
+        "weights_sha256": weights_sha256,
+        "baseline_path": baseline_path,
+        "baseline_version": args.baseline.stem if args.baseline is not None else "derived",
+        "baseline_sha256": baseline_sha256,
         "baseline_source": baseline_source,
         "baseline_adjustments": baseline_adjustments,
         "baseline_for_eval": baseline,

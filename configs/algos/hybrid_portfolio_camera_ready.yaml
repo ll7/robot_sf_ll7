@@ -5,7 +5,7 @@ allow_fallback: true
 # ORCA / prediction planner shared keys (SocNavPlannerConfig-compatible):
 max_linear_speed: 1.2
 max_angular_speed: 1.2
-predictive_model_id: predictive_proxy_selected_v2
+predictive_model_id: predictive_proxy_selected_v2_full
 predictive_horizon_steps: 8
 predictive_rollout_dt: 0.2
 predictive_goal_weight: 6.0

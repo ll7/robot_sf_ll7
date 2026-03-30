@@ -114,6 +114,7 @@ skills use the same commands:
 ```bash
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 scripts/dev/gh_comment.sh pr --current <<'EOF'
 Summary line
@@ -121,6 +122,42 @@ Summary line
 - bullet 2
 EOF
 ```
+
+For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
+
+- `docs/context/issue_713_batch_first_issue_workflow.md`
+- Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
+- Cache project and field IDs once per shell session instead of rediscovering them for every issue.
+
+On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
+default instead of `-n auto`, because the unbounded auto worker selection can leave local
+validation wrappers hanging after child processes should have exited. Override with
+`PYTEST_NUM_WORKERS=<int>` or `PYTEST_NUM_WORKERS=auto` when needed.
+
+For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the submitted
+wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
+`#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
+
+For paper-facing benchmark release runs, use the dedicated release wrapper:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+```
+
+Release-process references:
+
+- `docs/benchmark_release_protocol.md`
+- `docs/benchmark_release_reproducibility.md`
+
+### Benchmark fallback policy
+
+Benchmark work is fail-closed by default. Use the canonical policy note:
+
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+
+Fallback execution can still be useful for diagnostics and reproduction probes, but it must not be
+reported as a successful benchmark outcome.
 
 ### Environment factory pattern (CRITICAL)
 
@@ -1088,7 +1125,11 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 Use the following templates for specific tasks.
 
-- [issue template](../.github/ISSUE_TEMPLATE/issue_default.md)
+- [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
+- [issue creator skill](../.codex/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
+- [issue template auditor skill](../.codex/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
+- [priority assessor skill](../.codex/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
+- [PR opener skill](../.codex/skills/gh-pr-opener/SKILL.md) - Open draft PRs with the repository template, issue-scope verification, and conservative readiness freshness checks
 - [design doc template](./templates/design-doc-template.md)
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 

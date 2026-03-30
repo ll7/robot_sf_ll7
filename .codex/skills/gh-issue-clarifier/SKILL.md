@@ -10,6 +10,9 @@ description: "Clarify ambiguous GitHub issues by tightening scope and acceptance
 Use this skill to make ambiguous issues implementation-ready with minimal churn and clear
 decision records.
 
+For larger issue batches, follow `docs/context/issue_713_batch_first_issue_workflow.md` so issue
+cleanup stays separate from Project #5 writes.
+
 ## When To Use
 
 - Issue description is vague, contradictory, or missing acceptance criteria.
@@ -22,6 +25,7 @@ decision records.
    - `gh issue view <n> --comments --json title,body,labels,milestone,assignees,comments,url`
    - Review linked PRs/commits if present.
    - Inspect relevant code paths and tests before proposing changes.
+   - If this is part of a larger issue batch, keep issue cleanup separate from Project #5 writes.
 
 2. Detect ambiguity types
    - Problem ambiguity: unclear bug or objective.
@@ -53,6 +57,7 @@ decision records.
    - Create follow-up issues for deferred scope:
      - `gh issue create --title "<follow-up>" --body-file <body.md> --label "<labels>" --milestone "<milestone>"`
    - Add follow-up items to project and assign `Priority`.
+   - Batch the project routing after the issue-body edits instead of interleaving the two passes.
 
 6. Finalize clarified issue contract
    - Ensure issue contains:

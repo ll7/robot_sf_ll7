@@ -19,6 +19,7 @@ def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
     def _fake_run_map_batch(*args, **kwargs):
         jsonl_path = Path(args[1])
         row = {
+            "episode_id": "episode_001",
             "scenario_id": "scenario_a",
             "seed": 7,
             "status": "ok",
@@ -27,6 +28,7 @@ def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
                 "success_rate": 1.0,
                 "min_distance": 0.9,
                 "avg_speed": 0.4,
+                "total_collision_count": 0.0,
             },
         }
         jsonl_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
@@ -55,5 +57,30 @@ def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
 
     code = mod.main()
     assert code == 0
-    assert (output_dir / "smoke_summary.json").exists()
+    summary_path = output_dir / "smoke_summary.json"
+    assert summary_path.exists()
     assert (output_dir / "smoke.jsonl").exists()
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert payload["contract_version"] == "benchmark-reset-v2"
+    assert payload["integrity"]["pass"] is True
+
+
+def test_integrity_summary_groups_multiple_reasons_per_episode() -> None:
+    """Integrity summary should emit one contradiction entry per episode id."""
+    rows = [
+        {
+            "episode_id": "episode_001",
+            "termination_reason": "collision",
+            "metrics": {"success_rate": 1.0, "total_collision_count": 2.0},
+        }
+    ]
+
+    summary = mod._integrity_summary(rows)
+    assert summary["pass"] is False
+    assert summary["contradiction_count"] == 1
+    assert summary["contradictions"] == [
+        {
+            "episode_id": "episode_001",
+            "reasons": ["collision_with_success", "success_with_collision_metric"],
+        }
+    ]

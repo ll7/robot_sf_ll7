@@ -1,0 +1,300 @@
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: null
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [59601, 59602, 59603]
+
+scenarios:
+  - name: empty_map_8_directions_east
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_east.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map east
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify straight-line motion and frame correctness for an eastward target on an empty map.
+      expected_behavior: Move directly toward the east goal with no oscillation or spurious curvature.
+      expected_pass_criteria: Reach the east goal without collision, timeout, or visible open-space oscillation.
+      failure_modes:
+        - directional bias
+        - oscillation in open space
+        - incorrect frame transform
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: east
+      variation_rationale: East is the canonical forward-direction sanity case.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_northeast
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_northeast.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map northeast
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify diagonal motion symmetry for a northeast target on an obstacle-free map.
+      expected_behavior: Take a smooth diagonal route toward the northeast goal without axis bias.
+      expected_pass_criteria: Reach the northeast goal with a stable diagonal path and no axis-sign inversion.
+      failure_modes:
+        - diagonal asymmetry
+        - heading quantization artifacts
+        - open-space oscillation
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: northeast
+      variation_rationale: Diagonal travel exposes coupling errors between x and y axes.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_north
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_north.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map north
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify straight-line northbound motion without environmental interference.
+      expected_behavior: Rotate or align cleanly and progress north with minimal lateral drift.
+      expected_pass_criteria: Reach the north goal without collision, timeout, or sustained lateral drift.
+      failure_modes:
+        - lateral drift
+        - incorrect heading alignment
+        - unstable yaw correction
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: north
+      variation_rationale: Cardinal vertical motion exposes heading and coordinate-frame consistency.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_northwest
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_northwest.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map northwest
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify diagonal mirror symmetry for a northwest target on an empty map.
+      expected_behavior: Follow a smooth mirrored diagonal path comparable to the northeast case.
+      expected_pass_criteria: Reach the northwest goal with a mirrored diagonal trajectory and no frame-sign error.
+      failure_modes:
+        - mirror asymmetry
+        - frame-sign inversion
+        - unstable turn initiation
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: northwest
+      variation_rationale: Northwest is the mirrored counterpart to northeast and checks sign handling.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_west
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_west.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map west
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify westbound motion as the mirror case of the forward east target.
+      expected_behavior: Reverse heading cleanly and travel west without open-space deadlock.
+      expected_pass_criteria: Reach the west goal without collision, timeout, or asymmetric turn behavior.
+      failure_modes:
+        - back-side target mishandling
+        - heading wrap error
+        - directional asymmetry
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: west
+      variation_rationale: West mirrors east and checks wrap-around behavior in heading control.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_southwest
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_southwest.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map southwest
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify southwest diagonal travel with no obstacle or pedestrian interference.
+      expected_behavior: Take the mirrored southwest route with stable heading and smooth curvature.
+      expected_pass_criteria: Reach the southwest goal with stable mirrored diagonal motion and no open-space chatter.
+      failure_modes:
+        - diagonal asymmetry
+        - unstable heading correction
+        - axis-coupling error
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: southwest
+      variation_rationale: Southwest complements southeast and checks mirrored diagonal behavior.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_south
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_south.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map south
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify southbound motion as the mirror of north with no confounding interactions.
+      expected_behavior: Progress south after a clean heading change and maintain a stable path.
+      expected_pass_criteria: Reach the south goal without collision, timeout, or persistent heading drift.
+      failure_modes:
+        - mirror inconsistency
+        - lateral drift
+        - heading alignment error
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: south
+      variation_rationale: South mirrors north and catches sign errors in global-frame handling.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: empty_map_8_directions_southeast
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/empty_goal_southeast.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: empty_map_8_directions
+      label: empty map southeast
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: coordinate_transform
+      purpose: Verify southeast diagonal motion as a mirror pair against southwest and northeast.
+      expected_behavior: Reach the southeast goal with a smooth diagonal trajectory and no bias.
+      expected_pass_criteria: Reach the southeast goal with smooth diagonal motion and no directional asymmetry.
+      failure_modes:
+        - directional asymmetry
+        - diagonal jitter
+        - coordinate transform error
+      determinism: deterministic
+      variation_family: goal_direction
+      variation_value: southeast
+      variation_rationale: Southeast complements the other diagonal cases to cover all octants.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: goal_behind_robot
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/goal_behind_robot.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: goal_behind_robot
+      label: goal behind robot
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: angle_wrap
+      purpose: Test whether the planner can recover when the target lies behind the initial heading.
+      expected_behavior: Commit to a controlled turn-around instead of stalling or spinning in place.
+      expected_pass_criteria: Reach the rearward goal after one stable turn-around without repeated spin oscillation.
+      failure_modes:
+        - turn-in-place oscillation
+        - refusal to reverse heading
+        - wrap-around angle bug
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: small_angle_precision
+    map_id: atomic_empty_frame_test
+    route_overrides_file: ../route_overrides/issue_596/small_angle_precision.yaml
+    simulation_config:
+      max_episode_steps: 250
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: small_angle_precision
+      label: small angle precision
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: frame_consistency
+      target_failure_mode: oscillation
+      purpose: Test whether small heading corrections remain stable and do not collapse into zig-zag motion.
+      expected_behavior: Apply a slight steering correction and converge smoothly to the offset goal.
+      expected_pass_criteria: Reach the offset goal with a single smooth correction and no visible zig-zagging.
+      failure_modes:
+        - over-steering
+        - heading quantization
+        - oscillatory correction
+      determinism: deterministic
+      plausibility: *plausibility
+    seeds: *seeds

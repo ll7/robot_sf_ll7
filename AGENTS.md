@@ -5,6 +5,17 @@ This document covers briefly the repository structure, coding style, testing wor
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 
+## Codex Context Stack
+Treat the following files as the repository-native context stack for Codex-style agents:
+
+- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+- `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
+- `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
+- `.codex/skills/`: discoverable Codex skills for execution workflows and repo-local context packs.
+- `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
+
+Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
+
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
@@ -26,6 +37,45 @@ The project enforces Ruff with a 4-space indent, 100-character lines, and double
 ## Testing Guidelines
 Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs with committed artifacts in `output/` when benchmarks change. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows.
 
+## Proof-First Validation
+
+Any new change, skill, benchmark-facing update, or test must be verified with concrete evidence,
+not just implemented.
+
+- New local planners must be proven with an actual benchmark or targeted execution path that shows
+  they run correctly in this repository.
+- Metric changes must include a clear proof that the updated metric now computes the intended values
+  or fixes the intended regression.
+- New skills must be checked against their real invocation path, referenced files, and repository
+  workflow fit.
+- New tests must be shown to fail for the right reason before the fix when practical, or otherwise
+  justified with direct evidence that they cover the intended contract.
+
+Benchmark-specific policy:
+
+- Use the canonical fail-closed benchmark fallback note:
+  `docs/context/issue_691_benchmark_fallback_policy.md`
+- Fallback behavior is **not** acceptable as a successful benchmark outcome unless the task
+  explicitly exists to measure that fallback mode.
+- If a planner, environment, or dependency cannot satisfy the contract needed for an accurate
+  benchmark run, the run for that planner must fail closed with a clear error and an explicit
+  `not available` or `failed` status.
+- Do not classify fallback execution as benchmark-strengthening evidence; report it as a limitation
+  or exclusion reason with the exact condition that triggered it.
+- Benchmark reports and issue follow-ups should clearly identify whether a planner ran in
+  `native`, `adapter`, `fallback`, or `degraded` mode, and fallback/degraded should be treated as a
+  caveat, not a success condition.
+
+Prefer proof that matches the risk:
+
+- benchmark or planner changes: benchmark run, policy-analysis run, or other executable evidence,
+- training/config workflow changes: canonical command run or smoke path,
+- metrics/schema changes: targeted assertions plus a reproducible sample or fixture,
+- docs/skill/instruction changes: verify referenced paths, commands, and discoverability surfaces.
+
+Do not present a change as complete until the proof is recorded in the validation notes, PR text, or
+issue follow-up.
+
 ## Commit & Pull Request Workflow
 Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`). Each PR should summarize intent, reference related issues, and list the commands you ran. Include screenshots or short GIFs when UI or playback output changes, and note any new assets placed under `maps/` or `model/`. Ensure CI stays green by syncing with `main` and resolving lint or test failures locally before requesting review.
 Use the GitHub CLI (`gh`) for repository interactions such as viewing/commenting on issues and creating/updating PRs.
@@ -42,6 +92,30 @@ When referencing files in PRs, issue comments, docs, and agent responses, use re
 - When citing metric values, add one line interpreting the implication (for example, safety improved but success unchanged).
 - If uncertainty remains, clearly separate observed evidence from hypothesis.
 
+## Planning Convention
+
+For non-trivial work, follow `.agent/PLANS.md`:
+- restate the goal and boundaries first,
+- list evidence sources before implementation,
+- keep validation commands explicit,
+- state what proof will demonstrate the change actually works here,
+- record follow-up risks separately from completed scope.
+
+Do not treat plans as throwaway scratch text when they influence benchmark semantics, model provenance, or public docs.
+
+## GitHub Workflow Batching
+
+When working issue batches or Project #5 updates:
+
+- clean up issue text and labels first,
+- route Project #5 metadata in a separate pass,
+- run derived score sync once at the end of the batch,
+- cache project and field IDs once per shell session.
+
+Canonical note:
+
+- `docs/context/issue_713_batch_first_issue_workflow.md`
+
 ## Key Codex Skills
 
 For issue management and delivery, use these local skills:
@@ -52,8 +126,18 @@ For issue management and delivery, use these local skills:
   - Maintains a clear sequential execution queue in GitHub Project #5 (`In progress`/`Ready`/`Tracked`).
 - `.codex/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
+- `.codex/skills/gh-issue-priority-assessor/SKILL.md`
+  - Reviews Project #5 priority inputs against the static rubric, explains plausibility, and keeps field writeback opt-in.
 - `.codex/skills/analyze-camera-ready-benchmark/SKILL.md`
   - Runs consistency diagnostics for camera-ready benchmark campaigns and summarizes runtime/quality/fallback signals.
+
+Use the repo-local context skills under `.codex/skills/` when the task is primarily about understanding or reviewing benchmark/planner context rather than executing GitHub workflow automation:
+
+- `.codex/skills/benchmark-overview/SKILL.md`
+- `.codex/skills/experiment-context/SKILL.md`
+- `.codex/skills/planner-integration/SKILL.md`
+- `.codex/skills/paper-facing-docs/SKILL.md`
+- `.codex/skills/review-benchmark-change/SKILL.md`
 
 ## Donts
 

@@ -1,0 +1,75 @@
+name: paper_experiment_matrix_v1_guarded_ppo_compare
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 2
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
+
+planners:
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    benchmark_profile: experimental

@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,9 @@ from robot_sf.planner.predictive_model import (
     save_predictive_checkpoint,
 )
 from robot_sf.training.scenario_loader import load_scenarios
+
+_CONTRACT_VERSION = "benchmark-reset-v2"
+_TRAINING_FAMILY = "prediction_planner"
 
 
 def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
@@ -109,6 +113,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-val-ade", type=float, default=1.2)
     parser.add_argument("--max-val-fde", type=float, default=2.0)
     parser.add_argument("--register-model", action="store_true")
+    parser.add_argument("--checkpoint-only-register", type=Path, default=None)
+    parser.add_argument("--training-summary", type=Path, default=None)
     parser.add_argument("--proxy-scenario-matrix", type=Path, default=None)
     parser.add_argument("--proxy-seed-manifest", type=Path, default=None)
     parser.add_argument("--proxy-every-epochs", type=int, default=0)
@@ -436,9 +442,237 @@ def _init_wandb(args: argparse.Namespace, cfg: PredictiveModelConfig):
     )
 
 
+def _selection_decision(
+    *,
+    select_by_proxy: bool,
+    best: dict[str, float],
+    best_proxy: dict[str, float] | None,
+) -> dict[str, Any]:
+    """Build deterministic checkpoint-selection metadata."""
+    if bool(select_by_proxy) and best_proxy is not None:
+        return {
+            "selection_mode": "proxy",
+            "selected_checkpoint_reason": (
+                "Selected by proxy campaign ranking: success_rate, then mean_min_distance, "
+                "then validation loss."
+            ),
+            "selected_epoch": int(best["epoch"]),
+            "proxy_metrics": dict(best_proxy),
+            "validation_metrics": {
+                "val_loss": float(best["val_loss"]),
+                "val_ade": float(best["val_ade"]),
+                "val_fde": float(best["val_fde"]),
+            },
+        }
+    return {
+        "selection_mode": "val_loss",
+        "selected_checkpoint_reason": "Selected by minimum validation loss.",
+        "selected_epoch": int(best["epoch"]),
+        "proxy_metrics": None,
+        "validation_metrics": {
+            "val_loss": float(best["val_loss"]),
+            "val_ade": float(best["val_ade"]),
+            "val_fde": float(best["val_fde"]),
+        },
+    }
+
+
+def _should_update_val_loss_best(
+    *,
+    select_by_proxy: bool,
+    proxy_selected: bool,
+    val_loss: float,
+    best_val_loss: float,
+) -> bool:
+    """Return whether the val-loss path should replace the current best checkpoint."""
+    if bool(select_by_proxy) and bool(proxy_selected):
+        return False
+    return float(val_loss) < float(best_val_loss)
+
+
+def _register_model_entry(
+    *,
+    model_id: str,
+    checkpoint_path: Path,
+    dataset: Path,
+    summary_path: Path,
+    selection: dict[str, Any],
+) -> None:
+    """Upsert registry metadata for a promoted predictive checkpoint."""
+    rel_checkpoint = checkpoint_path
+    try:
+        rel_checkpoint = checkpoint_path.relative_to(Path.cwd())
+    except ValueError:
+        rel_checkpoint = checkpoint_path
+
+    upsert_registry_entry(
+        {
+            "model_id": model_id,
+            "display_name": f"Predictive planner model ({model_id})",
+            "local_path": str(rel_checkpoint),
+            "config_path": "",
+            "commit": _git_commit(),
+            "wandb_run_id": "",
+            "wandb_run_path": "",
+            "wandb_entity": "",
+            "wandb_project": "",
+            "wandb_file": "",
+            "tags": ["predictive", "rgl", "planner", "trajectory", "benchmark-reset-v2"],
+            "notes": [
+                f"Dataset: {dataset}",
+                f"Training summary: {summary_path}",
+                f"Selection mode: {selection.get('selection_mode', 'unknown')}",
+                "Promoted by scripts/training/train_predictive_planner.py",
+            ],
+        }
+    )
+
+
+def _dataset_manifest_path(dataset_path: Path) -> Path:
+    """Return the expected dataset-manifest path for a generated NPZ dataset."""
+    return dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+
+
+def _source_dataset_ids(dataset_path: Path) -> list[str]:
+    """Resolve dataset provenance ids from the sibling manifest when available."""
+    manifest_path = _dataset_manifest_path(dataset_path)
+    if manifest_path.exists():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to parse dataset manifest {}: {}", manifest_path, exc)
+        else:
+            if not isinstance(payload, dict):
+                logger.warning(
+                    "Dataset manifest {} must be a JSON object, got {}",
+                    manifest_path,
+                    type(payload).__name__,
+                )
+                return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
+            dataset_id = str(payload.get("dataset_id", "")).strip()
+            if dataset_id:
+                return [f"{_TRAINING_FAMILY}:{dataset_id}"]
+            logger.warning("Dataset manifest {} is missing dataset_id", manifest_path)
+    else:
+        logger.warning("Dataset manifest missing next to dataset: {}", manifest_path)
+    return [f"{_TRAINING_FAMILY}:{dataset_path.stem}"]
+
+
+def _summary_path_candidates(
+    summary: dict[str, object],
+    *keys: str,
+    summary_path: Path | None = None,
+) -> list[Path]:
+    """Return normalized path candidates from top-level summary keys and nested selection fields."""
+    candidates: list[Path] = []
+    selection = summary.get("selection", {})
+    nested = selection if isinstance(selection, dict) else {}
+    base_dir = summary_path.parent.resolve() if summary_path is not None else None
+    for key in keys:
+        for value in (summary.get(key), nested.get(key)):
+            text = str(value or "").strip()
+            if text:
+                path = Path(text)
+                if not path.is_absolute() and base_dir is not None:
+                    path = (base_dir / path).resolve()
+                else:
+                    path = path.resolve()
+                candidates.append(path)
+    return candidates
+
+
+def _validate_checkpoint_registration_inputs(
+    *,
+    summary: dict[str, object],
+    checkpoint_path: Path,
+    dataset_path: Path,
+    model_id: str,
+    summary_path: Path | None = None,
+) -> None:
+    """Ensure checkpoint-only registration matches the training summary provenance."""
+    summary_checkpoints = _summary_path_candidates(
+        summary,
+        "checkpoint",
+        "checkpoint_path",
+        summary_path=summary_path,
+    )
+    if not summary_checkpoints:
+        raise RuntimeError("Training summary missing checkpoint provenance for registration.")
+    if checkpoint_path.resolve() not in summary_checkpoints:
+        raise RuntimeError(
+            "Checkpoint does not match training summary provenance: "
+            f"{checkpoint_path} not in {summary_checkpoints}"
+        )
+
+    summary_datasets = _summary_path_candidates(summary, "dataset", summary_path=summary_path)
+    if not summary_datasets:
+        raise RuntimeError("Training summary missing dataset provenance for registration.")
+    if dataset_path.resolve() not in summary_datasets:
+        raise RuntimeError(
+            "Dataset does not match training summary provenance: "
+            f"{dataset_path} not in {summary_datasets}"
+        )
+
+    selection = summary.get("selection", {})
+    selection_dict = selection if isinstance(selection, dict) else {}
+    summary_model_id = str(summary.get("model_id") or selection_dict.get("model_id") or "").strip()
+    if not summary_model_id:
+        raise RuntimeError("Training summary missing model_id provenance for registration.")
+    if summary_model_id != model_id:
+        raise RuntimeError(
+            f"Model id does not match training summary provenance: {model_id} != {summary_model_id}"
+        )
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Train predictive trajectory model and persist checkpoint + metrics."""
     args = parse_args()
+
+    if args.checkpoint_only_register is not None:
+        if args.training_summary is None:
+            raise ValueError("--training-summary is required with --checkpoint-only-register")
+        if not bool(args.register_model):
+            raise ValueError("--register-model is required with --checkpoint-only-register")
+        if not args.checkpoint_only_register.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint_only_register}")
+        if not args.training_summary.exists():
+            raise FileNotFoundError(f"Training summary not found: {args.training_summary}")
+        if not args.dataset.exists():
+            raise FileNotFoundError(f"Dataset not found: {args.dataset}")
+        summary = json.loads(args.training_summary.read_text(encoding="utf-8"))
+        if not isinstance(summary, dict):
+            raise TypeError(f"Expected JSON object at {args.training_summary}")
+        _validate_checkpoint_registration_inputs(
+            summary=summary,
+            checkpoint_path=args.checkpoint_only_register,
+            dataset_path=args.dataset,
+            model_id=str(args.model_id),
+            summary_path=args.training_summary,
+        )
+        gates = summary.get("quality_gates", {})
+        if not isinstance(gates, dict) or not bool(gates.get("pass_all", False)):
+            raise RuntimeError("Refusing to register predictive model with failing training gates.")
+        selection = summary.get("selection", {})
+        if not isinstance(selection, dict):
+            selection = {}
+        _register_model_entry(
+            model_id=str(args.model_id),
+            checkpoint_path=args.checkpoint_only_register,
+            dataset=args.dataset,
+            summary_path=args.training_summary,
+            selection=selection,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "return_code": 0,
+                    "model_id": str(args.model_id),
+                    "checkpoint": str(args.checkpoint_only_register),
+                }
+            )
+        )
+        return 0
 
     if not args.dataset.exists():
         raise FileNotFoundError(f"Dataset not found: {args.dataset}")
@@ -456,8 +690,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
     )
 
-    if state.ndim != 3 or state.shape[-1] != 4:
-        raise ValueError("Expected state shape (N, max_agents, 4)")
+    if state.ndim != 3 or state.shape[-1] < 4:
+        raise ValueError("Expected state shape (N, max_agents, F) with F >= 4")
     if target.ndim != 4 or target.shape[-1] != 2:
         raise ValueError("Expected target shape (N, max_agents, horizon, 2)")
 
@@ -492,6 +726,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     cfg = PredictiveModelConfig(
         max_agents=int(state.shape[1]),
         horizon_steps=int(target.shape[2]),
+        input_dim=int(state.shape[2]),
         hidden_dim=int(args.hidden_dim),
         message_passing_steps=int(args.message_passing_steps),
     )
@@ -516,6 +751,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "epoch": -1,
     }
     best_proxy: dict[str, float] | None = None
+    proxy_selected = False
     proxy_enabled = args.proxy_scenario_matrix is not None and int(args.proxy_every_epochs) > 0
 
     for epoch in range(1, int(args.epochs) + 1):
@@ -543,7 +779,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         }
         history.append(row)
 
-        if val_loss < best["val_loss"]:
+        if _should_update_val_loss_best(
+            select_by_proxy=bool(args.select_by_proxy),
+            proxy_selected=proxy_selected,
+            val_loss=val_loss,
+            best_val_loss=float(best["val_loss"]),
+        ):
             best = {
                 "val_loss": val_loss,
                 "val_ade": val_ade,
@@ -648,6 +889,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "val_loss": float(val_loss),
                     "epoch": float(epoch),
                 }
+                proxy_selected = True
                 best = {
                     "val_loss": val_loss,
                     "val_ade": val_ade,
@@ -698,14 +940,27 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "pass_val_fde": bool(best["val_fde"] <= float(args.max_val_fde)),
     }
     gates["pass_all"] = bool(gates["pass_val_ade"] and gates["pass_val_fde"])
+    selection = _selection_decision(
+        select_by_proxy=bool(args.select_by_proxy),
+        best=best,
+        best_proxy=best_proxy,
+    )
 
     summary = {
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "artifact_role": "predictive_training_summary",
+        "generated_at": datetime.now(UTC).isoformat(),
         "model_id": args.model_id,
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),
         "device": str(device),
         "config": asdict(cfg),
         "best": best,
+        "best_checkpoint": {
+            "path": str(checkpoint_path),
+            "epoch": int(best["epoch"]),
+        },
         "quality_gates": gates,
         "epochs": int(args.epochs),
         "batch_size": int(args.batch_size),
@@ -713,7 +968,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "weight_decay": float(args.weight_decay),
         "seed": int(args.seed),
         "git_commit": _git_commit(),
-        "selection_mode": "proxy" if bool(args.select_by_proxy) else "val_loss",
+        "selection_mode": selection["selection_mode"],
+        "selection": selection,
+        "selected_checkpoint_reason": selection["selected_checkpoint_reason"],
+        "source_dataset_ids": _source_dataset_ids(Path(args.dataset)),
         "proxy": {
             "enabled": bool(proxy_enabled),
             "scenario_matrix": str(args.proxy_scenario_matrix)
@@ -751,40 +1009,21 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         wandb_run.summary["best_val_fde"] = float(best["val_fde"])
         wandb_run.summary["quality_gate_pass"] = bool(gates["pass_all"])
 
-    if bool(args.register_model):
-        rel_checkpoint = checkpoint_path
-        try:
-            rel_checkpoint = checkpoint_path.relative_to(Path.cwd())
-        except ValueError:
-            rel_checkpoint = checkpoint_path
-
-        upsert_registry_entry(
-            {
-                "model_id": args.model_id,
-                "display_name": f"Predictive planner model ({args.model_id})",
-                "local_path": str(rel_checkpoint),
-                "config_path": "",
-                "commit": _git_commit(),
-                "wandb_run_id": "",
-                "wandb_run_path": "",
-                "wandb_entity": "",
-                "wandb_project": "",
-                "wandb_file": "",
-                "tags": ["predictive", "rgl", "planner", "trajectory"],
-                "notes": [
-                    f"Dataset: {args.dataset}",
-                    "Generated by scripts/training/train_predictive_planner.py",
-                ],
-            }
-        )
-        logger.info("Updated model registry entry '{}'", args.model_id)
-
     if not gates["pass_all"]:
         logger.error("Quality gates failed: {}", gates)
         if wandb_run is not None:
             wandb_run.finish(exit_code=2)
         return 2
     logger.success("Quality gates passed: {}", gates)
+    if bool(args.register_model):
+        _register_model_entry(
+            model_id=str(args.model_id),
+            checkpoint_path=checkpoint_path,
+            dataset=args.dataset,
+            summary_path=summary_path,
+            selection=selection,
+        )
+        logger.info("Updated model registry entry '{}'", args.model_id)
     if wandb_run is not None:
         wandb_run.finish()
     return 0

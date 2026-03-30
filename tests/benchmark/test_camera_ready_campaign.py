@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
@@ -20,10 +22,11 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _sanitize_csv_cell,
     _sanitize_git_remote,
     _sanitize_name,
-    _write_campaign_report,
+    _sha256_file,
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
+    write_campaign_report,
 )
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -113,6 +116,8 @@ def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None
     assert cfg.snqi_contract.rank_alignment_fail_threshold == pytest.approx(0.4)
     assert cfg.snqi_contract.outcome_separation_warn_threshold == pytest.approx(0.1)
     assert cfg.snqi_contract.outcome_separation_fail_threshold == pytest.approx(0.0)
+    assert cfg.snqi_contract.max_component_dominance_warn_threshold == pytest.approx(0.24)
+    assert cfg.snqi_contract.max_component_dominance_fail_threshold == pytest.approx(0.27)
     assert cfg.snqi_contract.calibration_seed == 77
     assert cfg.snqi_contract.calibration_trials == 1234
 
@@ -143,6 +148,35 @@ def test_load_campaign_config_rejects_invalid_snqi_contract_thresholds(tmp_path:
     )
 
     with pytest.raises(ValueError, match="rank_alignment_fail_threshold"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_inverted_dominance_thresholds(tmp_path: Path) -> None:
+    """Config loader should reject dominance fail thresholds below warn thresholds."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_invalid_dominance.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_contract_invalid_dominance",
+                f"scenario_matrix: {matrix_path.as_posix()}",
+                "snqi_contract:",
+                "  max_component_dominance_warn_threshold: 0.3",
+                "  max_component_dominance_fail_threshold: 0.2",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="max_component_dominance_fail_threshold"):
         load_campaign_config(config_path)
 
 
@@ -177,6 +211,38 @@ def test_load_campaign_config_rejects_non_finite_snqi_thresholds(tmp_path: Path)
 
     with pytest.raises(ValueError, match="must be a finite float"):
         load_campaign_config(config_path)
+
+
+def test_load_holonomic_camera_ready_campaign_config() -> None:
+    """Holonomic camera-ready profile should stay strict and fail closed."""
+    cfg = load_campaign_config(Path("configs/benchmarks/camera_ready_all_planners_holonomic.yaml"))
+
+    assert cfg.name == "camera_ready_all_planners_holonomic"
+    assert cfg.kinematics_matrix == ("holonomic",)
+    assert cfg.holonomic_command_mode == "vx_vy"
+    assert cfg.export_publication_bundle is True
+    assert cfg.stop_on_failure is True
+
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert planners["orca"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["sacadrl"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["socnav_sampling"].socnav_missing_prereq_policy == "fail-fast"
+    assert planners["socnav_bench"].socnav_missing_prereq_policy == "fail-fast"
+    assert (
+        planners["ppo"].algo_config_path
+        == Path("configs/baselines/ppo_15m_grid_socnav_holonomic.yaml").resolve()
+    )
+
+    ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert ppo_cfg["fallback_to_goal"] is False
+
+
+def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:
+    """Hash helper should raise a path-specific error for missing or unreadable files."""
+    missing_path = tmp_path / "missing.json"
+
+    with pytest.raises(RuntimeError, match="Failed to hash file"):
+        _sha256_file(missing_path)
 
 
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915
@@ -369,6 +435,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "amv_coverage_summary.md").exists()
     assert (campaign_root / "reports" / "comparability_matrix.json").exists()
     assert (campaign_root / "reports" / "comparability_matrix.md").exists()
+    assert (campaign_root / "reports" / "seed_variability_by_scenario.json").exists()
+    assert (campaign_root / "reports" / "seed_variability_by_scenario.csv").exists()
+    assert (campaign_root / "reports" / "seed_episode_rows.csv").exists()
+    assert (campaign_root / "reports" / "statistical_sufficiency.json").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.json").exists()
     assert (campaign_root / "reports" / "snqi_diagnostics.md").exists()
     assert (campaign_root / "reports" / "snqi_sensitivity.csv").exists()
@@ -396,6 +466,9 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "fallback" in report_text
     assert "learned contract" in report_text
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
+    assert "availability_status" in table_md
+    assert "benchmark_success" in table_md
+    assert "availability_reason" in table_md
     assert "readiness_status" in table_md
     assert "learned_policy_contract_status" in table_md
     assert "socnav_prereq_policy" in table_md
@@ -410,6 +483,11 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    ppo_row = next(row for row in summary_payload["planner_rows"] if row["algo"] == "ppo")
+    assert ppo_row["status"] == "not_available"
+    assert ppo_row["availability_status"] == "not_available"
+    assert ppo_row["benchmark_success"] == "false"
     assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
     assert summary_payload["artifacts"]["matrix_summary_json"].endswith(
         "reports/matrix_summary.json"
@@ -420,6 +498,18 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
     assert summary_payload["artifacts"]["comparability_json"].endswith(
         "reports/comparability_matrix.json"
+    )
+    assert summary_payload["artifacts"]["seed_variability_json"].endswith(
+        "reports/seed_variability_by_scenario.json"
+    )
+    assert summary_payload["artifacts"]["seed_variability_csv"].endswith(
+        "reports/seed_variability_by_scenario.csv"
+    )
+    assert summary_payload["artifacts"]["seed_episode_rows_csv"].endswith(
+        "reports/seed_episode_rows.csv"
+    )
+    assert summary_payload["artifacts"]["statistical_sufficiency_json"].endswith(
+        "reports/statistical_sufficiency.json"
     )
     assert summary_payload["artifacts"]["snqi_diagnostics_json"].endswith(
         "reports/snqi_diagnostics.json"
@@ -432,11 +522,76 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
     assert summary_payload["campaign"]["snqi_contract_status"] in {"pass", "warn", "fail"}
     assert "snqi_weights_version" in summary_payload["campaign"]
+    assert "snqi_weights_sha256" in summary_payload["campaign"]
     assert "snqi_baseline_version" in summary_payload["campaign"]
+    assert "snqi_baseline_sha256" in summary_payload["campaign"]
     assert "release_url" in summary_payload["campaign"]
     assert "release_asset_url" in summary_payload["campaign"]
     assert "doi_url" in summary_payload["campaign"]
-    assert result["publication_bundle"] is not None
+    seed_variability_payload = json.loads(
+        (campaign_root / "reports" / "seed_variability_by_scenario.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert seed_variability_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
+    assert seed_variability_payload["source"]["campaign_manifest_path"].endswith(
+        "campaign_manifest.json"
+    )
+    assert seed_variability_payload["source"]["run_meta_path"].endswith("run_meta.json")
+    assert seed_variability_payload["source"]["episodes_paths"]
+    assert all("episodes" in path for path in seed_variability_payload["source"]["episodes_paths"])
+    planner_keys = {row["planner_key"] for row in seed_variability_payload["rows"]}
+    assert planner_keys == {"goal"}
+    success_summary = seed_variability_payload["rows"][0]["summary"]["success"]
+    assert "ci_low" in success_summary
+    assert "ci_high" in success_summary
+    assert "ci_half_width" in success_summary
+    seed_episode_rows_csv = (campaign_root / "reports" / "seed_episode_rows.csv").read_text(
+        encoding="utf-8"
+    )
+    assert "scenario_id" in seed_episode_rows_csv
+    assert "planner_key" in seed_episode_rows_csv
+    assert "kinematics" in seed_episode_rows_csv
+    assert "seed" in seed_episode_rows_csv
+    assert "repeat_index" in seed_episode_rows_csv
+    statistical_sufficiency_payload = json.loads(
+        (campaign_root / "reports" / "statistical_sufficiency.json").read_text(encoding="utf-8")
+    )
+    assert (
+        statistical_sufficiency_payload["confidence"]["method"] == "bootstrap_mean_over_seed_means"
+    )
+    assert statistical_sufficiency_payload["row_count"] == 1
+    assert statistical_sufficiency_payload["rows"][0]["kinematics"] == "differential_drive"
+    expected_confidence = seed_variability_payload["confidence"]
+    assert run_meta["seed_variability"]["bootstrap_method"] == expected_confidence["method"]
+    assert run_meta["seed_variability"]["bootstrap_level"] == pytest.approx(
+        expected_confidence["confidence"]
+    )
+    assert (
+        run_meta["seed_variability"]["bootstrap_samples"]
+        == expected_confidence["bootstrap_samples"]
+    )
+    assert run_meta["seed_variability"]["seed"] == expected_confidence["bootstrap_seed"]
+    campaign_manifest = json.loads(
+        (campaign_root / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
+    assert (
+        campaign_manifest["seed_variability"]["bootstrap_method"] == expected_confidence["method"]
+    )
+    assert campaign_manifest["seed_variability"]["bootstrap_level"] == pytest.approx(
+        expected_confidence["confidence"]
+    )
+    assert (
+        campaign_manifest["seed_variability"]["bootstrap_samples"]
+        == expected_confidence["bootstrap_samples"]
+    )
+    assert campaign_manifest["seed_variability"]["seed"] == expected_confidence["bootstrap_seed"]
+    assert result["publication_bundle"] is None
+    assert "publication_bundle" not in summary_payload
+    assert any(
+        "Publication bundle export skipped because benchmark_success=false." in warning
+        for warning in summary_payload["warnings"]
+    )
 
 
 def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
@@ -475,6 +630,30 @@ def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):
         cfg.seed_policy.seed_sets_path == (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
     )
     assert cfg.kinematics_matrix == ("differential_drive",)
+
+
+def test_load_seed_variability_pilot_config_and_scenarios() -> None:
+    """Seed-variability pilot config should stay narrow and deterministic."""
+    cfg = load_campaign_config(Path("configs/benchmarks/paper_seed_variability_pilot_v1.yaml"))
+
+    assert cfg.paper_facing is True
+    assert cfg.paper_profile_version == "paper-seed-variability-v1"
+    assert cfg.export_publication_bundle is False
+    assert cfg.kinematics_matrix == ("differential_drive",)
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111, 112, 113, 114, 115, 116, 117, 118]
+    assert [planner.key for planner in cfg.planners] == ["orca", "ppo"]
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == [
+        "classic_crossing_low",
+        "classic_head_on_corridor_low",
+        "classic_overtaking_low",
+        "classic_t_intersection_low",
+    ]
+    assert all(
+        scenario["seeds"] == [111, 112, 113, 114, 115, 116, 117, 118] for scenario in scenarios
+    )
 
 
 def test_load_campaign_scenarios_converts_absolute_repo_map_path_to_relative(tmp_path: Path):
@@ -582,6 +761,79 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     assert planner_rows[0]["status"] == "partial-failure"
 
 
+def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, monkeypatch) -> None:
+    """Campaign should stop after the first not-available planner when stop_on_failure is enabled."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_stop_on_not_available.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_stop_on_not_available",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: true",
+                "planners:",
+                "  - key: ppo",
+                "    algo: ppo",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, out_path, schema_path, benchmark_profile, kwargs
+        call_order.append(algo)
+        if algo == "ppo":
+            return {
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "preflight": {
+                    "status": "fallback",
+                    "learned_policy_contract": {
+                        "critical_mismatches": ["obs_mode=image mismatch"],
+                    },
+                },
+            }
+        raise AssertionError("run_batch must not be called for planners after not_available")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="stop_not_available")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_rows = summary_payload["planner_rows"]
+
+    assert call_order == ["ppo"]
+    assert len(planner_rows) == 1
+    assert planner_rows[0]["planner_key"] == "ppo"
+    assert planner_rows[0]["status"] == "not_available"
+    assert any("obs_mode=image mismatch" in warning for warning in summary_payload["warnings"])
+
+
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     """Markdown report tables should escape raw cell separators from planner metadata."""
     report_path = tmp_path / "campaign_report.md"
@@ -604,6 +856,10 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
                 "projection_rate": "0.0",
                 "infeasible_rate": "0.0",
                 "execution_mode": "native",
+                "execution_detail": "direct_holonomic_world_velocity",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
                 "readiness_status": "ok",
                 "readiness_tier": "baseline-ready",
                 "preflight_status": "ok",
@@ -612,10 +868,12 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
             }
         ],
     }
-    _write_campaign_report(report_path, payload)
+    write_campaign_report(report_path, payload)
     report_text = report_path.read_text(encoding="utf-8")
     assert "planner\\|unsafe" in report_text
     assert "holonomic\\|vx_vy" in report_text
+    assert "direct_holonomic_world_velocity" in report_text
+    assert "world_velocity_passthrough" in report_text
 
 
 def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
@@ -645,6 +903,122 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
     )
     assert row["execution_mode"] == "adapter"
     assert row["readiness_status"] == "adapter"
+
+
+def test_planner_report_row_exposes_execution_detail_and_command_spaces() -> None:
+    """Row builder should surface direct-world-velocity metadata explicitly."""
+    planner = PlannerSpec(key="orca", algo="orca")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {
+                "execution_mode": "adapter",
+                "execution_detail": "direct_holonomic_world_velocity",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+            },
+        },
+    }
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="holonomic",
+    )
+    assert row["execution_mode"] == "adapter"
+    assert row["execution_detail"] == "direct_holonomic_world_velocity"
+    assert row["planner_command_space"] == "holonomic_vxy_world"
+    assert row["benchmark_command_space"] == "holonomic_vxy_world"
+    assert row["projection_policy"] == "world_velocity_passthrough"
+
+
+def test_planner_report_row_backfills_collision_means_from_termination_reason() -> None:
+    """Row builder should not zero out collisions when aggregate metrics are sparse."""
+    planner = PlannerSpec(key="ppo", algo="ppo")
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 2.0,
+        "algorithm_readiness": {"tier": "experimental"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "pass"}},
+        "algorithm_metadata_contract": {},
+    }
+    aggregates = {
+        "ppo": {
+            "success": {"mean": 0.0},
+            "collisions": {"mean": 0.0},
+            "total_collision_count": {"mean": 0.0},
+            "snqi": {"mean": -0.5},
+        }
+    }
+    records = [
+        {"termination_reason": "collision", "metrics": {"snqi": -0.4}},
+        {"termination_reason": "success", "metrics": {"snqi": -0.6}},
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=aggregates,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["success_mean"] == "0.5000"
+    assert row["collisions_mean"] == "0.5000"
+    assert row["total_collision_count_mean"] == "0.5000"
+    assert row["success_ci_low"] == "nan"
+    assert row["success_ci_high"] == "nan"
+    assert row["collision_ci_low"] == "nan"
+    assert row["collision_ci_high"] == "nan"
+
+
+def test_planner_report_row_uses_episode_ci_placeholders_when_means_are_backfilled() -> None:
+    """Backfilled success/collision means should not keep stale aggregate CIs."""
+    planner = PlannerSpec(key="ppo", algo="ppo")
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 2.0,
+        "algorithm_readiness": {"tier": "experimental"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "pass"}},
+        "algorithm_metadata_contract": {},
+    }
+    aggregates = {
+        "ppo": {
+            "success": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+            "collisions": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+            "total_collision_count": {"mean": 0.0},
+            "snqi": {"mean": -0.5, "mean_ci": [-0.6, -0.4]},
+        }
+    }
+    records = [
+        {"termination_reason": "success", "metrics": {"snqi": -0.4}},
+        {"termination_reason": "collision", "metrics": {"snqi": -0.6}},
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=aggregates,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["success_mean"] == "0.5000"
+    assert row["collisions_mean"] == "0.5000"
+    assert row["success_ci_low"] == "nan"
+    assert row["success_ci_high"] == "nan"
+    assert row["collision_ci_low"] == "nan"
+    assert row["collision_ci_high"] == "nan"
 
 
 def test_jsonable_repo_relative_normalizes_paths_for_stable_hashing(tmp_path: Path) -> None:
@@ -776,8 +1150,8 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
     assert run_dirs[0] == expected
 
 
-def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeypatch) -> None:
-    """Skipped planner/kinematics combinations should not be marked as successful."""
+def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, monkeypatch) -> None:
+    """Skipped planner/kinematics combinations must fail closed in benchmark reports."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -822,8 +1196,57 @@ def test_run_campaign_marks_skipped_preflight_as_skipped(tmp_path: Path, monkeyp
     monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="skipped")
     summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
-    assert summary_payload["planner_rows"][0]["status"] == "skipped"
+    assert summary_payload["planner_rows"][0]["status"] == "not_available"
+    assert summary_payload["planner_rows"][0]["availability_status"] == "not_available"
+    assert summary_payload["planner_rows"][0]["benchmark_success"] == "false"
     assert summary_payload["campaign"]["successful_runs"] == 0
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert result["benchmark_success"] is False
+
+
+def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeypatch) -> None:
+    """Campaigns with zero run entries must fail closed at campaign level."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_empty.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: empty_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = replace(load_campaign_config(config_path), planners=())
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.run_batch",
+        lambda *args, **kwargs: pytest.fail(
+            "run_batch should not be called when no planners exist"
+        ),
+    )
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="empty")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+
+    assert summary_payload["planner_rows"] == []
+    assert summary_payload["campaign"]["successful_runs"] == 0
+    assert summary_payload["campaign"]["total_runs"] == 0
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert result["benchmark_success"] is False
 
 
 def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypatch) -> None:
@@ -1388,10 +1811,10 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
                 "  seeds: [111]",
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "planners:",
-                "  - key: z_exp",
-                "    algo: goal",
+                "  - key: stream_gap",
+                "    algo: stream_gap",
                 "    planner_group: experimental",
-                "  - key: a_core",
+                "  - key: goal",
                 "    algo: goal",
                 "    planner_group: core",
             ],
@@ -1405,7 +1828,7 @@ def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Pa
         Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
     )
     planner_keys = [row["planner_key"] for row in matrix_payload["rows"]]
-    assert planner_keys == ["a_core", "z_exp"]
+    assert planner_keys == ["goal", "stream_gap"]
 
 
 def test_prepare_campaign_preflight_writes_amv_and_comparability_artifacts(tmp_path: Path) -> None:
@@ -1564,3 +1987,62 @@ def test_prepare_campaign_preflight_rejects_invalid_comparability_mapping_for_pa
     cfg = load_campaign_config(config_path)
     with pytest.raises(ValueError, match="scenario_family_mapping"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="bad_map")
+
+
+def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_paper(
+    tmp_path: Path,
+) -> None:
+    """Paper-facing preflight should fail when planner comparability coverage is incomplete."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    incomplete_mapping = tmp_path / "incomplete_mapping.yaml"
+    incomplete_mapping.write_text(
+        "\n".join(
+            [
+                "mapping_version: planner-coverage-test-v1",
+                "scenario_family_mapping:",
+                "  smoke: corridor",
+                "metric_comparability:",
+                "  success:",
+                "    classification: comparable",
+                "    alyassi_metric: success_rate",
+                "    rationale: comparable",
+                "planner_key_mapping:",
+                "  prediction_planner_v2_full: predictive-planner-full",
+                "  stream_gap: stream-gap",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: missing_planner_mapping",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "kinematics_matrix: [differential_drive]",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"comparability_mapping: {incomplete_mapping.as_posix()}",
+                "planners:",
+                "  - key: prediction_planner_v2_full",
+                "    algo: prediction_planner",
+                "    planner_group: core",
+                "  - key: prediction_planner_v2_xl_ego",
+                "    algo: prediction_planner",
+                "    planner_group: core",
+                "  - key: stream_gap",
+                "    algo: stream_gap",
+                "    planner_group: experimental",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    with pytest.raises(ValueError, match="prediction_planner_v2_xl_ego"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="missing_planner")

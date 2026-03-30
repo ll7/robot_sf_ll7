@@ -146,6 +146,13 @@ _DIRECT_WANDB_TRAIN_METRIC_KEYS = (
     "train/policy_gradient_loss",
     "train/entropy_loss",
 )
+_AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB = 6.0
+_AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB = 1.1
+_AUTO_NUM_ENVS_STABLE_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_STABLE_CPU_DIVISOR = 2
+_AUTO_NUM_ENVS_STABLE_HEADROOM_GIB = 20.0
+_AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB = 1.2
 
 
 def _wandb_training_clock() -> float:
@@ -299,12 +306,16 @@ def _parse_step_schedule(raw: object) -> tuple[tuple[int | None, int], ...]:
     return tuple(schedule)
 
 
-def _parse_num_envs(raw: object) -> int | None:
-    """Parse num_envs setting (supports int or 'auto')."""
+def _parse_num_envs(raw: object) -> int | str | None:
+    """Parse num_envs setting (supports int and host-aware auto modes)."""
     if raw is None:
         return None
-    if isinstance(raw, str) and raw.strip().lower() == "auto":
-        return None
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"auto", "auto_throughput"}:
+            return "auto_throughput"
+        if normalized == "auto_stable":
+            return "auto_stable"
     return max(1, int(raw))
 
 
@@ -316,12 +327,134 @@ def _ensure_cuda_determinism_env() -> None:
     logger.info("Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic CUDA")
 
 
+def _slurm_allocated_cpus() -> int | None:
+    """Return allocated CPU count from Slurm when available."""
+
+    for key in ("SLURM_CPUS_PER_TASK", "SLURM_JOB_CPUS_PER_NODE"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        token = raw.split("(", 1)[0].split(",", 1)[0].strip()
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def _host_logical_cpus() -> int:
+    """Return the logical CPU count available to the current process."""
+
+    return max(1, _slurm_allocated_cpus() or (os.cpu_count() or 1))
+
+
+def _host_memory_gib() -> float | None:
+    """Return total visible host memory in GiB when detectable."""
+
+    if hasattr(os, "sysconf"):
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            phys_pages = os.sysconf("SC_PHYS_PAGES")
+            if isinstance(page_size, int) and isinstance(phys_pages, int):
+                total_bytes = page_size * phys_pages
+                if total_bytes > 0:
+                    return float(total_bytes) / float(1024**3)
+        except (ValueError, OSError):
+            pass
+    return None
+
+
+def _memory_limited_num_envs(*, headroom_gib: float, env_budget_gib: float) -> int | None:
+    """Estimate a safe env cap from visible host memory."""
+
+    total_gib = _host_memory_gib()
+    if total_gib is None:
+        return None
+    usable_gib = max(0.0, total_gib - headroom_gib)
+    return max(1, int(usable_gib // env_budget_gib))
+
+
+def _describe_num_envs_resolution(config: ExpertTrainingConfig) -> dict[str, object]:
+    """Return structured details explaining how num_envs was resolved."""
+
+    if isinstance(config.num_envs, int):
+        resolved = max(1, int(config.num_envs))
+        return {
+            "requested": int(config.num_envs),
+            "mode": "fixed",
+            "logical_cpus": None,
+            "slurm_cpus": None,
+            "reserve_cores": int(config.num_envs_reserve_cores),
+            "host_memory_gib": None,
+            "cpu_target": resolved,
+            "memory_cap": None,
+            "headroom_gib": None,
+            "env_budget_gib": None,
+            "resolved": resolved,
+            "decision": "explicit config integer",
+        }
+
+    mode = (
+        str(config.num_envs).strip().lower()
+        if isinstance(config.num_envs, str)
+        else "auto_throughput"
+    )
+    if mode == "auto":
+        mode = "auto_throughput"
+    if mode not in {"auto_throughput", "auto_stable"}:
+        raise ValueError("num_envs must be an int or one of {'auto_throughput', 'auto_stable'}")
+
+    slurm_cpus = _slurm_allocated_cpus()
+    logical_cpus = max(1, slurm_cpus or (os.cpu_count() or 1))
+    reserve = max(0, int(config.num_envs_reserve_cores))
+    host_memory_gib = _host_memory_gib()
+    if mode == "auto_stable":
+        cpu_target = max(
+            1,
+            (logical_cpus // _AUTO_NUM_ENVS_STABLE_CPU_DIVISOR)
+            - _AUTO_NUM_ENVS_STABLE_RESERVED_CORES
+            - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_STABLE_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_STABLE_ENV_BUDGET_GIB
+        decision_label = "stable headroom heuristic"
+    else:
+        cpu_target = max(
+            1,
+            logical_cpus - _AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES - reserve,
+        )
+        headroom_gib = _AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB
+        env_budget_gib = _AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB
+        decision_label = "throughput heuristic"
+
+    memory_cap = None
+    if host_memory_gib is not None:
+        usable_gib = max(0.0, host_memory_gib - headroom_gib)
+        memory_cap = max(1, int(usable_gib // env_budget_gib))
+    resolved = cpu_target if memory_cap is None else max(1, min(cpu_target, memory_cap))
+    limiter = "cpu target" if memory_cap is None or cpu_target <= memory_cap else "memory cap"
+
+    return {
+        "requested": config.num_envs if config.num_envs is not None else "auto_throughput",
+        "mode": mode,
+        "logical_cpus": logical_cpus,
+        "slurm_cpus": slurm_cpus,
+        "reserve_cores": reserve,
+        "host_memory_gib": host_memory_gib,
+        "cpu_target": cpu_target,
+        "memory_cap": memory_cap,
+        "headroom_gib": headroom_gib,
+        "env_budget_gib": env_budget_gib,
+        "resolved": resolved,
+        "decision": f"{decision_label}; limited by {limiter}",
+    }
+
+
 def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
     """Resolve the effective number of environments for training."""
-    if config.num_envs is not None:
-        return max(1, int(config.num_envs))
-    cores = os.cpu_count() or 1
-    return max(1, cores - 1)
+    return int(_describe_num_envs_resolution(config)["resolved"])
 
 
 def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
@@ -364,6 +497,17 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "peds_have_static_obstacle_forces",
         "peds_have_robot_repulsion",
         "map_id",
+        "predictive_foresight_enabled",
+        "predictive_foresight_model_id",
+        "predictive_foresight_checkpoint_path",
+        "predictive_foresight_device",
+        "predictive_foresight_max_agents",
+        "predictive_foresight_horizon_steps",
+        "predictive_foresight_rollout_dt",
+        "predictive_foresight_ego_conditioning",
+        "predictive_foresight_near_distance",
+        "predictive_foresight_front_corridor_length",
+        "predictive_foresight_front_corridor_half_width",
     ):
         if key in overrides:
             setattr(env_config, key, overrides[key])
@@ -490,6 +634,25 @@ class ScenarioContext:
 
 
 @dataclass(slots=True)
+class EvaluationContext:
+    """Resolved evaluation surface and profile."""
+
+    scenario_config: Path
+    scenario_profile: tuple[str, ...]
+    scenario_definitions: tuple[Mapping[str, Any], ...]
+
+
+@dataclass(slots=True)
+class TrainingRuntimeContext:
+    """Runtime-only parameters for one PPO training invocation."""
+
+    run_id: str
+    dry_run: bool
+    resume_from: Path | None
+    config_path: Path | None
+
+
+@dataclass(slots=True)
 class BestCheckpointSummary:
     """Snapshot describing the best checkpoint chosen during training."""
 
@@ -499,6 +662,7 @@ class BestCheckpointSummary:
     checkpoint_path: Path
     metrics: dict[str, float]
     meets_convergence: bool
+    report_path: Path | None = None
 
 
 @dataclass(slots=True)
@@ -620,13 +784,23 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         collision_rate=float(convergence_raw["collision_rate"]),
         plateau_window=int(convergence_raw["plateau_window"]),
     )
+    frequency_episodes = int(evaluation_raw.get("frequency_episodes", 0))
     evaluation = EvaluationSchedule(
-        frequency_episodes=int(evaluation_raw["frequency_episodes"]),
+        frequency_episodes=frequency_episodes,
         evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
         hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
         step_schedule=step_schedule,
+        randomize_seeds=bool(
+            evaluation_raw.get("randomize_seeds", data.get("randomize_seeds", False))
+        ),
+        scenario_config=_resolve_optional_path(
+            path,
+            evaluation_raw.get("scenario_config"),
+            field_name="evaluation.scenario_config",
+        ),
     )
-    _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
+    if "frequency_episodes" in evaluation_raw:
+        _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
     if not evaluation.step_schedule:
         raise ValueError(
             "evaluation.step_schedule is required; frequency_episodes alone is not supported."
@@ -642,7 +816,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         convergence=convergence,
         evaluation=evaluation,
         ppo_hyperparams=dict(data.get("ppo_hyperparams", {}) or {}),
-        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "eval_episode_return")),
+        best_checkpoint_metric=str(data.get("best_checkpoint_metric", "success_rate")),
         snqi_weights_path=_resolve_optional_path(
             path,
             data.get("snqi_weights"),
@@ -713,18 +887,21 @@ def _log_startup_summary(
     worker_mode: str,
 ) -> None:
     """Emit one structured startup summary for run-critical resolved config."""
+    num_envs_details = _describe_num_envs_resolution(config)
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
-        "total_timesteps={} reward_profile={} num_envs={} worker_mode={} "
-        "randomize_seeds={} resume_from={} scenario_sampling={}",
+        "total_timesteps={} reward_profile={} requested_num_envs={} num_envs={} worker_mode={} "
+        "randomize_seeds={} evaluation_randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
         config.total_timesteps,
         _resolved_reward_name(config.env_factory_kwargs),
+        config.num_envs if config.num_envs is not None else "auto_throughput",
         num_envs,
         worker_mode,
         _randomize_seeds(config),
+        _randomize_eval_seeds(config),
         (
             str(config.resume_from)
             if config.resume_from is not None
@@ -733,6 +910,27 @@ def _log_startup_summary(
             else "<none>"
         ),
         sorted(config.scenario_sampling.keys()),
+    )
+    logger.info(
+        "num_envs resolution: requested={} mode={} resolved={} decision='{}' "
+        "logical_cpus={} slurm_cpus={} reserve_cores={} host_memory_gib={} "
+        "cpu_target={} memory_cap={} headroom_gib={} env_budget_gib={}",
+        num_envs_details["requested"],
+        num_envs_details["mode"],
+        num_envs_details["resolved"],
+        num_envs_details["decision"],
+        num_envs_details["logical_cpus"],
+        num_envs_details["slurm_cpus"],
+        num_envs_details["reserve_cores"],
+        (
+            round(float(num_envs_details["host_memory_gib"]), 2)
+            if isinstance(num_envs_details["host_memory_gib"], int | float)
+            else None
+        ),
+        num_envs_details["cpu_target"],
+        num_envs_details["memory_cap"],
+        num_envs_details["headroom_gib"],
+        num_envs_details["env_budget_gib"],
     )
 
 
@@ -931,8 +1129,35 @@ def _reapply_resumed_ppo_hyperparams(model: PPO, config: ExpertTrainingConfig) -
 
 
 def _randomize_seeds(config: ExpertTrainingConfig) -> bool:
-    """Return True when training/evaluation should avoid deterministic seeding."""
+    """Return True when training should avoid deterministic seeding."""
     return bool(getattr(config, "randomize_seeds", False))
+
+
+def _randomize_eval_seeds(config: ExpertTrainingConfig) -> bool:
+    """Return True when evaluation should avoid deterministic seeding."""
+    evaluation = getattr(config, "evaluation", None)
+    if evaluation is None:
+        return _randomize_seeds(config)
+    return bool(getattr(evaluation, "randomize_seeds", _randomize_seeds(config)))
+
+
+def _deterministic_eval_seed_for_episode(
+    config: ExpertTrainingConfig,
+    *,
+    episode_idx: int,
+    scenario_cycle_length: int,
+) -> int:
+    """Return the deterministic eval seed for an episode index.
+
+    The seed only advances after one full deterministic pass over the scenario surface. This
+    preserves the intended scenario-seed cross product when `evaluation_episodes` is configured as
+    `len(scenarios) * len(seeds)`.
+    """
+    cycle_length = max(1, int(scenario_cycle_length))
+    seed_block = max(0, int(episode_idx)) // cycle_length
+    if config.seeds:
+        return int(config.seeds[seed_block % len(config.seeds)])
+    return int(seed_block)
 
 
 def _resolve_tensorboard_logdir(run_id: str) -> Path:
@@ -979,7 +1204,13 @@ def _init_wandb(
             "total_timesteps": config.total_timesteps,
             "seeds": list(config.seeds),
             "randomize_seeds": bool(config.randomize_seeds),
+            "evaluation_randomize_seeds": bool(_randomize_eval_seeds(config)),
             "scenario_config": str(config.scenario_config),
+            "evaluation_scenario_config": (
+                str(config.evaluation.scenario_config)
+                if config.evaluation.scenario_config is not None
+                else str(config.scenario_config)
+            ),
             "feature_extractor": config.feature_extractor,
             "ppo_hyperparams": dict(config.ppo_hyperparams),
             "best_checkpoint_metric": config.best_checkpoint_metric,
@@ -1193,16 +1424,47 @@ def _resolve_scenario_context(
     )
 
 
+def _resolve_evaluation_context(
+    config: ExpertTrainingConfig,
+    *,
+    training_scenario_definitions: Sequence[Mapping[str, Any]],
+) -> EvaluationContext:
+    """Resolve evaluation scenarios independently from the training surface."""
+    evaluation_scenario_config = config.evaluation.scenario_config or config.scenario_config
+    if evaluation_scenario_config == config.scenario_config:
+        scenario_definitions = tuple(training_scenario_definitions)
+    else:
+        scenario_definitions = tuple(load_scenarios(evaluation_scenario_config))
+
+    if config.evaluation.hold_out_scenarios:
+        sampler = ScenarioSampler(
+            scenario_definitions,
+            include_scenarios=tuple(config.evaluation.hold_out_scenarios),
+            seed=0,
+            strategy="cycle",
+        )
+        scenario_profile = sampler.scenario_ids
+    else:
+        scenario_profile = tuple(
+            scenario_id_from_definition(scenario, index=index)
+            for index, scenario in enumerate(scenario_definitions)
+        )
+
+    return EvaluationContext(
+        scenario_config=evaluation_scenario_config,
+        scenario_profile=tuple(scenario_profile),
+        scenario_definitions=scenario_definitions,
+    )
+
+
 def _execute_training(
     *,
     config: ExpertTrainingConfig,
     scenario_ctx: ScenarioContext,
+    evaluation_ctx: EvaluationContext,
     scenario_definitions: Sequence[Mapping[str, Any]],
     eval_steps: Sequence[int],
-    run_id: str,
-    dry_run: bool,
-    resume_from: Path | None,
-    config_path: Path | None,
+    runtime_ctx: TrainingRuntimeContext,
 ) -> TrainingOutputs:
     """Run training (or dry-run) and return raw metrics + episode records."""
     startup_t0 = time.perf_counter()
@@ -1210,7 +1472,7 @@ def _execute_training(
     worker_mode = _resolve_worker_mode(config, num_envs)
     _log_startup_summary(
         config=config,
-        config_path=config_path,
+        config_path=runtime_ctx.config_path,
         num_envs=num_envs,
         worker_mode=worker_mode,
     )
@@ -1224,11 +1486,11 @@ def _execute_training(
             snqi_context.baseline_fallback_keys,
         )
     tensorboard_log = (
-        _resolve_tensorboard_logdir(run_id)
+        _resolve_tensorboard_logdir(runtime_ctx.run_id)
         if bool(config.tracking.get("tensorboard", True))
         else None
     )
-    if dry_run:
+    if runtime_ctx.dry_run:
         metrics_raw, episode_records = _simulate_dry_run_metrics(
             config,
             eval_steps=eval_steps,
@@ -1257,13 +1519,13 @@ def _execute_training(
         scenario=scenario_ctx.selected_scenario,
         scenario_definitions=scenario_definitions,
         exclude_scenarios=scenario_ctx.training_exclude,
-        run_id=run_id,
+        run_id=runtime_ctx.run_id,
         tensorboard_log=tensorboard_log,
-        resume_from=resume_from,
+        resume_from=runtime_ctx.resume_from,
     )
     wandb_run, wandb_callback = _init_wandb(
         tracking=config.tracking,
-        run_id=run_id,
+        run_id=runtime_ctx.run_id,
         config=config,
         tensorboard_log=tensorboard_log,
     )
@@ -1282,6 +1544,7 @@ def _execute_training(
         _train_with_schedule(
             model,
             config=config,
+            evaluation_ctx=evaluation_ctx,
             scenario_definitions=scenario_definitions,
             scenario_id=scenario_ctx.scenario_label if config.scenario_id else None,
             hold_out_scenarios=config.evaluation.hold_out_scenarios,
@@ -1371,6 +1634,47 @@ def _timeline_from_episode_records(
     return timeline
 
 
+def _per_scenario_eval_rows_from_episode_records(
+    *,
+    episode_records: Sequence[Mapping[str, object]],
+) -> list[dict[str, float | int | str]]:
+    """Build per-scenario checkpoint rows from raw episode records."""
+    grouped: dict[tuple[int, str], dict[str, object]] = {}
+    for record in episode_records:
+        scenario_id = str(record.get("scenario_id", "unknown"))
+        eval_step = int(record.get("eval_step", 0) or 0)
+        metrics = record.get("metrics", {})
+        if not isinstance(metrics, Mapping):
+            continue
+        bucket = grouped.setdefault(
+            (eval_step, scenario_id),
+            {
+                "eval_step": eval_step,
+                "scenario_id": scenario_id,
+                "episodes": 0,
+                **{metric: [] for metric in _EVAL_METRIC_KEYS},
+            },
+        )
+        bucket["episodes"] = int(bucket["episodes"]) + 1
+        for metric in _EVAL_METRIC_KEYS:
+            value = metrics.get(metric)
+            if value is not None:
+                cast("list[float]", bucket[metric]).append(float(value))
+
+    rows: list[dict[str, float | int | str]] = []
+    for (_eval_step, _scenario_id), bucket in sorted(grouped.items()):
+        row: dict[str, float | int | str] = {
+            "eval_step": int(bucket["eval_step"]),
+            "scenario_id": str(bucket["scenario_id"]),
+            "episodes": int(bucket["episodes"]),
+        }
+        for metric in _EVAL_METRIC_KEYS:
+            values = cast("list[float]", bucket[metric])
+            row[metric] = float(np.mean(values)) if values else float("nan")
+        rows.append(row)
+    return rows
+
+
 def _build_eval_timeline_entry(
     summary: Mapping[str, float],
     *,
@@ -1409,6 +1713,38 @@ def _write_eval_timeline(
     )
     json_path.write_text(json.dumps(sorted_rows, indent=2, sort_keys=True), encoding="utf-8")
     fieldnames = ["eval_step", *_EVAL_METRIC_KEYS]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in sorted_rows:
+            writer.writerow(row)
+    return json_path
+
+
+def _write_eval_per_scenario(
+    *,
+    run_id: str,
+    rows: Sequence[Mapping[str, float | int | str]],
+) -> Path:
+    """Write per-scenario eval rows as JSON and CSV artifacts."""
+    report_dir = get_imitation_report_dir() / "eval_by_scenario"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    json_path = report_dir / f"{run_id}.json"
+    csv_path = report_dir / f"{run_id}.csv"
+    sorted_rows = sorted(
+        (
+            {
+                "eval_step": int(row.get("eval_step", 0)),
+                "scenario_id": str(row.get("scenario_id", "unknown")),
+                "episodes": int(row.get("episodes", 0)),
+                **{key: float(row.get(key, float("nan"))) for key in _EVAL_METRIC_KEYS},
+            }
+            for row in rows
+        ),
+        key=lambda row: (int(row["eval_step"]), str(row["scenario_id"])),
+    )
+    json_path.write_text(json.dumps(sorted_rows, indent=2, sort_keys=True), encoding="utf-8")
+    fieldnames = ["eval_step", "scenario_id", "episodes", *_EVAL_METRIC_KEYS]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -1462,6 +1798,25 @@ def _finalize_best_checkpoint(
         )
         return None
     shutil.copy2(best_source, best_path)
+    report_path = checkpoint_dir / f"{config.policy_id}_best.summary.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "policy_id": config.policy_id,
+                "metric": tracker.metric_name,
+                "value": float(best_candidate.score),
+                "eval_step": int(best_candidate.eval_step),
+                "meets_convergence": bool(best_candidate.meets_convergence),
+                "metrics": best_candidate.metrics,
+                "source_checkpoint_path": str(best_source),
+                "best_checkpoint_path": str(best_path),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return BestCheckpointSummary(
         metric=tracker.metric_name,
         value=best_candidate.score,
@@ -1469,6 +1824,7 @@ def _finalize_best_checkpoint(
         checkpoint_path=best_path,
         metrics=best_candidate.metrics,
         meets_convergence=best_candidate.meets_convergence,
+        report_path=report_path,
     )
 
 
@@ -1524,10 +1880,117 @@ def _log_perf_to_wandb(
     )
 
 
-def _train_with_schedule(  # noqa: PLR0913
+def _update_wandb_best_checkpoint_summary(
+    wandb_run: object | None,
+    *,
+    config: ExpertTrainingConfig,
+    best_summary: BestCheckpointSummary,
+) -> None:
+    """Mirror the selected best checkpoint metadata into W&B summary fields."""
+    if wandb_run is None or not hasattr(wandb_run, "summary"):
+        return
+    summary = wandb_run.summary
+    payload: dict[str, object] = {
+        "best/checkpoint_metric": best_summary.metric,
+        "best/checkpoint_value": float(best_summary.value),
+        "best/eval_step": int(best_summary.eval_step),
+        "best/checkpoint_path": str(best_summary.checkpoint_path),
+        "best/checkpoint_alias": "best-success",
+        "best/meets_convergence": bool(best_summary.meets_convergence),
+        "best/policy_id": config.policy_id,
+        "best/selection_policy": (
+            "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi"
+        ),
+    }
+    if best_summary.report_path is not None:
+        payload["best/checkpoint_report_path"] = str(best_summary.report_path)
+    for key, value in best_summary.metrics.items():
+        payload[f"best/{key}"] = float(value)
+    if hasattr(summary, "update"):
+        summary.update(payload)
+    else:  # pragma: no cover - defensive fallback for loose stubs
+        for key, value in payload.items():
+            summary[key] = value
+
+
+def _upload_wandb_best_checkpoint_artifact(
+    wandb_run: object | None,
+    *,
+    config: ExpertTrainingConfig,
+    best_summary: BestCheckpointSummary,
+) -> None:
+    """Upload the selected best PPO checkpoint as a dedicated W&B model artifact."""
+    if wandb_run is None:
+        return
+    try:  # pragma: no cover - optional dependency
+        import wandb  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Skipping W&B best-checkpoint artifact upload: {}", exc)
+        return
+
+    artifact_name = f"{config.policy_id}-best-success"
+    metadata: dict[str, object] = {
+        "policy_id": config.policy_id,
+        "selection_policy": "success_rate -> lower collision_rate -> lower max_steps_rate -> higher snqi",
+        "metric": best_summary.metric,
+        "metric_value": float(best_summary.value),
+        "eval_step": int(best_summary.eval_step),
+        "meets_convergence": bool(best_summary.meets_convergence),
+        "metrics": {key: float(value) for key, value in best_summary.metrics.items()},
+    }
+    artifact = wandb.Artifact(artifact_name, type="model", metadata=metadata)
+    artifact.description = (
+        "Best intermediate PPO checkpoint selected from periodic evaluation for this run."
+    )
+    artifact.add_file(str(best_summary.checkpoint_path), name="model.zip")
+    if best_summary.report_path is not None and best_summary.report_path.exists():
+        artifact.add_file(str(best_summary.report_path), name="best_checkpoint_summary.json")
+    aliases = ["best-success", f"step-{best_summary.eval_step}"]
+    try:
+        wandb_run.log_artifact(artifact, aliases=aliases)
+    except TypeError:  # pragma: no cover - older or stubbed interfaces
+        wandb_run.log_artifact(artifact)
+
+
+def _persist_best_checkpoint_if_updated(
+    tracker: _BestCheckpointTracker,
+    *,
+    config: ExpertTrainingConfig,
+    checkpoint_dir: Path | None,
+    wandb_run: object | None,
+    last_persisted_eval_step: int | None,
+) -> tuple[BestCheckpointSummary | None, int | None]:
+    """Persist and publish the currently selected best checkpoint when it changes."""
+    best_candidate = tracker.best()
+    if best_candidate is None or best_candidate.eval_step == last_persisted_eval_step:
+        return None, last_persisted_eval_step
+
+    best_summary = _finalize_best_checkpoint(
+        tracker,
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+    )
+    if best_summary is None:
+        return None, last_persisted_eval_step
+
+    _update_wandb_best_checkpoint_summary(
+        wandb_run,
+        config=config,
+        best_summary=best_summary,
+    )
+    _upload_wandb_best_checkpoint_artifact(
+        wandb_run,
+        config=config,
+        best_summary=best_summary,
+    )
+    return best_summary, best_summary.eval_step
+
+
+def _train_with_schedule(  # noqa: C901,PLR0913
     model: PPO,
     *,
     config: ExpertTrainingConfig,
+    evaluation_ctx: EvaluationContext,
     scenario_definitions: Sequence[Mapping[str, Any]],
     scenario_id: str | None,
     hold_out_scenarios: Sequence[str],
@@ -1571,6 +2034,8 @@ def _train_with_schedule(  # noqa: PLR0913
         higher_is_better=higher_is_better,
         convergence=config.convergence,
     )
+    best_summary: BestCheckpointSummary | None = None
+    last_persisted_best_eval_step: int | None = None
 
     for eval_step in eval_steps:
         train_steps = max(0, eval_step - timesteps_done)
@@ -1590,8 +2055,8 @@ def _train_with_schedule(  # noqa: PLR0913
         step_metrics, eval_records = _evaluate_policy(
             model,
             config,
-            scenario_definitions=scenario_definitions,
-            scenario_path=config.scenario_config,
+            scenario_definitions=evaluation_ctx.scenario_definitions,
+            scenario_path=evaluation_ctx.scenario_config,
             scenario_id=scenario_id,
             hold_out_scenarios=hold_out_scenarios,
             snqi_context=snqi_context,
@@ -1628,14 +2093,26 @@ def _train_with_schedule(  # noqa: PLR0913
             checkpoint_path = checkpoint_dir / f"{config.policy_id}_step{eval_step}.zip"
             model.save(str(checkpoint_path))
         tracker.update(summary, eval_step=eval_step)
+        persisted_best, last_persisted_best_eval_step = _persist_best_checkpoint_if_updated(
+            tracker,
+            config=config,
+            checkpoint_dir=checkpoint_dir,
+            wandb_run=wandb_run,
+            last_persisted_eval_step=last_persisted_best_eval_step,
+        )
+        if persisted_best is not None:
+            best_summary = persisted_best
         episode_records.extend(eval_records)
         timesteps_done = eval_step
 
-    best_summary = _finalize_best_checkpoint(
-        tracker,
-        config=config,
-        checkpoint_dir=checkpoint_dir,
-    )
+    if best_summary is None:
+        best_summary, _ = _persist_best_checkpoint_if_updated(
+            tracker,
+            config=config,
+            checkpoint_dir=checkpoint_dir,
+            wandb_run=wandb_run,
+            last_persisted_eval_step=last_persisted_best_eval_step,
+        )
     return metrics_raw, episode_records, best_summary, eval_timeline, perf_timeline
 
 
@@ -1723,13 +2200,13 @@ def _init_training_model(
 
 
 def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
-    """TODO docstring. Document this function.
+    """Estimate a simple path-efficiency proxy from episode metadata.
 
     Args:
-        meta: TODO docstring.
+        meta: Episode metadata emitted by the environment.
 
     Returns:
-        TODO docstring.
+        Fraction of the step budget left unused, clamped to ``[0, 1]``.
     """
     steps_taken = float(meta.get("step_of_episode", 0) or 0)
     max_steps = float(meta.get("max_sim_steps", steps_taken if steps_taken > 0 else 1))
@@ -1748,13 +2225,18 @@ def _gather_episode_metrics(
     avg_step_reward: float,
     snqi_context: TrainingSNQIContext,
 ) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Assemble one canonical PPO evaluation metric row from a finished episode.
 
     Args:
-        info: TODO docstring.
+        info: Final environment info payload for the episode.
+        steps_taken: Number of executed simulation steps.
+        max_steps: Episode step budget from the environment.
+        episode_return: Total undiscounted reward accumulated in the episode.
+        avg_step_reward: Mean reward per executed step.
+        snqi_context: Resolved SNQI weights and baselines used for scoring.
 
     Returns:
-        TODO docstring.
+        Normalized benchmark-facing metrics for one evaluation episode.
     """
     raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
     if isinstance(raw_meta, Mapping):
@@ -1813,7 +2295,7 @@ def _evaluate_policy(
     metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
 
-    use_random = _randomize_seeds(config)
+    use_random = _randomize_eval_seeds(config)
     sampler_seed = None if use_random else 0
     sampler_strategy = "random" if use_random else "cycle"
     if scenario_id:
@@ -1836,12 +2318,17 @@ def _evaluate_policy(
             seed=sampler_seed,
             strategy=sampler_strategy,
         )
+    scenario_cycle_length = max(1, len(sampler.scenario_ids))
 
     for episode_idx in range(episodes):
         seed = (
             None
             if use_random
-            else int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
+            else _deterministic_eval_seed_for_episode(
+                config,
+                episode_idx=episode_idx,
+                scenario_cycle_length=scenario_cycle_length,
+            )
         )
         scenario, scenario_name = sampler.sample()
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
@@ -1905,7 +2392,7 @@ def _simulate_dry_run_metrics(
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {key: [] for key in _EVAL_METRIC_KEYS}
     episode_records: list[dict[str, object]] = []
-    use_random = _randomize_seeds(config)
+    use_random = _randomize_eval_seeds(config)
     rng = np.random.default_rng(None if use_random else 123)
 
     for eval_step in eval_steps:
@@ -1913,7 +2400,11 @@ def _simulate_dry_run_metrics(
             seed = (
                 None
                 if use_random
-                else int(config.seeds[idx % len(config.seeds)] if config.seeds else idx)
+                else _deterministic_eval_seed_for_episode(
+                    config,
+                    episode_idx=idx,
+                    scenario_cycle_length=1,
+                )
             )
             success = 1.0 if idx % 5 != 0 else 0.0
             collision = 0.0 if idx % 3 else 0.2
@@ -2012,12 +2503,10 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
 
 
 def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
-    """Apply seed configuration and warn when randomization is enabled."""
+    """Apply training seed configuration and warn when randomness overrides it."""
     if _randomize_seeds(config):
         if config.seeds:
-            logger.warning(
-                "randomize_seeds enabled; ignoring provided seeds for training/evaluation."
-            )
+            logger.warning("randomize_seeds enabled; ignoring provided seeds for training.")
     elif config.seeds:
         common.set_global_seed(int(config.seeds[0]))
 
@@ -2067,6 +2556,15 @@ def _build_training_notes(
     ]
     if _randomize_seeds(config):
         notes.append("randomize_seeds=true")
+    else:
+        notes.append("randomize_seeds=false")
+    if _randomize_eval_seeds(config):
+        notes.append("evaluation.randomize_seeds=true")
+    else:
+        notes.append("evaluation.randomize_seeds=false")
+    notes.append(
+        f"evaluation.scenario_config={config.evaluation.scenario_config or config.scenario_config}"
+    )
     if outputs.tensorboard_log is not None:
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     notes.append(f"startup_sec={outputs.startup_sec:.3f}")
@@ -2150,22 +2648,29 @@ def run_expert_training(
 
     scenario_definitions = load_scenarios(config.scenario_config)
     scenario_ctx = _resolve_scenario_context(config, scenario_definitions)
+    evaluation_ctx = _resolve_evaluation_context(
+        config,
+        training_scenario_definitions=scenario_definitions,
+    )
 
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
+    runtime_ctx = TrainingRuntimeContext(
+        run_id=run_id,
+        dry_run=dry_run,
+        resume_from=_resolve_resume_checkpoint(config=config, resume_from=resume_from),
+        config_path=config_path,
+    )
     eval_steps = _build_eval_steps(config.total_timesteps, config.evaluation.step_schedule)
-    resolved_resume_from = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
 
     outputs = _execute_training(
         config=config,
         scenario_ctx=scenario_ctx,
+        evaluation_ctx=evaluation_ctx,
         scenario_definitions=scenario_definitions,
         eval_steps=eval_steps,
-        run_id=run_id,
-        dry_run=dry_run,
-        resume_from=resolved_resume_from,
-        config_path=config_path,
+        runtime_ctx=runtime_ctx,
     )
 
     aggregates = _aggregate_metrics(outputs.metrics_raw)
@@ -2235,6 +2740,10 @@ def run_expert_training(
     episode_log_path = common.get_imitation_report_dir() / "episodes" / f"{run_id}.jsonl"
     _write_episode_log(episode_log_path, outputs.episode_records)
     eval_timeline_path = _write_eval_timeline(run_id=run_id, timeline=outputs.eval_timeline)
+    eval_per_scenario_path = _write_eval_per_scenario(
+        run_id=run_id,
+        rows=_per_scenario_eval_rows_from_episode_records(episode_records=outputs.episode_records),
+    )
 
     wall_clock_seconds = max(0.0, time.perf_counter() - start_time)
     perf_summary_path = _write_perf_summary(
@@ -2245,6 +2754,8 @@ def run_expert_training(
     )
     wall_clock_hours = wall_clock_seconds / 3600.0
     input_artifacts = [str(config.scenario_config)]
+    if evaluation_ctx.scenario_config != config.scenario_config:
+        input_artifacts.append(str(evaluation_ctx.scenario_config))
     if config.snqi_weights_path is not None:
         input_artifacts.append(str(config.snqi_weights_path))
     if config.snqi_baseline_path is not None:
@@ -2257,7 +2768,9 @@ def run_expert_training(
         metrics=aggregates,
         episode_log_path=episode_log_path,
         eval_timeline_path=eval_timeline_path,
+        eval_per_scenario_path=eval_per_scenario_path,
         perf_summary_path=perf_summary_path,
+        evaluation_scenario_config=evaluation_ctx.scenario_config,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
         scenario_coverage=scenario_coverage,

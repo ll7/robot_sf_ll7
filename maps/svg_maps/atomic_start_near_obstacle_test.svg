@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="20"
+   height="20"
+   viewBox="0 0 20 20"
+   version="1.1"
+   id="svg_atomic_start_near_obstacle_test"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g id="layer1" inkscape:label="Layer 1">
+    <rect x="0" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="19.5" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19.5" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <rect id="near_spawn_obstacle" x="3.4" y="8.0" width="2.0" height="4.0" style="fill:#000000" inkscape:label="obstacle" />
+
+    <rect id="robot_spawn_zone_0" x="1.5" y="9.0" width="1.0" height="2.0" style="fill:#ffdf00" inkscape:label="robot_spawn_zone_0" />
+    <rect id="robot_goal_zone_0" x="17.0" y="9.0" width="1.5" height="2.0" style="fill:#ff6c00" inkscape:label="robot_goal_zone_0" />
+    <path id="robot_route_0_0" d="M 2.0,10 6.0,13.5 17.75,10" style="fill:none;stroke:#0310b4;stroke-width:0.2" inkscape:label="robot_route_0_0" />
+  </g>
+</svg>

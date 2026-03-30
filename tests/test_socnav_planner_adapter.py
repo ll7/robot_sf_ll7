@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -15,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -237,10 +239,187 @@ def test_orca_responds_to_static_obstacle_in_grid(monkeypatch):
     v_free, w_free = adapter.plan(obs_free)
     obs_blocked = _with_occupancy_grid(
         _make_obs(goal=(5.0, 0.0), heading=0.0),
-        obstacle_cells=[(2, 3)],
+        obstacle_cells=[(1, 3), (2, 3)],
     )
     v_blocked, w_blocked = adapter.plan(obs_blocked)
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
+
+
+def test_hrvo_adapter_returns_finite_action():
+    """HRVO adapter should emit a bounded unicycle command."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, max_angular_speed=1.2))
+    obs = _make_obs_with_peds([(1.6, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    v, w = adapter.plan(obs)
+    vx, vy = adapter.plan_velocity_world(obs)
+    assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
+    assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+    assert np.isfinite(vx)
+    assert np.isfinite(vy)
+    assert abs(vy) > 1e-4
+
+
+def test_hrvo_builds_hybrid_apex_distinct_from_vo_and_rvo():
+    """HRVO should build an asymmetric apex instead of plain VO or midpoint RVO."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, hrvo_time_horizon=4.0))
+    obs = _make_obs_with_peds([(1.5, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    obs["pedestrians"]["velocities"][0] = np.array([-0.8, 0.0], dtype=np.float32)
+    robot_state, goal_state, ped_state = adapter._socnav_fields(obs)
+    robot_pos = np.asarray(robot_state["position"], dtype=float)
+    robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
+    goal = np.asarray(goal_state["current"], dtype=float)
+    preferred_velocity = adapter._ego_to_world(
+        adapter._preferred_velocity(
+            goal,
+            robot_pos,
+            robot_heading,
+            float(adapter.config.max_linear_speed),
+        ),
+        robot_heading,
+    )
+    ped_positions, ped_velocities, _ped_count, ped_radius = adapter._extract_pedestrians(ped_state)
+    ped_vel_world = ped_velocities.astype(float)
+    obstacles = adapter._build_hrvo_obstacles(
+        robot_velocity_world=np.zeros(2, dtype=float),
+        preferred_velocity_world=preferred_velocity,
+        other_positions=ped_positions - robot_pos[None, :],
+        other_velocities_world=ped_vel_world,
+        other_pref_velocities_world=ped_vel_world.copy(),
+        robot_radius=float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0]),
+        other_radii=np.full((ped_positions.shape[0],), float(ped_radius), dtype=float),
+        time_step=0.1,
+    )
+    assert len(obstacles) == 1
+    vo_apex = ped_vel_world[0]
+    rvo_apex = 0.5 * ped_vel_world[0]
+    assert not np.allclose(obstacles[0].apex, vo_apex)
+    assert not np.allclose(obstacles[0].apex, rvo_apex)
+    assert abs(float(obstacles[0].apex[1])) > 1e-4
+
+
+def test_make_hrvo_policy_wraps_hrvo_adapter():
+    """Convenience constructor should expose the HRVO adapter."""
+    policy = make_hrvo_policy(SocNavPlannerConfig(max_linear_speed=0.9))
+    obs = _make_obs_with_peds([(1.2, 0.0)], goal=(4.0, 0.0), heading=0.0)
+    v, w = policy.act(obs)
+    assert v >= 0.0
+    assert np.isfinite(w)
+
+
+def test_hrvo_responds_to_static_obstacle_in_grid():
+    """HRVO should extract occupied grid cells into static obstacle constraints."""
+    adapter = HRVOPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, orca_obstacle_range=4.0))
+    obs_blocked = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(1, 3), (2, 3)],
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs_blocked,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] > 0
+    assert centers.shape[0] == radii.shape[0]
+
+
+def test_hrvo_coalesces_adjacent_static_obstacle_cells():
+    """Adjacent occupied cells should be reduced before entering the HRVO solve."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 1), (2, 2), (2, 3)],
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] < 3
+    assert centers.shape[0] == radii.shape[0]
+    assert centers.shape[0] > 0
+
+
+def test_hrvo_extracts_bound_exact_static_obstacle_points():
+    """HRVO should use bound exact obstacle geometry even without an occupancy grid."""
+    adapter = HRVOPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            orca_obstacle_range=4.0,
+            orca_obstacle_max_points=10,
+        )
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+    adapter.bind_static_obstacle_points(
+        np.array([[1.5, 0.0], [1.75, 0.0], [2.0, 0.0]], dtype=float),
+        spacing=0.25,
+    )
+    centers, radii = adapter._extract_obstacles_from_grid(
+        obs,
+        np.array([0.0, 0.0], dtype=float),
+        0.0,
+    )
+    assert centers.shape[0] > 0
+    assert centers.shape[0] == radii.shape[0]
+    assert np.all(centers[:, 0] > 1.0)
+
+
+def test_orca_head_on_bias_breaks_straight_symmetry(monkeypatch):
+    """Head-on bias should inject a turn instead of preserving a straight collision course."""
+    adapter = _orca_fallback_adapter(
+        monkeypatch,
+        SocNavPlannerConfig(
+            orca_head_on_bias=0.5,
+            orca_symmetry_bias=0.3,
+            orca_commit_distance=2.5,
+        ),
+    )
+    obs = _make_obs_with_peds([(1.1, 0.0)], goal=(5.0, 0.0), heading=0.0)
+    _v, w = adapter.plan(obs)
+    assert abs(w) > 1e-3
+
+
+def test_orca_stall_commit_bias_turns_when_forward_corridor_is_blocked(monkeypatch):
+    """Repeated low-progress blocked steps should trigger persistent side commitment."""
+    adapter = _orca_fallback_adapter(
+        monkeypatch,
+        SocNavPlannerConfig(
+            orca_stall_cycles_before_commit=1,
+            orca_commit_persistence_steps=4,
+            orca_commit_lateral_gain=0.7,
+            orca_side_probe_offset=0.6,
+            orca_forward_probe_distance=1.0,
+        ),
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3), (2, 2)],
+    )
+    obs["robot"]["speed"] = np.array([0.0], dtype=np.float32)
+    _v1, w1 = adapter.plan(obs)
+    _v2, w2 = adapter.plan(obs)
+    assert abs(w1) > 1e-3 or abs(w2) > 1e-3
+    assert adapter._commit_side_ttl > 0
+
+
+def test_orca_reset_clears_commit_and_stall_state(monkeypatch):
+    """Episode reset should clear ORCA's sticky stall/commit state."""
+    adapter = _orca_fallback_adapter(monkeypatch)
+    adapter._stall_cycles = 3
+    adapter._last_goal_distance = 1.4
+    adapter._commit_side = -1
+    adapter._commit_side_ttl = 7
+
+    adapter.reset()
+
+    assert adapter._stall_cycles == 0
+    assert adapter._last_goal_distance is None
+    assert adapter._commit_side == 0
+    assert adapter._commit_side_ttl == 0
 
 
 def test_orca_adapter_requires_rvo2_when_fallback_disabled(monkeypatch):
@@ -548,6 +727,109 @@ def test_prediction_adapter_progress_escape_keeps_lower_cost_rollout(monkeypatch
     )
     v, w = adapter.plan(_make_obs(goal=(4.0, 0.0), heading=0.0))
     assert (v, w) == (0.2, 0.0)
+
+
+def test_prediction_adapter_sequence_search_is_deterministic(monkeypatch):
+    """Sequence search should stay deterministic for the same observation and config."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_sequence_search_enabled=True,
+        predictive_sequence_segments=3,
+        predictive_sequence_branch_factor=4,
+        predictive_sequence_beam_width=6,
+        predictive_candidate_speeds=(0.0, 0.4, 0.8),
+        predictive_candidate_heading_deltas=(-np.pi / 6, 0.0, np.pi / 6),
+    )
+    obs = _make_obs_with_peds([(1.2, 0.3), (2.0, -0.4)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
+
+
+def test_prediction_adapter_sequence_search_keeps_progress_escape(monkeypatch):
+    """Sequence search should still allow progress-escape recovery in clear space."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        max_linear_speed=1.0,
+        predictive_sequence_search_enabled=True,
+        predictive_candidate_speeds=(0.0,),
+        predictive_candidate_heading_deltas=(0.0,),
+        predictive_progress_escape_enabled=True,
+        predictive_progress_escape_distance=1.0,
+        predictive_progress_escape_min_speed_ratio=0.4,
+        predictive_progress_escape_clearance_margin=0.1,
+    )
+    obs = _make_obs(goal=(4.0, 0.0), heading=0.0)
+    v, _w = PredictionPlannerAdapter(cfg, allow_fallback=True).plan(obs)
+    assert v >= 0.39
+
+
+def test_prediction_adapter_probabilistic_risk_mode_is_deterministic(monkeypatch):
+    """Probabilistic rollout scoring should stay deterministic for a fixed seed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_uncertainty_mode="heuristic_gaussian",
+        predictive_risk_sample_count=4,
+        predictive_risk_seed=13,
+        predictive_risk_objective="cvar",
+        predictive_risk_cvar_alpha=0.5,
+        predictive_candidate_speeds=(0.0, 0.3, 0.6),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+    )
+    obs = _make_obs_with_peds([(1.3, 0.4), (2.1, -0.2)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
+
+
+def test_prediction_adapter_cvar_objective_penalizes_worse_tail() -> None:
+    """CVaR aggregation should be strictly more conservative than the mean on skewed samples."""
+    cvar_cfg = SocNavPlannerConfig(
+        predictive_risk_objective="cvar",
+        predictive_risk_cvar_alpha=0.5,
+    )
+    mean_cfg = SocNavPlannerConfig(predictive_risk_objective="mean")
+    cvar_adapter = PredictionPlannerAdapter(cvar_cfg, allow_fallback=True)
+    mean_adapter = PredictionPlannerAdapter(mean_cfg, allow_fallback=True)
+    costs = [1.0, 2.0, 10.0, 20.0]
+    cvar = cvar_adapter._aggregate_risk_costs(costs)
+    mean = mean_adapter._aggregate_risk_costs(costs)
+    assert cvar > mean
+
+
+def test_prediction_adapter_mcts_mode_is_deterministic(monkeypatch):
+    """MCTS-lite search should stay deterministic under a fixed planner seed."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_mcts_enabled=True,
+        predictive_sequence_segments=3,
+        predictive_mcts_iterations=24,
+        predictive_mcts_branch_factor=3,
+        predictive_mcts_rollout_count=2,
+        predictive_risk_seed=5,
+        predictive_candidate_speeds=(0.0, 0.35, 0.7),
+        predictive_candidate_heading_deltas=(-np.pi / 6, 0.0, np.pi / 6),
+    )
+    obs = _make_obs_with_peds([(1.0, 0.25), (1.8, -0.3)], goal=(4.0, 0.0), heading=0.0)
+    planner_a = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    planner_b = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    assert planner_a.plan(obs) == planner_b.plan(obs)
 
 
 def test_policy_constructors():

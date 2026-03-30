@@ -26,7 +26,20 @@ from shapely.geometry import LineString, Polygon
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.fallback_policy import (
+    availability_payload,
+    summarize_benchmark_availability,
+)
+from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode as _resolve_benchmark_execution_mode,
+)
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.seed_variance import (
+    build_seed_episode_rows,
+    build_seed_variability_csv_rows,
+    build_seed_variability_rows,
+    build_statistical_sufficiency_rows,
+)
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     calibrate_weights,
@@ -38,7 +51,12 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     sanitize_baseline_stats,
 )
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
-from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback, load_optional_json
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    episode_metric_value,
+    load_optional_json,
+)
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
     get_artifact_category_path,
@@ -62,6 +80,13 @@ _REPORT_METRICS: tuple[str, ...] = (
     "path_efficiency",
     "comfort_exposure",
     "jerk_mean",
+    "snqi",
+)
+_SEED_VARIABILITY_METRICS: tuple[str, ...] = (
+    "success",
+    "collisions",
+    "near_misses",
+    "time_to_goal_norm",
     "snqi",
 )
 _PLANNER_GROUPS = {"core", "experimental"}
@@ -122,6 +147,8 @@ class SnqiContractConfig:
     rank_alignment_fail_threshold: float = 0.3
     outcome_separation_warn_threshold: float = 0.05
     outcome_separation_fail_threshold: float = 0.0
+    max_component_dominance_warn_threshold: float = 0.24
+    max_component_dominance_fail_threshold: float = 0.27
     calibration_seed: int = 123
     calibration_trials: int = 3000
 
@@ -185,6 +212,24 @@ def _hash_payload(payload: Any) -> str:
     """
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(encoded).hexdigest()[:12]
+
+
+def _sha256_payload(payload: Any) -> str:
+    """Return a stable SHA-256 digest for a JSON-serializable payload."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    """Return a stable SHA-256 digest for a file."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise RuntimeError(f"Failed to hash file '{path}': {exc}") from exc
+    return digest.hexdigest()
 
 
 def _jsonable(value: Any) -> Any:
@@ -573,6 +618,37 @@ def _metric_ci(block: dict[str, Any], metric: str) -> tuple[float, float]:
         return (float("nan"), float("nan"))
 
 
+def _episode_metric_mean(records: list[dict[str, Any]], metric: str) -> float:
+    """Return a mean metric value directly from episode records."""
+    values: list[float] = []
+    for record in records:
+        value = episode_metric_value(record, metric)
+        if value is None or not math.isfinite(value):
+            continue
+        values.append(value)
+    if not values:
+        return float("nan")
+    return float(sum(values) / len(values))
+
+
+def _episode_metric_ci(records: list[dict[str, Any]], metric: str) -> tuple[float, float]:
+    """Return CI placeholders for metrics recomputed directly from episode records.
+
+    The aggregate summary block can contain stale CI values when means are
+    corrected from per-episode termination semantics. Emit ``nan`` CI bounds in
+    that case rather than pairing corrected means with misleading intervals.
+    """
+    values: list[float] = []
+    for record in records:
+        value = episode_metric_value(record, metric)
+        if value is None or not math.isfinite(value):
+            continue
+        values.append(value)
+    if not values:
+        return (float("nan"), float("nan"))
+    return (float("nan"), float("nan"))
+
+
 def _safe_float(value: float) -> str:
     """Format a float for report tables with NaN handling.
 
@@ -590,27 +666,15 @@ def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     Returns:
         Resolved execution mode string, or ``"unknown"`` when unavailable.
     """
-    if not isinstance(algorithm_metadata_contract, dict):
-        return "unknown"
+    return _resolve_benchmark_execution_mode(algorithm_metadata_contract)
 
-    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
-    if isinstance(planner_kinematics, dict):
-        execution_mode = planner_kinematics.get("execution_mode")
-        if execution_mode is not None:
-            return str(execution_mode)
 
-    # Backward-compatible fallback for older payloads that wrote this at top-level.
-    execution_mode = algorithm_metadata_contract.get("execution_mode")
-    if execution_mode is not None:
-        return str(execution_mode)
-
-    adapter_impact = algorithm_metadata_contract.get("adapter_impact")
-    if isinstance(adapter_impact, dict):
-        execution_mode = adapter_impact.get("execution_mode")
-        if execution_mode is not None:
-            return str(execution_mode)
-
-    return "unknown"
+def _normalized_algorithm_metadata_contract(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return the algorithm metadata contract as a dictionary."""
+    contract = summary.get("algorithm_metadata_contract")
+    if isinstance(contract, dict):
+        return contract
+    return {}
 
 
 def _sanitize_git_remote(remote: str) -> str:
@@ -711,6 +775,12 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
         "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
         "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+        "max_component_dominance_warn_threshold": (
+            cfg.snqi_contract.max_component_dominance_warn_threshold
+        ),
+        "max_component_dominance_fail_threshold": (
+            cfg.snqi_contract.max_component_dominance_fail_threshold
+        ),
     }
     for field_name, value in threshold_values.items():
         if not math.isfinite(value):
@@ -728,6 +798,14 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
     ):
         raise ValueError(
             "snqi_contract.outcome_separation_fail_threshold must be <= outcome_separation_warn_threshold"
+        )
+    if (
+        cfg.snqi_contract.max_component_dominance_fail_threshold
+        < cfg.snqi_contract.max_component_dominance_warn_threshold
+    ):
+        raise ValueError(
+            "snqi_contract.max_component_dominance_fail_threshold must be >= "
+            "max_component_dominance_warn_threshold"
         )
 
     if cfg.paper_facing:
@@ -936,6 +1014,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             outcome_separation_fail_threshold=float(
                 snqi_contract_raw.get("outcome_separation_fail_threshold", 0.0)
             ),
+            max_component_dominance_warn_threshold=float(
+                snqi_contract_raw.get("max_component_dominance_warn_threshold", 0.24)
+            ),
+            max_component_dominance_fail_threshold=float(
+                snqi_contract_raw.get("max_component_dominance_fail_threshold", 0.27)
+            ),
             calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
             calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
         ),
@@ -1069,6 +1153,116 @@ def _write_matrix_summary_artifacts(
     _write_json(json_path, payload)
     _write_csv(csv_path, rows)
     return json_path, csv_path
+
+
+def _build_seed_variability_payload(
+    records: list[dict[str, Any]],
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+    config_hash: str,
+    git_hash: str,
+    seed_policy: dict[str, Any],
+    confidence_settings: dict[str, Any],
+    source_paths: dict[str, Any],
+) -> dict[str, Any]:
+    """Build paper-facing seed-variability export payload from campaign episodes.
+
+    Returns:
+        JSON-serializable payload for ``seed_variability_by_scenario.json``.
+    """
+    rows = build_seed_variability_rows(
+        records,
+        metrics=_SEED_VARIABILITY_METRICS,
+        campaign_id=campaign_id,
+        config_hash=config_hash,
+        git_hash=git_hash,
+        seed_policy=seed_policy,
+        confidence_settings=confidence_settings,
+    )
+    return {
+        "schema_version": "benchmark-seed-variability-by-scenario.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "metrics": list(_SEED_VARIABILITY_METRICS),
+        "confidence": dict(confidence_settings),
+        "source": source_paths,
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_seed_variability_artifacts(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> tuple[Path, Path]:
+    """Write paper-facing seed-variability JSON and CSV artifacts.
+
+    Returns:
+        Tuple of ``(json_path, csv_path)`` for the generated artifacts.
+    """
+    json_path = reports_dir / "seed_variability_by_scenario.json"
+    csv_path = reports_dir / "seed_variability_by_scenario.csv"
+    _write_json(json_path, payload)
+    csv_rows = build_seed_variability_csv_rows(
+        payload.get("rows") or [],
+        metrics=payload.get("metrics") or [],
+    )
+    _write_csv(csv_path, csv_rows)
+    return json_path, csv_path
+
+
+def _write_seed_episode_rows_artifact(
+    reports_dir: Path,
+    rows: list[dict[str, Any]],
+) -> Path:
+    """Write flat planner-aware per-episode seed traceability CSV.
+
+    Returns:
+        Path to the generated CSV artifact.
+    """
+    csv_path = reports_dir / "seed_episode_rows.csv"
+    _write_csv(csv_path, rows)
+    return csv_path
+
+
+def _build_statistical_sufficiency_payload(
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+    seed_variability_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a thin statistical-sufficiency summary from seed-variability rows.
+
+    Returns:
+        JSON-serializable statistical sufficiency payload.
+    """
+    rows = build_statistical_sufficiency_rows(
+        seed_variability_payload.get("rows") or [],
+        metrics=seed_variability_payload.get("metrics") or [],
+    )
+    return {
+        "schema_version": "benchmark-seed-statistical-sufficiency.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "confidence": dict(seed_variability_payload.get("confidence") or {}),
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_statistical_sufficiency_artifact(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> Path:
+    """Write statistical sufficiency JSON artifact.
+
+    Returns:
+        Path to the generated JSON artifact.
+    """
+    json_path = reports_dir / "statistical_sufficiency.json"
+    _write_json(json_path, payload)
+    return json_path
 
 
 def _scenario_family_from_scenario(scenario: dict[str, Any]) -> str:
@@ -1236,6 +1430,12 @@ def _load_comparability_mapping(path: Path) -> dict[str, Any]:
         raise ValueError("Comparability mapping requires 'metric_comparability' mapping")
     _validate_metric_map(metric_map)
 
+    planner_key_map = payload.get("planner_key_mapping")
+    if planner_key_map is not None:
+        if not isinstance(planner_key_map, dict):
+            raise ValueError("Comparability mapping 'planner_key_mapping' must be a mapping")
+        _validate_planner_key_map(planner_key_map)
+
     extensions = payload.get("amv_specific_extensions", [])
     if not isinstance(extensions, list):
         raise ValueError("Comparability mapping 'amv_specific_extensions' must be a list")
@@ -1266,6 +1466,18 @@ def _validate_metric_map(metric_map: dict[str, Any]) -> None:
             raise ValueError(
                 f"metric_comparability[{metric}] classification must be one of comparable|proxy|amv_specific"
             )
+
+
+def _validate_planner_key_map(planner_key_map: dict[str, Any]) -> None:
+    """Validate planner-key mapping payload."""
+    for key, value in planner_key_map.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("planner_key_mapping entries must be non-empty string->string")
 
 
 def _markdown_rows_from_mapping_rows(
@@ -1302,6 +1514,23 @@ def _build_comparability_summary(
     mapping = _load_comparability_mapping(mapping_path)
     family_map = mapping["scenario_family_mapping"]
     metric_map = mapping["metric_comparability"]
+    planner_key_map = mapping.get("planner_key_mapping")
+    if cfg.paper_facing:
+        if not isinstance(planner_key_map, dict):
+            raise ValueError(
+                "Comparability mapping requires 'planner_key_mapping' mapping for paper-facing campaigns"
+            )
+        missing_planner_keys = [
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled and planner.key not in planner_key_map
+        ]
+        if missing_planner_keys:
+            missing = ", ".join(sorted(missing_planner_keys))
+            raise ValueError(
+                "Comparability mapping is missing planner_key_mapping entries for enabled planners: "
+                f"{missing}"
+            )
 
     family_counts: dict[str, int] = {}
     for scenario in scenarios:
@@ -1422,6 +1651,17 @@ def _write_snqi_diagnostics_artifacts(
         f"- Rank alignment (Spearman): `{payload.get('rank_alignment_spearman', 0.0):.4f}`",
         f"- Outcome separation: `{payload.get('outcome_separation', 0.0):.4f}`",
         f"- Objective score: `{payload.get('objective_score', 0.0):.4f}`",
+        f"- Dominant component: `{payload.get('dominant_component', 'unknown')}`",
+        f"- Dominant component mean |contribution|: `{payload.get('dominant_component_mean_abs', 0.0):.4f}`",
+        "",
+        "## SNQI Assets",
+        "",
+        f"- Weights path: `{payload.get('weights_path', 'derived')}`",
+        f"- Weights version: `{payload.get('weights_version', 'unknown')}`",
+        f"- Weights SHA-256: `{payload.get('weights_sha256', 'unknown')}`",
+        f"- Baseline path: `{payload.get('baseline_path', 'derived')}`",
+        f"- Baseline version: `{payload.get('baseline_version', 'unknown')}`",
+        f"- Baseline SHA-256: `{payload.get('baseline_sha256', 'unknown')}`",
         "",
         "## Baseline Normalization",
         "",
@@ -1533,6 +1773,12 @@ def prepare_campaign_preflight(
             "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
             "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
             "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
+            "max_component_dominance_warn_threshold": (
+                cfg.snqi_contract.max_component_dominance_warn_threshold
+            ),
+            "max_component_dominance_fail_threshold": (
+                cfg.snqi_contract.max_component_dominance_fail_threshold
+            ),
             "calibration_seed": cfg.snqi_contract.calibration_seed,
             "calibration_trials": cfg.snqi_contract.calibration_trials,
         },
@@ -1732,12 +1978,13 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(
+def _planner_report_row(  # noqa: C901
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
     *,
     kinematics: str,
+    records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one campaign table row for a planner run.
 
@@ -1754,9 +2001,12 @@ def _planner_report_row(
     collision_ci = _metric_ci(metric_block, "collisions")
     snqi_ci = _metric_ci(metric_block, "snqi")
 
-    execution_mode = _resolve_execution_mode(
-        summary.get("algorithm_metadata_contract"),
-    )
+    algorithm_metadata_contract = _normalized_algorithm_metadata_contract(summary)
+    availability = summarize_benchmark_availability(summary)
+    execution_mode = availability.execution_mode
+    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
+    if not isinstance(planner_kinematics, dict):
+        planner_kinematics = {}
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
     learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
     contract_status = "not_applicable"
@@ -1771,13 +2021,49 @@ def _planner_report_row(
         if isinstance(warning_list, list):
             contract_warnings = len(warning_list)
     status = str(summary.get("status", "unknown"))
-    readiness_status = "native"
-    if preflight_status == "fallback":
-        readiness_status = "fallback"
-    elif preflight_status == "skipped" or status == "failed":
-        readiness_status = "degraded"
-    elif execution_mode in {"adapter", "mixed"}:
-        readiness_status = "adapter"
+    readiness_status = availability.readiness_status
+
+    resolved_metrics = {
+        "success_mean": _metric_mean(metric_block, "success"),
+        "collisions_mean": _metric_mean(metric_block, "collisions"),
+        "ped_collision_count_mean": _metric_mean(metric_block, "ped_collision_count"),
+        "obstacle_collision_count_mean": _metric_mean(metric_block, "obstacle_collision_count"),
+        "total_collision_count_mean": _metric_mean(metric_block, "total_collision_count"),
+        "near_misses_mean": _metric_mean(metric_block, "near_misses"),
+        "time_to_goal_norm_mean": _metric_mean(metric_block, "time_to_goal_norm"),
+        "path_efficiency_mean": _metric_mean(metric_block, "path_efficiency"),
+        "comfort_exposure_mean": _metric_mean(metric_block, "comfort_exposure"),
+        "jerk_mean": _metric_mean(metric_block, "jerk_mean"),
+        "snqi_mean": _metric_mean(metric_block, "snqi"),
+    }
+    if records:
+        metric_sources = {
+            "success_mean": "success",
+            "collisions_mean": "collisions",
+            "ped_collision_count_mean": "ped_collision_count",
+            "obstacle_collision_count_mean": "obstacle_collision_count",
+            "total_collision_count_mean": "total_collision_count",
+            "near_misses_mean": "near_misses",
+            "time_to_goal_norm_mean": "time_to_goal_norm",
+            "path_efficiency_mean": "path_efficiency",
+            "comfort_exposure_mean": "comfort_exposure",
+            "jerk_mean": "jerk_mean",
+            "snqi_mean": "snqi",
+        }
+        for field_name, metric_name in metric_sources.items():
+            if field_name in {
+                "success_mean",
+                "collisions_mean",
+                "total_collision_count_mean",
+            }:
+                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+                if field_name == "success_mean":
+                    success_ci = _episode_metric_ci(records, metric_name)
+                elif field_name == "collisions_mean":
+                    collision_ci = _episode_metric_ci(records, metric_name)
+                continue
+            if not math.isfinite(resolved_metrics[field_name]):
+                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
 
     row = {
         "planner_key": planner.key,
@@ -1791,21 +2077,19 @@ def _planner_report_row(
         "runtime_sec": _safe_float(summary.get("runtime_sec")),
         "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
         "failed_jobs": int(summary.get("failed_jobs", 0)),
-        "success_mean": _safe_float(_metric_mean(metric_block, "success")),
-        "collisions_mean": _safe_float(_metric_mean(metric_block, "collisions")),
-        "ped_collision_count_mean": _safe_float(_metric_mean(metric_block, "ped_collision_count")),
+        "success_mean": _safe_float(resolved_metrics["success_mean"]),
+        "collisions_mean": _safe_float(resolved_metrics["collisions_mean"]),
+        "ped_collision_count_mean": _safe_float(resolved_metrics["ped_collision_count_mean"]),
         "obstacle_collision_count_mean": _safe_float(
-            _metric_mean(metric_block, "obstacle_collision_count")
+            resolved_metrics["obstacle_collision_count_mean"]
         ),
-        "total_collision_count_mean": _safe_float(
-            _metric_mean(metric_block, "total_collision_count")
-        ),
-        "near_misses_mean": _safe_float(_metric_mean(metric_block, "near_misses")),
-        "time_to_goal_norm_mean": _safe_float(_metric_mean(metric_block, "time_to_goal_norm")),
-        "path_efficiency_mean": _safe_float(_metric_mean(metric_block, "path_efficiency")),
-        "comfort_exposure_mean": _safe_float(_metric_mean(metric_block, "comfort_exposure")),
-        "jerk_mean": _safe_float(_metric_mean(metric_block, "jerk_mean")),
-        "snqi_mean": _safe_float(_metric_mean(metric_block, "snqi")),
+        "total_collision_count_mean": _safe_float(resolved_metrics["total_collision_count_mean"]),
+        "near_misses_mean": _safe_float(resolved_metrics["near_misses_mean"]),
+        "time_to_goal_norm_mean": _safe_float(resolved_metrics["time_to_goal_norm_mean"]),
+        "path_efficiency_mean": _safe_float(resolved_metrics["path_efficiency_mean"]),
+        "comfort_exposure_mean": _safe_float(resolved_metrics["comfort_exposure_mean"]),
+        "jerk_mean": _safe_float(resolved_metrics["jerk_mean"]),
+        "snqi_mean": _safe_float(resolved_metrics["snqi_mean"]),
         "success_ci_low": _safe_float(success_ci[0]),
         "success_ci_high": _safe_float(success_ci[1]),
         "collision_ci_low": _safe_float(collision_ci[0]),
@@ -1813,7 +2097,16 @@ def _planner_report_row(
         "snqi_ci_low": _safe_float(snqi_ci[0]),
         "snqi_ci_high": _safe_float(snqi_ci[1]),
         "execution_mode": execution_mode,
+        "execution_detail": str(planner_kinematics.get("execution_detail", "unspecified")),
+        "planner_command_space": str(planner_kinematics.get("planner_command_space", "unknown")),
+        "benchmark_command_space": str(
+            planner_kinematics.get("benchmark_command_space", "unknown")
+        ),
+        "projection_policy": str(planner_kinematics.get("projection_policy", "unknown")),
         "readiness_status": readiness_status,
+        "availability_status": availability.availability_status,
+        "benchmark_success": str(availability.benchmark_success).lower(),
+        "availability_reason": availability.availability_reason or "",
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
         "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
@@ -1821,7 +2114,7 @@ def _planner_report_row(
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
     }
-    feasibility = (summary.get("algorithm_metadata_contract") or {}).get("kinematics_feasibility")
+    feasibility = algorithm_metadata_contract.get("kinematics_feasibility")
     if isinstance(feasibility, dict):
         row["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0) or 0)
         row["projection_rate"] = _safe_float(float(feasibility.get("projection_rate", 0.0) or 0.0))
@@ -1892,7 +2185,6 @@ def _build_breakdown_rows(  # noqa: C901
                 continue
             scenario_id = str(record.get("scenario_id", "unknown"))
             family = _scenario_family(record)
-            metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
             scenario_key = (planner_key, algo, scenario_id, family)
             family_key = (planner_key, algo, family)
 
@@ -1918,11 +2210,7 @@ def _build_breakdown_rows(  # noqa: C901
             scenario_bucket["episodes"] += 1
             family_bucket["episodes"] += 1
             for metric in _REPORT_METRICS:
-                raw = metrics.get(metric)
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    value = None
+                value = episode_metric_value(record, metric)
                 if value is not None and not math.isfinite(value):
                     value = None
                 _add_metric(scenario_bucket, metric, value)
@@ -1983,7 +2271,7 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
+def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     path: Path, payload: dict[str, Any]
 ) -> None:
     """Write a human-readable campaign report in Markdown."""
@@ -2042,15 +2330,19 @@ def _write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
     if rows:
         lines.append(
-            "| planner | planner group | execution mode | readiness status | tier | preflight | learned contract | run status |"
+            "| planner | planner group | execution mode | execution detail | planner cmd | benchmark cmd | projection policy | readiness status | tier | preflight | learned contract | run status |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
         for row in rows:
             lines.append(
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
                 f"{_escape_markdown_cell(row.get('planner_group'))} | "
                 f"{_escape_markdown_cell(row.get('execution_mode'))} | "
+                f"{_escape_markdown_cell(row.get('execution_detail'))} | "
+                f"{_escape_markdown_cell(row.get('planner_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('benchmark_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('projection_policy'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_status'))} | "
                 f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
                 f"{_escape_markdown_cell(row.get('preflight_status'))} | "
@@ -2225,6 +2517,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     resolved_seeds = list(prepared["resolved_seeds"])
     scenario_hash = str(prepared["scenario_hash"])
     git_meta = dict(prepared["git_meta"])
+    config_hash = str(prepared["config_hash"])
 
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -2232,6 +2525,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
+    seed_variability_records: list[dict[str, Any]] = []
     kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     stop_requested = False
 
@@ -2309,11 +2603,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
-                preflight_status = str((summary.get("preflight") or {}).get("status", "")).lower()
-                if preflight_status == "skipped":
-                    status = "skipped"
-                elif int(summary.get("failed_jobs", 0)) > 0:
+                availability = summarize_benchmark_availability(summary)
+                if availability.availability_status == "not_available":
+                    status = "not_available"
+                elif availability.availability_status == "partial-failure":
                     status = "partial-failure"
+                elif availability.availability_status == "failed":
+                    status = "failed"
             except Exception as exc:
                 status = "failed"
                 summary = {
@@ -2339,10 +2635,20 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
             )
             summary["kinematics"] = kinematics
+            summary["benchmark_availability"] = availability_payload(summary)
             _write_json(planner_dir / "summary.json", summary)
 
+            records: list[dict[str, Any]] = []
             if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
+                if status == "ok":
+                    for record in records:
+                        annotated = dict(record)
+                        annotated["planner_key"] = planner.key
+                        annotated["planner_group"] = planner.planner_group
+                        annotated["benchmark_profile"] = planner.benchmark_profile
+                        annotated["kinematics"] = kinematics
+                        seed_variability_records.append(annotated)
                 try:
                     aggregates = compute_aggregates_with_ci(
                         records,
@@ -2356,7 +2662,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                         f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
                     )
 
-            row = _planner_report_row(planner, summary, aggregates, kinematics=kinematics)
+            row = _planner_report_row(
+                planner,
+                summary,
+                aggregates,
+                kinematics=kinematics,
+                records=records,
+            )
             planner_rows.append(row)
 
             run_entries.append(
@@ -2389,7 +2701,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 },
             )
 
-            if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
+            if status in {"failed", "partial-failure", "not_available"} and cfg.stop_on_failure:
                 logger.warning(
                     "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
                     planner.key,
@@ -2403,6 +2715,20 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                             f"'{planner.key}' ({kinematics}) had partial failures "
                             f"({int(summary.get('failed_jobs', 0))} failed jobs); "
                             "stop_on_failure=true"
+                        ),
+                    )
+                elif status == "not_available":
+                    availability_reason = (
+                        (summary.get("benchmark_availability") or {}).get("availability_reason")
+                        if isinstance(summary.get("benchmark_availability"), dict)
+                        else None
+                    )
+                    warnings.append(
+                        (
+                            "Campaign halted early: planner "
+                            f"'{planner.key}' ({kinematics}) was not available"
+                            + (f" ({availability_reason})" if availability_reason else "")
+                            + "; stop_on_failure=true"
                         ),
                     )
                 stop_requested = True
@@ -2428,6 +2754,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "kinematics",
             "execution_mode",
             "readiness_status",
+            "availability_status",
+            "benchmark_success",
+            "availability_reason",
             "readiness_tier",
             "preflight_status",
             "learned_policy_contract_status",
@@ -2642,6 +2971,55 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
     total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
+    benchmark_success = len(run_entries) > 0 and successful_runs == len(run_entries)
+    confidence_settings = {
+        "method": "bootstrap_mean_over_seed_means",
+        "confidence": float(cfg.bootstrap_confidence),
+        "bootstrap_samples": int(cfg.bootstrap_samples),
+        "bootstrap_seed": int(cfg.bootstrap_seed),
+    }
+    successful_seed_run_entries = [
+        entry
+        for entry in run_entries
+        if str(entry.get("status", "")) == "ok" and str(entry.get("episodes_path", "")).strip()
+    ]
+    seed_source_paths = {
+        "campaign_manifest_path": _repo_relative(campaign_root / "campaign_manifest.json"),
+        "run_meta_path": _repo_relative(campaign_root / "run_meta.json"),
+        "episodes_paths": [
+            _repo_relative(campaign_root / str(entry.get("episodes_path", "")))
+            for entry in successful_seed_run_entries
+        ],
+    }
+    seed_variability_payload = _build_seed_variability_payload(
+        seed_variability_records,
+        campaign_id=campaign_id,
+        generated_at_utc=campaign_finished_at_utc,
+        config_hash=config_hash,
+        git_hash=git_meta.get("commit", "unknown"),
+        seed_policy={
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "resolved_seeds": list(resolved_seeds),
+        },
+        confidence_settings=confidence_settings,
+        source_paths=seed_source_paths,
+    )
+    seed_variability_json_path, seed_variability_csv_path = _write_seed_variability_artifacts(
+        reports_dir,
+        seed_variability_payload,
+    )
+    seed_episode_rows = build_seed_episode_rows(seed_variability_records)
+    seed_episode_rows_csv_path = _write_seed_episode_rows_artifact(reports_dir, seed_episode_rows)
+    statistical_sufficiency_payload = _build_statistical_sufficiency_payload(
+        campaign_id=campaign_id,
+        generated_at_utc=campaign_finished_at_utc,
+        seed_variability_payload=seed_variability_payload,
+    )
+    statistical_sufficiency_json_path = _write_statistical_sufficiency_artifact(
+        reports_dir,
+        statistical_sufficiency_payload,
+    )
     release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
     repository_url = cfg.repository_url.rstrip("/")
@@ -2668,6 +3046,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         rank_alignment_fail=cfg.snqi_contract.rank_alignment_fail_threshold,
         outcome_separation_warn=cfg.snqi_contract.outcome_separation_warn_threshold,
         outcome_separation_fail=cfg.snqi_contract.outcome_separation_fail_threshold,
+        max_component_dominance_warn=cfg.snqi_contract.max_component_dominance_warn_threshold,
+        max_component_dominance_fail=cfg.snqi_contract.max_component_dominance_fail_threshold,
     )
     contract_eval = evaluate_snqi_contract(
         planner_rows,
@@ -2688,6 +3068,22 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         weights=configured_weights,
         baseline=baseline_for_eval,
     )
+    weights_path = (
+        _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
+    )
+    baseline_path = (
+        _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
+    )
+    weights_sha256 = (
+        _sha256_file(cfg.snqi_weights_path)
+        if cfg.snqi_weights_path is not None
+        else _sha256_payload(configured_weights)
+    )
+    baseline_sha256 = (
+        _sha256_file(cfg.snqi_baseline_path)
+        if cfg.snqi_baseline_path is not None
+        else _sha256_payload(baseline_for_eval)
+    )
     snqi_diagnostics_payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",
         "campaign_id": campaign_id,
@@ -2698,12 +3094,26 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "rank_alignment_spearman": contract_eval.rank_alignment_spearman,
         "outcome_separation": contract_eval.outcome_separation,
         "objective_score": contract_eval.objective_score,
+        "dominant_component": contract_eval.dominant_component,
+        "dominant_component_mean_abs": contract_eval.dominant_component_mean_abs,
         "thresholds": {
             "rank_alignment_warn": cfg.snqi_contract.rank_alignment_warn_threshold,
             "rank_alignment_fail": cfg.snqi_contract.rank_alignment_fail_threshold,
             "outcome_separation_warn": cfg.snqi_contract.outcome_separation_warn_threshold,
             "outcome_separation_fail": cfg.snqi_contract.outcome_separation_fail_threshold,
+            "max_component_dominance_warn": cfg.snqi_contract.max_component_dominance_warn_threshold,
+            "max_component_dominance_fail": cfg.snqi_contract.max_component_dominance_fail_threshold,
         },
+        "weights_path": weights_path,
+        "weights_version": (
+            cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+        ),
+        "weights_sha256": weights_sha256,
+        "baseline_path": baseline_path,
+        "baseline_version": (
+            cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
+        ),
+        "baseline_sha256": baseline_sha256,
         "baseline_source": baseline_source,
         "baseline_adjustments": baseline_adjustments,
         "baseline_for_eval": baseline_for_eval,
@@ -2753,6 +3163,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "benchmark_success": benchmark_success,
             "paper_interpretation_profile": cfg.paper_interpretation_profile,
             "kinematics_matrix": list(kinematics_matrix),
             "holonomic_command_mode": cfg.holonomic_command_mode,
@@ -2776,12 +3187,18 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_weights_version": (
                 cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
             ),
+            "snqi_weights_sha256": weights_sha256,
             "snqi_baseline_version": (
                 cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
             ),
+            "snqi_baseline_sha256": baseline_sha256,
             "snqi_contract_status": contract_eval.status,
             "snqi_contract_rank_alignment_spearman": contract_eval.rank_alignment_spearman,
             "snqi_contract_outcome_separation": contract_eval.outcome_separation,
+            "snqi_contract_dominant_component": contract_eval.dominant_component,
+            "snqi_contract_dominant_component_mean_abs": (
+                contract_eval.dominant_component_mean_abs
+            ),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -2809,6 +3226,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "comparability_md": (
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
+            "seed_variability_json": _repo_relative(seed_variability_json_path),
+            "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -2827,7 +3248,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     }
 
     publication_payload: dict[str, Any] | None = None
-    if cfg.export_publication_bundle and not skip_publication_bundle and not snqi_hard_fail:
+    if (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and benchmark_success
+    ):
         publication_dir = get_artifact_category_path("benchmarks") / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
@@ -2852,9 +3278,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             campaign_summary["publication_bundle"] = publication_payload
         except Exception as exc:
             warnings.append(f"Publication bundle export failed: {exc}")
+    elif (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and not benchmark_success
+    ):
+        warnings.append("Publication bundle export skipped because benchmark_success=false.")
 
     _write_json(summary_json_path, campaign_summary)
-    _write_campaign_report(report_md_path, campaign_summary)
+    write_campaign_report(report_md_path, campaign_summary)
 
     # Add run-level metadata files for publication provenance helpers.
     run_meta = {
@@ -2883,11 +3316,37 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "comparability_md": (
                 _repo_relative(comparability_md_path) if comparability_md_path else None
             ),
+            "seed_variability_json": _repo_relative(seed_variability_json_path),
+            "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
         },
         "snqi_artifacts": {
             "diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
             "diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
             "sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+        },
+        "seed_variability_artifacts": {
+            "json": _repo_relative(seed_variability_json_path),
+            "csv": _repo_relative(seed_variability_csv_path),
+            "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+            "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
+        },
+        "seed_variability": {
+            "metrics": list(_SEED_VARIABILITY_METRICS),
+            "row_count": int(seed_variability_payload.get("row_count", 0)),
+            "bootstrap_method": str(
+                seed_variability_payload.get("confidence", {}).get("method", "")
+            ),
+            "bootstrap_level": float(
+                seed_variability_payload.get("confidence", {}).get("confidence", 0.0) or 0.0
+            ),
+            "bootstrap_samples": int(
+                seed_variability_payload.get("confidence", {}).get("bootstrap_samples", 0) or 0
+            ),
+            "seed": int(
+                seed_variability_payload.get("confidence", {}).get("bootstrap_seed", 0) or 0
+            ),
         },
         "campaign_id": campaign_id,
         "started_at_utc": campaign_started_at_utc,
@@ -2913,9 +3372,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_contract_status": contract_eval.status,
             "artifacts": {
                 **dict(manifest_payload.get("artifacts") or {}),
+                "seed_variability_json": _repo_relative(seed_variability_json_path),
+                "seed_variability_csv": _repo_relative(seed_variability_csv_path),
+                "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
+                "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+            },
+            "seed_variability": {
+                **dict(run_meta.get("seed_variability") or {}),
             },
         },
     )
@@ -2948,8 +3414,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "snqi_sensitivity_csv": str(snqi_sensitivity_csv_path),
         "matrix_summary_json": str(matrix_summary_json_path),
         "matrix_summary_csv": str(matrix_summary_csv_path),
+        "seed_variability_json": str(seed_variability_json_path),
+        "seed_variability_csv": str(seed_variability_csv_path),
+        "seed_episode_rows_csv": str(seed_episode_rows_csv_path),
+        "statistical_sufficiency_json": str(statistical_sufficiency_json_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
+        "benchmark_success": benchmark_success,
         "total_episodes": total_episodes,
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,
@@ -2967,4 +3438,5 @@ __all__ = [
     "load_campaign_config",
     "prepare_campaign_preflight",
     "run_campaign",
+    "write_campaign_report",
 ]

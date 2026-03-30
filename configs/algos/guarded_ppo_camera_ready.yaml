@@ -1,8 +1,8 @@
 # Guarded PPO benchmark config.
-# Keeps the BR-06 v3 PPO policy as the primary controller and only intervenes
-# when a short rollout predicts unsafe near-field crowd interaction.
+# Keeps the promoted BR-06 v3 PPO policy as the primary controller and only
+# intervenes when a short rollout predicts unsafe near-field crowd interaction.
 
-model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 device: auto
 deterministic: true
 obs_mode: dict

@@ -1,0 +1,72 @@
+experiment:
+  run_id: predictive_br07_all_maps_randomized_xl
+
+output:
+  root: output/tmp/predictive_planner/pipeline
+
+scenarios:
+  scenario_matrix: ../../scenarios/classic_interactions.yaml
+  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
+
+base_collection:
+  # Expanded random-seed coverage to improve generalization across all maps.
+  seeds_per_scenario: 24
+  random_seed_base: 31000
+  max_steps: 260
+  max_agents: 24
+  horizon_steps: 12
+  max_speed: 1.2
+
+hardcase_collection:
+  # Longer horizon and steps to capture harder interaction structure.
+  max_steps: 300
+  max_agents: 24
+  horizon_steps: 12
+  max_speed: 1.2
+
+mixing:
+  # Stronger hardcase emphasis for planner-relevant failure modes.
+  hardcase_repeat: 8
+  shuffle_seed: 42
+
+training:
+  model_id: predictive_proxy_selected_v2_xl
+  # Larger capacity and longer optimization budget than the full profile.
+  epochs: 400
+  batch_size: 128
+  lr: 0.0002
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 42
+  hidden_dim: 256
+  message_passing_steps: 4
+  max_val_ade: 1.0
+  max_val_fde: 1.8
+  # Less frequent proxy checks to keep runtime focused on training.
+  proxy_every_epochs: 20
+  proxy_horizon: 120
+  proxy_dt: 0.1
+  proxy_workers: 1
+
+wandb:
+  enabled: true
+  project: robot_sf
+  entity: ll7
+  group: predictive-br07-xl
+  job_type: train
+  name: predictive_br07_all_maps_randomized_xl
+  mode: online
+  tags:
+    - predictive
+    - br07
+    - all-maps
+    - randomized-seeds
+    - xl
+    - extended-data
+
+evaluation:
+  workers: 1
+  campaign_workers: 2
+  horizon: 120
+  dt: 0.1

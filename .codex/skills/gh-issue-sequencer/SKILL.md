@@ -10,12 +10,16 @@ description: "Maintain a clear next-work queue in GitHub by normalizing issue me
 Use this skill to create and maintain a sequential, high-signal backlog so the next work item is
 always obvious.
 
+Batch issue cleanup and Project #5 routing separately; the canonical workflow note is
+`docs/context/issue_713_batch_first_issue_workflow.md`.
+
 ## Goal State
 
 - Exactly one issue is `In progress`.
 - A small, explicit queue (for example top 3) is `Ready`.
 - Remaining actionable issues are `Todo` or `Tracked`.
 - Blocked/decision-heavy issues are labeled and not silently mixed into ready work.
+- Project metadata updates are batched after issue cleanup, not interleaved with every body edit.
 
 ## Workflow
 
@@ -29,6 +33,7 @@ always obvious.
    - Ensure milestone is set when roadmap context exists (for example `benchmark` milestone).
    - Ensure project `Priority` is set (`Very High`..`Very Low`) for actionable items.
    - Move stale completed items to `Done`.
+   - Cache project/field IDs once per shell session before editing a batch of items.
 
 3. Classify issues into lanes
    - `In progress`: actively being implemented now.
@@ -53,6 +58,7 @@ always obvious.
      - `Next`: `#<issue>, #<issue>`
      - `Blocked/Decision`: `#<issue>`
    - Use `scripts/dev/gh_comment.sh` for multiline formatting.
+   - If you need score recomputation, run it once after the batch instead of after every item.
 
 6. Keep sequence healthy
    - Remove `Ready` from issues missing acceptance criteria.

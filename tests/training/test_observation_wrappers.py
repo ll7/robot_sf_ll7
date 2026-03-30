@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 from gymnasium import Env, spaces
 
-from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
+from robot_sf.training.observation_wrappers import (
+    adapt_dict_observation_to_policy_space,
+    maybe_flatten_env_observations,
+    resolve_policy_obs_adapter,
+)
 
 
 class _DummyEnv(Env):
@@ -83,3 +89,64 @@ def test_maybe_flatten_env_wraps_dict_space():
     obs, _ = wrapped.reset()
     assert obs.shape == (5,)
     wrapped.close()
+
+
+def test_adapt_dict_observation_to_policy_space_drops_extra_keys_and_preserves_expected():
+    """Dict-policy adapter should filter live env payloads down to model-declared keys."""
+    policy_model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "robot_speed": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                "goal_current": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+            }
+        )
+    )
+
+    adapted = adapt_dict_observation_to_policy_space(
+        {
+            "robot_speed": [0.1, 0.2],
+            "goal_current": [1.0, 2.0],
+            "robot_velocity_xy": [0.1, 0.2],
+            "robot_heading": [0.0],
+        },
+        policy_model,
+    )
+
+    assert set(adapted) == {"robot_speed", "goal_current"}
+    assert adapted["robot_speed"].dtype == np.float32
+    assert adapted["goal_current"].shape == (2,)
+
+
+def test_adapt_dict_observation_to_policy_space_backfills_robot_speed_from_velocity_xy():
+    """Compatibility alias should keep older PPO checkpoints runnable on newer env payloads."""
+    policy_model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "robot_speed": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+            }
+        )
+    )
+
+    adapted = adapt_dict_observation_to_policy_space(
+        {"robot_velocity_xy": [0.3, -0.2]},
+        policy_model,
+    )
+
+    assert np.allclose(adapted["robot_speed"], np.array([0.3, -0.2], dtype=np.float32))
+
+
+def test_resolve_policy_obs_adapter_aligns_dict_observations():
+    """Dict PPO checkpoints should receive a compatibility adapter instead of raw env payloads."""
+    policy_model = SimpleNamespace(
+        observation_space=spaces.Dict(
+            {
+                "robot_speed": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+            }
+        )
+    )
+
+    adapter = resolve_policy_obs_adapter(policy_model)
+
+    assert adapter is not None
+    adapted = adapter({"robot_velocity_xy": [0.0, 0.5], "robot_heading": [0.0]})
+    assert set(adapted) == {"robot_speed"}

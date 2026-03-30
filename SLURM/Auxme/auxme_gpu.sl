@@ -120,4 +120,4 @@ else
 fi
 
 echo "[auxme] Running: uv run ${UV_RUN_ARGS_ARRAY[*]} python ${TRAIN_SCRIPT} ${TRAIN_ARGS}"
-srun --kill-on-bad-exit=1 uv run "${UV_RUN_ARGS_ARRAY[@]}" python "${TRAIN_SCRIPT}" ${TRAIN_ARGS}
+uv run "${UV_RUN_ARGS_ARRAY[@]}" python "${TRAIN_SCRIPT}" ${TRAIN_ARGS}

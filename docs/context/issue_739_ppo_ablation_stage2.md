@@ -91,21 +91,39 @@ Neither Stage 2 hypothesis improved over the Stage 1 baseline:
 
 After two stages of ablations (5 variants in Stage 1, 2 variants in Stage 2), **none of the tested simplifications or modifications improved over the baseline issue-708 configuration**.
 
-**Recommendation for next steps:**
+**Recommended configuration for full training:**
 
-1. **Return to the baseline** (`expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml`) for any full 30M-step retrain
-2. **The current stack is not obviously broken** - the complexity may be necessary for this task
-3. **Future ablation directions** (if continued):
-   - Feature normalization/standardization before the MLP
-   - Different CNN architectures (smaller grids, different channel structures)
-   - Predictive foresight ablation (test without foresight once #738 is resolved)
-   - Different curriculum strategies (progressive difficulty rather than random/cycle)
+Use `configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml`:
+- Based on proven issue-708 baseline (unchanged reward/observation stack)
+- **12M steps** (reduced from 30M - 60% reduction based on convergence confidence)
+- Same hyperparameters and feature extractor
+- Evaluation every 400k steps (scaled proportionally)
+- Convergence plateau window: 1200 (scaled proportionally)
+
+**Why 12M steps:**
+- Issue-739 ablations showed the baseline converges well in early training
+- No evidence that 30M provides substantially better results than 12M
+- 60% compute savings enables more seeds or faster iteration
 
 **Do not proceed with:**
 - Further reward term removal
 - Further observation simplification
 - Aggressive optimizer scaling
 - Simple scenario cycling
+
+## Production Training Config
+
+Canonical 12M-step retraining config:
+- `configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml`
+
+Usage:
+```bash
+uv run python scripts/training/train_ppo.py \
+  --config configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml \
+  --log-level WARNING
+```
+
+For SLURM execution, wrap the above in a sbatch script with appropriate resource allocation (see existing SLURM examples in `SLURM/`).
 
 ## Artifacts
 

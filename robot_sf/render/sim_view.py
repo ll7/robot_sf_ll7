@@ -893,7 +893,7 @@ class SimulationView:
 
         radius_px = self.ped_radius * self.scaling
         ped_sprite = self._get_entity_sprite("ped") if self.ped_render_mode == "sprite" else None
-        for i, (ped_x, ped_y) in enumerate(ped_pos):
+        for ped_x, ped_y in ped_pos:
             center = self._scale_tuple((ped_x, ped_y))
             if ped_sprite is not None:
                 self._draw_sprite(ped_sprite, center, radius_px)

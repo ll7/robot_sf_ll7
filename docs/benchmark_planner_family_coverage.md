@@ -49,6 +49,7 @@ and kinematics/adapters in this repository, not a generic literature survey.
 | Alyassi-style family | Coverage status | Planner / config entrypoint | Planner-facing input / observation contract | Kinematics / adapter status | Benchmark note |
 | --- | --- | --- | --- | --- | --- |
 | CrowdNav family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md` | CrowdNav-family joint robot/human state packing with source-simulator normalization and temporal context | Adapter-heavy; source policy semantics are simulator-native rather than Robot SF `unicycle_vw` | External anchor only; historical family anchor, not current in-repo benchmark support |
+| DSRNN-style graph-attention family | conceptually adjacent only | `docs/context/issue_600_dsrnn_stretch_follow_up.md` | CrowdNav-descended graph and temporal state packing with recurrent neighborhood encoding layered on top of source simulator observations | Adapter-heavy and history-sensitive; source policy semantics remain simulator-native and require source-harness proof before any `unicycle_vw` wrapper claim | Stretch roadmap anchor only; keep behind the first attention and prediction-family spikes |
 | SoNIC safety-aware family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md`, `docs/context/issue_602_guarded_ppo_profile.md` | SoNIC-family model-specific observation stack with bundled predictor/policy checkpoints; not the same as internal PPO dict observations | Adapter-heavy; source semantics remain model/simulator-specific, while internal `guarded_ppo` stays native `unicycle_vw` with a reactive guard | Prototype only; do not treat internal `guarded_ppo` as SoNIC-family support |
 | Go-MPC | conceptually adjacent only | `docs/context/issue_599_go_mpc_assessment.md` | Kinodynamic MPC stack requiring robot state `(x, y, theta, v, w)` plus ordered obstacle states and RL guidance inputs | Solver-locked and adapter-heavy; differential-drive / kinodynamic family shape, but tied to FORCESPro runtime | Reference only; not current repo support and not pursued now |
 | `safe_control` safety-controller family | conceptually adjacent only | `docs/context/issue_695_safe_control_feasibility_note.md` | Waypoint-tracking controller loop requiring model-specific robot state, waypoint lists, and explicit obstacle arrays | Closest path is unicycle-compatible in principle, but adapter-heavy and blocked by missing optional runtime dependencies in the current repo environment | Reference only; not current repo support and not pursued now |
@@ -71,6 +72,8 @@ and kinematics/adapters in this repository, not a generic literature survey.
 - Testing-only planners (`risk_dwa`, `mppi_social`, `predictive_mppi`, `hybrid_portfolio`,
   `stream_gap`, `gap_prediction`) are intentionally guarded by
   `allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
+- `DSRNN-style graph-attention family` is currently a sequencing note, not an implementation plan:
+  keep it behind the first attention-family and prediction-family source-harness spikes.
 - Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should
   not infer that a partially related planner family is fully covered unless it appears above as
   `implemented and benchmarkable`.

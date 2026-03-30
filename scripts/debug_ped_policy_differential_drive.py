@@ -67,7 +67,7 @@ def make_env(svg_map_path: str):
         sim_config=SimulationSettings(
             stack_steps=1,
             difficulty=0,
-            ped_density_by_difficulty=[0.02],
+            ped_density_by_difficulty=[0.04],
             debug_without_robot_movement=False,
             peds_reset_follow_route_at_start=True,
         ),
@@ -117,11 +117,10 @@ def extract_info(meta: dict, reward: float) -> str:
 
 def run():
     """Run the differential-drive pedestrian policy debugger."""
-    env = make_env("maps/svg_maps/masterthesis/corner.svg")
+    env = make_env("maps/svg_maps/masterthesis/headon.svg")
 
     filename = get_latest_ped_model_file()
-    filename = "./model_ped/ppo_2026-03-29_23-19-05.zip"
-    filename = "./model_ped/ppo_2026-03-29_22-34-26.zip"
+    filename = "./model_ped/ppo_2026-03-30_12-25-31.zip"
     logger.info(f"Loading pedestrian model from {filename}")
     model = PPO.load(str(filename), env=env)
 

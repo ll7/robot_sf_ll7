@@ -95,6 +95,6 @@ def training(svg_map_path: str):
 
 
 if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
+    SVG_MAP = "maps/svg_maps/masterthesis/intersection.svg"
 
     training(SVG_MAP)

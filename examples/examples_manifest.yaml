@@ -205,8 +205,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/masterthesis/intersection.svg
-      - model/run_043.zip
-      - model_ped/ppo_9_intersection.zip
+      - model/run_043
+      - model_ped/ppo_intersection.zip
     ci_enabled: false
     ci_reason: "Interactive pygame debug demo with offline checkpoints."
     doc_reference: docs/dev_guide.md#advanced-feature-demos

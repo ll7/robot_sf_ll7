@@ -17,6 +17,8 @@ References:
     - docs/dev_guide.md#pedestrian-environments
 """
 
+from pathlib import Path
+
 from loguru import logger
 from stable_baselines3 import PPO
 
@@ -32,7 +34,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 logger.info("Running ego pedestrian simulation with random actions and recording playback.")
 
 
-def test_simulation(map_definition: MapDefinition):
+def test_simulation(map_definition: MapDefinition) -> None:
     """Run a short ego pedestrian simulation and render the playback loop."""
     logger.info("Creating the environment.")
     env_config = PedEnvSettings(
@@ -68,7 +70,7 @@ def test_simulation(map_definition: MapDefinition):
     env.exit()
 
 
-def get_file():
+def get_file() -> Path:
     """Get the latest recorded file."""
 
     recordings_dir = get_artifact_category_path("recordings")
@@ -83,7 +85,7 @@ def get_file():
     return latest_file
 
 
-def main():
+def main() -> None:
     """Run ego pedestrian simulation and visualize the recorded playback.
 
     This function orchestrates the complete workflow:

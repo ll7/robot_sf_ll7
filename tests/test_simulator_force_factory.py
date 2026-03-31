@@ -15,7 +15,8 @@ from robot_sf.sim import simulator as simulator_module
 class _ForceStub:
     """Simple force stub storing config and bound callback for inspection."""
 
-    def __init__(self, config, peds, getter) -> None:
+    def __init__(self, kind: str, config, peds, getter) -> None:
+        self.kind = kind
         self.config = config
         self.peds = peds
         self.getter = getter
@@ -25,8 +26,16 @@ def test_make_ped_forces_binds_robot_specific_callbacks(monkeypatch) -> None:
     """Each generated force must reference the robot it was created for."""
     base_force = object()
     monkeypatch.setattr(simulator_module, "pysf_make_forces", lambda sim, config: [base_force])
-    monkeypatch.setattr(simulator_module, "PedRobotForce", _ForceStub)
-    monkeypatch.setattr(simulator_module, "AdversarialPedForce", _ForceStub)
+    monkeypatch.setattr(
+        simulator_module,
+        "PedRobotForce",
+        lambda *args: _ForceStub("prf", *args),
+    )
+    monkeypatch.setattr(
+        simulator_module,
+        "AdversarialPedForce",
+        lambda *args: _ForceStub("apf", *args),
+    )
 
     robots = [
         SimpleNamespace(
@@ -60,6 +69,8 @@ def test_make_ped_forces_binds_robot_specific_callbacks(monkeypatch) -> None:
 
     assert [force.getter() for force in prf_forces] == [robot.pos for robot in robots]
     assert [force.getter() for force in apf_forces] == [robot.pose for robot in robots]
+    assert [force.kind for force in prf_forces] == ["prf", "prf"]
+    assert [force.kind for force in apf_forces] == ["apf", "apf"]
     assert [force.config.robot_radius for force in prf_forces] == [0.5, 0.8]
     assert [force.config.robot_radius for force in apf_forces] == [0.5, 0.8]
     assert prf_config.robot_radius == 9.0

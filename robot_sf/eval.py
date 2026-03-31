@@ -652,7 +652,8 @@ class PedVecEnvMetrics:
         Returns:
             float: The mean of average ego pedestrian speeds at collision.
         """
-        return sum(m.avg_ego_ped_speed_at_collision for m in self.metrics) / len(self.metrics)
+        samples = [speed for metric in self.metrics for speed in metric.ego_ped_speed_at_collision]
+        return mean(samples) if samples else 0.0
 
     @property
     def avg_ego_ped_speed(self) -> float:
@@ -662,9 +663,12 @@ class PedVecEnvMetrics:
     @property
     def avg_collision_impact_angle_rad_at_collision(self) -> float:
         """Average impact angle across environments for collision outcomes."""
-        return sum(m.avg_collision_impact_angle_rad_at_collision for m in self.metrics) / len(
-            self.metrics
-        )
+        samples = [
+            angle
+            for metric in self.metrics
+            for angle in metric.collision_impact_angle_rad_at_collision
+        ]
+        return mean(samples) if samples else 0.0
 
     def update(self, metas: list[dict]):
         """TODO docstring. Document this function.

@@ -189,7 +189,8 @@ class FollowRouteBehavior:
         within ongoing route navigation sessions. The method is retained to satisfy
         the PedestrianBehavior protocol interface.
 
-        However, if reset_start is True, all groups will be immediately respawned at the start.
+        However, if reset_at_start is True, all groups will be immediately respawned at
+        the start.
         """
         if self.reset_at_start:
             for gid in self.navigators.keys():

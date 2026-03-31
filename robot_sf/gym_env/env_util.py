@@ -690,6 +690,7 @@ def init_collision_and_sensors_with_image(
             width=sim.map_def.width,
             height=sim.map_def.height,
             get_agent_coords=lambda i=i: sim.robot_pos[i],
+            get_agent_pose=lambda i=i: sim.robot_poses[i],
             get_goal_coords=lambda i=i: sim.goal_pos[i],
             get_obstacle_coords=sim.get_obstacle_lines,
             get_pedestrian_coords=lambda: sim.ped_pos,

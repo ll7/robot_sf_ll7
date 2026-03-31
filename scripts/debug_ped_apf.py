@@ -197,31 +197,33 @@ def run(svg_map_path: str, model_name: str | None = None):
         model_name = MODEL_NAME
 
     env = make_env(svg_map_path, model_name)
-    model = load_model(model_name)
-    obs_adapter = get_obs_adapter(model_name)
+    try:
+        model = load_model(model_name)
+        obs_adapter = get_obs_adapter(model_name)
 
-    obs, _ = env.reset()
-    for _ in range(10000):
-        # Adapt observation if needed for the model
-        if obs_adapter is not None:
-            adapted_obs = obs_adapter(obs)
-        else:
-            adapted_obs = obs
+        obs, _ = env.reset()
+        for _ in range(10000):
+            # Adapt observation if needed for the model
+            if obs_adapter is not None:
+                adapted_obs = obs_adapter(obs)
+            else:
+                adapted_obs = obs
 
-        action, _ = model.predict(adapted_obs, deterministic=True)
-        obs, _, done, _, _ = env.step(action)
-        env.render()
-        # sleep(0.1)
-
-        if done:
-            obs, _ = env.reset()
+            action, _ = model.predict(adapted_obs, deterministic=True)
+            obs, _, terminated, truncated, _ = env.step(action)
+            done = bool(terminated or truncated)
             env.render()
-    # forces = env.simulator.force_history
+            # sleep(0.1)
 
-    # plot_forces_over_time2(forces)
-    # plot_forces_quiver(forces)
+            if done:
+                obs, _ = env.reset()
+                env.render()
+        # forces = env.simulator.force_history
 
-    env.exit()
+        # plot_forces_over_time2(forces)
+        # plot_forces_quiver(forces)
+    finally:
+        env.exit()
 
 
 def plot_forces_over_time2(forces_over_time):

@@ -124,34 +124,34 @@ def extract_info(meta: dict, reward: float) -> str:
 def run():
     """Run the differential-drive pedestrian policy debugger."""
     env = make_env("maps/svg_maps/masterthesis/headon.svg")
+    try:
+        filename = get_latest_ped_model_file()
+        logger.info(f"Loading pedestrian model from {filename}")
+        model = PPO.load(str(filename), env=env)
 
-    filename = get_latest_ped_model_file()
-    logger.info(f"Loading pedestrian model from {filename}")
-    model = PPO.load(str(filename), env=env)
+        obs = env.reset()
+        ep_rewards = 0.0
 
-    obs = env.reset()
-    ep_rewards = 0.0
-
-    for _ in range(10000):
-        if isinstance(obs, tuple):
-            obs = obs[0]
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, meta = env.step(action)
-        done = bool(terminated or truncated)
-        robot_speed = _extract_linear_speed(env.simulator.robots[0].current_speed)
-        ego_speed = _extract_linear_speed(env.simulator.ego_ped.current_speed)
-        ep_rewards += float(reward)
-        env.render()
-
-        if done:
-            logger.info(extract_info(meta, ep_rewards))
-            logger.info(f"Robot speed {robot_speed}")
-            logger.info(f"Ego speed {ego_speed}")
-            ep_rewards = 0.0
-            obs = env.reset()
+        for _ in range(10000):
+            if isinstance(obs, tuple):
+                obs = obs[0]
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, meta = env.step(action)
+            done = bool(terminated or truncated)
+            robot_speed = _extract_linear_speed(env.simulator.robots[0].current_speed)
+            ego_speed = _extract_linear_speed(env.simulator.ego_ped.current_speed)
+            ep_rewards += float(reward)
             env.render()
 
-    env.exit()
+            if done:
+                logger.info(extract_info(meta, ep_rewards))
+                logger.info(f"Robot speed {robot_speed}")
+                logger.info(f"Ego speed {ego_speed}")
+                ep_rewards = 0.0
+                obs = env.reset()
+                env.render()
+    finally:
+        env.exit()
 
 
 if __name__ == "__main__":

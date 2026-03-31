@@ -1,5 +1,7 @@
 """Tests for environment metric helpers."""
 
+import math
+
 from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics, PedVecEnvMetrics, VecEnvMetrics
 
 
@@ -278,3 +280,19 @@ def test_ped_outcome_priority_and_vector_rates():
     assert len(ped2.route_outcomes) == before_p2 + 1
     assert ped.route_outcomes[-1] == EnvOutcome.TIMEOUT
     assert ped2.route_outcomes[-1] == EnvOutcome.TIMEOUT
+
+
+def test_ped_vec_env_metrics_weight_collision_sample_aggregates() -> None:
+    """Collision-speed and impact-angle aggregates should weight actual samples, not env means."""
+    ped1 = PedEnvMetrics()
+    ped1.ego_ped_speed_at_collision.extend([1.0, 3.0])
+    ped1.collision_impact_angle_rad_at_collision.extend([0.2, 0.4])
+
+    ped2 = PedEnvMetrics()
+    ped2.ego_ped_speed_at_collision.extend([10.0])
+    ped2.collision_impact_angle_rad_at_collision.extend([1.0])
+
+    vec = PedVecEnvMetrics(metrics=[ped1, ped2])
+
+    assert math.isclose(vec.avg_ego_ped_speed_at_collision, 14.0 / 3.0)
+    assert math.isclose(vec.avg_collision_impact_angle_rad_at_collision, 1.6 / 3.0)

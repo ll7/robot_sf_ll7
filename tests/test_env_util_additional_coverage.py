@@ -75,6 +75,11 @@ class _FakeMultiRobotSim:
         return [robot.pose[0] for robot in self.robots]
 
     @property
+    def robot_poses(self) -> list[tuple[tuple[float, float], float]]:
+        """Current robot poses for occupancy callbacks needing heading."""
+        return [robot.pose for robot in self.robots]
+
+    @property
     def goal_pos(self) -> list[tuple[float, float]]:
         """Current robot goal positions."""
         return self._goal_pos
@@ -276,6 +281,8 @@ def test_init_collision_and_sensors_with_image_uses_default_image_settings(monke
     assert circles is not None
     assert len(circles) == 1
     assert circles[0][0] == sim.robot_pos[1]
+    assert occupancies[0].agent_heading == pytest.approx(0.0)
+    assert occupancies[1].agent_heading == pytest.approx(0.2)
 
     assert len(sensor_fusions) == 2
     assert isinstance(sensor_fusions[0], _DummyImageFusion)

@@ -129,7 +129,8 @@ def run():
 
         # Select action using discrete heuristic policy
         action = select_action(obs)
-        obs, reward, done, _, meta = env.step(action)
+        obs, reward, terminated, truncated, meta = env.step(action)
+        done = bool(terminated or truncated)
         ep_rewards += reward
         env.render()
 

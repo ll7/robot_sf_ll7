@@ -415,7 +415,7 @@ class RouteNavigator:
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
-    def new_route(self, route: list[Vec2D], *, start_pos: Vec2D | None = None):
+    def new_route(self, route: list[Vec2D], *, start_pos: Vec2D | None = None) -> None:
         """Replace the active route and reset progress.
 
         Args:

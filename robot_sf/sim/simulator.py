@@ -22,7 +22,7 @@ Example:
     >>> for sim in sims:
     ...     sim.step_once([action1, action2])"""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import ceil, cos, pi, sin
 from random import sample, uniform
 
@@ -83,15 +83,17 @@ def _make_ped_forces(
 
     if prf_config.is_active:
         for robot in robots:
-            prf_config.robot_radius = robot.config.radius
+            robot_prf_config = replace(prf_config, robot_radius=robot.config.radius)
             forces.append(
-                PedRobotForce(prf_config, sim.peds, lambda: robot.pos),
+                PedRobotForce(robot_prf_config, sim.peds, lambda robot=robot: robot.pos),
             )
 
     if apf_config.is_active:
         for robot in robots:
-            apf_config.robot_radius = robot.config.radius
-            forces.append(AdversialPedForce(apf_config, sim.peds, lambda: robot.pose))
+            robot_apf_config = replace(apf_config, robot_radius=robot.config.radius)
+            forces.append(
+                AdversialPedForce(robot_apf_config, sim.peds, lambda robot=robot: robot.pose)
+            )
 
     return forces
 
@@ -415,11 +417,14 @@ class PedSimulator(Simulator):
                 self.config.apf_config,
             ),
         )
+        self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
 
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
+
+        self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
         self.reset_state()
         for behavior in self.peds_behaviors:
@@ -431,6 +436,11 @@ class PedSimulator(Simulator):
         Returns the current positions of all pedestrians.
         """
         return self.pysf_state.ped_positions[:-1]  # Exclude the ego pedestrian
+
+    @property
+    def ped_vel(self):
+        """Return current velocities for NPC pedestrians only."""
+        return self.pysf_state.ped_velocities[:-1]
 
     @property
     def ego_ped_pos(self) -> Vec2D:
@@ -459,6 +469,14 @@ class PedSimulator(Simulator):
         """
         return self.robots[0].pos
 
+    def _sync_ego_ped_social_force_state(self) -> None:
+        """Synchronize the appended ego-pedestrian row in the PySF state array."""
+        pysf_states = self.pysf_state.pysf_states()
+        pysf_states[-1, 0:2] = self.ego_ped.pos
+        pysf_states[-1, 2:4] = self.ego_ped.current_speed
+        if pysf_states.shape[1] > 6:
+            pysf_states[-1, 6] = self.ego_ped.pose[1]
+
     def reset_state(self):
         """Reset robot and ego pedestrian state.
 
@@ -486,6 +504,7 @@ class PedSimulator(Simulator):
                 0, 6
             ]  # Have the same orientation as the first NPC
             self.ego_ped.reset_state((ped_spawn, npc_orient))
+        self._sync_ego_ped_social_force_state()
 
     def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
         """Advance simulation with robot and ego pedestrian actions.
@@ -508,9 +527,7 @@ class PedSimulator(Simulator):
             nav.update_position(robot.pos)
 
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
-        # Update state for social force calculation
-        self.pysf_state.pysf_states()[-1, 0:2] = self.ego_ped.pos
-        self.pysf_state.pysf_states()[-1, 2:4] = self.ego_ped.current_speed
+        self._sync_ego_ped_social_force_state()
 
     def get_proximity_point(
         self,

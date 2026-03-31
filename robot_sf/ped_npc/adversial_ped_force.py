@@ -94,8 +94,8 @@ class AdversialPedForce:
         self.config = config
         self.peds = peds
         self.get_robot_pose = get_robot_pose
-        self.last_forces = 0.0
-        self.target_ped_idx = config.target_ped_idx
+        self.last_forces = np.zeros((self.peds.size(), 2), dtype=np.float64)
+        self.target_ped_idx: int | list[int] = config.target_ped_idx
         """Even if the target_idx restricts to one ped, groups forces may pull more pedestrians
             towards the robot"""
 
@@ -119,11 +119,24 @@ class AdversialPedForce:
         ped_max_speeds = np.array(self.peds.max_speeds, dtype=np.float64)
         robot_pos = np.array(self.get_robot_pose()[0], dtype=np.float64)
         robot_orient = self.get_robot_pose()[1]
-        forces = np.zeros((self.peds.size(), 2))
+        forces = np.zeros((self.peds.size(), 2), dtype=np.float64)
+        num_peds = forces.shape[0]
+        if num_peds == 0:
+            self.last_forces = forces
+            return forces
+
         if isinstance(self.target_ped_idx, int):
-            target_ped_idx = np.array([self.target_ped_idx], dtype=np.int64)
+            raw_target_idx = [int(self.target_ped_idx)]
         else:
-            target_ped_idx = np.array(self.target_ped_idx, dtype=np.int64)
+            raw_target_idx = [int(idx) for idx in self.target_ped_idx]
+
+        target_ped_idx = np.array(
+            [idx for idx in raw_target_idx if -num_peds <= idx < num_peds],
+            dtype=np.int64,
+        )
+        if target_ped_idx.size == 0:
+            self.last_forces = forces
+            return forces
 
         adversial_ped_force(
             out_forces=forces,
@@ -139,7 +152,7 @@ class AdversialPedForce:
         )
 
         forces = forces * self.config.force_multiplier
-        self.last_forces = forces
+        self.last_forces = forces.copy()
         return forces
 
 

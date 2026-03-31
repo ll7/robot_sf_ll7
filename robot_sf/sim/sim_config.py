@@ -94,6 +94,8 @@ class SimulationSettings:
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")
+        if self.apf_config is None or not isinstance(self.apf_config, AdversialPedForceConfig):
+            raise ValueError("Adversarial-ped-force settings need to be specified!")
         self._validate_route_spawn_config()
 
     def _validate_route_spawn_config(self) -> None:

@@ -5,7 +5,6 @@ run_023 differential-drive robot profile and legacy observation adapter logic
 used in ``scripts/debug_ped_apf.py``.
 """
 
-import os
 from pathlib import Path
 
 import loguru
@@ -23,6 +22,13 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.sim_config import SimulationSettings
 
 logger = loguru.logger
+
+
+def _extract_linear_speed(speed_like) -> float:
+    """Return the translational component from a scalar/sequence speed value."""
+    if isinstance(speed_like, (tuple, list)):
+        return float(speed_like[0]) if speed_like else float("nan")
+    return float(speed_like)
 
 
 class LegacyRun023ObsAdapter:
@@ -92,7 +98,7 @@ def get_latest_ped_model_file() -> Path:
     if not model_dir.exists():
         raise FileNotFoundError("Directory not found: model_ped")
 
-    candidates = sorted(model_dir.glob("*.zip"), key=os.path.getctime)
+    candidates = sorted(model_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
     if not candidates:
         raise FileNotFoundError("No pedestrian model checkpoints found in model_ped")
 
@@ -120,7 +126,6 @@ def run():
     env = make_env("maps/svg_maps/masterthesis/headon.svg")
 
     filename = get_latest_ped_model_file()
-    filename = "./model_ped/ppo_2026-03-30_12-25-31.zip"
     logger.info(f"Loading pedestrian model from {filename}")
     model = PPO.load(str(filename), env=env)
 
@@ -131,9 +136,10 @@ def run():
         if isinstance(obs, tuple):
             obs = obs[0]
         action, _ = model.predict(obs, deterministic=True)
-        obs, reward, done, _, meta = env.step(action)
-        robot_speed = env.simulator.robots[0].current_speed
-        ego_speed = env.simulator.ego_ped.current_speed
+        obs, reward, terminated, truncated, meta = env.step(action)
+        done = bool(terminated or truncated)
+        robot_speed = _extract_linear_speed(env.simulator.robots[0].current_speed)
+        ego_speed = _extract_linear_speed(env.simulator.ego_ped.current_speed)
         ep_rewards += float(reward)
         env.render()
 

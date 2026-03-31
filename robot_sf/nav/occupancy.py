@@ -13,7 +13,7 @@ large maps or dense crowds.
 
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numba
@@ -184,8 +184,11 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
-    get_agent_pose: Callable[[], RobotPose] | None = None
-    get_dynamic_objects: Callable[[], list[Circle2D]] | None = None
+    get_agent_pose: Callable[[], RobotPose] | None = field(default=None, kw_only=True)
+    get_dynamic_objects: Callable[[], list[Circle2D]] | None = field(
+        default=None,
+        kw_only=True,
+    )
     agent_radius: float = 1.0
     ped_radius: float = 0.4
     goal_radius: float = 1.0

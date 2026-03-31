@@ -1,8 +1,8 @@
-"""Demo for running a trained adversarial pedestrian policy..
+"""Demo for running a trained adversarial pedestrian policy.
 
 Usage:
-    uv run python examples/advanced/32_demo_adversial_pedestrian.py
-    uv run python examples/advanced/32_demo_adversial_pedestrian.py \
+    uv run python examples/advanced/32_demo_adversarial_pedestrian.py
+    uv run python examples/advanced/32_demo_adversarial_pedestrian.py \
         --ped-model model_ped/ppo_intersection.zip \
         --map maps/svg_maps/masterthesis/intersection.svg
 

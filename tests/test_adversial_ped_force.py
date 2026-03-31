@@ -4,7 +4,33 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.ped_npc.adversial_ped_force import adversial_ped_force
+from robot_sf.ped_npc.adversial_ped_force import (
+    AdversialPedForce,
+    AdversialPedForceConfig,
+    adversial_ped_force,
+)
+
+
+class _DummyPedState:
+    """Minimal pedestrian-state stub for APF wrapper tests."""
+
+    agent_radius = 0.4
+
+    def __init__(
+        self, positions: np.ndarray, velocities: np.ndarray, max_speeds: np.ndarray
+    ) -> None:
+        self._positions = positions
+        self._velocities = velocities
+        self.max_speeds = max_speeds
+
+    def size(self) -> int:
+        return int(self._positions.shape[0])
+
+    def pos(self) -> np.ndarray:
+        return self._positions
+
+    def vel(self) -> np.ndarray:
+        return self._velocities
 
 
 def test_adversial_ped_force_applies_only_to_targets() -> None:
@@ -99,3 +125,19 @@ def test_adversial_ped_force_includes_velocity_term_current_formula() -> None:
 
     expected = np.array([[1.6, 0.0]], dtype=np.float64)
     np.testing.assert_allclose(out_forces, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_adversial_ped_force_invalid_target_indices_noop() -> None:
+    """Ignore out-of-range target indices instead of indexing outside the crowd array."""
+    ped_state = _DummyPedState(
+        positions=np.array([[0.0, 0.0]], dtype=np.float64),
+        velocities=np.zeros((1, 2), dtype=np.float64),
+        max_speeds=np.array([1.0], dtype=np.float64),
+    )
+    force = AdversialPedForce(
+        AdversialPedForceConfig(is_active=True, target_ped_idx=99),
+        ped_state,
+        get_robot_pose=lambda: ((0.0, 0.0), 0.0),
+    )
+
+    np.testing.assert_allclose(force(), np.zeros((1, 2), dtype=np.float64))

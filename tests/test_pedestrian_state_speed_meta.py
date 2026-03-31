@@ -6,8 +6,9 @@ from robot_sf.ped_ego.pedestrian_state import PedestrianState
 class _DummySensors:
     """Minimal sensor wrapper used by PedestrianState tests."""
 
-    def __init__(self, speed: float) -> None:
+    def __init__(self, speed: float, angular_speed: float = 0.0) -> None:
         self._speed = speed
+        self._angular_speed = angular_speed
 
     def reset_cache(self) -> None:
         return None
@@ -16,7 +17,7 @@ class _DummySensors:
         return {"ok": 1.0}
 
     def robot_speed_sensor(self) -> tuple[float, float]:
-        return (self._speed, 0.0)
+        return (self._speed, self._angular_speed)
 
 
 class _DummyRobotOccupancy:
@@ -93,6 +94,22 @@ def test_pedestrian_state_meta_includes_ego_ped_speed() -> None:
     assert meta["ego_ped_speed"] == 0.42
     assert meta["collision_impact_angle_rad"] == 0.0
     assert meta["robot_ped_collision_zone"] == "none"
+
+
+def test_pedestrian_state_uses_linear_speed_component_only() -> None:
+    """Do not mix angular velocity into the reported ego-pedestrian speed metric."""
+    state = PedestrianState(
+        robot_occupancy=_DummyRobotOccupancy(),
+        ego_ped_occupancy=_DummyEgoPedOccupancy(),
+        sensors=_DummySensors(speed=1.0, angular_speed=0.5),
+        d_t=0.1,
+        sim_time_limit=10.0,
+    )
+
+    state.reset()
+    state.step()
+
+    assert state.ego_ped_speed == 1.0
 
 
 def test_pedestrian_state_collision_meta_includes_impact_kinematics() -> None:

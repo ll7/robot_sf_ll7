@@ -69,6 +69,23 @@ def test_continuous_occupancy_goal_and_bounds() -> None:
     assert occ.is_in_bounds(-0.1, 1.0) is False
 
 
+def test_continuous_occupancy_positional_agent_radius_is_preserved() -> None:
+    """Keep the historical positional constructor layout stable for agent radius."""
+    occ = ContinuousOccupancy(
+        2.0,
+        2.0,
+        lambda: (0.0, 0.0),
+        lambda: (1.0, 1.0),
+        lambda: np.zeros((0, 4)),
+        lambda: np.zeros((0, 2)),
+        0.25,
+    )
+
+    assert occ.get_agent_pose is None
+    assert occ.get_dynamic_objects is None
+    assert occ.agent_radius == 0.25
+
+
 def test_ego_ped_distance_and_collision() -> None:
     """Compute ego-ped distance and collision against an enemy agent."""
     occ = EgoPedContinuousOccupancy(

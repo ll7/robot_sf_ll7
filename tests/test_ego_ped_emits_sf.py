@@ -7,9 +7,9 @@ This module verifies that:
 
 import numpy as np
 import pytest
-from stable_baselines3 import PPO
 
 from robot_sf.common.types import Line2D
+from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
@@ -76,7 +76,7 @@ def dummy_map():
 
 @pytest.fixture
 def env(dummy_map):
-    """Build a pedestrian environment with a fixed PPO model.
+    """Build a pedestrian environment with a stubbed robot policy.
 
     This ensures all tests run against the same policy and simulator configuration.
     """
@@ -91,17 +91,23 @@ def env(dummy_map):
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
 
-    robot_model = "./model/run_043"
-
-    robot_model = PPO.load(robot_model, env=None)
     env = make_pedestrian_env(
         config=config,
-        robot_model=robot_model,
+        robot_model=StubRobotModel(),
         debug=False,
         recording_enabled=False,
         peds_have_obstacle_forces=False,
     )
-    return env
+    yield env
+    env.exit()
+
+
+def _social_force_fn(env):
+    """Resolve the SocialForce callable without relying on force-list ordering."""
+    for force in env.simulator.pysf_sim.forces:
+        if type(force).__name__ == "SocialForce":
+            return force
+    raise AssertionError("SocialForce not found in env.simulator.pysf_sim.forces")
 
 
 def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
@@ -115,15 +121,14 @@ def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
     # Case 1: Ego in the way of NPC
     # Place ego at (12, 10), which is along the NPC's route from (7, 10) to (34, 10)
     env.simulator.ego_ped.state.pose = ((12.0, 10.0), 0)
-    ped_positions = env.simulator.pysf_state.ped_positions
-    print("Pedestrian positions over time:", ped_positions)
+    social_force = _social_force_fn(env)
     social_force_threshold = 0.5
     threshold_reached = False
     for i in range(200):
         action = np.array([0, 0])  # No action for the ego pedestrian
-        _, _, done, _, _ = env.step(action)
-        # Get the social force for the NPC (index 0)
-        sf = env.simulator.pysf_sim.forces[1]()  # index 1 is social force
+        _, _, terminated, truncated, _ = env.step(action)
+        done = bool(terminated or truncated)
+        sf = social_force()
         social_force_norm = float(np.linalg.norm(sf[0]))
         if social_force_norm > social_force_threshold:
             assert social_force_norm > social_force_threshold
@@ -141,9 +146,9 @@ def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
     social_forces = []
     for i in range(200):
         action = np.array([0, 0])  # No action for the ego pedestrian
-        _, _, done, _, _ = env.step(action)
-        # Get the social force for the NPC (index 0)
-        sf = env.simulator.pysf_sim.forces[1]()  # index 1 is social force
+        _, _, terminated, truncated, _ = env.step(action)
+        done = bool(terminated or truncated)
+        sf = social_force()
         social_forces.append(sf[0].copy())
 
         if done:
@@ -158,14 +163,14 @@ def test_npc_pedestrian_avoids_ego_pedestrian_social_force(env):
         "Social force on NPC changed during the episode without ego ped"
     )
 
-    env.exit()
-
 
 def test_ego_position_correct_in_states(env):
     """
     Test that the ego pedestrian's position is correctly reflected in the simulator state.
     """
     _, _ = env.reset()
+    assert np.allclose(env.simulator.pysf_state.pysf_states()[-1, 0:2], env.simulator.ego_ped_pos)
+    assert np.asarray(env.simulator.ped_pos).shape == np.asarray(env.simulator.ped_vel).shape
 
     for i in range(5):
         action = np.array([0, 0])  # No action for the ego pedestrian
@@ -192,8 +197,6 @@ def test_ego_position_correct_in_states(env):
         assert np.allclose(
             env.simulator.pysf_state.pysf_states()[-1, 0:2], env.simulator.ego_ped_pos
         ), "Ego pedestrian position does not match the simulator state"
-
-    env.exit()
 
 
 if __name__ == "__main__":

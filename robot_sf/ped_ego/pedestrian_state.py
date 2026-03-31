@@ -123,12 +123,26 @@ class PedestrianState:
         self.is_collision_robot_with_pedestrian = self.robot_occupancy.is_pedestrian_collision
         self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
-        self.ego_ped_speed = math.hypot(*self.sensors.robot_speed_sensor())
+        self.ego_ped_speed = self._extract_linear_speed(self.sensors.robot_speed_sensor())
+        self.collision_impact_angle_rad = 0.0
+        self.robot_ped_collision_zone = "none"
         if self.is_collision_with_robot:
             impact_angle, zone = self._compute_robot_ped_impact_metrics()
             self.collision_impact_angle_rad = impact_angle
             self.robot_ped_collision_zone = zone
         return self.sensors.next_obs()
+
+    @staticmethod
+    def _extract_linear_speed(
+        speed_like: float | tuple[float, ...] | list[float] | np.ndarray,
+    ) -> float:
+        """Return the translational speed component from sensor output."""
+        if isinstance(speed_like, np.ndarray):
+            flat = speed_like.reshape(-1)
+            return float(abs(flat[0])) if flat.size else 0.0
+        if isinstance(speed_like, (tuple, list)):
+            return float(abs(speed_like[0])) if speed_like else 0.0
+        return float(abs(speed_like))
 
     def _compute_robot_ped_impact_metrics(
         self,

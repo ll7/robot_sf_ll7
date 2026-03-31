@@ -1,8 +1,5 @@
 """Debug runner for pedestrian policy models in the SocialForce simulator."""
 
-import os
-from pathlib import Path
-
 import loguru
 import numpy as np
 from stable_baselines3 import PPO
@@ -15,12 +12,11 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePede
 from robot_sf.nav.nav_types import SvgRectangle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
-from svg_conv.svg_conv import convert_map
 
 logger = loguru.logger
 
 
-def dummy_map():
+def dummy_map() -> MapDefinition:
     """Create a minimal map definition for deterministic pedestrian routing.
 
     This keeps environment setup stable across tests to isolate behavior under test.
@@ -90,20 +86,8 @@ def dummy_map():
     return map_def
 
 
-def make_env(svg_map_path):
-    """Create a pedestrian simulation environment for debugging.
-
-    Parameters
-    ----------
-    svg_map_path : str
-        Path to the SVG map file.
-
-    Returns
-    -------
-    gym.Env
-        Pedestrian simulation environment with loaded robot model.
-    """
-    map_definition = convert_map(svg_map_path)
+def make_env():
+    """Create a deterministic pedestrian simulation environment for debugging."""
     map_definition = dummy_map()
     robot_model = PPO.load("./model/run_043", env=None)
 
@@ -125,96 +109,54 @@ def make_env(svg_map_path):
     return env
 
 
-def get_file():
-    """Get the latest model file."""
-
-    filename = max(
-        os.listdir("model/pedestrian"),
-        key=lambda x: os.path.getctime(os.path.join("model/pedestrian", x)),
-    )
-    return Path("model/pedestrian", filename)
+def _find_social_force(env):
+    """Return the SocialForce callable from the configured PySF force list."""
+    for force in env.simulator.pysf_sim.forces:
+        if type(force).__name__ == "SocialForce":
+            return force
+    raise RuntimeError("SocialForce not found in env.simulator.pysf_sim.forces")
 
 
 def run():
     """Run the debug environment to analyze pedestrian social forces."""
-    env = make_env("maps/svg_maps/debug_06.svg")
-    filename = get_file()
-    # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
-    logger.info(f"Loading pedestrian model from {filename}")
+    env = make_env()
+    try:
+        _ = env.reset()
+        env.simulator.ego_ped.state.pose = ((12.0, 10.0), 0)
+        social_force_fn = _find_social_force(env)
 
-    # model = PPO.load(filename, env=env)
-
-    _ = env.reset()
-    env.simulator.ego_ped.state.pose = ((12.0, 10.0), 0)
-
-    # Teleport NPC
-    # def teleport_npc(x, y):
-    #     env.simulator.pysf_sim.peds.state[0, 0:2] = [x, y]  # position
-    #     env.simulator.pysf_sim.peds.state[0, 2:4] = [1.0, 0.0]  # velocity
-
-    # teleport_npc(1.0, 10.0)
-
-    social_forces = []
-    all_forces = []
-    total_forces = []
-    social_force_threshold = 0.5
-    # force_names = [type(force).__name__ for force in env.simulator.pysf_sim.forces]
-    for i in range(400):
-        action = np.array([0, 0])  # No action for the ego pedestrian
-        _, _, done, _, _ = env.step(action)
-        # Get the social force for the NPC (index 0)
-        sf = env.simulator.pysf_sim.forces[1]()  # index 1 is social force
-        force_components = [force() for force in env.simulator.pysf_sim.forces]
-        npc_social_force = sf[0].copy()
-        social_forces.append(npc_social_force)
-        social_force_norm = float(np.linalg.norm(npc_social_force))
-        if social_force_norm > social_force_threshold:
-            npc_pos = env.simulator.pysf_sim.peds.state[0, 0:2].copy()
-            logger.info(
-                f"step={i} social_force={npc_social_force.tolist()} "
-                f"|f|={social_force_norm:.6f} "
-                f"npc_pos=({float(npc_pos[0]):.6f}, {float(npc_pos[1]):.6f})"
+        social_forces = []
+        all_forces = []
+        total_forces = []
+        social_force_threshold = 0.5
+        for i in range(400):
+            action = np.array([0, 0])  # No action for the ego pedestrian
+            _, _, terminated, truncated, _ = env.step(action)
+            done = bool(terminated or truncated)
+            sf = social_force_fn()
+            force_components = [force() for force in env.simulator.pysf_sim.forces]
+            npc_social_force = sf[0].copy()
+            social_forces.append(npc_social_force)
+            social_force_norm = float(np.linalg.norm(npc_social_force))
+            if social_force_norm > social_force_threshold:
+                npc_pos = env.simulator.pysf_sim.peds.state[0, 0:2].copy()
+                logger.info(
+                    f"step={i} social_force={npc_social_force.tolist()} "
+                    f"|f|={social_force_norm:.6f} "
+                    f"npc_pos=({float(npc_pos[0]):.6f}, {float(npc_pos[1]):.6f})"
+                )
+            npc_force_components = np.stack(
+                [component[0].copy() for component in force_components],
+                axis=0,
             )
-        npc_force_components = np.stack(
-            [component[0].copy() for component in force_components], axis=0
-        )
-        all_forces.append(npc_force_components)
-        total_forces.append(npc_force_components.sum(axis=0))
-        # teleport_npc(11, 10.0)  # Keep teleporting to isolate social force response
-        env.render()
-        # time.sleep(0.5)
+            all_forces.append(npc_force_components)
+            total_forces.append(npc_force_components.sum(axis=0))
+            env.render()
 
-        if done:
-            break
-    # logger.error(f"sf: {social_forces}")
-    # logger.error(f"force names: {force_names}")
-    # logger.error(f"all forces (per step, per component for NPC 0): {all_forces}")
-    # logger.error(f"total summed force (per step for NPC 0): {total_forces}")
-    env.exit()
-
-
-def extract_info(meta: dict, reward: float) -> str:
-    """Extract and format episode statistics from metadata.
-
-    Parameters
-    ----------
-    meta : dict
-        Metadata dictionary containing episode information.
-    reward : float
-        Cumulative reward for the episode.
-
-    Returns
-    -------
-    str
-        Formatted string containing episode number, steps, done conditions,
-        reward, and distance to robot.
-    """
-    meta = meta["meta"]
-    eps_num = meta["episode"]
-    steps = meta["step_of_episode"]
-    done = [key for key, value in meta.items() if value is True]
-    dis = meta["distance_to_robot"]
-    return f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, Distance: {dis}"
+            if done:
+                break
+    finally:
+        env.exit()
 
 
 if __name__ == "__main__":

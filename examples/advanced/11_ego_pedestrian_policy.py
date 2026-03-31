@@ -4,7 +4,7 @@ Usage:
     uv run python examples/advanced/11_ego_pedestrian_policy.py
 
 Prerequisites:
-    - maps/svg_maps/debug06.svg
+    - maps/svg_maps/debug_06.svg
     - model/run_043
 
 Expected Output:
@@ -56,7 +56,8 @@ def test_simulation(map_definition: MapDefinition):
     logger.info("Simulating the random policy.")
     for _ in range(1000):
         action_ped = env.action_space.sample()
-        _, _, done, _, _ = env.step(action_ped)
+        _, _, terminated, truncated, _ = env.step(action_ped)
+        done = bool(terminated or truncated)
         env.render()
 
         if done:
@@ -71,7 +72,14 @@ def get_file():
     """Get the latest recorded file."""
 
     recordings_dir = get_artifact_category_path("recordings")
-    latest_file = max(recordings_dir.iterdir(), key=lambda path: path.stat().st_ctime)
+    if not recordings_dir.exists():
+        raise FileNotFoundError(f"Recordings directory not found: {recordings_dir}")
+
+    recordings = [path for path in recordings_dir.iterdir() if path.is_file()]
+    if not recordings:
+        raise FileNotFoundError(f"No recordings found in: {recordings_dir}")
+
+    latest_file = max(recordings, key=lambda path: path.stat().st_mtime)
     return latest_file
 
 

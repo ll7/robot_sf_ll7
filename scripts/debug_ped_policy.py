@@ -1,6 +1,5 @@
 """Debug runner for pedestrian policy models in the SocialForce simulator."""
 
-import os
 from pathlib import Path
 
 import loguru
@@ -16,6 +15,13 @@ from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
 logger = loguru.logger
+
+
+def _extract_linear_speed(speed_like) -> float:
+    """Return the translational component from a scalar/sequence speed value."""
+    if isinstance(speed_like, (tuple, list)):
+        return float(speed_like[0]) if speed_like else float("nan")
+    return float(speed_like)
 
 
 def make_env(svg_map_path):
@@ -65,12 +71,15 @@ def make_env(svg_map_path):
 
 def get_file():
     """Get the latest model file."""
+    model_dir = Path("model_ped")
+    if not model_dir.exists():
+        raise FileNotFoundError(f"Model directory not found: {model_dir}")
 
-    filename = max(
-        os.listdir("model/pedestrian"),
-        key=lambda x: os.path.getctime(os.path.join("model/pedestrian", x)),
-    )
-    return Path("model/pedestrian", filename)
+    candidates = sorted(model_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+    if not candidates:
+        raise FileNotFoundError(f"No model checkpoints found in: {model_dir}")
+
+    return candidates[-1]
 
 
 def run():
@@ -83,7 +92,6 @@ def run():
     # env = make_env("maps/svg_maps/debug_06.svg")
     env = make_env("maps/svg_maps/masterthesis/intersection.svg")
     filename = get_file()
-    filename = "./model_ped/ppo_intersection.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)
@@ -95,9 +103,10 @@ def run():
         if isinstance(obs, tuple):  # Check env.reset()
             obs = obs[0]
         action, _ = model.predict(obs, deterministic=True)
-        obs, reward, done, _, meta = env.step(action)
-        robot_speed = env.simulator.robots[0].current_speed
-        ego_speed = env.simulator.ego_ped.current_speed
+        obs, reward, terminated, truncated, meta = env.step(action)
+        done = bool(terminated or truncated)
+        robot_speed = _extract_linear_speed(env.simulator.robots[0].current_speed)
+        ego_speed = _extract_linear_speed(env.simulator.ego_ped.current_speed)
         ep_rewards += reward
         env.render()
 
@@ -135,7 +144,10 @@ def extract_info(meta: dict, reward: float) -> str:
     angle = meta["collision_impact_angle_deg"]
     zone = meta["robot_ped_collision_zone"]
     speed = meta["ego_ped_speed"]
-    return f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, Distance: {dis}, Angle: {angle}, Zone: {zone}, speed: {speed}"
+    return (
+        f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, "
+        f"Distance: {dis}, Angle: {angle}, Zone: {zone}, speed: {speed}"
+    )
 
 
 if __name__ == "__main__":

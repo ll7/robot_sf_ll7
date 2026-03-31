@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -122,7 +121,7 @@ def _latest_ped_model_path() -> Path:
     if not model_dir.exists():
         raise FileNotFoundError(f"Directory not found: {model_dir}")
 
-    candidates = sorted(model_dir.glob("*.zip"), key=os.path.getctime)
+    candidates = sorted(model_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
     if not candidates:
         raise FileNotFoundError("No pedestrian model checkpoints found in model_ped/")
     return candidates[-1]

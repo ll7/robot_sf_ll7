@@ -199,8 +199,8 @@ examples:
     ci_reason: "Requires external PPO checkpoint and long recording playback."
     doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, recording]
-  - path: advanced/32_demo_adversial_pedestrian.py
-    name: "32 Demo Adversial Pedestrian"
+  - path: advanced/32_demo_adversarial_pedestrian.py
+    name: "32 Demo Adversarial Pedestrian"
     summary: "Run a modernized debug rollout for pedestrian PPO policies with factory-based setup."
     category_slug: advanced
     prerequisites:

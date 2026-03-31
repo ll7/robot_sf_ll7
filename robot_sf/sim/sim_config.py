@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from math import ceil
 
-from robot_sf.ped_npc.adversial_ped_force import AdversialPedForceConfig
+from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 
 
@@ -44,7 +44,7 @@ class SimulationSettings:
     prf_config: PedRobotForceConfig = field(default_factory=PedRobotForceConfig)
     """Pedestrian-robot force configuration"""
 
-    apf_config: AdversialPedForceConfig = field(default_factory=AdversialPedForceConfig)
+    apf_config: AdversarialPedForceConfig = field(default_factory=AdversarialPedForceConfig)
     """Adversarial pedestrian force configuration"""
 
     ped_density_by_difficulty: list[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
@@ -94,7 +94,7 @@ class SimulationSettings:
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")
-        if self.apf_config is None or not isinstance(self.apf_config, AdversialPedForceConfig):
+        if self.apf_config is None or not isinstance(self.apf_config, AdversarialPedForceConfig):
             raise ValueError("Adversarial-ped-force settings need to be specified!")
         self._validate_route_spawn_config()
 

@@ -111,7 +111,7 @@ class DrivingMetricsCallback(BaseMetricsCallback):
         return True  # info: don't request early abort
 
 
-class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
+class AdversarialPedestrianMetricsCallback(BaseMetricsCallback):
     """Callback for logging adversarial pedestrian metrics during training."""
 
     def __init__(self, num_envs: int):
@@ -184,3 +184,6 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
             )
             self.writer.flush()
         return True  # info: don't request early abort
+
+
+AdversialPedestrianMetricsCallback = AdversarialPedestrianMetricsCallback

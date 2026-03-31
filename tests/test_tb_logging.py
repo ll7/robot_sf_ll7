@@ -8,6 +8,7 @@ import pytest
 from stable_baselines3.common.logger import TensorBoardOutputFormat
 
 from robot_sf.tb_logging import (
+    AdversarialPedestrianMetricsCallback,
     AdversialPedestrianMetricsCallback,
     BaseMetricsCallback,
     DrivingMetricsCallback,
@@ -62,7 +63,7 @@ class _DrivingMetricsStub:
 
 
 class _PedMetricsStub:
-    """Expose the metric attributes consumed by AdversialPedestrianMetricsCallback."""
+    """Expose the metric attributes consumed by AdversarialPedestrianMetricsCallback."""
 
     timeout_rate = 0.1
     obstacle_collision_rate = 0.2
@@ -158,9 +159,9 @@ def test_driving_metrics_callback_skips_writer_when_not_logging_step() -> None:
     assert callback.writer.flush_calls == 0
 
 
-def test_adversial_pedestrian_metrics_callback_logs_extended_collision_metrics() -> None:
+def test_adversarial_pedestrian_metrics_callback_logs_extended_collision_metrics() -> None:
     """Log the pedestrian-specific collision and kinematics metrics."""
-    callback = AdversialPedestrianMetricsCallback(num_envs=2)
+    callback = AdversarialPedestrianMetricsCallback(num_envs=2)
     callback.metrics = _PedMetricsStub()
     callback.writer = _RecordingWriter()
     callback.locals = {"infos": [{"meta": {"episode": 1}}, {"meta": {"episode": 2}}]}
@@ -184,3 +185,8 @@ def test_adversial_pedestrian_metrics_callback_logs_extended_collision_metrics()
         ("metrics/avg_collision_impact_angle_rad", 0.9, 987),
     ]
     assert callback.writer.flush_calls == 1
+
+
+def test_adversarial_pedestrian_metrics_callback_legacy_alias_remains_available() -> None:
+    """Preserve the legacy callback name while switching callers to the corrected spelling."""
+    assert AdversialPedestrianMetricsCallback is AdversarialPedestrianMetricsCallback

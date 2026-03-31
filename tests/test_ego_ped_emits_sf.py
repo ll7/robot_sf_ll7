@@ -16,6 +16,7 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import SvgRectangle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.sim import simulator as simulator_module
 from robot_sf.sim.sim_config import SimulationSettings
 
 
@@ -179,6 +180,25 @@ def test_ego_position_correct_in_states(env):
         assert np.allclose(
             env.simulator.pysf_state.pysf_states()[-1, 0:2], env.simulator.ego_ped_pos
         ), "Ego pedestrian position does not match the simulator state"
+
+
+def test_ego_social_force_state_preserves_tau_and_uses_cartesian_velocity(env) -> None:
+    """Keep the ego row compatible with PySF's state layout while syncing motion."""
+    _, _ = env.reset()
+
+    tau_before = float(env.simulator.pysf_state.pysf_states()[-1, simulator_module.PYSF_TAU_INDEX])
+    env.simulator.ego_ped.state.pose = ((12.0, 5.0), np.pi / 2)
+    env.simulator.ego_ped.state.velocity = 1.5
+
+    env.simulator._sync_ego_ped_social_force_state()
+
+    ego_state = env.simulator.pysf_state.pysf_states()[-1]
+    np.testing.assert_allclose(
+        ego_state[simulator_module.PYSF_VELOCITY_SLICE],
+        np.array([0.0, 1.5], dtype=float),
+        atol=1e-9,
+    )
+    assert ego_state[simulator_module.PYSF_TAU_INDEX] == pytest.approx(tau_before)
 
     env.simulator.ego_ped.state.pose = ((12.0, 5.0), 0)
     for i in range(5):

@@ -23,7 +23,7 @@ Example:
     ...     sim.step_once([action1, action2])"""
 
 from dataclasses import dataclass, field, replace
-from math import ceil, cos, pi, sin
+from math import atan2, ceil, cos, pi, sin
 from random import sample, uniform
 
 import numpy as np
@@ -41,13 +41,41 @@ from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
-from robot_sf.ped_npc.adversial_ped_force import AdversialPedForce, AdversialPedForceConfig
+from robot_sf.ped_npc.adversial_ped_force import (
+    AdversarialPedForce,
+    AdversarialPedForceConfig,
+)
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.robot.robot_state import Robot
+
+PYSF_POSITION_SLICE = slice(0, 2)
+PYSF_VELOCITY_SLICE = slice(2, 4)
+PYSF_TAU_INDEX = 6
+MIN_HEADING_SPEED_MPS = 1e-6
+
+
+def _cartesian_velocity(speed: float, heading: float) -> np.ndarray:
+    """Convert scalar speed plus heading into PySF ``(vx, vy)`` components.
+
+    Returns:
+        np.ndarray: Cartesian velocity vector with shape ``(2,)``.
+    """
+    return np.array([speed * cos(heading), speed * sin(heading)], dtype=float)
+
+
+def _heading_from_velocity(velocity_xy: np.ndarray, fallback_heading: float) -> float:
+    """Derive a heading from a PySF velocity vector or keep the fallback heading.
+
+    Returns:
+        float: Heading angle in radians.
+    """
+    if float(np.linalg.norm(velocity_xy)) <= MIN_HEADING_SPEED_MPS:
+        return fallback_heading
+    return float(atan2(float(velocity_xy[1]), float(velocity_xy[0])))
 
 
 def _make_ped_forces(
@@ -56,7 +84,7 @@ def _make_ped_forces(
     robots: list[Robot],
     peds_have_obstacle_forces: bool,
     prf_config: PedRobotForceConfig,
-    apf_config: AdversialPedForceConfig,
+    apf_config: AdversarialPedForceConfig,
 ) -> list[PySFForce]:
     """Configure pedestrian forces for the physics engine.
 
@@ -92,7 +120,7 @@ def _make_ped_forces(
         for robot in robots:
             robot_apf_config = replace(apf_config, robot_radius=robot.config.radius)
             forces.append(
-                AdversialPedForce(robot_apf_config, sim.peds, lambda robot=robot: robot.pose)
+                AdversarialPedForce(robot_apf_config, sim.peds, lambda robot=robot: robot.pose)
             )
 
     return forces
@@ -472,10 +500,9 @@ class PedSimulator(Simulator):
     def _sync_ego_ped_social_force_state(self) -> None:
         """Synchronize the appended ego-pedestrian row in the PySF state array."""
         pysf_states = self.pysf_state.pysf_states()
-        pysf_states[-1, 0:2] = self.ego_ped.pos
-        pysf_states[-1, 2:4] = self.ego_ped.current_speed
-        if pysf_states.shape[1] > 6:
-            pysf_states[-1, 6] = self.ego_ped.pose[1]
+        ego_speed, ego_heading = self.ego_ped.current_speed
+        pysf_states[-1, PYSF_POSITION_SLICE] = self.ego_ped.pos
+        pysf_states[-1, PYSF_VELOCITY_SLICE] = _cartesian_velocity(ego_speed, ego_heading)
 
     def reset_state(self):
         """Reset robot and ego pedestrian state.
@@ -500,9 +527,13 @@ class PedSimulator(Simulator):
             # Spawn ego pedestrian randomly in one of the pedestrian spawn zones
             ped_spawn_zone = sample(self.map_def.ped_spawn_zones, k=1)[0]
             ped_spawn = sample_zone(ped_spawn_zone, 1)[0]
-            npc_orient = self.pysf_state.pysf_states()[
-                0, 6
-            ]  # Have the same orientation as the first NPC
+            npc_orient = self.ego_ped.pose[1]
+            if self.pysf_state.num_peds > 1:
+                npc_velocity = self.pysf_state.pysf_states()[0, PYSF_VELOCITY_SLICE]
+                npc_orient = _heading_from_velocity(
+                    npc_velocity,
+                    fallback_heading=npc_orient,
+                )
             self.ego_ped.reset_state((ped_spawn, npc_orient))
         self._sync_ego_ped_social_force_state()
 

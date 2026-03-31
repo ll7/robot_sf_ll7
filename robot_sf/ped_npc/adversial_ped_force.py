@@ -16,9 +16,11 @@ from pysocialforce.scene import PedState
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import RobotPose, Vec2D
 
+MIN_ATTRACTION_DISTANCE_M = 1.0
+
 
 @dataclass
-class AdversialPedForceConfig:
+class AdversarialPedForceConfig:
     """Configuration for adversarial pedestrian force behavior.
 
     Attributes
@@ -48,7 +50,7 @@ class AdversialPedForceConfig:
     target_ped_idx: int = -1
 
 
-class AdversialPedForce:
+class AdversarialPedForce:
     """Compute attractive forces pulling pedestrians towards a point in front of the robot.
 
     This class implements adversarial force behavior that modifies pedestrian trajectories
@@ -56,7 +58,7 @@ class AdversialPedForce:
 
     Attributes
     ----------
-    config : AdversialPedForceConfig
+    config : AdversarialPedForceConfig
         Configuration parameters for the adversarial force behavior.
     peds : PedState
         The pedestrian state containing positions, velocities, and other properties.
@@ -76,7 +78,7 @@ class AdversialPedForce:
 
     def __init__(
         self,
-        config: AdversialPedForceConfig,
+        config: AdversarialPedForceConfig,
         peds: PedState,
         get_robot_pose: Callable[[], RobotPose],
     ):
@@ -84,7 +86,7 @@ class AdversialPedForce:
 
         Parameters
         ----------
-        config : AdversialPedForceConfig
+        config : AdversarialPedForceConfig
             Configuration parameters for the adversarial force behavior.
         peds : PedState
             The pedestrian state containing positions, velocities, and other properties.
@@ -138,7 +140,7 @@ class AdversialPedForce:
             self.last_forces = forces
             return forces
 
-        adversial_ped_force(
+        adversarial_ped_force(
             out_forces=forces,
             relaxation_time=self.config.relaxation_time,
             ped_positions=ped_positions,
@@ -157,7 +159,7 @@ class AdversialPedForce:
 
 
 @numba.njit(fastmath=True)
-def adversial_ped_force(  # noqa: PLR0913
+def adversarial_ped_force(  # noqa: PLR0913
     out_forces: np.ndarray,
     relaxation_time: float,
     ped_positions: np.ndarray,
@@ -199,7 +201,7 @@ def adversial_ped_force(  # noqa: PLR0913
         ped_pos = ped_positions[idx]
         distance = euclid_dist(attraction_point, ped_pos)
 
-        if distance <= threshold and distance > 1:  # avoid division by zero and not too accurate
+        if distance <= threshold and distance > MIN_ATTRACTION_DISTANCE_M:
             # Desired direction
             direction = (attraction_point - ped_pos) / distance
 
@@ -208,3 +210,8 @@ def adversial_ped_force(  # noqa: PLR0913
 
             # relaxation toward desired velocity
             out_forces[idx] = (v_desired - ped_velocities[idx]) / relaxation_time
+
+
+AdversialPedForceConfig = AdversarialPedForceConfig
+AdversialPedForce = AdversarialPedForce
+adversial_ped_force = adversarial_ped_force

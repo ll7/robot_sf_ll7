@@ -141,3 +141,116 @@ def test_adversial_ped_force_invalid_target_indices_noop() -> None:
     )
 
     np.testing.assert_allclose(force(), np.zeros((1, 2), dtype=np.float64))
+
+
+def test_adversial_ped_force_wrapper_initializes_and_copies_last_forces() -> None:
+    """Wrapper state should start with a correctly shaped buffer and retain a copied result."""
+    ped_state = _DummyPedState(
+        positions=np.array([[-1.0, 0.0], [0.0, -2.0]], dtype=np.float64),
+        velocities=np.zeros((2, 2), dtype=np.float64),
+        max_speeds=np.array([1.0, 1.5], dtype=np.float64),
+    )
+    force = AdversialPedForce(
+        AdversialPedForceConfig(
+            is_active=True,
+            target_ped_idx=[0, 1],
+            force_multiplier=2.0,
+            offset=1.0,
+            activation_threshold=10.0,
+        ),
+        ped_state,
+        get_robot_pose=lambda: ((0.0, 0.0), 0.0),
+    )
+
+    assert force.last_forces.shape == (2, 2)
+
+    computed = force()
+    np.testing.assert_allclose(force.last_forces, computed)
+    computed[0, 0] = -999.0
+    assert force.last_forces[0, 0] != -999.0
+
+
+def test_adversial_ped_force_wrapper_handles_empty_crowd() -> None:
+    """Return an empty force matrix when no pedestrians are present."""
+    ped_state = _DummyPedState(
+        positions=np.zeros((0, 2), dtype=np.float64),
+        velocities=np.zeros((0, 2), dtype=np.float64),
+        max_speeds=np.zeros((0,), dtype=np.float64),
+    )
+    force = AdversialPedForce(
+        AdversialPedForceConfig(is_active=True, target_ped_idx=-1),
+        ped_state,
+        get_robot_pose=lambda: ((0.0, 0.0), 0.0),
+    )
+
+    result = force()
+
+    assert result.shape == (0, 2)
+    assert force.last_forces.shape == (0, 2)
+
+
+def test_adversial_ped_force_wrapper_handles_invalid_target_lists() -> None:
+    """Return zeros when every requested target index falls outside the current crowd."""
+    ped_state = _DummyPedState(
+        positions=np.array([[0.0, 0.0]], dtype=np.float64),
+        velocities=np.zeros((1, 2), dtype=np.float64),
+        max_speeds=np.array([1.0], dtype=np.float64),
+    )
+    force = AdversialPedForce(
+        AdversialPedForceConfig(is_active=True, target_ped_idx=[10, 11]),
+        ped_state,
+        get_robot_pose=lambda: ((0.0, 0.0), 0.0),
+    )
+
+    np.testing.assert_allclose(force(), np.zeros((1, 2), dtype=np.float64))
+    np.testing.assert_allclose(force.last_forces, np.zeros((1, 2), dtype=np.float64))
+
+
+def test_adversial_ped_force_skips_far_and_near_targets() -> None:
+    """Do not apply attraction when a target is too near or beyond the threshold."""
+    out_forces = np.zeros((2, 2), dtype=np.float64)
+    ped_positions = np.array([[0.25, 0.0], [5.0, 0.0]], dtype=np.float64)
+    ped_velocities = np.zeros_like(ped_positions)
+    ped_max_speeds = np.array([1.0, 1.0], dtype=np.float64)
+
+    adversial_ped_force(
+        out_forces=out_forces,
+        relaxation_time=1.0,
+        ped_positions=ped_positions,
+        ped_velocities=ped_velocities,
+        ped_max_speeds=ped_max_speeds,
+        robot_pos=np.array([0.0, 0.0], dtype=np.float64),
+        robot_orient=0.0,
+        offset=1.0,
+        threshold=2.0,
+        target_ped_idx=np.array([0, 1], dtype=np.int64),
+    )
+
+    np.testing.assert_allclose(out_forces, np.zeros((2, 2), dtype=np.float64))
+
+
+def test_adversial_ped_force_respects_robot_orientation() -> None:
+    """Compute the attraction point using robot orientation, not only x-axis offsets."""
+    out_forces = np.zeros((1, 2), dtype=np.float64)
+    ped_positions = np.array([[0.0, 0.0]], dtype=np.float64)
+    ped_velocities = np.zeros_like(ped_positions)
+    ped_max_speeds = np.array([2.0], dtype=np.float64)
+
+    adversial_ped_force.py_func(
+        out_forces=out_forces,
+        relaxation_time=1.0,
+        ped_positions=ped_positions,
+        ped_velocities=ped_velocities,
+        ped_max_speeds=ped_max_speeds,
+        robot_pos=np.array([0.0, 0.0], dtype=np.float64),
+        robot_orient=np.pi / 2,
+        offset=2.0,
+        threshold=10.0,
+        target_ped_idx=np.array([0], dtype=np.int64),
+    )
+
+    np.testing.assert_allclose(
+        out_forces,
+        np.array([[0.0, 2.0]], dtype=np.float64),
+        atol=1e-12,
+    )

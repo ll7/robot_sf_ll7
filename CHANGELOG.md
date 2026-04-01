@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Added `SLURM/Auxme/issue_749_imitation_pipeline.sl`, a shared-artifact Auxme wrapper for issue #749 imitation runs that stages registered source checkpoints into `benchmarks/expert_policies/` and keeps dataset, BC, and PPO finetune jobs on the same `ROBOT_SF_ARTIFACT_ROOT`.
 * Added benchmark release protocol v0.1 surfaces: canonical release manifests for the paper-facing matrix, a `run_benchmark_release.py` entrypoint layered on the camera-ready workflow, release/reproducibility docs, `CITATION.cff`, and a benchmark-focused `RELEASE.md` checklist.
 * Added Project #5 task prioritization support: a documented benchmark-oriented scoring model, a `project_priority_score.py` sync helper, and a GitHub Actions workflow for manual/scheduled/issue-event score synchronization into a numeric `Priority Score` field.
 * Default PR template now prompts for summary, validation/proof, risks/rollout, docs/provenance, and follow-up issues so reviews stay proof-first and easier to act on.
@@ -72,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
+
+* Issue #747 and #748 carry-forward PPO configs now resume from the registered BR-06 v10 best-success checkpoint instead of the older v3 baseline, so the resumed observation contract matches predictive-foresight training.
 
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.

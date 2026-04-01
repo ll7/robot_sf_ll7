@@ -1,9 +1,11 @@
 # Usage: uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_748_br06_v10_carry_forward_num_envs_14.yaml --log-level WARNING
 # Issue 748 follow-up: keep the proven BR-06 v10 carry-forward contract, but pin num_envs=14
 # because the imech156-u num_envs benchmark marked 14 envs as the safer long-run compromise.
+# Resume from the registered v10 best-success checkpoint so the predictive-foresight
+# observation contract matches the carry-forward environment.
 policy_id: ppo_expert_issue_748_br06_v10_carry_forward_num_envs_14
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
-resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+resume_model_id: ppo_expert_br06_v10_best_27dbe5xu_20260317
 num_envs: 14
 worker_mode: subproc
 seeds:

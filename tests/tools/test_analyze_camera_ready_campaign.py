@@ -765,3 +765,45 @@ def test_analyze_campaign_cli_writes_scenario_difficulty_artifacts(
     assert difficulty_payload["verified_simple_assessment"]["status"] == "rerun_required"
     assert "## Scenario Difficulty" in analysis_md.read_text(encoding="utf-8")
     assert "# Scenario Difficulty" in difficulty_md.read_text(encoding="utf-8")
+
+
+def test_analyze_campaign_cli_respects_output_overrides_for_difficulty_sidecars(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sidecar scenario-difficulty outputs should follow explicit output overrides."""
+    campaign_root = tmp_path / "campaign"
+    _write_scenario_difficulty_campaign(campaign_root)
+    output_dir = tmp_path / "redirected_reports"
+    output_json = output_dir / "custom_campaign_analysis.json"
+    output_md = output_dir / "custom_campaign_analysis.md"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "analyze_camera_ready_campaign.py",
+            "--campaign-root",
+            str(campaign_root),
+            "--output-json",
+            str(output_json),
+            "--output-md",
+            str(output_md),
+        ],
+    )
+
+    assert main() == 0
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    difficulty_json = output_dir / "scenario_difficulty_analysis.json"
+    difficulty_md = output_dir / "scenario_difficulty_analysis.md"
+
+    assert stdout_payload == {
+        "analysis_json": str(output_json.resolve()),
+        "analysis_md": str(output_md.resolve()),
+        "scenario_difficulty_json": str(difficulty_json.resolve()),
+        "scenario_difficulty_md": str(difficulty_md.resolve()),
+    }
+    assert difficulty_json.exists()
+    assert difficulty_md.exists()

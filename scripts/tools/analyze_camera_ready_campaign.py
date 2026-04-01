@@ -703,9 +703,15 @@ def main() -> int:
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_md.parent.mkdir(parents=True, exist_ok=True)
     difficulty_output_json = (
-        campaign_root / "reports" / "scenario_difficulty_analysis.json"
-    ).resolve()
-    difficulty_output_md = (campaign_root / "reports" / "scenario_difficulty_analysis.md").resolve()
+        output_json.with_name("scenario_difficulty_analysis.json")
+        if args.output_json is not None
+        else (campaign_root / "reports" / "scenario_difficulty_analysis.json").resolve()
+    )
+    difficulty_output_md = (
+        output_md.with_name("scenario_difficulty_analysis.md")
+        if args.output_md is not None
+        else (campaign_root / "reports" / "scenario_difficulty_analysis.md").resolve()
+    )
     difficulty_output_json.parent.mkdir(parents=True, exist_ok=True)
     difficulty_output_md.parent.mkdir(parents=True, exist_ok=True)
 

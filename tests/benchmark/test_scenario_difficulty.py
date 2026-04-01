@@ -508,6 +508,7 @@ def test_benchmark_success_and_consensus_filters_cover_failure_modes() -> None:
     assert _is_benchmark_success({"benchmark_success": True}) is True
     assert _is_benchmark_success({"benchmark_success": "false"}) is False
 
+    assert _is_consensus_planner({}) is False
     assert _is_consensus_planner({"planner_group": "experimental"}) is False
     assert _is_consensus_planner({"planner_group": "core", "readiness_status": "fallback"}) is False
     assert _is_consensus_planner({"planner_group": "core", "preflight_status": "fallback"}) is False
@@ -544,25 +545,25 @@ def test_verified_simple_assessment_supports_candidate_when_order_is_preserved(
                 "planner_key": "goal",
                 "scenario_id": "easy_case",
                 "success_mean": "0.95",
-                "seed_success_ci_half_width_mean": "0.02",
+                "seed_success_ci_half_width": "0.02",
             },
             {
                 "planner_key": "orca",
                 "scenario_id": "easy_case",
                 "success_mean": "0.90",
-                "seed_success_ci_half_width_mean": "0.03",
+                "seed_success_ci_half_width": "0.03",
             },
             {
                 "planner_key": "goal",
                 "scenario_id": "hard_case",
                 "success_mean": "0.45",
-                "seed_success_ci_half_width_mean": "0.10",
+                "seed_success_ci_half_width": "0.10",
             },
             {
                 "planner_key": "orca",
                 "scenario_id": "hard_case",
                 "success_mean": "0.40",
-                "seed_success_ci_half_width_mean": "0.09",
+                "seed_success_ci_half_width": "0.09",
             },
         ],
         _planner_row_index(_planner_rows()[:2]),
@@ -572,6 +573,8 @@ def test_verified_simple_assessment_supports_candidate_when_order_is_preserved(
     assert assessment["status"] == "candidate_supported"
     assert assessment["worth_adding"] is True
     assert assessment["comparison_planner_selection"] == "core benchmark-success planners"
+    assert assessment["full_seed_success_ci_half_width_mean"] == pytest.approx(0.06)
+    assert assessment["subset_seed_success_ci_half_width_mean"] == pytest.approx(0.06)
 
 
 def test_verified_simple_assessment_marks_candidate_noisy_when_subset_reorders(
@@ -793,3 +796,111 @@ def test_build_scenario_difficulty_marks_verified_simple_candidate_noisy_when_re
     assert assessment["worth_adding"] is False
     assert assessment["full_seed_success_ci_half_width_mean"] == pytest.approx(0.155)
     assert assessment["subset_seed_success_ci_half_width_mean"] == pytest.approx(0.30)
+
+
+def test_verified_simple_assessment_does_not_claim_support_without_noise_evidence(
+    tmp_path: Path,
+) -> None:
+    """High rank correlation without seed-noise evidence should remain mixed rather than supported."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text(
+        "scenarios:\n  - name: easy_case\n  - name: hard_case\n",
+        encoding="utf-8",
+    )
+
+    assessment = _verified_simple_assessment(
+        [
+            {"planner_key": "goal", "scenario_id": "easy_case", "success_mean": "0.95"},
+            {"planner_key": "orca", "scenario_id": "easy_case", "success_mean": "0.90"},
+            {"planner_key": "goal", "scenario_id": "hard_case", "success_mean": "0.45"},
+            {"planner_key": "orca", "scenario_id": "hard_case", "success_mean": "0.40"},
+        ],
+        _planner_row_index(_planner_rows()[:2]),
+        manifest_path=manifest,
+    )
+
+    assert assessment["status"] == "mixed_signal"
+    assert assessment["worth_adding"] is None
+
+
+def test_build_scenario_difficulty_keeps_missing_planner_group_on_all_planner_fallback() -> None:
+    """Campaigns without explicit planner-group metadata should use the all-planners fallback label."""
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=[
+            {"planner_key": "goal", "algo": "goal", "status": "ok", "benchmark_success": "true"},
+            {"planner_key": "orca", "algo": "orca", "status": "ok", "benchmark_success": "true"},
+        ],
+        scenario_breakdown_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.95",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.05",
+                "time_to_goal_norm_mean": "0.30",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.90",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.10",
+                "time_to_goal_norm_mean": "0.35",
+            },
+        ],
+    )
+
+    assert (
+        analysis["primary_proxy"]["eligible_planner_selection"]
+        == "all planners (fallback: no eligible core set)"
+    )
+
+
+def test_build_scenario_difficulty_does_not_flag_easy_underperformance_on_zero_baseline() -> None:
+    """Zero residual baselines should not fabricate easy-scenario underperformance flags."""
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "planner_group": "core",
+                "status": "ok",
+                "preflight_status": "ok",
+                "benchmark_success": "true",
+            }
+        ],
+        scenario_breakdown_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.95",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.05",
+                "time_to_goal_norm_mean": "0.30",
+            },
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "hard_family",
+                "scenario_id": "hard_case",
+                "episodes": "3",
+                "success_mean": "0.45",
+                "collisions_mean": "0.30",
+                "near_misses_mean": "0.40",
+                "time_to_goal_norm_mean": "0.80",
+            },
+        ],
+    )
+
+    assert all(
+        row["easy_scenario_underperformance"] is False for row in analysis["planner_residual_rows"]
+    )

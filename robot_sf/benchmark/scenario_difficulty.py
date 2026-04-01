@@ -152,7 +152,9 @@ def _is_benchmark_success(row: Mapping[str, Any]) -> bool:
 
 def _is_consensus_planner(row: Mapping[str, Any]) -> bool:
     planner_group = str(row.get("planner_group", "")).strip().lower()
-    if planner_group and planner_group != _CORE_PLANNER_GROUP:
+    if not planner_group:
+        return False
+    if planner_group != _CORE_PLANNER_GROUP:
         return False
     if str(row.get("readiness_status", "")).strip().lower() in _READINESS_EXCLUDED_STATUSES:
         return False
@@ -305,8 +307,9 @@ def _planner_quality_rows(
         output.append(
             {
                 "planner_key": planner_key,
-                "algo": str(template.get("algo", "unknown")),
-                "planner_group": str(template.get("planner_group", "unknown")),
+                "algo": str(template.get("algo") or "unknown").strip() or "unknown",
+                "planner_group": str(template.get("planner_group") or "unknown").strip()
+                or "unknown",
                 "success_mean": _mean(_safe_float(row.get("success_mean")) for row in planner_rows),
                 "collisions_mean": _mean(
                     _safe_float(row.get("collisions_mean")) for row in planner_rows
@@ -452,8 +455,11 @@ def _verified_simple_assessment(
             "rows to judge ordering stability. Keep the subset as a gate until a broader pilot is "
             "available."
         )
-    elif rank_correlation >= 0.8 and (
-        subset_noise is None or full_noise is None or subset_noise <= full_noise * 1.15
+    elif (
+        rank_correlation >= 0.8
+        and subset_noise is not None
+        and full_noise is not None
+        and subset_noise <= full_noise * 1.15
     ):
         worth_adding = True
         status = "candidate_supported"
@@ -470,6 +476,15 @@ def _verified_simple_assessment(
         recommendation = (
             "The verified-simple subset materially reorders planners or increases seed noise. Keep "
             "it as a debugging or promotion gate rather than a benchmark calibration set."
+        )
+    elif rank_correlation >= 0.8:
+        worth_adding = None
+        status = "mixed_signal"
+        recommendation = (
+            "The verified-simple subset preserves planner ordering, but this campaign does not "
+            "include enough seed-variability evidence to show that the subset is comparably "
+            "stable. Use it only as a secondary calibration view until a bounded pilot fills in "
+            "the noise data."
         )
     else:
         worth_adding = None
@@ -790,10 +805,13 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
         0.50,
     )
     for row in residual_rows:
+        residual_score = _safe_float(row.get("residual_score"))
         row["easy_scenario_underperformance"] = bool(
-            row.get("residual_score") is not None
+            residual_score is not None
             and residual_threshold is not None
-            and float(row["residual_score"]) >= residual_threshold
+            and residual_threshold > 0.0
+            and residual_score > 0.0
+            and residual_score >= residual_threshold
             and row.get("difficulty_score") is not None
             and easy_difficulty_limit is not None
             and float(row["difficulty_score"]) <= easy_difficulty_limit

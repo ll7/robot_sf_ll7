@@ -39,6 +39,8 @@ models:
     wandb_project:
     wandb_run_id: run_id
     wandb_file: model.zip
+    local_only: false
+    replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]
     notes: ["Add any extra context here."]
 ```

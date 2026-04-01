@@ -209,7 +209,7 @@ def test_register_model_entry_marks_local_only_when_portable_provenance_is_missi
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Predictive promotions without downloadable provenance should be explicit local-only entries."""
+    """Predictive promotions without complete downloadable provenance stay local-only."""
     checkpoint = tmp_path / "predictive_model.pt"
     dataset = tmp_path / "predictive_rollouts_mixed.npz"
     summary = tmp_path / "training_summary.json"
@@ -227,12 +227,17 @@ def test_register_model_entry_marks_local_only_when_portable_provenance_is_missi
         dataset=dataset,
         summary_path=summary,
         selection={"selection_mode": "proxy"},
+        registry_wandb_provenance={
+            "wandb_run_id": "o45sz5yj",
+            "wandb_entity": "ll7",
+            "wandb_project": "robot_sf",
+        },
     )
 
     assert captured["model_id"] == "predictive_proxy_selected_v2_full"
     assert captured["local_only"] is True
     assert captured["wandb_run_path"] == ""
-    assert "Local-only registry entry" in captured["notes"][3]
+    assert any("Local-only registry entry" in str(note) for note in captured["notes"])
 
 
 def test_register_model_entry_preserves_portable_provenance_when_provided(
@@ -270,7 +275,7 @@ def test_register_model_entry_preserves_portable_provenance_when_provided(
     assert captured["wandb_run_id"] == "o45sz5yj"
     assert captured["wandb_run_path"] == "ll7/robot_sf/o45sz5yj"
     assert captured["wandb_file"] == "predictive_model.pt"
-    assert "Portable W&B provenance" in captured["notes"][3]
+    assert any("Portable W&B provenance" in str(note) for note in captured["notes"])
 
 
 def test_register_model_entry_preserves_replacement_model_id(

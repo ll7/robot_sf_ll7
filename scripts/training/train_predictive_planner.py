@@ -507,11 +507,11 @@ def _register_model_entry(
     except ValueError:
         rel_checkpoint = checkpoint_path
 
-    portable_provenance = (
-        dict(registry_wandb_provenance)
-        if isinstance(registry_wandb_provenance, dict) and registry_wandb_provenance
-        else {}
-    )
+    portable_provenance: dict[str, str] = {}
+    if isinstance(registry_wandb_provenance, dict):
+        candidate_provenance = dict(registry_wandb_provenance)
+        if candidate_provenance.get("wandb_run_path") and candidate_provenance.get("wandb_file"):
+            portable_provenance = candidate_provenance
     local_only = not portable_provenance
 
     upsert_registry_entry(

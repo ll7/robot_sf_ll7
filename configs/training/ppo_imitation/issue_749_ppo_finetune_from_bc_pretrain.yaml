@@ -1,0 +1,14 @@
+# Usage: uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/issue_749_ppo_finetune_from_bc_pretrain.yaml
+# Continues from the BC checkpoint produced by issue_749_bc_pretrain_v3_expert_trajectories.yaml.
+# Keep this run separate from benchmark claims until the imitation pipeline is aligned with the
+# BR-06 v10 predictive-foresight observation and reward contract.
+run_id: issue_749_ppo_finetune_from_bc_pretrain
+pretrained_policy_id: ppo_expert_issue_749_bc_pretrained_v3
+total_timesteps: 30000000
+learning_rate: 7.5e-05
+random_seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337

@@ -235,6 +235,29 @@ def test_resolve_model_path_rejects_missing_local_path_when_download_disabled(
         )
 
 
+def test_resolve_model_path_rejects_missing_local_only_entry_with_migration_guidance(
+    tmp_path: Path,
+) -> None:
+    """Local-only entries should fail fast with an explicit replacement hint."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        (
+            "version: 1\nmodels:\n"
+            "  - model_id: predictive_proxy_selected_v2_full\n"
+            "    local_path: missing/predictive_model.pt\n"
+            "    local_only: true\n"
+            "    replacement_model_id: predictive_proxy_selected_v2_xl_ego\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="local-only.*predictive_proxy_selected_v2_xl_ego"):
+        registry.resolve_model_path(
+            "predictive_proxy_selected_v2_full",
+            registry_path=registry_path,
+        )
+
+
 def test_download_from_wandb_uses_cached_path(monkeypatch, tmp_path: Path) -> None:
     """Cached W&B downloads should be reused without hitting the API."""
     cache_dir = tmp_path / "cache"

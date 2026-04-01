@@ -368,6 +368,8 @@ This emits:
 
 * `reports/campaign_analysis.json`
 * `reports/campaign_analysis.md`
+* `reports/scenario_difficulty_analysis.json`
+* `reports/scenario_difficulty_analysis.md`
 
 SNQI contract analyzer helper:
 
@@ -425,21 +427,21 @@ repository-relative for publication-grade portability).
 Core vs experimental partitions:
 
 * paper-facing profile (`paper_profile_version=paper-matrix-v1`):
-  partitioning follows explicit planner tags from config ( `planner_group=core|experimental` )
+  partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
   as part of the frozen execution contract.
 * non-paper runs:
   partitioning remains readiness-tier based.
 * `campaign_table_core.{csv,md}`:
-  core partition rows ( `planner_group=core` for paper-facing runs; 
+  core partition rows (`planner_group=core` for paper-facing runs;
 `readiness_tier=baseline-ready` for non-paper runs).
 * `campaign_table_experimental.{csv,md}`:
-  non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
+  non-core rows (`planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
 
 Portability guarantee:
 
 * Episode `scenario_params.map_file` is normalized to repository-relative paths
   when the map resides in the repository tree (for example
-`maps/svg_maps/classic_crossing.svg` ).
+`maps/svg_maps/classic_crossing.svg`).
 
 Additional diagnostics generated per campaign:
 

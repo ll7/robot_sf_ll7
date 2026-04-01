@@ -617,3 +617,177 @@ def test_verified_simple_assessment_marks_candidate_noisy_when_subset_reorders(
 
     assert assessment["status"] == "candidate_noisy"
     assert assessment["worth_adding"] is False
+
+
+def test_build_scenario_difficulty_supports_verified_simple_candidate_with_overlap(
+    tmp_path: Path,
+) -> None:
+    """Build-level analysis should preserve planner overlap for verified-simple assessment."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text(
+        "scenarios:\n  - name: easy_case\n  - name: hard_case\n",
+        encoding="utf-8",
+    )
+
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=_planner_rows()[:2],
+        scenario_breakdown_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.95",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.05",
+                "time_to_goal_norm_mean": "0.30",
+                "snqi_mean": "0.30",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.90",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.10",
+                "time_to_goal_norm_mean": "0.35",
+                "snqi_mean": "0.20",
+            },
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "hard_family",
+                "scenario_id": "hard_case",
+                "episodes": "3",
+                "success_mean": "0.35",
+                "collisions_mean": "0.45",
+                "near_misses_mean": "0.70",
+                "time_to_goal_norm_mean": "0.85",
+                "snqi_mean": "-0.40",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "scenario_family": "hard_family",
+                "scenario_id": "hard_case",
+                "episodes": "3",
+                "success_mean": "0.40",
+                "collisions_mean": "0.35",
+                "near_misses_mean": "0.65",
+                "time_to_goal_norm_mean": "0.80",
+                "snqi_mean": "-0.30",
+            },
+        ],
+        seed_variability_payload=_seed_payload(),
+        preview_payload=_preview_payload(),
+        verified_simple_manifest_path=manifest,
+    )
+
+    assessment = analysis["verified_simple_assessment"]
+    assert assessment["status"] == "candidate_supported"
+    assert assessment["worth_adding"] is True
+
+
+def test_build_scenario_difficulty_marks_verified_simple_candidate_noisy_when_reordered(
+    tmp_path: Path,
+) -> None:
+    """Build-level analysis should surface noisy verified-simple candidates from planner rows."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text(
+        "scenarios:\n  - name: hard_case\n",
+        encoding="utf-8",
+    )
+
+    seed_payload = {
+        "rows": [
+            {
+                "scenario_id": "easy_case",
+                "planner_key": "goal",
+                "seed_count": 3,
+                "summary": {"success": {"ci_half_width": 0.01}},
+            },
+            {
+                "scenario_id": "easy_case",
+                "planner_key": "orca",
+                "seed_count": 3,
+                "summary": {"success": {"ci_half_width": 0.01}},
+            },
+            {
+                "scenario_id": "hard_case",
+                "planner_key": "goal",
+                "seed_count": 3,
+                "summary": {"success": {"ci_half_width": 0.30}},
+            },
+            {
+                "scenario_id": "hard_case",
+                "planner_key": "orca",
+                "seed_count": 3,
+                "summary": {"success": {"ci_half_width": 0.30}},
+            },
+        ]
+    }
+    scenario_rows = [
+        {
+            "planner_key": "goal",
+            "algo": "goal",
+            "scenario_id": "easy_case",
+            "scenario_name": "easy_case",
+            "episodes": 10,
+            "success_mean": 0.99,
+            "collisions_mean": 0.00,
+            "near_misses_mean": 0.01,
+            "time_to_goal_norm_mean": 0.90,
+            "snqi_mean": 0.70,
+        },
+        {
+            "planner_key": "orca",
+            "algo": "orca",
+            "scenario_id": "easy_case",
+            "scenario_name": "easy_case",
+            "episodes": 10,
+            "success_mean": 0.10,
+            "collisions_mean": 0.10,
+            "near_misses_mean": 0.10,
+            "time_to_goal_norm_mean": 1.20,
+            "snqi_mean": 0.50,
+        },
+        {
+            "planner_key": "goal",
+            "algo": "goal",
+            "scenario_id": "hard_case",
+            "scenario_name": "hard_case",
+            "episodes": 10,
+            "success_mean": 0.10,
+            "collisions_mean": 0.60,
+            "near_misses_mean": 0.40,
+            "time_to_goal_norm_mean": 1.80,
+            "snqi_mean": 0.10,
+        },
+        {
+            "planner_key": "orca",
+            "algo": "orca",
+            "scenario_id": "hard_case",
+            "scenario_name": "hard_case",
+            "episodes": 10,
+            "success_mean": 0.70,
+            "collisions_mean": 0.20,
+            "near_misses_mean": 0.20,
+            "time_to_goal_norm_mean": 1.10,
+            "snqi_mean": 0.60,
+        },
+    ]
+
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=_planner_rows()[:2],
+        scenario_breakdown_rows=scenario_rows,
+        seed_variability_payload=seed_payload,
+        preview_payload=_preview_payload(),
+        verified_simple_manifest_path=manifest,
+    )
+
+    assessment = analysis["verified_simple_assessment"]
+    assert assessment["status"] == "candidate_noisy"
+    assert assessment["worth_adding"] is False

@@ -715,11 +715,10 @@ def main() -> int:
         json.dumps(analysis.get("scenario_difficulty", {}), indent=2) + "\n",
         encoding="utf-8",
     )
+    scenario_difficulty = analysis.get("scenario_difficulty")
     difficulty_output_md.write_text(
         _build_scenario_difficulty_markdown(
-            analysis.get("scenario_difficulty", {})
-            if isinstance(analysis.get("scenario_difficulty"), dict)
-            else {}
+            scenario_difficulty if isinstance(scenario_difficulty, dict) else {}
         ),
         encoding="utf-8",
     )

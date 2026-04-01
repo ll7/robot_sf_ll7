@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional `constraint_comfort_exposure_max` , and `constraint_handling=penalize|prune` )
   with per-trial feasibility metadata and feasible/infeasible study summaries.
 * Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
-* Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`,    `--policies`).
+* Policy analysis sweep mode can run multiple policies in one invocation (`--policy-sweep`, `--policies`).
 * Policy analysis now records `jerk_mean_eps0p1` and `curvature_mean_eps0p1` with a low-speed filter.
 * Policy analysis supports named seed sets (`--seed-set` via `configs/benchmarks/seed_sets_v1.yaml`) and writes combined sweep reports.
 * Policy analysis can optionally extract failure frames from report.json (`--extract-frames`), and the frame extractor accepts report inputs.

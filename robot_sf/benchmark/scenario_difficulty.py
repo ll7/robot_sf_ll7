@@ -32,6 +32,12 @@ _SEED_METRICS: tuple[str, ...] = (
     "time_to_goal_norm",
     "snqi",
 )
+_CORE_PLANNER_GROUP = "core"
+_READINESS_EXCLUDED_STATUSES = frozenset({"fallback", "degraded"})
+_PREFLIGHT_EXCLUDED_STATUSES = frozenset({"fallback"})
+_BENCHMARK_EXCLUDED_STATUSES = frozenset(
+    {"failed", "partial-failure", "not_available", "not-available"}
+)
 
 
 def _safe_float(value: Any) -> float | None:
@@ -146,18 +152,13 @@ def _is_benchmark_success(row: Mapping[str, Any]) -> bool:
 
 def _is_consensus_planner(row: Mapping[str, Any]) -> bool:
     planner_group = str(row.get("planner_group", "")).strip().lower()
-    if planner_group and planner_group != "core":
+    if planner_group and planner_group != _CORE_PLANNER_GROUP:
         return False
-    if str(row.get("readiness_status", "")).strip().lower() in {"fallback", "degraded"}:
+    if str(row.get("readiness_status", "")).strip().lower() in _READINESS_EXCLUDED_STATUSES:
         return False
-    if str(row.get("preflight_status", "")).strip().lower() == "fallback":
+    if str(row.get("preflight_status", "")).strip().lower() in _PREFLIGHT_EXCLUDED_STATUSES:
         return False
-    if str(row.get("status", "")).strip().lower() in {
-        "failed",
-        "partial-failure",
-        "not_available",
-        "not-available",
-    }:
+    if str(row.get("status", "")).strip().lower() in _BENCHMARK_EXCLUDED_STATUSES:
         return False
     return _is_benchmark_success(row)
 
@@ -932,7 +933,7 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
         "planner_residual_rows": residual_rows,
         "planner_summary_rows": planner_summary_rows,
         "verified_simple_assessment": _verified_simple_assessment(
-            ranked_rows,
+            normalized_rows,
             planner_index,
             manifest_path=verified_simple_manifest_path,
         ),

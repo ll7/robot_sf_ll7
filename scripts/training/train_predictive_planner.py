@@ -509,8 +509,25 @@ def _register_model_entry(
 
     portable_provenance: dict[str, str] = {}
     if isinstance(registry_wandb_provenance, dict):
-        candidate_provenance = dict(registry_wandb_provenance)
-        if candidate_provenance.get("wandb_run_path") and candidate_provenance.get("wandb_file"):
+        candidate_provenance = {
+            key: str(registry_wandb_provenance.get(key, "") or "").strip()
+            for key in (
+                "wandb_run_id",
+                "wandb_run_path",
+                "wandb_entity",
+                "wandb_project",
+                "wandb_file",
+            )
+        }
+        has_run_path = bool(candidate_provenance.get("wandb_run_path"))
+        has_split_ids = all(
+            candidate_provenance.get(key)
+            for key in ("wandb_entity", "wandb_project", "wandb_run_id")
+        )
+        if has_run_path or has_split_ids:
+            candidate_provenance["wandb_file"] = (
+                candidate_provenance.get("wandb_file") or "model.zip"
+            )
             portable_provenance = candidate_provenance
     local_only = not portable_provenance
 

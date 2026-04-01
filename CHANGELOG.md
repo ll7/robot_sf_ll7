@@ -160,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Pedestrian route sampling now fails fast when obstacle constraints cannot be satisfied instead of silently ignoring obstacles.
+* Model registry resolution now fails fast for `local_only` entries with explicit replacement guidance instead of attempting ambiguous off-machine fallback, and predictive promotion metadata now preserves portable W&B entries when provenance is supplied as either a full run path or split run identifiers.
 
 ### Changed
 

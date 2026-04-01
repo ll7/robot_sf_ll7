@@ -228,7 +228,6 @@ def test_register_model_entry_marks_local_only_when_portable_provenance_is_missi
         summary_path=summary,
         selection={"selection_mode": "proxy"},
         registry_wandb_provenance={
-            "wandb_run_id": "o45sz5yj",
             "wandb_entity": "ll7",
             "wandb_project": "robot_sf",
         },
@@ -244,7 +243,7 @@ def test_register_model_entry_preserves_portable_provenance_when_provided(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Checkpoint-only registration should pass through explicit portable provenance metadata."""
+    """Checkpoint-only registration should pass through run-path provenance metadata."""
     checkpoint = tmp_path / "predictive_model.pt"
     dataset = tmp_path / "predictive_rollouts_mixed.npz"
     summary = tmp_path / "training_summary.json"
@@ -275,6 +274,43 @@ def test_register_model_entry_preserves_portable_provenance_when_provided(
     assert captured["wandb_run_id"] == "o45sz5yj"
     assert captured["wandb_run_path"] == "ll7/robot_sf/o45sz5yj"
     assert captured["wandb_file"] == "predictive_model.pt"
+    assert any("Portable W&B provenance" in str(note) for note in captured["notes"])
+
+
+def test_register_model_entry_accepts_split_portable_provenance_and_default_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Split W&B run identifiers should remain portable and default the file name."""
+    checkpoint = tmp_path / "predictive_model.pt"
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    summary = tmp_path / "training_summary.json"
+    for path in (checkpoint, dataset, summary):
+        path.write_text("stub", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(trainer, "upsert_registry_entry", _capture_registry_entry(captured))
+    monkeypatch.setattr(trainer, "_git_commit", lambda: "deadbeef")
+
+    trainer._register_model_entry(
+        model_id="predictive_proxy_selected_v2_full",
+        checkpoint_path=checkpoint,
+        dataset=dataset,
+        summary_path=summary,
+        selection={"selection_mode": "proxy"},
+        registry_wandb_provenance={
+            "wandb_run_id": "o45sz5yj",
+            "wandb_entity": "ll7",
+            "wandb_project": "robot_sf",
+        },
+    )
+
+    assert captured["local_only"] is False
+    assert captured["wandb_run_id"] == "o45sz5yj"
+    assert captured["wandb_entity"] == "ll7"
+    assert captured["wandb_project"] == "robot_sf"
+    assert captured["wandb_file"] == "model.zip"
     assert any("Portable W&B provenance" in str(note) for note in captured["notes"])
 
 

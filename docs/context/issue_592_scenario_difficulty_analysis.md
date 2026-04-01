@@ -109,3 +109,27 @@ Current conservative recommendation:
 * Rankings are only as planner-agnostic as the selected consensus pool.
 * Preview metadata can be truncated; missing static context should not be overread.
 * This workflow does not change fallback policy, planner categories, or benchmark success rules.
+
+## Validation Note
+
+Successful end-to-end validation was rerun locally on April 1, 2026 with ORCA available via the
+`rvo2` binding:
+
+* Campaign:
+  `output/benchmarks/camera_ready/camera_ready_baseline_safe_issue592_baseline_safe_rvo2_20260401_135310`
+* Runner outcome:
+  `423` episodes, `3/3` successful planner runs, `benchmark_success=true`
+* Analyzer outputs written:
+  + `reports/campaign_analysis.json`
+  + `reports/campaign_analysis.md`
+  + `reports/scenario_difficulty_analysis.json`
+  + `reports/scenario_difficulty_analysis.md`
+
+Observed difficulty ordering on that run remained plausible for the pilot proxy, with
+`francis2023_robot_crowding`, `francis2023_robot_overtaking`, and
+`francis2023_exiting_elevator` at the top of the hardest-scenario table.
+
+The rerun also exposed one analyzer semantics caveat that is now tracked separately: non-paper
+baseline-safe campaigns can produce a successful all-planner consensus while the planner metadata
+still marks every row as `planner_group=experimental`, so the analysis must describe that fallback
+explicitly instead of implying a true core-planner consensus.

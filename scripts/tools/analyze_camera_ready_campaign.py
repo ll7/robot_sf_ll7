@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import subprocess
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from robot_sf.benchmark.utils import (
     episode_collision_value,
     episode_success_value,
@@ -104,6 +106,11 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists() or path.stat().st_size == 0:
         return []
@@ -151,8 +158,8 @@ def _planner_row_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
-    """Resolve episodes path while preventing traversal outside trusted roots."""
+def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: str) -> Path:
+    """Resolve campaign paths while preventing traversal outside trusted roots."""
     candidate_path = Path(raw_path)
     repo_root = _get_repository_root()
     trusted_roots = (campaign_root.resolve(), repo_root.resolve())
@@ -162,7 +169,7 @@ def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
         if any(resolved.is_relative_to(root) for root in trusted_roots):
             return resolved
         raise ValueError(
-            f"Unsafe absolute episodes_path outside trusted roots: {candidate_path}",
+            f"Unsafe absolute {label} outside trusted roots: {candidate_path}",
         )
 
     for base in trusted_roots:
@@ -175,7 +182,82 @@ def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
     fallback = (trusted_roots[0] / candidate_path).resolve()
     if fallback.is_relative_to(trusted_roots[0]):
         return fallback
-    raise ValueError(f"Unsafe relative episodes_path: {raw_path}")
+    raise ValueError(f"Unsafe relative {label}: {raw_path}")
+
+
+def _resolve_safe_episodes_path(campaign_root: Path, raw_path: str) -> Path:
+    """Resolve episodes path while preventing traversal outside trusted roots."""
+    return _resolve_safe_campaign_path(campaign_root, raw_path, label="episodes_path")
+
+
+def _resolve_safe_artifact_path(campaign_root: Path, raw_path: str) -> Path:
+    """Resolve report artifact paths while preventing traversal outside trusted roots."""
+    return _resolve_safe_campaign_path(campaign_root, raw_path, label="artifact path")
+
+
+def _load_optional_json_artifact(
+    campaign_root: Path, raw_path: str | None
+) -> dict[str, Any] | None:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = _resolve_safe_artifact_path(campaign_root, raw_path)
+    if not path.exists():
+        return None
+    return _read_json(path)
+
+
+def _load_optional_csv_artifact(
+    campaign_root: Path,
+    raw_path: str | None,
+) -> list[dict[str, str]]:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return []
+    path = _resolve_safe_artifact_path(campaign_root, raw_path)
+    if not path.exists():
+        return []
+    return _read_csv(path)
+
+
+def _default_verified_simple_manifest_path() -> Path | None:
+    path = (
+        _get_repository_root() / "configs" / "scenarios" / "sets" / "verified_simple_subset_v1.yaml"
+    ).resolve()
+    return path if path.exists() else None
+
+
+def _format_float(value: Any, *, digits: int = 4) -> str:
+    parsed = _safe_float(value)
+    if parsed is None:
+        return "nan"
+    return f"{parsed:.{digits}f}"
+
+
+def _load_scenario_difficulty_analysis(
+    campaign_root: Path,
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    artifacts = summary_payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+    planner_rows = summary_payload.get("planner_rows")
+    if not isinstance(planner_rows, list):
+        planner_rows = []
+    return build_scenario_difficulty_analysis(
+        planner_rows=planner_rows,
+        scenario_breakdown_rows=_load_optional_csv_artifact(
+            campaign_root,
+            artifacts.get("scenario_breakdown_csv"),
+        ),
+        seed_variability_payload=_load_optional_json_artifact(
+            campaign_root,
+            artifacts.get("seed_variability_json"),
+        ),
+        preview_payload=_load_optional_json_artifact(
+            campaign_root,
+            artifacts.get("preflight_preview_scenarios"),
+        ),
+        verified_simple_manifest_path=_default_verified_simple_manifest_path(),
+    )
 
 
 def _analyze_planner(  # noqa: C901
@@ -327,10 +409,140 @@ def _analyze_planner(  # noqa: C901
     )
 
 
+def _scenario_difficulty_markdown_lines(  # noqa: C901
+    payload: dict[str, Any],
+    *,
+    heading_prefix: str,
+) -> list[str]:
+    title = f"{heading_prefix} Scenario Difficulty"
+    lines = [title, ""]
+    scenario_rows = payload.get("scenario_rows")
+    if not isinstance(scenario_rows, list) or not scenario_rows:
+        lines.append(
+            "- Scenario difficulty analysis is unavailable because the campaign does not expose a "
+            "scenario breakdown artifact."
+        )
+        assessment = payload.get("verified_simple_assessment")
+        if isinstance(assessment, dict):
+            lines.extend(
+                [
+                    "",
+                    f"- Verified-simple assessment: `{assessment.get('status', 'unknown')}`",
+                    f"- Recommendation: {assessment.get('recommendation', 'n/a')}",
+                ]
+            )
+        return lines
+
+    primary_proxy = payload.get("primary_proxy") if isinstance(payload, dict) else {}
+    if not isinstance(primary_proxy, dict):
+        primary_proxy = {}
+    lines.extend(
+        [
+            f"- Primary proxy: `{primary_proxy.get('name', 'unknown')}`",
+            f"- Consensus planners: `{primary_proxy.get('eligible_planner_count', 0)}` ({primary_proxy.get('eligible_planner_selection', 'unknown')})",
+            f"- Supporting metric: `{primary_proxy.get('supporting_metric', 'unknown')}`",
+            "",
+            f"{heading_prefix}# Hardest Scenarios",
+            "",
+            "| rank | scenario | family | difficulty | success | collisions | near misses | time_to_goal | seed success CI |",
+            "|---:|---|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in scenario_rows[:8]:
+        lines.append(
+            "| "
+            f"{int(row.get('difficulty_rank', 0) or 0)} | "
+            f"{row.get('scenario_id', 'unknown')} | "
+            f"{row.get('scenario_family', 'unknown')} | "
+            f"{_format_float(row.get('difficulty_score'))} | "
+            f"{_format_float(row.get('consensus_success_mean'))} | "
+            f"{_format_float(row.get('consensus_collisions_mean'))} | "
+            f"{_format_float(row.get('consensus_near_misses_mean'))} | "
+            f"{_format_float(row.get('consensus_time_to_goal_norm_mean'))} | "
+            f"{_format_float(row.get('seed_success_ci_half_width_mean'))} |"
+        )
+
+    family_rows = payload.get("family_rows")
+    if isinstance(family_rows, list) and family_rows:
+        lines.extend(
+            [
+                "",
+                f"{heading_prefix}# Family Rollup",
+                "",
+                "| family | scenarios | difficulty | success | collisions | near misses | seed success CI | hardest scenarios |",
+                "|---|---:|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for row in family_rows:
+            hardest = ", ".join(str(value) for value in row.get("hardest_scenarios", [])[:3]) or "-"
+            lines.append(
+                "| "
+                f"{row.get('scenario_family', 'unknown')} | "
+                f"{int(row.get('scenario_count', 0) or 0)} | "
+                f"{_format_float(row.get('difficulty_score_mean'))} | "
+                f"{_format_float(row.get('consensus_success_mean'))} | "
+                f"{_format_float(row.get('consensus_collisions_mean'))} | "
+                f"{_format_float(row.get('consensus_near_misses_mean'))} | "
+                f"{_format_float(row.get('seed_success_ci_half_width_mean'))} | "
+                f"{hardest} |"
+            )
+
+    planner_rows = payload.get("planner_summary_rows")
+    if isinstance(planner_rows, list) and planner_rows:
+        lines.extend(
+            [
+                "",
+                f"{heading_prefix}# Planner Residual Summary",
+                "",
+                "| planner | group | mean residual | max residual | easy-scenario mismatches | worst scenarios |",
+                "|---|---|---:|---:|---:|---|",
+            ]
+        )
+        for row in planner_rows:
+            worst = ", ".join(str(value) for value in row.get("worst_scenarios", [])[:3]) or "-"
+            lines.append(
+                "| "
+                f"{row.get('planner_key', 'unknown')} | "
+                f"{row.get('planner_group', 'unknown')} | "
+                f"{_format_float(row.get('mean_residual_score'))} | "
+                f"{_format_float(row.get('max_residual_score'))} | "
+                f"{int(row.get('easy_scenario_underperformance_count', 0) or 0)} | "
+                f"{worst} |"
+            )
+
+    assessment = payload.get("verified_simple_assessment")
+    if isinstance(assessment, dict):
+        lines.extend(
+            [
+                "",
+                f"{heading_prefix}# Verified-Simple Assessment",
+                "",
+                f"- Status: `{assessment.get('status', 'unknown')}`",
+                f"- Matched scenarios: `{assessment.get('matched_scenario_count', 0)}`",
+                f"- Rank correlation: `{_format_float(assessment.get('rank_correlation'))}`",
+                f"- Recommendation: {assessment.get('recommendation', 'n/a')}",
+            ]
+        )
+
+    findings = payload.get("findings")
+    lines.extend(["", f"{heading_prefix}# Difficulty Findings", ""])
+    if isinstance(findings, list) and findings:
+        for finding in findings:
+            lines.append(f"- {finding}")
+    else:
+        lines.append("- No additional scenario-difficulty warnings.")
+    return lines
+
+
+def _build_scenario_difficulty_markdown(payload: dict[str, Any]) -> str:
+    return "\n".join(_scenario_difficulty_markdown_lines(payload, heading_prefix="#")) + "\n"
+
+
 def _build_markdown_report(payload: dict[str, Any]) -> str:
     campaign = payload.get("campaign", {})
     planners = payload.get("planners", [])
     runtime_hotspots = payload.get("runtime_hotspots", {})
+    scenario_difficulty = payload.get("scenario_difficulty", {})
     findings = payload.get("findings", [])
     lines = [
         "# Camera-Ready Campaign Analysis",
@@ -386,6 +598,11 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
                 )
     else:
         lines.append("- No runtime hotspot data available.")
+
+    if isinstance(scenario_difficulty, dict):
+        lines.extend(
+            [""] + _scenario_difficulty_markdown_lines(scenario_difficulty, heading_prefix="##")
+        )
 
     lines.extend(["", "## Findings", ""])
     if findings:
@@ -445,6 +662,10 @@ def analyze_campaign(
             }
         )
     slowest_planners = slowest_planners[:3]
+    scenario_difficulty = _load_scenario_difficulty_analysis(campaign_root, summary_payload)
+    for finding in scenario_difficulty.get("findings", []):
+        findings.append(f"scenario_difficulty: {finding}")
+    findings = sorted(set(findings))
 
     return {
         "campaign": {
@@ -458,6 +679,7 @@ def analyze_campaign(
         "runtime_hotspots": {
             "slowest_planners": slowest_planners,
         },
+        "scenario_difficulty": scenario_difficulty,
         "findings": findings,
     }
 
@@ -480,10 +702,38 @@ def main() -> int:
     )
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_md.parent.mkdir(parents=True, exist_ok=True)
+    difficulty_output_json = (
+        campaign_root / "reports" / "scenario_difficulty_analysis.json"
+    ).resolve()
+    difficulty_output_md = (campaign_root / "reports" / "scenario_difficulty_analysis.md").resolve()
+    difficulty_output_json.parent.mkdir(parents=True, exist_ok=True)
+    difficulty_output_md.parent.mkdir(parents=True, exist_ok=True)
 
     output_json.write_text(json.dumps(analysis, indent=2) + "\n", encoding="utf-8")
     output_md.write_text(_build_markdown_report(analysis), encoding="utf-8")
-    print(json.dumps({"analysis_json": str(output_json), "analysis_md": str(output_md)}, indent=2))
+    difficulty_output_json.write_text(
+        json.dumps(analysis.get("scenario_difficulty", {}), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    difficulty_output_md.write_text(
+        _build_scenario_difficulty_markdown(
+            analysis.get("scenario_difficulty", {})
+            if isinstance(analysis.get("scenario_difficulty"), dict)
+            else {}
+        ),
+        encoding="utf-8",
+    )
+    print(
+        json.dumps(
+            {
+                "analysis_json": str(output_json),
+                "analysis_md": str(output_md),
+                "scenario_difficulty_json": str(difficulty_output_json),
+                "scenario_difficulty_md": str(difficulty_output_md),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

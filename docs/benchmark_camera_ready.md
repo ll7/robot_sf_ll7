@@ -5,9 +5,9 @@ camera-ready benchmark outputs across multiple planners.
 
 Canonical benchmark fallback policy:
 
-- [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
-- [Experimental Planner Guardrails](./benchmark_experimental_planners.md)
-- [Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)
+* [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
+* [Experimental Planner Guardrails](./benchmark_experimental_planners.md)
+* [Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)
 
 ## Entry Point
 
@@ -48,62 +48,63 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 Current promoted all-planners baseline run:
 
-- campaign id:
-  - `camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
-- root:
-  - `output/benchmarks/camera_ready/camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
-- status:
-  - `8/8 planners ok`, `1080 episodes`, runtime `386.54s`
-- predictive planner:
-  - `status=ok`, `episodes=135`, `failed_jobs=0`
-  - `success_mean=0.9778`, `collisions_mean=0.0000`, `near_misses_mean=0.0296`
+* campaign id:
+  + `camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
+* root:
+  + `output/benchmarks/camera_ready/camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
+* status:
+  + `8/8 planners ok`,  `1080 episodes`, runtime `386.54s`
+* predictive planner:
+  + `status=ok`,  `episodes=135`,  `failed_jobs=0`
+  + `success_mean=0.9778`,  `collisions_mean=0.0000`,  `near_misses_mean=0.0296`
 
 ## Config Presets
 
-- `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
-  - single scenario smoke for fast validation
-- `configs/benchmarks/camera_ready_baseline_safe.yaml`
-  - baseline-ready planners on full scenario suite
-- `configs/benchmarks/camera_ready_all_planners.yaml`
-  - baseline + experimental planners on full scenario suite
-  - prediction planner runs first for early fail-fast signal
-  - `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
-- `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
-  - co-existing holonomic sibling profile for issue 690 feasibility work
-  - keeps the same scenario matrix, seed policy, publication bundle, and report layout
-  - strict fail-closed planner policy: no fallback-to-success behavior in benchmark mode
-- `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
-  - full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
-- `configs/benchmarks/paper_experiment_matrix_v1.yaml`
-  - frozen paper-facing execution contract (`paper_profile_version=paper-matrix-v1`)
-  - mixed planner matrix with explicit `planner_group` tags (`core|experimental`)
-  - differential-drive-only kinematics for v1 paper freeze
-  - `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
+* `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
+  + single scenario smoke for fast validation
+* `configs/benchmarks/camera_ready_baseline_safe.yaml`
+  + baseline-ready planners on full scenario suite
+* `configs/benchmarks/camera_ready_all_planners.yaml`
+  + baseline + experimental planners on full scenario suite
+  + prediction planner runs first for early fail-fast signal
+  + `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
+* `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
+  + co-existing holonomic sibling profile for issue 690 feasibility work
+  + keeps the same scenario matrix, seed policy, publication bundle, and report layout
+  + strict fail-closed planner policy: no fallback-to-success behavior in benchmark mode
+* `configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml`
+  + full suite with strict SocNav prereq policy (`fail-fast`, no fallback)
+* `configs/benchmarks/paper_experiment_matrix_v1.yaml`
+  + frozen paper-facing execution contract (`paper_profile_version=paper-matrix-v1`)
+  + mixed planner matrix with explicit `planner_group` tags (`core|experimental`)
+  + differential-drive-only kinematics for v1 paper freeze
+  + `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
-- `configs/algos/prediction_planner_camera_ready.yaml`
-  - explicit `prediction_planner` camera-ready profile used by all-planners presets
-  - resolves checkpoint via `predictive_model_id` from `model/registry.yaml`
+
+* `configs/algos/prediction_planner_camera_ready.yaml`
+  + explicit `prediction_planner` camera-ready profile used by all-planners presets
+  + resolves checkpoint via `predictive_model_id` from `model/registry.yaml`
 
 `prediction_planner` is now part of all-planners campaign presets as an experimental planner.
 For reproducible runs, verify that the configured model id exists and resolves to a valid local checkpoint before launching the campaign.
 
 Testing-only planners remain opt-in only under the guardrail policy in
-`docs/benchmark_experimental_planners.md`. Issue 596 adds a verified-simple stage gate for any
+`docs/benchmark_experimental_planners.md` . Issue 596 adds a verified-simple stage gate for any
 future reconsideration, but does not remove the opt-in requirement by itself.
 
 SNQI calibration assets used by camera-ready presets:
 
-- `configs/benchmarks/snqi_weights_camera_ready_v1.json`
-- `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
-- `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
-- `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
+* `configs/benchmarks/snqi_weights_camera_ready_v1.json`
+* `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
+* `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
+* `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
 
 ## Produced Artifacts
 
 Campaign outputs are written under:
 
-`output/benchmarks/camera_ready/<campaign_id>/`
+ `output/benchmarks/camera_ready/<campaign_id>/`
 
 Expected tree:
 
@@ -143,17 +144,25 @@ Expected tree:
     campaign_report.md
 ```
 
+  Optional post-run analyzer outputs after calling
+`scripts/tools/analyze_camera_ready_campaign.py` :
+
+  + `reports/campaign_analysis.json`
+  + `reports/campaign_analysis.md`
+  + `reports/scenario_difficulty_analysis.json`
+  + `reports/scenario_difficulty_analysis.md`
+
 Publication bundle export is written under:
 
-`output/benchmarks/publication/`
+ `output/benchmarks/publication/`
 
-with files generated by `export_publication_bundle`.
+with files generated by `export_publication_bundle` .
 
 Release publication runbook:
 
-- `docs/benchmark_camera_ready_release.md`
-- `docs/benchmark_release_protocol.md`
-- `docs/benchmark_release_reproducibility.md`
+* `docs/benchmark_camera_ready_release.md`
+* `docs/benchmark_release_protocol.md`
+* `docs/benchmark_release_reproducibility.md`
 
 Benchmark release entrypoint:
 
@@ -162,31 +171,58 @@ uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
 ```
 
+## Post-Run Difficulty Analysis
+
+Use the analyzer after a full campaign when you need to distinguish scenario-driven difficulty from
+planner-specific mismatch:
+
+```bash
+source .venv/bin/activate
+uv run python scripts/tools/analyze_camera_ready_campaign.py \
+  --campaign-root output/benchmarks/camera_ready/<campaign_id>
+```
+
+The analyzer keeps benchmark semantics unchanged and only consumes existing artifacts. It adds:
+
+* planner integrity and runtime hotspot checks in `reports/campaign_analysis.{json,md}`
+* scenario difficulty ranking, family rollups, planner residual summaries, and verified-simple
+  subset assessment in `reports/scenario_difficulty_analysis.{json,md}`
+
+Interpretation rules:
+
+* Treat the difficulty score as a reproducible proxy, not as ground truth.
+* Use residuals to distinguish globally hard scenarios from planner-specific mismatch.
+* Treat the verified-simple subset as a calibration aid only when a bounded pilot preserves planner
+  ordering and does not inflate seed noise materially.
+
+For the pilot method and current recommendation gate, see
+`docs/context/issue_592_scenario_difficulty_analysis.md` .
+
 ## Campaign Summary Semantics
 
 Benchmark mode is fail-closed:
 
-- fallback-only or skipped planners are reported as `not_available`
-- partial-failure planners are reported as non-success
-- campaign CLI exit status is non-zero when any planner row is not benchmark-success
-- diagnostic fallback remains valid only for explicit probe workflows, not for benchmark claims
+* fallback-only or skipped planners are reported as `not_available`
+* partial-failure planners are reported as non-success
+* campaign CLI exit status is non-zero when any planner row is not benchmark-success
+* diagnostic fallback remains valid only for explicit probe workflows, not for benchmark claims
 
 `reports/campaign_summary.json` contains:
 
-- campaign metadata/provenance (scenario hash, git hash, runtime)
-- per-planner run summary from benchmark runner
-- per-planner aggregate statistics (mean and CI when available)
-- flattened planner comparison rows
-- matrix definition summary rows (`reports/matrix_summary.{json,csv}`)
-- AMV scope coverage summary (`reports/amv_coverage_summary.{json,md}`)
-- Alyassi comparability summary (`reports/comparability_matrix.{json,md}`)
-- seed variability by scenario/planner (`reports/seed_variability_by_scenario.{json,csv}`)
-- planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
-- statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
-- SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
-- warning list
-- publication bundle paths (if export enabled)
-- interpretation profile metadata (`paper_interpretation_profile`)
+* campaign metadata/provenance (scenario hash, git hash, runtime)
+* per-planner run summary from benchmark runner
+* per-planner aggregate statistics (mean and CI when available)
+* flattened planner comparison rows
+* matrix definition summary rows (`reports/matrix_summary.{json,csv}`)
+* AMV scope coverage summary (`reports/amv_coverage_summary.{json,md}`)
+* Alyassi comparability summary (`reports/comparability_matrix.{json,md}`)
+* seed variability by scenario/planner (`reports/seed_variability_by_scenario.{json,csv}`)
+* planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
+* statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
+* SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
+* warning list
+* publication bundle paths (if export enabled)
+* interpretation profile metadata (`paper_interpretation_profile`)
 
 ## Reproducibility Metadata
 
@@ -194,48 +230,48 @@ Each campaign now stores the exact invocation and timing provenance.
 
 Captured fields include:
 
-- exact command used to launch the campaign (`invoked_command`)
-- campaign wallclock start/end (`started_at_utc`, `finished_at_utc`)
-- campaign runtime and throughput (`runtime_sec`, `episodes_per_second`)
-- per-planner start/end/runtime/throughput in run entries and planner summaries
-- seed-policy provenance (`mode`, configured seeds, resolved seed list)
-- preflight artifact paths (`validate_config`, `preview_scenarios`)
+* exact command used to launch the campaign (`invoked_command`)
+* campaign wallclock start/end (`started_at_utc`,  `finished_at_utc`)
+* campaign runtime and throughput (`runtime_sec`,  `episodes_per_second`)
+* per-planner start/end/runtime/throughput in run entries and planner summaries
+* seed-policy provenance (`mode`, configured seeds, resolved seed list)
+* preflight artifact paths (`validate_config`,  `preview_scenarios`)
 
 Primary locations:
 
-- `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json`
-  - `campaign.invoked_command`
-  - `campaign.started_at_utc`
-  - `campaign.finished_at_utc`
-  - `campaign.runtime_sec`
-  - `campaign.episodes_per_second`
-  - `runs[].started_at_utc`
-  - `runs[].finished_at_utc`
-  - `runs[].runtime_sec`
-  - `runs[].summary.episodes_per_second`
-- `output/benchmarks/camera_ready/<campaign_id>/campaign_manifest.json`
-  - `invoked_command`
-  - `started_at_utc`
-  - `runtime_sec`
-- `output/benchmarks/camera_ready/<campaign_id>/run_meta.json`
-  - `invoked_command`
-  - `started_at_utc`
-  - `finished_at_utc`
-  - `runtime_sec`
-  - `episodes_per_second`
-  - `seed_policy.*`
-  - `preflight_artifacts.*`
-- `output/benchmarks/camera_ready/<campaign_id>/preflight/validate_config.json`
-- `output/benchmarks/camera_ready/<campaign_id>/preflight/preview_scenarios.json`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.json`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.csv`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.json`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.csv`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/seed_episode_rows.csv`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/statistical_sufficiency.json`
-- `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
-  - command in header
-  - per-planner timing columns in the summary table
+* `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json`
+  + `campaign.invoked_command`
+  + `campaign.started_at_utc`
+  + `campaign.finished_at_utc`
+  + `campaign.runtime_sec`
+  + `campaign.episodes_per_second`
+  + `runs[].started_at_utc`
+  + `runs[].finished_at_utc`
+  + `runs[].runtime_sec`
+  + `runs[].summary.episodes_per_second`
+* `output/benchmarks/camera_ready/<campaign_id>/campaign_manifest.json`
+  + `invoked_command`
+  + `started_at_utc`
+  + `runtime_sec`
+* `output/benchmarks/camera_ready/<campaign_id>/run_meta.json`
+  + `invoked_command`
+  + `started_at_utc`
+  + `finished_at_utc`
+  + `runtime_sec`
+  + `episodes_per_second`
+  + `seed_policy.*`
+  + `preflight_artifacts.*`
+* `output/benchmarks/camera_ready/<campaign_id>/preflight/validate_config.json`
+* `output/benchmarks/camera_ready/<campaign_id>/preflight/preview_scenarios.json`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.json`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/matrix_summary.csv`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.json`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/seed_variability_by_scenario.csv`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/seed_episode_rows.csv`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/statistical_sufficiency.json`
+* `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
+  + command in header
+  + per-planner timing columns in the summary table
 
 ## Fixed-Scenario Multi-Seed Variability
 
@@ -244,10 +280,10 @@ variability analysis.
 
 Required config shape:
 
-- one fixed scenario manifest
-- one explicit planner set
-- explicit `seed_policy`
-- bootstrap settings recorded in config
+* one fixed scenario manifest
+* one explicit planner set
+* explicit `seed_policy`
+* bootstrap settings recorded in config
 
 Recommended seed policy for paper-facing variability work:
 
@@ -262,49 +298,50 @@ bootstrap_seed: 123
 
 Grouping semantics:
 
-- raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
-- `reports/seed_episode_rows.csv` is the paper-facing flat export for grouping by
-  `scenario_id`, `planner_key`, `seed`, and deterministic `repeat_index`
-- `reports/seed_variability_by_scenario.json` is the aggregate export grouped by
-  `(scenario_id, planner_key)` across seeds
+* raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
+* `reports/seed_episode_rows.csv` is the paper-facing flat export for grouping by
+`scenario_id` , `planner_key` , `seed` , and deterministic `repeat_index`
+
+* `reports/seed_variability_by_scenario.json` is the aggregate export grouped by
+`(scenario_id, planner_key)` across seeds
 
 Confidence semantics:
 
-- the seed-variability export uses bootstrap over per-seed means
-- the JSON payload records:
-  - method
-  - confidence level
-  - bootstrap sample count
-  - bootstrap seed
-- each metric summary records:
-  - `mean`
-  - `std`
-  - `cv`
-  - `count`
-  - `ci_low`
-  - `ci_high`
-  - `ci_half_width`
+* the seed-variability export uses bootstrap over per-seed means
+* the JSON payload records:
+  + method
+  + confidence level
+  + bootstrap sample count
+  + bootstrap seed
+* each metric summary records:
+  + `mean`
+  + `std`
+  + `cv`
+  + `count`
+  + `ci_low`
+  + `ci_high`
+  + `ci_half_width`
 
 Artifact bundle expected by paper consumers:
 
-- `campaign_manifest.json`
-- `run_meta.json`
-- `reports/seed_variability_by_scenario.json`
-- `reports/seed_variability_by_scenario.csv`
-- `reports/seed_episode_rows.csv`
-- `reports/statistical_sufficiency.json`
+* `campaign_manifest.json`
+* `run_meta.json`
+* `reports/seed_variability_by_scenario.json`
+* `reports/seed_variability_by_scenario.csv`
+* `reports/seed_episode_rows.csv`
+* `reports/statistical_sufficiency.json`
 
-Recommended pilot for downstream manuscript issue `amv_benchmark_paper#74`:
+Recommended pilot for downstream manuscript issue `amv_benchmark_paper#74` :
 
-- benchmark config: `configs/benchmarks/paper_seed_variability_pilot_v1.yaml`
-- scenarios:
-  - `classic_crossing_low`
-  - `classic_head_on_corridor_low`
-  - `classic_overtaking_low`
-  - `classic_t_intersection_low`
-- planners:
-  - `orca`
-  - `ppo`
+* benchmark config: `configs/benchmarks/paper_seed_variability_pilot_v1.yaml`
+* scenarios:
+  + `classic_crossing_low`
+  + `classic_head_on_corridor_low`
+  + `classic_overtaking_low`
+  + `classic_t_intersection_low`
+* planners:
+  + `orca`
+  + `ppo`
 
 Quick inspection example:
 
@@ -329,8 +366,8 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
 
 This emits:
 
-- `reports/campaign_analysis.json`
-- `reports/campaign_analysis.md`
+* `reports/campaign_analysis.json`
+* `reports/campaign_analysis.md`
 
 SNQI contract analyzer helper:
 
@@ -343,15 +380,15 @@ uv run python scripts/tools/analyze_snqi_contract.py \
 
 This emits:
 
-- `reports/snqi_diagnostics.json`
-- `reports/snqi_diagnostics.md`
-- `reports/snqi_sensitivity.csv`
+* `reports/snqi_diagnostics.json`
+* `reports/snqi_diagnostics.md`
+* `reports/snqi_sensitivity.csv`
 
 The analyzer now also emits runtime hotspot diagnostics:
 
-- top slow planners by campaign runtime
-- per-planner `wall_time_sec` mean/p95
-- top slow scenarios per hotspot planner
+* top slow planners by campaign runtime
+* per-planner `wall_time_sec` mean/p95
+* top slow scenarios per hotspot planner
 
 Campaign-to-campaign comparison helper:
 
@@ -374,42 +411,42 @@ repository-relative for publication-grade portability).
 
 `campaign_table.csv` and `campaign_table.md` include at least:
 
-- planner key and algorithm
-- execution mode and readiness status (`native` / `adapter` / `fallback` / `degraded`)
-- readiness tier and preflight status
-- episode count and failure count
-- success/collision/near-miss means
-- time-to-goal normalization mean
-- path efficiency mean
-- comfort exposure mean
-- jerk mean
-- SNQI mean and CI fields (if available)
+* planner key and algorithm
+* execution mode and readiness status (`native` / `adapter` / `fallback` / `degraded`)
+* readiness tier and preflight status
+* episode count and failure count
+* success/collision/near-miss means
+* time-to-goal normalization mean
+* path efficiency mean
+* comfort exposure mean
+* jerk mean
+* SNQI mean and CI fields (if available)
 
 Core vs experimental partitions:
 
-- paper-facing profile (`paper_profile_version=paper-matrix-v1`):
-  partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
+* paper-facing profile (`paper_profile_version=paper-matrix-v1`):
+  partitioning follows explicit planner tags from config ( `planner_group=core|experimental` )
   as part of the frozen execution contract.
-- non-paper runs:
+* non-paper runs:
   partitioning remains readiness-tier based.
-- `campaign_table_core.{csv,md}`:
-  core partition rows (`planner_group=core` for paper-facing runs;
-  `readiness_tier=baseline-ready` for non-paper runs).
-- `campaign_table_experimental.{csv,md}`:
-  non-core rows (`planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
+* `campaign_table_core.{csv,md}`:
+  core partition rows ( `planner_group=core` for paper-facing runs; 
+`readiness_tier=baseline-ready` for non-paper runs).
+* `campaign_table_experimental.{csv,md}`:
+  non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
 
 Portability guarantee:
 
-- Episode `scenario_params.map_file` is normalized to repository-relative paths
+* Episode `scenario_params.map_file` is normalized to repository-relative paths
   when the map resides in the repository tree (for example
-  `maps/svg_maps/classic_crossing.svg`).
+`maps/svg_maps/classic_crossing.svg` ).
 
 Additional diagnostics generated per campaign:
 
-- `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
-  - per-planner, per-scenario metric means
-- `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
-  - per-planner, per-family (archetype) metric means
+* `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
+  + per-planner, per-scenario metric means
+* `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
+  + per-planner, per-family (archetype) metric means
 
 ## Notes on Experimental Planners
 
@@ -420,58 +457,58 @@ execution to continue with degraded behavior instead of hard-fail.
 
 Current planner mapping in map-runner:
 
-- `socnav_sampling`: in-repo `SamplingPlannerAdapter` baseline (no upstream SocNavBench dependency).
-- `socnav_bench`: upstream `SocNavBenchSamplingAdapter` wrapper (requires SocNav prereqs).
+* `socnav_sampling`: in-repo `SamplingPlannerAdapter` baseline (no upstream SocNavBench dependency).
+* `socnav_bench`: upstream `SocNavBenchSamplingAdapter` wrapper (requires SocNav prereqs).
 
 Decision rule for publication:
 
-- Use strict profile/config when you need publication claims without degraded
+* Use strict profile/config when you need publication claims without degraded
   fallback behavior.
-- Use fallback profile/config for diagnostics/exploration only, and always cite
-  `preflight_status` plus the report disclosure section
-  `SocNav Strict-vs-Fallback Disclosure`.
+* Use fallback profile/config for diagnostics/exploration only, and always cite
+`preflight_status` plus the report disclosure section
+`SocNav Strict-vs-Fallback Disclosure` .
 
 ## Current Validation Snapshot
 
-Validated on branch `codex/benchmark-camera-ready-pipeline`:
+Validated on branch `codex/benchmark-camera-ready-pipeline` :
 
-- baseline-safe calibration campaign (multi-seed `eval` set):
-  - `camera_ready_baseline_safe_snqi_calib_base_20260217_122711`
-  - `total_runs=3`, `successful_runs=3`, `total_episodes=405`
-  - output used to derive:
+* baseline-safe calibration campaign (multi-seed `eval` set):
+  + `camera_ready_baseline_safe_snqi_calib_base_20260217_122711`
+  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + output used to derive:
     - `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
-- baseline-safe verification with SNQI enabled:
-  - `camera_ready_baseline_safe_snqi_verify_20260217_123159`
-  - `total_runs=3`, `successful_runs=3`, `total_episodes=405`
-  - `snqi_mean` is numeric in campaign table (no `nan`)
-- smoke all-planners with SNQI calibration enabled:
-  - `camera_ready_smoke_all_planners_snqi_check_20260217_123000`
-  - `total_runs=7`, `successful_runs=7`, `total_episodes=7`
-  - `snqi_mean` is numeric in campaign table (no `nan`)
-- full all-planners with multi-seed + SNQI enabled:
-  - `camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
-  - `total_runs=7`, `successful_runs=7`, `total_episodes=945`
-  - `snqi_mean` is numeric for all planners in campaign table
-- smoke all-planners:
-  - `camera_ready_smoke_all_planners_smoke3_20260217_112307`
-  - `total_runs=7`, `successful_runs=7`, `total_episodes=7`
-- full all-planners:
-  - `camera_ready_all_planners_full2_20260217_112600`
-  - `total_runs=7`, `successful_runs=7`, `total_episodes=315`
-  - campaign runtime: `130.03s`
-  - publication bundle created
+* baseline-safe verification with SNQI enabled:
+  + `camera_ready_baseline_safe_snqi_verify_20260217_123159`
+  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + `snqi_mean` is numeric in campaign table (no `nan`)
+* smoke all-planners with SNQI calibration enabled:
+  + `camera_ready_smoke_all_planners_snqi_check_20260217_123000`
+  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+  + `snqi_mean` is numeric in campaign table (no `nan`)
+* full all-planners with multi-seed + SNQI enabled:
+  + `camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
+  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=945`
+  + `snqi_mean` is numeric for all planners in campaign table
+* smoke all-planners:
+  + `camera_ready_smoke_all_planners_smoke3_20260217_112307`
+  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+* full all-planners:
+  + `camera_ready_all_planners_full2_20260217_112600`
+  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=315`
+  + campaign runtime: `130.03s`
+  + publication bundle created
 
 Artifact locations:
 
-- campaign root:
-  - `output/benchmarks/camera_ready/camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
-- publication bundle:
-  - `output/benchmarks/publication/camera_ready_all_planners_snqi_multiseed_verify_20260217_123437_publication_bundle`
+* campaign root:
+  + `output/benchmarks/camera_ready/camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
+* publication bundle:
+  + `output/benchmarks/publication/camera_ready_all_planners_snqi_multiseed_verify_20260217_123437_publication_bundle`
 
 ## Remaining Camera-Ready Gaps
 
 The pipeline is complete and reproducible, but final publication-grade reporting
 still requires:
 
-- release metadata finalization:
-  - replace `release_tag`/DOI placeholders in campaign config before archival
+* release metadata finalization:
+  + replace `release_tag`/DOI placeholders in campaign config before archival

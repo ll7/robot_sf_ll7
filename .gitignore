@@ -55,3 +55,6 @@ third_party/socnavbench/wayptnav_data/
 third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
 third_party/socnavbench/surreal/code/human_meshes/
 third_party/socnavbench/surreal/code/human_textures/
+
+# Cmake
+third_party/python-rvo2/.*

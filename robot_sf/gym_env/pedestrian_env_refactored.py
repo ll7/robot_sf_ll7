@@ -10,6 +10,7 @@ import datetime
 import pickle
 from collections.abc import Callable
 from copy import deepcopy
+from functools import partial
 from typing import Any
 
 import loguru
@@ -41,6 +42,13 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
 
 logger = loguru.logger
+
+
+def _reward_function_name(reward_func: Callable[..., float]) -> str:
+    """Return a stable log label for direct callables and partial-wrapped rewards."""
+    if isinstance(reward_func, partial):
+        return _reward_function_name(reward_func.func)
+    return getattr(reward_func, "__name__", type(reward_func).__name__)
 
 
 class RefactoredPedestrianEnv(SingleAgentEnv):
@@ -104,8 +112,16 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             robot_model = StubRobotModel()
         self.robot_model = robot_model
 
+        # Debug help
+        self.debug_without_robot_movement = env_config.sim_config.debug_without_robot_movement
+        if self.debug_without_robot_movement:
+            logger.warning(
+                "Debug without robot movement enabled: Robot will not move regardless of model output."
+            )
+
         # Store reward function
         self.reward_func = reward_func or simple_ped_reward
+        logger.info(f"Using reward function: {_reward_function_name(self.reward_func)}")
 
         self.robot_action_space = None
         self._robot_action_space_valid = True
@@ -314,6 +330,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             record_video=self.record_video,
             video_path=self.video_path,
             video_fps=self.video_fps if self.video_fps is not None else 10.0,
+            show_lidar=True,  # Enable lidar visualization in debug mode
         )
 
     def step(self, action):
@@ -327,7 +344,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         self.last_action_ped = action_ped
 
         # Get robot action from model
-        if not self._robot_action_space_valid:
+        if not self._robot_action_space_valid or self.debug_without_robot_movement:
             action_robot = self._null_robot_action()
         else:
             try:
@@ -442,10 +459,15 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
         # Ego pedestrian LIDAR visualization
         ego_ped_pos = self.simulator.ego_ped_pos
+        ego_ped_lidar_config = (
+            self.config.ego_ped_lidar_config
+            if self.config.ego_ped_lidar_config is not None
+            else self.config.lidar_config
+        )
         distances, directions = lidar_ray_scan(
             self.simulator.ego_ped_pose,
             self.ped_state.ego_ped_occupancy,
-            self.config.lidar_config,
+            ego_ped_lidar_config,
         )
         ego_ped_ray_vecs = render_lidar(ego_ped_pos, distances, directions)
 

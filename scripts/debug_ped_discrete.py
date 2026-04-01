@@ -119,28 +119,28 @@ def run():
     for 10000 steps, collecting and logging episode statistics.
     """
     env = make_env("maps/svg_maps/debug_06.svg")
+    try:
+        obs = env.reset()
+        ep_rewards = 0
 
-    obs = env.reset()
-    ep_rewards = 0
+        for _ in range(10000):
+            if isinstance(obs, tuple):  # Handle env.reset() returning tuple
+                obs = obs[0]
 
-    for _ in range(10000):
-        if isinstance(obs, tuple):  # Handle env.reset() returning tuple
-            obs = obs[0]
-
-        # Select action using discrete heuristic policy
-        action = select_action(obs)
-        obs, reward, terminated, truncated, meta = env.step(action)
-        done = bool(terminated or truncated)
-        ep_rewards += reward
-        env.render()
-
-        if done:
-            logger.info(extract_info(meta, ep_rewards))
-            ep_rewards = 0
-            obs = env.reset()
+            # Select action using discrete heuristic policy
+            action = select_action(obs)
+            obs, reward, terminated, truncated, meta = env.step(action)
+            done = bool(terminated or truncated)
+            ep_rewards += reward
             env.render()
 
-    env.exit()
+            if done:
+                logger.info(extract_info(meta, ep_rewards))
+                ep_rewards = 0
+                obs = env.reset()
+                env.render()
+    finally:
+        env.exit()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@
 
 import math
 
+import pytest
+
 from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics, PedVecEnvMetrics, VecEnvMetrics
 
 
@@ -221,13 +223,29 @@ def test_ped_outcome_priority_and_vector_rates():
             "collision_impact_angle_rad": 0.4,
         }
     )
+    ped.update(
+        {
+            "distance_to_robot": 0.5,
+            "ego_ped_speed": 1.1,
+            "is_robot_collision": True,
+            "is_route_complete": False,
+            "is_timesteps_exceeded": False,
+            "is_obstacle_collision": False,
+            "is_pedestrian_collision": False,
+            "is_robot_obstacle_collision": False,
+            "is_robot_pedestrian_collision": True,
+            "collision_impact_angle_rad": 0.1,
+        }
+    )
 
     assert ped.robot_collisions == 1
     assert ped.robot_at_goal == 1
     assert ped.robot_obstacle_collisions == 1
-    assert list(ped.ego_ped_speed_at_collision) == []
-    assert ped.avg_ego_ped_speed == 0.0
-    assert ped.avg_collision_impact_angle_rad_at_collision == 0.0
+    assert ped.robot_pedestrian_collisions == 1
+    assert ped.route_outcomes[-1] == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION
+    assert list(ped.ego_ped_speed_at_collision) == [1.1]
+    assert ped.avg_ego_ped_speed == 1.1
+    assert ped.avg_collision_impact_angle_rad_at_collision == pytest.approx(0.1)
     assert 0.0 <= ped.robot_collision_rate <= 1.0
     assert 0.0 <= ped.robot_at_goal_rate <= 1.0
     assert 0.0 <= ped.robot_obstacle_collision_rate <= 1.0

@@ -321,6 +321,11 @@ class PedEnvMetrics:
             else 0.0
         )
 
+        @property
+        def avg_collision_impact_angle_rad(self) -> float:
+            """Backward-compatible alias for average collision impact angle."""
+            return self.avg_collision_impact_angle_rad_at_collision
+
     @property
     def total_routes(self) -> int:
         """TODO docstring. Document this function.
@@ -669,6 +674,11 @@ class PedVecEnvMetrics:
             for angle in metric.collision_impact_angle_rad_at_collision
         ]
         return mean(samples) if samples else 0.0
+
+    @property
+    def avg_collision_impact_angle_rad(self) -> float:
+        """Backward-compatible alias for average collision impact angle."""
+        return self.avg_collision_impact_angle_rad_at_collision
 
     def update(self, metas: list[dict]):
         """TODO docstring. Document this function.

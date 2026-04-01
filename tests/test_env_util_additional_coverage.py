@@ -117,6 +117,11 @@ class _FakePedSim:
         return [robot.pose[0] for robot in self.robots]
 
     @property
+    def robot_poses(self) -> list[tuple[tuple[float, float], float]]:
+        """Current robot poses for occupancy callbacks needing heading."""
+        return [robot.pose for robot in self.robots]
+
+    @property
     def goal_pos(self) -> list[tuple[float, float]]:
         """Current robot goal positions."""
         return self._goal_pos
@@ -192,6 +197,7 @@ def test_init_ped_spaces_and_collision_sensor_initialization() -> None:
 
     sim = _FakePedSim(map_def)
     occupancies, sensors = init_ped_collision_and_sensors(sim, cfg, orig_obs_spaces)
+    assert occupancies[0].agent_heading == pytest.approx(0.0)
     assert len(occupancies) == 2
     assert len(sensors) == 2
 

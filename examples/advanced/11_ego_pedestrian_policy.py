@@ -52,22 +52,23 @@ def test_simulation(map_definition: MapDefinition) -> None:
         recording_enabled=True,
         peds_have_obstacle_forces=True,
     )
+    try:
+        _, _ = env.reset()
 
-    _, _ = env.reset()
-
-    logger.info("Simulating the random policy.")
-    for _ in range(1000):
-        action_ped = env.action_space.sample()
-        _, _, terminated, truncated, _ = env.step(action_ped)
-        done = bool(terminated or truncated)
-        env.render()
-
-        if done:
-            _, _ = env.reset()
+        logger.info("Simulating the random policy.")
+        for _ in range(1000):
+            action_ped = env.action_space.sample()
+            _, _, terminated, truncated, _ = env.step(action_ped)
+            done = bool(terminated or truncated)
             env.render()
 
-    env.reset()
-    env.exit()
+            if done:
+                _, _ = env.reset()
+                env.render()
+
+        env.reset()
+    finally:
+        env.exit()
 
 
 def get_file() -> Path:

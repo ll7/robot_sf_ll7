@@ -445,7 +445,7 @@ class RobotEnv(BaseEnv):
         # Debug help
         if env_config.sim_config.debug_without_robot_movement:
             self.debug_without_robot_movement = env_config.sim_config.debug_without_robot_movement
-            logger.error("Debug mode: Robot will not move!")
+            logger.warning("Debug mode: Robot will not move!")
         else:
             self.debug_without_robot_movement = False
 

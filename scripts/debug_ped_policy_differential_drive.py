@@ -49,10 +49,8 @@ class LegacyRun023ObsAdapter:
         """Adapt dict observations to the run_023 flattened format before inference."""
         adapted_obs = obs
         if isinstance(obs, dict):
-            drive_state = np.asarray(obs[OBS_DRIVE_STATE])
+            drive_state = np.asarray(obs[OBS_DRIVE_STATE])[:, :-1].copy()
             ray_state = np.asarray(obs[OBS_RAYS])
-
-            drive_state = drive_state[:, :-1]
             drive_state[:, 2] *= 10
 
             drive_state = np.squeeze(drive_state).reshape(-1)

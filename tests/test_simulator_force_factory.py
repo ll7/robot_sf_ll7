@@ -29,12 +29,12 @@ def test_make_ped_forces_binds_robot_specific_callbacks(monkeypatch) -> None:
     monkeypatch.setattr(
         simulator_module,
         "PedRobotForce",
-        lambda *args: _ForceStub("prf", *args),
+        lambda config, peds, get_robot_pos: _ForceStub("prf", config, peds, get_robot_pos),
     )
     monkeypatch.setattr(
         simulator_module,
         "AdversarialPedForce",
-        lambda *args: _ForceStub("apf", *args),
+        lambda config, peds, get_robot_pose: _ForceStub("apf", config, peds, get_robot_pose),
     )
 
     robots = [

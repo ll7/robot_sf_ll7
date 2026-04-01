@@ -165,7 +165,7 @@ def make_env(svg_map_path: str, model_name: str):
             ped_density_by_difficulty=profile["ped_density_by_difficulty"],
             peds_reset_follow_route_at_start=True,
             apf_config=apf_config,
-            debug_without_robot_movement=False,  # Enable debug mode to prevent robot movement
+            debug_without_robot_movement=False,  # Keep robot movement enabled during APF debug
         ),
         robot_config=profile["robot_config"],
     )

@@ -196,7 +196,7 @@ Interpretation rules:
   ordering and does not inflate seed noise materially.
 
 For the pilot method and current recommendation gate, see
-`docs/context/issue_592_scenario_difficulty_analysis.md` .
+`docs/context/issue_692_scenario_difficulty_analysis.md` .
 
 ## Campaign Summary Semantics
 

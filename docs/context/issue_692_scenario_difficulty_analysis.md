@@ -1,4 +1,4 @@
-# Issue 592 Scenario Difficulty Analysis
+# Issue 692 Scenario Difficulty Analysis
 
 This note defines the conservative pilot workflow for separating scenario-driven benchmark difficulty
 from planner-quality or adapter-mismatch effects in camera-ready campaigns.

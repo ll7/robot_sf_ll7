@@ -714,7 +714,7 @@ def test_analyze_campaign_cli_writes_scenario_difficulty_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """CLI execution should write both campaign and scenario-difficulty reports because issue 592 is user-facing only if the post-run entrypoint emits concrete artifacts."""
+    """CLI execution should write both campaign and scenario-difficulty reports because issue 692 is user-facing only if the post-run entrypoint emits concrete artifacts."""
     campaign_root = tmp_path / "campaign"
     _write_scenario_difficulty_campaign(campaign_root)
 

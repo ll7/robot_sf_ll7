@@ -17,6 +17,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+from gymnasium import ObservationWrapper
 from gymnasium import spaces as gym_spaces
 from gymnasium.wrappers import FlattenObservation
 from loguru import logger
@@ -25,10 +26,13 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 __all__ = [
     "adapt_dict_observation_to_policy_space",
+    "adapt_observation_to_space",
     "maybe_flatten_env_observations",
     "resolve_policy_obs_adapter",
     "resolve_policy_stack_steps",
+    "resolve_space_obs_adapter",
     "sync_policy_spaces",
+    "wrap_env_observations_to_space",
 ]
 
 _DICT_OBS_COMPAT_ALIASES: dict[str, tuple[str, ...]] = {
@@ -131,29 +135,15 @@ def _reshape_to_target_shape(
     return np.asarray(arr).reshape(target_shape)
 
 
-def adapt_dict_observation_to_policy_space(
+def adapt_dict_observation_to_space(
     obs: Mapping[str, Any],
-    policy_model: Any | None,
+    target_space: gym_spaces.Dict,
 ) -> Mapping[str, Any]:
-    """Filter and reshape dict observations to match a loaded PPO policy space.
-
-    Stable-Baselines3 multi-input policies reject unexpected dict keys. This helper
-    keeps only the checkpoint-declared keys, reshapes values to the declared subspace
-    shapes, and backfills a small alias set for renamed robot kinematics fields.
-
-    Returns:
-        Mapping[str, Any]: Observation payload aligned to the model-declared Dict space.
-    """
-    if policy_model is None:
-        return obs
-    obs_space = getattr(policy_model, "observation_space", None)
-    if not isinstance(obs_space, gym_spaces.Dict):
-        return obs
-
+    """Filter and reshape dict observations to match a target Dict space."""
     aligned: dict[str, np.ndarray] = {}
     missing: list[str] = []
     source_obs = dict(obs)
-    for key, subspace in obs_space.spaces.items():
+    for key, subspace in target_space.spaces.items():
         value = source_obs.get(key)
         if value is None:
             for alias in _DICT_OBS_COMPAT_ALIASES.get(key, ()):
@@ -175,6 +165,68 @@ def adapt_dict_observation_to_policy_space(
     return aligned
 
 
+def adapt_dict_observation_to_policy_space(
+    obs: Mapping[str, Any],
+    policy_model: Any | None,
+) -> Mapping[str, Any]:
+    """Filter and reshape dict observations to match a loaded PPO policy space.
+
+    Stable-Baselines3 multi-input policies reject unexpected dict keys. This helper
+    keeps only the checkpoint-declared keys, reshapes values to the declared subspace
+    shapes, and backfills a small alias set for renamed robot kinematics fields.
+
+    Returns:
+        Mapping[str, Any]: Observation payload aligned to the model-declared Dict space.
+    """
+    if policy_model is None:
+        return obs
+    obs_space = getattr(policy_model, "observation_space", None)
+    if not isinstance(obs_space, gym_spaces.Dict):
+        return obs
+    return adapt_dict_observation_to_space(obs, obs_space)
+
+
+def adapt_observation_to_space(
+    obs: Mapping[str, Any] | np.ndarray,
+    target_space: gym_spaces.Space[Any],
+) -> Mapping[str, Any] | np.ndarray:
+    """Adapt one observation payload to a declared target observation space."""
+    if isinstance(target_space, gym_spaces.Dict):
+        if not isinstance(obs, Mapping):
+            raise ValueError("Dict target observation spaces require mapping observations.")
+        return adapt_dict_observation_to_space(obs, target_space)
+
+    if isinstance(target_space, gym_spaces.Box):
+        if not isinstance(obs, Mapping):
+            return np.asarray(obs, dtype=target_space.dtype)
+        shape = tuple(target_space.shape)
+        if shape and shape[-1] == 5:
+            return _make_drive_state_adapter(shape)(obs)
+        if shape and shape[-1] == 272:
+            return _make_ray_obs_adapter(shape)(obs)
+
+    return obs
+
+
+def resolve_space_obs_adapter(
+    obs_space: gym_spaces.Space[Any] | None,
+    *,
+    fallback_adapter: Callable[[Mapping[str, Any]], np.ndarray] | None = None,
+) -> Callable[[Mapping[str, Any]], Any] | None:
+    """Return an adapter callable for a declared observation space."""
+    if obs_space is None:
+        return fallback_adapter
+    if isinstance(obs_space, gym_spaces.Dict):
+        return lambda orig_obs: adapt_dict_observation_to_space(orig_obs, obs_space)
+    if isinstance(obs_space, gym_spaces.Box):
+        shape = tuple(obs_space.shape)
+        if shape and shape[-1] == 5:
+            return _make_drive_state_adapter(shape)
+        if shape and shape[-1] == 272:
+            return _make_ray_obs_adapter(shape)
+    return fallback_adapter
+
+
 def resolve_policy_obs_adapter(
     policy_model: Any | None,
     *,
@@ -192,22 +244,48 @@ def resolve_policy_obs_adapter(
         if fallback_adapter is not None:
             logger.warning("PPO policy missing observation_space; using fallback adapter.")
         return fallback_adapter
+    adapter = resolve_space_obs_adapter(obs_space, fallback_adapter=fallback_adapter)
     if isinstance(obs_space, gym_spaces.Dict):
         logger.info(
             "PPO policy expects dict observations; aligning runtime dict keys to model space."
         )
-        return lambda orig_obs: adapt_dict_observation_to_policy_space(orig_obs, policy_model)
-    if isinstance(obs_space, gym_spaces.Box):
+    elif isinstance(obs_space, gym_spaces.Box):
         shape = tuple(obs_space.shape)
         if shape and shape[-1] == 5:
             logger.info("PPO policy expects drive_state observations; using drive-state adapter.")
-            return _make_drive_state_adapter(shape)
-        if shape and shape[-1] == 272:
+        elif shape and shape[-1] == 272:
             logger.info("PPO policy expects ray observations; using ray adapter.")
-            return _make_ray_obs_adapter(shape)
-    if fallback_adapter is not None:
-        logger.info("PPO policy expects flat observations; using fallback adapter.")
-    return fallback_adapter
+        elif fallback_adapter is not None:
+            logger.info("PPO policy expects flat observations; using fallback adapter.")
+    return adapter
+
+
+class _ObservationSpaceAdapterWrapper(ObservationWrapper):
+    """Adapt runtime observations to a target observation space."""
+
+    def __init__(self, env: Any, target_space: gym_spaces.Space[Any]):
+        super().__init__(env)
+        self._adapter = resolve_space_obs_adapter(target_space)
+        self.observation_space = target_space
+
+    def observation(self, observation: Any) -> Any:
+        if self._adapter is None:
+            return observation
+        return self._adapter(observation)
+
+
+def wrap_env_observations_to_space(
+    env: Any,
+    target_space: gym_spaces.Space[Any] | None,
+    *,
+    context: str = "runtime",
+) -> Any:
+    """Wrap an env so emitted observations match a target observation space."""
+    adapter = resolve_space_obs_adapter(target_space)
+    if target_space is None or adapter is None:
+        return env
+    logger.info("Wrapping env observations to match target space during {}.", context)
+    return _ObservationSpaceAdapterWrapper(env, target_space)
 
 
 def _extract_stack_from_shape(shape: tuple[int, ...] | None) -> int | None:

@@ -14,6 +14,7 @@
 run_id: issue_749_bc_pretrain_v3_expert_trajectories
 dataset_id: issue_749_v3_expert_traj_200
 policy_output_id: ppo_expert_issue_749_bc_pretrained_v3
+source_training_config: ../ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml
 bc_epochs: 10
 batch_size: 32
 learning_rate: 0.0003

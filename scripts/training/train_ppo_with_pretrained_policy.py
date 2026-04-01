@@ -24,6 +24,7 @@ from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.training.env_overrides import apply_env_overrides, load_training_env_overrides
 from robot_sf.training.imitation_config import PPOFineTuningConfig
 from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
 from robot_sf.training.snqi_utils import (
@@ -86,7 +87,9 @@ def _evaluate_policy_metrics(
         raise ValueError("Model must be provided for evaluation when not in dry-run mode")
 
     eval_seed = config.random_seeds[0] if config.random_seeds else None
-    eval_env = make_robot_env(config=RobotSimulationConfig(), seed=eval_seed)
+    eval_config = RobotSimulationConfig()
+    apply_env_overrides(eval_config, load_training_env_overrides(config.source_training_config))
+    eval_env = make_robot_env(config=eval_config, seed=eval_seed)
     eval_env = maybe_flatten_env_observations(eval_env, context="PPO evaluation")
 
     successes: list[float] = []
@@ -152,7 +155,9 @@ def run_ppo_finetuning(
         raise FileNotFoundError(f"Pre-trained policy not found: {pretrained_path}")
 
     # Create environment
-    env = make_robot_env(config=RobotSimulationConfig())
+    env_config = RobotSimulationConfig()
+    apply_env_overrides(env_config, load_training_env_overrides(config.source_training_config))
+    env = make_robot_env(config=env_config)
     env = maybe_flatten_env_observations(env, context="PPO fine-tuning")
 
     if not dry_run:
@@ -314,6 +319,7 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         learning_rate=raw.get("learning_rate", 0.0001),
         snqi_weights_path=_resolve_optional_path("snqi_weights"),
         snqi_baseline_path=_resolve_optional_path("snqi_baseline"),
+        source_training_config=_resolve_optional_path("source_training_config"),
     )
 
 

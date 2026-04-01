@@ -28,7 +28,9 @@ from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_trajectory_dataset_manifest
 from robot_sf.benchmark.validation.trajectory_dataset import TrajectoryDatasetValidator
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.training.env_overrides import apply_env_overrides, load_training_env_overrides
 from robot_sf.training.imitation_config import TrajectoryCollectionConfig
+from robot_sf.training.observation_wrappers import resolve_policy_obs_adapter
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -117,6 +119,7 @@ def _record_episode(
     env: Any,
     *,
     policy: PPO | None,
+    policy_obs_adapter: Any = None,
     dry_run: bool,
 ) -> tuple[list[Any], list[Any], list[Any]]:
     """TODO docstring. Document this function.
@@ -141,7 +144,8 @@ def _record_episode(
         if dry_run or policy is None:
             action = _zero_action(env.action_space)
         else:
-            action, _ = policy.predict(obs, deterministic=True)
+            predict_obs = policy_obs_adapter(obs) if policy_obs_adapter is not None else obs
+            action, _ = policy.predict(predict_obs, deterministic=True)
         next_obs, _reward, terminated, truncated, _info = env.step(action)
         positions.append(tuple(env.state.nav.pos))
         actions.append(np.asarray(action, dtype=float))
@@ -157,10 +161,12 @@ def _record_dataset(
     config: TrajectoryCollectionConfig,
     *,
     policy: PPO | None,
+    policy_obs_adapter: Any = None,
     dry_run: bool,
     scenario_label: str,
     scenario: Mapping[str, Any],
     scenario_path: Path,
+    env_overrides: Mapping[str, object],
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
     """TODO docstring. Document this function.
 
@@ -185,9 +191,15 @@ def _record_dataset(
     for episode in range(config.episodes):
         seed = int(config.random_seeds[episode % len(config.random_seeds)])
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        apply_env_overrides(env_config, env_overrides)
         env = make_robot_env(config=env_config, seed=seed)
         try:
-            positions, actions, observations = _record_episode(env, policy=policy, dry_run=dry_run)
+            positions, actions, observations = _record_episode(
+                env,
+                policy=policy,
+                policy_obs_adapter=policy_obs_adapter,
+                dry_run=dry_run,
+            )
         finally:
             env.close()
         dataset["positions"].append(np.asarray(positions, dtype=object))
@@ -328,19 +340,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     common.set_global_seed(int(collection_config.random_seeds[0]))
 
     policy = None
+    policy_obs_adapter = None
     if not args.dry_run:
         checkpoint = common.get_expert_policy_dir() / f"{collection_config.source_policy_id}.zip"
         if not checkpoint.exists():
             raise FileNotFoundError(f"Expert policy checkpoint not found: {checkpoint}")
         policy = PPO.load(str(checkpoint))
+        policy_obs_adapter = resolve_policy_obs_adapter(policy)
+
+    env_overrides = load_training_env_overrides(args.training_config)
 
     arrays, coverage = _record_dataset(
         collection_config,
         policy=policy,
+        policy_obs_adapter=policy_obs_adapter,
         dry_run=args.dry_run,
         scenario_label=scenario_label,
         scenario=selected_scenario,
         scenario_path=scenario_path,
+        env_overrides=env_overrides,
     )
 
     dataset_path = common.get_trajectory_dataset_path(collection_config.dataset_id)

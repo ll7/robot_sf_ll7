@@ -28,6 +28,7 @@ from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.training.env_overrides import apply_env_overrides, load_training_env_overrides
 from robot_sf.training.imitation_config import BCPretrainingConfig
 from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
 
@@ -236,7 +237,9 @@ def run_bc_pretraining(
     dataset = _load_trajectory_dataset(dataset_path)
 
     # Create environment for BC
-    env = make_robot_env(config=RobotSimulationConfig())
+    env_config = RobotSimulationConfig()
+    apply_env_overrides(env_config, load_training_env_overrides(config.source_training_config))
+    env = make_robot_env(config=env_config)
     raw_observation_space = env.observation_space
     env = maybe_flatten_env_observations(env, context="BC pre-training")
 
@@ -305,6 +308,10 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
     """Load and parse BC pre-training configuration from YAML."""
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
+    source_training_config = None
+    if raw.get("source_training_config"):
+        source_training_config = (config_path.parent / str(raw["source_training_config"])).resolve()
+
     return BCPretrainingConfig.from_raw(
         run_id=raw["run_id"],
         dataset_id=raw["dataset_id"],
@@ -313,6 +320,7 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         batch_size=raw.get("batch_size", 32),
         learning_rate=raw.get("learning_rate", 0.0003),
         random_seeds=tuple(raw.get("random_seeds", [42])),
+        source_training_config=source_training_config,
     )
 
 

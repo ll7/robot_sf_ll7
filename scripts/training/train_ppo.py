@@ -65,6 +65,7 @@ from robot_sf.training.imitation_config import (
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.observation_wrappers import wrap_env_observations_to_space
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -962,6 +963,7 @@ def _make_training_env(  # noqa: PLR0913
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
     scenario_sampling: Mapping[str, object],
+    target_observation_space: object | None = None,
 ) -> Callable[[], Any]:
     """Create a training environment factory (seeded when provided)."""
 
@@ -974,13 +976,18 @@ def _make_training_env(  # noqa: PLR0913
         if scenario is not None:
             env_config = _build_config(scenario)
             scenario_id = scenario_id_from_definition(scenario, index=0)
-            return make_robot_env(
+            env = make_robot_env(
                 config=env_config,
                 seed=seed,
                 suite_name=suite_name,
                 scenario_name=scenario_id,
                 algorithm_name=algorithm_name,
                 **env_factory_kwargs,
+            )
+            return wrap_env_observations_to_space(
+                env,
+                cast("Any", target_observation_space),
+                context="PPO training",
             )
 
         if scenario_definitions is None:
@@ -1008,7 +1015,7 @@ def _make_training_env(  # noqa: PLR0913
             seed=seed,
             strategy=str(scenario_sampling.get("strategy", "random")),  # type: ignore[union-attr]
         )
-        return ScenarioSwitchingEnv(
+        env = ScenarioSwitchingEnv(
             scenario_sampler=sampler,
             scenario_path=scenario_path,
             config_builder=_build_config,
@@ -1016,6 +1023,11 @@ def _make_training_env(  # noqa: PLR0913
             algorithm_name=algorithm_name,
             env_factory_kwargs=env_factory_kwargs,
             seed=seed,
+        )
+        return wrap_env_observations_to_space(
+            env,
+            cast("Any", target_observation_space),
+            context="PPO training",
         )
 
     return _factory
@@ -2139,6 +2151,17 @@ def _init_training_model(
         if use_random
         else [base_seed + idx for idx in range(num_envs)]
     )  # type: ignore[operator]
+    resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
+    resumed_model: PPO | None = None
+    target_observation_space = None
+    if resolved_resume is not None:
+        resume_path = resolved_resume
+        if not resume_path.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+        logger.info("Resuming PPO from {}", resume_path)
+        resumed_model = PPO.load(str(resume_path))
+        target_observation_space = getattr(resumed_model, "observation_space", None)
+
     env_fns = [
         _make_training_env(
             seed if seed is None else int(seed),
@@ -2151,6 +2174,7 @@ def _init_training_model(
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
             scenario_sampling=config.scenario_sampling,
+            target_observation_space=target_observation_space,
         )
         for seed in env_seeds
     ]
@@ -2159,13 +2183,9 @@ def _init_training_model(
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_kwargs = _resolve_policy_kwargs(config)
-    resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
-    if resolved_resume is not None:
-        resume_path = resolved_resume
-        if not resume_path.exists():
-            raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
-        logger.info("Resuming PPO from {}", resume_path)
-        model = PPO.load(str(resume_path), env=vec_env)
+    if resumed_model is not None:
+        model = resumed_model
+        model.set_env(vec_env)
         if config.resume_source_step is not None:
             actual_step = int(getattr(model, "num_timesteps", 0) or 0)
             expected_step = int(config.resume_source_step)
@@ -2340,6 +2360,11 @@ def _evaluate_policy(
             scenario_name=scenario_name,
             algorithm_name=config.policy_id,
             **config.env_factory_kwargs,
+        )
+        env = wrap_env_observations_to_space(
+            env,
+            getattr(model, "observation_space", None),
+            context="PPO evaluation",
         )
         obs, _ = env.reset()
         done = False

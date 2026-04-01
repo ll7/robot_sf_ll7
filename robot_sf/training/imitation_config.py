@@ -206,6 +206,7 @@ class BCPretrainingConfig:
     batch_size: int
     learning_rate: float
     random_seeds: tuple[int, ...]
+    source_training_config: Path | None = None
 
     @classmethod
     def from_raw(
@@ -218,6 +219,7 @@ class BCPretrainingConfig:
         batch_size: int,
         learning_rate: float,
         random_seeds: tuple[int, ...] | list[int],
+        source_training_config: Path | None = None,
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -233,6 +235,9 @@ class BCPretrainingConfig:
             batch_size=batch_size,
             learning_rate=learning_rate,
             random_seeds=ensure_seed_tuple(random_seeds),
+            source_training_config=(
+                source_training_config.resolve() if source_training_config else None
+            ),
         )
 
 
@@ -247,6 +252,7 @@ class PPOFineTuningConfig:
     learning_rate: float
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
+    source_training_config: Path | None = None
 
     @classmethod
     def from_raw(
@@ -259,6 +265,7 @@ class PPOFineTuningConfig:
         learning_rate: float = 0.0003,
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
+        source_training_config: Path | None = None,
     ) -> PPOFineTuningConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -274,6 +281,9 @@ class PPOFineTuningConfig:
             learning_rate=learning_rate,
             snqi_weights_path=snqi_weights_path.resolve() if snqi_weights_path else None,
             snqi_baseline_path=snqi_baseline_path.resolve() if snqi_baseline_path else None,
+            source_training_config=(
+                source_training_config.resolve() if source_training_config else None
+            ),
         )
 
 

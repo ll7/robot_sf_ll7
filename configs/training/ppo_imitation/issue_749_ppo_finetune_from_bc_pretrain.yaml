@@ -4,6 +4,7 @@
 # BR-06 v10 predictive-foresight observation and reward contract.
 run_id: issue_749_ppo_finetune_from_bc_pretrain
 pretrained_policy_id: ppo_expert_issue_749_bc_pretrained_v3
+source_training_config: ../ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml
 total_timesteps: 30000000
 learning_rate: 7.5e-05
 random_seeds:

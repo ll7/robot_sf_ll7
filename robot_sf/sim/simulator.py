@@ -271,7 +271,7 @@ class Simulator:
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:])
+                nav.new_route(waypoints[1:], start_pos=waypoints[0])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: list[RobotAction]):
@@ -516,7 +516,7 @@ class PedSimulator(Simulator):
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
-                nav.new_route(waypoints[1:])
+                nav.new_route(waypoints[1:], start_pos=waypoints[0])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
         if self.spawn_near_robot:
@@ -525,6 +525,10 @@ class PedSimulator(Simulator):
             self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
         else:
             # Spawn ego pedestrian randomly in one of the pedestrian spawn zones
+            if not self.map_def.ped_spawn_zones:
+                raise ValueError(
+                    "spawn_near_robot=False requires at least one pedestrian spawn zone.",
+                )
             ped_spawn_zone = sample(self.map_def.ped_spawn_zones, k=1)[0]
             ped_spawn = sample_zone(ped_spawn_zone, 1)[0]
             npc_orient = self.ego_ped.pose[1]

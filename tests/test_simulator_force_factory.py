@@ -114,3 +114,29 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
 
     assert sim.ego_ped.reset_calls[0][0] == (9.0, 9.0)
     assert sim.ego_ped.reset_calls[0][1] == pytest.approx(np.pi / 2)
+
+
+def test_ped_simulator_reset_requires_spawn_zone_when_spawn_near_robot_disabled() -> None:
+    """The explicit random-zone spawn mode should fail clearly without pedestrian zones."""
+
+    class _EgoPedStub:
+        def __init__(self) -> None:
+            self.pose = ((0.0, 0.0), 0.25)
+
+        def reset_state(self, new_pose) -> None:
+            raise AssertionError(f"unexpected reset_state call: {new_pose}")
+
+    sim = object.__new__(simulator_module.PedSimulator)
+    sim.robots = [SimpleNamespace()]
+    sim.robot_navs = [SimpleNamespace(reached_waypoint=True, reached_destination=False)]
+    sim.spawn_near_robot = False
+    sim.map_def = SimpleNamespace(ped_spawn_zones=[])
+    sim.pysf_state = SimpleNamespace(num_peds=0, pysf_states=lambda: np.zeros((0, 7), dtype=float))
+    sim.ego_ped = _EgoPedStub()
+    sim._sync_ego_ped_social_force_state = lambda: None
+
+    with pytest.raises(
+        ValueError,
+        match="spawn_near_robot=False requires at least one pedestrian spawn zone",
+    ):
+        simulator_module.PedSimulator.reset_state(sim)

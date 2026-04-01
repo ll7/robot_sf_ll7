@@ -271,3 +271,31 @@ def test_register_model_entry_preserves_portable_provenance_when_provided(
     assert captured["wandb_run_path"] == "ll7/robot_sf/o45sz5yj"
     assert captured["wandb_file"] == "predictive_model.pt"
     assert "Portable W&B provenance" in captured["notes"][3]
+
+
+def test_register_model_entry_preserves_replacement_model_id(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Replacement guidance should be written into the registry payload when provided."""
+    checkpoint = tmp_path / "predictive_model.pt"
+    dataset = tmp_path / "predictive_rollouts_mixed.npz"
+    summary = tmp_path / "training_summary.json"
+    for path in (checkpoint, dataset, summary):
+        path.write_text("stub", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(trainer, "upsert_registry_entry", _capture_registry_entry(captured))
+    monkeypatch.setattr(trainer, "_git_commit", lambda: "deadbeef")
+
+    trainer._register_model_entry(
+        model_id="predictive_proxy_selected_v2_full",
+        checkpoint_path=checkpoint,
+        dataset=dataset,
+        summary_path=summary,
+        selection={"selection_mode": "proxy"},
+        replacement_model_id="predictive_proxy_selected_v2_xl_ego",
+    )
+
+    assert captured["replacement_model_id"] == "predictive_proxy_selected_v2_xl_ego"

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class PedestrianBehavior(Protocol):
     """
     !!! Not Implemented !!!
-    TODO: What is the purpose of this class?
+    This class is used for type checking the pedestrian behaviors.
     """
 
     def step(self):
@@ -117,6 +117,8 @@ class FollowRouteBehavior:
         The distance threshold for proximity to a goal. Default is 1.
     navigators : Dict[int, RouteNavigator]
         The navigators for each group. Initialized in the post-init method.
+    reset_at_start : bool
+        If True, groups will reset to the start of their routes on reset.
 
     Methods
     -------
@@ -135,6 +137,7 @@ class FollowRouteBehavior:
     goal_proximity_threshold: float = 1
     obstacle_polygons: list["PreparedGeometry"] | None = None
     navigators: dict[int, RouteNavigator] = field(init=False)
+    reset_at_start: bool = False
 
     def __post_init__(self):
         """
@@ -185,7 +188,13 @@ class FollowRouteBehavior:
         This method intentionally performs no action to preserve group continuity
         within ongoing route navigation sessions. The method is retained to satisfy
         the PedestrianBehavior protocol interface.
+
+        However, if reset_at_start is True, all groups will be immediately respawned at
+        the start.
         """
+        if self.reset_at_start:
+            for gid in self.navigators.keys():
+                self.respawn_group_at_start(gid)
 
     def respawn_group_at_start(self, gid: int):
         """

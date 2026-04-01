@@ -442,6 +442,13 @@ class RobotEnv(BaseEnv):
             self.map_def,
         )
 
+        # Debug help
+        self.debug_without_robot_movement: bool = bool(
+            env_config.sim_config.debug_without_robot_movement
+        )
+        if self.debug_without_robot_movement:
+            logger.warning("Debug mode: Robot will not move!")
+
         # Assign the reward function; ensure a valid callable even if None passed via factory
         if reward_func is None:  # defensive: factory allows Optional
             logger.debug(
@@ -661,8 +668,12 @@ class RobotEnv(BaseEnv):
         Returns:
             tuple: ``(obs, reward, terminated, truncated, info)`` per Gymnasium API.
         """
-        # Process the action through the simulator
-        action = self.simulator.robots[0].parse_action(action)
+        if self.debug_without_robot_movement:
+            action = (0.0, 0.0)
+        else:
+            # Process the action through the simulator only when debug mode is disabled.
+            action = self.simulator.robots[0].parse_action(action)
+
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation

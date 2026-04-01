@@ -18,6 +18,25 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
 
 
+def _local_only_resolution_error(
+    entry: dict[str, Any], *, local_path: str | None
+) -> FileNotFoundError:
+    """Build a clear resolution error for models intentionally scoped to one machine.
+
+    Returns:
+        FileNotFoundError: Resolution error with optional migration guidance.
+    """
+    model_id = str(entry.get("model_id", "unknown-model"))
+    replacement = str(entry.get("replacement_model_id", "") or "").strip()
+    message = (
+        f"Model '{model_id}' is marked local-only and is unavailable on this machine. "
+        f"Expected local path: {local_path or '<unset>'}."
+    )
+    if replacement:
+        message += f" Use '{replacement}' instead."
+    return FileNotFoundError(message)
+
+
 @dataclass(frozen=True)
 class WandbLatestModel:
     """Selection metadata for a latest-model query against W&B."""
@@ -98,6 +117,12 @@ def resolve_model_path(
             resolved = Path.cwd() / resolved
         if resolved.exists():
             return resolved
+
+    if bool(entry.get("local_only")):
+        raise _local_only_resolution_error(
+            entry,
+            local_path=str(local_path) if local_path is not None else None,
+        )
 
     if not allow_download:
         raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")

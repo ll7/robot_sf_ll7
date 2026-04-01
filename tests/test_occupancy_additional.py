@@ -69,6 +69,23 @@ def test_continuous_occupancy_goal_and_bounds() -> None:
     assert occ.is_in_bounds(-0.1, 1.0) is False
 
 
+def test_continuous_occupancy_positional_agent_radius_is_preserved() -> None:
+    """Keep the historical positional constructor layout stable for agent radius."""
+    occ = ContinuousOccupancy(
+        2.0,
+        2.0,
+        lambda: (0.0, 0.0),
+        lambda: (1.0, 1.0),
+        lambda: np.zeros((0, 4)),
+        lambda: np.zeros((0, 2)),
+        0.25,
+    )
+
+    assert occ.get_agent_pose is None
+    assert occ.get_dynamic_objects is None
+    assert occ.agent_radius == 0.25
+
+
 def test_ego_ped_distance_and_collision() -> None:
     """Compute ego-ped distance and collision against an enemy agent."""
     occ = EgoPedContinuousOccupancy(
@@ -177,3 +194,81 @@ def test_check_quality_of_map_point_flags_obstacles() -> None:
     assert check_quality_of_map_point(map_def, (0.2, 1.8), radius=0.05) is True
     assert check_quality_of_map_point(map_def, (3.0, 3.0), radius=0.1) is False
     assert check_quality_of_map_point(map_def, (0.1, 0.1), radius=0.0) is True
+
+
+def test_continuous_occupancy_properties_and_non_collision_paths() -> None:
+    """Exercise property accessors and non-collision branches for occupancy checks."""
+    obstacles = np.array([[1.5, 1.5, 1.8, 1.8]])
+    pedestrians = np.array([[1.6, 1.6]])
+    occ = ContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (0.2, 0.2),
+        get_goal_coords=lambda: (1.8, 1.8),
+        get_obstacle_coords=lambda: obstacles,
+        get_pedestrian_coords=lambda: pedestrians,
+        get_agent_pose=lambda: ((0.2, 0.2), 1.25),
+        agent_radius=0.2,
+        ped_radius=0.2,
+        goal_radius=0.2,
+    )
+
+    np.testing.assert_array_equal(occ.obstacle_coords, obstacles)
+    np.testing.assert_array_equal(occ.pedestrian_coords, pedestrians)
+    assert occ.agent_heading == 1.25
+    assert occ.is_obstacle_collision is False
+    assert occ.is_pedestrian_collision is False
+    assert occ.is_robot_at_goal is False
+    assert occ.is_in_bounds(2.0, 2.0) is True
+
+
+def test_continuous_occupancy_out_of_bounds_is_obstacle_collision() -> None:
+    """Treat positions outside the map bounds as obstacle collisions."""
+    occ = ContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (-0.1, 0.5),
+        get_goal_coords=lambda: (1.0, 1.0),
+        get_obstacle_coords=lambda: np.zeros((0, 4)),
+        get_pedestrian_coords=lambda: np.zeros((0, 2)),
+    )
+
+    assert occ.agent_heading is None
+    assert occ.is_obstacle_collision is True
+
+
+def test_circle_collides_any_lines_supports_nested_segments_without_hits() -> None:
+    """Support nested tuple segments and return False when none intersect."""
+    circle = ((0.0, 0.0), 0.5)
+    nested_segments = [((1.0, 1.0), (2.0, 2.0)), ((2.0, 1.0), (3.0, 1.0))]
+
+    assert circle_collides_any_lines(circle, nested_segments) is False
+
+
+def test_ego_ped_without_enemy_callback_has_no_agent_collision() -> None:
+    """Return False when no opposing-agent callback is configured."""
+    occ = EgoPedContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (0.5, 0.0),
+        get_goal_coords=lambda: (1.5, 0.0),
+        get_obstacle_coords=lambda: np.zeros((0, 4)),
+        get_pedestrian_coords=lambda: np.zeros((0, 2)),
+        agent_radius=0.3,
+    )
+
+    assert occ.is_agent_agent_collision is False
+
+
+def test_check_quality_of_map_point_supports_flat_bounds_and_invalid_entries() -> None:
+    """Accept flat line bounds while skipping invalid bound entries safely."""
+    flat_bounds = [
+        (0.0, 2.0, 0.0, 0.0),
+        (2.0, 2.0, 0.0, 2.0),
+        "skip-me",
+        (0.0, 0.0, 0.0, 2.0),
+    ]
+    map_def = _make_map(obstacles=[], bounds=flat_bounds)
+
+    assert check_quality_of_map_point(map_def, (1.0, 1.0), radius=0.1) is True
+    assert check_quality_of_map_point(map_def, (1.0, 0.0), radius=0.1) is False

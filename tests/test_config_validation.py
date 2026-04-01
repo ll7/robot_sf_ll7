@@ -12,7 +12,12 @@ from robot_sf.gym_env.config_validation import (
     get_resolved_config_dict,
     validate_config,
 )
-from robot_sf.gym_env.unified_config import ImageRobotConfig, RobotSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    ImageRobotConfig,
+    PedestrianSimulationConfig,
+    RobotSimulationConfig,
+)
+from robot_sf.sensor.range_sensor import LidarScannerSettings
 
 
 class TestUnknownKeyValidation:
@@ -129,6 +134,34 @@ class TestConflictDetection:
 
         # Should not raise
         validate_config(config)
+
+
+class TestPedestrianConfigValidation:
+    """Test pedestrian-specific runtime validation and coercion."""
+
+    def test_pedestrian_config_converts_lidar_dict(self):
+        """Dict-based ego pedestrian lidar configs should coerce to LidarScannerSettings."""
+        config = PedestrianSimulationConfig(
+            ego_ped_lidar_config={
+                "max_scan_dist": 12.0,
+                "visual_angle_portion": 0.5,
+                "num_rays": 32,
+            }
+        )
+
+        assert isinstance(config.ego_ped_lidar_config, LidarScannerSettings)
+        assert config.ego_ped_lidar_config.max_scan_dist == 12.0
+        assert config.ego_ped_lidar_config.num_rays == 32
+
+    def test_pedestrian_config_rejects_invalid_spawn_flag_type(self):
+        """spawn_near_robot should fail fast when config loading passes a non-bool value."""
+        with pytest.raises(TypeError, match="spawn_near_robot"):
+            PedestrianSimulationConfig(spawn_near_robot="yes")  # type: ignore[arg-type]
+
+    def test_pedestrian_config_rejects_invalid_lidar_type(self):
+        """ego_ped_lidar_config should only accept settings objects, dicts, or None."""
+        with pytest.raises(TypeError, match="ego_ped_lidar_config"):
+            PedestrianSimulationConfig(ego_ped_lidar_config=object())  # type: ignore[arg-type]
 
 
 class TestResolvedConfigDict:

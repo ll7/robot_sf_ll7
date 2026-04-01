@@ -8,6 +8,7 @@ import numpy as np
 from gymnasium import Env, spaces
 
 from robot_sf.training.observation_wrappers import (
+    LegacyRun023ObsAdapter,
     adapt_dict_observation_to_policy_space,
     maybe_flatten_env_observations,
     resolve_policy_obs_adapter,
@@ -150,3 +151,31 @@ def test_resolve_policy_obs_adapter_aligns_dict_observations():
     assert adapter is not None
     adapted = adapter({"robot_velocity_xy": [0.0, 0.5], "robot_heading": [0.0]})
     assert set(adapted) == {"robot_speed"}
+
+
+def test_legacy_run023_obs_adapter_flattens_drive_and_ray_state() -> None:
+    """The shared legacy adapter should preserve run_023 observation semantics."""
+    captured: dict[str, object] = {}
+
+    class _Model:
+        action_space = "stub"
+
+        def predict(self, obs, deterministic: bool = True):
+            captured["obs"] = obs
+            captured["deterministic"] = deterministic
+            return "action", None
+
+    adapter = LegacyRun023ObsAdapter(_Model())
+    obs = {
+        "drive_state": np.array([[1.0, 2.0, 3.0, 4.0]], dtype=np.float32),
+        "rays": np.array([[9.0, 8.0]], dtype=np.float32),
+    }
+
+    action, _ = adapter.predict(obs, deterministic=False)
+
+    assert action == "action"
+    assert captured["deterministic"] is False
+    assert np.allclose(
+        captured["obs"],
+        np.array([9.0, 8.0, 1.0, 2.0, 30.0], dtype=np.float32),
+    )

@@ -11,12 +11,10 @@ Quick reference:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import numpy as np
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 from gymnasium import ObservationWrapper
 from gymnasium import spaces as gym_spaces
 from gymnasium.wrappers import FlattenObservation
@@ -25,6 +23,7 @@ from loguru import logger
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 __all__ = [
+    "LegacyRun023ObsAdapter",
     "adapt_dict_observation_to_policy_space",
     "adapt_observation_to_space",
     "maybe_flatten_env_observations",
@@ -39,6 +38,37 @@ _DICT_OBS_COMPAT_ALIASES: dict[str, tuple[str, ...]] = {
     "robot_speed": ("robot_velocity_xy",),
     "robot_velocity_xy": ("robot_speed",),
 }
+
+
+class LegacyRun023ObsAdapter:
+    """Wrap a PPO model so ``run_023`` receives its legacy flattened observation format."""
+
+    def __init__(self, model: Any):
+        """Store the wrapped model and expose action-space compatibility hooks."""
+        self._model = model
+        self.action_space = getattr(model, "action_space", None)
+
+    def set_action_space(self, action_space: Any) -> None:
+        """Allow env-side action-space synchronization."""
+        self.action_space = action_space
+        if hasattr(self._model, "set_action_space"):
+            self._model.set_action_space(action_space)
+
+    def predict(self, obs: Any, deterministic: bool = True) -> Any:
+        """Adapt dict observations to the ``run_023`` flattened format before inference.
+
+        Returns:
+            Any: The wrapped model prediction tuple using the adapted observation payload.
+        """
+        adapted_obs = obs
+        if isinstance(obs, Mapping):
+            drive_state = np.asarray(obs[OBS_DRIVE_STATE])[:, :-1].copy()
+            ray_state = np.asarray(obs[OBS_RAYS])
+            drive_state[:, 2] *= 10
+            drive_state = np.squeeze(drive_state).reshape(-1)
+            ray_state = np.squeeze(ray_state).reshape(-1)
+            adapted_obs = np.concatenate((ray_state, drive_state), axis=0)
+        return self._model.predict(adapted_obs, deterministic=deterministic)
 
 
 def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> Any:
@@ -139,7 +169,11 @@ def adapt_dict_observation_to_space(
     obs: Mapping[str, Any],
     target_space: gym_spaces.Dict,
 ) -> Mapping[str, Any]:
-    """Filter and reshape dict observations to match a target Dict space."""
+    """Filter and reshape dict observations to match a target Dict space.
+
+    Returns:
+        Mapping[str, Any]: Observation payload aligned to the target Dict space.
+    """
     aligned: dict[str, np.ndarray] = {}
     missing: list[str] = []
     source_obs = dict(obs)
@@ -190,7 +224,11 @@ def adapt_observation_to_space(
     obs: Mapping[str, Any] | np.ndarray,
     target_space: gym_spaces.Space[Any],
 ) -> Mapping[str, Any] | np.ndarray:
-    """Adapt one observation payload to a declared target observation space."""
+    """Adapt one observation payload to a declared target observation space.
+
+    Returns:
+        Mapping[str, Any] | np.ndarray: Observation payload aligned to ``target_space``.
+    """
     if isinstance(target_space, gym_spaces.Dict):
         if not isinstance(obs, Mapping):
             raise ValueError("Dict target observation spaces require mapping observations.")
@@ -280,7 +318,11 @@ def wrap_env_observations_to_space(
     *,
     context: str = "runtime",
 ) -> Any:
-    """Wrap an env so emitted observations match a target observation space."""
+    """Wrap an env so emitted observations match a target observation space.
+
+    Returns:
+        Any: The original environment or an observation-adapting wrapper.
+    """
     adapter = resolve_space_obs_adapter(target_space)
     if target_space is None or adapter is None:
         return env

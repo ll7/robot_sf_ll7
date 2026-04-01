@@ -164,21 +164,20 @@ class SocialForce:
     """
 
     def __init__(self, config: SocialForceConfig, peds: PedState):
-        """TODO docstring. Document this function.
+        """Initialize the SocialForce instance.
 
         Args:
-            config: TODO docstring.
-            peds: TODO docstring.
+            config (SocialForceConfig): Configuration object for social force calculations.
+            peds (PedState): Current state of all pedestrians in the simulation.
         """
         self.config = config
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
-
+        """Calculate the social force for each pedestrian.
         Returns:
-            TODO docstring.
+            np.ndarray: An array of shape (num_peds, 2) containing the social force vectors for each
+            pedestrian.
         """
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
@@ -211,10 +210,10 @@ def social_force(
         ped_positions (np.ndarray): Array of shape (num_peds, 2) representing the positions of pedestrians.
         ped_velocities (np.ndarray): Array of shape (num_peds, 2) representing the velocities of pedestrians.
         activation_threshold (float): Threshold distance for considering the interaction between pedestrians.
-        n (int): Exponent for the repulsive force.
-        n_prime (int): Exponent for the attractive force.
-        lambda_importance (float): Importance factor for the attractive force.
-        gamma (float): Scaling factor for the attractive force.
+        n (int): Angular decay-shape parameter for the lateral (angle) interaction component.
+        n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
+        lambda_importance (float): Weight of relative velocity in the interaction direction.
+        gamma (float): Scale factor for the interaction range parameter B.
 
     Returns:
         np.ndarray: Array of shape (num_peds, 2) representing the social forces acting on each pedestrian.
@@ -269,8 +268,8 @@ def social_force_single_ped(
     Args:
         pos_diffs (np.ndarray): Array of position differences between the pedestrian and its neighbors.
         vel_diffs (np.ndarray): Array of velocity differences between the pedestrian and its neighbors.
-        n (int): Number of neighbors.
-        n_prime (int): Number of neighbors in the preferred direction.
+        n (int): Angular decay-shape parameter for the lateral (angle) interaction component.
+        n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): Importance factor for the social force.
         gamma (float): Scaling factor for the social force.
 
@@ -302,8 +301,8 @@ def social_force_ped_ped(
     Args:
         pos_diff (Point2D): The position difference between the two pedestrians.
         vel_diff (Point2D): The velocity difference between the two pedestrians.
-        n (int): The number of pedestrians.
-        n_prime (int): The number of pedestrians prime.
+        n (int): Angular decay-shape parameter for the lateral (angle) interaction component.
+        n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): The importance of the velocity difference.
         gamma (float): The gamma value.
 
@@ -350,13 +349,14 @@ def social_force_ped_ped(
 
 @njit(fastmath=True)
 def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
-    """TODO docstring. Document this function.
+    """Normalize a 2D vector and return its length.
 
     Args:
-        vec: TODO docstring.
+        vec: Input 2D vector ``(x, y)``.
 
     Returns:
-        TODO docstring.
+        tuple[Point2D, float]: Unit vector and original vector length.
+        For the zero vector, returns ``(vec, 0)``.
     """
     if vec[0] == 0 and vec[1] == 0:
         return vec, 0
@@ -511,15 +511,15 @@ def obstacle_force(
 def potential_field_force(
     obst_dist: float, dx_obst_dist: float, dy_obst_dist: float
 ) -> tuple[float, float]:
-    """TODO docstring. Document this function.
+    """Compute repulsive obstacle force from distance derivatives.
 
     Args:
-        obst_dist: TODO docstring.
-        dx_obst_dist: TODO docstring.
-        dy_obst_dist: TODO docstring.
+        obst_dist: Distance from pedestrian to obstacle (must be positive).
+        dx_obst_dist: Partial derivative of obstacle distance with respect to x.
+        dy_obst_dist: Partial derivative of obstacle distance with respect to y.
 
     Returns:
-        TODO docstring.
+        tuple[float, float]: Obstacle force components `(force_x, force_y)`.
     """
     der_potential = 1 / pow(obst_dist, 3)
     return der_potential * dx_obst_dist, der_potential * dy_obst_dist
@@ -527,32 +527,32 @@ def potential_field_force(
 
 @njit(fastmath=True)
 def euclid_dist(x1: float, y1: float, x2: float, y2: float) -> float:
-    """TODO docstring. Document this function.
+    """Compute Euclidean distance between two 2D points.
 
     Args:
-        x1: TODO docstring.
-        y1: TODO docstring.
-        x2: TODO docstring.
-        y2: TODO docstring.
+        x1: X coordinate of the first point.
+        y1: Y coordinate of the first point.
+        x2: X coordinate of the second point.
+        y2: Y coordinate of the second point.
 
     Returns:
-        TODO docstring.
+        float: Euclidean distance between `(x1, y1)` and `(x2, y2)`.
     """
     return pow(pow(x2 - x1, 2) + pow(y2 - y1, 2), 0.5)
 
 
 @njit(fastmath=True)
 def euclid_dist_sq(x1: float, y1: float, x2: float, y2: float) -> float:
-    """TODO docstring. Document this function.
+    """Compute squared Euclidean distance between two 2D points.
 
     Args:
-        x1: TODO docstring.
-        y1: TODO docstring.
-        x2: TODO docstring.
-        y2: TODO docstring.
+        x1: X coordinate of the first point.
+        y1: Y coordinate of the first point.
+        x2: X coordinate of the second point.
+        y2: Y coordinate of the second point.
 
     Returns:
-        TODO docstring.
+        float: Squared Euclidean distance between `(x1, y1)` and `(x2, y2)`.
     """
     return pow(x2 - x1, 2) + pow(y2 - y1, 2)
 
@@ -560,15 +560,15 @@ def euclid_dist_sq(x1: float, y1: float, x2: float, y2: float) -> float:
 @njit(fastmath=True)
 def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> tuple[float, float]:
     # info: distance is an expensive operation and therefore pre-computed
-    """TODO docstring. Document this function.
+    """Compute gradient of Euclidean distance with respect to `p1`.
 
     Args:
-        p1: TODO docstring.
-        p2: TODO docstring.
-        distance: TODO docstring.
+        p1: Reference point `(x, y)` for differentiation.
+        p2: Target point `(x, y)`.
+        distance: Precomputed `||p1 - p2||` (must be positive).
 
     Returns:
-        TODO docstring.
+        tuple[float, float]: Partial derivatives `(d_dist/dx1, d_dist/dy1)`.
     """
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
@@ -599,12 +599,16 @@ class GroupCoherenceForceAlt:
         self.config = config
 
     def __call__(self) -> np.ndarray:
-        # Initialize an array to store coherence forces for each pedestrian with zero values.
-        """TODO docstring. Document this function.
+        """Compute alternative group-coherence forces for all pedestrians.
 
+        For each group, this method computes vectors from members to the group
+        centroid and applies a tanh-based softening that depends on distance to
+        the centroid and group size. If no groups are present, a zero force
+        matrix is returned.
 
         Returns:
-            TODO docstring.
+            np.ndarray: Force vectors with shape (num_peds, 2), scaled by the
+            coherence-force factor.
         """
         forces = np.zeros((self.peds.size(), 2))
 
@@ -659,12 +663,16 @@ class GroupRepulsiveForce:
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
-        # Retrieve the distance threshold from configuration where repulsive force is effective.
-        """TODO docstring. Document this function.
+        """Compute intra-group repulsive forces for all pedestrians.
 
+        For each group, this method computes pairwise relative position vectors
+        between members, keeps only neighbors within the configured distance
+        threshold, and sums the remaining vectors per pedestrian. If no groups
+        are present, a zero force matrix is returned.
 
         Returns:
-            TODO docstring.
+            np.ndarray: Force vectors with shape (num_peds, 2), scaled by the
+            repulsive-force factor.
         """
         threshold = self.config.threshold
         # Initialize a zero np.array to store repulsive forces for each pedestrian.
@@ -809,14 +817,14 @@ def group_gaze_force(
 
 @njit
 def vec_len_2d(vec_x: float, vec_y: float) -> float:
-    """TODO docstring. Document this function.
+    """Compute the Euclidean length of a 2D vector.
 
     Args:
-        vec_x: TODO docstring.
-        vec_y: TODO docstring.
+        vec_x: X component of the vector.
+        vec_y: Y component of the vector.
 
     Returns:
-        TODO docstring.
+        float: Vector magnitude ``sqrt(vec_x**2 + vec_y**2)``.
     """
     return (vec_x**2 + vec_y**2) ** 0.5
 

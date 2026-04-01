@@ -137,6 +137,69 @@ def simple_ped_reward(
     return float(reward)
 
 
+def stationary_collision_ped_reward(  # noqa: PLR0913
+    meta: dict,
+    max_episode_step_discount: float = -0.1,
+    ped_coll_penalty: float = -5,
+    obst_coll_penalty: float = -5,
+    stationary_collision_reward: float = 10,
+    slow_coll_reward: float = 8,
+    robot_coll_reward: float = 5,
+    robot_route_complete_penalty: float = -2,
+    stationary_speed_epsilon: float = 0.1,
+    slow_speed: float = 1.0,
+) -> float:
+    """Pedestrian reward that grants bonus for collisions while ego pedestrian is stationary.
+
+    Args:
+        meta: Metadata dictionary describing collisions, goal status, and optional speed/action.
+        max_episode_step_discount: Per-step discount divided by ``max_sim_steps``.
+        ped_coll_penalty: Penalty applied when colliding with pedestrians while moving.
+        obst_coll_penalty: Penalty applied when colliding with obstacles.
+        stationary_collision_reward: Bonus granted when pedestrian collision occurs at zero speed.
+        slow_coll_reward: Bonus granted when pedestrian collision occurs at low speed.
+        robot_coll_reward: Reward granted when colliding with the robot.
+        robot_route_complete_penalty: Penalty applied if the robot completes its route.
+        stationary_speed_epsilon: Speed threshold to consider the ego pedestrian stationary.
+        slow_speed: Speed threshold to consider the ego pedestrian moving slowly.
+
+    Returns:
+        float: Scalar reward for the timestep.
+    """
+
+    reward = max_episode_step_discount / meta["max_sim_steps"]
+
+    distance = meta["distance_to_robot"]
+    reward += distance * -0.001
+
+    ego_speed = meta["ego_ped_speed"]
+
+    is_stationary = ego_speed <= max(0.0, float(stationary_speed_epsilon))
+    is_slow = ego_speed <= float(slow_speed)
+    is_robot_collision = meta["is_robot_collision"]
+
+    if is_robot_collision and is_stationary:
+        # logger.warning(
+        #     f"Stationary collision detected at speed {ego_speed:.4f} m/s, granting reward."
+        # )
+        reward += stationary_collision_reward
+    elif is_robot_collision and is_slow:
+        reward += slow_coll_reward
+    elif is_robot_collision:
+        reward += robot_coll_reward
+
+    if meta["is_pedestrian_collision"]:
+        reward += ped_coll_penalty
+
+    if meta["is_obstacle_collision"]:
+        reward += obst_coll_penalty
+
+    if meta.get("is_route_complete"):
+        reward += robot_route_complete_penalty
+
+    return float(reward)
+
+
 def punish_action_reward(
     meta: dict,
     max_episode_step_discount: float = -0.1,
@@ -499,6 +562,12 @@ def build_reward_function(
         return partial(route_completion_v3_reward, **kwargs)
     if normalized in {"social_quality_v1", "social_quality"}:
         return partial(social_quality_v1_reward, **kwargs)
+    if normalized in {
+        "stationary_collision_ped",
+        "stationary_collision_ped_reward",
+        "ped_stationary_collision",
+    }:
+        return partial(stationary_collision_ped_reward, **kwargs)
     supported = (
         "simple",
         "punish_action",
@@ -510,5 +579,7 @@ def build_reward_function(
         "route_completion_v3",
         "social_quality_v1",
         "social_quality",
+        "stationary_collision_ped",
+        "ped_stationary_collision",
     )
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")

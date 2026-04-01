@@ -360,3 +360,68 @@ def test_lidar_settings_validation_errors():
         LidarScannerSettings(scan_noise=[-0.1, 0.2])
     with pytest.raises(ValueError):
         LidarScannerSettings(scan_noise=[0.1, 1.5])
+
+
+def test_lidar_settings_ego_pedestrian_lidar():
+    """Ego pedestrian 120-degree lidar has correct extended range and narrow FOV."""
+    lidar = LidarScannerSettings.ego_pedestrian_lidar()
+
+    # Check range is extended
+    assert lidar.max_scan_dist == 30.0
+
+    # Check angle portion is 1/3 (120 degrees total, -60 to +60)
+    assert np.isclose(lidar.visual_angle_portion, 1.0 / 3.0)
+
+    # Check angle opening is correct (-60° to +60°)
+    assert np.isclose(lidar.angle_opening[0], -np.pi / 3)  # -60 degrees
+    assert np.isclose(lidar.angle_opening[1], np.pi / 3)  # +60 degrees
+
+    # Check ray count is consistent
+    assert lidar.num_rays == 272
+
+    # Verify it's a valid configuration (no validation errors)
+    assert lidar.max_scan_dist > 0
+    assert 0 < lidar.visual_angle_portion <= 1
+    assert lidar.num_rays > 0
+
+
+def test_lidar_settings_default():
+    """Default lidar factory method creates 360-degree, 10m range configuration."""
+    lidar = LidarScannerSettings.default()
+
+    # Check range is standard
+    assert lidar.max_scan_dist == 10.0
+
+    # Check angle portion is 1.0 (full 360 degrees)
+    assert np.isclose(lidar.visual_angle_portion, 1.0)
+
+    # Check angle opening is full circle (-180° to +180°)
+    assert np.isclose(lidar.angle_opening[0], -np.pi)  # -180 degrees
+    assert np.isclose(lidar.angle_opening[1], np.pi)  # +180 degrees
+
+    # Check ray count is consistent
+    assert lidar.num_rays == 272
+
+    # Verify it's a valid configuration
+    assert lidar.max_scan_dist > 0
+    assert 0 < lidar.visual_angle_portion <= 1
+    assert lidar.num_rays > 0
+
+
+def test_lidar_settings_factory_methods_comparison():
+    """Verify factory methods create appropriately different configurations."""
+    default_lidar = LidarScannerSettings.default()
+    ego_ped_lidar = LidarScannerSettings.ego_pedestrian_lidar()
+
+    # Ego pedestrian should have longer range
+    assert ego_ped_lidar.max_scan_dist > default_lidar.max_scan_dist
+
+    # Ego pedestrian should have narrower FOV
+    assert ego_ped_lidar.visual_angle_portion < default_lidar.visual_angle_portion
+
+    # Same ray count for consistency
+    assert ego_ped_lidar.num_rays == default_lidar.num_rays
+
+    # Angle opening should reflect the difference
+    assert abs(ego_ped_lidar.angle_opening[0]) < abs(default_lidar.angle_opening[0])
+    assert abs(ego_ped_lidar.angle_opening[1]) < abs(default_lidar.angle_opening[1])

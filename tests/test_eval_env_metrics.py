@@ -1,5 +1,9 @@
 """Tests for environment metric helpers."""
 
+import math
+
+import pytest
+
 from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics, PedVecEnvMetrics, VecEnvMetrics
 
 
@@ -117,10 +121,15 @@ def test_ped_update():
         "is_timesteps_exceeded": True,
         "is_robot_collision": False,
         "distance_to_robot": 45.0,
+        "ego_ped_speed": 0.4,
+        "collision_impact_angle_rad": 0.0,
     }
     metrics.update(meta)
     assert metrics.exceeded_timesteps == 1
     assert metrics.route_end_distance == 45.0
+    assert metrics.avg_ego_ped_speed == 0.0
+    assert metrics.avg_collision_impact_angle_rad_at_collision == 0.0
+    assert metrics.avg_collision_impact_angle_rad == 0.0
 
 
 def test_env_rate_properties_and_vector_aggregation():
@@ -176,6 +185,7 @@ def test_ped_outcome_priority_and_vector_rates():
     ped.update(
         {
             "distance_to_robot": 1.0,
+            "ego_ped_speed": 1.25,
             "is_robot_collision": True,
             "is_route_complete": True,
             "is_timesteps_exceeded": False,
@@ -183,11 +193,13 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": False,
             "is_robot_pedestrian_collision": False,
+            "collision_impact_angle_rad": 0.2,
         }
     )
     ped.update(
         {
             "distance_to_robot": 2.0,
+            "ego_ped_speed": 0.75,
             "is_robot_collision": False,
             "is_route_complete": True,
             "is_timesteps_exceeded": False,
@@ -195,11 +207,13 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": False,
             "is_robot_pedestrian_collision": False,
+            "collision_impact_angle_rad": 0.0,
         }
     )
     ped.update(
         {
             "distance_to_robot": 3.0,
+            "ego_ped_speed": 0.25,
             "is_robot_collision": False,
             "is_route_complete": False,
             "is_timesteps_exceeded": False,
@@ -207,12 +221,33 @@ def test_ped_outcome_priority_and_vector_rates():
             "is_pedestrian_collision": False,
             "is_robot_obstacle_collision": True,
             "is_robot_pedestrian_collision": False,
+            "collision_impact_angle_rad": 0.4,
+        }
+    )
+    ped.update(
+        {
+            "distance_to_robot": 0.5,
+            "ego_ped_speed": 1.1,
+            "is_robot_collision": True,
+            "is_route_complete": False,
+            "is_timesteps_exceeded": False,
+            "is_obstacle_collision": False,
+            "is_pedestrian_collision": False,
+            "is_robot_obstacle_collision": False,
+            "is_robot_pedestrian_collision": True,
+            "collision_impact_angle_rad": 0.1,
         }
     )
 
     assert ped.robot_collisions == 1
     assert ped.robot_at_goal == 1
     assert ped.robot_obstacle_collisions == 1
+    assert ped.robot_pedestrian_collisions == 1
+    assert ped.route_outcomes[-1] == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION
+    assert list(ped.ego_ped_speed_at_collision) == [1.1]
+    assert ped.avg_ego_ped_speed == 1.1
+    assert ped.avg_collision_impact_angle_rad_at_collision == pytest.approx(0.1)
+    assert ped.avg_collision_impact_angle_rad == pytest.approx(0.1)
     assert 0.0 <= ped.robot_collision_rate <= 1.0
     assert 0.0 <= ped.robot_at_goal_rate <= 1.0
     assert 0.0 <= ped.robot_obstacle_collision_rate <= 1.0
@@ -229,12 +264,15 @@ def test_ped_outcome_priority_and_vector_rates():
     assert 0.0 <= vec.robot_obstacle_collision_rate <= 1.0
     assert 0.0 <= vec.robot_pedestrian_collision_rate <= 1.0
     assert vec.route_end_distance >= 0.0
+    assert 0.0 <= vec.avg_ego_ped_speed_at_collision
+    assert vec.avg_ego_ped_speed == vec.avg_ego_ped_speed_at_collision
     before_p1 = len(ped.route_outcomes)
     before_p2 = len(ped2.route_outcomes)
     vec.update(
         [
             {
                 "distance_to_robot": 0.5,
+                "ego_ped_speed": 0.3,
                 "is_robot_collision": False,
                 "is_route_complete": False,
                 "is_timesteps_exceeded": True,
@@ -242,9 +280,11 @@ def test_ped_outcome_priority_and_vector_rates():
                 "is_pedestrian_collision": False,
                 "is_robot_obstacle_collision": False,
                 "is_robot_pedestrian_collision": False,
+                "collision_impact_angle_rad": 0.0,
             },
             {
                 "distance_to_robot": 0.8,
+                "ego_ped_speed": 0.1,
                 "is_robot_collision": False,
                 "is_route_complete": False,
                 "is_timesteps_exceeded": True,
@@ -252,6 +292,7 @@ def test_ped_outcome_priority_and_vector_rates():
                 "is_pedestrian_collision": False,
                 "is_robot_obstacle_collision": False,
                 "is_robot_pedestrian_collision": False,
+                "collision_impact_angle_rad": 0.0,
             },
         ]
     )
@@ -259,3 +300,19 @@ def test_ped_outcome_priority_and_vector_rates():
     assert len(ped2.route_outcomes) == before_p2 + 1
     assert ped.route_outcomes[-1] == EnvOutcome.TIMEOUT
     assert ped2.route_outcomes[-1] == EnvOutcome.TIMEOUT
+
+
+def test_ped_vec_env_metrics_weight_collision_sample_aggregates() -> None:
+    """Collision-speed and impact-angle aggregates should weight actual samples, not env means."""
+    ped1 = PedEnvMetrics()
+    ped1.ego_ped_speed_at_collision.extend([1.0, 3.0])
+    ped1.collision_impact_angle_rad_at_collision.extend([0.2, 0.4])
+
+    ped2 = PedEnvMetrics()
+    ped2.ego_ped_speed_at_collision.extend([10.0])
+    ped2.collision_impact_angle_rad_at_collision.extend([1.0])
+
+    vec = PedVecEnvMetrics(metrics=[ped1, ped2])
+
+    assert math.isclose(vec.avg_ego_ped_speed_at_collision, 14.0 / 3.0)
+    assert math.isclose(vec.avg_collision_impact_angle_rad_at_collision, 1.6 / 3.0)

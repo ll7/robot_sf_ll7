@@ -424,10 +424,10 @@ def _verified_simple_assessment(
     rank_correlation = _spearman_rank_correlation(full_planner_rows, subset_planner_rows)
 
     full_noise = _mean(
-        _safe_float(row.get("seed_success_ci_half_width_mean")) for row in scenario_rows
+        _safe_float(row.get("seed_success_ci_half_width")) for row in selected_full_rows
     )
     subset_noise = _mean(
-        _safe_float(row.get("seed_success_ci_half_width_mean")) for row in subset_rows
+        _safe_float(row.get("seed_success_ci_half_width")) for row in selected_subset_rows
     )
     full_by_planner = {str(row.get("planner_key")): row for row in full_planner_rows}
     subset_by_planner = {str(row.get("planner_key")): row for row in subset_planner_rows}

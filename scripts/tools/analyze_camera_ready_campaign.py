@@ -444,7 +444,7 @@ def _scenario_difficulty_markdown_lines(  # noqa: C901
             "",
             f"{heading_prefix}# Hardest Scenarios",
             "",
-            "| rank | scenario | family | difficulty | success | collisions | near misses | time_to_goal | seed success CI |",
+            "| rank | scenario | family | difficulty | success | collisions | near misses | time_to_goal_norm | seed success CI |",
             "|---:|---|---|---:|---:|---:|---:|---:|---:|",
         ]
     )

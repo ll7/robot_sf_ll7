@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts.tools.analyze_camera_ready_campaign import analyze_campaign, main
+from scripts.tools.analyze_camera_ready_campaign import (
+    _build_scenario_difficulty_markdown,
+    analyze_campaign,
+    main,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -707,6 +711,17 @@ def test_analyze_campaign_includes_scenario_difficulty_outputs(tmp_path: Path) -
     assert difficulty["scenario_rows"][0]["scenario_id"] == "hard_case"
     assert difficulty["family_rows"][0]["scenario_count"] == 1
     assert difficulty["verified_simple_assessment"]["status"] == "rerun_required"
+
+
+def test_analyze_campaign_markdown_labels_normalized_time_to_goal(tmp_path: Path) -> None:
+    """Scenario difficulty markdown should name the normalized time metric explicitly."""
+    campaign_root = tmp_path / "campaign"
+    _write_scenario_difficulty_campaign(campaign_root)
+
+    analysis = analyze_campaign(campaign_root)
+    markdown = _build_scenario_difficulty_markdown(analysis["scenario_difficulty"])
+    assert "time_to_goal_norm" in markdown
+    assert " | time_to_goal | " not in markdown
 
 
 def test_analyze_campaign_cli_writes_scenario_difficulty_artifacts(

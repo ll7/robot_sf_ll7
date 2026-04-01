@@ -590,25 +590,25 @@ def test_verified_simple_assessment_marks_candidate_noisy_when_subset_reorders(
                 "planner_key": "goal",
                 "scenario_id": "easy_case",
                 "success_mean": "0.99",
-                "seed_success_ci_half_width_mean": "0.01",
+                "seed_success_ci_half_width": "0.01",
             },
             {
                 "planner_key": "orca",
                 "scenario_id": "easy_case",
                 "success_mean": "0.80",
-                "seed_success_ci_half_width_mean": "0.01",
+                "seed_success_ci_half_width": "0.01",
             },
             {
                 "planner_key": "goal",
                 "scenario_id": "hard_case",
                 "success_mean": "0.10",
-                "seed_success_ci_half_width_mean": "0.30",
+                "seed_success_ci_half_width": "0.30",
             },
             {
                 "planner_key": "orca",
                 "scenario_id": "hard_case",
                 "success_mean": "0.70",
-                "seed_success_ci_half_width_mean": "0.30",
+                "seed_success_ci_half_width": "0.30",
             },
         ],
         _planner_row_index(_planner_rows()[:2]),
@@ -791,3 +791,5 @@ def test_build_scenario_difficulty_marks_verified_simple_candidate_noisy_when_re
     assessment = analysis["verified_simple_assessment"]
     assert assessment["status"] == "candidate_noisy"
     assert assessment["worth_adding"] is False
+    assert assessment["full_seed_success_ci_half_width_mean"] == pytest.approx(0.155)
+    assert assessment["subset_seed_success_ci_half_width_mean"] == pytest.approx(0.30)

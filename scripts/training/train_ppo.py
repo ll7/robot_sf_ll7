@@ -2152,15 +2152,15 @@ def _init_training_model(
         else [base_seed + idx for idx in range(num_envs)]
     )  # type: ignore[operator]
     resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
-    resumed_model: PPO | None = None
+    resumed_probe: PPO | None = None
     target_observation_space = None
     if resolved_resume is not None:
         resume_path = resolved_resume
         if not resume_path.exists():
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         logger.info("Resuming PPO from {}", resume_path)
-        resumed_model = PPO.load(str(resume_path))
-        target_observation_space = getattr(resumed_model, "observation_space", None)
+        resumed_probe = PPO.load(str(resume_path))
+        target_observation_space = getattr(resumed_probe, "observation_space", None)
 
     env_fns = [
         _make_training_env(
@@ -2183,9 +2183,9 @@ def _init_training_model(
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_kwargs = _resolve_policy_kwargs(config)
-    if resumed_model is not None:
-        model = resumed_model
-        model.set_env(vec_env)
+    if resumed_probe is not None:
+        assert resolved_resume is not None
+        model = PPO.load(str(resolved_resume), env=vec_env)
         if config.resume_source_step is not None:
             actual_step = int(getattr(model, "num_timesteps", 0) or 0)
             expected_step = int(config.resume_source_step)

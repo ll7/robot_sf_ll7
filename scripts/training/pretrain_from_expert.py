@@ -115,12 +115,72 @@ def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
     }
 
 
+def _align_observation_array(
+    value: Any,
+    *,
+    expected_shape: tuple[int, ...] | None,
+    dtype: Any,
+) -> np.ndarray:
+    """Pad, crop, or reshape arrays so they match the declared observation shape."""
+    target_dtype = dtype if dtype is not None else np.float32
+    arr = np.asarray(value, dtype=target_dtype)
+    if expected_shape is None:
+        return arr
+
+    normalized_shape = tuple(int(dim) for dim in expected_shape)
+    if arr.shape == normalized_shape:
+        return arr
+
+    expected_size = int(np.prod(normalized_shape))
+    if arr.size == expected_size:
+        return arr.reshape(normalized_shape)
+
+    if arr.ndim != len(normalized_shape):
+        raise ValueError(
+            "Observation shape mismatch: "
+            f"got {arr.shape}, expected {normalized_shape}."
+        )
+
+    aligned = np.zeros(normalized_shape, dtype=target_dtype)
+    copy_slices = tuple(slice(0, min(got, expected)) for got, expected in zip(arr.shape, normalized_shape))
+    aligned[copy_slices] = arr[copy_slices]
+    return aligned
+
+
+def _coerce_observation_to_space(obs: Any, observation_space: Space | None) -> Any:
+    """Align one saved observation payload to the declared Gymnasium space."""
+    if observation_space is None:
+        return obs
+
+    subspaces = getattr(observation_space, "spaces", None)
+    if subspaces is not None:
+        if not isinstance(obs, dict):
+            raise ValueError("Expected dict observation payload for dict observation space.")
+        aligned: dict[str, Any] = {}
+        for key, subspace in subspaces.items():
+            if key in obs:
+                aligned[key] = _coerce_observation_to_space(obs[key], subspace)
+                continue
+            expected_shape = getattr(subspace, "shape", None)
+            if expected_shape is None:
+                raise KeyError(f"Missing required observation key: {key}")
+            aligned[key] = np.zeros(expected_shape, dtype=getattr(subspace, "dtype", np.float32))
+        return aligned
+
+    return _align_observation_array(
+        obs,
+        expected_shape=getattr(observation_space, "shape", None),
+        dtype=getattr(observation_space, "dtype", None),
+    )
+
+
 def _flatten_single_observation(obs: Any, observation_space: Space | None) -> np.ndarray:
     """Flatten an observation dict/object into a 1-D numpy array."""
 
     if observation_space is not None:
         try:
-            return np.asarray(flatten_space(observation_space, obs), dtype=np.float32)
+            aligned_obs = _coerce_observation_to_space(obs, observation_space)
+            return np.asarray(flatten_space(observation_space, aligned_obs), dtype=np.float32)
         except (AssertionError, ValueError, TypeError) as exc:
             logger.warning(
                 "Failed to flatten observation via observation_space: {}. Falling back to simplified conversion.",

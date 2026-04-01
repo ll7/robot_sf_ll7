@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Issue #747 and #748 carry-forward PPO configs now resume from the registered BR-06 v10 best-success checkpoint instead of the older v3 baseline, so the resumed observation contract matches predictive-foresight training.
 * PPO resume, issue #749 trajectory collection, and issue #749 imitation fine-tuning now adapt runtime observations to the checkpoint-declared observation space and can apply source-training `env_overrides`, preventing contract mismatches such as missing legacy keys (for example `drive_state`) when replaying older expert checkpoints.
+* Resumed PPO training now reloads checkpoints against the target vectorized env instead of rebinding with `set_env`, and BC pretraining now pads ragged saved pedestrian arrays to the declared observation-space shape so issue #747, #748, and #749 cluster relaunches do not fail on `n_envs` or flattened-feature-size mismatches.
 
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.

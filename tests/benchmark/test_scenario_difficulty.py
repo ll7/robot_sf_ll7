@@ -6,7 +6,28 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
+from robot_sf.benchmark.scenario_difficulty import (
+    _build_seed_index,
+    _difficulty_weighted_score,
+    _is_benchmark_success,
+    _is_consensus_planner,
+    _load_verified_simple_ids,
+    _max,
+    _mean,
+    _metric_range,
+    _normalized_ranks,
+    _percentile,
+    _planner_quality_rows,
+    _planner_row_index,
+    _planner_selection_rows,
+    _preview_metadata_lookup,
+    _safe_float,
+    _scenario_family,
+    _seed_field,
+    _spearman_rank_correlation,
+    _verified_simple_assessment,
+    build_scenario_difficulty_analysis,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -387,3 +408,212 @@ def test_build_scenario_difficulty_reports_fallback_selection_when_core_set_miss
     )
     assert analysis["primary_proxy"]["eligible_planner_count"] == 2
     assert any("fell back to all planners" in finding for finding in analysis["findings"])
+
+
+def test_scenario_difficulty_helper_edge_cases(tmp_path: Path) -> None:
+    """Low-level helpers should handle empty, malformed, and fallback inputs without inventing signal."""
+    assert _safe_float("") is None
+    assert _safe_float("abc") is None
+    assert _safe_float("1.5") == pytest.approx(1.5)
+    assert _mean([None, float("nan")]) is None
+    assert _max([None]) is None
+    assert _metric_range([None]) is None
+    assert _percentile([], 0.5) is None
+    assert _percentile([3.0], 0.5) == pytest.approx(3.0)
+    assert _scenario_family({}) == "unknown"
+    assert _scenario_family({"scenario_id": "fallback_case"}) == "fallback_case"
+    assert _normalized_ranks({}, higher_is_harder=True) == {}
+    assert _normalized_ranks({"only": 1.0}, higher_is_harder=True) == {"only": 0.0}
+    assert _difficulty_weighted_score("missing", {}) == (None, {})
+
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text("scenarios: invalid\n", encoding="utf-8")
+    assert _load_verified_simple_ids(manifest) == (set(), str(manifest))
+
+    seed_index = _build_seed_index(
+        {
+            "rows": [
+                {"scenario_id": "", "planner_key": "goal"},
+                {"scenario_id": "case", "planner_key": ""},
+                {
+                    "scenario_id": "case",
+                    "planner_key": "goal",
+                    "seed_count": 3,
+                    "summary": {"success": {"ci_half_width": 0.2}},
+                },
+            ]
+        }
+    )
+    assert list(seed_index) == [("case", "goal")]
+    assert _seed_field(seed_index[("case", "goal")], "success", "ci_half_width") == pytest.approx(
+        0.2
+    )
+    assert _seed_field({"summary": []}, "success", "ci_half_width") is None
+
+
+def test_preview_metadata_lookup_handles_truncation_and_missing_dicts() -> None:
+    """Preview metadata parsing should degrade safely when the preflight payload is partial or malformed."""
+    lookup, truncated = _preview_metadata_lookup(
+        {
+            "truncated": True,
+            "route_clearance_warnings": [{"scenario": "case_a", "warning_scope": "route"}],
+            "scenarios": [
+                "bad-row",
+                {
+                    "id": "case_a",
+                    "metadata": [],
+                    "simulation_config": [],
+                },
+            ],
+        }
+    )
+
+    assert truncated is True
+    assert lookup["case_a"]["route_clearance_warning"] is True
+    assert lookup["case_a"]["route_clearance_scope"] == "route"
+    assert lookup["case_a"]["ped_density"] is None
+
+
+def test_planner_quality_and_selection_helpers_cover_sparse_inputs() -> None:
+    """Planner helper summaries should stay well-defined for sparse rows and fallback selections."""
+    quality_rows = _planner_quality_rows(
+        [
+            {"planner_key": "goal", "planner_group": "core", "success_mean": "0.8"},
+            {"planner_key": "goal", "planner_group": "core", "success_mean": "0.6"},
+            {"planner_key": "orca", "planner_group": "experimental", "collisions_mean": "0.1"},
+        ]
+    )
+    assert quality_rows[0]["planner_key"] == "goal"
+    assert quality_rows[0]["success_mean"] == pytest.approx(0.7)
+
+    selected, reason = _planner_selection_rows(
+        [{"planner_key": "goal", "scenario_id": "case"}],
+        {"goal": {"planner_group": "experimental", "status": "ok", "benchmark_success": "true"}},
+    )
+    assert reason == "all planners (fallback: no eligible core set)"
+    assert selected[0]["planner_key"] == "goal"
+
+    assert (
+        _spearman_rank_correlation(
+            [{"planner_key": "goal"}],
+            [{"planner_key": "goal"}],
+        )
+        is None
+    )
+
+
+def test_benchmark_success_and_consensus_filters_cover_failure_modes() -> None:
+    """Consensus filtering should exclude fallback/degraded/non-success rows and keep plain successful rows."""
+    assert _is_benchmark_success({}) is True
+    assert _is_benchmark_success({"benchmark_success": True}) is True
+    assert _is_benchmark_success({"benchmark_success": "false"}) is False
+
+    assert _is_consensus_planner({"planner_group": "experimental"}) is False
+    assert _is_consensus_planner({"planner_group": "core", "readiness_status": "fallback"}) is False
+    assert _is_consensus_planner({"planner_group": "core", "preflight_status": "fallback"}) is False
+    assert _is_consensus_planner({"planner_group": "core", "status": "not_available"}) is False
+    assert _is_consensus_planner({"planner_group": "core", "benchmark_success": "true"}) is True
+
+
+def test_build_scenario_difficulty_reports_preview_truncation_and_manifest_missing() -> None:
+    """Unavailable artifacts should remain explicit instead of silently fabricating difficulty output."""
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=_planner_rows()[:1],
+        scenario_breakdown_rows=[],
+        preview_payload={"truncated": True},
+        verified_simple_manifest_path=None,
+    )
+
+    assert analysis["status"] == "unavailable"
+    assert analysis["verified_simple_assessment"]["status"] == "manifest_missing"
+
+
+def test_verified_simple_assessment_supports_candidate_when_order_is_preserved(
+    tmp_path: Path,
+) -> None:
+    """A simple subset should be marked as supported when ordering and seed noise stay aligned with the full campaign."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text(
+        "scenarios:\n  - name: easy_case\n  - name: hard_case\n",
+        encoding="utf-8",
+    )
+
+    assessment = _verified_simple_assessment(
+        [
+            {
+                "planner_key": "goal",
+                "scenario_id": "easy_case",
+                "success_mean": "0.95",
+                "seed_success_ci_half_width_mean": "0.02",
+            },
+            {
+                "planner_key": "orca",
+                "scenario_id": "easy_case",
+                "success_mean": "0.90",
+                "seed_success_ci_half_width_mean": "0.03",
+            },
+            {
+                "planner_key": "goal",
+                "scenario_id": "hard_case",
+                "success_mean": "0.45",
+                "seed_success_ci_half_width_mean": "0.10",
+            },
+            {
+                "planner_key": "orca",
+                "scenario_id": "hard_case",
+                "success_mean": "0.40",
+                "seed_success_ci_half_width_mean": "0.09",
+            },
+        ],
+        _planner_row_index(_planner_rows()[:2]),
+        manifest_path=manifest,
+    )
+
+    assert assessment["status"] == "candidate_supported"
+    assert assessment["worth_adding"] is True
+    assert assessment["comparison_planner_selection"] == "core benchmark-success planners"
+
+
+def test_verified_simple_assessment_marks_candidate_noisy_when_subset_reorders(
+    tmp_path: Path,
+) -> None:
+    """A reordered or noisier subset should stay a debugging gate rather than a calibration aid."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text(
+        "scenarios:\n  - name: hard_case\n",
+        encoding="utf-8",
+    )
+
+    assessment = _verified_simple_assessment(
+        [
+            {
+                "planner_key": "goal",
+                "scenario_id": "easy_case",
+                "success_mean": "0.99",
+                "seed_success_ci_half_width_mean": "0.01",
+            },
+            {
+                "planner_key": "orca",
+                "scenario_id": "easy_case",
+                "success_mean": "0.80",
+                "seed_success_ci_half_width_mean": "0.01",
+            },
+            {
+                "planner_key": "goal",
+                "scenario_id": "hard_case",
+                "success_mean": "0.10",
+                "seed_success_ci_half_width_mean": "0.30",
+            },
+            {
+                "planner_key": "orca",
+                "scenario_id": "hard_case",
+                "success_mean": "0.70",
+                "seed_success_ci_half_width_mean": "0.30",
+            },
+        ],
+        _planner_row_index(_planner_rows()[:2]),
+        manifest_path=manifest,
+    )
+
+    assert assessment["status"] == "candidate_noisy"
+    assert assessment["worth_adding"] is False

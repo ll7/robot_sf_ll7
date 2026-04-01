@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Restored the backward-compatible `avg_collision_impact_angle_rad` pedestrian metric alias and corrected the adversarial-force plot labels in `scripts/debug_ped_apf.py`.
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
 * Auxme GPU SLURM submissions now default to `48G` host memory instead of the previous `120G`, matching the documented PPO host-memory sizing guidance more closely while preserving headroom for `num_envs` auto-resolution on 24-CPU jobs.

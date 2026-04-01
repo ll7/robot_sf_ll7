@@ -129,6 +129,7 @@ def test_ped_update():
     assert metrics.route_end_distance == 45.0
     assert metrics.avg_ego_ped_speed == 0.0
     assert metrics.avg_collision_impact_angle_rad_at_collision == 0.0
+    assert metrics.avg_collision_impact_angle_rad == 0.0
 
 
 def test_env_rate_properties_and_vector_aggregation():
@@ -246,6 +247,7 @@ def test_ped_outcome_priority_and_vector_rates():
     assert list(ped.ego_ped_speed_at_collision) == [1.1]
     assert ped.avg_ego_ped_speed == 1.1
     assert ped.avg_collision_impact_angle_rad_at_collision == pytest.approx(0.1)
+    assert ped.avg_collision_impact_angle_rad == pytest.approx(0.1)
     assert 0.0 <= ped.robot_collision_rate <= 1.0
     assert 0.0 <= ped.robot_at_goal_rate <= 1.0
     assert 0.0 <= ped.robot_obstacle_collision_rate <= 1.0

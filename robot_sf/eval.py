@@ -321,10 +321,10 @@ class PedEnvMetrics:
             else 0.0
         )
 
-        @property
-        def avg_collision_impact_angle_rad(self) -> float:
-            """Backward-compatible alias for average collision impact angle."""
-            return self.avg_collision_impact_angle_rad_at_collision
+    @property
+    def avg_collision_impact_angle_rad(self) -> float:
+        """Backward-compatible alias for average collision impact angle."""
+        return self.avg_collision_impact_angle_rad_at_collision
 
     @property
     def total_routes(self) -> int:

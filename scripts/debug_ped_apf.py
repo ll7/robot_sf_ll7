@@ -248,8 +248,8 @@ def plot_forces_over_time2(forces_over_time):
     Fx = forces_over_time[:, 6, 2, 0]  # x-component
     Fy = forces_over_time[:, 6, 2, 1]  # y-component
 
-    plt.plot(timesteps, Fx, label="Fx (adversial)")
-    plt.plot(timesteps, Fy, label="Fy (adversial)")
+    plt.plot(timesteps, Fx, label="Fx (adversarial)")
+    plt.plot(timesteps, Fy, label="Fy (adversarial)")
 
     plt.xlabel("Timestep")
     plt.ylabel("Force")

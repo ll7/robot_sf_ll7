@@ -22,6 +22,10 @@ def test_training_closes_vectorized_env_after_success(monkeypatch) -> None:
             return super().__new__(cls, callbacks)
 
     class _ModelStub:
+        @staticmethod
+        def load(*_args, **_kwargs):
+            return "robot-model"
+
         def __init__(self, *_args, **_kwargs) -> None:
             pass
 
@@ -34,7 +38,6 @@ def test_training_closes_vectorized_env_after_success(monkeypatch) -> None:
             save_paths.append(path)
 
     monkeypatch.setattr(mod, "convert_map", lambda _path: "map-def")
-    monkeypatch.setattr(mod.PPO, "load", staticmethod(lambda *_args, **_kwargs: "robot-model"))
     monkeypatch.setattr(mod, "make_pedestrian_env", lambda **_kwargs: "ped-env")
     monkeypatch.setattr(mod, "make_vec_env", lambda *args, **kwargs: _EnvStub())
     monkeypatch.setattr(mod, "PPO", _ModelStub)

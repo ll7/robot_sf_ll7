@@ -10,6 +10,7 @@ import datetime
 import pickle
 from collections.abc import Callable
 from copy import deepcopy
+from functools import partial
 from typing import Any
 
 import loguru
@@ -41,6 +42,13 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
 
 logger = loguru.logger
+
+
+def _reward_function_name(reward_func: Callable[..., float]) -> str:
+    """Return a stable log label for direct callables and partial-wrapped rewards."""
+    if isinstance(reward_func, partial):
+        return _reward_function_name(reward_func.func)
+    return getattr(reward_func, "__name__", type(reward_func).__name__)
 
 
 class RefactoredPedestrianEnv(SingleAgentEnv):
@@ -113,7 +121,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
         # Store reward function
         self.reward_func = reward_func or simple_ped_reward
-        logger.info(f"Using reward function: {self.reward_func.__name__}")
+        logger.info(f"Using reward function: {_reward_function_name(self.reward_func)}")
 
         self.robot_action_space = None
         self._robot_action_space_valid = True

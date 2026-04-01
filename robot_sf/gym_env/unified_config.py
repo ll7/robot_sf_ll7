@@ -289,12 +289,25 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
     """
 
     ego_ped_config: UnicycleDriveSettings = field(default_factory=UnicycleDriveSettings)
+    ego_ped_lidar_config: LidarScannerSettings | None = None
+    spawn_near_robot: bool = True  # Whether to spawn the ego pedestrian near the robot
 
     def __post_init__(self):
         """Validate pedestrian-specific configuration."""
         super().__post_init__()
         if not self.ego_ped_config:
             raise ValueError("Ego pedestrian configuration must be initialized!")
+        if isinstance(self.ego_ped_lidar_config, dict):
+            self.ego_ped_lidar_config = LidarScannerSettings(**self.ego_ped_lidar_config)
+        elif self.ego_ped_lidar_config is not None and not isinstance(
+            self.ego_ped_lidar_config,
+            LidarScannerSettings,
+        ):
+            raise TypeError(
+                "ego_ped_lidar_config must be a LidarScannerSettings instance, dict, or None",
+            )
+        if not isinstance(self.spawn_near_robot, bool):
+            raise TypeError("spawn_near_robot must be a bool")
 
         # Ensure radius consistency between ego pedestrian and simulation
         self.ego_ped_config.radius = self.sim_config.ped_radius

@@ -1,4 +1,4 @@
-"""Training script for pedestrian avoidance using PPO with adversarial metrics.
+"""Training script for pedestrian avoidance using PPO with a differential-drive robot.
 
 This module provides training functionality for a robot navigation policy
 using Proximal Policy Optimization (PPO) in environments with pedestrians
@@ -19,15 +19,16 @@ from robot_sf.gym_env.reward import stationary_collision_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.tb_logging import AdversialPedestrianMetricsCallback
+from robot_sf.tb_logging import AdversarialPedestrianMetricsCallback
+from robot_sf.training.observation_wrappers import LegacyRun023ObsAdapter
 
 logger = loguru.logger
 
 
-def training(svg_map_path: str):
+def training(svg_map_path: str) -> None:
     """Train a PPO policy for pedestrian avoidance on a given SVG map.
 
     This function builds a vectorized pedestrian environment using the provided SVG map,
@@ -48,12 +49,13 @@ def training(svg_map_path: str):
         OSError: If the environment cannot spawn subprocesses or write output files.
     """
     n_envs = 8
+    # Match differential-drive defensive policy profile (run_023).
     ped_densities = [0.04]
     difficulty = 0
 
     def make_env():
         map_definition = convert_map(svg_map_path)
-        robot_model = PPO.load("./model/run_043", env=None)
+        robot_model = LegacyRun023ObsAdapter(PPO.load("./model/run_023", env=None))
 
         # Configure ego pedestrian lidar with longer range and 120 degree view
         ego_ped_lidar = LidarScannerSettings.ego_pedestrian_lidar()
@@ -61,10 +63,11 @@ def training(svg_map_path: str):
         config = PedestrianSimulationConfig(
             map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
             sim_config=SimulationSettings(
+                stack_steps=1,
                 difficulty=difficulty,
                 ped_density_by_difficulty=ped_densities,
             ),
-            robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+            robot_config=DifferentialDriveSettings(radius=1.0, max_angular_speed=0.5),
             spawn_near_robot=False,
             ego_ped_lidar_config=ego_ped_lidar,
         )
@@ -81,10 +84,13 @@ def training(svg_map_path: str):
     try:
         policy_kwargs = {"features_extractor_class": DynamicsExtractor}
         model = PPO(
-            "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+            "MultiInputPolicy",
+            env,
+            tensorboard_log="./logs/ppo_logs/",
+            policy_kwargs=policy_kwargs,
         )
         save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
-        collect_metrics_callback = AdversialPedestrianMetricsCallback(n_envs)
+        collect_metrics_callback = AdversarialPedestrianMetricsCallback(n_envs)
         combined_callback = CallbackList([save_model_callback, collect_metrics_callback])
 
         model.learn(total_timesteps=1_500_000, progress_bar=True, callback=combined_callback)
@@ -97,6 +103,6 @@ def training(svg_map_path: str):
 
 
 if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/masterthesis/intersection.svg"
+    SVG_MAP = "maps/svg_maps/masterthesis/headon.svg"
 
     training(SVG_MAP)

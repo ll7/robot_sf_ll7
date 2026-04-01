@@ -133,6 +133,7 @@ class PedSpawnConfig:
     route_spawn_distribution: str = "cluster"
     route_spawn_jitter_frac: float = 0.0
     route_spawn_seed: int | None = None
+    reset_follow_route_at_start: bool = False
 
     def __post_init__(self):
         """
@@ -648,7 +649,7 @@ def populate_single_pedestrians(
     return ped_states, metadata
 
 
-def populate_simulation(
+def populate_simulation(  # noqa: PLR0913
     tau: float,
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
@@ -657,6 +658,7 @@ def populate_simulation(
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
     time_step_s: float = 0.1,
     single_ped_goal_threshold: float | None = None,
+    add_ego_state: bool = False,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -680,6 +682,7 @@ def populate_simulation(
             for individually controlled pedestrians with explicit goals/trajectories.
         time_step_s: Simulation step time in seconds (used for wait behavior).
         single_ped_goal_threshold: Optional distance threshold for single-ped waypoint arrival.
+        add_ego_state: If True, adds a pedestrian state for the ego agent at the end of the array.
 
     Returns:
         Tuple of (pysf_state, groups, ped_behaviors):
@@ -736,9 +739,29 @@ def populate_simulation(
     # Single pedestrians start as single-member groups for optional join/leave behaviors.
 
     # Create pedestrian state views
-    pysf_state = PedestrianStates(lambda: ped_states)
-    crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
-    route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
+    if add_ego_state:
+        # Create dummy ego state and inject it
+        ego_state = np.array(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                tau,
+            ]
+        ).reshape(1, -1)
+        new_ped_states = np.concatenate((ped_states, ego_state), axis=0)
+        pysf_state = PedestrianStates(lambda: new_ped_states)
+        crowd_pysf_state = PedestrianStates(lambda: new_ped_states[:route_offset])
+        route_pysf_state = PedestrianStates(
+            lambda: new_ped_states[route_offset:single_offset]
+        )  # Exclude single and ego states
+    else:
+        pysf_state = PedestrianStates(lambda: ped_states)
+        crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
+        route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
 
     groups = PedestrianGroupings(pysf_state)
     for ped_ids in combined_groups:
@@ -756,6 +779,7 @@ def populate_simulation(
         route_assignments,
         initial_sections,
         obstacle_polygons=prepared_obstacles,
+        reset_at_start=spawn_config.reset_follow_route_at_start,
     )
     ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
 
@@ -772,4 +796,7 @@ def populate_simulation(
                 goal_proximity_threshold=single_ped_goal_threshold,
             )
         )
+    if add_ego_state:
+        groups.new_group({pysf_state.num_peds - 1})  # Add ego_ped to groups
+
     return pysf_state, groups, ped_behaviors

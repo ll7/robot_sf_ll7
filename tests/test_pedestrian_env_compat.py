@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import numpy as np
 from gymnasium import spaces
 
@@ -9,7 +11,11 @@ from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
-from robot_sf.gym_env.pedestrian_env_refactored import RefactoredPedestrianEnv
+from robot_sf.gym_env.pedestrian_env_refactored import (
+    RefactoredPedestrianEnv,
+    _reward_function_name,
+)
+from robot_sf.gym_env.reward import simple_ped_reward
 
 
 def test_pedestrian_env_uses_stub_robot_model() -> None:
@@ -69,3 +75,10 @@ def test_pedestrian_env_records_and_resets(tmp_path, monkeypatch) -> None:
         assert env.recorded_states == []
     finally:
         env.exit()
+
+
+def test_reward_function_name_handles_partial_wrapped_rewards() -> None:
+    """Partial-wrapped reward functions should still log the underlying reward name."""
+    reward_func = partial(simple_ped_reward, constant=1.0)
+
+    assert _reward_function_name(reward_func) == "simple_ped_reward"

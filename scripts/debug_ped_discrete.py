@@ -4,7 +4,10 @@ This script simulates a pedestrian using a simple hardcoded heuristic policy
 with discrete actions (acceleration, left turn, right turn, no-op).
 """
 
+from typing import Any
+
 import loguru
+from gymnasium import Env
 from stable_baselines3 import PPO
 
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
@@ -40,34 +43,19 @@ def select_action(obs: dict) -> UnicycleAction:
     Returns:
         UnicycleAction: Tuple of (forward_velocity, angular_velocity).
     """
-    try:
-        # Handle target sensor observation
-        if "target_sensor" in obs:
-            target_obs = obs["target_sensor"]
-            # target_sensor typically contains [distance, angle]
-            if len(target_obs) >= 2:
-                target_angle = target_obs[1]
-                target_dist = target_obs[0]
+    target_obs = obs.get("target_sensor")
+    if target_obs is None or len(target_obs) < 2:
+        return NO_OP
 
-                # If target is far, accelerate and steer
-                if target_dist > 1.0:
-                    if abs(target_angle) > 0.3:  # ~17 degrees
-                        if target_angle > 0:
-                            return LEFT_TURN
-                        else:
-                            return RIGHT_TURN
-                    else:
-                        return ACCELERATION
-                else:
-                    # Target is close, maintain orientation
-                    return NO_OP
-    except (KeyError, IndexError):
-        pass
-
-    return NO_OP
+    target_dist, target_angle = target_obs[0], target_obs[1]
+    if target_dist <= 1.0:
+        return NO_OP
+    if abs(target_angle) > 0.3:  # ~17 degrees
+        return LEFT_TURN if target_angle > 0 else RIGHT_TURN
+    return ACCELERATION
 
 
-def make_env(svg_map_path: str = "maps/svg_maps/debug_06.svg"):
+def make_env(svg_map_path: str = "maps/svg_maps/debug_06.svg") -> Env[Any, Any]:
     """Create a pedestrian simulation environment for debugging.
 
     Parameters
@@ -112,7 +100,7 @@ def make_env(svg_map_path: str = "maps/svg_maps/debug_06.svg"):
     return env
 
 
-def run():
+def run() -> None:
     """Run the discrete action pedestrian debugger.
 
     Creates a pedestrian environment and runs the discrete heuristic policy

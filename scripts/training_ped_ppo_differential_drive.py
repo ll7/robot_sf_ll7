@@ -6,10 +6,8 @@ of varying densities.
 """
 
 import datetime
-from collections.abc import Mapping
 
 import loguru
-import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -23,38 +21,11 @@ from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.tb_logging import AdversarialPedestrianMetricsCallback
+from robot_sf.training.observation_wrappers import LegacyRun023ObsAdapter
 
 logger = loguru.logger
-
-
-class LegacyRun023ObsAdapter:
-    """Wrap a PPO model so run_023 gets the legacy flattened observation format."""
-
-    def __init__(self, model: PPO):
-        """Store the wrapped PPO model and expose its action space."""
-        self._model = model
-        self.action_space = getattr(model, "action_space", None)
-
-    def set_action_space(self, action_space) -> None:
-        """Allow pedestrian env to sync action-space expectations."""
-        self.action_space = action_space
-        if hasattr(self._model, "set_action_space"):
-            self._model.set_action_space(action_space)
-
-    def predict(self, obs, deterministic: bool = True):
-        """Adapt dict observations to run_023 format before model inference."""
-        adapted_obs = obs
-        if isinstance(obs, Mapping):
-            drive_state = np.asarray(obs[OBS_DRIVE_STATE])[:, :-1].copy()
-            ray_state = np.asarray(obs[OBS_RAYS])
-            drive_state[:, 2] *= 10
-            drive_state = np.squeeze(drive_state).reshape(-1)
-            ray_state = np.squeeze(ray_state).reshape(-1)
-            adapted_obs = np.concatenate((ray_state, drive_state), axis=0)
-        return self._model.predict(adapted_obs, deterministic=deterministic)
 
 
 def training(svg_map_path: str) -> None:

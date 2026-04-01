@@ -8,7 +8,6 @@ used in ``scripts/debug_ped_apf.py``.
 from pathlib import Path
 
 import loguru
-import numpy as np
 from stable_baselines3 import PPO
 
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
@@ -18,8 +17,8 @@ from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.training.observation_wrappers import LegacyRun023ObsAdapter
 
 logger = loguru.logger
 
@@ -29,35 +28,6 @@ def _extract_linear_speed(speed_like) -> float:
     if isinstance(speed_like, (tuple, list)):
         return float(speed_like[0]) if speed_like else float("nan")
     return float(speed_like)
-
-
-class LegacyRun023ObsAdapter:
-    """Wrap a PPO model so run_023 receives its legacy flattened observation format."""
-
-    def __init__(self, model: PPO):
-        """Store the wrapped model and expose action-space compatibility hooks."""
-        self._model = model
-        self.action_space = getattr(model, "action_space", None)
-
-    def set_action_space(self, action_space) -> None:
-        """Allow env-side action-space synchronization."""
-        self.action_space = action_space
-        if hasattr(self._model, "set_action_space"):
-            self._model.set_action_space(action_space)
-
-    def predict(self, obs, deterministic: bool = True):
-        """Adapt dict observations to the run_023 flattened format before inference."""
-        adapted_obs = obs
-        if isinstance(obs, dict):
-            drive_state = np.asarray(obs[OBS_DRIVE_STATE])[:, :-1].copy()
-            ray_state = np.asarray(obs[OBS_RAYS])
-            drive_state[:, 2] *= 10
-
-            drive_state = np.squeeze(drive_state).reshape(-1)
-            ray_state = np.squeeze(ray_state).reshape(-1)
-            adapted_obs = np.concatenate((ray_state, drive_state), axis=0)
-
-        return self._model.predict(adapted_obs, deterministic=deterministic)
 
 
 def make_env(svg_map_path: str):

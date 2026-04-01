@@ -18,7 +18,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.ped_npc.adversial_ped_force import AdversialPedForceConfig
+from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
@@ -155,7 +155,7 @@ def make_env(svg_map_path: str, model_name: str):
 
     map_definition = convert_map(svg_map_path)
 
-    apf_config = AdversialPedForceConfig(is_active=True, offset=5.0)
+    apf_config = AdversarialPedForceConfig(is_active=True, offset=5.0)
 
     config = RobotSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
@@ -226,27 +226,47 @@ def run(svg_map_path: str, model_name: str | None = None):
         env.exit()
 
 
-def plot_forces_over_time2(forces_over_time):
-    """
-    Plot the force over time for a given pedestrian and force component.
+def plot_forces_over_time2(
+    forces_over_time: np.ndarray,
+    *,
+    ped_idx: int = 2,
+    force_indices: tuple[int, int] = (0, 6),
+) -> None:
+    """Plot desired and adversarial force components for one pedestrian over time.
 
-    forces_over_time: array of shape (T, N, M, 2)
-    ped_idx: index of the pedestrian
-    component_idx: which force component (0 = desired force)
+    Args:
+        forces_over_time: Force-history array with shape ``(T, F, P, 2)``.
+        ped_idx: Pedestrian index to visualize.
+        force_indices: Pair ``(desired_force_idx, adversarial_force_idx)``.
     """
     forces_over_time = np.array(forces_over_time)
-    print(forces_over_time.shape)
+    if forces_over_time.ndim != 4 or forces_over_time.shape[-1] != 2:
+        raise ValueError(
+            f"Expected forces_over_time with shape (T, F, P, 2); got {forces_over_time.shape}."
+        )
+    if not 0 <= ped_idx < forces_over_time.shape[2]:
+        raise IndexError(
+            f"ped_idx {ped_idx} out of range for {forces_over_time.shape[2]} pedestrians"
+        )
+
+    desired_force_idx, adversarial_force_idx = force_indices
+    for force_idx in force_indices:
+        if not 0 <= force_idx < forces_over_time.shape[1]:
+            raise IndexError(
+                f"force index {force_idx} out of range for {forces_over_time.shape[1]} force terms"
+            )
+
     timesteps = np.arange(forces_over_time.shape[0])
 
-    # F[time,force,ped,:]=(Fx, Fy)
-    Fx = forces_over_time[:, 0, 2, 0]  # x-component
-    Fy = forces_over_time[:, 0, 2, 1]  # y-component
+    # F[time, force, pedestrian, :] = (Fx, Fy)
+    Fx = forces_over_time[:, desired_force_idx, ped_idx, 0]
+    Fy = forces_over_time[:, desired_force_idx, ped_idx, 1]
 
     plt.plot(timesteps, Fx, label="Fx (desired)")
     plt.plot(timesteps, Fy, label="Fy (desired)")
 
-    Fx = forces_over_time[:, 6, 2, 0]  # x-component
-    Fy = forces_over_time[:, 6, 2, 1]  # y-component
+    Fx = forces_over_time[:, adversarial_force_idx, ped_idx, 0]
+    Fy = forces_over_time[:, adversarial_force_idx, ped_idx, 1]
 
     plt.plot(timesteps, Fx, label="Fx (adversarial)")
     plt.plot(timesteps, Fy, label="Fy (adversarial)")

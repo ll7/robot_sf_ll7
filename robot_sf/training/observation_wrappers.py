@@ -11,12 +11,10 @@ Quick reference:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import numpy as np
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 from gymnasium import spaces as gym_spaces
 from gymnasium.wrappers import FlattenObservation
 from loguru import logger
@@ -24,6 +22,7 @@ from loguru import logger
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 __all__ = [
+    "LegacyRun023ObsAdapter",
     "adapt_dict_observation_to_policy_space",
     "maybe_flatten_env_observations",
     "resolve_policy_obs_adapter",
@@ -35,6 +34,37 @@ _DICT_OBS_COMPAT_ALIASES: dict[str, tuple[str, ...]] = {
     "robot_speed": ("robot_velocity_xy",),
     "robot_velocity_xy": ("robot_speed",),
 }
+
+
+class LegacyRun023ObsAdapter:
+    """Wrap a PPO model so ``run_023`` receives its legacy flattened observation format."""
+
+    def __init__(self, model: Any):
+        """Store the wrapped model and expose action-space compatibility hooks."""
+        self._model = model
+        self.action_space = getattr(model, "action_space", None)
+
+    def set_action_space(self, action_space: Any) -> None:
+        """Allow env-side action-space synchronization."""
+        self.action_space = action_space
+        if hasattr(self._model, "set_action_space"):
+            self._model.set_action_space(action_space)
+
+    def predict(self, obs: Any, deterministic: bool = True) -> Any:
+        """Adapt dict observations to the ``run_023`` flattened format before inference.
+
+        Returns:
+            Any: The wrapped model prediction tuple using the adapted observation payload.
+        """
+        adapted_obs = obs
+        if isinstance(obs, Mapping):
+            drive_state = np.asarray(obs[OBS_DRIVE_STATE])[:, :-1].copy()
+            ray_state = np.asarray(obs[OBS_RAYS])
+            drive_state[:, 2] *= 10
+            drive_state = np.squeeze(drive_state).reshape(-1)
+            ray_state = np.squeeze(ray_state).reshape(-1)
+            adapted_obs = np.concatenate((ray_state, drive_state), axis=0)
+        return self._model.predict(adapted_obs, deterministic=deterministic)
 
 
 def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> Any:

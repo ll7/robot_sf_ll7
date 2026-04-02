@@ -532,6 +532,10 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             "status": "unavailable",
             "primary_proxy": {
                 "name": "consensus_outcome_rank_v1",
+                "description": (
+                    "Weighted consensus score across core benchmark-success planners using "
+                    "success, collisions, near-misses, and normalized time-to-goal."
+                ),
                 "eligible_planner_selection": "core benchmark-success planners",
             },
             "scenario_rows": [],
@@ -553,6 +557,10 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
     }
     consensus_planners = set(configured_consensus_planners)
     consensus_selection = "core benchmark-success planners"
+    consensus_description = (
+        "Weighted consensus score across core benchmark-success planners using success, "
+        "collisions, near-misses, and normalized time-to-goal."
+    )
     findings: list[str] = []
     if not consensus_planners:
         consensus_planners = {
@@ -561,6 +569,10 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             if isinstance(row.get("planner_key"), str) and str(row.get("planner_key")).strip()
         }
         consensus_selection = "all planners (fallback: no eligible core set)"
+        consensus_description = (
+            "Weighted consensus score across all planners in the scenario breakdown because no "
+            "eligible core benchmark-success planners were available."
+        )
         findings.append(
             "No eligible core benchmark-success planners were available; difficulty consensus fell "
             "back to all planners in the scenario breakdown."
@@ -933,10 +945,7 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
         "status": "ok",
         "primary_proxy": {
             "name": "consensus_outcome_rank_v1",
-            "description": (
-                "Weighted consensus score across core benchmark-success planners using success, "
-                "collisions, near-misses, and normalized time-to-goal."
-            ),
+            "description": consensus_description,
             "eligible_planner_selection": consensus_selection,
             "eligible_planner_count": len(consensus_planners),
             "metric_weights": {

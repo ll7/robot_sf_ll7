@@ -407,6 +407,10 @@ def test_build_scenario_difficulty_reports_fallback_selection_when_core_set_miss
         == "all planners (fallback: no eligible core set)"
     )
     assert analysis["primary_proxy"]["eligible_planner_count"] == 2
+    assert "all planners" in analysis["primary_proxy"]["description"]
+    assert not analysis["primary_proxy"]["description"].startswith(
+        "Weighted consensus score across core benchmark-success planners"
+    )
     assert any("fell back to all planners" in finding for finding in analysis["findings"])
 
 

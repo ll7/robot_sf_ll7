@@ -133,3 +133,7 @@ The rerun also exposed one analyzer semantics caveat that is now tracked separat
 baseline-safe campaigns can produce a successful all-planner consensus while the planner metadata
 still marks every row as `planner_group=experimental`, so the analysis must describe that fallback
 explicitly instead of implying a true core-planner consensus.
+
+The generated scenario-difficulty markdown now mirrors the JSON payload by including the
+primary-proxy description line, so fallback runs stay visibly labeled as fallback runs in both
+machine-readable and human-readable outputs.

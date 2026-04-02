@@ -6,7 +6,7 @@ The score is intentionally simple and benchmark-oriented:
             / effort_hours**alpha
 
 This helper is the deterministic `gh` fallback for Project #5 score sync. It is
-intentionally kept scriptable for batch routing and CI-style automation even as
+intentionally kept scriptable for local/manual batch routing even as
 interactive issue/PR/project work moves toward GitHub MCP / app tools.
 
 The helper reads issue-backed project items via `gh project item-list`, applies

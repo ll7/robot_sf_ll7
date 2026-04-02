@@ -165,6 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Retired the PAT-dependent `project-priority-score-sync.yml` GitHub Actions workflow and updated Project #5 prioritization docs to treat `scripts/tools/project_priority_score.py sync` as the supported local/manual score-sync path.
 * Policy analysis timestamps now use CET/CEST (Europe/Berlin) instead of UTC for output folders and episode metadata.
 * Policy analysis runs now force `use_planner=False` in the episode config to avoid attaching global planners during metrics/video sweeps.
 * Classic global planner defaults now use 0.5m grid cells (`cells_per_meter=2`) with zero inflation for shortest-path planning, reducing invalid start/goal cell failures.

@@ -10,6 +10,10 @@ description: "Review existing GitHub issues against the repo's issue-template co
 Use this skill when an existing issue should be checked against the repo's template contract and
 rewritten if it is missing the sections needed for agent-ready execution.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue inspection when available. Keep the
+`gh` commands below as the deterministic fallback for issue edits, labels, and related project
+metadata cleanup.
+
 ## Read First
 
 - `.github/ISSUE_TEMPLATE/issue_default.md`

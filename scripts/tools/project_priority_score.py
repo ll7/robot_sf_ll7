@@ -5,7 +5,11 @@ The score is intentionally simple and benchmark-oriented:
     score = improvement * success_probability * time_criticality * unlock_factor
             / effort_hours**alpha
 
-This helper reads issue-backed project items via `gh project item-list`, applies
+This helper is the deterministic `gh` fallback for Project #5 score sync. It is
+intentionally kept scriptable for batch routing and CI-style automation even as
+interactive issue/PR/project work moves toward GitHub MCP / app tools.
+
+The helper reads issue-backed project items via `gh project item-list`, applies
 defaults and clamping for missing or invalid inputs, and writes the derived
 numeric score back to a `Priority Score` project field.
 """
@@ -184,72 +188,143 @@ def compute_priority_score(inputs: ScoreInputs, *, alpha: float = DEFAULT_ALPHA)
 class GhProjectClient:
     """Small wrapper around the gh CLI for project field automation."""
 
+    def _run_completed(self, *args: str) -> subprocess.CompletedProcess[str]:
+        """Run a gh command and raise a high-signal error on failure."""
+
+        try:
+            return subprocess.run(
+                ["gh", *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.strip()
+            stdout = exc.stdout.strip()
+            details = stderr or stdout or "no stderr/stdout captured"
+            raise RuntimeError(
+                "gh command failed: "
+                + " ".join(["gh", *args])
+                + f"\n{details}\n"
+                + "For interactive issue/PR/project work, prefer the GitHub MCP/app tools. "
+                + "For this scripted fallback, verify `gh auth status` and ensure the token "
+                + "has `project` scope."
+            ) from exc
+
     def run_json(self, *args: str) -> dict[str, Any]:
         """Run a gh command and parse the JSON output."""
 
-        completed = subprocess.run(
-            ["gh", *args],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return json.loads(completed.stdout)
+        completed = self._run_completed(*args)
+        try:
+            return json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "gh command returned invalid JSON: "
+                + " ".join(["gh", *args])
+                + f"\n{completed.stdout.strip() or '<empty stdout>'}"
+            ) from exc
 
     def run(self, *args: str) -> None:
         """Run a gh command for side effects."""
 
-        subprocess.run(["gh", *args], check=True, capture_output=True, text=True)
+        self._run_completed(*args)
+
+    def _should_retry_with_at_me(self, *, owner: str, error: RuntimeError) -> bool:
+        """Limit `@me` fallback to the known ll7 user-owner gh quirk."""
+
+        return owner == "ll7" and "unknown owner type" in str(error).lower()
+
+    def _run_project_command(
+        self,
+        subcommand: str,
+        *,
+        owner: str,
+        project_number: int,
+        extra_args: Sequence[str] = (),
+        as_json: bool = False,
+    ) -> Any:
+        """Run a `gh project` command with the known user-owner fallback."""
+
+        args = (
+            "project",
+            subcommand,
+            str(project_number),
+            "--owner",
+            owner,
+            *extra_args,
+        )
+        if as_json:
+            args = (*args, "--format", "json")
+        try:
+            if as_json:
+                return self.run_json(*args)
+            self.run(*args)
+            return None
+        except RuntimeError as exc:
+            if not self._should_retry_with_at_me(owner=owner, error=exc):
+                raise
+            retry_args = (
+                "project",
+                subcommand,
+                str(project_number),
+                "--owner",
+                "@me",
+                *extra_args,
+            )
+            if as_json:
+                return self.run_json(*retry_args, "--format", "json")
+            self.run(*retry_args)
+            return None
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return the GraphQL project ID."""
 
-        payload = self.run_json(
-            "project", "view", str(project_number), "--owner", owner, "--format", "json"
+        payload = self._run_project_command(
+            "view",
+            owner=owner,
+            project_number=project_number,
+            as_json=True,
         )
         return str(payload["id"])
 
     def field_list(self, *, owner: str, project_number: int) -> list[dict[str, Any]]:
         """Return the current project fields."""
 
-        payload = self.run_json(
-            "project",
+        payload = self._run_project_command(
             "field-list",
-            str(project_number),
-            "--owner",
-            owner,
-            "--format",
-            "json",
+            owner=owner,
+            project_number=project_number,
+            as_json=True,
         )
         return list(payload["fields"])
 
     def ensure_number_field(self, *, owner: str, project_number: int, name: str) -> None:
         """Create a number field when it is missing."""
 
-        self.run(
-            "project",
+        self._run_project_command(
             "field-create",
-            str(project_number),
-            "--owner",
-            owner,
-            "--name",
-            name,
-            "--data-type",
-            "NUMBER",
+            owner=owner,
+            project_number=project_number,
+            extra_args=(
+                "--name",
+                name,
+                "--data-type",
+                "NUMBER",
+            ),
         )
 
     def item_list(self, *, owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
         """Return project items with their visible field values."""
 
-        payload = self.run_json(
-            "project",
+        payload = self._run_project_command(
             "item-list",
-            str(project_number),
-            "--owner",
-            owner,
-            "--limit",
-            str(limit),
-            "--format",
-            "json",
+            owner=owner,
+            project_number=project_number,
+            extra_args=(
+                "--limit",
+                str(limit),
+            ),
+            as_json=True,
         )
         return list(payload["items"])
 

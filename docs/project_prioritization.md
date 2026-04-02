@@ -56,6 +56,10 @@ When processing a batch of issues, keep the GitHub work in three separate passes
 This keeps issue cleanup independent from project routing and makes it easier to avoid GraphQL
 quota exhaustion mid-batch.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
+Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
+batch sync and CI-style automation.
+
 Canonical workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
@@ -176,6 +180,8 @@ Useful flags:
 - `--dry-run` computes scores without writing them back
 - `--issue-number <n>` updates one issue only
 - `--skip-status Done` skips completed work
+
+This helper is intentionally `gh`-based even when interactive GitHub work is MCP-first.
 
 ### GitHub Actions Sync
 

@@ -1,6 +1,6 @@
 ---
 name: gh-issue-autopilot
-description: "Autonomous issue-to-PR workflow with gh: pick next best issue, branch, implement, test with scripts/dev gates, open draft PR, and create/track follow-up issues when scope must be deferred."
+description: "Autonomous issue-to-PR workflow with GitHub MCP-first interaction and gh fallback for batch/project automation."
 ---
 
 # GH Issue Autopilot
@@ -9,6 +9,10 @@ description: "Autonomous issue-to-PR workflow with gh: pick next best issue, bra
 
 Use this skill when the user asks to "take the next issue" and execute end-to-end from issue
 selection to a draft PR, while keeping project metadata and follow-up tracking consistent.
+
+Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project reads when available.
+Keep the concrete `gh` commands below as the deterministic fallback for project routing, scripted
+batch work, PR opening, and auth/debugging.
 
 Typical invocation:
 
@@ -36,7 +40,8 @@ Typical invocation:
 4. Tie-breaker:
    - lower issue number first (older work first).
 
-Use `gh project item-list` as the source of truth before falling back to plain `gh issue list`.
+Use GitHub MCP / GitHub app tools as the source of truth when available before falling back to
+`gh project item-list` and then plain `gh issue list`.
 
 ## Workflow
 

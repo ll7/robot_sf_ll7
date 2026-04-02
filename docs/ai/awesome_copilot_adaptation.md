@@ -45,6 +45,17 @@ Surface the new skills from:
 - `docs/ai/repo_overview.md`
 - `.github/copilot-instructions.md`
 
+### Additional adopted skills
+
+These upstream ideas were kept because they add direct value to this repository's workflow:
+
+- `context-map` for focused file and validation discovery,
+- `what-context-needed` for underspecified tasks,
+- `quality-playbook` for proof-first non-trivial changes,
+- `agentic-eval` for improving AI workflow outputs with small rubrics,
+- `review-and-refactor` for narrow review-then-refactor passes,
+- `update-docs-on-code-change` for keeping workflow docs synchronized with code.
+
 ## Concepts Rejected
 
 - a new retrieval database or MCP-backed memory layer,
@@ -57,6 +68,16 @@ Surface the new skills from:
 - Use `.codex/skills/autoresearch/SKILL.md` when there is a measurable metric and room for
   multiple experiments.
 - Use `.codex/skills/auto-improvement/SKILL.md` when the task is a targeted refinement pass.
+- Use `context-map` before multi-file changes when you need a compact file/validation map.
+- Use `what-context-needed` when the task is underspecified and you need the minimum missing
+  context before proceeding.
+- Use `quality-playbook` when the task needs proof-first planning, risk classification, and a
+  validation choice.
+- Use `agentic-eval` when the artifact being improved is a skill, instruction, prompt-like text, or
+  other AI workflow output.
+- Use `review-and-refactor` when the change should be reviewed first and then refactored
+  surgically.
+- Use `update-docs-on-code-change` when code changes would otherwise leave docs stale.
 - Use `clean-up` when the task is a straightforward cleanup, formatting, or lint pass.
 - Use `gh-issue-clarifier` when the task is underspecified and needs scope decisions first.
 

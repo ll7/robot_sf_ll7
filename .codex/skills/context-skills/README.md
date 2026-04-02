@@ -14,3 +14,5 @@ Available skills:
 - `planner-integration`
 - `paper-facing-docs`
 - `review-benchmark-change`
+- `context-map`
+- `what-context-needed`

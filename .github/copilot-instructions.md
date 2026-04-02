@@ -15,6 +15,13 @@ It is everyones guide on how to use this repository effectively.
 - For measurement-driven improvement loops, use `.codex/skills/autoresearch/SKILL.md`.
   For shorter refinement passes, use `.codex/skills/auto-improvement/SKILL.md`.
   See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.
+- For context discovery, use `.codex/skills/context-map/SKILL.md` before multi-file changes and
+  `.codex/skills/what-context-needed/SKILL.md` when the task is underspecified.
+- For proof-first quality work, use `.codex/skills/quality-playbook/SKILL.md` for non-trivial
+  changes, `.codex/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
+  `.codex/skills/review-and-refactor/SKILL.md` for narrow review-then-refactor passes.
+- For doc synchronization, use `.codex/skills/update-docs-on-code-change/SKILL.md` when code
+  changes would make docs stale.
 - Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work.
 - Keep `gh` for deterministic batch automation, score sync, and auth/debugging fallback.
 - Central point to link new documentation pages is `docs/README.md`.

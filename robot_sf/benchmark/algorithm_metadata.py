@@ -19,6 +19,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_socialforce": "classical",
     "social_navigation_pyenvs_sfm_helbing": "classical",
     "social_navigation_pyenvs_hsfm_new_guo": "classical",
+    "crowdnav_height": "learning",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
@@ -50,6 +51,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
     "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
     "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
+    "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -145,6 +147,21 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "body-frame ActionXYW or NewHeadedState outputs into Robot SF unicycle_vw commands."
         ),
     },
+    "crowdnav_height": {
+        "repo_url": "https://github.com/Shuijing725/CrowdNav_HEIGHT",
+        "commit": "65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05",
+        "checkout_path": "output/repos/CrowdNav_HEIGHT",
+        "checkpoint_bundle": (
+            "https://drive.google.com/drive/folders/1B1EA_gTMKg3hFQ_PXpQYjA8JBRHgmEQR?usp=drive_link"
+        ),
+        "default_checkpoint": "HEIGHT/checkpoints/237800.pt",
+        "upstream_policy": "training.networks.model.Policy[selfAttn_merge_srnn_lidar]",
+        "adapter_boundary": (
+            "Rebuild the upstream lidar-plus-human dict observation from Robot SF SocNav state, "
+            "run checkpoint inference, and translate the upstream discrete delta-v/delta-theta "
+            "action table into stateful Robot SF unicycle_vw commands."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -227,6 +244,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_command_space": "body_velocity_xy_plus_omega",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "body_velocity_heading_safe_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "crowdnav_height": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "CrowdNavHeightAdapter",
+        "upstream_command_space": "discrete_delta_v_and_delta_theta",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "upstream_discrete_delta_vw_to_unicycle_vw_stateful",
         "projection_documented": True,
     },
     "ppo": {

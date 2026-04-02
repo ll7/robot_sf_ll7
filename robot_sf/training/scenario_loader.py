@@ -72,14 +72,14 @@ def _load_scenario_manifest(
         includes = _resolve_includes(data, source=source)
         if "scenarios" in data:
             scenarios = data["scenarios"]
+            if not isinstance(scenarios, list):
+                raise ValueError(f"Scenario config 'scenarios' must be a list: {source}")
         elif not includes:
             raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
     elif isinstance(data, list):
         scenarios = data
     else:  # pragma: no cover - malformed input handled by caller
         raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
-    if scenarios and not isinstance(scenarios, list):
-        raise ValueError(f"Scenario config 'scenarios' must be a list: {source}")
     return scenarios, includes, local_map_search_paths
 
 

@@ -117,6 +117,28 @@ def test_iter_map_registry_entries_rejects_invalid_format(tmp_path: Path) -> Non
         )
 
 
+@pytest.mark.parametrize("scenarios_value", ["", None, "{}"])
+def test_load_scenarios_rejects_non_list_scenarios_key(
+    tmp_path: Path,
+    scenarios_value: object,
+) -> None:
+    """The manifest parser should fail fast when scenarios is not a list."""
+    manifest = tmp_path / "manifest.yaml"
+    if scenarios_value == "{}":
+        scenarios_yaml = "scenarios: {}\n"
+    elif scenarios_value is None:
+        scenarios_yaml = "scenarios: null\n"
+    else:
+        scenarios_yaml = 'scenarios: ""\n'
+    _write_yaml(
+        manifest,
+        scenarios_yaml,
+    )
+
+    with pytest.raises(ValueError, match="Scenario config 'scenarios' must be a list"):
+        scenario_loader.load_scenarios(manifest)
+
+
 def test_register_map_entry_resolves_relative_paths_and_duplicates(tmp_path: Path) -> None:
     """Registry entries should resolve relative paths and reject duplicates."""
     registry: dict[str, Path] = {}

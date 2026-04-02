@@ -118,6 +118,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Reviewed" in creator_text
 
     auditor_text = SKILL_FILES[1].read_text(encoding="utf-8")
+    assert "GitHub MCP / GitHub app tools" in auditor_text
     assert "uv run python scripts/tools/issue_template_audit.py" in auditor_text
     assert "gh issue view" in auditor_text
     assert "gh issue edit" in auditor_text

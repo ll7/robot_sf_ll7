@@ -1,6 +1,6 @@
 ---
 name: gh-pr-opener
-description: "Open Robot SF draft PRs with the repository template, explicit issue-scope verification, and a conservative PR-readiness freshness gate."
+description: "Open Robot SF PRs with MCP-first GitHub interaction, explicit issue-scope verification, and a conservative PR-readiness freshness gate."
 ---
 
 # GH PR Opener
@@ -9,6 +9,10 @@ description: "Open Robot SF draft PRs with the repository template, explicit iss
 
 Use this skill when a branch is ready to be handed off as a GitHub PR and the repository wants a
 standard, conservative opening flow.
+
+Prefer GitHub MCP / GitHub app tools for interactive issue and PR inspection when available.
+Keep the concrete `gh` commands below as the deterministic fallback for PR creation, readiness
+verification, and metadata operations that still need CLI scripting.
 
 This skill is fail-closed by design:
 

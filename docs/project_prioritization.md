@@ -58,7 +58,7 @@ quota exhaustion mid-batch.
 
 Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
 Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
-batch sync and CI-style automation.
+batch sync and local/manual score recomputation.
 
 Canonical workflow note:
 
@@ -183,43 +183,26 @@ Useful flags:
 
 This helper is intentionally `gh`-based even when interactive GitHub work is MCP-first.
 
-### GitHub Actions Sync
+### Supported Sync Mode
 
-The repository workflow
-`/.github/workflows/project-priority-score-sync.yml` runs:
+Repository-supported score sync is local/manual only. The GitHub Actions
+workflow has been retired so Project #5 score updates no longer depend on a
+repository secret or scheduled issue-event automation.
 
-- manually via `workflow_dispatch`
-- nightly on a schedule
-- on issue metadata changes such as `opened`, `edited`, `labeled`, and
-  `unlabeled`
+Recommended usage:
 
-## GitHub Actions Limitation
-
-Projects v2 field edits do not currently provide a simple repository-local
-workflow trigger equivalent to normal issue events. That means this repository
-cannot do true immediate recomputation on every Project field edit with a
-purely in-repo workflow alone.
-
-The current implementation is intentionally pragmatic:
-
-- do now: manual, scheduled, and issue-event sync
-- do later if needed: webhook- or GitHub-App-driven sync on
-  `projects_v2_item`
+- run the local command explicitly after a batch of issue/project edits
+- use `--dry-run` first when changing score inputs or debugging field state
+- keep interactive inspection and issue cleanup MCP-first, with this helper as
+  the scripted fallback
 
 ## Authentication
 
-The workflow uses a PAT-style secret:
-
-- `PROJECT_AUTOMATION_TOKEN`
-
-It must have at least:
-
-- `repo`
-- `project`
-- `workflow`
-
-`GITHUB_TOKEN` is not sufficient for this user-owned Projects v2 automation
-path.
+The local/manual workflow uses your authenticated GitHub CLI session. Before
+running sync, verify that `gh auth status` shows an account with access to the
+target repository and Project #5. The standard `GITHUB_TOKEN` environment
+variable is typically insufficient for user-owned Projects v2; ensure your
+local `gh` session is authenticated with project scope.
 
 ## Worked Example
 

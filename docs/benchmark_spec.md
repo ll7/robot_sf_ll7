@@ -9,7 +9,7 @@ Canonical benchmark fallback policy:
 
 Francis-guideline crosswalk for the current benchmark contract:
 
-- `docs/context/issue_759_francis_guideline_mapping.md`
+- [Francis Guideline Mapping For Robot SF](./context/issue_759_francis_guideline_mapping.md)
 
 ## Scope
 

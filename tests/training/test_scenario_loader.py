@@ -55,6 +55,103 @@ scenarios:
     assert names == ["scenario_a", "scenario_b", "scenario_local"]
 
 
+def test_load_scenarios_select_scenarios_preserves_explicit_order(tmp_path: Path) -> None:
+    """Scenario selection should keep an explicit, deterministic subset order."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+  - name: scenario_b
+    map_file: maps/b.svg
+  - name: scenario_c
+    map_file: maps/c.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+select_scenarios:
+  - scenario_c
+  - scenario_a
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+    names = [scenario.get("name") for scenario in scenarios]
+    assert names == ["scenario_c", "scenario_a"]
+
+
+def test_load_scenarios_select_scenarios_rejects_duplicate_names(tmp_path: Path) -> None:
+    """Selecting by name should fail closed when the expanded manifest is ambiguous."""
+    source_a = tmp_path / "a.yaml"
+    source_b = tmp_path / "b.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source_a,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+""",
+    )
+    _write_yaml(
+        source_b,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/b.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - a.yaml
+  - b.yaml
+select_scenarios:
+  - scenario_a
+""",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate scenario name"):
+        load_scenarios(manifest)
+
+
+def test_load_scenarios_select_scenarios_rejects_unknown_names(tmp_path: Path) -> None:
+    """Selecting a missing scenario should raise instead of silently skipping it."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+select_scenarios:
+  - scenario_b
+""",
+    )
+
+    with pytest.raises(ValueError, match="Unknown select_scenarios entry"):
+        load_scenarios(manifest)
+
+
 def test_load_scenarios_detects_include_cycles(tmp_path: Path) -> None:
     """Include cycles are rejected with a clear error."""
     file_a = tmp_path / "a.yaml"

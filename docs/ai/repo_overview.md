@@ -54,6 +54,14 @@ Then branch by task type:
 
 - `.codex/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
   planner, experiment, and documentation work
+- `.codex/skills/autoresearch/` and `.codex/skills/auto-improvement/`: repo-local skills for
+  measurable improvement loops and smaller refinement passes
+- `.codex/skills/context-map/` and `.codex/skills/what-context-needed/`: context-gathering skills
+  for locating the right files or requesting the minimum missing context
+- `.codex/skills/quality-playbook/`, `.codex/skills/agentic-eval/`,
+  `.codex/skills/review-and-refactor/`, and `.codex/skills/update-docs-on-code-change/`: quality
+  and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and
+  doc-sync
 
 ## Working Style Defaults
 
@@ -62,6 +70,12 @@ Then branch by task type:
 - Preserve benchmark claims conservatively.
 - Treat planner provenance as part of correctness, not just documentation polish.
 - Distinguish observed evidence from hypothesis in findings and reports.
+- Prefer `autoresearch` for measurable improvement loops and `auto-improvement` for targeted
+  refinement passes.
+- Prefer `context-map` before multi-file work, `what-context-needed` when context is missing,
+  `quality-playbook` for proof-first planning, `agentic-eval` for AI workflow outputs,
+  `review-and-refactor` for surgical improvements, and `update-docs-on-code-change` when a code
+  change would stale docs.
 
 ## Common Failure Modes
 

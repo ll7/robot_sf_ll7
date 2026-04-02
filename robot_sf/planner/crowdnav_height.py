@@ -313,6 +313,8 @@ class CrowdNavHeightAdapter:
 
     projection_policy = "upstream_discrete_delta_vw_to_unicycle_vw_stateful"
     upstream_policy = "training.networks.model.Policy[selfAttn_merge_srnn_lidar]"
+    _LINEAR_VELOCITY_INDEX = 0
+    _ANGULAR_VELOCITY_INDEX = 1
 
     def __init__(self, config: CrowdNavHeightConfig | None = None) -> None:
         """Initialize the adapter and load the upstream checkpoint."""
@@ -606,25 +608,19 @@ class CrowdNavHeightAdapter:
         angular_res = float(self._checkpoint_config.lidar.angular_res)
         ray_num = int(360.0 / angular_res)
         distances = np.full((ray_num,), sensor_range, dtype=np.float32)
-        if self._obstacle_segments.size == 0:
-            return distances
         origin = np.asarray(robot_pos, dtype=float)
         ray_angles = np.linspace(0.0, 2.0 * math.pi, ray_num, endpoint=False, dtype=float)
-        for idx, ray_angle in enumerate(ray_angles):
-            direction = np.array(
-                [
-                    math.cos(float(heading) + float(ray_angle)),
-                    math.sin(float(heading) + float(ray_angle)),
-                ],
-                dtype=float,
-            )
+        angles = heading + ray_angles
+        directions = np.stack((np.cos(angles), np.sin(angles)), axis=-1)
+        segments = self._obstacle_segments
+        for idx, direction in enumerate(directions):
             best = sensor_range
-            for seg in self._obstacle_segments:
+            for seg in segments:
                 hit = _ray_segment_intersection_distance(
                     origin,
                     direction,
-                    np.asarray(seg[:2], dtype=float),
-                    np.asarray(seg[2:4], dtype=float),
+                    seg[:2],
+                    seg[2:4],
                 )
                 if hit is not None and hit < best:
                     best = hit
@@ -735,32 +731,30 @@ class CrowdNavHeightAdapter:
             raise ValueError(f"Unexpected CrowdNav_HEIGHT discrete action index: {action_idx}")
         delta_v, delta_theta = self._action_table[action_idx]
         robot_cfg = self._checkpoint_config.robot
+        linear_min = max(float(robot_cfg.v_min), -self.config.max_linear_speed)
+        linear_max = min(float(robot_cfg.v_max), self.config.max_linear_speed)
+        angular_min = max(float(robot_cfg.w_min), -self.config.max_angular_speed)
+        angular_max = min(float(robot_cfg.w_max), self.config.max_angular_speed)
+        if linear_min > linear_max or angular_min > angular_max:
+            raise ValueError(
+                "CrowdNav_HEIGHT projection limits are inconsistent with the checkpoint robot limits"
+            )
         self._desired_velocity[0] = float(
             np.clip(
-                self._desired_velocity[0] + delta_v, float(robot_cfg.v_min), float(robot_cfg.v_max)
+                self._desired_velocity[self._LINEAR_VELOCITY_INDEX] + delta_v,
+                linear_min,
+                linear_max,
             )
         )
         self._desired_velocity[1] = float(
             np.clip(
-                self._desired_velocity[1] + delta_theta,
-                float(robot_cfg.w_min),
-                float(robot_cfg.w_max),
+                self._desired_velocity[self._ANGULAR_VELOCITY_INDEX] + delta_theta,
+                angular_min,
+                angular_max,
             )
         )
-        linear = float(
-            np.clip(
-                self._desired_velocity[0],
-                -self.config.max_linear_speed,
-                self.config.max_linear_speed,
-            )
-        )
-        angular = float(
-            np.clip(
-                self._desired_velocity[1],
-                -self.config.max_angular_speed,
-                self.config.max_angular_speed,
-            )
-        )
+        linear = float(self._desired_velocity[self._LINEAR_VELOCITY_INDEX])
+        angular = float(self._desired_velocity[self._ANGULAR_VELOCITY_INDEX])
         meta.update(
             {
                 "action_index": action_idx,

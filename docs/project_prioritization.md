@@ -200,10 +200,9 @@ Recommended usage:
 
 The local/manual workflow uses your authenticated GitHub CLI session. Before
 running sync, verify that `gh auth status` shows an account with access to the
-target repository and Project #5.
-
-`GITHUB_TOKEN` is not sufficient for this user-owned Projects v2 automation
-path.
+target repository and Project #5. The standard `GITHUB_TOKEN` environment
+variable is typically insufficient for user-owned Projects v2; ensure your
+local `gh` session is authenticated with project scope.
 
 ## Worked Example
 

@@ -126,6 +126,8 @@ EOF
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
+- Keep `gh` for scripted batch operations, derived score sync, auth debugging, and one-off deterministic fallback commands.
 - Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
 - Cache project and field IDs once per shell session instead of rediscovering them for every issue.
 

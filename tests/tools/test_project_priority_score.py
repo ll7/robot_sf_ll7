@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
+
+import pytest
 
 from scripts.tools.project_priority_score import (
     DEFAULT_ALPHA,
@@ -287,3 +290,69 @@ def test_compute_priority_score_matches_expected_value_extension() -> None:
 
     expected = (5.0 * 0.7 * 1.5 * 2.0) / (8.0**DEFAULT_ALPHA)
     assert compute_priority_score(inputs, alpha=DEFAULT_ALPHA) == expected
+
+
+def test_gh_project_client_surfaces_actionable_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify gh failures include MCP-first and auth-scope guidance.
+
+    This matters because the score-sync helper intentionally remains the
+    deterministic `gh` fallback, so command failures should explain how to
+    recover instead of surfacing an opaque subprocess error.
+    """
+
+    from scripts.tools.project_priority_score import GhProjectClient
+
+    def _raise(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            1,
+            ["gh", "project", "item-list"],
+            output="",
+            stderr="authentication failed",
+        )
+
+    client = GhProjectClient()
+    monkeypatch.setattr(subprocess, "run", _raise)
+
+    with pytest.raises(RuntimeError, match="prefer the GitHub MCP/app tools"):
+        client.item_list(owner="ll7", project_number=5, limit=1)
+
+
+def test_gh_project_client_retries_user_owned_project_commands_with_at_me(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify project commands retry with `@me` after the owner-type gh quirk.
+
+    This matters because the scripted score-sync path should stay reliable on
+    gh builds that reject an explicit user login such as `ll7` for some
+    `gh project` subcommands.
+    """
+
+    from scripts.tools.project_priority_score import GhProjectClient
+
+    calls: list[list[str]] = []
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if "--owner" in args and args[args.index("--owner") + 1] == "ll7":
+            raise subprocess.CalledProcessError(
+                1,
+                args,
+                output="",
+                stderr="unknown owner type",
+            )
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout='{"fields": []}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    client = GhProjectClient()
+    assert client.field_list(owner="ll7", project_number=5) == []
+    assert calls[0][0:4] == ["gh", "project", "field-list", "5"]
+    assert calls[0][calls[0].index("--owner") + 1] == "ll7"
+    assert calls[1][calls[1].index("--owner") + 1] == "@me"

@@ -10,6 +10,10 @@ description: "Create structured GitHub issues from vague prompts using repo temp
 Use this skill when the user wants a new issue created from a rough idea and needs it turned
 into a repo-ready issue body with the right template, labels, and project metadata.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue/project inspection when available.
+Keep the `gh` commands below as the deterministic fallback for issue creation and batched Project
+#5 routing.
+
 ## Read First
 
 - `.github/ISSUE_TEMPLATE/issue_default.md`

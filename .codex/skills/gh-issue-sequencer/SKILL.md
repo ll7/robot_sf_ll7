@@ -13,6 +13,9 @@ always obvious.
 Batch issue cleanup and Project #5 routing separately; the canonical workflow note is
 `docs/context/issue_713_batch_first_issue_workflow.md`.
 
+Prefer GitHub MCP / GitHub app tools for interactive inspection and issue cleanup when available.
+Keep the `gh` commands below as the deterministic fallback for project routing and queue writes.
+
 ## Goal State
 
 - Exactly one issue is `In progress`.

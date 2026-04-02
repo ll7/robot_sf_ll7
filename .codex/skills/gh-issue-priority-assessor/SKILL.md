@@ -10,6 +10,10 @@ description: "LLM-backed review workflow for Project #5 priority inputs; assess 
 Use this skill when an issue needs a plausibility review for Project #5 priority
 inputs or when you want an LLM-backed estimate of the current issue fields.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue/project reads when available. Keep
+the `gh` commands below as the deterministic fallback for scripted writeback and score-sync
+adjacent batching.
+
 ## Read First
 
 - `docs/project_prioritization.md`

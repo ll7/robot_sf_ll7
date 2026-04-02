@@ -13,6 +13,10 @@ decision records.
 For larger issue batches, follow `docs/context/issue_713_batch_first_issue_workflow.md` so issue
 cleanup stays separate from Project #5 writes.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue reads, linked-context inspection, and
+comment drafting when available. Keep the `gh` commands below as the deterministic fallback for
+labels, project status changes, and follow-up issue creation.
+
 ## When To Use
 
 - Issue description is vague, contradictory, or missing acceptance criteria.

@@ -12,6 +12,8 @@ It is everyones guide on how to use this repository effectively.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
   `docs/context/issue_713_batch_first_issue_workflow.md`: clean up issues first, route project
   metadata second, run derived score sync last, and cache IDs once per shell session.
+- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work.
+- Keep `gh` for deterministic batch automation, score sync, and auth/debugging fallback.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.

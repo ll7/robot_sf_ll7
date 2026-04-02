@@ -7,6 +7,10 @@ Canonical benchmark fallback policy:
 
 - `docs/context/issue_691_benchmark_fallback_policy.md`
 
+Francis-guideline crosswalk for the current benchmark contract:
+
+- `docs/context/issue_759_francis_guideline_mapping.md`
+
 ## Scope
 
 This spec documents the map-based benchmark workflow driven by scenario manifests under

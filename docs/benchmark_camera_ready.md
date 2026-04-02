@@ -8,6 +8,7 @@ Canonical benchmark fallback policy:
 * [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
 * [Experimental Planner Guardrails](./benchmark_experimental_planners.md)
 * [Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)
+* [Francis Guideline Mapping For Robot SF](./context/issue_759_francis_guideline_mapping.md)
 
 ## Entry Point
 

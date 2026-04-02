@@ -42,11 +42,19 @@ per-scenario and per-archetype YAMLs into a single scenario list.
 # configs/scenarios/sets/classic_crossing_subset.yaml
 includes:
   - ../archetypes/classic_crossing.yaml
+select_scenarios:
+  - classic_crossing_low
+  - classic_crossing_high
 map_search_paths:
   - ../../../maps/svg_maps
 ```
 
-The loader expands includes relative to the manifest file and preserves order.
+The loader expands includes relative to the manifest file and then applies
+`select_scenarios` as an explicit, case-insensitive subset filter. Selector
+order controls the final scenario order. Duplicate names in the expanded pool
+raise an error so subset manifests fail closed when the source data is
+ambiguous.
+
 If `map_file` paths in included scenarios are not resolvable, you can set
 `map_search_paths` to help locate map files. The loader logs a warning with
 the attempted paths and suggestion.

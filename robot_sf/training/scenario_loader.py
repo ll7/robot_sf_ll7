@@ -45,12 +45,52 @@ def _load_yaml_documents(path: Path) -> Any:
         return yaml.safe_load(handle)
 
 
+def _load_scenario_manifest(
+    data: Any,
+    *,
+    source: Path,
+    root: Path,
+) -> tuple[list[Any], list[Path], list[Path]]:
+    """Extract scenario entries, includes, and search paths from loaded YAML.
+
+    Returns:
+        tuple[list[Any], list[Path], list[Path]]: Scenarios, include paths, and
+        resolved map search paths.
+    """
+    scenarios: list[Any] = []
+    includes: list[Path] = []
+    local_map_search_paths = (
+        _resolve_map_search_paths(data, root=root) if isinstance(data, Mapping) else []
+    )
+    if local_map_search_paths:
+        logger.info(
+            "Scenario manifest '{}' configured map_search_paths: {}",
+            source,
+            ", ".join(str(path) for path in local_map_search_paths),
+        )
+    if isinstance(data, Mapping):
+        includes = _resolve_includes(data, source=source)
+        if "scenarios" in data:
+            scenarios = data["scenarios"]
+        elif not includes:
+            raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
+    elif isinstance(data, list):
+        scenarios = data
+    else:  # pragma: no cover - malformed input handled by caller
+        raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
+    if scenarios and not isinstance(scenarios, list):
+        raise ValueError(f"Scenario config 'scenarios' must be a list: {source}")
+    return scenarios, includes, local_map_search_paths
+
+
 def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
     Supports a list of scenarios, a mapping with ``scenarios``, and optional
     include lists (``includes``, ``include``, or ``scenario_files``) for
     composing per-scenario and per-archetype files into a single list.
+    Manifests can also provide ``select_scenarios`` to keep only an explicit,
+    deterministic subset of the expanded scenarios by name.
 
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
@@ -83,31 +123,11 @@ def _load_scenarios_recursive(
     visited.add(resolved)
     try:
         data = _load_yaml_documents(resolved)
-        scenarios: list[Any] = []
-        includes: list[Path] = []
-        local_map_search_paths = (
-            _resolve_map_search_paths(data, root=root) if isinstance(data, Mapping) else []
+        scenarios, includes, local_map_search_paths = _load_scenario_manifest(
+            data,
+            source=resolved,
+            root=root,
         )
-        if local_map_search_paths:
-            logger.info(
-                "Scenario manifest '{}' configured map_search_paths: {}",
-                resolved,
-                ", ".join(str(path) for path in local_map_search_paths),
-            )
-        if isinstance(data, Mapping):
-            includes = _resolve_includes(data, source=resolved)
-            if "scenarios" in data:
-                scenarios = data["scenarios"]
-            elif not includes:
-                raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
-        elif isinstance(data, list):
-            scenarios = data
-        else:  # pragma: no cover - malformed input handled by caller
-            raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
-
-        if scenarios and not isinstance(scenarios, list):
-            raise ValueError(f"Scenario config 'scenarios' must be a list: {resolved}")
-
         combined: list[Mapping[str, Any]] = []
         inherited_search_paths = map_search_paths or []
         effective_search_paths = local_map_search_paths or inherited_search_paths
@@ -128,6 +148,8 @@ def _load_scenarios_recursive(
                 map_search_paths=effective_search_paths,
             )
         )
+        if isinstance(data, Mapping):
+            combined = _apply_scenario_selection(combined, data=data, source=resolved)
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -164,6 +186,93 @@ def _resolve_includes(data: Mapping[str, Any], *, source: Path) -> list[Path]:
             )
         includes.append(candidate)
     return includes
+
+
+def _resolve_scenario_selection(data: Mapping[str, Any], *, source: Path) -> list[str]:
+    """Resolve explicit scenario selection names from a manifest.
+
+    Returns:
+        list[str]: Ordered scenario names to keep.
+    """
+    raw = data.get("select_scenarios")
+    if raw is None:
+        return []
+    if isinstance(raw, (str, Path)):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        raise ValueError(f"select_scenarios must be a list or string in '{source}'.")
+    selected: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, (str, Path)):
+            raise ValueError(f"select_scenarios entry '{entry}' must be a string in '{source}'.")
+        name = str(entry).strip()
+        if not name:
+            raise ValueError(f"select_scenarios entry must not be empty in '{source}'.")
+        key = name.lower()
+        if key in seen:
+            raise ValueError(f"Duplicate select_scenarios entry '{name}' in '{source}'.")
+        seen.add(key)
+        selected.append(name)
+    if not selected:
+        raise ValueError(f"select_scenarios must not be empty in '{source}'.")
+    return selected
+
+
+def _apply_scenario_selection(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    data: Mapping[str, Any],
+    source: Path,
+) -> list[Mapping[str, Any]]:
+    """Apply explicit scenario selection after manifest expansion.
+
+    Returns:
+        list[Mapping[str, Any]]: Filtered scenarios in selector order.
+    """
+    selected_names = _resolve_scenario_selection(data, source=source)
+    if not selected_names:
+        return scenarios
+
+    scenario_map: dict[str, Mapping[str, Any]] = {}
+    for idx, scenario in enumerate(scenarios):
+        name = _scenario_identifier(scenario, source=source, index=idx)
+        key = name.lower()
+        if key in scenario_map:
+            raise ValueError(
+                f"Duplicate scenario name '{name}' in '{source}' prevents select_scenarios."
+            )
+        scenario_map[key] = scenario
+
+    selected: list[Mapping[str, Any]] = []
+    for name in selected_names:
+        key = name.lower()
+        if key not in scenario_map:
+            raise ValueError(f"Unknown select_scenarios entry '{name}' in '{source}'.")
+        selected.append(scenario_map[key])
+    return selected
+
+
+def _scenario_identifier(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    index: int,
+) -> str:
+    """Return the stable scenario identifier used for selection and deduping."""
+    name = scenario.get("name") or scenario.get("scenario_id")
+    if name is None:
+        raise ValueError(f"Scenario entry {index} in '{source}' is missing a name or scenario_id.")
+    if not isinstance(name, str):
+        raise ValueError(f"Scenario name must be a string in '{source}' at index {index}.")
+    normalized = name.strip()
+    if not normalized:
+        raise ValueError(
+            f"Scenario name must be a non-empty string in '{source}' at index {index}."
+        )
+    return normalized
 
 
 def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Path]:

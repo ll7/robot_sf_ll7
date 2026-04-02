@@ -54,6 +54,8 @@ Then branch by task type:
 
 - `.codex/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
   planner, experiment, and documentation work
+- `.codex/skills/autoresearch/` and `.codex/skills/auto-improvement/`: repo-local skills for
+  measurable improvement loops and smaller refinement passes
 
 ## Working Style Defaults
 
@@ -62,6 +64,8 @@ Then branch by task type:
 - Preserve benchmark claims conservatively.
 - Treat planner provenance as part of correctness, not just documentation polish.
 - Distinguish observed evidence from hypothesis in findings and reports.
+- Prefer `autoresearch` for measurable improvement loops and `auto-improvement` for targeted
+  refinement passes.
 
 ## Common Failure Modes
 

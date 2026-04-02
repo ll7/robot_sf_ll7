@@ -306,7 +306,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
-  - Copilot prompts can be found in `.github/prompts`
+  - Codex skills can be found in `.codex/skills/`
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
     - `.github/copilot-instructions.md`

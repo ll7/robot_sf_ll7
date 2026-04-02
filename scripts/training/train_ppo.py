@@ -2299,6 +2299,30 @@ def _gather_episode_metrics(
     }
 
 
+def _resolve_env_max_sim_steps(env: Any) -> int:
+    """Return ``max_sim_steps`` even when the env is wrapped.
+
+    Returns:
+        int: Episode step cap exposed by the wrapped or unwrapped env state.
+    """
+    if hasattr(env, "get_wrapper_attr"):
+        try:
+            state = env.get_wrapper_attr("state")
+            max_steps = getattr(state, "max_sim_steps", None)
+            if max_steps is not None:
+                return int(max_steps)
+        except AttributeError:
+            pass
+
+    state = getattr(env, "state", None)
+    if state is None:
+        state = getattr(getattr(env, "unwrapped", None), "state", None)
+    max_steps = getattr(state, "max_sim_steps", None)
+    if max_steps is None:
+        raise AttributeError("Environment does not expose state.max_sim_steps.")
+    return int(max_steps)
+
+
 def _evaluate_policy(
     model: PPO,
     config: ExpertTrainingConfig,
@@ -2371,7 +2395,7 @@ def _evaluate_policy(
         info: Mapping[str, object] = {}
         steps = 0
         episode_return = 0.0
-        max_steps = env.state.max_sim_steps  # type: ignore[attr-defined]
+        max_steps = _resolve_env_max_sim_steps(env)
 
         while not done and steps < max_steps:
             action, _ = model.predict(obs, deterministic=True)

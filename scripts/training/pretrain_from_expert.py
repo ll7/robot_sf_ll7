@@ -7,6 +7,7 @@ producing a warm-start checkpoint for subsequent PPO fine-tuning.
 from __future__ import annotations
 
 import argparse
+import inspect
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,7 +122,7 @@ def _align_observation_array(
     expected_shape: tuple[int, ...] | None,
     dtype: Any,
 ) -> np.ndarray:
-    """Pad, crop, or reshape arrays so they match the declared observation shape."""
+    """Pad, crop, reshape, or stack arrays to match the declared observation shape."""
     target_dtype = dtype if dtype is not None else np.float32
     arr = np.asarray(value, dtype=target_dtype)
     if expected_shape is None:
@@ -135,14 +136,23 @@ def _align_observation_array(
     if arr.size == expected_size:
         return arr.reshape(normalized_shape)
 
+    if len(normalized_shape) == 2:
+        stack, features = normalized_shape
+        if arr.ndim == 1 and arr.shape == (features,):
+            return np.repeat(arr[np.newaxis, :], stack, axis=0)
+        if arr.ndim == 2 and arr.shape[1:] == (features,) and arr.shape[0] == 1:
+            return np.repeat(arr, stack, axis=0)
+
     if arr.ndim != len(normalized_shape):
         raise ValueError(
-            "Observation shape mismatch: "
-            f"got {arr.shape}, expected {normalized_shape}."
+            f"Observation shape mismatch: got {arr.shape}, expected {normalized_shape}."
         )
 
     aligned = np.zeros(normalized_shape, dtype=target_dtype)
-    copy_slices = tuple(slice(0, min(got, expected)) for got, expected in zip(arr.shape, normalized_shape))
+    copy_slices = tuple(
+        slice(0, min(got, expected))
+        for got, expected in zip(arr.shape, normalized_shape, strict=False)
+    )
     aligned[copy_slices] = arr[copy_slices]
     return aligned
 
@@ -262,22 +272,29 @@ def _create_bc_trainer(
 ) -> tuple[Any, PPO]:
     """Initialize BC trainer alongside the PPO container holding the policy."""
     bc = _require_imitation_bc()
+    bc_device = "cpu"
+    logger.info("Initializing BC pre-training policy and trainer on {}.", bc_device)
 
     policy_model = PPO(
         "MlpPolicy",
         env,
         learning_rate=config.learning_rate,
         verbose=1,
+        device=bc_device,
     )
 
-    trainer = bc.BC(
-        observation_space=env.observation_space,
-        action_space=env.action_space,
-        demonstrations=trajectories,
-        policy=policy_model.policy,
-        batch_size=config.batch_size,
-        rng=np.random.default_rng(int(config.random_seeds[0])),
-    )
+    trainer_kwargs: dict[str, Any] = {
+        "observation_space": env.observation_space,
+        "action_space": env.action_space,
+        "demonstrations": trajectories,
+        "policy": policy_model.policy,
+        "batch_size": config.batch_size,
+        "rng": np.random.default_rng(int(config.random_seeds[0])),
+    }
+    if "device" in inspect.signature(bc.BC).parameters:
+        trainer_kwargs["device"] = bc_device
+
+    trainer = bc.BC(**trainer_kwargs)
 
     return trainer, policy_model
 

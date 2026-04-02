@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from scripts.training import train_ppo
@@ -52,3 +53,29 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
     assert payload["total_wall_clock_sec"] == 12.0
     assert payload["train_env_steps_per_sec_mean"] == 100.0
     assert payload["eval_sec_per_checkpoint"] == 3.0
+
+
+def test_resolve_env_max_sim_steps_reads_wrapper_state() -> None:
+    """Wrapped eval envs should still expose max_sim_steps through wrapper attr lookup."""
+    env = SimpleNamespace(
+        get_wrapper_attr=lambda name: SimpleNamespace(max_sim_steps=77)
+        if name == "state"
+        else None,
+        unwrapped=SimpleNamespace(state=SimpleNamespace(max_sim_steps=12)),
+    )
+
+    assert train_ppo._resolve_env_max_sim_steps(env) == 77
+
+
+def test_resolve_env_max_sim_steps_falls_back_to_unwrapped_state() -> None:
+    """Fallback lookup should support wrappers that only expose the unwrapped env state."""
+
+    def _missing_attr(_name: str) -> object:
+        raise AttributeError("missing")
+
+    env = SimpleNamespace(
+        get_wrapper_attr=_missing_attr,
+        unwrapped=SimpleNamespace(state=SimpleNamespace(max_sim_steps=33)),
+    )
+
+    assert train_ppo._resolve_env_max_sim_steps(env) == 33

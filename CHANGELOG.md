@@ -81,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
+* PPO evaluation now resolves `max_sim_steps` through wrapped environments, preventing late-stage evaluation failures when observation-space adapters hide `env.state`.
+* BC pretraining now initializes the PPO container and imitation BC trainer on CPU, avoiding CUDA/CPU mixed-device setup failures during behavioural cloning smoke and cluster runs.
+* Synced the `predictive_proxy_selected_v2_full` registry entry with portable W&B provenance from `origin/main`, so predictive-foresight workflows can resolve the intended checkpoint on this branch.
 * Issue #747 and #748 carry-forward PPO configs now resume from the registered BR-06 v10 best-success checkpoint instead of the older v3 baseline, so the resumed observation contract matches predictive-foresight training.
 * PPO resume, issue #749 trajectory collection, and issue #749 imitation fine-tuning now adapt runtime observations to the checkpoint-declared observation space and can apply source-training `env_overrides`, preventing contract mismatches such as missing legacy keys (for example `drive_state`) when replaying older expert checkpoints.
 * Resumed PPO training now reloads checkpoints against the target vectorized env instead of rebinding with `set_env`, and BC pretraining now pads ragged saved pedestrian arrays to the declared observation-space shape so issue #747, #748, and #749 cluster relaunches do not fail on `n_envs` or flattened-feature-size mismatches.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -244,10 +245,55 @@ def test_adapter_accepts_flat_benchmark_observation_schema(tmp_path: Path) -> No
     assert adapter._last_model_inputs["robot_node"].shape == (1, 5)
 
 
+def test_adapter_cleans_up_import_shims(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The adapter should not leak temporary compatibility modules into sys.modules."""
+    repo_root = tmp_path / "repo"
+    model_dir = tmp_path / "model"
+    _write_fake_upstream_repo(repo_root)
+    _write_fake_checkpoint_dir(model_dir, action_index=0)
+    tracked_modules = (
+        "gym",
+        "gym.spaces",
+        "gym.spaces.box",
+        "gym.spaces.dict",
+        "baselines",
+        "baselines.bench",
+        "baselines.common",
+        "baselines.common.atari_wrappers",
+        "baselines.common.vec_env",
+        "baselines.common.vec_env.dummy_vec_env",
+        "baselines.common.vec_env.vec_normalize",
+        "baselines.common.vec_env.vec_env",
+        "baselines.common.vec_env.util",
+        "baselines.logger",
+        "torchvision",
+        "torchvision.models",
+    )
+    for name in tracked_modules:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+
+    CrowdNavHeightAdapter(
+        build_crowdnav_height_config(
+            {
+                "repo_root": str(repo_root),
+                "model_dir": str(model_dir),
+                "checkpoint_name": "fake.pt",
+            }
+        )
+    )
+
+    for name in tracked_modules:
+        assert name not in sys.modules
+
+
 @pytest.mark.parametrize("seed", [7, 11, 23])
 @pytest.mark.slow
 def test_adapter_runs_live_socnav_smoke_for_multiple_seeds(seed: int) -> None:
     """The wrapped checkpoint should execute several live Robot SF episodes without fallback."""
+    config = build_crowdnav_height_config({})
+    checkpoint_path = config.model_dir / "checkpoints" / config.checkpoint_name
+    if not config.repo_root.exists() or not checkpoint_path.exists():
+        pytest.skip("missing CrowdNav_HEIGHT checkpoint")
     env = make_robot_env(
         config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT),
         seed=seed,
@@ -255,7 +301,7 @@ def test_adapter_runs_live_socnav_smoke_for_multiple_seeds(seed: int) -> None:
     )
     try:
         obs, _ = env.reset(seed=seed)
-        adapter = CrowdNavHeightAdapter(build_crowdnav_height_config({}))
+        adapter = CrowdNavHeightAdapter(config)
         adapter.bind_env(env)
         adapter.reset(seed=seed)
 

@@ -61,7 +61,7 @@ that optimization-based baselines should be elevated alongside ORCA as part of b
 **Implementation Complexity:** Medium
 **Time Estimate:** 2-3 weeks
 
-### 3. MPC-Based Approaches (MEDIUM PRIORITY)
+### 3. MPC-Based Approaches (HIGH PRIORITY)
 
 **Recommended Methods:**
 - **DR-MPC: Deep Residual Model Predictive Control for Real-world Social Navigation** (RA-L 2025)
@@ -165,7 +165,7 @@ benchmark value they would add right now.
 
 **Success Criteria:**
 - Achieve >80% success rate on benchmark
-- Identify 2-3 top performing methods
+- Identify 2-3 top-performing methods
 - Understand performance trade-offs
 
 ### Phase 3: Future Exploration (Longer term)

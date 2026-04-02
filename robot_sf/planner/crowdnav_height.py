@@ -166,6 +166,7 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
     repo_str = str(repo_root)
     original_path = list(sys.path)
     prefixes = ("crowd_nav", "crowd_sim", "training")
+    injected_modules: set[str] = set()
     original_modules = {
         name: module
         for name, module in sys.modules.items()
@@ -181,6 +182,7 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             sys.modules["gym.spaces"] = gymnasium.spaces
             sys.modules["gym.spaces.box"] = importlib.import_module("gymnasium.spaces.box")
             sys.modules["gym.spaces.dict"] = importlib.import_module("gymnasium.spaces.dict")
+            injected_modules.update({"gym", "gym.spaces", "gym.spaces.box", "gym.spaces.dict"})
         if "baselines" not in sys.modules:
             baselines = ModuleType("baselines")
             bench = ModuleType("baselines.bench")
@@ -285,6 +287,20 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             sys.modules["baselines.common.vec_env.vec_env"] = vec_env
             sys.modules["baselines.common.vec_env.util"] = util
             sys.modules["baselines.logger"] = baselines.logger
+            injected_modules.update(
+                {
+                    "baselines",
+                    "baselines.bench",
+                    "baselines.common",
+                    "baselines.common.atari_wrappers",
+                    "baselines.common.vec_env",
+                    "baselines.common.vec_env.dummy_vec_env",
+                    "baselines.common.vec_env.vec_normalize",
+                    "baselines.common.vec_env.vec_env",
+                    "baselines.common.vec_env.util",
+                    "baselines.logger",
+                }
+            )
         if "torchvision" not in sys.modules:
             torchvision = ModuleType("torchvision")
             torchvision_models = ModuleType("torchvision.models")
@@ -294,16 +310,20 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             torchvision_models.resnet50 = lambda *args, **kwargs: None
             sys.modules["torchvision"] = torchvision
             sys.modules["torchvision.models"] = torchvision_models
+            injected_modules.update({"torchvision", "torchvision.models"})
         training_root = repo_root / "training"
         if training_root.exists() and "training" not in sys.modules:
             training_pkg = ModuleType("training")
             training_pkg.__path__ = [str(training_root)]  # type: ignore[attr-defined]
             sys.modules["training"] = training_pkg
+            injected_modules.add("training")
         yield
     finally:
         for name in list(sys.modules):
             if any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes):
                 sys.modules.pop(name, None)
+        for name in injected_modules:
+            sys.modules.pop(name, None)
         sys.modules.update(original_modules)
         sys.path[:] = original_path
 
@@ -716,6 +736,14 @@ class CrowdNavHeightAdapter:
         """
         if self._hidden_state is None:
             self.reset()
+        expected_time_step = float(self._checkpoint_config.env.time_step)
+        if not math.isfinite(time_step) or time_step <= 0.0:
+            raise ValueError(f"Invalid CrowdNav_HEIGHT time_step: {time_step}")
+        if not math.isclose(float(time_step), expected_time_step, rel_tol=0.0, abs_tol=1e-6):
+            raise ValueError(
+                "CrowdNav_HEIGHT adapter expects a fixed time_step "
+                f"of {expected_time_step:.6f}s, got {float(time_step):.6f}s"
+            )
         obs_tensors, meta = self._build_model_inputs(observation)
         assert self._hidden_state is not None
         with torch.no_grad():

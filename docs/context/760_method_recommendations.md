@@ -4,6 +4,21 @@
 
 Based on the detailed analysis of HEIGHT's performance issues and the comprehensive survey of available navigation methods, this document recommends specific approaches to test with the Robot SF benchmark. The recommendations prioritize methods that address HEIGHT's key failure modes while leveraging approaches that have already shown success.
 
+### Survey Alignment Note
+
+The prioritization below is aligned with engineering and benchmark ROI, not with the survey's
+implicit taxonomy. The `awesome-robot-social-navigation` methods list is organized more like a
+research-paradigm map than a sequence of implementation priorities. The current ordering is mostly
+sound, but there are three structural adjustments worth keeping explicit:
+
+- MPC should be treated as a first-class baseline family, not just a medium-priority follow-up.
+- Social Force should be called out as a baseline family, including calibration and parameter sweeps.
+- Foundation models should remain strictly post-benchmark exploratory work unless a concrete
+  upstream repo/checkpoint makes the integration cost much lower than expected.
+
+Net assessment: about `80%` agreement with the survey-driven framing, with the main correction being
+that optimization-based baselines should be elevated alongside ORCA as part of benchmark completeness.
+
 ## Top Recommendations
 
 ### 1. ORCA Variants (HIGH PRIORITY)
@@ -66,6 +81,11 @@ Based on the detailed analysis of HEIGHT's performance issues and the comprehens
 **Implementation Complexity:** High
 **Time Estimate:** 3-4 weeks
 
+**Survey alignment note:** MPC is stronger than a generic medium-priority follow-up. For benchmark
+completeness, it should be treated as a core classical comparator alongside ORCA and Social Force.
+If there is bandwidth for only one optimization-based track, MPC should move ahead of extra
+attention-model variants and ahead of exploratory foundation-model work.
+
 ### 4. Attention-Based RL Methods (MEDIUM PRIORITY)
 
 **Recommended Methods:**
@@ -105,6 +125,10 @@ Based on the detailed analysis of HEIGHT's performance issues and the comprehens
 
 **Implementation Complexity:** High
 **Time Estimate:** 4-6 weeks
+
+**Survey alignment note:** keep these strictly exploratory. The survey may list them as a frontier
+method class, but the integration burden and reproducibility risk are still high relative to the
+benchmark value they would add right now.
 
 ## Implementation Strategy
 
@@ -209,6 +233,7 @@ Based on the phased approach:
 ### Low Risk
 - ORCA variants (proven approach, already works well)
 - DRL-VO (builds on existing ORCA infrastructure)
+- Social Force calibration and parameter sweeps
 
 ### Medium Risk
 - MPC approaches (more complex but promising)
@@ -222,10 +247,22 @@ Based on the phased approach:
 | Priority | Method Category | Specific Methods | Time Estimate | Expected Impact |
 |----------|-----------------|-------------------|---------------|-----------------|
 | HIGH | ORCA Variants | Non-holonomic ORCA, ORCA-DD, Relaxed ORCA | 1-2 weeks | Immediate improvement, 75-85% success |
+| HIGH | MPC Approaches | DR-MPC, SICNav | 3-4 weeks | Safety guarantees, 85-95% success |
 | HIGH | DRL-VO | DRL-VO (T-RO 2023) | 2-3 weeks | Potential SOTA, 80-90% success |
-| MEDIUM | MPC Approaches | DR-MPC, SICNav | 3-4 weeks | Safety guarantees, 85-95% success |
 | MEDIUM | Attention RL | Intention Aware, ST2 | 3-5 weeks | HEIGHT replacement, 80-90% success |
 | LOW | Foundation Models | VLM-Social-Nav, GSON | 4-6 weeks | Future potential, exploratory |
+
+### Baseline Completeness Note
+
+For benchmark validity, the classical baseline family should include:
+
+- ORCA variants
+- Social Force variants
+- MPC-based navigation
+
+That gives the benchmark a clearer decomposition of reactive, optimization-based, and learning-based
+behavior. It also makes HEIGHT's failure modes easier to interpret because the comparison set is no
+longer missing a principled optimization baseline.
 
 ## Next Steps
 

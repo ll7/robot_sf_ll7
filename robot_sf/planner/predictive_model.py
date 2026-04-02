@@ -232,6 +232,7 @@ def load_predictive_checkpoint(
             "Checkpoint is missing required PredictiveTrajectoryModel keys: "
             f"{sorted(load_result.missing_keys)}"
         )
+    model = model.to(map_location)
     model.eval()
     return model, payload
 

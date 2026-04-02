@@ -37,7 +37,7 @@ env_overrides:
   include_grid_in_observation: true
   predictive_foresight_enabled: true
   predictive_foresight_model_id: predictive_proxy_selected_v2_full
-  predictive_foresight_device: cpu
+  predictive_foresight_device: cuda
   predictive_foresight_max_agents: 16
   predictive_foresight_horizon_steps: 8
   predictive_foresight_rollout_dt: 0.2

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 * Added `SLURM/Auxme/issue_749_imitation_pipeline.sl`, a shared-artifact Auxme wrapper for issue #749 imitation runs that stages registered source checkpoints into `benchmarks/expert_policies/` and keeps dataset, BC, and PPO finetune jobs on the same `ROBOT_SF_ARTIFACT_ROOT`.
+* Camera-ready campaign analysis now emits `scenario_difficulty_analysis.{json,md}` plus richer `campaign_analysis.{json,md}` content that ranks scenario difficulty from existing artifacts, summarizes family-level hardness, flags planner residual mismatch on easier scenarios, and records whether the verified-simple subset needs a bounded pilot before it can be treated as a calibration aid.
+* Added adversarial pedestrian policy demo (`examples/advanced/32_demo_adversarial_pedestrian.py`) with factory-based environment setup, CLI overrides for map/model paths, and per-episode collision/kinematics summary logging.
+* Added pedestrian policy collision benchmark script (`scripts/benchmark_ped_policy_collisions.py`) to evaluate pedestrian checkpoints with episode metrics plus collision kinematics (robot speed, pedestrian speed, and impact angle at robot-pedestrian collision), front/back/side collision-zone percentages, explicit timeout/robot-goal counts, and a console outcome-breakdown log line.
+* Added differential-drive pedestrian policy debug runner (`scripts/debug_ped_policy_differential_drive.py`) combining the pedestrian debug loop with run_023-compatible differential-drive robot profile and observation adapter behavior.
+* Added differential-drive pedestrian PPO training entrypoint (`scripts/training_ped_ppo_differential_drive.py`) mirroring the existing pedestrian PPO workflow with `DifferentialDriveSettings`.
+* Pedestrian collision telemetry now records `collision_impact_angle_rad/deg` in per-step metadata, with aggregated TensorBoard scalars and histograms for overall and per-collision-type impact kinematics.
+* APF model comparison benchmark script (`scripts/benchmark_ped_apf_models.py`) to run `run_023` and `run_043` with APF off/on (100 episodes each by default) and report aggregated episode metrics (steps, collisions, success/timeout, rewards) with JSON export under `output/benchmarks/`.
+* Shipped adversarial-pedestrian assets for the new demos and training workflow: SVG maps `maps/svg_maps/masterthesis/corner.svg`, `maps/svg_maps/masterthesis/headon.svg`, `maps/svg_maps/masterthesis/intersection.svg`, plus pedestrian PPO checkpoints `model_ped/ppo_corner.zip`, `model_ped/ppo_headon.zip`, and `model_ped/ppo_intersection.zip` used by `examples/advanced/32_demo_adversarial_pedestrian.py`, `scripts/benchmark_ped_policy_collisions.py`, `scripts/debug_ped_policy_differential_drive.py`, `scripts/training_ped_ppo_differential_drive.py`, and `scripts/benchmark_ped_apf_models.py`.
 * Added benchmark release protocol v0.1 surfaces: canonical release manifests for the paper-facing matrix, a `run_benchmark_release.py` entrypoint layered on the camera-ready workflow, release/reproducibility docs, `CITATION.cff`, and a benchmark-focused `RELEASE.md` checklist.
 * Added Project #5 task prioritization support: a documented benchmark-oriented scoring model, a `project_priority_score.py` sync helper, and a GitHub Actions workflow for manual/scheduled/issue-event score synchronization into a numeric `Priority Score` field.
 * Default PR template now prompts for summary, validation/proof, risks/rollout, docs/provenance, and follow-up issues so reviews stay proof-first and easier to act on.
@@ -73,11 +81,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
-
 * Issue #747 and #748 carry-forward PPO configs now resume from the registered BR-06 v10 best-success checkpoint instead of the older v3 baseline, so the resumed observation contract matches predictive-foresight training.
 * PPO resume, issue #749 trajectory collection, and issue #749 imitation fine-tuning now adapt runtime observations to the checkpoint-declared observation space and can apply source-training `env_overrides`, preventing contract mismatches such as missing legacy keys (for example `drive_state`) when replaying older expert checkpoints.
 * Resumed PPO training now reloads checkpoints against the target vectorized env instead of rebinding with `set_env`, and BC pretraining now pads ragged saved pedestrian arrays to the declared observation-space shape so issue #747, #748, and #749 cluster relaunches do not fail on `n_envs` or flattened-feature-size mismatches.
-
+* Restored the backward-compatible `avg_collision_impact_angle_rad` pedestrian metric alias and corrected the adversarial-force plot labels in `scripts/debug_ped_apf.py`.
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.
 * Differential-drive kinematics now match standard straight-line and in-place rotation formulas.
 * Auxme GPU SLURM submissions now default to `48G` host memory instead of the previous `120G`, matching the documented PPO host-memory sizing guidance more closely while preserving headroom for `num_envs` auto-resolution on 24-CPU jobs.

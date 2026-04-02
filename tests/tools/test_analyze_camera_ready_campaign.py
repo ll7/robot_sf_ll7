@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from scripts.tools.analyze_camera_ready_campaign import (
     _build_scenario_difficulty_markdown,
     analyze_campaign,
@@ -722,6 +723,61 @@ def test_analyze_campaign_markdown_labels_normalized_time_to_goal(tmp_path: Path
     markdown = _build_scenario_difficulty_markdown(analysis["scenario_difficulty"])
     assert "time_to_goal_norm" in markdown
     assert " | time_to_goal | " not in markdown
+
+
+def test_analyze_campaign_markdown_surfaces_fallback_description() -> None:
+    """Markdown output should mirror the fallback consensus description so non-paper reports do not read like a core-planner consensus."""
+    analysis = build_scenario_difficulty_analysis(
+        planner_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "planner_group": "experimental",
+                "status": "ok",
+                "preflight_status": "ok",
+                "benchmark_success": "true",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "planner_group": "experimental",
+                "status": "ok",
+                "preflight_status": "ok",
+                "benchmark_success": "true",
+            },
+        ],
+        scenario_breakdown_rows=[
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.95",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.05",
+                "time_to_goal_norm_mean": "0.30",
+                "snqi_mean": "0.30",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "3",
+                "success_mean": "0.90",
+                "collisions_mean": "0.00",
+                "near_misses_mean": "0.10",
+                "time_to_goal_norm_mean": "0.35",
+                "snqi_mean": "0.20",
+            },
+        ],
+    )
+
+    markdown = _build_scenario_difficulty_markdown(analysis)
+    assert "Description:" in markdown
+    assert "all planners in the scenario breakdown" in markdown
+    assert "no eligible core benchmark-success planners were available" in markdown
 
 
 def test_analyze_campaign_cli_writes_scenario_difficulty_artifacts(

@@ -439,6 +439,7 @@ def _scenario_difficulty_markdown_lines(  # noqa: C901
     lines.extend(
         [
             f"- Primary proxy: `{primary_proxy.get('name', 'unknown')}`",
+            f"- Description: {primary_proxy.get('description', 'unknown')}",
             f"- Consensus planners: `{primary_proxy.get('eligible_planner_count', 0)}` ({primary_proxy.get('eligible_planner_selection', 'unknown')})",
             f"- Supporting metric: `{primary_proxy.get('supporting_metric', 'unknown')}`",
             "",

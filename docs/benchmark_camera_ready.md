@@ -431,7 +431,9 @@ Core vs experimental partitions:
   partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
   as part of the frozen execution contract.
 * non-paper runs:
-  partitioning remains readiness-tier based.
+  partitioning remains readiness-tier based. When the scenario-difficulty analyzer
+  cannot find an eligible core benchmark-success set, the report falls back to the
+  full scenario breakdown and says so explicitly instead of implying a core consensus.
 * `campaign_table_core.{csv,md}`:
   core partition rows (`planner_group=core` for paper-facing runs;
 `readiness_tier=baseline-ready` for non-paper runs).

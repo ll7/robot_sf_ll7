@@ -356,3 +356,37 @@ def test_gh_project_client_retries_user_owned_project_commands_with_at_me(
     assert calls[0][0:4] == ["gh", "project", "field-list", "5"]
     assert calls[0][calls[0].index("--owner") + 1] == "ll7"
     assert calls[1][calls[1].index("--owner") + 1] == "@me"
+
+
+def test_gh_project_client_does_not_retry_unknown_owner_with_at_me(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify only the known ll7 owner quirk can trigger the `@me` fallback.
+
+    This matters because silently retrying arbitrary owners could read or write
+    the wrong project if the helper grows beyond the current ll7-only usage.
+    """
+
+    from scripts.tools.project_priority_score import GhProjectClient
+
+    calls: list[list[str]] = []
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise subprocess.CalledProcessError(
+            1,
+            args,
+            output="",
+            stderr="unknown owner type",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    client = GhProjectClient()
+    with pytest.raises(RuntimeError, match="unknown owner type"):
+        client.field_list(owner="octocat", project_number=5)
+
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--owner") + 1] == "octocat"

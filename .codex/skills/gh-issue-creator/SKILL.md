@@ -12,7 +12,7 @@ into a repo-ready issue body with the right template, labels, and project metada
 
 Prefer GitHub MCP / GitHub app tools for interactive issue/project inspection when available.
 Keep the `gh` commands below as the deterministic fallback for issue creation and batched Project
-#5 routing.
+`#5` routing.
 
 ## Read First
 

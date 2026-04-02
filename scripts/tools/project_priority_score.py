@@ -229,51 +229,21 @@ class GhProjectClient:
 
         self._run_completed(*args)
 
-    def _run_project_json(
+    def _should_retry_with_at_me(self, *, owner: str, error: RuntimeError) -> bool:
+        """Limit `@me` fallback to the known ll7 user-owner gh quirk."""
+
+        return owner == "ll7" and "unknown owner type" in str(error).lower()
+
+    def _run_project_command(
         self,
         subcommand: str,
         *,
         owner: str,
         project_number: int,
         extra_args: Sequence[str] = (),
-    ) -> dict[str, Any]:
-        """Run a `gh project` JSON command with a user-owner fallback."""
-
-        args = (
-            "project",
-            subcommand,
-            str(project_number),
-            "--owner",
-            owner,
-            *extra_args,
-            "--format",
-            "json",
-        )
-        try:
-            return self.run_json(*args)
-        except RuntimeError as exc:
-            if owner == "@me" or "unknown owner type" not in str(exc):
-                raise
-            return self.run_json(
-                "project",
-                subcommand,
-                str(project_number),
-                "--owner",
-                "@me",
-                *extra_args,
-                "--format",
-                "json",
-            )
-
-    def _run_project(
-        self,
-        subcommand: str,
-        *,
-        owner: str,
-        project_number: int,
-        extra_args: Sequence[str] = (),
-    ) -> None:
-        """Run a `gh project` command with a user-owner fallback."""
+        as_json: bool = False,
+    ) -> Any:
+        """Run a `gh project` command with the known user-owner fallback."""
 
         args = (
             "project",
@@ -283,12 +253,17 @@ class GhProjectClient:
             owner,
             *extra_args,
         )
+        if as_json:
+            args = (*args, "--format", "json")
         try:
+            if as_json:
+                return self.run_json(*args)
             self.run(*args)
+            return None
         except RuntimeError as exc:
-            if owner == "@me" or "unknown owner type" not in str(exc):
+            if not self._should_retry_with_at_me(owner=owner, error=exc):
                 raise
-            self.run(
+            retry_args = (
                 "project",
                 subcommand,
                 str(project_number),
@@ -296,31 +271,37 @@ class GhProjectClient:
                 "@me",
                 *extra_args,
             )
+            if as_json:
+                return self.run_json(*retry_args, "--format", "json")
+            self.run(*retry_args)
+            return None
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return the GraphQL project ID."""
 
-        payload = self._run_project_json(
+        payload = self._run_project_command(
             "view",
             owner=owner,
             project_number=project_number,
+            as_json=True,
         )
         return str(payload["id"])
 
     def field_list(self, *, owner: str, project_number: int) -> list[dict[str, Any]]:
         """Return the current project fields."""
 
-        payload = self._run_project_json(
+        payload = self._run_project_command(
             "field-list",
             owner=owner,
             project_number=project_number,
+            as_json=True,
         )
         return list(payload["fields"])
 
     def ensure_number_field(self, *, owner: str, project_number: int, name: str) -> None:
         """Create a number field when it is missing."""
 
-        self._run_project(
+        self._run_project_command(
             "field-create",
             owner=owner,
             project_number=project_number,
@@ -335,7 +316,7 @@ class GhProjectClient:
     def item_list(self, *, owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
         """Return project items with their visible field values."""
 
-        payload = self._run_project_json(
+        payload = self._run_project_command(
             "item-list",
             owner=owner,
             project_number=project_number,
@@ -343,6 +324,7 @@ class GhProjectClient:
                 "--limit",
                 str(limit),
             ),
+            as_json=True,
         )
         return list(payload["items"])
 

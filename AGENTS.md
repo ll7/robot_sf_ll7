@@ -11,7 +11,8 @@ Treat the following files as the repository-native context stack for Codex-style
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
-- `.codex/skills/`: discoverable Codex skills for execution workflows and repo-local context packs.
+- `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
+  mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
@@ -122,24 +123,26 @@ Canonical note:
 
 For issue management and delivery, use these local skills:
 
-- `.codex/skills/gh-issue-autopilot/SKILL.md`
+- `.agents/skills/gh-issue-autopilot/SKILL.md`
   - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open draft PR.
-- `.codex/skills/gh-issue-sequencer/SKILL.md`
+- `.agents/skills/gh-issue-sequencer/SKILL.md`
   - Maintains a clear sequential execution queue in GitHub Project #5 (`In progress`/`Ready`/`Tracked`).
-- `.codex/skills/gh-issue-clarifier/SKILL.md`
+- `.agents/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
-- `.codex/skills/gh-issue-priority-assessor/SKILL.md`
+- `.agents/skills/gh-issue-priority-assessor/SKILL.md`
   - Reviews Project #5 priority inputs against the static rubric, explains plausibility, and keeps field writeback opt-in.
-- `.codex/skills/analyze-camera-ready-benchmark/SKILL.md`
+- `.agents/skills/analyze-camera-ready-benchmark/SKILL.md`
   - Runs consistency diagnostics for camera-ready benchmark campaigns and summarizes runtime/quality/fallback signals.
 
-Use the repo-local context skills under `.codex/skills/` when the task is primarily about understanding or reviewing benchmark/planner context rather than executing GitHub workflow automation:
+Use the repo-local context skills under `.agents/skills/` when the task is primarily about
+understanding or reviewing benchmark/planner context rather than executing GitHub workflow
+automation:
 
-- `.codex/skills/benchmark-overview/SKILL.md`
-- `.codex/skills/experiment-context/SKILL.md`
-- `.codex/skills/planner-integration/SKILL.md`
-- `.codex/skills/paper-facing-docs/SKILL.md`
-- `.codex/skills/review-benchmark-change/SKILL.md`
+- `.agents/skills/benchmark-overview/SKILL.md`
+- `.agents/skills/experiment-context/SKILL.md`
+- `.agents/skills/planner-integration/SKILL.md`
+- `.agents/skills/paper-facing-docs/SKILL.md`
+- `.agents/skills/review-benchmark-change/SKILL.md`
 
 ## Donts
 

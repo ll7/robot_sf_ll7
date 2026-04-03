@@ -20,7 +20,7 @@ The repository already has a strong local-context baseline:
 - `AGENTS.md`
 - `.specify/memory/constitution.md`
 - `docs/dev_guide.md`
-- execution-oriented `.codex/skills/`
+- execution-oriented `.agents/skills/`
 - the new repo-local context stack added in this issue
 
 That is enough to improve onboarding and long-horizon work without adding infrastructure that would
@@ -38,7 +38,7 @@ Until then, prefer:
 
 1. repo-local instructions,
 2. focused docs under `docs/ai/`,
-3. `.codex/skills/` context packs,
+3. `.agents/skills/` context packs,
 4. manual or scripted context bundles via the chosen packer.
 
 ## What This Prevents

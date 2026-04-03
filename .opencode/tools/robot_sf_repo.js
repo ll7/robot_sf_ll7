@@ -1,8 +1,46 @@
-import { tool } from "@opencode-ai/plugin";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+
+function makeSchemaNode() {
+  return {
+    describe() {
+      return this;
+    },
+    default() {
+      return this;
+    },
+    int() {
+      return this;
+    },
+    min() {
+      return this;
+    },
+    max() {
+      return this;
+    },
+  };
+}
+
+function makeFallbackTool() {
+  const schema = {
+    string: () => makeSchemaNode(),
+    number: () => makeSchemaNode(),
+    enum: () => makeSchemaNode(),
+  };
+  const fallback = (definition) => definition;
+  fallback.schema = schema;
+  return fallback;
+}
+
+let tool;
+
+try {
+  ({ tool } = await import("@opencode-ai/plugin"));
+} catch {
+  tool = makeFallbackTool();
+}
 
 const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
@@ -29,10 +67,16 @@ async function runCommand(command, args, options = {}) {
     const stderr = timedOut
       ? `Command timed out after ${COMMAND_TIMEOUT_MS} ms: ${[command, ...args].join(" ")}`
       : (error.stderr ?? error.message ?? "").trim();
+    const normalizedExitCode =
+      typeof error.code === "number"
+        ? error.code
+        : Number.isFinite(Number.parseInt(error.code, 10))
+          ? Number.parseInt(error.code, 10)
+          : 1;
     return {
       command: [command, ...args].join(" "),
       cwd,
-      exitCode: error.code ?? 1,
+      exitCode: normalizedExitCode,
       stdout: (error.stdout ?? "").trim(),
       stderr,
     };
@@ -70,7 +114,7 @@ export const find_tests = tool({
       .slice(0, args.limit);
     const contentMatches = await runCommand(
       "rg",
-      ["-n", "--glob", "test_*.py", ...dirs, "--", stem],
+      ["-n", "--glob", "test_*.py", "--", stem, ...dirs],
       { cwd: root },
     );
 
@@ -111,9 +155,9 @@ export const search_configs = tool({
         "*.md",
         "--glob",
         "*.py",
-        ...searchRoots,
         "--",
         args.query,
+        ...searchRoots,
       ],
       { cwd: root },
     );

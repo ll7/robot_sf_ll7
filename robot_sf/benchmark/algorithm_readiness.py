@@ -71,6 +71,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
     ),
     AlgorithmReadiness(
+        canonical_name="crowdnav_height",
+        tier="experimental",
+        aliases=("crowdnav_height",),
+        note="Upstream CrowdNav_HEIGHT model-only checkpoint wrapper.",
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),

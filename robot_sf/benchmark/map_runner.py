@@ -46,6 +46,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
+from robot_sf.planner.crowdnav_height import CrowdNavHeightAdapter, build_crowdnav_height_config
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.guarded_ppo import (
@@ -120,6 +121,7 @@ _SOCNAV_ALGO_KEYS = {
     "social_nav_pyenvs_sfm_helbing",
     "social_navigation_pyenvs_hsfm_new_guo",
     "social_nav_pyenvs_hsfm_new_guo",
+    "crowdnav_height",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1249,6 +1251,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 default_policy_name="hsfm_new_guo",
             )
         )
+    elif algo_key in {"crowdnav_height"}:
+        adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -1324,6 +1328,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter.bind_static_obstacle_points(points, spacing=spacing)
 
         planner_bind_env = _bind_env
+    elif hasattr(adapter, "bind_env"):
+        planner_bind_env = adapter.bind_env
     holonomic_world_velocity_mode = (
         algo_key
         in {

@@ -178,6 +178,25 @@ def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract(
     assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
 
 
+def test_crowdnav_height_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """CrowdNav_HEIGHT metadata should expose the upstream repo and checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="crowdnav_height",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_crowdnav_height_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "discrete_delta_v_and_delta_theta"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "upstream_discrete_delta_vw_to_unicycle_vw_stateful"
+    assert upstream["repo_url"] == "https://github.com/Shuijing725/CrowdNav_HEIGHT"
+    assert upstream["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
+
+
 def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
     """NMPC metadata should classify the planner as a native optimizer-style adapter."""
     meta = enrich_algorithm_metadata(

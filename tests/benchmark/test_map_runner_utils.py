@@ -399,6 +399,41 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
     assert meta["upstream_reference"]["upstream_policy"] == "crowd_nav.policy_no_train.orca.ORCA"
 
 
+def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Experimental CrowdNav_HEIGHT wiring should expose the upstream checkpoint boundary."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def bind_env(self, env) -> None:
+            del env
+
+        def plan(self, _obs):
+            return (0.15, 0.05)
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.CrowdNavHeightAdapter", _DummyAdapter)
+    _, meta = _build_policy(
+        "crowdnav_height",
+        {
+            "repo_root": "output/repos/CrowdNav_HEIGHT",
+            "model_dir": "output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT",
+            "checkpoint_name": "237800.pt",
+        },
+        robot_kinematics="differential_drive",
+    )
+    assert meta["baseline_category"] == "learning"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "upstream_discrete_delta_vw_to_unicycle_vw_stateful"
+    )
+    assert (
+        meta["upstream_reference"]["repo_url"] == "https://github.com/Shuijing725/CrowdNav_HEIGHT"
+    )
+    assert meta["upstream_reference"]["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
+
+
 def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_velocity_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1118,6 +1153,29 @@ def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
         robot_kinematics="differential_drive",
     )
     assert cfg["repo_root"] == "output/repos/Social-Navigation-PyEnvs"
+    assert preflight["status"] == "skipped"
+    assert preflight["policy"] == "skip-with-warning"
+    assert "missing upstream prereq" in str(preflight["error"])
+
+
+def test_preflight_policy_treats_crowdnav_height_as_socnav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permissive prereq policies should apply to CrowdNav_HEIGHT as a structured external wrapper."""
+
+    def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        del cfg, robot_kinematics, adapter_impact_eval
+        raise RuntimeError(f"missing upstream prereq for {algo}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    cfg, preflight = _preflight_policy(
+        algo="crowdnav_height",
+        algo_config={"repo_root": "output/repos/CrowdNav_HEIGHT"},
+        benchmark_profile="experimental",
+        missing_prereq_policy="skip-with-warning",
+        robot_kinematics="differential_drive",
+    )
+    assert cfg["repo_root"] == "output/repos/CrowdNav_HEIGHT"
     assert preflight["status"] == "skipped"
     assert preflight["policy"] == "skip-with-warning"
     assert "missing upstream prereq" in str(preflight["error"])

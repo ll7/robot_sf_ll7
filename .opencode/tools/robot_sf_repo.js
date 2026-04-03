@@ -5,12 +5,16 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
 
-async function runCommand(command, args, cwd) {
+async function runCommand(command, args, options = {}) {
+  const { cwd, env = {} } = options;
   try {
     const { stdout, stderr } = await execFileAsync(command, args, {
       cwd,
+      env: { ...process.env, ...env },
       maxBuffer: 1024 * 1024 * 10,
+      timeout: COMMAND_TIMEOUT_MS,
     });
     return {
       command: [command, ...args].join(" "),
@@ -20,12 +24,17 @@ async function runCommand(command, args, cwd) {
       stderr: stderr.trim(),
     };
   } catch (error) {
+    const timedOut =
+      error.killed === true || error.code === "ETIMEDOUT" || error.signal === "SIGTERM";
+    const stderr = timedOut
+      ? `Command timed out after ${COMMAND_TIMEOUT_MS} ms: ${[command, ...args].join(" ")}`
+      : (error.stderr ?? error.message ?? "").trim();
     return {
       command: [command, ...args].join(" "),
       cwd,
       exitCode: error.code ?? 1,
       stdout: (error.stdout ?? "").trim(),
-      stderr: (error.stderr ?? error.message ?? "").trim(),
+      stderr,
     };
   }
 }
@@ -49,7 +58,7 @@ export const find_tests = tool({
       return JSON.stringify({ repo_path: args.repo_path, matches: [], references: [] }, null, 2);
     }
 
-    const fileList = await runCommand("rg", ["--files", ...dirs], root);
+    const fileList = await runCommand("rg", ["--files", ...dirs], { cwd: root });
     const fileMatches = fileList.stdout
       .split("\n")
       .filter(Boolean)
@@ -57,8 +66,8 @@ export const find_tests = tool({
       .slice(0, args.limit);
     const contentMatches = await runCommand(
       "rg",
-      ["-n", "--glob", "test_*.py", stem, ...dirs],
-      root,
+      ["-n", "--glob", "test_*.py", ...dirs, "--", stem],
+      { cwd: root },
     );
 
     return JSON.stringify(
@@ -83,6 +92,9 @@ export const search_configs = tool({
   async execute(args, context) {
     const root = context.worktree;
     const searchRoots = existingDirs(root, ["configs", "docs/context", "scripts/validation"]);
+    if (searchRoots.length === 0) {
+      return JSON.stringify({ query: args.query, exitCode: 0, matches: [] }, null, 2);
+    }
     const result = await runCommand(
       "rg",
       [
@@ -95,10 +107,11 @@ export const search_configs = tool({
         "*.md",
         "--glob",
         "*.py",
-        args.query,
         ...searchRoots,
+        "--",
+        args.query,
       ],
-      root,
+      { cwd: root },
     );
     return JSON.stringify(
       {
@@ -123,20 +136,24 @@ export const run_validation = tool({
     const root = context.worktree;
     const commandMap = {
       ruff_fix_format: {
-        command: "/bin/bash",
-        args: ["scripts/dev/ruff_fix_format.sh"],
+        command: path.join(root, "scripts/dev/ruff_fix_format.sh"),
+        args: [],
       },
       tests_parallel: {
-        command: "/bin/bash",
-        args: ["scripts/dev/run_tests_parallel.sh"],
+        command: path.join(root, "scripts/dev/run_tests_parallel.sh"),
+        args: [],
       },
       pr_ready_check: {
-        command: "/bin/bash",
-        args: ["-lc", "BASE_REF=origin/main scripts/dev/pr_ready_check.sh"],
+        command: path.join(root, "scripts/dev/pr_ready_check.sh"),
+        args: [],
+        env: { BASE_REF: "origin/main" },
       },
     };
     const selected = commandMap[args.target];
-    const result = await runCommand(selected.command, selected.args, root);
+    const result = await runCommand(selected.command, selected.args, {
+      cwd: root,
+      env: selected.env,
+    });
     return JSON.stringify(result, null, 2);
   },
 });

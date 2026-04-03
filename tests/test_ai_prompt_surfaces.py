@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / ".agents" / "skills"
 LEGACY_SKILL_DIR = ROOT / ".codex" / "skills"
+OPENCODE_SKILL_DIR = ROOT / ".opencode" / "skills"
 DOCS_README = ROOT / "docs" / "README.md"
 DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 REPO_OVERVIEW = ROOT / "docs" / "ai" / "repo_overview.md"
@@ -33,13 +34,17 @@ def test_ai_skill_files_exist() -> None:
         assert path.exists(), f"missing expected AI workflow surface: {path}"
 
 
-def test_legacy_codex_skill_path_mirrors_agents_directory() -> None:
-    """The legacy Codex skill path should remain a working mirror of the canonical tree."""
+def test_legacy_skill_paths_mirror_agents_directory() -> None:
+    """Legacy skill paths should remain working mirrors of the canonical tree."""
 
     assert SKILL_DIR.exists(), "expected canonical .agents/skills directory to exist"
-    assert LEGACY_SKILL_DIR.exists(), "expected legacy .codex/skills mirror to exist"
-    assert LEGACY_SKILL_DIR.is_symlink(), "expected .codex/skills to remain a symlink mirror"
-    assert LEGACY_SKILL_DIR.resolve() == SKILL_DIR.resolve()
+    for legacy_dir, label in [
+        (LEGACY_SKILL_DIR, ".codex/skills"),
+        (OPENCODE_SKILL_DIR, ".opencode/skills"),
+    ]:
+        assert legacy_dir.exists(), f"expected legacy {label} mirror to exist"
+        assert legacy_dir.is_symlink(), f"expected {label} to remain a symlink mirror"
+        assert legacy_dir.resolve() == SKILL_DIR.resolve()
 
 
 def test_ai_skill_files_contain_expected_language() -> None:

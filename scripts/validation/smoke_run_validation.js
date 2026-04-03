@@ -31,29 +31,33 @@ function makeStubWorktree() {
 
 async function main() {
   const root = makeStubWorktree();
-  const expected = {
-    ruff_fix_format: {
-      command: path.join(root, "scripts/dev/ruff_fix_format.sh"),
-      stdout: "stub:ruff_fix_format",
-    },
-    tests_parallel: {
-      command: path.join(root, "scripts/dev/run_tests_parallel.sh"),
-      stdout: "stub:tests_parallel",
-    },
-    pr_ready_check: {
-      command: path.join(root, "scripts/dev/pr_ready_check.sh"),
-      stdout: "stub:pr_ready_check:origin/main",
-    },
-  };
+  try {
+    const expected = {
+      ruff_fix_format: {
+        command: path.join(root, "scripts/dev/ruff_fix_format.sh"),
+        stdout: "stub:ruff_fix_format",
+      },
+      tests_parallel: {
+        command: path.join(root, "scripts/dev/run_tests_parallel.sh"),
+        stdout: "stub:tests_parallel",
+      },
+      pr_ready_check: {
+        command: path.join(root, "scripts/dev/pr_ready_check.sh"),
+        stdout: "stub:pr_ready_check:origin/main",
+      },
+    };
 
-  for (const [target, expectation] of Object.entries(expected)) {
-    const raw = await run_validation.execute({ target }, { worktree: root });
-    const result = JSON.parse(raw);
-    assert.equal(result.command, expectation.command, `unexpected command for ${target}`);
-    assert.equal(result.cwd, root, `unexpected cwd for ${target}`);
-    assert.equal(result.exitCode, 0, `unexpected exit code for ${target}`);
-    assert.equal(result.stdout, expectation.stdout, `unexpected stdout for ${target}`);
-    assert.equal(result.stderr, "", `unexpected stderr for ${target}`);
+    for (const [target, expectation] of Object.entries(expected)) {
+      const raw = await run_validation.execute({ target }, { worktree: root });
+      const result = JSON.parse(raw);
+      assert.equal(result.command, expectation.command, `unexpected command for ${target}`);
+      assert.equal(result.cwd, root, `unexpected cwd for ${target}`);
+      assert.equal(result.exitCode, 0, `unexpected exit code for ${target}`);
+      assert.equal(result.stdout, expectation.stdout, `unexpected stdout for ${target}`);
+      assert.equal(result.stderr, "", `unexpected stderr for ${target}`);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 }
 

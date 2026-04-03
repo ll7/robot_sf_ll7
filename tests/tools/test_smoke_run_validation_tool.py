@@ -21,6 +21,7 @@ def test_run_validation_smoke_script_passes() -> None:
         check=False,
         capture_output=True,
         text=True,
+        timeout=300,
     )
 
     assert result.returncode == 0, result.stderr or result.stdout

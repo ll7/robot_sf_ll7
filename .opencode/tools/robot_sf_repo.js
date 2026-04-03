@@ -55,7 +55,11 @@ export const find_tests = tool({
     const stem = lookup.replace(path.extname(lookup), "").replace(/^test_/, "");
     const dirs = existingDirs(root, ["tests", "test_pygame", "fast-pysf/tests"]);
     if (dirs.length === 0) {
-      return JSON.stringify({ repo_path: args.repo_path, matches: [], references: [] }, null, 2);
+      return JSON.stringify(
+        { repo_path: args.repo_path, stem, matches: [], references: [] },
+        null,
+        2,
+      );
     }
 
     const fileList = await runCommand("rg", ["--files", ...dirs], { cwd: root });

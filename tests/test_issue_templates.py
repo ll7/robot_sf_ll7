@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
 SKILL_FILES = [
-    ROOT / ".codex" / "skills" / "gh-issue-creator" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
 ]
 KNOWN_LABELS = {
     "bug",

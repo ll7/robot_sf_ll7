@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = ROOT / ".codex" / "skills"
+SKILL_DIR = ROOT / ".agents" / "skills"
+LEGACY_SKILL_DIR = ROOT / ".codex" / "skills"
 DOCS_README = ROOT / "docs" / "README.md"
 DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 REPO_OVERVIEW = ROOT / "docs" / "ai" / "repo_overview.md"
@@ -15,6 +16,8 @@ ADAPTATION_NOTE = ROOT / "docs" / "ai" / "awesome_copilot_adaptation.md"
 
 def test_ai_skill_files_exist() -> None:
     """The repo should expose the adopted AI workflow skills as real Codex skill files."""
+
+    assert LEGACY_SKILL_DIR.exists(), "expected legacy .codex/skills mirror to exist"
 
     for path in [
         SKILL_DIR / "autoresearch" / "SKILL.md",
@@ -28,6 +31,13 @@ def test_ai_skill_files_exist() -> None:
         ADAPTATION_NOTE,
     ]:
         assert path.exists(), f"missing expected AI workflow surface: {path}"
+
+
+def test_legacy_codex_skill_path_mirrors_agents_directory() -> None:
+    """The legacy Codex skill path should remain a working mirror of the canonical tree."""
+
+    assert LEGACY_SKILL_DIR.is_symlink(), "expected .codex/skills to remain a symlink mirror"
+    assert LEGACY_SKILL_DIR.resolve() == SKILL_DIR.resolve()
 
 
 def test_ai_skill_files_contain_expected_language() -> None:

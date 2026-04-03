@@ -36,6 +36,8 @@ def test_ai_skill_files_exist() -> None:
 def test_legacy_codex_skill_path_mirrors_agents_directory() -> None:
     """The legacy Codex skill path should remain a working mirror of the canonical tree."""
 
+    assert SKILL_DIR.exists(), "expected canonical .agents/skills directory to exist"
+    assert LEGACY_SKILL_DIR.exists(), "expected legacy .codex/skills mirror to exist"
     assert LEGACY_SKILL_DIR.is_symlink(), "expected .codex/skills to remain a symlink mirror"
     assert LEGACY_SKILL_DIR.resolve() == SKILL_DIR.resolve()
 

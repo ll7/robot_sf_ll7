@@ -92,17 +92,17 @@ def test_ai_docs_reference_the_new_skill_surfaces() -> None:
     assert "quality" in docs_readme_text
     assert "doc-sync" in docs_readme_text
 
-    assert "Codex skills can be found in `.codex/skills/`" in dev_guide_text
+    assert "Canonical skills live in `.agents/skills/`" in dev_guide_text
 
     for fragment in [
-        ".codex/skills/autoresearch/",
-        ".codex/skills/auto-improvement/",
-        ".codex/skills/context-map/",
-        ".codex/skills/what-context-needed/",
-        ".codex/skills/quality-playbook/",
-        ".codex/skills/agentic-eval/",
-        ".codex/skills/review-and-refactor/",
-        ".codex/skills/update-docs-on-code-change/",
+        ".agents/skills/autoresearch/",
+        ".agents/skills/auto-improvement/",
+        ".agents/skills/context-map/",
+        ".agents/skills/what-context-needed/",
+        ".agents/skills/quality-playbook/",
+        ".agents/skills/agentic-eval/",
+        ".agents/skills/review-and-refactor/",
+        ".agents/skills/update-docs-on-code-change/",
         "doc-sync",
     ]:
         assert fragment in repo_overview_text

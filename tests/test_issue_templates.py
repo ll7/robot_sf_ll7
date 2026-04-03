@@ -94,9 +94,9 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
     assert "../.github/ISSUE_TEMPLATE/issue_default.md" in docs_text
-    assert "../.codex/skills/gh-issue-creator/SKILL.md" in docs_text
-    assert "../.codex/skills/gh-issue-template-auditor/SKILL.md" in docs_text
-    assert "../.codex/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-creator/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-template-auditor/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
 
     prioritization_text = (ROOT / "docs" / "project_prioritization.md").read_text(encoding="utf-8")
     assert "Plausibility Checks" in prioritization_text

@@ -52,14 +52,14 @@ Then branch by task type:
 
 ### Existing agent workflow surfaces
 
-- `.codex/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
+- `.agents/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
   planner, experiment, and documentation work
-- `.codex/skills/autoresearch/` and `.codex/skills/auto-improvement/`: repo-local skills for
+- `.agents/skills/autoresearch/` and `.agents/skills/auto-improvement/`: repo-local skills for
   measurable improvement loops and smaller refinement passes
-- `.codex/skills/context-map/` and `.codex/skills/what-context-needed/`: context-gathering skills
+- `.agents/skills/context-map/` and `.agents/skills/what-context-needed/`: context-gathering skills
   for locating the right files or requesting the minimum missing context
-- `.codex/skills/quality-playbook/`, `.codex/skills/agentic-eval/`,
-  `.codex/skills/review-and-refactor/`, and `.codex/skills/update-docs-on-code-change/`: quality
+- `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,
+  `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
   and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and
   doc-sync
 

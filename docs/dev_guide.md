@@ -306,7 +306,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
-  - Codex skills can be found in `.codex/skills/`
+  - Canonical skills live in `.agents/skills/` and are mirrored at `.codex/skills/` for Codex
+    compatibility.
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
     - `.github/copilot-instructions.md`
@@ -1128,10 +1129,10 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 Use the following templates for specific tasks.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
-- [issue creator skill](../.codex/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
-- [issue template auditor skill](../.codex/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
-- [priority assessor skill](../.codex/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
-- [PR opener skill](../.codex/skills/gh-pr-opener/SKILL.md) - Open draft PRs with the repository template, issue-scope verification, and conservative readiness freshness checks
+- [issue creator skill](../.agents/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
+- [issue template auditor skill](../.agents/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
+- [priority assessor skill](../.agents/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
+- [PR opener skill](../.agents/skills/gh-pr-opener/SKILL.md) - Open draft PRs with the repository template, issue-scope verification, and conservative readiness freshness checks
 - [design doc template](./templates/design-doc-template.md)
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 

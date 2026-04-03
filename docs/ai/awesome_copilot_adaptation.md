@@ -12,7 +12,7 @@ assumption. The existing repo-native stack remains the source of truth:
 - `AGENTS.md`
 - `.specify/memory/constitution.md`
 - `docs/dev_guide.md`
-- `.codex/skills/`
+- `.agents/skills/`
 - `docs/ai/`
 
 ## Concepts Adopted
@@ -65,9 +65,9 @@ These upstream ideas were kept because they add direct value to this repository'
 
 ## Skill Selection Guide
 
-- Use `.codex/skills/autoresearch/SKILL.md` when there is a measurable metric and room for
+- Use `.agents/skills/autoresearch/SKILL.md` when there is a measurable metric and room for
   multiple experiments.
-- Use `.codex/skills/auto-improvement/SKILL.md` when the task is a targeted refinement pass.
+- Use `.agents/skills/auto-improvement/SKILL.md` when the task is a targeted refinement pass.
 - Use `context-map` before multi-file changes when you need a compact file/validation map.
 - Use `what-context-needed` when the task is underspecified and you need the minimum missing
   context before proceeding.

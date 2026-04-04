@@ -106,11 +106,12 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
 2. Mapped control and state interfaces for both methods to Robot SF categories:
    - robot pose/velocity/goal, human state adjacency, and MPC command semantics.
 3. Classified family status:
-   - DR-MPC: `assessment only`.
-   - SICNav: `prototype only`.
+   - DR-MPC: `assessment only` .
+   - SICNav: `prototype only` .
 4. Suggested minimal benchmark-safe integration boundary and guidance toward wrapper prototypes.
 5. Updated repo docs:
    - `docs/context/issue_771_drmpscnav_assessment.md`
+
    - `docs/benchmark_planner_family_coverage.md` (added DR-MPC and SICNav rows).
 
 ### Verification checklist
@@ -120,13 +121,13 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
 * Lint gate passed: `uv run ruff check .`
 * Git commit and push performed.
 * Draft PR created: https://github.com/ll7/robot_sf_ll7/pull/774.
-* Issue label update: `benchmark`, `priority: medium`.
+* Issue label update: `benchmark`,  `priority: medium`.
 
 ### What is now working
 
 * Robot SF docs now include a clear MPC arcade evaluation path for issue #771.
 * Team can use the document as a direct source of truth for:
-  - DR-MPC and SICNav viability,
-  - integration interface mapping,
-  - classification decision and next-step boundary.
+  + DR-MPC and SICNav viability, 
+  + integration interface mapping, 
+  + classification decision and next-step boundary.
 * Benchmarks and reviewers can now identify the expected implementation ladder (external anchor → wrapper prototype → full integration).

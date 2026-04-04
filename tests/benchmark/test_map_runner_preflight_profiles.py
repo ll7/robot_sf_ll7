@@ -272,8 +272,56 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
             benchmark_profile="experimental",
             resume=False,
         )
-        assert summary["written"] == 1
-        assert summary["algorithm_readiness"]["tier"] == "experimental"
+    assert summary["written"] == 1
+    assert summary["algorithm_readiness"]["tier"] == "experimental"
+
+
+def test_sicnav_requires_explicit_opt_in(tmp_path: Path, monkeypatch) -> None:
+    """SICNav should stay behind the explicit testing-only opt-in gate."""
+    _patch_lightweight_batch(monkeypatch)
+    with pytest.raises(ValueError, match="experimental-testing"):
+        map_runner.run_map_batch(
+            [_scenario()],
+            tmp_path / "episodes.jsonl",
+            schema_path=SCHEMA_PATH,
+            algo="sicnav",
+            benchmark_profile="experimental",
+            resume=False,
+        )
+
+
+def test_sicnav_fails_closed_when_dependency_metadata_reports_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """SICNav preflight should fail closed when the wrapper reports missing runtime deps."""
+    _patch_lightweight_batch(monkeypatch)
+
+    class _DummyPlanner:
+        def __init__(self, config, seed=None) -> None:
+            self.config = config
+            self.seed = seed
+
+        def get_metadata(self):
+            return {"status": "missing_dependency"}
+
+    monkeypatch.setattr(map_runner, "SICNavPlanner", _DummyPlanner)
+    algo_cfg_path = tmp_path / "sicnav.yaml"
+    algo_cfg_path.write_text(
+        "allow_testing_algorithms: true\ninclude_in_paper: false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="SICNav dependency is missing or unresolved"):
+        map_runner.run_map_batch(
+            [_scenario()],
+            tmp_path / "episodes.jsonl",
+            schema_path=SCHEMA_PATH,
+            algo="sicnav",
+            algo_config_path=str(algo_cfg_path),
+            benchmark_profile="experimental",
+            resume=False,
+        )
 
 
 def test_adapter_impact_eval_flag_surfaces_in_summary(tmp_path: Path, monkeypatch) -> None:

@@ -97,6 +97,7 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
 * This assessment excludes direct training from scratch in the local repo (out-of-scope by request).
 * Both methods are still “assessment-level” from Robot SF benchmark governance; “fallback execution” is not treated as a success condition.
 * In next pass, generate a dedicated issue (`#771-drmpscnav-implementation`) for wrapper prototype and CI smoke-run scripts.
+* See `docs/context/issue_771_drmpscnav_implementation_guide.md` for the implementation, testing, and benchmark validation plan.
 
 ## Result Verification & Current Status
 
@@ -121,7 +122,7 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
 * Lint gate passed: `uv run ruff check .`
 * Git commit and push performed.
 * Draft PR created: https://github.com/ll7/robot_sf_ll7/pull/774.
-* Issue label update: `benchmark`,  `priority: medium`.
+* Issue label update: `benchmark`,   `priority: medium`.
 
 ### What is now working
 

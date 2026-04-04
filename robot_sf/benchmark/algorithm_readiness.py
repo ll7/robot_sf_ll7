@@ -129,6 +129,20 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="GA3C-CADRL adapter; dependency/model-sensitive.",
     ),
     AlgorithmReadiness(
+        canonical_name="sicnav",
+        tier="experimental",
+        aliases=("sicnav",),
+        note="External SICNav MPC wrapper; dependency-sensitive and testing-only.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="dr_mpc",
+        tier="experimental",
+        aliases=("dr_mpc", "drmpc"),
+        note="External DR-MPC wrapper; dependency-sensitive assessment anchor.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="prediction_planner",
         tier="experimental",
         aliases=("prediction_planner",),

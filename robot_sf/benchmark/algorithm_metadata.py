@@ -28,6 +28,8 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
     "sacadrl": "learning",
+    "sicnav": "classical",
+    "dr_mpc": "learning",
     "prediction_planner": "learning",
     "predictive_mppi": "learning",
     "risk_dwa": "classical",
@@ -60,6 +62,8 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
     "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
+    "sicnav": "upstream_sicnav_checkpoint_or_policy_wrapper",
+    "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -215,6 +219,31 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "action table into stateful Robot SF unicycle_vw commands."
         ),
     },
+    "sicnav": {
+        "repo_url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
+        "commit": "local_vendor_reference",
+        "checkout_path": "third_party/external_mpc_repos/sicnav",
+        "upstream_policy": "sicnav_diffusion.policy.sicnav_acados.SICNavAcados",
+        "default_checkpoint": (
+            "sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt"
+        ),
+        "adapter_boundary": (
+            "Map Robot SF structured robot/human state into the upstream SICNav checkpoint "
+            "contract, run the external MPC policy, and project the selected velocity or "
+            "unicycle command into Robot SF unicycle_vw semantics."
+        ),
+    },
+    "dr_mpc": {
+        "repo_url": "https://github.com/James-R-Han/DR-MPC",
+        "commit": "local_vendor_reference",
+        "checkout_path": "third_party/external_mpc_repos/dr_mpc",
+        "upstream_policy": "scripts.models.model.Policy",
+        "adapter_boundary": (
+            "Map Robot SF structured robot/human state into the upstream DR-MPC residual "
+            "control contract, run the external residual-MPC policy, and project the selected "
+            "action into Robot SF unicycle_vw semantics."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -352,6 +381,28 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_command_space": "discrete_delta_v_and_delta_theta",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "upstream_discrete_delta_vw_to_unicycle_vw_stateful",
+        "projection_documented": True,
+    },
+    "sicnav": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SICNavPlanner",
+        "upstream_command_space": "velocity_vector_xy_or_unicycle",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "dr_mpc": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "DRMPCPlanner",
+        "upstream_command_space": "velocity_vector_xy_or_unicycle",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
     "ppo": {

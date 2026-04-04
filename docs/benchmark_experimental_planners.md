@@ -17,6 +17,8 @@ The following planners are currently treated as testing-only and fail closed by 
 - `hybrid_portfolio`
 - `stream_gap`
 - `gap_prediction`
+- `sicnav`
+- `dr_mpc`
 
 These planners are blocked unless their algo config explicitly contains:
 
@@ -80,9 +82,11 @@ testing-only planners. None of them currently meet the promotion bar.
 | `hybrid_portfolio` | `docs/context/issue_673_hybrid_portfolio_benchmark.md` | Planner switching loses both success and runtime efficiency while still colliding more. | Prove that portfolio arbitration yields a measurable benchmark benefit beyond its component planners, not just a near-miss reduction. | Revisit only with explicit evidence about why the switching logic should improve commitment and runtime behavior. |
 | `stream_gap` | `docs/context/issue_681_stream_gap_benchmark.md` | Strong safety/runtime signal but zero goal-reaching on the paper surface. | Recover non-trivial goal-reaching while preserving the low-collision, low-near-miss behavior that makes the planner interesting. | Show a concrete commitment/progress fix on the verified-simple gate before spending more full-benchmark time. |
 | `gap_prediction` | `docs/context/issue_671_gap_prediction_benchmark.md` | Over-conservative veto behavior collapses success to zero. | Demonstrate that the veto/prediction interaction can support actual progress rather than only suppressing motion. | Bring a concrete fix for progress recovery, then rerun verified-simple and only escalate to the paper surface if success returns. |
+| `sicnav` | `docs/context/issue_771_drmpscnav_assessment.md` | External MPC dependency stack is still being staged against the verified-simple gate. | Show the SICNav wrapper can run deterministically on the verified-simple subset without fallback-only behavior. | Land a real dependency-backed smoke run and compare it against the current baselines before promoting the planner. |
+| `dr_mpc` | `docs/context/issue_771_drmpscnav_assessment.md` | External DR-MPC runtime is assessment-only and not yet benchmark-ready in-repo. | Show the wrapper can resolve the upstream contract and produce stable actions without fallback-only behavior. | Keep DR-MPC as a follow-up anchor until the benchmark wrapper is backed by a real upstream runtime. |
 
 ## Current status
 
-- Keep all six planners behind `allow_testing_algorithms: true`.
+- Keep all eight planners behind `allow_testing_algorithms: true`.
 - Treat their existing benchmark notes as negative evidence, not missing paperwork.
 - Do not remove the guard for documentation completeness alone.

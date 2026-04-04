@@ -16,7 +16,9 @@ import numpy as np
 import yaml
 from loguru import logger
 
+from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
@@ -127,6 +129,8 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_orca_relaxed",
     "socnav_hrvo",
     "crowdnav_height",
+    "sicnav",
+    "dr_mpc",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -301,6 +305,8 @@ def _build_adapter_policy(
 
     if hasattr(adapter, "reset"):
         _policy._planner_reset = lambda seed=None: adapter.reset()
+    if hasattr(adapter, "close"):
+        _policy._planner_close = adapter.close
 
     return _policy, meta
 
@@ -329,6 +335,65 @@ def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
         feasibility["mean_abs_delta_angular"] = 0.0
     feasibility["max_abs_delta_linear"] = max_linear
     feasibility["max_abs_delta_angular"] = max_angular
+
+
+class _ExternalMPCAdapter:
+    """Bridge an external MPC wrapper into the map-runner adapter contract.
+
+    The external wrapper is expected to expose ``step(obs) -> dict`` while the
+    benchmark runner expects ``plan(obs) -> (linear, angular)``. The adapter also
+    normalizes the upstream observation into the structured Robot SF payload used
+    by the other external planner bridges.
+    """
+
+    def __init__(
+        self,
+        planner: Any,
+        *,
+        algo_config: dict[str, Any],
+        robot_kinematics: str | None,
+        planner_name: str,
+    ) -> None:
+        self._planner = planner
+        self._algo_config = algo_config
+        self._robot_kinematics = robot_kinematics
+        self._planner_name = planner_name
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset the wrapped planner if it exposes the standard hook."""
+        if hasattr(self._planner, "reset"):
+            if seed is None:
+                self._planner.reset()
+            else:
+                try:
+                    self._planner.reset(seed=seed)
+                except TypeError:
+                    self._planner.reset()
+
+    def close(self) -> None:
+        """Release wrapped planner resources if available."""
+        if hasattr(self._planner, "close"):
+            self._planner.close()
+
+    def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
+        """Produce a map-runner command from an external MPC planner step.
+
+        Returns:
+            tuple[float, float]: Projected ``(linear, angular)`` command.
+        """
+        action = self._planner.step(_obs_to_external_mpc_format(obs))
+        if not isinstance(action, dict):
+            raise TypeError(
+                f"{self._planner_name} returned unsupported action payload: {type(action)}"
+            )
+        linear, angular, _conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            self._algo_config,
+            robot_kinematics=self._robot_kinematics,
+            project_command=False,
+        )
+        return linear, angular
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -790,6 +855,23 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
+    """Convert map-runner observations into the external MPC wrapper contract.
+
+    Returns:
+        dict[str, Any]: Structured observation with obstacles preserved when present.
+
+    The external MPC wrappers use the same robot/human fields as the PPO bridge,
+    but they may also reason about obstacle payloads when the upstream contract
+    exposes them, so preserve the raw obstacle list when available.
+    """
+    payload = _obs_to_ppo_format(obs)
+    obstacles = obs.get("obstacles")
+    if isinstance(obstacles, list):
+        payload["obstacles"] = obstacles
+    return payload
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1032,6 +1114,56 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         if hasattr(adapter, "reset"):
             _policy._planner_reset = lambda seed=None: adapter.reset()
         return _policy, meta
+
+    if algo_key == "sicnav":
+        planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "SICNav dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="SICNavPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="SICNavPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
+
+    if algo_key == "dr_mpc":
+        planner = DRMPCPlanner(build_dr_mpc_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "DR-MPC dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="DRMPCPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="DRMPCPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
 
     socnav_cfg = _build_socnav_config(algo_config)
 
@@ -1438,7 +1570,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset()
+        _policy._planner_reset = lambda seed=None: adapter.reset(seed=seed)
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):

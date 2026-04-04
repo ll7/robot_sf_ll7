@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+# ruff: noqa: C901
 """Run a full policy analysis sweep with metrics and optional videos.
 
 This script evaluates a policy across all scenarios in a training config (or a
 scenario YAML), computes benchmark metrics, and emits a digestible report that
 highlights strengths and weaknesses. Video rendering is optional.
+
+ruff: noqa: C901
 
 Examples:
   uv run python scripts/tools/policy_analysis_run.py \
@@ -75,6 +78,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchComplexPolicy,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -100,7 +104,10 @@ _POLICY_CHOICES = (
     "socnav_sampling",
     "socnav_social_force",
     "socnav_orca",
-    "socnav_sacadrl",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
     "socnav_bench",
     "fast_pysf",
     "fast_pysf_planner",
@@ -477,6 +484,29 @@ def _build_socnav_policy(
         if orca_neighbor_dist is not None:
             policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
         return policy
+    if policy_name == "socnav_orca_nonholonomic":
+        config = SocNavPlannerConfig()
+        config.orca_heading_slowdown = 0.8
+        config.orca_commit_distance = 1.8
+        config.orca_commit_lateral_gain = 0.6
+        return make_orca_policy(config=config)
+    if policy_name == "socnav_orca_dd":
+        config = SocNavPlannerConfig()
+        config.orca_time_horizon = 3.0
+        config.orca_neighbor_dist = 8.0
+        config.orca_max_neighbors = 6
+        config.orca_stall_speed_threshold = 0.1
+        return make_orca_policy(config=config)
+    if policy_name == "socnav_orca_relaxed":
+        config = SocNavPlannerConfig()
+        config.orca_time_horizon = 8.0
+        config.orca_obstacle_range = 8.0
+        config.orca_obstacle_threshold = 0.6
+        config.orca_head_on_bias = 0.4
+        config.orca_symmetry_bias = 0.15
+        return make_orca_policy(config=config)
+    if policy_name == "socnav_hrvo":
+        return make_hrvo_policy()
     if policy_name == "socnav_sacadrl":
         return make_sacadrl_policy()
     if policy_name == "socnav_bench":
@@ -822,7 +852,7 @@ def _find_problem_episodes(
     return out
 
 
-def _write_report(  # noqa: C901
+def _write_report(
     out_dir: Path,
     *,
     summary: dict[str, Any],
@@ -1413,7 +1443,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: C901,PLR0913,PLR0915
+def _build_episode_record(  # noqa: PLR0913, PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,

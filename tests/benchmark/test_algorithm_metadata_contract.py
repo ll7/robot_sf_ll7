@@ -111,6 +111,25 @@ def test_hrvo_metadata_exposes_local_provenance_boundary() -> None:
     )
 
 
+def test_socnav_orca_variant_metadata_is_registered_and_experimental() -> None:
+    """SocNav ORCA variants should expose classical benchmark semantics and explicit opt-in readiness."""
+    for algo in (
+        "socnav_orca_nonholonomic",
+        "socnav_orca_dd",
+        "socnav_orca_relaxed",
+        "socnav_hrvo",
+    ):
+        meta = enrich_algorithm_metadata(
+            algo=algo,
+            metadata={"status": "ok"},
+            execution_mode="adapter",
+            robot_kinematics="differential_drive",
+        )
+        assert meta["baseline_category"] == "classical"
+        assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
+        assert meta["planner_kinematics"]["supports_adapter_commands"] is True
+
+
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
     """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
     meta = enrich_algorithm_metadata(

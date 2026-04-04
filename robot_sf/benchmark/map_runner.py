@@ -6,6 +6,7 @@ import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -121,6 +122,10 @@ _SOCNAV_ALGO_KEYS = {
     "social_nav_pyenvs_sfm_helbing",
     "social_navigation_pyenvs_hsfm_new_guo",
     "social_nav_pyenvs_hsfm_new_guo",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
     "crowdnav_height",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
@@ -1221,6 +1226,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_nonholonomic"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_heading_slowdown = 0.8
+        config.orca_commit_distance = 1.8
+        config.orca_commit_lateral_gain = 0.6
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_dd"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 3.0
+        config.orca_neighbor_dist = 8.0
+        config.orca_max_neighbors = 6
+        config.orca_stall_speed_threshold = 0.1
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_relaxed"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 8.0
+        config.orca_obstacle_range = 8.0
+        config.orca_obstacle_threshold = 0.6
+        config.orca_head_on_bias = 0.4
+        config.orca_symmetry_bias = 0.15
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"hrvo"}:
         adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:

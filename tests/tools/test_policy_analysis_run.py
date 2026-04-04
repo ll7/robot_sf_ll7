@@ -29,6 +29,68 @@ def test_resolve_policies_rejects_invalid_names():
         policy_analysis_run._resolve_policies(args)
 
 
+def test_policy_choices_include_orca_variants() -> None:
+    """Policy choice enums should include all supported ORCA variants."""
+    for policy in (
+        "socnav_orca_nonholonomic",
+        "socnav_orca_dd",
+        "socnav_orca_relaxed",
+        "socnav_hrvo",
+    ):
+        assert policy in policy_analysis_run._POLICY_CHOICES
+
+
+def test_build_socnav_policy_supports_orca_variants() -> None:
+    """SocNav policy builder should construct ORCA variant policies."""
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_orca_nonholonomic",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+    assert policy is not None
+    assert policy.adapter.config.orca_heading_slowdown == 0.8
+    assert policy.adapter.config.orca_commit_distance == 1.8
+    assert policy.adapter.config.orca_commit_lateral_gain == 0.6
+
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_orca_dd",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+    assert policy is not None
+    assert policy.adapter.config.orca_time_horizon == 3.0
+    assert policy.adapter.config.orca_neighbor_dist == 8.0
+    assert policy.adapter.config.orca_max_neighbors == 6
+    assert policy.adapter.config.orca_stall_speed_threshold == 0.1
+
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_orca_relaxed",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+    assert policy is not None
+    assert policy.adapter.config.orca_time_horizon == 8.0
+    assert policy.adapter.config.orca_obstacle_range == 8.0
+    assert policy.adapter.config.orca_obstacle_threshold == 0.6
+    assert policy.adapter.config.orca_head_on_bias == 0.4
+    assert policy.adapter.config.orca_symmetry_bias == 0.15
+
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_hrvo",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+    assert policy is not None
+
+
 def test_run_frame_extraction_logs_timeout(monkeypatch, tmp_path: Path):
     """Log and return cleanly when frame extraction hits a timeout."""
     report_json = tmp_path / "report.json"

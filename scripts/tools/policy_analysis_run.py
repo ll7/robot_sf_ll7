@@ -75,6 +75,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchComplexPolicy,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -100,12 +101,37 @@ _POLICY_CHOICES = (
     "socnav_sampling",
     "socnav_social_force",
     "socnav_orca",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
     "socnav_sacadrl",
     "socnav_bench",
     "fast_pysf",
     "fast_pysf_planner",
 )
 _SUPPORTED_POLICIES = frozenset(_POLICY_CHOICES)
+
+_ORCA_POLICY_VARIANT_CONFIGS: dict[str, dict[str, float]] = {
+    "socnav_orca_nonholonomic": {
+        "orca_heading_slowdown": 0.8,
+        "orca_commit_distance": 1.8,
+        "orca_commit_lateral_gain": 0.6,
+    },
+    "socnav_orca_dd": {
+        "orca_time_horizon": 3.0,
+        "orca_neighbor_dist": 8.0,
+        "orca_max_neighbors": 6,
+        "orca_stall_speed_threshold": 0.1,
+    },
+    "socnav_orca_relaxed": {
+        "orca_time_horizon": 8.0,
+        "orca_obstacle_range": 8.0,
+        "orca_obstacle_threshold": 0.6,
+        "orca_head_on_bias": 0.4,
+        "orca_symmetry_bias": 0.15,
+    },
+}
 
 _TIMESTAMP_TZ = ZoneInfo("Europe/Berlin")
 _DEFAULT_SEED_SET_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
@@ -451,6 +477,24 @@ def _goal_action(env, *, speed: float) -> np.ndarray:
     return np.array([linear, angular], dtype=float)
 
 
+def _build_orca_policy_variant(
+    policy_name: str,
+    *,
+    orca_time_horizon: float | None,
+    orca_neighbor_dist: float | None,
+) -> SocNavPlannerPolicy:
+    policy = make_orca_policy()
+    if policy_name in _ORCA_POLICY_VARIANT_CONFIGS:
+        for field, value in _ORCA_POLICY_VARIANT_CONFIGS[policy_name].items():
+            setattr(policy.adapter.config, field, value)
+    if policy_name == "socnav_orca":
+        if orca_time_horizon is not None:
+            policy.adapter.config.orca_time_horizon = float(orca_time_horizon)
+        if orca_neighbor_dist is not None:
+            policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
+    return policy
+
+
 def _build_socnav_policy(
     policy_name: str,
     *,
@@ -460,32 +504,31 @@ def _build_socnav_policy(
     socnav_allow_fallback: bool,
 ) -> SocNavPlannerPolicy | None:
     """Construct the SocNav planner policy for the selected CLI mode."""
-    if policy_name == "prediction_planner":
-        return make_prediction_policy(allow_fallback=socnav_allow_fallback)
-    if policy_name == "socnav_sampling":
-        return SocNavBenchComplexPolicy(
+    if policy_name in _ORCA_POLICY_VARIANT_CONFIGS or policy_name == "socnav_orca":
+        return _build_orca_policy_variant(
+            policy_name,
+            orca_time_horizon=orca_time_horizon,
+            orca_neighbor_dist=orca_neighbor_dist,
+        )
+
+    builder = {
+        "prediction_planner": lambda: make_prediction_policy(allow_fallback=socnav_allow_fallback),
+        "socnav_sampling": lambda: SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),
             allow_fallback=socnav_allow_fallback,
-        )
-    if policy_name == "socnav_social_force":
-        return make_social_force_policy()
-    if policy_name == "socnav_orca":
-        policy = make_orca_policy()
-        if orca_time_horizon is not None:
-            policy.adapter.config.orca_time_horizon = float(orca_time_horizon)
-        if orca_neighbor_dist is not None:
-            policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
-        return policy
-    if policy_name == "socnav_sacadrl":
-        return make_sacadrl_policy()
-    if policy_name == "socnav_bench":
-        return SocNavBenchComplexPolicy(
+        ),
+        "socnav_social_force": make_social_force_policy,
+        "socnav_hrvo": make_hrvo_policy,
+        "socnav_sacadrl": make_sacadrl_policy,
+        "socnav_bench": lambda: SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),
             allow_fallback=socnav_allow_fallback,
-        )
-    return None
+        ),
+    }
+    builder_fn = builder.get(policy_name)
+    return builder_fn() if builder_fn is not None else None
 
 
 def _policy_uses_adapter(policy_name: str) -> bool:

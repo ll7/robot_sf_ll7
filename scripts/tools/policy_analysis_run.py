@@ -6,8 +6,6 @@ This script evaluates a policy across all scenarios in a training config (or a
 scenario YAML), computes benchmark metrics, and emits a digestible report that
 highlights strengths and weaknesses. Video rendering is optional.
 
-ruff: noqa: C901
-
 Examples:
   uv run python scripts/tools/policy_analysis_run.py \
     --training-config configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml \
@@ -108,6 +106,7 @@ _POLICY_CHOICES = (
     "socnav_orca_dd",
     "socnav_orca_relaxed",
     "socnav_hrvo",
+    "socnav_sacadrl",
     "socnav_bench",
     "fast_pysf",
     "fast_pysf_planner",

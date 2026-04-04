@@ -34,6 +34,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "stream_gap": "classical",
     "gap_prediction": "classical",
     "socnav_bench": "classical",
+    "drl_vo": "learning",
     "random": "diagnostic",
     "fast_pysf_planner": "diagnostic",
     "rvo": "classical",
@@ -66,6 +67,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "stream_gap": "gap_acceptance_local_planner",
     "gap_prediction": "predictive_planner_with_gap_veto",
     "socnav_bench": "socnav_adapter",
+    "drl_vo": "hybrid_deep_reinforcement_velocity_obstacle",
     "random": "stochastic_uniform_action_reference",
     "fast_pysf_planner": "social_force_reference",
     "rvo": "placeholder_adapter",
@@ -98,6 +100,14 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         ),
         "provenance_note": (
             "Local implementation informed by upstream references; not a wrapped upstream runtime."
+        ),
+    },
+    "drl_vo": {
+        "repo_url": "https://github.com/ll7/DRL-VO",
+        "commit": "proposed_2026_04_03",
+        "adapter_boundary": (
+            "Hybrid DRL-VO planner: learned policy coupled with velocity obstacle safety fallback. "
+            "For benchmark contract, map policy output to Robot SF unicycle_vw commands."
         ),
     },
     "social_navigation_pyenvs_orca": {
@@ -195,6 +205,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "HRVOPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "drl_vo": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "DRLVOPlannerAdapter",
         "upstream_command_space": "velocity_vector_xy",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",

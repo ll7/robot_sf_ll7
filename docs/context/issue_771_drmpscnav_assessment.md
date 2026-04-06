@@ -21,8 +21,7 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
   + `conda env create -f environment.yml`
   + `Python-RVO2` (CMake build)
   + `pysteam`
-
-  + PyTorch
+  + `PyTorch`
 * license: no explicit license file in repo (risk for downstream reuse)
 
 ### SICNav

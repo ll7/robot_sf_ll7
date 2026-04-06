@@ -68,13 +68,13 @@ and kinematics/adapters in this repository, not a generic literature survey.
 
 ## Notes On Interpretation
 
-* `baseline-ready` in the benchmark stack currently means `goal`,   `social_force`, and `orca`.
+* `baseline-ready` in the benchmark stack currently means `goal`, `social_force`, and `orca`.
 * `ppo` is benchmarkable and paper-facing when provenance and quality-gate requirements are
   satisfied, but it is still tracked conservatively in the generic readiness catalog because the
   benchmark stack distinguishes generic availability from paper-grade promotion.
-* Testing-only planners (`risk_dwa`,   `mppi_social`,   `predictive_mppi`,   `hybrid_portfolio`, 
-`stream_gap` , `gap_prediction` ) are intentionally guarded by
-`allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
+* Testing-only planners (`risk_dwa`, `mppi_social`, `predictive_mppi`, `hybrid_portfolio`,
+  `stream_gap`, `gap_prediction`) are intentionally guarded by `allow_testing_algorithms: true`
+  to prevent accidental inclusion in broad or paper-facing runs.
 * `DSRNN-style graph-attention family` is currently a sequencing note, not an implementation plan:
   keep it behind the first attention-family and prediction-family source-harness spikes.
 * Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should

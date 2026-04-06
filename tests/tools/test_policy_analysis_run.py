@@ -12,6 +12,11 @@ import pytest
 from gymnasium import spaces
 from loguru import logger
 
+from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
+    ORCAPlannerAdapter,
+    SACADRLPlannerAdapter,
+)
 from scripts.tools import policy_analysis_run
 
 if TYPE_CHECKING:
@@ -331,7 +336,7 @@ def test_build_socnav_policy_returns_valid_orca_variant_policies() -> None:
             socnav_allow_fallback=False,
         )
         assert policy is not None
-        assert hasattr(policy, "adapter")
+        assert isinstance(policy.adapter, ORCAPlannerAdapter)
         for attr, expected in check["config_attrs"].items():
             actual = getattr(policy.adapter.config, attr)
             assert actual == expected
@@ -347,8 +352,7 @@ def test_build_socnav_policy_returns_hrvo_policy() -> None:
         socnav_allow_fallback=False,
     )
     assert policy is not None
-    assert hasattr(policy, "adapter")
-    assert policy.adapter.__class__.__name__ == "HRVOPlannerAdapter"
+    assert isinstance(policy.adapter, HRVOPlannerAdapter)
 
 
 def test_build_socnav_policy_preserves_sacadrl_policy() -> None:
@@ -362,7 +366,7 @@ def test_build_socnav_policy_preserves_sacadrl_policy() -> None:
     )
 
     assert policy is not None
-    assert hasattr(policy, "adapter")
+    assert isinstance(policy.adapter, SACADRLPlannerAdapter)
 
 
 def test_apply_video_termination_suffix_noop_when_video_missing(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Policy analysis issue-768 coverage now includes ORCA variant CLI entries (`socnav_orca_nonholonomic`,   `socnav_orca_dd`,   `socnav_orca_relaxed`,   `socnav_hrvo`), targeted regression tests for the new builder paths and sweep policy resolver, and an issue note comparing the branch results against `main` plus full-eval artifacts under `output/experiments/768_*`.
+- Policy analysis issue-768 coverage now includes ORCA variant CLI entries (`socnav_orca_nonholonomic`, `socnav_orca_dd`, `socnav_orca_relaxed`, `socnav_hrvo`), targeted regression tests for the new builder paths and sweep policy resolver, and an issue note comparing the branch results against `main` plus full-eval artifacts under `output/experiments/768_*`.
 
 * GitHub workflow guidance now prefers MCP / app tools for interactive issue, PR, and project work, keeps `gh` as the documented scripted fallback, and hardens `project_priority_score.py` with clearer auth diagnostics plus a retry path for the `--owner ll7` / `unknown owner type` gh quirk.
 * Camera-ready campaign analysis now emits `scenario_difficulty_analysis.{json,md}` plus richer `campaign_analysis.{json,md}` content that ranks scenario difficulty from existing artifacts, summarizes family-level hardness, flags planner residual mismatch on easier scenarios, and records whether the verified-simple subset needs a bounded pilot before it can be treated as a calibration aid.

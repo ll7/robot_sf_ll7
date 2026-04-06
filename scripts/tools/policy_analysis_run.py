@@ -483,20 +483,20 @@ def _build_socnav_policy(
         if orca_neighbor_dist is not None:
             policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
         return policy
-    if policy_name == "socnav_orca_nonholonomic":
+    elif policy_name == "socnav_orca_nonholonomic":
         config = SocNavPlannerConfig()
         config.orca_heading_slowdown = 0.8
         config.orca_commit_distance = 1.8
         config.orca_commit_lateral_gain = 0.6
         return make_orca_policy(config=config)
-    if policy_name == "socnav_orca_dd":
+    elif policy_name == "socnav_orca_dd":
         config = SocNavPlannerConfig()
         config.orca_time_horizon = 3.0
         config.orca_neighbor_dist = 8.0
         config.orca_max_neighbors = 6
         config.orca_stall_speed_threshold = 0.1
         return make_orca_policy(config=config)
-    if policy_name == "socnav_orca_relaxed":
+    elif policy_name == "socnav_orca_relaxed":
         config = SocNavPlannerConfig()
         config.orca_time_horizon = 8.0
         config.orca_obstacle_range = 8.0
@@ -504,11 +504,11 @@ def _build_socnav_policy(
         config.orca_head_on_bias = 0.4
         config.orca_symmetry_bias = 0.15
         return make_orca_policy(config=config)
-    if policy_name == "socnav_hrvo":
+    elif policy_name == "socnav_hrvo":
         return make_hrvo_policy()
-    if policy_name == "socnav_sacadrl":
+    elif policy_name == "socnav_sacadrl":
         return make_sacadrl_policy()
-    if policy_name == "socnav_bench":
+    elif policy_name == "socnav_bench":
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),

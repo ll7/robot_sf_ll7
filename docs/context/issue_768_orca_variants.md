@@ -101,7 +101,7 @@ The main implementation risk found during verification was a CLI regression: the
 
 ## Notes on algorithmic status
 
-* This is effectively a policy-variant tuning experiment reading to existing ORCA implementation (and in-repo HRVO). 
+* This is effectively a policy-variant tuning experiment relating to the existing ORCA implementation (and in-repo HRVO).
 * It is not a fully new `ORCA-DD` paper-precise algorithm implementation; it is a configuration-based variant of existing `ORCAPlannerAdapter` to behave like differential-drive configured ORCA.
 * For stronger paper-precise claims, a dedicated adapter would need to implement nonholonomic ORCA (**future work**).
 

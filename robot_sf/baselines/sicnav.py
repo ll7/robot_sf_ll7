@@ -68,44 +68,40 @@ class SICNavPlanner:
             return config
         raise TypeError(f"Invalid config type: {type(config)}")
 
+    @staticmethod
+    def _is_sicnav_module(name: str) -> bool:
+        """Return True for SICNav-related modules that need import-state cleanup."""
+        return (
+            name == "sicnav"
+            or name.startswith("sicnav.")
+            or name == "sicnav_diffusion"
+            or name.startswith("sicnav_diffusion.")
+        )
+
     @contextmanager
-    def _upstream_import_context(self) -> Iterator[None]:
+    def _upstream_import_context(self) -> Iterator[set[str]]:
         """Temporarily add the vendored SICNav repo root to `sys.path`."""
         repo_root = Path(self.config.repo_root).expanduser()
         repo_str = str(repo_root)
         original_path = list(sys.path)
         original_modules = {
-            name: module
-            for name, module in sys.modules.items()
-            if (
-                name == "sicnav"
-                or name.startswith("sicnav.")
-                or name == "sicnav_diffusion"
-                or name.startswith("sicnav_diffusion.")
-            )
+            name: module for name, module in sys.modules.items() if self._is_sicnav_module(name)
         }
+        preserved_modules: set[str] = set()
         if repo_str not in sys.path:
             sys.path.insert(0, repo_str)
         try:
             for name in list(sys.modules):
-                if (
-                    name == "sicnav"
-                    or name.startswith("sicnav.")
-                    or name == "sicnav_diffusion"
-                    or name.startswith("sicnav_diffusion.")
-                ):
+                if self._is_sicnav_module(name):
                     sys.modules.pop(name, None)
-            yield
+            yield preserved_modules
         finally:
             for name in list(sys.modules):
-                if (
-                    name == "sicnav"
-                    or name.startswith("sicnav.")
-                    or name == "sicnav_diffusion"
-                    or name.startswith("sicnav_diffusion.")
-                ):
+                if self._is_sicnav_module(name) and name not in preserved_modules:
                     sys.modules.pop(name, None)
-            sys.modules.update(original_modules)
+            for name, module in original_modules.items():
+                if name not in preserved_modules:
+                    sys.modules[name] = module
             sys.path[:] = original_path
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -125,13 +121,19 @@ class SICNavPlanner:
         if self._module is not None:
             return self._module
 
-        with self._upstream_import_context():
+        with self._upstream_import_context() as preserved_modules:
             for module_name in ("sicnav_diffusion", "sicnav"):
                 try:
                     module = importlib.import_module(module_name)
                 except ImportError:
                     continue
                 self._module = module
+                preserved_modules.update(
+                    name
+                    for name in sys.modules
+                    if self._is_sicnav_module(name)
+                    and (name == module_name or name.startswith(f"{module_name}."))
+                )
                 return module
 
         raise ImportError(

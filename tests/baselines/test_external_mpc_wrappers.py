@@ -79,9 +79,14 @@ class SICNavPolicy:
     _write(repo_root / "sicnav" / "__init__.py", "")
 
     planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
-    action = planner.step(_make_robot_observation())
-    assert action == {"v": 0.5, "omega": 0.1}
-    assert planner.get_metadata()["status"] == "ok"
+    try:
+        action = planner.step(_make_robot_observation())
+        assert action == {"v": 0.5, "omega": 0.1}
+        assert "sicnav_diffusion" in sys.modules
+        assert planner.get_metadata()["status"] == "ok"
+    finally:
+        sys.modules.pop("sicnav_diffusion", None)
+        sys.modules.pop("sicnav", None)
 
 
 def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) -> None:

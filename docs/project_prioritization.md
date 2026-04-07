@@ -71,11 +71,11 @@ and clamps values into stable ranges:
 
 | Field | Default | Range / clamp |
 | --- | --- | --- |
-| Improvement | `1.0` | `>= 0.0` |
+| Improvement | `1.0` | `0.1 .. 10.0` |
 | Success Probability | `0.7` | `0.0 .. 1.0` |
 | Expected Duration in Hours | `1.0` | `>= 0.1` |
-| Time Criticality | `1.0` | `0.5 .. 2.0` |
-| Unlock Factor | `1.0` | `1.0 .. 3.0` |
+| Time Criticality | `1.0` | `0.1 .. 10.0` |
+| Unlock Factor | `1.0` | `0.1 .. 10.0` |
 
 The helper writes `Priority Score` rounded to 6 decimal places.
 
@@ -88,8 +88,8 @@ Use coarse estimates, not false precision.
 This measures the expected project-level gain, not just the amount of code
 changed.
 
-- `5.0` required for benchmark or paper correctness
-- `3.0` significant planner / benchmark improvement
+- `9.0` required for benchmark or paper correctness
+- `5.0` significant planner / benchmark improvement
 - `1.0` normal useful task
 - `0.2` cleanup or low-impact polish
 
@@ -98,10 +98,10 @@ changed.
 This is the probability that the scoped work can be completed and validated in
 this repository, not the probability that the idea is generally good.
 
-- `0.9` straightforward extension
+- `1.0` straightforward extension
 - `0.7` normal implementation path
 - `0.5` uncertain integration
-- `0.3` research-heavy or highly uncertain
+- `0.1` research-heavy and highly uncertain
 
 Avoid `0.0` unless the task is effectively impossible under current
 constraints.
@@ -110,7 +110,8 @@ constraints.
 
 This reflects cost of delay, blockers, or deadline pressure.
 
-- `2.0` milestone-critical or actively blocking a deadline
+- `10.0` milestone-critical or actively blocking a deadline
+- `5.0` very urgent and should be done soon
 - `1.0` normal
 - `0.5` can wait
 
@@ -118,7 +119,8 @@ This reflects cost of delay, blockers, or deadline pressure.
 
 This captures how much downstream work the issue unblocks.
 
-- `3.0` unlocks many downstream tasks
+- `10.0` opens a completely different line of work
+- `5.0` unlocks many downstream tasks
 - `1.5` partial enabler
 - `1.0` standalone work
 

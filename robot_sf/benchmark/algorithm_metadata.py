@@ -19,11 +19,17 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_socialforce": "classical",
     "social_navigation_pyenvs_sfm_helbing": "classical",
     "social_navigation_pyenvs_hsfm_new_guo": "classical",
+    "socnav_orca_nonholonomic": "classical",
+    "socnav_orca_dd": "classical",
+    "socnav_orca_relaxed": "classical",
+    "socnav_hrvo": "classical",
     "crowdnav_height": "learning",
     "ppo": "learning",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
     "sacadrl": "learning",
+    "sicnav": "classical",
+    "dr_mpc": "learning",
     "prediction_planner": "learning",
     "predictive_mppi": "learning",
     "risk_dwa": "classical",
@@ -47,12 +53,18 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
+    "socnav_orca_nonholonomic": "orca_adapter",
+    "socnav_orca_dd": "orca_adapter",
+    "socnav_orca_relaxed": "orca_adapter",
     "hrvo": "hybrid_reciprocal_velocity_obstacle",
+    "socnav_hrvo": "hybrid_reciprocal_velocity_obstacle",
     "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
     "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
     "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
     "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
+    "sicnav": "upstream_sicnav_checkpoint_or_policy_wrapper",
+    "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
@@ -84,6 +96,51 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "adapter_boundary": (
             "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
             "then project the selected velocity into Robot SF unicycle_vw commands."
+        ),
+    },
+    "socnav_orca_nonholonomic": {
+        "repo_url": "https://github.com/mit-acl/Python-RVO2",
+        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+        "vendored_path": "third_party/python-rvo2",
+        "adapter_boundary": (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
+            "apply nonholonomic commitment heuristics, and project the selected velocity into "
+            "Robot SF unicycle_vw commands."
+        ),
+    },
+    "socnav_orca_dd": {
+        "repo_url": "https://github.com/mit-acl/Python-RVO2",
+        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+        "vendored_path": "third_party/python-rvo2",
+        "adapter_boundary": (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
+            "tune the result for differential-drive compatibility, and project it into Robot SF "
+            "unicycle_vw commands."
+        ),
+    },
+    "socnav_orca_relaxed": {
+        "repo_url": "https://github.com/mit-acl/Python-RVO2",
+        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+        "vendored_path": "third_party/python-rvo2",
+        "adapter_boundary": (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
+            "apply relaxed safety tuning, and project the selected velocity into Robot SF "
+            "unicycle_vw commands."
+        ),
+    },
+    "socnav_hrvo": {
+        "repo_url": "https://github.com/snape/HRVO",
+        "license": "Apache-2.0",
+        "reference_repo_url": (
+            "https://github.com/atb033/multi_agent_path_planning/blob/master/"
+            "decentralized/velocity_obstacle/velocity_obstacle.py"
+        ),
+        "adapter_boundary": (
+            "Run the local Robot SF HRVO geometry solver inspired by the upstream HRVO library, "
+            "then project the selected world-frame velocity into Robot SF unicycle_vw commands."
+        ),
+        "provenance_note": (
+            "Local implementation informed by upstream references; not a wrapped upstream runtime."
         ),
     },
     "hrvo": {
@@ -172,6 +229,31 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "action table into stateful Robot SF unicycle_vw commands."
         ),
     },
+    "sicnav": {
+        "repo_url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
+        "commit": "local_vendor_reference",
+        "checkout_path": "third_party/external_mpc_repos/sicnav",
+        "upstream_policy": "sicnav_diffusion.policy.sicnav_acados.SICNavAcados",
+        "default_checkpoint": (
+            "sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt"
+        ),
+        "adapter_boundary": (
+            "Map Robot SF structured robot/human state into the upstream SICNav checkpoint "
+            "contract, run the external MPC policy, and project the selected velocity or "
+            "unicycle command into Robot SF unicycle_vw semantics."
+        ),
+    },
+    "dr_mpc": {
+        "repo_url": "https://github.com/James-R-Han/DR-MPC",
+        "commit": "local_vendor_reference",
+        "checkout_path": "third_party/external_mpc_repos/dr_mpc",
+        "upstream_policy": "scripts.models.model.Policy",
+        "adapter_boundary": (
+            "Map Robot SF structured robot/human state into the upstream DR-MPC residual "
+            "control contract, run the external residual-MPC policy, and project the selected "
+            "action into Robot SF unicycle_vw semantics."
+        ),
+    },
 }
 
 _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -194,6 +276,50 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "socnav_orca_nonholonomic": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "socnav_orca_dd": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "socnav_orca_relaxed": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ORCAPlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "socnav_hrvo": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "HRVOPlannerAdapter",
         "upstream_command_space": "velocity_vector_xy",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
@@ -276,6 +402,28 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_command_space": "discrete_delta_v_and_delta_theta",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "upstream_discrete_delta_vw_to_unicycle_vw_stateful",
+        "projection_documented": True,
+    },
+    "sicnav": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SICNavPlanner",
+        "upstream_command_space": "velocity_vector_xy_or_unicycle",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "dr_mpc": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "DRMPCPlanner",
+        "upstream_command_space": "velocity_vector_xy_or_unicycle",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
     "ppo": {

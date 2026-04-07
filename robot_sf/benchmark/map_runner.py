@@ -6,6 +6,7 @@ import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,8 +16,10 @@ import numpy as np
 import yaml
 from loguru import logger
 
+from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
 from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
@@ -122,7 +125,13 @@ _SOCNAV_ALGO_KEYS = {
     "social_nav_pyenvs_sfm_helbing",
     "social_navigation_pyenvs_hsfm_new_guo",
     "social_nav_pyenvs_hsfm_new_guo",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
     "crowdnav_height",
+    "sicnav",
+    "dr_mpc",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -295,10 +304,29 @@ def _build_adapter_policy(
             meta=meta,
         )
 
-    if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset()
+    _attach_planner_reset(_policy, adapter)
+    if hasattr(adapter, "close"):
+        _policy._planner_close = adapter.close
 
     return _policy, meta
+
+
+def _attach_planner_reset(policy: Callable[..., Any], adapter: Any) -> None:
+    """Attach a planner reset hook that tolerates adapters without seed support."""
+    reset = getattr(adapter, "reset", None)
+    if not callable(reset):
+        return
+
+    def _planner_reset(seed: int | None = None) -> None:
+        if seed is None:
+            reset()
+            return
+        try:
+            reset(seed=seed)
+        except TypeError:
+            reset()
+
+    policy._planner_reset = _planner_reset
 
 
 def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
@@ -325,6 +353,65 @@ def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
         feasibility["mean_abs_delta_angular"] = 0.0
     feasibility["max_abs_delta_linear"] = max_linear
     feasibility["max_abs_delta_angular"] = max_angular
+
+
+class _ExternalMPCAdapter:
+    """Bridge an external MPC wrapper into the map-runner adapter contract.
+
+    The external wrapper is expected to expose ``step(obs) -> dict`` while the
+    benchmark runner expects ``plan(obs) -> (linear, angular)``. The adapter also
+    normalizes the upstream observation into the structured Robot SF payload used
+    by the other external planner bridges.
+    """
+
+    def __init__(
+        self,
+        planner: Any,
+        *,
+        algo_config: dict[str, Any],
+        robot_kinematics: str | None,
+        planner_name: str,
+    ) -> None:
+        self._planner = planner
+        self._algo_config = algo_config
+        self._robot_kinematics = robot_kinematics
+        self._planner_name = planner_name
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset the wrapped planner if it exposes the standard hook."""
+        if hasattr(self._planner, "reset"):
+            if seed is None:
+                self._planner.reset()
+            else:
+                try:
+                    self._planner.reset(seed=seed)
+                except TypeError:
+                    self._planner.reset()
+
+    def close(self) -> None:
+        """Release wrapped planner resources if available."""
+        if hasattr(self._planner, "close"):
+            self._planner.close()
+
+    def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
+        """Produce a map-runner command from an external MPC planner step.
+
+        Returns:
+            tuple[float, float]: Projected ``(linear, angular)`` command.
+        """
+        action = self._planner.step(_obs_to_external_mpc_format(obs))
+        if not isinstance(action, dict):
+            raise TypeError(
+                f"{self._planner_name} returned unsupported action payload: {type(action)}"
+            )
+        linear, angular, _conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            self._algo_config,
+            robot_kinematics=self._robot_kinematics,
+            project_command=False,
+        )
+        return linear, angular
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -788,6 +875,23 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
+    """Convert map-runner observations into the external MPC wrapper contract.
+
+    Returns:
+        dict[str, Any]: Structured observation with obstacles preserved when present.
+
+    The external MPC wrappers use the same robot/human fields as the PPO bridge,
+    but they may also reason about obstacle payloads when the upstream contract
+    exposes them, so preserve the raw obstacle list when available.
+    """
+    payload = _obs_to_ppo_format(obs)
+    obstacles = obs.get("obstacles")
+    if isinstance(obstacles, list):
+        payload["obstacles"] = obstacles
+    return payload
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1046,9 +1150,58 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
         return _policy, meta
+
+    if algo_key == "sicnav":
+        planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "SICNav dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="SICNavPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="SICNavPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
+
+    if algo_key == "dr_mpc":
+        planner = DRMPCPlanner(build_dr_mpc_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "DR-MPC dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="DRMPCPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="DRMPCPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
 
     socnav_cfg = _build_socnav_config(algo_config)
 
@@ -1195,8 +1348,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = drl_planner.close
-        if hasattr(drl_planner, "reset"):
-            _policy._planner_reset = lambda seed=None: drl_planner.reset()
+        _attach_planner_reset(_policy, drl_planner)
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "drl_vo")
@@ -1294,6 +1446,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_nonholonomic"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_heading_slowdown = 0.8
+        config.orca_commit_distance = 1.8
+        config.orca_commit_lateral_gain = 0.6
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_dd"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 3.0
+        config.orca_neighbor_dist = 8.0
+        config.orca_max_neighbors = 6
+        config.orca_stall_speed_threshold = 0.1
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_relaxed"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 8.0
+        config.orca_obstacle_range = 8.0
+        config.orca_obstacle_threshold = 0.6
+        config.orca_head_on_bias = 0.4
+        config.orca_symmetry_bias = 0.15
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"hrvo"}:
         adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
@@ -1384,7 +1562,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         command_limits=algo_config,
     )
     planner_bind_env = None
-    if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
+    if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
 
         def _bind_env(env: Any) -> None:
             simulator = getattr(env, "simulator", None)
@@ -1408,6 +1586,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         in {
             "orca",
             "hrvo",
+            "socnav_hrvo",
             "social_force",
             "sf",
             "social_navigation_pyenvs_orca",
@@ -1427,7 +1606,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "coordinates, then forward that world-frame velocity directly into the "
                 "holonomic vx_vy benchmark action space."
             )
-        elif algo_key == "hrvo":
+        elif algo_key in {"hrvo", "socnav_hrvo"}:
             adapter_boundary = (
                 "Run the local HRVO geometry solver in world velocity space, then forward the "
                 "selected world-frame velocity directly into the holonomic vx_vy benchmark "
@@ -1465,8 +1644,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 float(velocity_world[1]),
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
         if planner_bind_env is not None:
             _policy._planner_bind_env = planner_bind_env
         return _policy, meta
@@ -1479,8 +1657,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
         )
 
-    if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset()
+    _attach_planner_reset(_policy, adapter)
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):

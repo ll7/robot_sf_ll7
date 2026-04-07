@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -274,10 +275,12 @@ def test_build_policy_hrvo_preserves_local_provenance_metadata() -> None:
     )
 
 
+@pytest.mark.parametrize("algo", ["hrvo", "socnav_hrvo"])
 def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
+    algo: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Holonomic HRVO should expose an explicit world-frame velocity command payload."""
+    """Holonomic HRVO aliases should expose an explicit world-frame velocity command payload."""
 
     bind_calls: list[tuple[np.ndarray, float]] = []
 
@@ -307,7 +310,7 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
         lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
     )
     policy, meta = _build_policy(
-        "hrvo",
+        algo,
         {"allow_testing_algorithms": True},
         robot_kinematics="holonomic",
         robot_command_mode="vx_vy",
@@ -326,6 +329,34 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
     }
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
     assert meta["planner_kinematics"]["projection_policy"] == ("world_velocity_passthrough")
+
+
+def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter reset hooks should not require every adapter to accept a seed kwarg."""
+
+    reset_calls: list[str] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return 0.1, 0.2
+
+        def reset(self) -> None:
+            reset_calls.append("reset")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
+    policy, _ = _build_policy(
+        "hrvo",
+        {"allow_testing_algorithms": True},
+        robot_kinematics="differential_drive",
+    )
+
+    policy._planner_reset(seed=7)
+    assert reset_calls == ["reset"]
 
 
 def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
@@ -432,6 +463,94 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
         meta["upstream_reference"]["repo_url"] == "https://github.com/Shuijing725/CrowdNav_HEIGHT"
     )
     assert meta["upstream_reference"]["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
+
+
+def test_build_policy_sicnav_wires_external_mpc_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The SICNav key should build the external MPC wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyPlanner:
+        def __init__(self, config, seed=None) -> None:
+            self.config = config
+            self.seed = seed
+            self.reset_calls: list[int | None] = []
+            planners.append(self)
+
+        def get_metadata(self):
+            return {"status": "ok"}
+
+        def step(self, obs):
+            assert obs["robot"]["goal"] == [1.0, 0.0]
+            return {"v": 0.3, "omega": 0.2}
+
+        def reset(self, *, seed: int | None = None) -> None:
+            self.reset_calls.append(seed)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SICNavPlanner", _DummyPlanner)
+    policy, meta = _build_policy(
+        "sicnav",
+        {"repo_root": "third_party/external_mpc_repos/sicnav"},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.3, 0.2)
+    policy._planner_reset(seed=11)
+    assert planners[0].reset_calls == [11]
+    assert meta["policy_semantics"] == "upstream_sicnav_checkpoint_or_policy_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SICNavPlanner"
+
+
+def test_build_policy_dr_mpc_wires_external_mpc_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The DR-MPC key should build the external residual-MPC wrapper path."""
+
+    class _DummyPlanner:
+        def __init__(self, config, seed=None) -> None:
+            self.config = config
+            self.seed = seed
+
+        def get_metadata(self):
+            return {"status": "ok"}
+
+        def step(self, obs):
+            assert obs["robot"]["goal"] == [1.0, 0.0]
+            return {"vx": 0.25, "vy": -0.05}
+
+        def reset(self) -> None:
+            pass
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.DRMPCPlanner", _DummyPlanner)
+    policy, meta = _build_policy(
+        "dr_mpc",
+        {"repo_root": "third_party/external_mpc_repos/dr_mpc"},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert linear == pytest.approx(math.hypot(0.25, -0.05))
+    assert angular == pytest.approx(math.atan2(-0.05, 0.25))
+    assert meta["policy_semantics"] == "upstream_dr_mpc_residual_mpc_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "DRMPCPlanner"
 
 
 def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_velocity_command(

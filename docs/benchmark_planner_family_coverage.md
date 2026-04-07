@@ -53,6 +53,8 @@ and kinematics/adapters in this repository, not a generic literature survey.
 | DSRNN-style graph-attention family | conceptually adjacent only | `docs/context/issue_600_dsrnn_stretch_follow_up.md` | CrowdNav-descended graph and temporal state packing with recurrent neighborhood encoding layered on top of source simulator observations | Adapter-heavy and history-sensitive; source policy semantics remain simulator-native and require source-harness proof before any `unicycle_vw` wrapper claim | Stretch roadmap anchor only; keep behind the first attention and prediction-family spikes |
 | SoNIC safety-aware family | conceptually adjacent only | `docs/context/issue_601_crowdnav_feasibility_note.md` , `docs/context/issue_602_guarded_ppo_profile.md` | SoNIC-family model-specific observation stack with bundled predictor/policy checkpoints; not the same as internal PPO dict observations | Adapter-heavy; source semantics remain model/simulator-specific, while internal `guarded_ppo` stays native `unicycle_vw` with a reactive guard | Prototype only; do not treat internal `guarded_ppo` as SoNIC-family support |
 | Go-MPC | conceptually adjacent only | `docs/context/issue_599_go_mpc_assessment.md` | Kinodynamic MPC stack requiring robot state `(x, y, theta, v, w)` plus ordered obstacle states and RL guidance inputs | Solver-locked and adapter-heavy; differential-drive / kinodynamic family shape, but tied to FORCESPro runtime | Reference only; not current repo support and not pursued now |
+| DR-MPC | conceptually adjacent only | `docs/context/issue_771_drmpscnav_assessment.md` | Residual MPC + RL stack requiring robot pose/velocity/goal, human trajectory stacks, RVO2/pysteam-based crowd sim interface | Python + torch + RVO2 + pysteam, no explicit license file (assessment needed) | Reference only; assessment anchor with a fail-closed wrapper path, not current benchmark support |
+| SICNav | conceptually adjacent only | `docs/context/issue_771_drmpscnav_assessment.md` | Bilevel MPC with ORCA-based human prediction; robot pose/velocity/goal + crowd state + path points | Python + CasADi/IPOPT/Acados + RVO2; MIT license, checkpoint-ready | Reference only; testing-only wrapper exists, but it remains behind `allow_testing_algorithms: true` |
 | `safe_control` safety-controller family | conceptually adjacent only | `docs/context/issue_695_safe_control_feasibility_note.md` | Waypoint-tracking controller loop requiring model-specific robot state, waypoint lists, and explicit obstacle arrays | Closest path is unicycle-compatible in principle, but adapter-heavy and blocked by missing optional runtime dependencies in the current repo environment | Reference only; not current repo support and not pursued now |
 | Pred2Nav | conceptually adjacent only | `docs/context/issue_604_pred2nav_assessment.md` | Legacy crowd-simulation state with trajectory-history-aware predictive rollout scoring and predictor-pluggable controller terms | Holonomic / `ActionXY` controller boundary with explicit projection burden to Robot SF `unicycle_vw` | Reference only; license-blocked and not current repo support |
 | gym-collision-avoidance / CADRL family | conceptually adjacent only | `docs/context/issue_605_gym_collision_avoidance_reference_note.md` | Source-specific per-agent structured state dict with exact state ordering, normalization, and nearby-agent clipping | Unicycle-like but adapter-heavy; source policy uses `[speed, delta_heading]` rather than Robot SF `unicycle_vw` | Prototype only; canonical external CADRL-family reference, not current benchmark support |
@@ -66,13 +68,13 @@ and kinematics/adapters in this repository, not a generic literature survey.
 
 ## Notes On Interpretation
 
-* `baseline-ready` in the benchmark stack currently means `goal`,  `social_force`, and `orca`.
+* `baseline-ready` in the benchmark stack currently means `goal`, `social_force`, and `orca`.
 * `ppo` is benchmarkable and paper-facing when provenance and quality-gate requirements are
   satisfied, but it is still tracked conservatively in the generic readiness catalog because the
   benchmark stack distinguishes generic availability from paper-grade promotion.
-* Testing-only planners (`risk_dwa`,  `mppi_social`,  `predictive_mppi`,  `hybrid_portfolio`, 
-`stream_gap` , `gap_prediction` ) are intentionally guarded by
-`allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
+* Testing-only planners (`risk_dwa`, `mppi_social`, `predictive_mppi`, `hybrid_portfolio`,
+  `stream_gap`, `gap_prediction`) are intentionally guarded by `allow_testing_algorithms: true`
+  to prevent accidental inclusion in broad or paper-facing runs.
 * `DSRNN-style graph-attention family` is currently a sequencing note, not an implementation plan:
   keep it behind the first attention-family and prediction-family source-harness spikes.
 * Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should

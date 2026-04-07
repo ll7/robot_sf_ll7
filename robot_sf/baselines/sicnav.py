@@ -219,7 +219,7 @@ class SICNavPlanner:
 
         try:
             self._import_sicnav_module()
-        except ImportError:
+        except (ImportError, RuntimeError):
             status = "missing_dependency"
 
         return {

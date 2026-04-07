@@ -167,7 +167,7 @@ class DRMPCPlanner:
 
         try:
             self._import_dr_mpc_module()
-        except ImportError:
+        except (ImportError, RuntimeError):
             status = "missing_dependency"
 
         return {

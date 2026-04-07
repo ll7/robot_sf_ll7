@@ -751,6 +751,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
         heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
         robot_vel = np.array([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
     robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
 
     ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(pedestrians)
@@ -779,6 +780,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
             "goal": [float(robot_goal[0]), float(robot_goal[1])]
             if robot_goal.size >= 2
             else [0.0, 0.0],
+            "heading": robot_heading,
             "radius": robot_radius,
         },
         "agents": agents,
@@ -847,6 +849,25 @@ def _ppo_action_to_unicycle(
     else:
         v, omega = float(speed), angular_velocity
     return v, omega, "adapter"
+
+
+def _update_adapter_impact_metrics(
+    meta: dict[str, Any],
+    conversion_mode: str,
+    *,
+    count_native: bool | None = None,
+) -> None:
+    """Update native-vs-adapted step counters when adapter-impact probing is enabled."""
+    impact = meta.get("adapter_impact")
+    if not isinstance(impact, dict) or not bool(impact.get("requested", False)):
+        return
+    if count_native is None:
+        count_native = conversion_mode == "native"
+    if count_native:
+        impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+    else:
+        impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+    impact["status"] = "collecting"
 
 
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
@@ -1103,13 +1124,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 command=(float(linear), float(angular)),
                 meta=meta,
             )
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native":
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(meta, conversion_mode)
             return linear, angular
 
         _policy._planner_close = ppo_planner.close
@@ -1176,13 +1191,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 command=(float(linear), float(angular)),
                 meta=meta,
             )
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native":
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(meta, conversion_mode)
             return linear, angular
 
         _policy._planner_close = drl_planner.close
@@ -1269,13 +1278,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"}:
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(
+                meta,
+                conversion_mode,
+                count_native=conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"},
+            )
             return linear, angular
 
         _policy._planner_close = ppo_planner.close

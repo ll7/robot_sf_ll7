@@ -123,7 +123,9 @@ def test_drl_vo_metadata_exposes_reference_contract() -> None:
     assert meta["policy_semantics"] == "hybrid_deep_reinforcement_velocity_obstacle"
     assert meta["planner_kinematics"]["upstream_command_space"] == "velocity_vector_xy"
     assert meta["planner_kinematics"]["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
-    assert meta["upstream_reference"]["repo_url"] == "https://github.com/ll7/robot_sf_ll7"
+    upstream = meta["upstream_reference"]
+    assert upstream["repo_url"] == "https://github.com/TempleRAIL/drl_vo_nav"
+    assert upstream["commit"] == "6d734b6e0df77fd4c4faa4649ca0fcb3e69cf835"
 
 
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:

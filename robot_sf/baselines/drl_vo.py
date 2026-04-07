@@ -11,6 +11,7 @@ machines without PyTorch or a DRL-VO checkpoint.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -205,7 +206,20 @@ class DrlVoPlanner:
             tensor = tensor.unsqueeze(0)
 
         if hasattr(self._model, "predict"):
-            raw_action = self._model.predict(tensor)
+            predict = self._model.predict
+            try:
+                signature = inspect.signature(predict)
+            except (TypeError, ValueError):
+                raw_action = predict(tensor)
+            else:
+                accepts_deterministic = "deterministic" in signature.parameters or any(
+                    param.kind == inspect.Parameter.VAR_KEYWORD
+                    for param in signature.parameters.values()
+                )
+                if accepts_deterministic:
+                    raw_action = predict(tensor, deterministic=self.config.deterministic)
+                else:
+                    raw_action = predict(tensor)
         else:
             raw_action = self._model(tensor)
 
@@ -278,7 +292,12 @@ class DrlVoPlanner:
         if self.config.action_space == "velocity":
             return {"vx": float(direction[0] * speed), "vy": float(direction[1] * speed)}
 
-        return {"v": float(speed), "omega": 0.0}
+        heading_source = obs.robot.get("heading", [0.0])
+        heading = float(np.asarray(heading_source, dtype=float).reshape(-1)[0])
+        desired_heading = float(np.arctan2(direction[1], direction[0]))
+        heading_error = float((desired_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
+        omega = float(np.clip(heading_error, -self.config.omega_max, self.config.omega_max))
+        return {"v": float(speed), "omega": omega}
 
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the planner status and config."""

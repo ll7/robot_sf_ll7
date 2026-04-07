@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Restored the existing `socnav_sacadrl` CLI choice in `scripts/tools/policy_analysis_run.py` after the issue-768 ORCA variant additions, preventing a regression where the builder still supported SA-CADRL but the parser rejected it.
+* Paper results handoff export now fails closed on malformed metadata, validates JSONL rows as objects while streaming them, aggregates planner rows per run to reduce peak memory pressure, and writes standards-compliant JSON/CSV artifacts without permissive `NaN` serialization.
 
 * Restored the backward-compatible `avg_collision_impact_angle_rad` pedestrian metric alias and corrected the adversarial-force plot labels in `scripts/debug_ped_apf.py`.
 * Issue-708 PPO SLURM launcher now runs the training command directly in the batch shell instead of using a nested `srun`, avoiding an immediate allocation confirmation failure on Auxme.

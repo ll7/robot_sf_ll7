@@ -94,12 +94,13 @@ def _load_json(path: Path) -> dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object at the top level")
+    return payload
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+def _read_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     """Read JSONL episode records and fail on malformed object payloads."""
-    rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
             line = raw_line.strip()
@@ -108,8 +109,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             payload = json.loads(line)
             if not isinstance(payload, dict):
                 raise ValueError(f"{path}:{line_number} is not a JSON object")
-            rows.append(payload)
-    return rows
+            yield payload
 
 
 def _load_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -145,6 +145,15 @@ def _split_run_key(run_dir: Path) -> tuple[str, str]:
     return planner_key, kinematics
 
 
+def _episode_jsonl_paths(resolved: _ResolvedSource) -> list[Path]:
+    """Return sorted episode JSONL paths for a resolved campaign source."""
+    runs_dir = resolved.payload_root / "runs"
+    episode_paths = sorted(runs_dir.glob("*/episodes.jsonl"))
+    if not episode_paths:
+        raise FileNotFoundError(f"No episode JSONL files found under {runs_dir}")
+    return episode_paths
+
+
 def _coerce_float(value: Any) -> float | None:
     """Convert a value to a finite float when possible."""
     if isinstance(value, str):
@@ -164,45 +173,42 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
-def _load_records(
-    resolved: _ResolvedSource,
+def _load_run_records(
+    episodes_path: Path,
     *,
+    metrics: Sequence[str],
     campaign_rows: Mapping[tuple[str, str], Mapping[str, str]],
-) -> list[dict[str, Any]]:
-    """Load and annotate episode records for planner-summary handoff rows."""
-    runs_dir = resolved.payload_root / "runs"
-    episode_paths = sorted(runs_dir.glob("*/episodes.jsonl"))
-    if not episode_paths:
-        raise FileNotFoundError(f"No episode JSONL files found under {runs_dir}")
+) -> tuple[list[dict[str, Any]], set[int]]:
+    """Load and annotate one planner run worth of episode records."""
+    planner_key, kinematics = _split_run_key(episodes_path.parent)
+    row_metadata = campaign_rows.get((planner_key, kinematics), {})
+    algo = str(row_metadata.get("algo") or planner_key)
+    planner_group = str(row_metadata.get("planner_group") or "unknown")
+    benchmark_profile = str(row_metadata.get("benchmark_profile") or "unknown")
 
     records: list[dict[str, Any]] = []
-    for episodes_path in episode_paths:
-        planner_key, kinematics = _split_run_key(episodes_path.parent)
-        row_metadata = campaign_rows.get((planner_key, kinematics), {})
-        algo = str(row_metadata.get("algo") or planner_key)
-        planner_group = str(row_metadata.get("planner_group") or "unknown")
-        benchmark_profile = str(row_metadata.get("benchmark_profile") or "unknown")
+    discovered_seeds: set[int] = set()
+    for record in _read_jsonl(episodes_path):
+        annotated = dict(record)
+        record_metrics = dict(record.get("metrics") or {})
+        for metric in metrics:
+            value = episode_metric_value(record, metric)
+            if value is not None:
+                record_metrics[metric] = value
+        annotated["metrics"] = record_metrics
+        annotated["source_scenario_id"] = record.get("scenario_id")
+        annotated["scenario_id"] = _PLANNER_SUMMARY_SCENARIO_ID
+        annotated["planner_key"] = planner_key
+        annotated["kinematics"] = kinematics
+        annotated["algo"] = algo
+        annotated["planner_group"] = planner_group
+        annotated["benchmark_profile"] = benchmark_profile
+        seed = _coerce_int(record.get("seed"))
+        if seed is not None:
+            discovered_seeds.add(seed)
+        records.append(annotated)
 
-        for record in _read_jsonl(episodes_path):
-            annotated = dict(record)
-            metrics = dict(record.get("metrics") or {})
-            for metric in PAPER_RESULTS_HANDOFF_METRICS:
-                value = episode_metric_value(record, metric)
-                if value is not None:
-                    metrics[metric] = value
-            annotated["metrics"] = metrics
-            annotated["source_scenario_id"] = record.get("scenario_id")
-            annotated["scenario_id"] = _PLANNER_SUMMARY_SCENARIO_ID
-            annotated["planner_key"] = planner_key
-            annotated["kinematics"] = kinematics
-            annotated["algo"] = algo
-            annotated["planner_group"] = planner_group
-            annotated["benchmark_profile"] = benchmark_profile
-            records.append(annotated)
-
-    if not records:
-        raise ValueError(f"No episode records found under {runs_dir}")
-    return records
+    return records, discovered_seeds
 
 
 def _campaign_id(
@@ -268,7 +274,7 @@ def _git_hash(
 
 
 def _seed_policy(
-    seed_payload: Mapping[str, Any], records: Sequence[Mapping[str, Any]]
+    seed_payload: Mapping[str, Any], resolved_seeds: Iterable[int] | None = None
 ) -> dict[str, Any]:
     """Resolve seed policy metadata for the handoff payload."""
     rows = seed_payload.get("rows")
@@ -278,9 +284,7 @@ def _seed_policy(
             seed_policy = provenance.get("seed_policy")
             if isinstance(seed_policy, Mapping):
                 return dict(seed_policy)
-    seeds = sorted(
-        {int(record["seed"]) for record in records if _coerce_int(record.get("seed")) is not None}
-    )
+    seeds = sorted({int(seed) for seed in (resolved_seeds or [])})
     return {"mode": "derived_from_episode_records", "seed_set": None, "resolved_seeds": seeds}
 
 
@@ -308,10 +312,12 @@ def _flatten_handoff_row(
     *,
     row_metadata: Mapping[str, str],
     metrics: Sequence[str],
+    seed_policy_override: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Flatten one builder row into the paper Results handoff schema."""
     provenance = row.get("provenance") if isinstance(row.get("provenance"), Mapping) else {}
-    seed_policy = provenance.get("seed_policy") if isinstance(provenance, Mapping) else {}
+    row_seed_policy = provenance.get("seed_policy") if isinstance(provenance, Mapping) else {}
+    seed_policy = seed_policy_override if seed_policy_override is not None else row_seed_policy
     confidence = provenance.get("confidence") if isinstance(provenance, Mapping) else {}
     episode_count = _coerce_int(row.get("episode_count"))
     seed_count = _coerce_int(row.get("seed_count"))
@@ -380,6 +386,17 @@ def _flatten_handoff_row(
     return out
 
 
+def _sanitize_json_values(value: Any) -> Any:
+    """Recursively replace non-finite floats with null-safe values for JSON output."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Mapping):
+        return {str(key): _sanitize_json_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_json_values(item) for item in value]
+    return value
+
+
 def build_paper_results_handoff_payload(
     source_path: Path,
     *,
@@ -397,7 +414,7 @@ def build_paper_results_handoff_payload(
         resolved.payload_root / "reports" / "seed_variability_by_scenario.json"
     )
     campaign_rows = _campaign_table_index(resolved.payload_root)
-    records = _load_records(resolved, campaign_rows=campaign_rows)
+    episode_paths = _episode_jsonl_paths(resolved)
     campaign_id = _campaign_id(
         resolved,
         seed_payload=seed_payload,
@@ -405,17 +422,37 @@ def build_paper_results_handoff_payload(
     )
     resolved_confidence = dict(DEFAULT_CONFIDENCE_SETTINGS)
     resolved_confidence.update(dict(confidence_settings or {}))
-    seed_policy = _seed_policy(seed_payload, records)
+    row_seed_policy = _seed_policy(seed_payload)
+    config_hash = _config_hash(seed_payload, publication_manifest)
+    git_hash = _git_hash(seed_payload, publication_manifest)
 
-    rows = build_seed_variability_rows(
-        records,
-        metrics=metrics,
-        campaign_id=campaign_id,
-        config_hash=_config_hash(seed_payload, publication_manifest),
-        git_hash=_git_hash(seed_payload, publication_manifest),
-        seed_policy=seed_policy,
-        confidence_settings=resolved_confidence,
-    )
+    rows: list[dict[str, Any]] = []
+    discovered_seeds: set[int] = set()
+    for episodes_path in episode_paths:
+        run_records, run_seeds = _load_run_records(
+            episodes_path,
+            metrics=metrics,
+            campaign_rows=campaign_rows,
+        )
+        discovered_seeds.update(run_seeds)
+        if not run_records:
+            continue
+        rows.extend(
+            build_seed_variability_rows(
+                run_records,
+                metrics=metrics,
+                campaign_id=campaign_id,
+                config_hash=config_hash,
+                git_hash=git_hash,
+                seed_policy=row_seed_policy,
+                confidence_settings=resolved_confidence,
+            )
+        )
+
+    if not rows:
+        raise ValueError(f"No episode records found under {resolved.payload_root / 'runs'}")
+
+    seed_policy = _seed_policy(seed_payload, discovered_seeds)
 
     row_index = {(str(row.get("planner_key")), str(row.get("kinematics"))): row for row in rows}
     ordered_keys = [key for key in campaign_rows if key in row_index]
@@ -426,6 +463,7 @@ def build_paper_results_handoff_payload(
             row_index[key],
             row_metadata=campaign_rows.get(key, {}),
             metrics=metrics,
+            seed_policy_override=seed_policy,
         )
         for key in ordered_keys
     ]
@@ -497,11 +535,18 @@ def write_paper_results_handoff(
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "paper_results_handoff.json"
     csv_path = output_dir / "paper_results_handoff.csv"
-    json_path.write_text(json.dumps(payload, indent=2, allow_nan=True) + "\n", encoding="utf-8")
+    sanitized_payload = _sanitize_json_values(payload)
+    if not isinstance(sanitized_payload, Mapping):
+        raise TypeError("paper results handoff payload must be a mapping")
+    json_path.write_text(json.dumps(sanitized_payload, indent=2) + "\n", encoding="utf-8")
 
-    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), list) else []
+    metrics = (
+        sanitized_payload.get("metrics")
+        if isinstance(sanitized_payload.get("metrics"), list)
+        else []
+    )
     fieldnames = _csv_fieldnames(str(metric) for metric in metrics)
-    rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
+    rows = sanitized_payload.get("rows") if isinstance(sanitized_payload.get("rows"), list) else []
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()

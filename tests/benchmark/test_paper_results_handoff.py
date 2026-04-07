@@ -26,25 +26,30 @@ def _episode(
     *,
     scenario_id: str,
     seed: int,
-    success: float,
-    collisions: float,
-    near_misses: float,
-    time_to_goal_norm: float,
-    snqi: float,
+    success: float | None,
+    collisions: float | None,
+    near_misses: float | None,
+    time_to_goal_norm: float | None,
+    snqi: float | None,
 ) -> str:
     """Build one episode JSONL line."""
+    metrics = {
+        name: value
+        for name, value in {
+            "success": success,
+            "collisions": collisions,
+            "near_misses": near_misses,
+            "time_to_goal_norm": time_to_goal_norm,
+            "snqi": snqi,
+        }.items()
+        if value is not None
+    }
     return json.dumps(
         {
             "episode_id": f"{scenario_id}-{seed}",
             "scenario_id": scenario_id,
             "seed": seed,
-            "metrics": {
-                "success": success,
-                "collisions": collisions,
-                "near_misses": near_misses,
-                "time_to_goal_norm": time_to_goal_norm,
-                "snqi": snqi,
-            },
+            "metrics": metrics,
         }
     )
 
@@ -266,6 +271,79 @@ def test_paper_results_handoff_cli_writes_summary(
     assert summary["row_count"] == 2
     assert Path(summary["json_path"]).exists()
     assert Path(summary["csv_path"]).exists()
+
+
+def test_build_paper_results_handoff_payload_fails_closed_for_non_object_metadata(
+    tmp_path: Path,
+) -> None:
+    """Builder should reject malformed metadata files instead of defaulting silently."""
+    bundle_dir = tmp_path / "paper_campaign_publication_bundle"
+    _make_publication_bundle(bundle_dir)
+    _write(bundle_dir / "publication_manifest.json", "[]\n")
+
+    with pytest.raises(ValueError, match="publication_manifest.json must contain a JSON object"):
+        build_paper_results_handoff_payload(bundle_dir)
+
+
+def test_build_paper_results_handoff_payload_fails_closed_for_non_object_jsonl_rows(
+    tmp_path: Path,
+) -> None:
+    """Builder should reject malformed JSONL rows instead of accepting non-objects."""
+    bundle_dir = tmp_path / "paper_campaign_publication_bundle"
+    _make_publication_bundle(bundle_dir)
+    _write(bundle_dir / "payload" / "runs" / "orca__differential_drive" / "episodes.jsonl", "[]\n")
+
+    with pytest.raises(ValueError, match=r"episodes\.jsonl:1 is not a JSON object"):
+        build_paper_results_handoff_payload(bundle_dir)
+
+
+def test_export_paper_results_handoff_serializes_missing_metrics_without_nan(
+    tmp_path: Path,
+) -> None:
+    """Exporter should write standards-compliant JSON when some metric summaries are absent."""
+    bundle_dir = tmp_path / "paper_campaign_publication_bundle"
+    _make_publication_bundle(bundle_dir)
+    _write(
+        bundle_dir / "payload" / "runs" / "orca__differential_drive" / "episodes.jsonl",
+        "\n".join(
+            [
+                _episode(
+                    scenario_id="s1",
+                    seed=111,
+                    success=1.0,
+                    collisions=0.0,
+                    near_misses=None,
+                    time_to_goal_norm=0.4,
+                    snqi=-0.2,
+                ),
+                _episode(
+                    scenario_id="s2",
+                    seed=112,
+                    success=0.0,
+                    collisions=1.0,
+                    near_misses=None,
+                    time_to_goal_norm=0.6,
+                    snqi=0.0,
+                ),
+            ]
+        )
+        + "\n",
+    )
+
+    result = export_paper_results_handoff(
+        bundle_dir,
+        output_dir=tmp_path / "handoff",
+        confidence_settings={"bootstrap_samples": 0},
+    )
+
+    json_text = result.json_path.read_text(encoding="utf-8")
+    assert "NaN" not in json_text
+    payload = json.loads(json_text)
+    assert payload["rows"][0]["near_misses_mean"] is None
+
+    with result.csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["near_misses_mean"] == ""
 
 
 def test_canonical_handoff_matches_frozen_campaign_table_when_available() -> None:

@@ -55,6 +55,16 @@ def _get_drm_mp_planner():
     return module.DRMPCPlanner
 
 
+def _get_drl_vo_planner():
+    """Lazy import for DRL-VO baseline.
+
+    Returns:
+        The DrlVoPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.drl_vo")
+    return module.DrlVoPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
@@ -63,6 +73,7 @@ BASELINES: dict[str, type] = {
     "random": _get_random_planner,
     "sicnav": _get_sicnav_planner,
     "dr_mpc": _get_drm_mp_planner,
+    "drl_vo": _get_drl_vo_planner,
 }
 
 

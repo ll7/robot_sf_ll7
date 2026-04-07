@@ -17,6 +17,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
+from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
@@ -820,6 +821,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
         heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
         robot_vel = np.array([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
     robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
 
     ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(pedestrians)
@@ -848,6 +850,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
             "goal": [float(robot_goal[0]), float(robot_goal[1])]
             if robot_goal.size >= 2
             else [0.0, 0.0],
+            "heading": robot_heading,
             "radius": robot_radius,
         },
         "agents": agents,
@@ -933,6 +936,25 @@ def _ppo_action_to_unicycle(
     else:
         v, omega = float(speed), angular_velocity
     return v, omega, "adapter"
+
+
+def _update_adapter_impact_metrics(
+    meta: dict[str, Any],
+    conversion_mode: str,
+    *,
+    count_native: bool | None = None,
+) -> None:
+    """Update native-vs-adapted step counters when adapter-impact probing is enabled."""
+    impact = meta.get("adapter_impact")
+    if not isinstance(impact, dict) or not bool(impact.get("requested", False)):
+        return
+    if count_native is None:
+        count_native = conversion_mode == "native"
+    if count_native:
+        impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+    else:
+        impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+    impact["status"] = "collecting"
 
 
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
@@ -1239,13 +1261,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 command=(float(linear), float(angular)),
                 meta=meta,
             )
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native":
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(meta, conversion_mode)
             return linear, angular
 
         _policy._planner_close = ppo_planner.close
@@ -1263,6 +1279,65 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta["paper_ready"] = bool(paper_ready)
         if paper_reason:
             meta["paper_gate_reason"] = paper_reason
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key == "drl_vo":
+        drl_planner = DrlVoPlanner(algo_config, seed=None)
+        if hasattr(drl_planner, "get_metadata"):
+            planner_meta = drl_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="drl_vo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+
+        drl_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            drl_obs = _obs_to_ppo_format(obs)
+            action = drl_planner.step(drl_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"DRL-VO planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=drl_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=drl_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+            _update_adapter_impact_metrics(meta, conversion_mode)
+            return linear, angular
+
+        _policy._planner_close = drl_planner.close
+        if hasattr(drl_planner, "reset"):
+            _policy._planner_reset = lambda seed=None: drl_planner.reset()
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "drl_vo")
+        meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
     elif algo_key in {"guarded_ppo"}:
@@ -1340,13 +1415,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"}:
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(
+                meta,
+                conversion_mode,
+                count_native=conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"},
+            )
             return linear, angular
 
         _policy._planner_close = ppo_planner.close

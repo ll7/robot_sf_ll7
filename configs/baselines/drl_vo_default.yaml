@@ -1,0 +1,13 @@
+# Default DRL-VO baseline config for benchmark evaluation.
+# Use this file with `robot_sf_bench run --algo drl_vo --algo-config configs/baselines/drl_vo_default.yaml`.
+
+model_path: output/model_cache/drl_vo_default.pt
+model_id: null
+device: auto
+nearest_k: 5
+action_space: velocity
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: true
+goal_speed: 1.0
+allow_testing_algorithms: true

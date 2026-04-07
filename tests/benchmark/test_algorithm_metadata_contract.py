@@ -130,6 +130,23 @@ def test_socnav_orca_variant_metadata_is_registered_and_experimental() -> None:
         assert meta["planner_kinematics"]["supports_adapter_commands"] is True
 
 
+def test_drl_vo_metadata_exposes_reference_contract() -> None:
+    """DRL-VO metadata should expose hybrid planner reference contract."""
+    meta = enrich_algorithm_metadata(
+        algo="drl_vo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "hybrid_deep_reinforcement_velocity_obstacle"
+    assert meta["planner_kinematics"]["upstream_command_space"] == "velocity_vector_xy"
+    assert meta["planner_kinematics"]["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    upstream = meta["upstream_reference"]
+    assert upstream["repo_url"] == "https://github.com/TempleRAIL/drl_vo_nav"
+    assert upstream["commit"] == "6d734b6e0df77fd4c4faa4649ca0fcb3e69cf835"
+
+
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
     """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
     meta = enrich_algorithm_metadata(

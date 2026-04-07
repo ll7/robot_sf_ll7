@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import random
 import sys
+import threading
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -20,6 +22,9 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SICNAV_IMPORT_LOCK = threading.RLock()
 
 
 @dataclass
@@ -78,31 +83,51 @@ class SICNavPlanner:
             or name.startswith("sicnav_diffusion.")
         )
 
+    @staticmethod
+    def _has_supported_policy_constructor(module: Any) -> bool:
+        """Return whether the imported module exposes a supported policy factory."""
+        return callable(getattr(module, "SICNavPolicy", None)) or callable(
+            getattr(module, "load_policy", None)
+        )
+
+    @staticmethod
+    def _resolve_repo_root(repo_root: str) -> Path:
+        """Resolve a configured repo root against the Robot SF checkout root.
+
+        Returns:
+            Path: Absolute path to the configured upstream checkout.
+        """
+        root = Path(repo_root).expanduser()
+        if not root.is_absolute():
+            root = _REPO_ROOT / root
+        return root.resolve()
+
     @contextmanager
     def _upstream_import_context(self) -> Iterator[set[str]]:
         """Temporarily add the vendored SICNav repo root to `sys.path`."""
-        repo_root = Path(self.config.repo_root).expanduser()
-        repo_str = str(repo_root)
-        original_path = list(sys.path)
-        original_modules = {
-            name: module for name, module in sys.modules.items() if self._is_sicnav_module(name)
-        }
-        preserved_modules: set[str] = set()
-        if repo_str not in sys.path:
-            sys.path.insert(0, repo_str)
-        try:
-            for name in list(sys.modules):
-                if self._is_sicnav_module(name):
-                    sys.modules.pop(name, None)
-            yield preserved_modules
-        finally:
-            for name in list(sys.modules):
-                if self._is_sicnav_module(name) and name not in preserved_modules:
-                    sys.modules.pop(name, None)
-            for name, module in original_modules.items():
-                if name not in preserved_modules:
-                    sys.modules[name] = module
-            sys.path[:] = original_path
+        with _SICNAV_IMPORT_LOCK:
+            repo_root = self._resolve_repo_root(self.config.repo_root)
+            repo_str = str(repo_root)
+            original_path = list(sys.path)
+            original_modules = {
+                name: module for name, module in sys.modules.items() if self._is_sicnav_module(name)
+            }
+            preserved_modules: set[str] = set()
+            if repo_str not in sys.path:
+                sys.path.insert(0, repo_str)
+            try:
+                for name in list(sys.modules):
+                    if self._is_sicnav_module(name):
+                        sys.modules.pop(name, None)
+                yield preserved_modules
+            finally:
+                for name in list(sys.modules):
+                    if self._is_sicnav_module(name) and name not in preserved_modules:
+                        sys.modules.pop(name, None)
+                for name, module in original_modules.items():
+                    if name not in preserved_modules:
+                        sys.modules[name] = module
+                sys.path[:] = original_path
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset the SICNav wrapper state and optionally reseed the RNG."""
@@ -118,23 +143,24 @@ class SICNavPlanner:
         self._module = None
 
     def _import_sicnav_module(self) -> Any:
-        if self._module is not None:
-            return self._module
+        with _SICNAV_IMPORT_LOCK:
+            if self._module is not None:
+                return self._module
 
-        with self._upstream_import_context() as preserved_modules:
-            for module_name in ("sicnav_diffusion", "sicnav"):
-                try:
-                    module = importlib.import_module(module_name)
-                except ImportError:
-                    continue
-                self._module = module
-                preserved_modules.update(
-                    name
-                    for name in sys.modules
-                    if self._is_sicnav_module(name)
-                    and (name == module_name or name.startswith(f"{module_name}."))
-                )
-                return module
+            with self._upstream_import_context() as preserved_modules:
+                for module_name in ("sicnav_diffusion", "sicnav"):
+                    try:
+                        module = importlib.import_module(module_name)
+                    except ImportError:
+                        continue
+                    self._module = module
+                    preserved_modules.update(
+                        name
+                        for name in sys.modules
+                        if self._is_sicnav_module(name)
+                        and (name == module_name or name.startswith(f"{module_name}."))
+                    )
+                    return module
 
         raise ImportError(
             "SICNav dependency is missing. Install `sicnav_diffusion` or `sicnav`, "
@@ -142,26 +168,46 @@ class SICNavPlanner:
             "`sicnav` baseline."
         )
 
+    def _apply_seed(self, policy: Any) -> None:
+        """Apply the configured seed to common upstream policy RNG hooks."""
+        if self._seed is None:
+            return
+        random.seed(self._seed)
+        np.random.seed(self._seed)
+        for method_name in ("seed", "set_seed"):
+            seed_method = getattr(policy, method_name, None)
+            if callable(seed_method):
+                seed_method(self._seed)
+                return
+
     def _build_policy(self) -> Any:
         try:
             module = self._import_sicnav_module()
         except ImportError as exc:
             raise RuntimeError(str(exc)) from exc
 
-        if hasattr(module, "SICNavPolicy"):
+        if self._seed is not None:
+            random.seed(self._seed)
+            np.random.seed(self._seed)
+
+        if callable(getattr(module, "SICNavPolicy", None)):
             policy_cls = module.SICNavPolicy
-            return policy_cls(
+            policy = policy_cls(
                 checkpoint_path=self.config.checkpoint_path,
                 solver=self.config.solver,
                 device=self.config.device,
             )
+            self._apply_seed(policy)
+            return policy
 
-        if hasattr(module, "load_policy"):
-            return module.load_policy(
+        if callable(getattr(module, "load_policy", None)):
+            policy = module.load_policy(
                 self.config.checkpoint_path,
                 device=self.config.device,
                 solver=self.config.solver,
             )
+            self._apply_seed(policy)
+            return policy
 
         raise RuntimeError(
             "Imported SICNav package does not expose a supported policy constructor. "
@@ -218,7 +264,9 @@ class SICNavPlanner:
         status = "ok"
 
         try:
-            self._import_sicnav_module()
+            module = self._import_sicnav_module()
+            if not self._has_supported_policy_constructor(module):
+                status = "missing_dependency"
         except (ImportError, RuntimeError):
             status = "missing_dependency"
 

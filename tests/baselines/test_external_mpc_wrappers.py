@@ -1,5 +1,6 @@
 """Tests for the external MPC baseline wrappers."""
 
+import os
 import sys
 import types
 from pathlib import Path
@@ -60,7 +61,10 @@ def test_dr_mpc_step_raises_when_dependency_missing() -> None:
         planner.step(_make_robot_observation())
 
 
-def test_sicnav_planner_uses_external_policy_from_repo_root(tmp_path: Path) -> None:
+def test_sicnav_planner_uses_external_policy_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The SICNav wrapper should load a policy from a checked-out repo root."""
     repo_root = tmp_path / "sicnav_repo"
     _write(
@@ -71,6 +75,10 @@ class SICNavPolicy:
         self.checkpoint_path = checkpoint_path
         self.solver = solver
         self.device = device
+        self.seed_value = None
+
+    def seed(self, seed):
+        self.seed_value = seed
 
     def select_action(self, obs):
         return {"v": obs.robot["goal"][0] * 0.5, "omega": 0.1}
@@ -78,12 +86,33 @@ class SICNavPolicy:
     )
     _write(repo_root / "sicnav" / "__init__.py", "")
 
-    planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
+    original_cwd = Path.cwd()
+    non_repo_cwd = tmp_path / "elsewhere"
+    non_repo_cwd.mkdir()
+    monkeypatch.chdir(non_repo_cwd)
+    planner = SICNavPlanner(
+        build_sicnav_config({"repo_root": os.path.relpath(repo_root, start=original_cwd)}),
+        seed=1,
+    )
     try:
         action = planner.step(_make_robot_observation())
         assert action == {"v": 0.5, "omega": 0.1}
         assert "sicnav_diffusion" in sys.modules
+        assert planner._policy.seed_value == 1
         assert planner.get_metadata()["status"] == "ok"
+    finally:
+        sys.modules.pop("sicnav_diffusion", None)
+        sys.modules.pop("sicnav", None)
+
+
+def test_sicnav_metadata_marks_incompatible_module_as_missing(tmp_path: Path) -> None:
+    """SICNav metadata should fail closed when the import lacks a policy constructor."""
+    repo_root = tmp_path / "sicnav_repo"
+    _write(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
+
+    planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
+    try:
+        assert planner.get_metadata()["status"] == "missing_dependency"
     finally:
         sys.modules.pop("sicnav_diffusion", None)
         sys.modules.pop("sicnav", None)

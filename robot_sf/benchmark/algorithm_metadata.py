@@ -103,8 +103,8 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         ),
     },
     "drl_vo": {
-        "repo_url": "https://github.com/ll7/DRL-VO",
-        "commit": "proposed_2026_04_03",
+        "repo_url": "https://github.com/ll7/robot_sf_ll7",
+        "commit": "local_reference_implementation",
         "adapter_boundary": (
             "Hybrid DRL-VO planner: learned policy coupled with velocity obstacle safety fallback. "
             "For benchmark contract, map policy output to Robot SF unicycle_vw commands."

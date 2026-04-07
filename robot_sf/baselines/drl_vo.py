@@ -96,7 +96,7 @@ class DrlVoPlanner:
 
         try:
             model_path = self._resolve_model_path()
-        except (KeyError, RuntimeError, ValueError) as exc:
+        except (KeyError, FileNotFoundError, RuntimeError, ValueError) as exc:
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
                     "DRL-VO model",
@@ -190,7 +190,7 @@ class DrlVoPlanner:
                 action = self._predict_action(obs)
                 return action
             except Exception as exc:
-                logger.warning("DRL-VO model prediction failed: %s", exc)
+                logger.warning("DRL-VO model prediction failed: {}", exc)
                 if not self.config.fallback_to_goal:
                     raise
         return self._goal_seeking_action(obs)
@@ -222,7 +222,10 @@ class DrlVoPlanner:
         goal_rel = robot_goal - robot_pos
 
         parts = [goal_rel, robot_vel]
-        agents = list(obs.agents)[: self.config.nearest_k]
+        agents = sorted(
+            obs.agents,
+            key=lambda a: np.linalg.norm(np.asarray(a.get("position", [0.0, 0.0])) - robot_pos),
+        )[: self.config.nearest_k]
         for agent in agents:
             rel_pos = np.asarray(agent.get("position", [0.0, 0.0]), dtype=float) - robot_pos
             rel_vel = np.asarray(agent.get("velocity", [0.0, 0.0]), dtype=float)

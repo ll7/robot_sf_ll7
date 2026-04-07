@@ -1142,6 +1142,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             execution_mode="mixed",
             adapter_name="drl_vo_action_to_unicycle",
             robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
         )
         _init_feasibility_metadata(meta)
         planner_meta = meta.get("planner_kinematics")
@@ -1162,7 +1163,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             action = drl_planner.step(drl_obs)
             if not isinstance(action, dict):
                 raise TypeError(f"DRL-VO planner returned non-dict action: {type(action)}")
-            linear, angular, _ = _ppo_action_to_unicycle(
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
                 action,
                 obs,
                 algo_config,
@@ -1175,9 +1176,18 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 command=(float(linear), float(angular)),
                 meta=meta,
             )
+            impact = meta.get("adapter_impact")
+            if isinstance(impact, dict) and bool(impact.get("requested", False)):
+                if conversion_mode == "native":
+                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+                else:
+                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+                impact["status"] = "collecting"
             return linear, angular
 
         _policy._planner_close = drl_planner.close
+        if hasattr(drl_planner, "reset"):
+            _policy._planner_reset = lambda seed=None: drl_planner.reset()
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "drl_vo")

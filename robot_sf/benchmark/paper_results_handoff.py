@@ -313,6 +313,15 @@ def _flatten_handoff_row(
     provenance = row.get("provenance") if isinstance(row.get("provenance"), Mapping) else {}
     seed_policy = provenance.get("seed_policy") if isinstance(provenance, Mapping) else {}
     confidence = provenance.get("confidence") if isinstance(provenance, Mapping) else {}
+    episode_count = _coerce_int(row.get("episode_count"))
+    seed_count = _coerce_int(row.get("seed_count"))
+    repeat_count: int | float | None = None
+    if episode_count is not None and seed_count is not None and seed_count > 0:
+        repeat_count = (
+            episode_count // seed_count
+            if episode_count % seed_count == 0
+            else episode_count / seed_count
+        )
     out: dict[str, Any] = {
         "planner_key": row.get("planner_key"),
         "algo": row.get("algo"),
@@ -322,8 +331,9 @@ def _flatten_handoff_row(
         "readiness_tier": row_metadata.get("readiness_tier"),
         "readiness_status": row_metadata.get("readiness_status"),
         "preflight_status": row_metadata.get("preflight_status"),
-        "episode_count": row.get("episode_count"),
-        "seed_count": row.get("seed_count"),
+        "episode_count": episode_count,
+        "seed_count": seed_count,
+        "repeat_count": repeat_count,
         "seed_list": list(row.get("seed_list") or []),
         "campaign_id": provenance.get("campaign_id") if isinstance(provenance, Mapping) else None,
         "config_hash": provenance.get("config_hash") if isinstance(provenance, Mapping) else None,
@@ -445,6 +455,7 @@ def _csv_fieldnames(metrics: Iterable[str]) -> list[str]:
         "preflight_status",
         "episode_count",
         "seed_count",
+        "repeat_count",
         "seed_list",
         "campaign_id",
         "config_hash",

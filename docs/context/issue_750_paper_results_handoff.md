@@ -58,6 +58,7 @@ Each row also includes:
 
 - `episode_count`
 - `seed_count`
+- `repeat_count` as episodes per seed for the planner-summary row
 - `seed_list`
 - planner metadata such as `planner_group`, `readiness_tier`, `readiness_status`,
   `preflight_status`, and `status`
@@ -89,4 +90,5 @@ is direct:
   `time_to_goal_norm_ci_high`
 - `SNQI` -> `snqi_mean`, `snqi_ci_low`, `snqi_ci_high`
 
-Use `seed_count`, `seed_list`, and `episode_count` for seed/repeat sensitivity wording.
+Use `seed_count`, `seed_list`, `repeat_count`, and `episode_count` for seed/repeat sensitivity
+wording.

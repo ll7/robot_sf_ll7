@@ -183,6 +183,7 @@ def test_build_paper_results_handoff_payload_adds_interval_metadata(tmp_path: Pa
     assert orca["readiness_tier"] == "baseline-ready"
     assert orca["episode_count"] == 2
     assert orca["seed_count"] == 2
+    assert orca["repeat_count"] == 1
     assert orca["seed_list"] == [111, 112]
     assert orca["confidence_method"] == "bootstrap_mean_over_seed_means"
     assert orca["bootstrap_samples"] == 0
@@ -217,8 +218,10 @@ def test_export_paper_results_handoff_writes_json_and_csv(tmp_path: Path) -> Non
         reader = csv.DictReader(handle)
         assert "success_ci_low" in (reader.fieldnames or [])
         assert "confidence_method" in (reader.fieldnames or [])
+        assert "repeat_count" in (reader.fieldnames or [])
         first = next(reader)
     assert first["planner_key"] == "orca"
+    assert first["repeat_count"] == "1"
     assert first["seed_list"] == "111,112"
 
 
@@ -288,6 +291,7 @@ def test_canonical_handoff_matches_frozen_campaign_table_when_available() -> Non
         rows["orca"]["success_source_table_mean"],
         abs=5e-5,
     )
+    assert rows["orca"]["repeat_count"] == 47
     assert rows["ppo"]["collisions_mean"] == pytest.approx(
         rows["ppo"]["collisions_source_table_mean"],
         abs=5e-5,

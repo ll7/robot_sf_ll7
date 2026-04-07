@@ -1456,7 +1456,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: C901,PLR0913,PLR0915
+def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,

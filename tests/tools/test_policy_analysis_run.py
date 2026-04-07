@@ -12,6 +12,11 @@ import pytest
 from gymnasium import spaces
 from loguru import logger
 
+from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
+    ORCAPlannerAdapter,
+    SACADRLPlannerAdapter,
+)
 from scripts.tools import policy_analysis_run
 
 if TYPE_CHECKING:
@@ -318,6 +323,112 @@ def test_apply_video_termination_suffix_renames_file_and_updates_metadata(tmp_pa
     assert target.exists()
     assert not src.exists()
     assert record["video"]["path"] == str(target)
+
+
+def test_policy_parser_supports_new_orca_variant_choices() -> None:
+    """The CLI parser accepts the newly added ORCA variant policy names."""
+    parser = policy_analysis_run._build_parser()
+    for policy_name in [
+        "socnav_orca_nonholonomic",
+        "socnav_orca_dd",
+        "socnav_orca_relaxed",
+        "socnav_hrvo",
+    ]:
+        namespace = parser.parse_args(["--policy", policy_name])
+        assert namespace.policy == policy_name
+
+
+def test_policy_parser_preserves_existing_socnav_sacadrl_choice() -> None:
+    """Adding ORCA variants must not remove existing CLI policy choices."""
+    parser = policy_analysis_run._build_parser()
+
+    namespace = parser.parse_args(["--policy", "socnav_sacadrl"])
+
+    assert namespace.policy == "socnav_sacadrl"
+
+
+def test_resolve_policies_accepts_sacadrl_and_orca_variant_in_sweep() -> None:
+    """Policy sweep parsing should accept old and new SocNav policy names together."""
+    args = argparse.Namespace(
+        policy="goal",
+        policy_sweep=True,
+        policies="socnav_sacadrl,socnav_orca_dd",
+    )
+
+    policies = policy_analysis_run._resolve_policies(args)
+
+    assert policies == ["socnav_sacadrl", "socnav_orca_dd"]
+
+
+def test_build_socnav_policy_returns_valid_orca_variant_policies() -> None:
+    """Variant policy names should produce a SocNav policy with the correct adapter type."""
+    variant_checks = {
+        "socnav_orca_nonholonomic": {
+            "config_attrs": {
+                "orca_heading_slowdown": 0.8,
+                "orca_commit_distance": 1.8,
+                "orca_commit_lateral_gain": 0.6,
+            },
+        },
+        "socnav_orca_dd": {
+            "config_attrs": {
+                "orca_time_horizon": 3.0,
+                "orca_neighbor_dist": 8.0,
+                "orca_max_neighbors": 6,
+                "orca_stall_speed_threshold": 0.1,
+            },
+        },
+        "socnav_orca_relaxed": {
+            "config_attrs": {
+                "orca_time_horizon": 8.0,
+                "orca_obstacle_range": 8.0,
+                "orca_obstacle_threshold": 0.6,
+                "orca_head_on_bias": 0.4,
+                "orca_symmetry_bias": 0.15,
+            },
+        },
+    }
+
+    for policy_name, check in variant_checks.items():
+        policy = policy_analysis_run._build_socnav_policy(
+            policy_name,
+            socnav_root=None,
+            orca_time_horizon=None,
+            orca_neighbor_dist=None,
+            socnav_allow_fallback=False,
+        )
+        assert policy is not None
+        assert isinstance(policy.adapter, ORCAPlannerAdapter)
+        for attr, expected in check["config_attrs"].items():
+            actual = getattr(policy.adapter.config, attr)
+            assert actual == expected
+
+
+def test_build_socnav_policy_returns_hrvo_policy() -> None:
+    """The HRVO policy name should return a valid HRVO policy instance."""
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_hrvo",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+    assert policy is not None
+    assert isinstance(policy.adapter, HRVOPlannerAdapter)
+
+
+def test_build_socnav_policy_preserves_sacadrl_policy() -> None:
+    """Issue 768 additions must not break the existing SA-CADRL builder path."""
+    policy = policy_analysis_run._build_socnav_policy(
+        "socnav_sacadrl",
+        socnav_root=None,
+        orca_time_horizon=None,
+        orca_neighbor_dist=None,
+        socnav_allow_fallback=False,
+    )
+
+    assert policy is not None
+    assert isinstance(policy.adapter, SACADRLPlannerAdapter)
 
 
 def test_apply_video_termination_suffix_noop_when_video_missing(tmp_path: Path) -> None:

@@ -255,6 +255,22 @@ def test_video_perf_helper_covers_warning_and_enforce_branches(
     assert record["video"]["overhead_ratio"] == pytest.approx(0.2)
 
 
+def test_video_perf_helper_ignores_empty_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty test override env values should fall back to the computed timing ratio."""
+    record = {"episode_id": "ep-3", "scenario_id": "scenario-c", "seed": 5}
+    video = {"renderer": "synthetic"}
+
+    monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "")
+    monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "2.0")
+    monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "3.0")
+    monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
+
+    runner_mod._annotate_and_check_video_perf(record, video, 0.0, 1.0, 2.0)
+
+    assert record["video"]["encode_seconds"] == pytest.approx(1.0)
+    assert record["video"]["overhead_ratio"] == pytest.approx(0.5)
+
+
 def test_maybe_encode_video_swallow_value_errors(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

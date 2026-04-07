@@ -63,6 +63,10 @@ def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
     monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
+    # Force a known overhead_ratio so the soft-breach condition fires regardless of
+    # CI runner speed — the test only cares that the warning is emitted, not the
+    # actual timing.
+    monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.5")
 
     matrix_path = tmp_path / "matrix.yaml"
     out_jsonl = tmp_path / "episodes.jsonl"

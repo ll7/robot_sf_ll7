@@ -143,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + Integration tests for end-to-end pipeline validation
   + Sample-efficiency target: ≤70% of baseline timesteps to convergence
   + Documentation in `docs/dev_guide.md` and `specs/001-ppo-imitation-pretrain/quickstart.md`
-  + Default imitation configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`,        `configs/training/ppo_imitation/ppo_finetune.yaml`)
+  + Default pretraining configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`, `configs/training/ppo_imitation/ppo_finetune.yaml`)
 * Canonical artifact root enforcement and tooling (Feature 243)
   + Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
   + Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests

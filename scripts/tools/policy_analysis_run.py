@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: C901
 """Run a full policy analysis sweep with metrics and optional videos.
 
 This script evaluates a policy across all scenarios in a training config (or a
@@ -457,7 +456,7 @@ def _goal_action(env, *, speed: float) -> np.ndarray:
     return np.array([linear, angular], dtype=float)
 
 
-def _build_socnav_policy(
+def _build_socnav_policy(  # noqa: C901
     policy_name: str,
     *,
     socnav_root: Path | None,
@@ -851,7 +850,7 @@ def _find_problem_episodes(
     return out
 
 
-def _write_report(
+def _write_report(  # noqa: C901
     out_dir: Path,
     *,
     summary: dict[str, Any],
@@ -1442,7 +1441,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: PLR0913, PLR0915
+def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,

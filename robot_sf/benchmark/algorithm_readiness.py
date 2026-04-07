@@ -47,6 +47,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="drl_vo",
+        tier="experimental",
+        aliases=("drl_vo", "drlvo", "drl-vo"),
+        note=(
+            "DRL-VO hybrid planner (learned policy augmented with velocity obstacle fallback); "
+            "prototype stage."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_orca",
         tier="experimental",
         aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),

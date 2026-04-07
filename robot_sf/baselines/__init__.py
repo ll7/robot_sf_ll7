@@ -35,12 +35,23 @@ def _get_random_planner():
     return module.RandomPlanner
 
 
+def _get_drl_vo_planner():
+    """Lazy import for DRL-VO baseline.
+
+    Returns:
+        The DrlVoPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.drl_vo")
+    return module.DrlVoPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
     "baseline_sf": _get_social_force_planner,  # Backward compatibility
     "ppo": _get_ppo_planner,
     "random": _get_random_planner,
+    "drl_vo": _get_drl_vo_planner,
 }
 
 

@@ -28,6 +28,30 @@ class _DummyPPOPlanner:
         return {"algorithm": "ppo", "status": "ok", "config": dict(self.config)}
 
 
+class _DummyDrlVoPlanner:
+    """Test double for DRL-VO planner integration in map runner."""
+
+    def __init__(self, config, *, seed=None):
+        self.config = dict(config)
+        self.seed = seed
+        self.closed = False
+        self.reset_called = False
+        self.last_obs = None
+
+    def step(self, obs):
+        self.last_obs = obs
+        return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
+
+    def close(self):
+        self.closed = True
+
+    def reset(self):
+        self.reset_called = True
+
+    def get_metadata(self):
+        return {"algorithm": "drl_vo", "status": "ok", "config": dict(self.config)}
+
+
 def _sample_obs(heading: float = 0.0) -> dict:
     return {
         "dt": 0.1,
@@ -107,6 +131,36 @@ def test_build_policy_ppo_adapter_impact_updates_metadata(monkeypatch):
     assert impact["native_steps"] == 1
     assert impact["adapted_steps"] == 0
     assert impact["status"] == "collecting"
+
+
+def test_build_policy_drl_vo_adapter_impact_updates_metadata(monkeypatch):
+    """DRL-VO adapter-impact counters should mutate returned metadata in-place."""
+    monkeypatch.setattr(map_runner, "DrlVoPlanner", _DummyDrlVoPlanner)
+    policy, meta = map_runner._build_policy(
+        "drl_vo",
+        {"test_action": {"vx": 1.0, "vy": 0.0}, "v_max": 0.8},
+        adapter_impact_eval=True,
+    )
+
+    action_v, action_w = policy(_sample_obs(heading=np.pi / 2))
+    impact = meta.get("adapter_impact")
+    assert action_v == pytest.approx(0.8)
+    assert action_w < 0.0
+    assert isinstance(impact, dict)
+    assert impact["requested"] is True
+    assert impact["native_steps"] == 0
+    assert impact["adapted_steps"] == 1
+    assert impact["status"] == "collecting"
+    assert callable(getattr(policy, "_planner_close", None))
+    assert callable(getattr(policy, "_planner_reset", None))
+
+
+def test_obs_to_ppo_format_preserves_heading_for_unicycle_fallback():
+    """DRL-VO unicycle fallback needs robot heading in the converted observation."""
+    obs = _sample_obs(heading=np.pi / 2)
+
+    formatted = map_runner._obs_to_ppo_format(obs)
+    assert formatted["robot"]["heading"] == pytest.approx(np.pi / 2)
 
 
 def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):

@@ -75,6 +75,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchComplexPolicy,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
     make_sacadrl_policy,
@@ -100,6 +101,10 @@ _POLICY_CHOICES = (
     "socnav_sampling",
     "socnav_social_force",
     "socnav_orca",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
     "socnav_sacadrl",
     "socnav_bench",
     "fast_pysf",
@@ -451,7 +456,7 @@ def _goal_action(env, *, speed: float) -> np.ndarray:
     return np.array([linear, angular], dtype=float)
 
 
-def _build_socnav_policy(
+def _build_socnav_policy(  # noqa: C901
     policy_name: str,
     *,
     socnav_root: Path | None,
@@ -477,9 +482,32 @@ def _build_socnav_policy(
         if orca_neighbor_dist is not None:
             policy.adapter.config.orca_neighbor_dist = float(orca_neighbor_dist)
         return policy
-    if policy_name == "socnav_sacadrl":
+    elif policy_name == "socnav_orca_nonholonomic":
+        config = SocNavPlannerConfig()
+        config.orca_heading_slowdown = 0.8
+        config.orca_commit_distance = 1.8
+        config.orca_commit_lateral_gain = 0.6
+        return make_orca_policy(config=config)
+    elif policy_name == "socnav_orca_dd":
+        config = SocNavPlannerConfig()
+        config.orca_time_horizon = 3.0
+        config.orca_neighbor_dist = 8.0
+        config.orca_max_neighbors = 6
+        config.orca_stall_speed_threshold = 0.1
+        return make_orca_policy(config=config)
+    elif policy_name == "socnav_orca_relaxed":
+        config = SocNavPlannerConfig()
+        config.orca_time_horizon = 8.0
+        config.orca_obstacle_range = 8.0
+        config.orca_obstacle_threshold = 0.6
+        config.orca_head_on_bias = 0.4
+        config.orca_symmetry_bias = 0.15
+        return make_orca_policy(config=config)
+    elif policy_name == "socnav_hrvo":
+        return make_hrvo_policy()
+    elif policy_name == "socnav_sacadrl":
         return make_sacadrl_policy()
-    if policy_name == "socnav_bench":
+    elif policy_name == "socnav_bench":
         return SocNavBenchComplexPolicy(
             socnav_root=socnav_root,
             adapter_config=SocNavPlannerConfig(),
@@ -1413,7 +1441,7 @@ def _collect_episode_trajectories(  # noqa: PLR0913
     )
 
 
-def _build_episode_record(  # noqa: C901,PLR0913,PLR0915
+def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     scenario: Mapping[str, Any],
     *,
     seed: int,

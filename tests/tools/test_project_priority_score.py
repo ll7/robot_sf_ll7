@@ -101,7 +101,7 @@ def test_normalize_inputs_clamps_and_defaults() -> None:
 
     inputs = normalize_inputs(
         {
-            "improvement": -4,
+            "improvement": 11,
             "success probability": 1.7,
             lower_first_key(EFFORT_FIELD): 0,
             lower_first_key("Time Criticality"): 9,
@@ -110,12 +110,22 @@ def test_normalize_inputs_clamps_and_defaults() -> None:
     )
 
     assert inputs == ScoreInputs(
-        improvement=0.0,
+        improvement=10.0,
         success_probability=1.0,
         effort_hours=0.1,
-        time_criticality=2.0,
-        unlock_factor=1.0,
+        time_criticality=9.0,
+        unlock_factor=0.1,
     )
+    lower_bound_inputs = normalize_inputs(
+        {
+            "improvement": -4,
+            lower_first_key("Time Criticality"): 0,
+            lower_first_key("Unlock Factor"): -1,
+        }
+    )
+    assert lower_bound_inputs.improvement == 0.1
+    assert lower_bound_inputs.time_criticality == 0.1
+    assert lower_bound_inputs.unlock_factor == 0.1
 
     defaulted = normalize_inputs({})
     assert defaulted.success_probability == DEFAULT_SUCCESS_PROBABILITY

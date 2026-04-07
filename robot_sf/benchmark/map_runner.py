@@ -304,12 +304,29 @@ def _build_adapter_policy(
             meta=meta,
         )
 
-    if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset()
+    _attach_planner_reset(_policy, adapter)
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
 
     return _policy, meta
+
+
+def _attach_planner_reset(policy: Callable[..., Any], adapter: Any) -> None:
+    """Attach a planner reset hook that tolerates adapters without seed support."""
+    reset = getattr(adapter, "reset", None)
+    if not callable(reset):
+        return
+
+    def _planner_reset(seed: int | None = None) -> None:
+        if seed is None:
+            reset()
+            return
+        try:
+            reset(seed=seed)
+        except TypeError:
+            reset()
+
+    policy._planner_reset = _planner_reset
 
 
 def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
@@ -1133,8 +1150,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
         return _policy, meta
 
     if algo_key == "sicnav":
@@ -1332,8 +1348,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = drl_planner.close
-        if hasattr(drl_planner, "reset"):
-            _policy._planner_reset = lambda seed=None: drl_planner.reset()
+        _attach_planner_reset(_policy, drl_planner)
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "drl_vo")
@@ -1547,7 +1562,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         command_limits=algo_config,
     )
     planner_bind_env = None
-    if algo_key == "hrvo" and hasattr(adapter, "bind_static_obstacle_points"):
+    if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
 
         def _bind_env(env: Any) -> None:
             simulator = getattr(env, "simulator", None)
@@ -1571,6 +1586,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         in {
             "orca",
             "hrvo",
+            "socnav_hrvo",
             "social_force",
             "sf",
             "social_navigation_pyenvs_orca",
@@ -1590,7 +1606,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "coordinates, then forward that world-frame velocity directly into the "
                 "holonomic vx_vy benchmark action space."
             )
-        elif algo_key == "hrvo":
+        elif algo_key in {"hrvo", "socnav_hrvo"}:
             adapter_boundary = (
                 "Run the local HRVO geometry solver in world velocity space, then forward the "
                 "selected world-frame velocity directly into the holonomic vx_vy benchmark "
@@ -1628,8 +1644,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 float(velocity_world[1]),
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
         if planner_bind_env is not None:
             _policy._planner_bind_env = planner_bind_env
         return _policy, meta
@@ -1642,8 +1657,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
         )
 
-    if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset(seed=seed)
+    _attach_planner_reset(_policy, adapter)
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):

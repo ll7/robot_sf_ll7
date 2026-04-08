@@ -608,10 +608,15 @@ def _annotate_and_check_video_perf(
       - ROBOT_SF_VIDEO_OVERHEAD_SOFT (default 0.10)
       - ROBOT_SF_VIDEO_OVERHEAD_HARD (default 0.50)
       - ROBOT_SF_PERF_ENFORCE (any non-empty to enforce)
+      - ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO (for testing only — forces a ratio)
     """
     encode_seconds = float(max(0.0, enc_end - enc_start))
     total_elapsed = float(max(1e-9, enc_end - perf_start))
-    overhead_ratio = float(encode_seconds / total_elapsed)
+    override_ratio_raw = os.getenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO")
+    if override_ratio_raw:
+        overhead_ratio = float(override_ratio_raw)
+    else:
+        overhead_ratio = float(encode_seconds / total_elapsed)
     vid["encode_seconds"] = encode_seconds
     vid["overhead_ratio"] = overhead_ratio
     record["video"] = vid

@@ -54,15 +54,19 @@ moviepy_spec = importlib.util.find_spec("moviepy")
 @pytest.mark.skipif(logger is None, reason="loguru not available")
 def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
     # Force soft breach but not hard; do not enforce
-    """TODO docstring. Document this function.
+    """Video perf budget should warn, not fail, when only the soft threshold is exceeded.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary artifact directory for the matrix and JSONL output.
+        monkeypatch: Pytest environment patch helper used to force the overhead ratio.
     """
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
     monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
+    # Force a known overhead_ratio so the soft-breach condition fires regardless of
+    # CI runner speed — the test only cares that the warning is emitted, not the
+    # actual timing.
+    monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.5")
 
     matrix_path = tmp_path / "matrix.yaml"
     out_jsonl = tmp_path / "episodes.jsonl"

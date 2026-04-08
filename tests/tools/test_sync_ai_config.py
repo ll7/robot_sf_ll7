@@ -67,3 +67,13 @@ def test_pointer_file_must_reference_canonical_agents_file(
     assert sync_ai_config._check_pointer_file(".cursorrules", "AGENTS.md") == [
         ".cursorrules: expected to reference 'AGENTS.md'"
     ]
+
+
+def test_pointer_file_reports_non_file_paths(tmp_path: Path, monkeypatch) -> None:
+    """Pointer validation should report directory drift instead of raising."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    (tmp_path / ".cursorrules").mkdir()
+
+    assert sync_ai_config._check_pointer_file(".cursorrules", "AGENTS.md") == [
+        ".cursorrules: pointer path exists but is not a file"
+    ]

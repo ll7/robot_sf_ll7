@@ -84,7 +84,13 @@ def _check_pointer_file(path: str, expected_text: str) -> list[str]:
     pointer_path = _repo_path(path)
     if not pointer_path.exists():
         return [f"{path}: missing pointer file"]
-    if expected_text not in pointer_path.read_text(encoding="utf-8"):
+    if not pointer_path.is_file():
+        return [f"{path}: pointer path exists but is not a file"]
+    try:
+        content = pointer_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"{path}: cannot read pointer file: {exc}"]
+    if expected_text not in content:
         return [f"{path}: expected to reference {expected_text!r}"]
     return []
 

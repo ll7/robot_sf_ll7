@@ -41,6 +41,11 @@ other generated artifacts that benefit from a small evaluation loop.
 5. Record the result
    - Summarize what improved, what regressed, and what remained hard to judge.
 
+## Output
+
+Always report the artifact evaluated, the rubric used, the baseline result, the kept/discarded
+change, and remaining uncertainty.
+
 ## Guardrails
 
 - If the task has a strong measurable metric and needs repeated experiments, prefer `autoresearch`.

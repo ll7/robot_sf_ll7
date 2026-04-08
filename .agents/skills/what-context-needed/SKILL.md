@@ -40,6 +40,11 @@ minimal and action-oriented.
 4. Offer the next step
    - Say which skill or workflow would apply once the missing context is provided.
 
+## Output
+
+Ask for the smallest missing set of files, commands, artifacts, or decisions, and explain what each
+item will unblock.
+
 ## Guardrails
 
 - Do not invent missing facts.

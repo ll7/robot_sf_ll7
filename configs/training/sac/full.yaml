@@ -1,0 +1,52 @@
+# SAC full training configuration (3 000 000 steps)
+#
+# Purpose: Full production SAC training run targeting a checkpoint that is
+# competitive with or exceeds the PPO baseline on at least one scenario-matrix
+# subset.  Only run after the gate.yaml profile passes without error.
+#
+# Usage:
+#   uv run python scripts/training/train_sac_sb3.py \
+#     --config configs/training/sac/full.yaml
+#
+# Note: This profile requires at least ~8 GiB of RAM (replay buffer + env).
+
+policy_id: sac_full_v1
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 3000000
+seed: 42
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 3.0e-4
+  buffer_size: 300000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 5000
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0
+
+# W&B tracking (recommended for full runs to inspect reward curve)
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_full_v1
+  tags:
+    - sac
+    - full
+    - issue-790

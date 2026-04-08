@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Use `.specify/memory/constitution.md`, `docs/dev_guide.md` and `.github/copilot-instructions.md` to guide AI assistants.
+Use `AGENTS.md`, `.specify/memory/constitution.md`, and `docs/dev_guide.md` to guide AI assistants.
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -12,7 +12,9 @@ Treat the following files as the repository-native context stack for Codex-style
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
-  mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
+  mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.
+- `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
+  and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.

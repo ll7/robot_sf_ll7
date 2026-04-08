@@ -311,11 +311,19 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
-  - Canonical skills live in `.agents/skills/` and are mirrored at `.codex/skills/` for Codex
-    compatibility.
+  - Canonical AI assistant content lives in `.agents/`:
+    - Canonical skills live in `.agents/skills/`.
+    - `.agents/skills/` is mirrored at `.codex/skills/`, `.opencode/skills/`, and
+      `.claude/skills/`.
+    - `.agents/prompts/codex/` is mirrored at `.codex/prompts/`.
+    - `.agents/prompts/github/` is mirrored at `.github/prompts/`.
+    - `.agents/agents/github/` is mirrored at `.github/agents/`.
+    - `.agents/commands/gemini/` is mirrored at `.gemini/commands/`.
+  - Validate or repair supported mirrors with
+    `uv run python scripts/tools/sync_ai_config.py --check` or
+    `uv run python scripts/tools/sync_ai_config.py --fix`.
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
-    - `.github/copilot-instructions.md`
     - `AGENTS.md`
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.

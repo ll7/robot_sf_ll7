@@ -7,7 +7,7 @@ Tool-specific directories should point here when their formats allow it.
 
 | Canonical path | Compatibility path | Purpose |
 | --- | --- | --- |
-| `.agents/skills/` | `.codex/skills/`, `.opencode/skills/` | Repo-local workflow skills. |
+| `.agents/skills/` | `.codex/skills/`, `.opencode/skills/`, `.claude/skills/` | Repo-local workflow skills. |
 | `.agents/prompts/codex/` | `.codex/prompts/` | Codex prompt files. |
 | `.agents/prompts/github/` | `.github/prompts/` | GitHub prompt wrappers. |
 | `.agents/agents/github/` | `.github/agents/` | GitHub agent definitions. |

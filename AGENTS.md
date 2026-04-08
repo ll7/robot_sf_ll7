@@ -12,7 +12,7 @@ Treat the following files as the repository-native context stack for Codex-style
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
-  mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
+  mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.
 - `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.

@@ -55,7 +55,10 @@ def _capture_startup_summary(monkeypatch, tmp_path: Path) -> str:
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
-        messages.append(message.format(*args))
+        try:
+            messages.append(message.format(*args) if args else message)
+        except (IndexError, KeyError, ValueError):
+            messages.append(f"{message} | args={args}")
 
     monkeypatch.setattr(train_ppo.logger, "info", _fake_info)
     monkeypatch.setattr(train_ppo, "_host_memory_gib", lambda: 64.0)

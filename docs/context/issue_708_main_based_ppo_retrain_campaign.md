@@ -192,12 +192,81 @@ SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/policy_analysis
 
 ## Promotion Checklist
 
-- [ ] Full SLURM training run completed from the issue-708 config.
-- [ ] Best or final checkpoint path is recorded.
-- [ ] Policy analysis was run on the resulting checkpoint.
-- [ ] Benchmark-gate comparison was run against the maintained classic/francis surface.
-- [ ] Issue-596 atomic gate was run as a secondary sanity check.
-- [ ] Promotion recommendation is written conservatively using success/collision first and SNQI second.
+- [x] Full SLURM training run completed from the issue-708 config.
+- [x] Best or final checkpoint path is recorded.
+- [x] Policy analysis was run on the strongest downstream candidate checkpoint.
+- [x] Benchmark-gate comparison was intentionally skipped because policy analysis rejected promotion.
+- [x] Issue-596 atomic gate was intentionally skipped because there is no promotion candidate.
+- [x] Promotion recommendation is written conservatively using success/collision first and SNQI second.
+
+## Outcome Update: 2026-04-08
+
+The issue-708 PPO campaign family should not be promoted or extended with another expensive PPO
+continuation run without a new hypothesis.
+
+Observed W&B outcomes:
+
+- `#708` from-scratch run `l27j9bje`
+  (`ppo_expert_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch_20260328T153211`)
+  finished, but failed the benchmark-facing direction: final eval success `0.3000`,
+  collision `0.4667`, SNQI `-1.5286`; the best W&B checkpoint only reached success `0.6333`
+  and collision `0.3333`.
+- `#747` `num_envs=8` run `4edc7nyz`
+  (`ppo_expert_issue_747_br06_v10_carry_forward_num_envs_8_20260402T105719`)
+  finished with a weak final checkpoint: final eval success `0.7667`, collision `0.2333`,
+  SNQI `-0.4181`.
+- The `#747` W&B `best-success` model artifact
+  `ll7/robot_sf/ppo_expert_issue_747_br06_v10_carry_forward_num_envs_8-best-success:v1`
+  looked promising on the periodic eval surface at step `20000000`: success `0.9333`,
+  collision `0.0667`, SNQI `0.2965`; however, `meets_convergence` was still `false`.
+- `#748` `num_envs=14` run `a2p2t8vs`
+  (`ppo_expert_issue_748_br06_v10_carry_forward_num_envs_14_20260402T105719`)
+  finished with a weak final checkpoint: final eval success `0.8000`, collision `0.2000`,
+  SNQI `-0.2050`.
+- The `#748` best W&B artifact was weaker than `#747`: step `19000000`, success `0.9000`,
+  collision `0.1000`, SNQI `0.1130`.
+- No matching `#749` W&B run was found in `ll7/robot_sf` by issue tag, group, or run name.
+
+Because `#747` had the only potentially promotable W&B checkpoint, it was evaluated directly from
+the W&B model artifact rather than through `scripts/tools/evaluate_latest_ppo_candidate.py`.
+That wrapper resolves the run-level `model.zip`, which would select the weaker final checkpoint
+instead of the dedicated `best-success` artifact.
+
+Evaluation command:
+
+```bash
+SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/policy_analysis_run.py \
+  --training-config configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml \
+  --policy ppo \
+  --model-path output/model_cache/issue747_best_success_v1/model.zip \
+  --seed-set eval \
+  --max-seeds 3 \
+  --output output/benchmarks/issue747_best_success_eval/policy_analysis \
+  --video-output output/recordings/issue747_best_success_eval \
+  --all
+```
+
+Full policy-analysis result for `#747` best-success artifact:
+
+- episodes: `141`
+- success rate: `0.8298`
+- collision rate: `0.1702`
+- pedestrian collision rate: `0.0851`
+- obstacle collision rate: `0.0851`
+- termination reasons: `117` success, `24` collision
+- report: `output/benchmarks/issue747_best_success_eval/policy_analysis/report.md`
+- JSON report: `output/benchmarks/issue747_best_success_eval/policy_analysis/report.json`
+
+Interpretation:
+
+- `#747` passes the broad success sanity check but fails the collision gate and does not improve on
+  the promoted PPO reference recorded in `docs/training/ppo_num_envs_benchmark_imech156u.md`
+  (`0.8511` success, `0.1489` collision).
+- `#748` should not receive additional evaluation compute unless a new reason appears, because its
+  W&B best artifact was already weaker than `#747`.
+- `#749` should be treated as not executed or not synced until a concrete W&B run URL is provided.
+- Do not run the benchmark promotion gate for this branch now; the full policy-analysis surface is
+  enough to reject promotion.
 
 ## Decision Rule
 

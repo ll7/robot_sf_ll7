@@ -426,20 +426,30 @@ def build_seed_episode_rows(
     """
     grouped: dict[
         tuple[str, str, str, int],
-        list[tuple[int, str, dict[str, Any]]],
+        list[tuple[int, dict[str, Any], dict[str, Any]]],
     ] = defaultdict(list)
     for index, record in enumerate(records):
         flattened = flatten_metrics(record)
         scenario_id = str(record.get("scenario_id") or "unknown")
+        algo = str(
+            record.get("algo")
+            or _get_nested(record, "scenario_params.algo", default=None)
+            or _get_nested(record, "algorithm_metadata.algorithm", default="unknown")
+        )
         planner_key = str(
             record.get("planner_key")
             or _get_nested(record, "scenario_params.planner_key", default=None)
-            or record.get("algo")
-            or _get_nested(record, "scenario_params.algo", default="unknown")
+            or algo
         )
         kinematics = str(record.get("kinematics") or flattened.get("kinematics") or "unknown")
         seed = int(record.get("seed", -1))
-        grouped[(scenario_id, planner_key, kinematics, seed)].append((index, kinematics, flattened))
+        metadata = {
+            "scenario_id": scenario_id,
+            "planner_key": planner_key,
+            "kinematics": kinematics,
+            "algo": algo,
+        }
+        grouped[(scenario_id, planner_key, kinematics, seed)].append((index, metadata, flattened))
 
     rows: list[dict[str, Any]] = []
     for (_, _, _, _), group_rows in sorted(grouped.items()):
@@ -450,17 +460,14 @@ def build_seed_episode_rows(
                 int(item[0]),
             ),
         )
-        for repeat_index, (_, kinematics, flat) in enumerate(ordered):
+        for repeat_index, (_, metadata, flat) in enumerate(ordered):
             rows.append(
                 {
                     "episode_id": flat.get("episode_id"),
-                    "scenario_id": flat.get("scenario_id"),
-                    "planner_key": flat.get("planner_key")
-                    or _get_nested(flat, "scenario_params.planner_key", default=None)
-                    or flat.get("algo"),
-                    "kinematics": kinematics,
-                    "algo": flat.get("algo")
-                    or _get_nested(flat, "scenario_params.algo", default="unknown"),
+                    "scenario_id": metadata["scenario_id"],
+                    "planner_key": metadata["planner_key"],
+                    "kinematics": metadata["kinematics"],
+                    "algo": metadata["algo"],
                     "seed": flat.get("seed"),
                     "repeat_index": repeat_index,
                     "success": _coerce_float(flat.get("success")),

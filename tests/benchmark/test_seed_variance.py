@@ -158,6 +158,8 @@ def test_build_seed_episode_rows_assigns_repeat_index_deterministically() -> Non
 
     assert [row["episode_id"] for row in rows[:2]] == ["ep-a", "ep-b"]
     assert [row["repeat_index"] for row in rows[:2]] == [0, 1]
+    assert rows[0]["planner_key"] == "orca"
+    assert rows[0]["algo"] == "orca"
     assert rows[0]["collision"] == pytest.approx(1.0)
     assert rows[0]["near_miss"] == pytest.approx(1.0)
     assert rows[0]["time_to_goal"] == pytest.approx(0.90)
@@ -195,6 +197,30 @@ def test_build_seed_episode_rows_groups_repeat_index_by_kinematics() -> None:
     assert holonomic_rows[0]["success"] == pytest.approx(1.0)
     assert holonomic_rows[0]["time_to_goal"] == pytest.approx(0.20)
     assert [row["repeat_index"] for row in differential_rows[:2]] == [0, 1]
+
+
+def test_build_seed_episode_rows_uses_algorithm_metadata_fallback() -> None:
+    """Records with only algorithm metadata should still keep planner traceability."""
+    rows = build_seed_episode_rows(
+        [
+            {
+                "episode_id": "ep-meta",
+                "scenario_id": "classic_crossing_low",
+                "seed": 111,
+                "kinematics": "differential_drive",
+                "algorithm_metadata": {"algorithm": "orca"},
+                "metrics": {
+                    "success": 1.0,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "time_to_goal_norm": 0.20,
+                },
+            }
+        ]
+    )
+
+    assert rows[0]["planner_key"] == "orca"
+    assert rows[0]["algo"] == "orca"
 
 
 def test_build_statistical_sufficiency_rows_exposes_half_widths() -> None:

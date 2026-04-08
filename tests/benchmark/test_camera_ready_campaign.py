@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -554,6 +556,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "kinematics" in seed_episode_rows_csv
     assert "seed" in seed_episode_rows_csv
     assert "repeat_index" in seed_episode_rows_csv
+    seed_episode_rows = list(csv.DictReader(io.StringIO(seed_episode_rows_csv)))
+    assert seed_episode_rows
+    assert {row["planner_key"] for row in seed_episode_rows} == {"goal"}
+    assert {row["algo"] for row in seed_episode_rows} == {"goal"}
     statistical_sufficiency_payload = json.loads(
         (campaign_root / "reports" / "statistical_sufficiency.json").read_text(encoding="utf-8")
     )

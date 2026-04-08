@@ -230,29 +230,26 @@ def test_video_perf_helper_covers_warning_and_enforce_branches(
     """Perf-budget helper should warn on hard breaches and raise on enforced soft breaches."""
     record = {"episode_id": "ep-1", "scenario_id": "scenario-a", "seed": 9}
     video = {"renderer": "synthetic"}
-    captured: list[str] = []
-    token = runner_mod.logger.add(
-        lambda message: captured.append(str(message)), level="WARNING", format="{message}"
-    )
 
-    try:
-        monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.8")
-        monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.1")
-        monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.5")
-        monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
+    monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.8")
+    monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.1")
+    monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.5")
+    monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
+    runner_mod._annotate_and_check_video_perf(record, video, 0.0, 0.0, 1.0)
+
+    assert record["video"]["overhead_budget_status"] == "hard_breach"
+    assert record["video"]["overhead_budget_enforced"] is False
+
+    monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.2")
+    monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
+    monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
+    with pytest.raises(RuntimeError, match="video overhead soft breach"):
         runner_mod._annotate_and_check_video_perf(record, video, 0.0, 0.0, 1.0)
 
-        monkeypatch.setenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO", "0.2")
-        monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
-        monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
-        with pytest.raises(RuntimeError, match="video overhead soft breach"):
-            runner_mod._annotate_and_check_video_perf(record, video, 0.0, 0.0, 1.0)
-    finally:
-        runner_mod.logger.remove(token)
-
-    assert any("Video overhead hard breach but continue" in line for line in captured)
     assert record["video"]["encode_seconds"] >= 0.0
     assert record["video"]["overhead_ratio"] == pytest.approx(0.2)
+    assert record["video"]["overhead_budget_status"] == "soft_breach"
+    assert record["video"]["overhead_budget_enforced"] is True
 
 
 def test_video_perf_helper_ignores_empty_override_env(monkeypatch: pytest.MonkeyPatch) -> None:

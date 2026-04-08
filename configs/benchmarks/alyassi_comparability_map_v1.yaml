@@ -6,6 +6,7 @@ scenario_family_mapping:
   classic_doorway: doorway
   classic_t_intersection: intersection
   classic_cross_trap: intersection
+  classic_crossing: intersection
   classic_urban_crossing: intersection
   classic_merging: merge
   classic_overtaking: overtaking

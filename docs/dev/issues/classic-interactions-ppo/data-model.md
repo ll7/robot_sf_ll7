@@ -37,7 +37,7 @@ The split booleans (success/collision/timeout) enable downstream aggregation wit
 
 ```json
 {
-  "scenario": "classic_crossing_low",
+  "scenario": "classic_cross_trap_low",
   "seed": 101,
   "steps": 342,
   "outcome": "success",

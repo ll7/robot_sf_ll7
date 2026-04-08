@@ -102,7 +102,7 @@ Config:
 
 Scenario subset:
 
-- `classic_crossing_low`
+- `classic_cross_trap_low`
 - `classic_head_on_corridor_low`
 - `classic_overtaking_low`
 - `classic_t_intersection_low`

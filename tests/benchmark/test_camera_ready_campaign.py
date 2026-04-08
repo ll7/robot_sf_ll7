@@ -652,7 +652,7 @@ def test_load_seed_variability_pilot_config_and_scenarios() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert [scenario["name"] for scenario in scenarios] == [
-        "classic_crossing_low",
+        "classic_cross_trap_low",
         "classic_head_on_corridor_low",
         "classic_overtaking_low",
         "classic_t_intersection_low",

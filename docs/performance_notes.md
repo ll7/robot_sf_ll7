@@ -53,8 +53,8 @@ a tracked baseline snapshot (`configs/benchmarks/perf_baseline_classic_cold_warm
 ```bash
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   uv run python -m robot_sf.benchmark.perf_cold_warm \
-    --scenario-config configs/scenarios/archetypes/classic_crossing.yaml \
-    --scenario-name classic_crossing_low \
+    --scenario-config configs/scenarios/archetypes/classic_cross_trap.yaml \
+    --scenario-name classic_cross_trap_low \
     --episode-steps 64 \
     --cold-runs 1 \
     --warm-runs 2 \

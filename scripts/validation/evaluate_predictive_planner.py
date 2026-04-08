@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scenario-matrix",
         type=Path,
-        default=Path("configs/scenarios/sets/classic_crossing_subset.yaml"),
+        default=Path("configs/scenarios/sets/classic_cross_trap_subset.yaml"),
     )
     parser.add_argument(
         "--schema-path",

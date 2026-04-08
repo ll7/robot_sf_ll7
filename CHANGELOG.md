@@ -87,9 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Legacy `scripts/training_ppo.py` invocations now fail closed with the canonical
-  `scripts/training/train_ppo.py --config ...` migration path, while docs clarify that
-  `evaluation.step_schedule` controls PPO evaluation cadence and `frequency_episodes` is ignored.
+* Legacy `scripts/training_ppo.py` invocations now fail closed and point to the canonical PPO
+  training workflow docs.
 * Restored the existing `socnav_sacadrl` CLI choice in `scripts/tools/policy_analysis_run.py` after the issue-768 ORCA variant additions, preventing a regression where the builder still supported SA-CADRL but the parser rejected it.
 * Paper results handoff export now fails closed on malformed metadata, validates JSONL rows as objects while streaming them, aggregates planner rows per run to reduce peak memory pressure, and writes standards-compliant JSON/CSV artifacts without permissive `NaN` serialization.
 

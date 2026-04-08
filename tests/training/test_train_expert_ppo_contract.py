@@ -47,11 +47,11 @@ def test_legacy_training_ppo_entrypoint_fails_with_migration_command() -> None:
     assert result.returncode == 2
     assert "scripts/training/train_ppo.py" in result.stderr
     assert "--config" in result.stderr
-    assert "frequency_episodes" in result.stderr
+    assert "docs/training/ppo_training_workflow.md" in result.stderr
 
 
-def test_log_startup_summary_reports_run_critical_settings(monkeypatch, tmp_path: Path) -> None:
-    """Startup summary should log reproducibility-critical resolved PPO settings."""
+def _capture_startup_summary(monkeypatch, tmp_path: Path) -> str:
+    """Capture startup summary logs for focused contract assertions."""
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
@@ -92,16 +92,34 @@ def test_log_startup_summary_reports_run_critical_settings(monkeypatch, tmp_path
         worker_mode="subproc",
     )
 
-    summary = "\n".join(messages)
+    return "\n".join(messages)
+
+
+def test_log_startup_summary_reports_run_identity(monkeypatch, tmp_path: Path) -> None:
+    """Startup summary should report policy, config, and training horizon identity."""
+    summary = _capture_startup_summary(monkeypatch, tmp_path)
+
     assert "Training startup summary" in summary
     assert "policy_id=ppo_startup_summary_test" in summary
     assert "config_path=" in summary
     assert "total_timesteps=120000" in summary
+
+
+def test_log_startup_summary_reports_training_settings(monkeypatch, tmp_path: Path) -> None:
+    """Startup summary should report resolved reward, worker, and resume settings."""
+    summary = _capture_startup_summary(monkeypatch, tmp_path)
+
     assert "reward_profile=route_completion_v3" in summary
     assert "requested_num_envs=auto_stable" in summary
     assert "num_envs=3" in summary
     assert "worker_mode=subproc" in summary
     assert "model_id:ppo_registry_source" in summary
+
+
+def test_log_startup_summary_reports_num_envs_resolution(monkeypatch, tmp_path: Path) -> None:
+    """Startup summary should include the auto num-envs resolution explanation."""
+    summary = _capture_startup_summary(monkeypatch, tmp_path)
+
     assert "num_envs resolution" in summary
     assert "mode=auto_stable" in summary
 

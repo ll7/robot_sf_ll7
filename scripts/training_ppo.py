@@ -5,13 +5,10 @@ from __future__ import annotations
 import sys
 
 _MIGRATION_MESSAGE = """\
-scripts/training_ppo.py has been removed from the supported PPO training workflow.
+scripts/training_ppo.py is no longer supported.
 
-Use the config-driven canonical entrypoint instead:
-  uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
-
-The canonical trainer requires evaluation.step_schedule for checkpoint cadence.
-Legacy evaluation.frequency_episodes values are ignored when present.
+Use scripts/training/train_ppo.py with --config for PPO training.
+See docs/training/ppo_training_workflow.md for migration details.
 """
 
 

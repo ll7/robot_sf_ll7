@@ -27,6 +27,11 @@ evaluation cadence in training timesteps. `evaluation.frequency_episodes` is dep
 when present. It may remain in older YAML files for compatibility, but it does not control current
 checkpoint cadence.
 
+`frequency_episodes` was episode-count based, which made cadence harder to compare across scenario
+mixes, variable episode lengths, and worker-count changes. Use `evaluation.step_schedule` instead so
+checkpointing and evaluation are tied to the same timestep surface that Stable-Baselines3 and the
+training manifests report.
+
 ## Startup Summary
 
 At startup, the canonical trainer logs the resolved run-critical settings needed for provenance:

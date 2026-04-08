@@ -57,14 +57,19 @@ After a successful rerun, record freshness evidence:
      linked follow-up issue.
    - If the issue is only partially done, do not open the PR yet.
 
-3. Verify readiness freshness
+3. Sync with latest main before opening the PR
+   - `git fetch origin main`
+   - Merge or rebase the latest `origin/main` into the feature branch before PR creation.
+   - Treat any readiness result from before the latest-main sync as stale.
+
+4. Verify readiness freshness after the sync
    - Run:
      - `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main`
    - If the helper exits non-zero or returns non-fresh JSON, rerun:
      - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
      - `uv run python scripts/dev/pr_ready_freshness.py write --base-ref origin/main`
 
-4. Build the PR body from the repository template
+5. Build the PR body from the repository template
    - Start from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - Fill sections with repository-specific evidence:
      - summary of implementation,
@@ -75,18 +80,19 @@ After a successful rerun, record freshness evidence:
      - follow-up issues if any.
    - Do not remove sections; keep the template structure intact.
 
-5. Open the draft PR
+6. Open the draft PR
    - Preferred command:
      - `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`
    - Use a conventional commit/PR title prefix such as `feat:`, `fix:`, or `docs:`.
 
-6. Close the loop
+7. Close the loop
    - Keep the parent issue open while the PR is draft unless repository policy says otherwise.
    - Comment on the issue or PR when a follow-up item was intentionally deferred.
 
 ## Required Evidence
 
 - Current issue scope reviewed against the actual branch diff.
+- Latest `origin/main` integrated into the feature branch before PR creation.
 - Fresh readiness proof from either:
   - a passing `pr_ready_freshness.py status`, or
   - a new `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` run plus a new stamp.

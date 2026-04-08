@@ -78,7 +78,13 @@ Do not present a change as complete until the proof is recorded in the validatio
 issue follow-up.
 
 ## Commit & Pull Request Workflow
-Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`). Each PR should summarize intent, reference related issues, and list the commands you ran. Include screenshots or short GIFs when UI or playback output changes, and note any new assets placed under `maps/` or `model/`. Ensure CI stays green by syncing with `main` and resolving lint or test failures locally before requesting review.
+Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`).
+Each PR should summarize intent, reference related issues, and list the commands you ran. Include
+screenshots or short GIFs when UI or playback output changes, and note any new assets placed under
+`maps/` or `model/`. Before opening a PR, fetch the latest `origin/main`, merge or rebase it into
+the feature branch, and then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; readiness
+proof from before that sync is stale and must not be used for PR creation. Ensure CI stays green by
+resolving lint or test failures locally before requesting review.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

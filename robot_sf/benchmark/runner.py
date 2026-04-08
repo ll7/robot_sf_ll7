@@ -603,7 +603,8 @@ def _annotate_and_check_video_perf(
 ) -> None:
     """Annotate manifest with encode timing and enforce optional budgets.
 
-    Adds keys: encode_seconds, overhead_ratio.
+    Adds keys: encode_seconds, overhead_ratio, overhead_budget_status,
+    overhead_budget_enforced, overhead_soft_threshold, and overhead_hard_threshold.
     Budget env vars:
       - ROBOT_SF_VIDEO_OVERHEAD_SOFT (default 0.10)
       - ROBOT_SF_VIDEO_OVERHEAD_HARD (default 0.50)
@@ -624,6 +625,17 @@ def _annotate_and_check_video_perf(
     soft = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.10"))
     hard = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.50"))
     enforce = bool(os.getenv("ROBOT_SF_PERF_ENFORCE"))
+    if overhead_ratio > hard:
+        budget_status = "hard_breach"
+    elif overhead_ratio > soft:
+        budget_status = "soft_breach"
+    else:
+        budget_status = "ok"
+    vid["overhead_budget_status"] = budget_status
+    vid["overhead_budget_enforced"] = enforce
+    vid["overhead_soft_threshold"] = soft
+    vid["overhead_hard_threshold"] = hard
+
     if overhead_ratio > hard:
         if enforce:
             raise RuntimeError(

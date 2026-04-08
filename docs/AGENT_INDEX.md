@@ -20,9 +20,9 @@ entry points, contracts, and where to change behavior.
 - `robot_sf/benchmark/full_classic/orchestrator.py` - programmatic full-classic runner.
 - `scripts/tools/run_camera_ready_benchmark.py` - config-driven camera-ready campaign runner; canonical path for paper-facing runs.
 - `scripts/tools/policy_analysis_run.py` - policy sweep with per-scenario seed-holdout support.
-- `scripts/tools/analyze_camera_ready_campaign.py` - post-run campaign diagnostics and summary.
 
-## Paper Export Entry Points
+## Benchmark Analysis & Export
+- `scripts/tools/analyze_camera_ready_campaign.py` - post-run campaign diagnostics and summary.
 - `scripts/tools/paper_results_handoff.py` - export interval-inclusive paper Results rows with bootstrap CIs from a frozen campaign bundle.
 - `robot_sf/benchmark/seed_variance.py` - per-scenario/per-planner seed-variability analysis module (used by paper issue #74 pilot).
 - `scripts/tools/benchmark_publication_bundle.py` - package a campaign into a DOI-ready publication bundle.

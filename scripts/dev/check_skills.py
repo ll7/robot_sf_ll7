@@ -9,12 +9,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / ".agents" / "skills"
 README = SKILLS_ROOT / "README.md"
+GENERIC_REFERENCE_PREFIXES = ("docs/config", "docs/provenance", "tests/checks")
 PATH_PATTERN = re.compile(
-    r"`((?:\.agents|\.codex|\.opencode|docs|scripts|configs|tests|\.github)/[^`]+)`"
+    r"`[^`]*?((?:AGENTS\.md|code_review\.md|"
+    r"(?:\.agent|\.specify|\.agents|\.codex|\.opencode|docs|scripts|configs|tests|"
+    r"\.github)/[^\s`]+))[^`]*?`"
 )
 
 
 def _frontmatter_value(lines: list[str], key: str, path: Path) -> str:
+    """Return a frontmatter value from the first few lines or raise with the file path."""
     prefix = f"{key}: "
     for line in lines[:10]:
         if line.startswith(prefix):
@@ -25,29 +29,52 @@ def _frontmatter_value(lines: list[str], key: str, path: Path) -> str:
 def _validate_skill_metadata(
     path: Path,
     readme_text: str,
+    errors: list[str],
     missing_from_readme: list[str],
     directory_mismatches: list[str],
 ) -> str:
-    lines = path.read_text(encoding="utf-8").splitlines()
+    """Validate one skill file, record index drift, and return its text for path checks."""
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
     if not lines or lines[0] != "---":
-        raise AssertionError(f"{path}: missing opening YAML frontmatter marker")
-    name = _frontmatter_value(lines, "name", path)
-    _frontmatter_value(lines, "description", path)
+        errors.append(f"{path}: missing opening YAML frontmatter marker")
+        return text
+    try:
+        closing_idx = lines[1:].index("---") + 1
+    except ValueError:
+        errors.append(f"{path}: missing closing YAML frontmatter marker")
+        return text
+    frontmatter_lines = lines[: closing_idx + 1]
+    try:
+        name = _frontmatter_value(frontmatter_lines, "name", path)
+        _frontmatter_value(frontmatter_lines, "description", path)
+    except AssertionError as exc:
+        errors.append(str(exc))
+        return text
     if f"`{name}`" not in readme_text:
         missing_from_readme.append(name)
     if path.parent.name != name:
         directory_mismatches.append(f"{path.parent.name} != {name}")
-    return path.read_text(encoding="utf-8")
+    return text
 
 
 def _reference_path(match: str) -> str:
-    return match.split(maxsplit=1)[0].rstrip(".,:;)")
+    """Extract the filesystem path token from a matched backtick snippet."""
+    return match.split(maxsplit=1)[0].split("#", maxsplit=1)[0].rstrip(".,:;)")
+
+
+def _is_generic_reference(reference: str) -> bool:
+    """Return true for prose placeholders that name a path category, not a concrete path."""
+    return reference in GENERIC_REFERENCE_PREFIXES
 
 
 def _find_broken_paths(path: Path, text: str) -> list[str]:
+    """Return repo-relative path references from PATH_PATTERN that do not exist."""
     broken_paths: list[str] = []
     for match in PATH_PATTERN.findall(text):
         reference = _reference_path(match)
+        if _is_generic_reference(reference):
+            continue
         if not (REPO_ROOT / reference).exists():
             broken_paths.append(f"{path.relative_to(REPO_ROOT)} -> {reference}")
     return broken_paths
@@ -62,13 +89,20 @@ def main() -> int:
 
     missing_from_readme: list[str] = []
     directory_mismatches: list[str] = []
+    metadata_errors: list[str] = []
     broken_paths = _find_broken_paths(README, readme_text)
     for path in skill_paths:
         text = _validate_skill_metadata(
-            path, readme_text, missing_from_readme, directory_mismatches
+            path,
+            readme_text,
+            metadata_errors,
+            missing_from_readme,
+            directory_mismatches,
         )
         broken_paths.extend(_find_broken_paths(path, text))
 
+    if metadata_errors:
+        raise AssertionError("Invalid skill metadata: " + "; ".join(sorted(metadata_errors)))
     if missing_from_readme:
         raise AssertionError(
             "Skills missing from .agents/skills/README.md: "

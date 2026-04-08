@@ -6,14 +6,15 @@ read the specific `SKILL.md` before applying a skill.
 ## Selection Guide
 
 - Not sure which skill applies: `skill-picker`
-- Need to implement an issue end-to-end: `gh-issue-autopilot`
-- Need to address PR review comments: `gh-pr-comment-fixer`
-- Need to open a PR from a ready branch: `gh-pr-opener`
-- Need to verify a branch against `origin/main`: `implementation-verification`
-- Need only the standard gate: `pr-ready-check`
-- Need benchmark-sensitive review: `review-benchmark-change`
-- Need docs updated after code changes: `update-docs-on-code-change`
-- Need repository context before editing: `context-map`, `benchmark-overview`, or `experiment-context`
+- Implement an issue end-to-end: `gh-issue-autopilot`
+- Address PR review comments: `gh-pr-comment-fixer`
+- Open a PR from a ready branch: `gh-pr-opener`
+- Verify a branch against `origin/main`: `implementation-verification`
+- Run only the standard gate: `pr-ready-check`
+- Review benchmark-sensitive changes: `review-benchmark-change`
+- Update docs after code changes: `update-docs-on-code-change`
+- Gather repository context before editing: `context-map`, `benchmark-overview`, or
+  `experiment-context`
 
 ## Skill Routing
 

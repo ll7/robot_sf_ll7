@@ -158,6 +158,8 @@ def test_build_seed_episode_rows_assigns_repeat_index_deterministically() -> Non
 
     assert [row["episode_id"] for row in rows[:2]] == ["ep-a", "ep-b"]
     assert [row["repeat_index"] for row in rows[:2]] == [0, 1]
+    assert rows[0]["planner_key"] == "orca"
+    assert rows[0]["algo"] == "orca"
     assert rows[0]["collision"] == pytest.approx(1.0)
     assert rows[0]["near_miss"] == pytest.approx(1.0)
     assert rows[0]["time_to_goal"] == pytest.approx(0.90)

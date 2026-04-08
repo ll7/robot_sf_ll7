@@ -32,17 +32,6 @@ It is everyones guide on how to use this repository effectively.
 - For any changes that affect users, update the `CHANGELOG.md` file.
 - Source the environment before using python or uv `source .venv/bin/activate`.
 
-## Recent Changes
-- 343-telemetry-viz: Added Python 3.11 + Pygame/SDL, matplotlib (agg), NumPy, robot_sf.telemetry (manifest writer, sampler), Loguru
-
-- 270-imitation-report: Added Python 3.11 (existing uv-managed environment)
-- 001-map-verification: Added Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)
-
-## Active Technologies
-- Python 3.11 + Pygame/SDL, matplotlib (agg), NumPy, robot_sf.telemetry (manifest writer, sampler), Loguru (343-telemetry-viz)
-- Append-only JSONL telemetry + PNG/SVG summary artifacts under `output/` (respecting artifact policy) (343-telemetry-viz)
-
-
 ## Test Failure Evaluation
 
 **When encountering test failures, always evaluate test significance before fixing:**

@@ -431,11 +431,15 @@ def build_seed_episode_rows(
     for index, record in enumerate(records):
         flattened = flatten_metrics(record)
         scenario_id = str(record.get("scenario_id") or "unknown")
+        algo = str(
+            record.get("algo")
+            or _get_nested(record, "scenario_params.algo", default=None)
+            or _get_nested(record, "algorithm_metadata.algorithm", default="unknown")
+        )
         planner_key = str(
             record.get("planner_key")
             or _get_nested(record, "scenario_params.planner_key", default=None)
-            or record.get("algo")
-            or _get_nested(record, "scenario_params.algo", default="unknown")
+            or algo
         )
         kinematics = str(record.get("kinematics") or flattened.get("kinematics") or "unknown")
         seed = int(record.get("seed", -1))
@@ -443,9 +447,7 @@ def build_seed_episode_rows(
             "scenario_id": scenario_id,
             "planner_key": planner_key,
             "kinematics": kinematics,
-            "algo": str(
-                record.get("algo") or _get_nested(record, "scenario_params.algo", default="unknown")
-            ),
+            "algo": algo,
         }
         grouped[(scenario_id, planner_key, kinematics, seed)].append((index, metadata, flattened))
 

@@ -38,6 +38,11 @@ justified.
    - Run the smallest meaningful validation first.
    - Expand only if the change surface demands it.
 
+## Output
+
+Always report the reviewed surface, the specific issue found, the narrow change made, and the
+validation command/result.
+
 ## Guardrails
 
 - If the task is pure cleanup, use `clean-up`.

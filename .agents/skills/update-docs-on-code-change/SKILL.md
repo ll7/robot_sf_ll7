@@ -38,6 +38,11 @@ The goal is to keep docs discoverable, concise, and accurate rather than to rewr
    - Check that referenced files and commands still exist.
    - If the change affects discoverability, add or update a test.
 
+## Output
+
+Always report the code behavior that changed, docs updated, references verified, and any docs risk
+left out of scope.
+
 ## Guardrails
 
 - Do not add a new doc when an existing doc can be corrected.

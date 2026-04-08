@@ -47,6 +47,11 @@ the right proof, and making the result easy to review.
    - Run the selected checks.
    - Record what passed, what remains uncertain, and any follow-up issue needed.
 
+## Output
+
+Always report objective, risk class, proof chosen, validation result, and residual risk or
+follow-up issue.
+
 ## Guardrails
 
 - Do not treat fallback or degraded behavior as a success unless the task explicitly measures it.

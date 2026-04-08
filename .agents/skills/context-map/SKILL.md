@@ -46,6 +46,11 @@ and checks that matter most so the next step is low-risk and well-scoped.
    - `Risks`
    - `Open questions`
 
+## Output
+
+Always include the goal, relevant files/docs, likely commands, risks, and recommended next skill or
+execution path.
+
 ## Guardrails
 
 - Do not edit files in this skill.

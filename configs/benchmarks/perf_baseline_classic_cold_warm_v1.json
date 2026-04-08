@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "suite": "classic-interactions-cold-warm-v1",
-  "scenario": "classic_crossing_low",
+  "scenario": "classic_cross_trap_low",
   "notes": "Conservative baseline snapshot for CI regression checks. Tune via nightly artifacts if needed.",
   "cold": {
     "median": {

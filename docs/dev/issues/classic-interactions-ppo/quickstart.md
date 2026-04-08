@@ -33,7 +33,7 @@ If `moviepy` or `ffmpeg` missing the code logs a skip message and continues.
 ## 4. Select Scenario
 
 ```python
-run_demo(scenario_name="classic_crossing_low", max_episodes=3)
+run_demo(scenario_name="classic_cross_trap_low", max_episodes=3)
 ```
 
 ## 5. Programmatic Use

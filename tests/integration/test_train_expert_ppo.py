@@ -124,7 +124,7 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
                     "profile_strategy": "cycle",
                     "weights": {
                         "classic_doorway_low": 3.0,
-                        "classic_crossing_medium": 2.0,
+                        "classic_cross_trap_medium": 2.0,
                     },
                     "exclude_scenarios": ["francis2023_robot_crowding"],
                 },
@@ -160,7 +160,7 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
     assert config.scenario_sampling["profile_strategy"] == "cycle"
     assert config.scenario_sampling["weights"] == {
         "classic_doorway_low": 3.0,
-        "classic_crossing_medium": 2.0,
+        "classic_cross_trap_medium": 2.0,
     }
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
 

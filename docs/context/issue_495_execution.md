@@ -51,7 +51,7 @@ Artifact-backed findings:
 - The cold-path diagnostics were startup-only (`env_create_sec` / `first_step_sec`) and already
   matched the intended advisory semantics from the underlying cold/warm layer.
 - The top-level `perf_trend` failure came from the historical comparison for
-  `classic_crossing_low` warm metrics:
+  `classic_cross_trap_low` warm metrics:
   - `warm.first_step_sec`
   - `warm.episode_sec`
   - `warm.steps_per_sec`

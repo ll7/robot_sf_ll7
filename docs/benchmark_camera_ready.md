@@ -336,7 +336,7 @@ Recommended pilot for downstream manuscript issue `amv_benchmark_paper#74` :
 
 * benchmark config: `configs/benchmarks/paper_seed_variability_pilot_v1.yaml`
 * scenarios:
-  + `classic_crossing_low`
+  + `classic_cross_trap_low`
   + `classic_head_on_corridor_low`
   + `classic_overtaking_low`
   + `classic_t_intersection_low`

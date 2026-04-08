@@ -1,13 +1,10 @@
-# Deprecated compatibility wrapper for issue #594.
-# Prefer configs/training/benchmark_orca_classic_cross_trap_subset.yaml in new runs.
-#
 # Benchmark helper config for SocNav ORCA analysis runs.
 # Usage:
 #   uv run python scripts/tools/policy_analysis_run.py \
-#     --training-config configs/training/benchmark_orca_classic_crossing_subset.yaml \
+#     --training-config configs/training/benchmark_orca_classic_cross_trap_subset.yaml \
 #     --policy socnav_orca
-policy_id: socnav_orca_classic_crossing_subset
-scenario_config: ../scenarios/sets/classic_crossing_subset.yaml
+policy_id: socnav_orca_classic_cross_trap_subset
+scenario_config: ../scenarios/sets/classic_cross_trap_subset.yaml
 num_envs: 1
 worker_mode: auto
 seeds:

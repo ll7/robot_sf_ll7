@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import load_scenarios
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_yaml(path: Path, content: str) -> None:
@@ -150,6 +147,28 @@ select_scenarios:
 
     with pytest.raises(ValueError, match="Unknown select_scenarios entry"):
         load_scenarios(manifest)
+
+
+def test_classic_interactions_uses_canonical_cross_trap_names() -> None:
+    """The default classic suite should use issue-594 canonical cross-trap IDs."""
+    scenarios = load_scenarios(Path("configs/scenarios/classic_interactions.yaml"))
+    names = {scenario["name"] for scenario in scenarios}
+
+    assert {
+        "classic_cross_trap_low",
+        "classic_cross_trap_medium",
+        "classic_cross_trap_high",
+    }.issubset(names)
+    assert "classic_crossing_low" not in names
+
+
+def test_legacy_classic_crossing_manifest_still_loads_aliases() -> None:
+    """Legacy crossing IDs should keep working through the deprecated alias manifest."""
+    scenarios = load_scenarios(Path("configs/scenarios/sets/classic_crossing_subset.yaml"))
+    names = [scenario["name"] for scenario in scenarios]
+
+    assert names == ["classic_crossing_low", "classic_crossing_high"]
+    assert scenarios[0]["metadata"]["deprecated_alias_for"] == "classic_cross_trap_low"
 
 
 def test_load_scenarios_detects_include_cycles(tmp_path: Path) -> None:

@@ -39,12 +39,12 @@ Manifest files use `includes` (or `include` / `scenario_files`) to combine
 per-scenario and per-archetype YAMLs into a single scenario list.
 
 ```yaml
-# configs/scenarios/sets/classic_crossing_subset.yaml
+# configs/scenarios/sets/classic_cross_trap_subset.yaml
 includes:
-  - ../archetypes/classic_crossing.yaml
+  - ../archetypes/classic_cross_trap.yaml
 select_scenarios:
-  - classic_crossing_low
-  - classic_crossing_high
+  - classic_cross_trap_low
+  - classic_cross_trap_high
 map_search_paths:
   - ../../../maps/svg_maps
 ```
@@ -67,8 +67,8 @@ rebased relative to the manifest root so scenarios stay portable.
 
 ```yaml
 scenarios:
-  - name: crossing_demo
-    map_id: classic_crossing
+  - name: cross_trap_demo
+    map_id: classic_cross_trap
 ```
 
 If both `map_id` and `map_file` are provided, `map_id` takes precedence (with a
@@ -80,14 +80,14 @@ regenerate the registry with `scripts/tools/generate_map_registry.py`.
 Point training/analysis configs at a manifest (or a legacy combined file):
 
 ```yaml
-scenario_config: ../scenarios/sets/classic_crossing_subset.yaml
+scenario_config: ../scenarios/sets/classic_cross_trap_subset.yaml
 ```
 
 Example:
 
 ```bash
 uv run python scripts/tools/policy_analysis_run.py \
-  --training-config configs/training/benchmark_orca_classic_crossing_subset.yaml \
+  --training-config configs/training/benchmark_orca_classic_cross_trap_subset.yaml \
   --policy socnav_orca
 ```
 

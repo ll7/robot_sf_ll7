@@ -1,4 +1,4 @@
-"""Scenario sampling utilities for training across multiple scenarios."""
+"""Scenario sampling utilities for config-first training runs."""
 
 from __future__ import annotations
 
@@ -19,12 +19,8 @@ if TYPE_CHECKING:
 def scenario_id_from_definition(scenario: Mapping[str, Any], *, index: int) -> str:
     """Derive a stable scenario identifier from a scenario definition.
 
-    Args:
-        scenario: Scenario mapping loaded from YAML.
-        index: Fallback index for error diagnostics.
-
     Returns:
-        str: Stable scenario identifier.
+        Stable scenario identifier for logging and sampling.
     """
     scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or "").strip()
     if not scenario_id:
@@ -32,21 +28,21 @@ def scenario_id_from_definition(scenario: Mapping[str, Any], *, index: int) -> s
     return scenario_id
 
 
-def _spaces_compatible(
+def _spaces_compatible(  # noqa: C901
     base: spaces.Space,
     other: spaces.Space,
     *,
     allow_box_bounds_mismatch: bool,
 ) -> bool:
-    """Check whether two spaces are compatible for vectorized training.
-
-    Returns:
-        True when spaces are compatible for vectorized training.
-    """
+    """Return whether two spaces can safely share one vectorized env contract."""
     if type(base) is not type(other):
         return False
     if isinstance(base, spaces.Box):
-        return _box_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
+        if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):
+            return False
+        if allow_box_bounds_mismatch:
+            return True
+        return np.array_equal(base.low, other.low) and np.array_equal(base.high, other.high)
     if isinstance(base, spaces.Discrete):
         return base.n == other.n
     if isinstance(base, spaces.MultiDiscrete):
@@ -54,76 +50,28 @@ def _spaces_compatible(
     if isinstance(base, spaces.MultiBinary):
         return base.n == other.n
     if isinstance(base, spaces.Dict):
-        return _dict_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
+        if list(base.spaces.keys()) != list(other.spaces.keys()):
+            return False
+        return all(
+            _spaces_compatible(
+                base.spaces[key],
+                other.spaces[key],
+                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+            )
+            for key in base.spaces
+        )
     if isinstance(base, spaces.Tuple):
-        return _tuple_compatible(base, other, allow_box_bounds_mismatch=allow_box_bounds_mismatch)
+        if len(base.spaces) != len(other.spaces):
+            return False
+        return all(
+            _spaces_compatible(
+                base_space,
+                other_space,
+                allow_box_bounds_mismatch=allow_box_bounds_mismatch,
+            )
+            for base_space, other_space in zip(base.spaces, other.spaces, strict=False)
+        )
     return base == other
-
-
-def _box_compatible(
-    base: spaces.Box,
-    other: spaces.Box,
-    *,
-    allow_box_bounds_mismatch: bool,
-) -> bool:
-    """Check compatibility for Box spaces.
-
-    Returns:
-        True when Box spaces are compatible.
-    """
-    if type(base) is not type(other):
-        return False
-    if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):
-        return False
-    if allow_box_bounds_mismatch:
-        return True
-    return np.array_equal(base.low, other.low) and np.array_equal(base.high, other.high)
-
-
-def _dict_compatible(
-    base: spaces.Dict,
-    other: spaces.Dict,
-    *,
-    allow_box_bounds_mismatch: bool,
-) -> bool:
-    """Check compatibility for Dict spaces.
-
-    Returns:
-        True when Dict spaces are compatible.
-    """
-    if list(base.spaces.keys()) != list(other.spaces.keys()):
-        return False
-    return all(
-        _spaces_compatible(
-            base.spaces[key],
-            other.spaces[key],
-            allow_box_bounds_mismatch=allow_box_bounds_mismatch,
-        )
-        for key in base.spaces
-    )
-
-
-def _tuple_compatible(
-    base: spaces.Tuple,
-    other: spaces.Tuple,
-    *,
-    allow_box_bounds_mismatch: bool,
-) -> bool:
-    """Check compatibility for Tuple spaces.
-
-    Returns:
-        True when Tuple spaces are compatible.
-    """
-    if len(base.spaces) != len(other.spaces):
-        return False
-    return all(
-        _spaces_compatible(
-            base_space,
-            other_space,
-            allow_box_bounds_mismatch=allow_box_bounds_mismatch,
-        )
-        for base_space, other_space in zip(base.spaces, other.spaces, strict=False)
-    )
 
 
 @dataclass(slots=True)
@@ -143,33 +91,28 @@ class ScenarioSampler:
     _cycle_index: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        """Initialize scenario index, filters, and RNG."""
+        """Initialize scenario filters and sampling state."""
         scenario_ids, scenario_map = self._index_scenarios()
         filtered_ids = self._apply_filters(scenario_ids)
         if not filtered_ids:
             raise ValueError("Scenario sampler has no scenarios after filtering.")
-
         self._scenario_ids = tuple(filtered_ids)
         self._scenario_map = scenario_map
         self._rng = np.random.default_rng(self.seed)
         self._weights_array = self._build_weight_array()
-
         if self.strategy not in {"random", "cycle"}:
             raise ValueError(f"Unknown sampling strategy: {self.strategy}")
 
-        logger.debug(
-            "ScenarioSampler initialized scenarios={} strategy={} include={} exclude={}",
-            len(self._scenario_ids),
-            self.strategy,
-            list(self.include_scenarios),
-            list(self.exclude_scenarios),
-        )
+    @property
+    def scenario_ids(self) -> tuple[str, ...]:
+        """Return the filtered scenario identifiers in stable order."""
+        return self._scenario_ids
 
     def _index_scenarios(self) -> tuple[list[str], dict[str, Mapping[str, Any]]]:
-        """Build ordered scenario ids and mapping.
+        """Build ordered scenario ids and lookup map.
 
         Returns:
-            Tuple of (scenario_ids, scenario_map).
+            Scenario ids in declaration order and an id-to-definition lookup.
         """
         scenario_ids: list[str] = []
         scenario_map: dict[str, Mapping[str, Any]] = {}
@@ -183,42 +126,35 @@ class ScenarioSampler:
         """Filter scenarios based on include/exclude rules.
 
         Returns:
-            Filtered scenario id list.
+            Filtered scenario ids in declaration order.
         """
+        known = {name.lower() for name in scenario_ids}
         include_set = {name.lower() for name in self.include_scenarios}
         exclude_set = {name.lower() for name in self.exclude_scenarios}
-        self._validate_filters(scenario_ids, include_set, exclude_set)
-        filtered_ids: list[str] = []
-        for sid in scenario_ids:
-            sid_lower = sid.lower()
-            if include_set and sid_lower not in include_set:
-                continue
-            if exclude_set and sid_lower in exclude_set:
-                continue
-            filtered_ids.append(sid)
-        return filtered_ids
-
-    @staticmethod
-    def _validate_filters(
-        scenario_ids: Sequence[str],
-        include_set: set[str],
-        exclude_set: set[str],
-    ) -> None:
-        """Validate include/exclude filters against available ids."""
-        if include_set:
-            missing = include_set.difference({sid.lower() for sid in scenario_ids})
-            if missing:
-                raise ValueError(f"Unknown include_scenarios: {sorted(missing)}")
-        if exclude_set:
-            missing = exclude_set.difference({sid.lower() for sid in scenario_ids})
-            if missing:
-                raise ValueError(f"Unknown exclude_scenarios: {sorted(missing)}")
+        missing_include = include_set - known
+        missing_exclude = exclude_set - known
+        if missing_include:
+            raise ValueError(f"Unknown include_scenarios: {sorted(missing_include)}")
+        if missing_exclude:
+            raise ValueError(f"Unknown exclude_scenarios: {sorted(missing_exclude)}")
+        return [
+            scenario_id
+            for scenario_id in scenario_ids
+            if (not include_set or scenario_id.lower() in include_set)
+            and scenario_id.lower() not in exclude_set
+        ]
 
     def _build_weight_array(self) -> np.ndarray | None:
+        """Return normalized sampling weights for the filtered scenario set.
+
+        Returns:
+            Normalized sampling weights, or None for uniform sampling.
+        """
         if not self.weights:
             return None
         weights = np.array(
-            [float(self.weights.get(sid, 0.0)) for sid in self._scenario_ids], dtype=float
+            [float(self.weights.get(sid, 0.0)) for sid in self._scenario_ids],
+            dtype=float,
         )
         if np.any(weights < 0.0):
             raise ValueError("Scenario weights must be non-negative.")
@@ -226,26 +162,19 @@ class ScenarioSampler:
             raise ValueError("Scenario weights must include at least one positive entry.")
         return weights / weights.sum()
 
-    @property
-    def scenario_ids(self) -> tuple[str, ...]:
-        """Return the filtered scenario identifiers in stable order."""
-        return self._scenario_ids
-
     def sample(self) -> tuple[Mapping[str, Any], str]:
-        """Return a scenario mapping and its identifier."""
+        """Return a scenario mapping and its stable identifier."""
         if self.strategy == "cycle":
             idx = self._cycle_index
             self._cycle_index = (self._cycle_index + 1) % len(self._scenario_ids)
         else:
-            idx = int(
-                self._rng.choice(len(self._scenario_ids), p=self._weights_array)  # type: ignore[arg-type]
-            )
+            idx = int(self._rng.choice(len(self._scenario_ids), p=self._weights_array))
         scenario_id = self._scenario_ids[idx]
         return self._scenario_map[scenario_id], scenario_id
 
 
 class ScenarioSwitchingEnv(Env):
-    """Gymnasium environment wrapper that swaps scenarios per episode."""
+    """Gymnasium environment wrapper that swaps scenarios between episodes."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -267,7 +196,8 @@ class ScenarioSwitchingEnv(Env):
         self._env_factory = env_factory
         self._config_builder = config_builder or (
             lambda scenario: build_robot_config_from_scenario(
-                scenario, scenario_path=self._scenario_path
+                scenario,
+                scenario_path=self._scenario_path,
             )
         )
         self._env_factory_kwargs = dict(env_factory_kwargs or {})
@@ -290,20 +220,24 @@ class ScenarioSwitchingEnv(Env):
 
     @property
     def scenario_coverage(self) -> dict[str, int]:
-        """Return scenario coverage counts for this worker."""
+        """Return scenario activation counts for this worker."""
         return dict(self._scenario_coverage)
 
     @property
     def scenario_id(self) -> str | None:
-        """Return the most recently sampled scenario identifier."""
+        """Return the active scenario identifier."""
         return self._current_scenario_id
 
     def _build_env(self, *, seed: int | None) -> tuple[Env, str]:
+        """Create one environment for the next sampled scenario.
+
+        Returns:
+            Newly created environment and active scenario id.
+        """
         scenario, scenario_id = self._scenario_sampler.sample()
-        env_config = self._config_builder(scenario)
         env_seed = int(seed) if seed is not None else int(self._rng.integers(0, 2**31 - 1))
         env = self._env_factory(
-            config=env_config,
+            config=self._config_builder(scenario),
             seed=env_seed,
             suite_name=self._suite_name,
             scenario_name=scenario_id,
@@ -313,16 +247,16 @@ class ScenarioSwitchingEnv(Env):
         return env, scenario_id
 
     def _activate_env(self, env: Env, scenario_id: str) -> None:
-        """Register a newly accepted environment instance."""
+        """Register a newly accepted active environment instance."""
         self._scenario_coverage[scenario_id] = self._scenario_coverage.get(scenario_id, 0) + 1
         self._current_env = env
         self._current_scenario_id = scenario_id
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
-        """Reset the current scenario environment (optionally switching scenarios).
+        """Reset the current scenario environment, optionally switching scenarios.
 
         Returns:
-            tuple: ``(obs, info)`` from the active environment.
+            Reset observation and info from the active environment.
         """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
@@ -357,7 +291,7 @@ class ScenarioSwitchingEnv(Env):
                 )
             if not obs_strict and not self._warned_obs_bounds:
                 logger.warning(
-                    "Scenario switching detected observation space bound mismatches; "
+                    "Scenario switching detected observation-space bound mismatches; "
                     "using initial bounds for compatibility. previous={} current={}",
                     previous_scenario_id,
                     new_scenario_id,
@@ -373,7 +307,7 @@ class ScenarioSwitchingEnv(Env):
         """Step the active scenario environment.
 
         Returns:
-            tuple: ``(obs, reward, terminated, truncated, info)`` from the active environment.
+            Gymnasium step tuple from the active environment.
         """
         if self._current_env is None:
             raise RuntimeError("ScenarioSwitchingEnv.step called before reset().")
@@ -383,7 +317,7 @@ class ScenarioSwitchingEnv(Env):
         """Render the active environment when available.
 
         Returns:
-            Render output when supported, otherwise ``None``.
+            Render result from the active environment, or None when closed.
         """
         if self._current_env is None:
             return None
@@ -396,7 +330,7 @@ class ScenarioSwitchingEnv(Env):
             self._current_env = None
 
     def __getattr__(self, name: str):
-        """Forward attribute access to the underlying environment.
+        """Forward attribute access to the active environment.
 
         Returns:
             Attribute value from the active environment.

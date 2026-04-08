@@ -63,6 +63,52 @@ class _FakeAlgo:
         self.stop_called = True
 
 
+class _FakeEvalAlgo:
+    """Policy stub for periodic evaluation tests."""
+
+    def compute_single_action(self, _observation, *, explore: bool):
+        """Return one deterministic action."""
+        assert explore is False
+        return 0.0
+
+
+class _FakeEvalEnv:
+    """Single-step env that exposes Robot SF-style terminal metadata."""
+
+    def __init__(self) -> None:
+        """Initialize deterministic evaluation state."""
+        self.state = SimpleNamespace(max_sim_steps=3)
+        self.scenario_id = "A"
+        self.closed = False
+
+    def reset(self, *, seed: int | None = None):
+        """Return one deterministic observation."""
+        self.scenario_id = f"A-{seed}"
+        return 0.0, {}
+
+    def step(self, _action):
+        """Return one successful terminal transition."""
+        return (
+            0.0,
+            1.0,
+            True,
+            False,
+            {
+                "meta": {
+                    "is_route_complete": True,
+                    "is_pedestrian_collision": False,
+                    "is_robot_collision": False,
+                    "is_obstacle_collision": False,
+                    "is_timesteps_exceeded": False,
+                }
+            },
+        )
+
+    def close(self) -> None:
+        """Mark the env closed."""
+        self.closed = True
+
+
 class _FrozenDateTime:
     """Deterministic datetime replacement for reproducible run directories."""
 
@@ -196,6 +242,52 @@ algorithm:
     assert len(result_lines) == 2
     assert json.loads(result_lines[0])["iteration"] == 1
     assert json.loads(result_lines[1])["iteration"] == 2
+
+
+def test_periodic_evaluation_writes_summary_and_records(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Periodic evaluation should emit per-episode records and aggregate rates."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios:\n  - name: A\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_eval.yaml",
+        """
+experiment:
+  run_id: smoke
+  seed: 11
+env:
+  scenario_matrix:
+    path: scenarios.yaml
+evaluation:
+  enabled: true
+  every_iterations: 1
+  evaluation_episodes: 2
+algorithm:
+  framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_env = _FakeEvalEnv()
+    monkeypatch.setattr(dreamer, "_make_env_creator", lambda _config: lambda _payload: fake_env)
+
+    summary = dreamer._run_periodic_evaluation(
+        _FakeEvalAlgo(),
+        run_config,
+        iteration=3,
+        evaluation_dir=tmp_path / "evaluation",
+    )
+
+    assert summary["success_rate"] == 1.0
+    assert summary["collision_rate"] == 0.0
+    assert summary["timeout_rate"] == 0.0
+    assert fake_env.closed is True
+
+    records_path = Path(str(summary["evaluation_records_path"]))
+    records = [json.loads(line) for line in records_path.read_text(encoding="utf-8").splitlines()]
+    assert [record["episode"] for record in records] == [1, 2]
+    assert {record["success"] for record in records} == {True}
+    assert (tmp_path / "evaluation" / "iteration_000003_summary.json").exists()
 
 
 def test_run_training_cleans_up_ray_and_algo_on_failure(

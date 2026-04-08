@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from scripts.training.train_dreamerv3_rllib import (
+    _apply_cli_overrides,
+    _apply_nested_overrides,
     _build_ray_init_kwargs,
     _resolve_auto_overrides,
     load_run_config,
@@ -48,6 +54,94 @@ algorithm:
     assert run_config.env.flatten_keys == ("drive_state", "rays")
     assert run_config.algorithm.framework == "torch"
     assert run_config.experiment.output_root.is_absolute()
+    assert run_config.config_path == config_path.resolve()
+    assert run_config.env.scenario_matrix is None
+    assert run_config.evaluation.enabled is False
+
+
+def test_load_run_config_parses_scenario_matrix_relative_to_config(tmp_path: Path):
+    """Scenario-matrix config should resolve relative to the YAML location."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_matrix.yaml",
+        """
+experiment:
+  run_id: smoke
+env:
+  scenario_matrix:
+    path: ./scenarios.yaml
+    strategy: cycle
+    switch_per_reset: false
+    include_scenarios: [a]
+    exclude_scenarios: [b]
+    weights:
+      a: 2.0
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.env.scenario_matrix is not None
+    assert run_config.env.scenario_matrix.path == scenarios.resolve()
+    assert run_config.env.scenario_matrix.strategy == "cycle"
+    assert run_config.env.scenario_matrix.switch_per_reset is False
+    assert run_config.env.scenario_matrix.include_scenarios == ("a",)
+    assert run_config.env.scenario_matrix.exclude_scenarios == ("b",)
+    assert run_config.env.scenario_matrix.weights == {"a": 2.0}
+
+
+def test_load_run_config_parses_evaluation_settings(tmp_path: Path) -> None:
+    """Dreamer configs should accept periodic evaluation settings."""
+    scenarios = tmp_path / "scenarios.yaml"
+    scenarios.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = _write_yaml(
+        tmp_path / "dreamer_eval.yaml",
+        """
+experiment:
+  run_id: smoke
+evaluation:
+  enabled: true
+  every_iterations: 5
+  evaluation_episodes: 7
+  output_subdir: periodic_eval
+  scenario_matrix:
+    path: ./scenarios.yaml
+    strategy: cycle
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.evaluation.enabled is True
+    assert run_config.evaluation.every_iterations == 5
+    assert run_config.evaluation.evaluation_episodes == 7
+    assert run_config.evaluation.output_subdir == "periodic_eval"
+    assert run_config.evaluation.scenario_matrix is not None
+    assert run_config.evaluation.scenario_matrix.path == scenarios.resolve()
+
+
+def test_load_run_config_rejects_empty_scenario_matrix_path(tmp_path: Path):
+    """Scenario-matrix configs must provide a non-empty path."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_bad_matrix.yaml",
+        """
+experiment:
+  run_id: smoke
+env:
+  scenario_matrix:
+    path: ""
+algorithm:
+  framework: torch
+""",
+    )
+
+    with pytest.raises(ValueError, match="env.scenario_matrix.path"):
+        load_run_config(config_path)
 
 
 def test_load_run_config_rejects_unknown_root_keys(tmp_path: Path):
@@ -97,6 +191,95 @@ env:
 
     with pytest.raises(ValueError, match="env.flatten_keys"):
         load_run_config(config_path)
+
+
+def test_load_run_config_accepts_null_flatten_keys(tmp_path: Path):
+    """Benchmark-style Dreamer configs may request flattening all observation keys."""
+    config_path = _write_yaml(
+        tmp_path / "null_flatten.yaml",
+        """
+experiment:
+  run_id: smoke
+env:
+  flatten_observation: true
+  flatten_keys: null
+algorithm:
+  framework: torch
+""",
+    )
+
+    run_config = load_run_config(config_path)
+
+    assert run_config.env.flatten_keys is None
+
+
+def test_apply_cli_overrides_preserves_config_path(tmp_path: Path) -> None:
+    """CLI override reconstruction must retain the source config path for runtime metadata."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer.yaml",
+        """
+experiment:
+  run_id: smoke
+  output_root: output/dreamerv3
+algorithm:
+  framework: torch
+tracking:
+  wandb:
+    enabled: false
+""",
+    )
+
+    run_config = load_run_config(config_path)
+    overridden = _apply_cli_overrides(
+        run_config,
+        Namespace(
+            run_id="override-run",
+            train_iterations=3,
+            checkpoint_every=1,
+            log_level="warning",
+        ),
+    )
+
+    assert overridden.config_path == config_path.resolve()
+    assert overridden.experiment.run_id == "override-run"
+    assert overridden.experiment.train_iterations == 3
+    assert overridden.experiment.checkpoint_every == 1
+    assert overridden.experiment.log_level == "WARNING"
+
+
+def test_apply_nested_overrides_reconstructs_grid_config_dataclass() -> None:
+    """Benchmark grid overrides must preserve typed config objects for env creation."""
+    env_config = RobotSimulationConfig()
+
+    _apply_nested_overrides(
+        env_config,
+        {
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+            "grid_config": {
+                "width": 32.0,
+                "height": 32.0,
+                "resolution": 0.2,
+                "use_ego_frame": True,
+                "center_on_robot": True,
+                "channels": ["obstacles", "pedestrians", "combined"],
+            },
+        },
+    )
+
+    assert env_config.observation_mode is ObservationMode.SOCNAV_STRUCT
+    assert isinstance(env_config.grid_config, GridConfig)
+    assert env_config.grid_config.width == pytest.approx(32.0)
+    assert env_config.grid_config.height == pytest.approx(32.0)
+    assert env_config.grid_config.resolution == pytest.approx(0.2)
+    assert env_config.grid_config.use_ego_frame is True
+    assert env_config.grid_config.center_on_robot is True
+    assert env_config.grid_config.channels == [
+        GridChannel.OBSTACLES,
+        GridChannel.PEDESTRIANS,
+        GridChannel.COMBINED,
+    ]
 
 
 def test_load_run_config_parses_wandb_tracking_settings(tmp_path: Path):
@@ -274,19 +457,41 @@ algorithm:
 
 
 @pytest.mark.parametrize(
-    ("config_relpath", "expected_run_id", "expected_group", "expected_mode"),
+    (
+        "config_relpath",
+        "expected_run_id",
+        "expected_group",
+        "expected_mode",
+        "expect_benchmark_obs",
+    ),
     [
         (
             "configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml",
             "dreamerv3_br08_drive_state_rays_gate",
             "br08-drive-state-rays-gate",
             "offline",
+            False,
         ),
         (
             "configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml",
             "dreamerv3_br08_drive_state_rays_full",
             "br08-drive-state-rays-full",
             "online",
+            False,
+        ),
+        (
+            "configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml",
+            "dreamerv3_br08_benchmark_socnav_grid_gate",
+            "br08-benchmark-socnav-grid-gate",
+            "offline",
+            True,
+        ),
+        (
+            "configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml",
+            "dreamerv3_br08_benchmark_socnav_grid_full",
+            "br08-benchmark-socnav-grid-full",
+            "online",
+            True,
         ),
     ],
 )
@@ -295,6 +500,7 @@ def test_repo_br08_configs_load_with_expected_reward_contract(
     expected_run_id: str,
     expected_group: str,
     expected_mode: str,
+    expect_benchmark_obs: bool,
 ) -> None:
     """BR-08 Dreamer configs should load with the intended reward and tracking contract."""
     run_config = load_run_config(Path(config_relpath))
@@ -310,4 +516,28 @@ def test_repo_br08_configs_load_with_expected_reward_contract(
     assert isinstance(weights, dict)
     assert weights["terminal_bonus"] == 20.0
     assert weights["collision"] == -15.0
-    assert run_config.env.config_overrides["randomize_seeds"] is True
+    assert run_config.env.config_overrides["use_image_obs"] is False
+    if expect_benchmark_obs:
+        assert run_config.env.scenario_matrix is not None
+        assert run_config.env.flatten_keys is None
+        assert run_config.env.config_overrides["observation_mode"] == "socnav_struct"
+        assert run_config.env.config_overrides["use_occupancy_grid"] is True
+        assert run_config.env.config_overrides["include_grid_in_observation"] is True
+    else:
+        assert run_config.env.config_overrides["randomize_seeds"] is True
+
+
+def test_repo_benchmark_socnav_grid_full_enables_periodic_eval() -> None:
+    """The long socnav-grid Dreamer profile should declare benchmark-matrix evaluation."""
+    run_config = load_run_config(
+        Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
+    )
+
+    assert run_config.env.scenario_matrix is not None
+    assert run_config.evaluation.enabled is True
+    assert run_config.evaluation.every_iterations == 100
+    assert run_config.evaluation.evaluation_episodes == 30
+    assert run_config.evaluation.scenario_matrix is not None
+    assert run_config.algorithm.training["batch_size_B"] == 16
+    assert run_config.algorithm.training["batch_length_T"] == 32
+    assert run_config.algorithm.training["horizon_H"] == 10

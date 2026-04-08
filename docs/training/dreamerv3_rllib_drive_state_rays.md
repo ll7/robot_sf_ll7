@@ -1,15 +1,20 @@
-# DreamerV3 RLlib Runbook (`drive_state` + `rays`)
+# DreamerV3 RLlib Runbook
 
-This runbook documents a reproducible RLlib DreamerV3 workflow for Robot SF using
-the default non-image observation contract (`drive_state`, `rays`).
+This runbook documents reproducible RLlib DreamerV3 workflows for Robot SF. The
+legacy default uses the non-image observation contract (`drive_state`, `rays`).
+The BR-08 challenger path uses the benchmark-aligned scenario matrix with
+`socnav_struct` observations plus occupancy-grid features.
+
+For the Slurm handoff sequence, use
+[`dreamerv3_br08_slurm_handoff.md`](./dreamerv3_br08_slurm_handoff.md).
 
 Current scope note:
 
 - BR-08 prep is reproducible and benchmark-reset-v2 aligned.
-- The current launcher is still built on the unified env/map-pool surface, not the
-  scenario-matrix/all-SVG pipeline used by PPO benchmark runs.
+- The launcher now exposes scenario-matrix training and periodic evaluation surfaces
+  for the SocNav+grid challenger profiles.
 - Treat DreamerV3 here as a challenger training track with a clean launch/eval contract,
-  not yet as full scenario-matrix parity with PPO.
+  not yet as evidence that Dreamer is competitive with the promoted PPO policy.
 
 ## 1) Prerequisites
 
@@ -32,7 +37,8 @@ export SDL_VIDEODRIVER=dummy
 
 ## 2) Canonical Command
 
-Use this as the default full launch command:
+Use this as the default full launch command for the legacy `drive_state` + `rays`
+profile:
 
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
@@ -54,9 +60,23 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml
 ```
 
+Canonical benchmark-aligned SocNav+grid gate command:
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml
+```
+
+Canonical benchmark-aligned SocNav+grid full command:
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
+```
+
 ## 3) Config Notes
 
-Both BR-08 Dreamer configs include these reliability settings:
+The BR-08 Dreamer configs include these reliability settings:
 
 - `ray.disable_uv_run_runtime_env: true`
 - `ray.runtime_env.working_dir: .`
@@ -64,8 +84,12 @@ Both BR-08 Dreamer configs include these reliability settings:
 - action/observation contract fixes for float32-compatible env outputs
 - `env.factory_kwargs.reward_name: route_completion_v3`
 - success-priority reward weights aligned with the current benchmark-reset PPO runs
+- optional `env.scenario_matrix` and `evaluation.scenario_matrix` blocks for the
+  SocNav+grid challenger profiles
 
 These prevent worker-side uv rebuild loops and reduce startup package overhead.
+For scenario-matrix profiles, the wrapper switches scenarios per reset and rejects
+incompatible observation/action spaces while allowing harmless Box-bound differences.
 
 ## 4) Dry-run Validation
 
@@ -74,6 +98,14 @@ Use dry-run to validate YAML parsing and resolved settings:
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/drive_state_rays_br08_gate.yaml \
+  --dry-run
+```
+
+Benchmark-aligned dry-run:
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml \
   --dry-run
 ```
 
@@ -87,7 +119,7 @@ tmux new -s dreamer
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
 ```
 
 Detach/reattach:
@@ -113,7 +145,7 @@ set -euo pipefail
 cd /path/to/robot_sf_ll7
 source .venv/bin/activate
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
-  --config configs/training/rllib_dreamerv3/drive_state_rays_br08_full.yaml
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
 EOF
 ```
 
@@ -129,9 +161,13 @@ DreamerV3 promotion should follow the same success-first philosophy as PPO:
 
 Current limitation:
 
-- `train_dreamerv3_rllib.py` does not yet expose the full scenario-matrix training surface.
-- Benchmark comparison should therefore be treated as a challenger evaluation step after
-  training, not proof that Dreamer trained on the same all-scenarios curriculum as PPO.
+- `train_dreamerv3_rllib.py` exposes the scenario-matrix training/evaluation surface,
+  but no successful Dreamer checkpoint has been promoted from it yet.
+- Benchmark comparison should therefore remain a challenger evaluation step after
+  training, not a paper-facing planner-family row.
+- World-model encoder/decoder pretraining from policy rollouts is not implemented here.
+  That would require a separate design issue because it changes the model-data path below
+  the current RLlib launcher contract.
 
 ## 6) Monitoring Checklist
 

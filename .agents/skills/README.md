@@ -7,6 +7,7 @@ read the specific `SKILL.md` before applying a skill.
 
 - Not sure which skill applies: `skill-picker`
 - Implement an issue end-to-end: `gh-issue-autopilot`
+- Sequence Project #5 issue batches: `gh-issue-sequencer`
 - Address PR review comments: `gh-pr-comment-fixer`
 - Open a PR from a ready branch: `gh-pr-opener`
 - Verify a branch against `origin/main`: `implementation-verification`
@@ -62,6 +63,7 @@ read the specific `SKILL.md` before applying a skill.
 | `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |
 | `gh-issue-creator` | Creating structured GitHub issues from rough prompts with repo template conventions. |
 | `gh-issue-priority-assessor` | Reviewing Project #5 priority inputs and proposing field values with uncertainty. |
+| `gh-issue-sequencer` | Maintaining a clear Project #5 execution queue and batching project metadata updates. |
 | `gh-issue-template-auditor` | Auditing existing issues against the issue-template contract and repairing clear gaps. |
 | `gh-pr-comment-fixer` | Fetching PR review comments, implementing fixes, validating, pushing, and resolving threads. |
 | `gh-pr-opener` | Opening Robot SF PRs with issue-scope verification and PR-readiness freshness checks. |

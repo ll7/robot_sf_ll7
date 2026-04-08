@@ -27,6 +27,19 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
   (`SLURM_CPUS_PER_TASK`, `SLURM_GPUS*`, `CUDA_VISIBLE_DEVICES`) so the same config
   scales across different allocations.
 
+## Benchmark-aligned challenger profiles
+
+- `benchmark_socnav_grid_br08_gate.yaml`: Short BR-08 validation run on the
+  scenario-matrix SocNav+occupancy-grid observation contract. Use this before longer
+  training to verify that the Dreamer launcher can construct the benchmark-aligned
+  env surface and write reproducible artifacts.
+- `benchmark_socnav_grid_br08_full.yaml`: Longer Slurm/Auxme-oriented profile using
+  `auto` CPU/GPU resolution, online W&B tracking, scenario switching per reset, and
+  periodic cycle-order evaluation on the same scenario matrix.
+- These profiles are challenger-training infrastructure, not evidence that DreamerV3
+  is benchmark-competitive. Promotion still requires a full checkpoint evaluation
+  against the current PPO reference.
+
 ## Canonical command
 
 ```bash
@@ -39,6 +52,20 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/drive_state_rays_auxme_a30_full.yaml
+```
+
+## Canonical command (BR-08 SocNav+grid gate)
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml
+```
+
+## Canonical command (BR-08 SocNav+grid full)
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
 ```
 
 ## Recommended command (starter profile)

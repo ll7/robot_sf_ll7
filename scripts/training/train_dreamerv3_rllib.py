@@ -8,10 +8,11 @@ import json
 import logging
 import os
 import sys
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args, get_origin
 
 import yaml
 from loguru import logger
@@ -19,11 +20,14 @@ from loguru import logger
 from robot_sf.common.hardware import detect_hardware_capacity, recommend_env_runners
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.training.rllib_env_wrappers import DEFAULT_FLATTEN_KEYS, wrap_for_dreamerv3
 from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
 
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
-_TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking"}
+_TOP_LEVEL_KEYS = {"experiment", "ray", "env", "algorithm", "tracking", "evaluation"}
 _EXPERIMENT_KEYS = {
     "run_id",
     "output_root",
@@ -42,9 +46,31 @@ _RAY_KEYS = {
     "runtime_env",
 }
 _RAY_RUNTIME_ENV_KEYS = {"working_dir", "excludes", "env_vars", "py_executable"}
-_ENV_KEYS = {"flatten_observation", "flatten_keys", "normalize_actions", "factory_kwargs", "config"}
+_ENV_KEYS = {
+    "flatten_observation",
+    "flatten_keys",
+    "normalize_actions",
+    "factory_kwargs",
+    "config",
+    "scenario_matrix",
+}
+_SCENARIO_MATRIX_KEYS = {
+    "path",
+    "strategy",
+    "switch_per_reset",
+    "include_scenarios",
+    "exclude_scenarios",
+    "weights",
+}
 _ALGORITHM_KEYS = {"framework", "training", "env_runners", "resources", "learners", "api_stack"}
 _TRACKING_KEYS = {"wandb"}
+_EVALUATION_KEYS = {
+    "enabled",
+    "every_iterations",
+    "evaluation_episodes",
+    "output_subdir",
+    "scenario_matrix",
+}
 _WANDB_KEYS = {
     "enabled",
     "project",
@@ -91,14 +117,27 @@ class RaySettings:
 
 
 @dataclass(slots=True)
+class ScenarioMatrixSettings:
+    """Scenario-matrix-driven DreamerV3 training or evaluation settings."""
+
+    path: Path
+    strategy: str
+    switch_per_reset: bool
+    include_scenarios: tuple[str, ...]
+    exclude_scenarios: tuple[str, ...]
+    weights: dict[str, float]
+
+
+@dataclass(slots=True)
 class EnvSettings:
     """Environment construction settings for RLlib workers."""
 
     flatten_observation: bool
-    flatten_keys: tuple[str, ...]
+    flatten_keys: tuple[str, ...] | None
     normalize_actions: bool
     factory_kwargs: dict[str, object]
     config_overrides: dict[str, object]
+    scenario_matrix: ScenarioMatrixSettings | None
 
 
 @dataclass(slots=True)
@@ -136,14 +175,27 @@ class TrackingSettings:
 
 
 @dataclass(slots=True)
+class EvaluationSettings:
+    """Optional periodic evaluation settings for Dreamer training runs."""
+
+    enabled: bool
+    every_iterations: int
+    evaluation_episodes: int
+    output_subdir: str
+    scenario_matrix: ScenarioMatrixSettings | None
+
+
+@dataclass(slots=True)
 class DreamerRunConfig:
     """Complete validated training configuration."""
 
+    config_path: Path
     experiment: ExperimentSettings
     ray: RaySettings
     env: EnvSettings
     algorithm: AlgorithmSettings
     tracking: TrackingSettings
+    evaluation: EvaluationSettings
 
 
 def _ensure_mapping(payload: object, *, field_name: str) -> dict[str, object]:
@@ -209,14 +261,17 @@ def _coerce_optional_text(value: object, *, field_name: str) -> str | None:
     return text
 
 
-def _resolve_config_path(raw_value: object, *, field_name: str) -> Path:
+def _resolve_config_path(
+    raw_value: object, *, field_name: str, base_dir: Path | None = None
+) -> Path:
     """Resolve a path-like config value to an absolute path."""
     text_value = str(raw_value).strip()
     if not text_value:
         raise ValueError(f"{field_name} cannot be empty.")
     path_value = Path(text_value)
     if not path_value.is_absolute():
-        path_value = (Path.cwd() / path_value).resolve()
+        origin = Path.cwd() if base_dir is None else base_dir
+        path_value = (origin / path_value).resolve()
     return path_value
 
 
@@ -301,23 +356,63 @@ def _parse_ray_settings(payload: dict[str, object]) -> RaySettings:
     )
 
 
-def _parse_env_settings(payload: dict[str, object]) -> EnvSettings:
+def _parse_scenario_matrix_settings(
+    raw_payload: object,
+    *,
+    field_name: str,
+    base_dir: Path | None = None,
+) -> ScenarioMatrixSettings | None:
+    """Parse optional scenario-matrix settings."""
+    if raw_payload is None:
+        return None
+    scenario_raw = _ensure_mapping(raw_payload, field_name=field_name)
+    _ensure_known_keys(scenario_raw, field_name=field_name, allowed=_SCENARIO_MATRIX_KEYS)
+    path_raw = scenario_raw.get("path")
+    if path_raw in {None, ""}:
+        raise ValueError(f"{field_name}.path cannot be empty.")
+    include_raw = scenario_raw.get("include_scenarios", ())
+    exclude_raw = scenario_raw.get("exclude_scenarios", ())
+    if not isinstance(include_raw, list | tuple):
+        raise ValueError(f"{field_name}.include_scenarios must be a list or tuple.")
+    if not isinstance(exclude_raw, list | tuple):
+        raise ValueError(f"{field_name}.exclude_scenarios must be a list or tuple.")
+    weights_raw = _ensure_mapping(scenario_raw.get("weights"), field_name=f"{field_name}.weights")
+    return ScenarioMatrixSettings(
+        path=_resolve_config_path(path_raw, field_name=f"{field_name}.path", base_dir=base_dir),
+        strategy=str(scenario_raw.get("strategy", "random")).strip().lower(),
+        switch_per_reset=bool(scenario_raw.get("switch_per_reset", True)),
+        include_scenarios=tuple(str(name) for name in include_raw),
+        exclude_scenarios=tuple(str(name) for name in exclude_raw),
+        weights={str(key): float(value) for key, value in weights_raw.items()},
+    )
+
+
+def _parse_env_settings(payload: dict[str, object], *, base_dir: Path | None = None) -> EnvSettings:
     """Parse and validate the environment section."""
     env_raw = _ensure_mapping(payload.get("env"), field_name="env")
     _ensure_known_keys(env_raw, field_name="env", allowed=_ENV_KEYS)
 
     flatten_keys_raw = env_raw.get("flatten_keys", list(DEFAULT_FLATTEN_KEYS))
-    if not isinstance(flatten_keys_raw, list | tuple):
-        raise ValueError("env.flatten_keys must be a list or tuple of strings.")
+    if flatten_keys_raw is None:
+        flatten_keys = None
+    else:
+        if not isinstance(flatten_keys_raw, list | tuple):
+            raise ValueError("env.flatten_keys must be a list/tuple of strings or null.")
+        flatten_keys = tuple(str(key) for key in flatten_keys_raw)
 
     return EnvSettings(
         flatten_observation=bool(env_raw.get("flatten_observation", True)),
-        flatten_keys=tuple(str(key) for key in flatten_keys_raw),
+        flatten_keys=flatten_keys,
         normalize_actions=bool(env_raw.get("normalize_actions", True)),
         factory_kwargs=_ensure_mapping(
             env_raw.get("factory_kwargs"), field_name="env.factory_kwargs"
         ),
         config_overrides=_ensure_mapping(env_raw.get("config"), field_name="env.config"),
+        scenario_matrix=_parse_scenario_matrix_settings(
+            env_raw.get("scenario_matrix"),
+            field_name="env.scenario_matrix",
+            base_dir=base_dir,
+        ),
     )
 
 
@@ -351,7 +446,8 @@ def _parse_tracking_settings(payload: dict[str, object]) -> TrackingSettings:
         raise ValueError("tracking.wandb.tags must be a list or tuple of strings.")
 
     wandb_dir = _resolve_config_path(
-        wandb_raw.get("dir", "output/wandb"), field_name="tracking.wandb.dir"
+        wandb_raw.get("dir", "output/wandb"),
+        field_name="tracking.wandb.dir",
     )
     return TrackingSettings(
         wandb=WandbSettings(
@@ -372,6 +468,33 @@ def _parse_tracking_settings(payload: dict[str, object]) -> TrackingSettings:
     )
 
 
+def _parse_evaluation_settings(
+    payload: dict[str, object], *, base_dir: Path | None = None
+) -> EvaluationSettings:
+    """Parse and validate the optional periodic evaluation section."""
+    evaluation_raw = _ensure_mapping(payload.get("evaluation"), field_name="evaluation")
+    _ensure_known_keys(evaluation_raw, field_name="evaluation", allowed=_EVALUATION_KEYS)
+    enabled = bool(evaluation_raw.get("enabled", False))
+    every_iterations = int(evaluation_raw.get("every_iterations", 0) or 0)
+    evaluation_episodes = int(evaluation_raw.get("evaluation_episodes", 0) or 0)
+    if enabled and every_iterations < 1:
+        raise ValueError("evaluation.every_iterations must be >= 1 when evaluation is enabled.")
+    if enabled and evaluation_episodes < 1:
+        raise ValueError("evaluation.evaluation_episodes must be >= 1 when evaluation is enabled.")
+    output_subdir = str(evaluation_raw.get("output_subdir", "evaluation")).strip()
+    return EvaluationSettings(
+        enabled=enabled,
+        every_iterations=every_iterations,
+        evaluation_episodes=evaluation_episodes,
+        output_subdir=output_subdir or "evaluation",
+        scenario_matrix=_parse_scenario_matrix_settings(
+            evaluation_raw.get("scenario_matrix"),
+            field_name="evaluation.scenario_matrix",
+            base_dir=base_dir,
+        ),
+    )
+
+
 def load_run_config(path: Path) -> DreamerRunConfig:
     """Load, validate, and normalize the DreamerV3 run configuration YAML."""
     resolved = path.resolve()
@@ -383,40 +506,101 @@ def load_run_config(path: Path) -> DreamerRunConfig:
     _ensure_known_keys(payload, field_name="root", allowed=_TOP_LEVEL_KEYS)
 
     return DreamerRunConfig(
+        config_path=resolved,
         experiment=_parse_experiment_settings(payload),
         ray=_parse_ray_settings(payload),
-        env=_parse_env_settings(payload),
+        env=_parse_env_settings(payload, base_dir=resolved.parent),
         algorithm=_parse_algorithm_settings(payload),
         tracking=_parse_tracking_settings(payload),
+        evaluation=_parse_evaluation_settings(payload, base_dir=resolved.parent),
     )
 
 
-def _apply_nested_overrides(
+def _apply_nested_overrides(  # noqa: C901
     config_obj: object,
     overrides: dict[str, object],
     *,
     context_name: str = "env.config",
 ) -> None:
     """Recursively apply dict overrides onto dataclass-like objects."""
+    field_map = (
+        {field.name: field for field in fields(config_obj)} if is_dataclass(config_obj) else {}
+    )
+
+    def _coerce_from_annotation(annotation: object, value: object) -> object:
+        if annotation in {Any, object}:
+            return value
+        origin = get_origin(annotation)
+        if origin is not None:
+            args = [arg for arg in get_args(annotation) if arg is not type(None)]
+            if origin is list and isinstance(value, list | tuple):
+                item_annotation = args[0] if args else Any
+                return [_coerce_from_annotation(item_annotation, item) for item in value]
+            if len(args) == 1:
+                return _coerce_from_annotation(args[0], value)
+        if isinstance(annotation, type):
+            if issubclass(annotation, Enum) and not isinstance(value, annotation):
+                return annotation(value)
+            if is_dataclass(annotation) and isinstance(value, dict):
+                nested_obj = annotation()
+                _apply_nested_overrides(
+                    nested_obj,
+                    dict(value),
+                    context_name=context_name,
+                )
+                return nested_obj
+        return value
+
+    def _coerce_override_value(
+        current_attr: object,
+        value: object,
+        *,
+        field_annotation: object | None,
+    ) -> object:
+        if field_annotation is not None:
+            coerced = _coerce_from_annotation(field_annotation, value)
+            if coerced is not value:
+                return coerced
+        if isinstance(current_attr, Enum) and not isinstance(value, type(current_attr)):
+            return type(current_attr)(value)
+        if isinstance(current_attr, list) and current_attr:
+            exemplar = current_attr[0]
+            if isinstance(exemplar, Enum) and isinstance(value, list | tuple):
+                enum_type = type(exemplar)
+                return [item if isinstance(item, enum_type) else enum_type(item) for item in value]
+        if current_attr is None and field_annotation is not None:
+            return _coerce_from_annotation(field_annotation, value)
+        return value
+
     for key, value in overrides.items():
         if not hasattr(config_obj, key):
             raise ValueError(f"Unknown {context_name} override field: '{key}'")
         current_attr = getattr(config_obj, key)
+        field_annotation = field_map.get(key).type if key in field_map else None
         if isinstance(value, dict) and (
             hasattr(current_attr, "__dict__") or is_dataclass(current_attr)
         ):
             _apply_nested_overrides(current_attr, value, context_name=f"{context_name}.{key}")
+        elif key == "grid_config" and isinstance(value, dict):
+            setattr(config_obj, key, _coerce_from_annotation(GridConfig, value))
         else:
-            setattr(config_obj, key, value)
+            setattr(
+                config_obj,
+                key,
+                _coerce_override_value(
+                    current_attr,
+                    value,
+                    field_annotation=field_annotation,
+                ),
+            )
 
 
 def _create_env_template(env_settings: EnvSettings) -> RobotSimulationConfig:
     """Build the base RobotSimulationConfig used by all RLlib workers."""
     config = RobotSimulationConfig()
     _apply_nested_overrides(config, env_settings.config_overrides, context_name="env.config")
-    # Force vector-observation mode for the drive_state+rays DreamerV3 pipeline.
+    # DreamerV3 configs in this launcher currently assume non-image observations.
     config.use_image_obs = False
-    config.include_grid_in_observation = False
     return config
 
 
@@ -429,16 +613,65 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
     factory_kwargs = dict(config.env.factory_kwargs)
     factory_kwargs.setdefault("debug", False)
     factory_kwargs.setdefault("recording_enabled", False)
+    scenario_matrix = config.env.scenario_matrix
+    loaded_scenarios = (
+        load_scenarios(scenario_matrix.path, base_dir=scenario_matrix.path)
+        if scenario_matrix is not None
+        else None
+    )
 
     def _creator(worker_env_config: dict[str, object] | None = None) -> Any:
+        worker_payload = dict(worker_env_config or {})
         worker_overrides = {
             key: value
-            for key, value in dict(worker_env_config or {}).items()
+            for key, value in worker_payload.items()
             if key not in _IGNORED_ENV_CONTEXT_KEYS
         }
-        worker_config = copy.deepcopy(template)
-        _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
-        env = make_robot_env(config=worker_config, **factory_kwargs)
+        worker_index = int(worker_payload.get("worker_index", 0) or 0)
+        worker_seed = int(config.experiment.seed + worker_index)
+        if scenario_matrix is None:
+            worker_config = copy.deepcopy(template)
+            _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
+            env = make_robot_env(config=worker_config, **factory_kwargs)
+        else:
+            sampler = ScenarioSampler(
+                scenarios=loaded_scenarios or (),
+                include_scenarios=scenario_matrix.include_scenarios,
+                exclude_scenarios=scenario_matrix.exclude_scenarios,
+                weights=scenario_matrix.weights or None,
+                seed=worker_seed,
+                strategy=scenario_matrix.strategy,
+            )
+
+            def _config_builder(scenario: dict[str, object]) -> RobotSimulationConfig:
+                scenario_config = build_robot_config_from_scenario(
+                    scenario,
+                    scenario_path=scenario_matrix.path,
+                )
+                _apply_nested_overrides(
+                    scenario_config,
+                    copy.deepcopy(config.env.config_overrides),
+                    context_name="env.config",
+                )
+                _apply_nested_overrides(
+                    scenario_config,
+                    worker_overrides,
+                    context_name="worker.config",
+                )
+                scenario_config.use_image_obs = False
+                return scenario_config
+
+            env = ScenarioSwitchingEnv(
+                scenario_sampler=sampler,
+                scenario_path=scenario_matrix.path,
+                env_factory=make_robot_env,
+                config_builder=_config_builder,
+                env_factory_kwargs=factory_kwargs,
+                suite_name="dreamerv3_rllib",
+                algorithm_name=config.experiment.run_id,
+                switch_per_reset=scenario_matrix.switch_per_reset,
+                seed=worker_seed,
+            )
         return wrap_for_dreamerv3(
             env,
             flatten_observation=flatten_observation,
@@ -614,6 +847,120 @@ def _save_checkpoint(algo: Any, checkpoint_dir: Path) -> str:
     raise RuntimeError("Unable to save checkpoint: algorithm has neither save_to_path nor save.")
 
 
+def _predict_action(algo: Any, observation: Any) -> Any:
+    """Compute one deterministic action across common RLlib Algorithm APIs."""
+    compute_single_action = getattr(algo, "compute_single_action", None)
+    if callable(compute_single_action):
+        action = compute_single_action(observation, explore=False)
+    else:
+        compute_actions = getattr(algo, "compute_actions", None)
+        if not callable(compute_actions):
+            raise RuntimeError(
+                "Unable to evaluate DreamerV3 policy: algorithm exposes neither "
+                "compute_single_action nor compute_actions."
+            )
+        action = compute_actions([observation], explore=False)
+        if isinstance(action, tuple):
+            action = action[0]
+        action = action[0]
+    if isinstance(action, tuple):
+        return action[0]
+    return action
+
+
+def _episode_flags(info: dict[str, Any]) -> dict[str, bool]:
+    """Extract benchmark-style outcome flags from Robot SF episode info."""
+    meta = info.get("meta") if isinstance(info.get("meta"), dict) else {}
+    return {
+        "success": bool(meta.get("is_route_complete") or info.get("success", False)),
+        "collision": bool(
+            meta.get("is_pedestrian_collision")
+            or meta.get("is_robot_collision")
+            or meta.get("is_obstacle_collision")
+            or info.get("collision", False)
+        ),
+        "pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
+        "robot_collision": bool(meta.get("is_robot_collision", False)),
+        "obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
+        "timeout": bool(meta.get("is_timesteps_exceeded", False)),
+    }
+
+
+def _run_periodic_evaluation(
+    algo: Any,
+    run_config: DreamerRunConfig,
+    *,
+    iteration: int,
+    evaluation_dir: Path,
+) -> dict[str, object]:
+    """Evaluate the in-memory policy on the configured scenario matrix."""
+    matrix = run_config.evaluation.scenario_matrix or run_config.env.scenario_matrix
+    if matrix is None:
+        raise ValueError(
+            "DreamerV3 evaluation requires evaluation.scenario_matrix or env.scenario_matrix."
+        )
+    eval_env_settings = copy.deepcopy(run_config.env)
+    eval_env_settings.scenario_matrix = copy.deepcopy(matrix)
+    eval_env_settings.scenario_matrix.strategy = "cycle"
+    eval_env_settings.scenario_matrix.switch_per_reset = True
+    eval_config = DreamerRunConfig(
+        config_path=run_config.config_path,
+        experiment=run_config.experiment,
+        ray=run_config.ray,
+        env=eval_env_settings,
+        algorithm=run_config.algorithm,
+        tracking=run_config.tracking,
+        evaluation=run_config.evaluation,
+    )
+    env = _make_env_creator(eval_config)({"worker_index": 0})
+    records: list[dict[str, object]] = []
+    try:
+        for episode in range(1, run_config.evaluation.evaluation_episodes + 1):
+            observation, _ = env.reset(seed=run_config.experiment.seed + episode)
+            done = False
+            episode_return = 0.0
+            steps = 0
+            last_info: dict[str, Any] = {}
+            max_steps = int(getattr(getattr(env, "state", None), "max_sim_steps", 1000))
+            while not done and steps < max_steps:
+                action = _predict_action(algo, observation)
+                observation, reward, terminated, truncated, info = env.step(action)
+                episode_return += float(reward)
+                steps += 1
+                last_info = dict(info or {})
+                done = bool(terminated or truncated)
+            flags = _episode_flags(last_info)
+            records.append(
+                {
+                    "iteration": iteration,
+                    "episode": episode,
+                    "scenario_id": getattr(env, "scenario_id", None),
+                    "return": episode_return,
+                    "steps": steps,
+                    **flags,
+                }
+            )
+    finally:
+        env.close()
+
+    count = max(len(records), 1)
+    summary = {
+        "iteration": iteration,
+        "episodes": len(records),
+        "scenario_matrix": str(matrix.path),
+        "success_rate": sum(bool(row["success"]) for row in records) / count,
+        "collision_rate": sum(bool(row["collision"]) for row in records) / count,
+        "timeout_rate": sum(bool(row["timeout"]) for row in records) / count,
+        "evaluation_records_path": str(evaluation_dir / f"iteration_{iteration:06d}.jsonl"),
+    }
+    evaluation_dir.mkdir(parents=True, exist_ok=True)
+    records_path = Path(str(summary["evaluation_records_path"]))
+    for row in records:
+        append_jsonl_record(records_path, row)
+    _write_json(evaluation_dir / f"iteration_{iteration:06d}_summary.json", summary)
+    return summary
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     """Write JSON payload with stable formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -751,6 +1098,7 @@ def _run_training_iterations(
     run_config: DreamerRunConfig,
     *,
     checkpoint_dir: Path,
+    evaluation_dir: Path,
     result_log_path: Path,
     wandb_run: Any | None,
 ) -> list[dict[str, object]]:
@@ -801,6 +1149,26 @@ def _run_training_iterations(
         if is_periodic_ckpt or is_final_ckpt:
             ckpt_path = _save_checkpoint(algo, checkpoint_dir)
             logger.info("checkpoint_saved={}", ckpt_path)
+        should_evaluate = run_config.evaluation.enabled and (
+            iteration % run_config.evaluation.every_iterations == 0 or is_final_ckpt
+        )
+        if should_evaluate:
+            eval_summary = _run_periodic_evaluation(
+                algo,
+                run_config,
+                iteration=iteration,
+                evaluation_dir=evaluation_dir,
+            )
+            history[-1]["evaluation"] = eval_summary
+            if wandb_run is not None:
+                wandb_run.log(
+                    {
+                        "eval/success_rate": eval_summary["success_rate"],
+                        "eval/collision_rate": eval_summary["collision_rate"],
+                        "eval/timeout_rate": eval_summary["timeout_rate"],
+                    },
+                    step=iteration,
+                )
     return history
 
 
@@ -820,6 +1188,7 @@ def run_training(run_config: DreamerRunConfig) -> int:
     wandb_run = None
     summary_path = run_dir / "run_summary.json"
     result_log_path = run_dir / "result.jsonl"
+    evaluation_dir = run_dir / run_config.evaluation.output_subdir
     history: list[dict[str, object]] = []
     shared_capacity = _detect_shared_capacity(run_config)
     try:
@@ -838,6 +1207,7 @@ def run_training(run_config: DreamerRunConfig) -> int:
             algo,
             run_config,
             checkpoint_dir=checkpoint_dir,
+            evaluation_dir=evaluation_dir,
             result_log_path=result_log_path,
             wandb_run=wandb_run,
         )
@@ -850,7 +1220,24 @@ def run_training(run_config: DreamerRunConfig) -> int:
                 "train_iterations": run_config.experiment.train_iterations,
                 "checkpoint_every": run_config.experiment.checkpoint_every,
                 "seed": run_config.experiment.seed,
+                "config_path": str(run_config.config_path),
                 "result_log_path": str(result_log_path),
+                "scenario_matrix": (
+                    str(run_config.env.scenario_matrix.path)
+                    if run_config.env.scenario_matrix is not None
+                    else None
+                ),
+                "evaluation": {
+                    "enabled": run_config.evaluation.enabled,
+                    "scenario_matrix": (
+                        str(run_config.evaluation.scenario_matrix.path)
+                        if run_config.evaluation.scenario_matrix is not None
+                        else None
+                    ),
+                    "output_dir": str(evaluation_dir),
+                    "episodes": run_config.evaluation.evaluation_episodes,
+                    "every_iterations": run_config.evaluation.every_iterations,
+                },
                 "history": history,
             },
         )
@@ -930,11 +1317,13 @@ def _apply_cli_overrides(
     if args.log_level is not None:
         experiment.log_level = str(args.log_level).upper()
     return DreamerRunConfig(
+        config_path=run_config.config_path,
         experiment=experiment,
         ray=run_config.ray,
         env=run_config.env,
         algorithm=run_config.algorithm,
         tracking=run_config.tracking,
+        evaluation=run_config.evaluation,
     )
 
 

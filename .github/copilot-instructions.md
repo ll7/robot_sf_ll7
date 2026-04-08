@@ -1,5 +1,8 @@
 # Copilot Instructions
 
+`AGENTS.md` is the canonical repository instruction source. Treat this file as the Copilot-facing
+entrypoint and keep it limited to Copilot-specific pointers that are not already covered there.
+
 ALWAYS use the official [dev_guide](../docs/dev_guide.md) as the primary reference for development-related tasks.
 It is everyones guide on how to use this repository effectively.
 

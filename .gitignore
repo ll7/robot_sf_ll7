@@ -56,5 +56,8 @@ third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
 third_party/socnavbench/surreal/code/human_meshes/
 third_party/socnavbench/surreal/code/human_textures/
 
+# External MPC repos cloned for planner-zoo research (full git repos, not vendored)
+third_party/external_mpc_repos/
+
 # Cmake
 third_party/python-rvo2/.*

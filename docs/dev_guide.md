@@ -312,6 +312,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
   - Canonical AI assistant content lives in `.agents/`:
+    - Canonical skills live in `.agents/skills/`.
     - `.agents/skills/` is mirrored at `.codex/skills/`, `.opencode/skills/`, and
       `.claude/skills/`.
     - `.agents/prompts/codex/` is mirrored at `.codex/prompts/`.

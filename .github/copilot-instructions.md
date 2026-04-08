@@ -24,6 +24,9 @@ It is everyones guide on how to use this repository effectively.
   changes would make docs stale.
 - Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work.
 - Keep `gh` for deterministic batch automation, score sync, and auth/debugging fallback.
+- Before opening a PR, follow the latest-main sync rule in
+  `docs/dev_guide.md`: fetch `origin/main`, merge or rebase it into the feature branch, then run
+  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.

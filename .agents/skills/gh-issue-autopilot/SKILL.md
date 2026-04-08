@@ -93,20 +93,28 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
 7. Implement
    - Keep scope tight to issue acceptance criteria.
    - Add/adjust tests and docs with the code.
-   - If scope expands, split deferred work into follow-up issues (step 10).
+   - If scope expands, split deferred work into follow-up issues (step 12).
 
 8. Validate with repository gates
    - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
    - If failures occur, fix and rerun until green (or document justified exception).
 
-9. Commit, push, open draft PR
+9. Commit the implementation
    - Commit in logical batches with conventional messages.
+
+10. Sync with latest main before opening the PR
+   - `git fetch origin main`
+   - Merge or rebase the latest `origin/main` into the issue branch before PR creation.
+   - Run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` after the sync; a readiness result
+     from before the sync is stale.
+
+11. Push and open draft PR
    - `git push -u origin "$(git branch --show-current)"`
    - Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - Open draft PR linking issue:
      - `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`
 
-10. Create follow-up issues when needed
+12. Create follow-up issues when needed
    - For deferred but important work, create dedicated issues:
      - `gh issue create --title "<follow-up>" --body-file <body.md> --label "enhancement,technical-debt" --milestone "<milestone>"`
    - Add to project:
@@ -116,7 +124,7 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
    - If you are processing a larger batch, finish all issue cleanup before the project-write pass
      and run score sync once at the end.
 
-11. Close loop metadata
+13. Close loop metadata
    - Parent issue:
      - keep open while PR is draft; use closing keyword in PR body (`Closes #<n>`) when ready.
    - Project:

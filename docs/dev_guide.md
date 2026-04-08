@@ -123,6 +123,11 @@ Summary line
 EOF
 ```
 
+Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
+either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+The `BASE_REF` value tells the readiness gate what to compare against; it does not update the
+feature branch by itself, so validation from before the latest-main sync is stale for PR creation.
+
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
@@ -1121,7 +1126,8 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Ruff clean and “Check Code Quality” clean locally.
 - Type check clean (no type errors; warnings documented if present).
 - Docs updated (README in feature folder, diagrams if changed).
-- Validation scripts run and pass; optional benchmark if perf‑sensitive.
+- Feature branch synced with latest `origin/main` before PR creation, then validation scripts run
+  and pass; optional benchmark if perf‑sensitive.
 - CI green (lint + tests) and PR opened with appropriate links.
 
 ## Templates

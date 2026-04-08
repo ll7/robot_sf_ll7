@@ -1,6 +1,3 @@
-# Deprecated compatibility wrapper for issue #594.
-# Prefer configs/training/benchmark_orca_classic_cross_trap_subset.yaml in new runs.
-#
 # Benchmark helper config for SocNav ORCA analysis runs.
 # Usage:
 #   uv run python scripts/tools/policy_analysis_run.py \

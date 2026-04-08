@@ -12,6 +12,8 @@ maps:
   path: svg_maps/classic_bottleneck_medium.svg
 - map_id: classic_crossing
   path: svg_maps/classic_crossing.svg
+- map_id: classic_cross_trap
+  path: svg_maps/classic_crossing.svg
 - map_id: classic_doorway
   path: svg_maps/classic_doorway.svg
 - map_id: classic_group_crossing

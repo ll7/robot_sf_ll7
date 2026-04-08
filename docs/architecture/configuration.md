@@ -168,11 +168,12 @@ This enables a mix of per-scenario and per-archetype files while keeping a singl
 point for training/benchmark runs.
 
 ```yaml
-# configs/scenarios/sets/classic_crossing_subset.yaml
+# configs/scenarios/sets/classic_cross_trap_subset.yaml
 includes:
-  - ../single/classic_crossing_low.yaml
-  - ../single/classic_crossing_medium.yaml
-  - ../archetypes/classic_crossing_high.yaml
+  - ../archetypes/classic_cross_trap.yaml
+select_scenarios:
+  - classic_cross_trap_low
+  - classic_cross_trap_high
 ```
 
 Each included file can contain one or many scenarios. The loader expands includes

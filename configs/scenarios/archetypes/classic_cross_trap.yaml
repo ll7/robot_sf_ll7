@@ -1,17 +1,13 @@
-# Deprecated compatibility aliases for issue #594.
-# Prefer configs/scenarios/archetypes/classic_cross_trap.yaml and
-# classic_cross_trap_{low,medium,high} in new configs.
 scenarios:
-- name: classic_crossing_low
-  map_file: ../../../maps/svg_maps/classic_crossing.svg
+- name: classic_cross_trap_low
+  map_id: classic_cross_trap
   simulation_config:
     max_episode_steps: 600
     ped_density: 0.02
   robot_config: {}
   metadata:
-    deprecated_alias_for: classic_cross_trap_low
-    archetype: crossing
-    label: cross plaza circulation
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
     density: low
     flow: bi
     groups: 0.0
@@ -32,16 +28,15 @@ scenarios:
   - 101
   - 102
   - 103
-- name: classic_crossing_medium
-  map_file: ../../../maps/svg_maps/classic_crossing.svg
+- name: classic_cross_trap_medium
+  map_id: classic_cross_trap
   simulation_config:
     max_episode_steps: 600
     ped_density: 0.05
   robot_config: {}
   metadata:
-    deprecated_alias_for: classic_cross_trap_medium
-    archetype: crossing
-    label: cross plaza circulation
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
     density: medium
     flow: bi
     groups: 0.0
@@ -62,16 +57,15 @@ scenarios:
   - 101
   - 102
   - 103
-- name: classic_crossing_high
-  map_file: ../../../maps/svg_maps/classic_crossing.svg
+- name: classic_cross_trap_high
+  map_id: classic_cross_trap
   simulation_config:
     max_episode_steps: 600
     ped_density: 0.08
   robot_config: {}
   metadata:
-    deprecated_alias_for: classic_cross_trap_high
-    archetype: crossing
-    label: cross plaza circulation
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
     density: high
     flow: bi
     groups: 0.0

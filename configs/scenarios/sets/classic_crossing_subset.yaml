@@ -1,4 +1,5 @@
-# Example manifest combining per-scenario and per-archetype files, then selecting a subset.
+# Deprecated compatibility aliases for issue #594.
+# Prefer configs/scenarios/sets/classic_cross_trap_subset.yaml in new configs.
 includes:
   - ../archetypes/classic_crossing.yaml
 select_scenarios:

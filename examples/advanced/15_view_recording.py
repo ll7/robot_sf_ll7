@@ -20,22 +20,13 @@ import os
 
 from loguru import logger
 
+from examples.demo_utils import fast_demo_enabled
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.render.playback_recording import load_states_and_visualize
-
-
-def _fast_demo_enabled() -> bool:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
-    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def _step_budget(default: int) -> int:
@@ -53,7 +44,7 @@ def _step_budget(default: int) -> int:
             return max(1, int(override))
         except ValueError:  # pragma: no cover - defensive guard
             pass
-    if _fast_demo_enabled():
+    if fast_demo_enabled():
         return min(default, 64)
     return default
 
@@ -107,7 +98,7 @@ def main():
     test_simulation(map_def)
 
     # Load the states from the file and view the recording
-    if _fast_demo_enabled():
+    if fast_demo_enabled():
         logger.info("Fast demo enabled: skipping playback visualization to keep runtime short.")
     else:
         load_states_and_visualize(get_file())

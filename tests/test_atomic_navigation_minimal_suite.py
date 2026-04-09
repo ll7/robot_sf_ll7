@@ -146,6 +146,9 @@ def test_atomic_issue_596_maps_pass_repo_verifier(tmp_path: Path) -> None:
             mode="ci",
             output_path=output_path,
         )
+        assert summary.total_maps == 1, (
+            f"Verifier scope matched {summary.total_maps} maps for {map_name}; expected 1"
+        )
         assert summary.failed == 0, f"Map verifier failed for {map_name}: {summary.results}"
         assert output_path.exists(), f"Verifier did not emit a manifest for {map_name}"
 

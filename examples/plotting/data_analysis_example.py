@@ -24,6 +24,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from examples.demo_utils import fast_demo_enabled
 from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_timestamp,
     plot_all_data_json,
@@ -34,11 +35,6 @@ from robot_sf.data_analysis.extract_obj_from_pickle import (
     plot_all_data_pkl,
 )
 from robot_sf.render.playback_recording import load_states
-
-
-def _fast_demo_enabled() -> bool:
-    """Return True when the example should run in smoke-friendly fast mode."""
-    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def show_from_pkl(filename: str, unique_id: str):
@@ -99,13 +95,16 @@ if __name__ == "__main__":
         if recording_path:
             recording_id = extract_timestamp(str(recording_path))
 
-            if _fast_demo_enabled():
+            if fast_demo_enabled():
                 dataset_dir = Path("examples/datasets")
                 if dataset_dir.exists():
                     save_to_json(str(recording_path), f"{dataset_dir}/{recording_id}.json")
                     logger.info("Fast demo mode: exported JSON only")
                 else:
-                    logger.error("'examples/datasets' directory not found")
+                    raise RuntimeError(
+                        "Fast demo mode requires 'examples/datasets' to exist "
+                        f"(recording_id={recording_id}, recording_path={recording_path})"
+                    )
             else:
                 show_from_json(str(recording_path), recording_id)
                 show_from_pkl(str(recording_path), recording_id)

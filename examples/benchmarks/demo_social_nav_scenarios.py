@@ -24,6 +24,7 @@ Limitations:
 import os
 import time
 
+from examples.demo_utils import fast_demo_enabled
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
@@ -35,16 +36,6 @@ SVG_MAPS = [
     ("Crossing", "maps/svg_maps/crossing.svg"),
     ("Door passing", "maps/svg_maps/door_passing.svg"),
 ]
-
-
-def _fast_demo_enabled() -> bool:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
-    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def _step_budget(default: int) -> int:
@@ -62,7 +53,7 @@ def _step_budget(default: int) -> int:
             return max(1, int(override))
         except ValueError:  # pragma: no cover
             pass
-    if _fast_demo_enabled():
+    if fast_demo_enabled():
         return min(default, 64)
     return default
 
@@ -75,7 +66,7 @@ def _scenario_budget(default: int) -> int:
             return max(1, min(default, int(override)))
         except ValueError:  # pragma: no cover
             pass
-    if _fast_demo_enabled():
+    if fast_demo_enabled():
         return 1
     return default
 
@@ -107,7 +98,7 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
             break
     env.close()
     print(f"Completed scenario: {name}")
-    if not _fast_demo_enabled():
+    if not fast_demo_enabled():
         time.sleep(1)
 
 

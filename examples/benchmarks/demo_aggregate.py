@@ -55,8 +55,9 @@ def _write_demo_matrix(path: Path) -> None:
 
 
 def main() -> None:
+    """Run the synthetic aggregate demo and write the summary artifacts."""
+
     # Use helper catalog to ensure output directory exists
-    """TODO docstring. Document this function."""
     out_dir = ensure_output_dir(Path("output/results/demo_aggregate"))
 
     matrix_path = out_dir / "matrix.yaml"

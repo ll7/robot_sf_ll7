@@ -28,6 +28,28 @@ if TYPE_CHECKING:
     from robot_sf.common.types import Vec2D
 
 
+def _step_budget(default: int) -> int:
+    """Return a rollout budget compatible with the example smoke harness."""
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
+    if os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
+        return min(default, 8)
+    return default
+
+
+def _pedestrian_summary(ped: SinglePedestrianDefinition) -> str:
+    """Return a human-readable description for a configured pedestrian."""
+    if ped.goal:
+        return f"{ped.id}: start={ped.start}, goal={ped.goal}"
+    if ped.trajectory:
+        return f"{ped.id}: start={ped.start}, trajectory={len(ped.trajectory)} waypoints"
+    return f"{ped.id}: start={ped.start} (static)"
+
+
 def create_simple_map_with_single_pedestrians() -> MapDefinition:
     """
     Create a simple map with single pedestrians for demonstration.
@@ -119,7 +141,7 @@ def create_simple_map_with_single_pedestrians() -> MapDefinition:
     )
 
 
-def run_simulation_with_single_pedestrians(num_steps: int = 500):
+def run_simulation_with_single_pedestrians(num_steps: int = 500) -> None:
     """
     Run a simulation with single pedestrians and visualize the results.
 
@@ -135,12 +157,7 @@ def run_simulation_with_single_pedestrians(num_steps: int = 500):
 
     print(f"\nMap created with {len(custom_map.single_pedestrians)} single pedestrians:")
     for ped in custom_map.single_pedestrians:
-        if ped.goal:
-            print(f"  - {ped.id}: start={ped.start}, goal={ped.goal}")
-        elif ped.trajectory:
-            print(f"  - {ped.id}: start={ped.start}, trajectory={len(ped.trajectory)} waypoints")
-        else:
-            print(f"  - {ped.id}: start={ped.start} (static)")
+        print(f"  - {_pedestrian_summary(ped)}")
 
     # Configure simulation with custom map
     # Create a map pool with just our custom map
@@ -151,14 +168,7 @@ def run_simulation_with_single_pedestrians(num_steps: int = 500):
     # The map doesn't have ped_crowded_zones, so no crowd pedestrians will spawn
     env = make_robot_env(config=config, debug=True)
 
-    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
-    if override:
-        try:
-            num_steps = max(1, int(override))
-        except ValueError:  # pragma: no cover - defensive guard
-            override = None
-    if override is None and os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
-        num_steps = min(num_steps, 8)
+    num_steps = _step_budget(num_steps)
 
     print(f"\nRunning simulation for {num_steps} steps...")
     print("Press Ctrl+C to stop early\n")

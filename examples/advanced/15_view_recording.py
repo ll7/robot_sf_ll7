@@ -30,13 +30,23 @@ from robot_sf.render.playback_recording import load_states_and_visualize
 
 
 def _step_budget(default: int) -> int:
-    """TODO docstring. Document this function.
+    """Return the number of simulation steps to execute for the recording run.
 
     Args:
-        default: TODO docstring.
+        default: Baseline maximum number of simulation steps for the full demo run.
+            This value is treated as a positive step count in simulation iterations.
 
     Returns:
-        TODO docstring.
+        The effective step budget. `ROBOT_SF_EXAMPLES_MAX_STEPS` takes precedence
+        over the provided default when it is set to a valid integer and is
+        clamped to at least `1`. If the environment override is absent or
+        invalid, fast-demo mode wins next and caps the budget to
+        `min(default, 64)`. Otherwise the original `default` is returned.
+
+    Notes:
+        Precedence is `ROBOT_SF_EXAMPLES_MAX_STEPS` environment override, then
+        fast-demo mode, then the function argument. Invalid environment values
+        are ignored instead of raising an exception.
     """
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
     if override:

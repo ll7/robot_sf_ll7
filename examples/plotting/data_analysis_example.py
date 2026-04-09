@@ -98,8 +98,13 @@ if __name__ == "__main__":
             if fast_demo_enabled():
                 dataset_dir = Path("examples/datasets")
                 if dataset_dir.exists():
-                    save_to_json(str(recording_path), f"{dataset_dir}/{recording_id}.json")
-                    logger.info("Fast demo mode: exported JSON only")
+                    json_path = dataset_dir / f"{recording_id}.json"
+                    save_to_json(str(recording_path), str(json_path))
+                    logger.info(
+                        "Fast demo mode: exported JSON and skipped plotting "
+                        f"(recording_id={recording_id}, recording_path={recording_path}, "
+                        f"json_path={json_path})"
+                    )
                 else:
                     raise RuntimeError(
                         "Fast demo mode requires 'examples/datasets' to exist "
@@ -108,9 +113,8 @@ if __name__ == "__main__":
             else:
                 show_from_json(str(recording_path), recording_id)
                 show_from_pkl(str(recording_path), recording_id)
-
-            logger.info(f"Successfully extracted and plotted data from {recording_path}")
-            logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")
+                logger.info(f"Successfully extracted and plotted data from {recording_path}")
+                logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")
         else:
             logger.error("No recording files found in the 'examples/recordings' directory")
     else:

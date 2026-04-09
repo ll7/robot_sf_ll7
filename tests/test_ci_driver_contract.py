@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -33,14 +34,15 @@ def _driver_phases() -> set[str]:
 def _extract_workflow_phases(run_text: str) -> set[str]:
     """Return all ci_driver phase arguments referenced in a workflow run block."""
 
+    normalized = re.sub(r"\\\s*\n", " ", run_text)
     referenced_phases: set[str] = set()
-    for match in PHASE_PATTERN.finditer(run_text):
+    for match in PHASE_PATTERN.finditer(normalized):
         args = match.group("args")
-        if not args:
+        if not args or not args.strip():
             continue
-        referenced_phases.update(
-            token for token in args.split() if token and not token.startswith("-")
-        )
+        for token in shlex.split(args, comments=True, posix=True):
+            if token and not token.startswith("-"):
+                referenced_phases.add(token)
     return referenced_phases
 
 
@@ -72,6 +74,18 @@ def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
         "smoke",
         "artifact-policy",
     }
+
+
+def test_extract_workflow_phases_handles_line_continuations() -> None:
+    """Capture phases when a workflow command uses shell line continuations."""
+
+    run_text = """
+    scripts/dev/ci_driver.sh \
+      lint \
+      typecheck
+    """
+
+    assert _extract_workflow_phases(run_text) == {"lint", "typecheck"}
 
 
 def test_ci_workflow_only_references_known_driver_phases() -> None:

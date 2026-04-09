@@ -152,7 +152,7 @@ run_smoke_phase() {
 
   set -euo pipefail
   echo "Preflight: checking schema file, uv availability, and optional jq"
-  local schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+  local schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json"
   if [[ ! -r "$schema_path" ]]; then
     echo "ERROR: Schema file not found or not readable: $schema_path" >&2
     ls -la "$(dirname "$schema_path")" || true
@@ -172,7 +172,9 @@ run_smoke_phase() {
     echo "jq not found; JSONL validation will be skipped (episodes.jsonl size will still be checked)"
   fi
 
-  cat > matrix.yaml <<'YAML'
+  mkdir -p output/benchmarks/ci_smoke
+  local matrix_path="output/benchmarks/ci_smoke/matrix.yaml"
+  cat > "$matrix_path" <<'YAML'
 - id: ci-smoke-uni-low-open
   density: low
   flow: uni
@@ -184,11 +186,10 @@ run_smoke_phase() {
   repeats: 1
 YAML
 
-  mkdir -p output/benchmarks/ci_smoke
   uv run robot_sf_bench run \
-    --matrix matrix.yaml \
+    --matrix "$matrix_path" \
     --out output/benchmarks/ci_smoke/episodes.jsonl \
-    --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
+    --schema "$schema_path" \
     --horizon 3 \
     --dt 0.1 \
     --base-seed 0
@@ -216,7 +217,7 @@ run_phase() {
       uvx ty check . --exit-zero
       ;;
     test)
-      uv run pytest -q -n auto --max-worker-restart=0
+      "$SCRIPT_DIR/run_tests_parallel.sh" tests
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

@@ -114,6 +114,7 @@ skills use the same commands:
 ```bash
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
+scripts/dev/run_ci_local.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 scripts/dev/gh_comment.sh pr --current <<'EOF'
@@ -122,6 +123,13 @@ Summary line
 - bullet 2
 EOF
 ```
+
+`scripts/dev/run_ci_local.sh` is the local CI-equivalent entrypoint for the shared
+validation phases. It runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
+then delegates to `scripts/dev/ci_driver.sh` so local runs and `.github/workflows/ci.yml`
+share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
+`artifact-policy`). Pass explicit phases to scope a run, for example
+`scripts/dev/run_ci_local.sh lint test`.
 
 Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
 either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.

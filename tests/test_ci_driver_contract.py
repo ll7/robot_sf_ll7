@@ -11,7 +11,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-PHASE_PATTERN = re.compile(r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh\s+([a-z0-9_-]+)\b")
+PHASE_PATTERN = re.compile(
+    r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
+    re.MULTILINE,
+)
 
 
 def _driver_phases() -> set[str]:
@@ -27,6 +30,20 @@ def _driver_phases() -> set[str]:
     return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
+def _extract_workflow_phases(run_text: str) -> set[str]:
+    """Return all ci_driver phase arguments referenced in a workflow run block."""
+
+    referenced_phases: set[str] = set()
+    for match in PHASE_PATTERN.finditer(run_text):
+        args = match.group("args")
+        if not args:
+            continue
+        referenced_phases.update(
+            token for token in args.split() if token and not token.startswith("-")
+        )
+    return referenced_phases
+
+
 def _workflow_phases() -> set[str]:
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["ci"]["steps"]
@@ -36,9 +53,25 @@ def _workflow_phases() -> set[str]:
         run_text = step.get("run")
         if not run_text:
             continue
-        referenced_phases.update(PHASE_PATTERN.findall(run_text))
+        referenced_phases.update(_extract_workflow_phases(run_text))
 
     return referenced_phases
+
+
+def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
+    """Capture all phase arguments from one workflow run stanza."""
+
+    run_text = """
+    scripts/dev/ci_driver.sh lint   test
+    ./scripts/dev/ci_driver.sh   --verbose smoke artifact-policy
+    """
+
+    assert _extract_workflow_phases(run_text) == {
+        "lint",
+        "test",
+        "smoke",
+        "artifact-policy",
+    }
 
 
 def test_ci_workflow_only_references_known_driver_phases() -> None:

@@ -28,7 +28,8 @@ would blur ownership or make the reasoning harder to locate.
 Prefer these naming patterns:
 
 - `issue_<number>_<topic>.md` for issue-scoped notes,
-- `<topic>_<date>.md` for cross-issue audits, release notes, or bounded investigations.
+- `<topic>_<date>.md` using `YYYY-MM-DD` for cross-issue audits, release notes, or bounded
+  investigations.
 
 ## Required Linking
 
@@ -72,12 +73,13 @@ knowledge, not every transient iteration detail.
 
 ## Skills And Entry Points
 
-- Repository rule: `AGENTS.md`
-- Contributor workflow: `docs/dev_guide.md`
-- Docs index entry: `docs/README.md`
-- AI-facing orientation: `docs/ai/repo_overview.md`
-- Note-maintenance skill: `.agents/skills/context-note-maintainer/SKILL.md`
+- Repository rule: [AGENTS.md](../../AGENTS.md)
+- Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
+- Docs index entry: [docs/README.md](../README.md)
+- AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+- Note-maintenance skill:
+  [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
 ## Example
 
-- `docs/context/issue_796_agent_knowledge_capture_policy.md`
+- [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)

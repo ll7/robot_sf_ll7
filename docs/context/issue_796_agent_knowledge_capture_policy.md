@@ -1,14 +1,14 @@
 # Issue 796 Agent Knowledge Capture Policy
 
-- GitHub issue: `#796`
-- Canonical workflow: `docs/context/README.md`
+- GitHub issue: [#796](https://github.com/ll7/robot_sf_ll7/issues/796)
+- Canonical workflow: [docs/context/README.md](README.md)
 - Related repo guidance:
-  - `AGENTS.md`
-  - `.github/copilot-instructions.md`
-  - `docs/dev_guide.md`
-  - `docs/README.md`
-  - `docs/ai/repo_overview.md`
-  - `.agents/skills/context-note-maintainer/SKILL.md`
+  - [AGENTS.md](../../AGENTS.md)
+  - [.github/copilot-instructions.md](../../.github/copilot-instructions.md)
+  - [docs/dev_guide.md](../dev_guide.md)
+  - [docs/README.md](../README.md)
+  - [docs/ai/repo_overview.md](../ai/repo_overview.md)
+  - [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
 ## Goal
 
@@ -29,12 +29,13 @@ important context does not remain trapped in chat, PR text, or issue comments.
 
 ## Rollout Surface
 
-- Policy rule in `AGENTS.md`
-- Copilot-facing mirror in `.github/copilot-instructions.md`
-- Contributor workflow pointer in `docs/dev_guide.md`
-- Docs index entry in `docs/README.md`
-- AI-facing discoverability update in `docs/ai/repo_overview.md`
-- Dedicated note-maintenance workflow in `.agents/skills/context-note-maintainer/SKILL.md`
+- Policy rule in [AGENTS.md](../../AGENTS.md)
+- Copilot-facing mirror in [.github/copilot-instructions.md](../../.github/copilot-instructions.md)
+- Contributor workflow pointer in [docs/dev_guide.md](../dev_guide.md)
+- Docs index entry in [docs/README.md](../README.md)
+- AI-facing discoverability update in [docs/ai/repo_overview.md](../ai/repo_overview.md)
+- Dedicated note-maintenance workflow in
+  [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
 ## Validation
 

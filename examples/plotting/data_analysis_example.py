@@ -24,6 +24,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from examples.demo_utils import fast_demo_enabled
 from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_timestamp,
     plot_all_data_json,
@@ -94,12 +95,26 @@ if __name__ == "__main__":
         if recording_path:
             recording_id = extract_timestamp(str(recording_path))
 
-            show_from_json(str(recording_path), recording_id)
-
-            show_from_pkl(str(recording_path), recording_id)
-
-            logger.info(f"Successfully extracted and plotted data from {recording_path}")
-            logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")
+            if fast_demo_enabled():
+                dataset_dir = Path("examples/datasets")
+                if dataset_dir.exists():
+                    json_path = dataset_dir / f"{recording_id}.json"
+                    save_to_json(str(recording_path), str(json_path))
+                    logger.info(
+                        "Fast demo mode: exported JSON and skipped plotting "
+                        f"(recording_id={recording_id}, recording_path={recording_path}, "
+                        f"json_path={json_path})"
+                    )
+                else:
+                    raise RuntimeError(
+                        "Fast demo mode requires 'examples/datasets' to exist "
+                        f"(recording_id={recording_id}, recording_path={recording_path})"
+                    )
+            else:
+                show_from_json(str(recording_path), recording_id)
+                show_from_pkl(str(recording_path), recording_id)
+                logger.info(f"Successfully extracted and plotted data from {recording_path}")
+                logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")
         else:
             logger.error("No recording files found in the 'examples/recordings' directory")
     else:

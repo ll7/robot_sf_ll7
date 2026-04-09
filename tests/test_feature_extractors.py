@@ -232,13 +232,31 @@ class TestFeatureExtractorConfig:
 class TestIntegrationWithStableBaselines3:
     """Integration tests with StableBaselines3 and robot environment."""
 
+    @staticmethod
+    def _build_fast_config() -> EnvSettings:
+        """Return a small environment config for PPO integration smoke tests."""
+        config = EnvSettings()
+        config.sim_config.time_per_step_in_secs = 0.02
+        config.sim_config.sim_time_in_secs = 2
+        return config
+
+    @staticmethod
+    def _build_fast_ppo_kwargs() -> dict[str, int | float]:
+        """Return PPO kwargs that avoid large default rollout budgets in smoke tests."""
+        return {
+            "n_steps": 8,
+            "batch_size": 8,
+            "n_epochs": 1,
+            "gamma": 0.95,
+            "learning_rate": 3e-4,
+            "verbose": 0,
+        }
+
     def test_mlp_extractor_with_ppo(self):
         """Test MLP extractor integration with PPO."""
         PPO, make_vec_env = _require_sb3()
         # Create minimal environment
-        config = EnvSettings()
-        config.sim_config.time_per_step_in_secs = 0.1
-        config.sim_config.sim_time_in_secs = 10
+        config = self._build_fast_config()
 
         def make_env():
             """TODO docstring. Document this function."""
@@ -253,15 +271,7 @@ class TestIntegrationWithStableBaselines3:
         }
 
         model = PPO(
-            "MultiInputPolicy",
-            env,
-            policy_kwargs=policy_kwargs,
-            n_steps=16,
-            batch_size=16,
-            n_epochs=1,
-            gamma=0.95,
-            learning_rate=3e-4,
-            verbose=0,
+            "MultiInputPolicy", env, policy_kwargs=policy_kwargs, **self._build_fast_ppo_kwargs()
         )
 
         # Test that model can be created without errors
@@ -270,16 +280,14 @@ class TestIntegrationWithStableBaselines3:
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
         # Test a few training steps
-        model.learn(total_timesteps=32)
+        model.learn(total_timesteps=8)
 
         env.close()
 
     def test_attention_extractor_with_ppo(self):
         """Test attention extractor integration with PPO."""
         PPO, make_vec_env = _require_sb3()
-        config = EnvSettings()
-        config.sim_config.time_per_step_in_secs = 0.02
-        config.sim_config.sim_time_in_secs = 2
+        config = self._build_fast_config()
 
         def make_env():
             """TODO docstring. Document this function."""
@@ -293,29 +301,19 @@ class TestIntegrationWithStableBaselines3:
         }
 
         model = PPO(
-            "MultiInputPolicy",
-            env,
-            policy_kwargs=policy_kwargs,
-            n_steps=16,
-            batch_size=16,
-            n_epochs=1,
-            gamma=0.95,
-            learning_rate=3e-4,
-            verbose=0,
+            "MultiInputPolicy", env, policy_kwargs=policy_kwargs, **self._build_fast_ppo_kwargs()
         )
 
         assert model is not None
         assert isinstance(model.policy.features_extractor, AttentionFeatureExtractor)
 
-        model.learn(total_timesteps=32)
+        model.learn(total_timesteps=8)
         env.close()
 
     def test_lightweight_cnn_extractor_with_ppo(self):
         """Test lightweight CNN extractor integration with PPO."""
         PPO, make_vec_env = _require_sb3()
-        config = EnvSettings()
-        config.sim_config.time_per_step_in_secs = 0.1
-        config.sim_config.sim_time_in_secs = 10
+        config = self._build_fast_config()
 
         def make_env():
             """TODO docstring. Document this function."""
@@ -328,20 +326,20 @@ class TestIntegrationWithStableBaselines3:
             "features_extractor_kwargs": {"num_filters": [16, 8]},
         }
 
-        model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
+        model = PPO(
+            "MultiInputPolicy", env, policy_kwargs=policy_kwargs, **self._build_fast_ppo_kwargs()
+        )
 
         assert model is not None
         assert isinstance(model.policy.features_extractor, LightweightCNNExtractor)
 
-        model.learn(total_timesteps=32)
+        model.learn(total_timesteps=8)
         env.close()
 
     def test_config_with_ppo(self):
         """Test using configuration system with PPO."""
         PPO, make_vec_env = _require_sb3()
-        config = EnvSettings()
-        config.sim_config.time_per_step_in_secs = 0.1
-        config.sim_config.sim_time_in_secs = 10
+        config = self._build_fast_config()
 
         def make_env():
             """TODO docstring. Document this function."""
@@ -353,12 +351,14 @@ class TestIntegrationWithStableBaselines3:
         extractor_config = FeatureExtractorPresets.mlp_small()
         policy_kwargs = extractor_config.get_policy_kwargs()
 
-        model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
+        model = PPO(
+            "MultiInputPolicy", env, policy_kwargs=policy_kwargs, **self._build_fast_ppo_kwargs()
+        )
 
         assert model is not None
         assert isinstance(model.policy.features_extractor, MLPFeatureExtractor)
 
-        model.learn(total_timesteps=32)
+        model.learn(total_timesteps=8)
         env.close()
 
 

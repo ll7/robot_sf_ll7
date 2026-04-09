@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from gymnasium import spaces as gym_spaces
 
+from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_sac_sb3 import (
     SACTrainingConfig,
+    _build_env,
     build_arg_parser,
     load_sac_training_config,
     run_sac_training,
@@ -19,6 +22,7 @@ from scripts.training.train_sac_sb3 import (
 
 _GATE_CONFIG = Path("configs/training/sac/gate.yaml")
 _FULL_CONFIG = Path("configs/training/sac/full.yaml")
+_SOCNAV_GATE_CONFIG = Path("configs/training/sac/gate_socnav_struct.yaml")
 _CLASSIC_SCENARIO = Path("configs/scenarios/classic_interactions.yaml").resolve()
 
 
@@ -76,6 +80,13 @@ def test_full_config_loads() -> None:
     assert config.output_dir == Path("output/models/sac").resolve()
 
 
+def test_socnav_gate_config_loads() -> None:
+    """Benchmark-compatible gate config should load with socnav_struct override."""
+    assert _SOCNAV_GATE_CONFIG.exists(), f"Missing gate config: {_SOCNAV_GATE_CONFIG}"
+    config = load_sac_training_config(_SOCNAV_GATE_CONFIG)
+    assert config.env_overrides == {"observation_mode": "socnav_struct"}
+
+
 def test_load_rejects_unknown_hyperparams(tmp_path: Path) -> None:
     """Config loader should raise on unrecognised SAC hyperparameter keys."""
     scenario_path = _CLASSIC_SCENARIO
@@ -103,6 +114,41 @@ def test_load_rejects_non_mapping_yaml(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Dry-run integration test
 # ---------------------------------------------------------------------------
+
+
+def test_build_env_uses_expected_observation_and_action_contract() -> None:
+    """Env construction should preserve the PPO-compatible observation/action contract."""
+    config = load_sac_training_config(_GATE_CONFIG)
+    scenario_definitions = load_scenarios(config.scenario_config)
+    vec_env = _build_env(config, scenario_definitions=scenario_definitions)
+
+    try:
+        assert isinstance(vec_env.observation_space, gym_spaces.Dict)
+        assert set(vec_env.observation_space.spaces) == {"drive_state", "rays"}
+        assert isinstance(vec_env.action_space, gym_spaces.Box)
+        assert vec_env.action_space.shape == (2,)
+        assert tuple(vec_env.action_space.low.tolist()) == (0.0, -1.0)
+        assert tuple(vec_env.action_space.high.tolist()) == (2.0, 1.0)
+        assert getattr(vec_env.envs[0], "applied_seed", None) == config.seed
+    finally:
+        vec_env.close()
+
+
+def test_build_env_applies_socnav_struct_override() -> None:
+    """Env construction should support benchmark-compatible socnav_struct observations."""
+    config = load_sac_training_config(_SOCNAV_GATE_CONFIG)
+    scenario_definitions = load_scenarios(config.scenario_config)
+    vec_env = _build_env(config, scenario_definitions=scenario_definitions)
+
+    try:
+        assert isinstance(vec_env.observation_space, gym_spaces.Dict)
+        assert "robot_position" in vec_env.observation_space.spaces
+        assert "goal_current" in vec_env.observation_space.spaces
+        assert "pedestrians_positions" in vec_env.observation_space.spaces
+        assert isinstance(vec_env.action_space, gym_spaces.Box)
+        assert vec_env.action_space.shape == (2,)
+    finally:
+        vec_env.close()
 
 
 def test_dry_run_completes(tmp_path: Path) -> None:

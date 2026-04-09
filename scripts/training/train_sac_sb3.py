@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from gymnasium import ObservationWrapper
 from gymnasium import spaces as gym_spaces
 from loguru import logger
 
@@ -40,6 +41,7 @@ try:
 except ImportError as exc:
     raise RuntimeError("Stable-Baselines3 must be installed to run SAC training.") from exc
 
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -86,6 +88,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "scenario_config",
         "total_timesteps",
         "sac_hyperparams",
+        "env_overrides",
         "env_factory_kwargs",
         "tracking",
         "output_dir",
@@ -107,6 +110,7 @@ class SACTrainingConfig:
     scenario_config: Path
     total_timesteps: int
     sac_hyperparams: dict[str, object] = field(default_factory=dict)
+    env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     tracking: dict[str, object] = field(default_factory=dict)
     output_dir: Path = field(default_factory=lambda: Path("output/models/sac"))
@@ -163,6 +167,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         scenario_config=scenario_config,
         total_timesteps=int(data["total_timesteps"]),
         sac_hyperparams=raw_hyperparams,
+        env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
         tracking=dict(data.get("tracking", {}) or {}),
         output_dir=output_dir,
@@ -206,6 +211,7 @@ def _build_env(
         scenario,
         scenario_path=config.scenario_config,
     )
+    _apply_env_overrides(robot_config, config.env_overrides)
 
     env_kwargs: dict[str, Any] = {
         "config": robot_config,
@@ -215,9 +221,86 @@ def _build_env(
         env_kwargs["seed"] = config.seed
 
     def _make() -> Any:
-        return make_robot_env(**env_kwargs)
+        env = make_robot_env(**env_kwargs)
+        return _maybe_flatten_nested_dict_env(env)
 
     return DummyVecEnv([_make])
+
+
+def _apply_env_overrides(robot_config: Any, overrides: Mapping[str, object]) -> None:
+    """Apply a minimal set of config-driven environment overrides.
+
+    SAC currently needs this primarily to switch between `default_gym` and
+    benchmark-compatible `socnav_struct` observations without forking the script.
+    """
+    if not overrides:
+        return
+
+    for key, value in overrides.items():
+        if key == "observation_mode":
+            robot_config.observation_mode = ObservationMode(str(value))
+            continue
+        if not hasattr(robot_config, key):
+            raise ValueError(f"Unknown env_overrides key: {key}")
+        setattr(robot_config, key, value)
+
+
+def _flatten_nested_dict_spaces(obs_space: gym_spaces.Dict) -> gym_spaces.Dict:
+    """Flatten nested dict spaces to a single top-level Dict for SB3 compatibility."""
+    flattened: dict[str, gym_spaces.Space] = {}
+
+    def _walk(space_dict: dict[str, gym_spaces.Space], prefix: str = "") -> None:
+        for key, subspace in space_dict.items():
+            full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
+            if isinstance(subspace, gym_spaces.Dict):
+                _walk(subspace.spaces, full_key)
+            else:
+                flattened[full_key] = subspace
+
+    _walk(obs_space.spaces)
+    return gym_spaces.Dict(flattened)
+
+
+def _flatten_nested_dict_obs(obs: Mapping[str, Any]) -> dict[str, Any]:
+    """Flatten nested dict observations to match `_flatten_nested_dict_spaces`."""
+    flattened: dict[str, Any] = {}
+
+    def _walk(obs_dict: Mapping[str, Any], prefix: str = "") -> None:
+        for key, value in obs_dict.items():
+            full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
+            if isinstance(value, Mapping):
+                _walk(value, full_key)
+            else:
+                flattened[full_key] = value
+
+    _walk(obs)
+    return flattened
+
+
+class _FlattenNestedDictObservation(ObservationWrapper):
+    """Observation wrapper that flattens nested Dict observations into a flat Dict."""
+
+    def __init__(self, env: Any) -> None:
+        super().__init__(env)
+        self.observation_space = _flatten_nested_dict_spaces(env.observation_space)
+
+    def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        return _flatten_nested_dict_obs(observation)
+
+
+def _has_nested_dict_space(obs_space: gym_spaces.Space) -> bool:
+    """Return whether the observation space contains Dict-valued children."""
+    return isinstance(obs_space, gym_spaces.Dict) and any(
+        isinstance(subspace, gym_spaces.Dict) for subspace in obs_space.spaces.values()
+    )
+
+
+def _maybe_flatten_nested_dict_env(env: Any) -> Any:
+    """Flatten nested Dict observations without collapsing them to a Box."""
+    obs_space = getattr(env, "observation_space", None)
+    if _has_nested_dict_space(obs_space):
+        return _FlattenNestedDictObservation(env)
+    return env
 
 
 def _resolve_policy_name(observation_space: gym_spaces.Space) -> str:

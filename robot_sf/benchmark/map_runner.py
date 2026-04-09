@@ -19,6 +19,7 @@ from loguru import logger
 from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
 from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.baselines.sac import SACPlanner
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
@@ -1295,6 +1296,70 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta["paper_ready"] = bool(paper_ready)
         if paper_reason:
             meta["paper_gate_reason"] = paper_reason
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key in {"sac"}:
+        sac_planner = SACPlanner(algo_config, seed=None)
+        planner_cfg = getattr(sac_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            sac_obs_mode = str(planner_cfg.get("obs_mode", "dict")).strip().lower()
+        else:
+            sac_obs_mode = str(getattr(planner_cfg, "obs_mode", "dict")).strip().lower()
+        if hasattr(sac_planner, "get_metadata"):
+            planner_meta = sac_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+        sac_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
+                sac_obs = obs
+            else:
+                sac_obs = _obs_to_ppo_format(obs)
+            action = sac_planner.step(sac_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=sac_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=sac_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+            _update_adapter_impact_metrics(meta, conversion_mode)
+            return linear, angular
+
+        _policy._planner_close = sac_planner.close
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "sac")
+        meta.setdefault("config", algo_config)
+        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
     elif algo_key == "drl_vo":

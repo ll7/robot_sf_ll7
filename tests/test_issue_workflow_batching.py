@@ -16,7 +16,6 @@ SURFACE_PATHS = {
 }
 SKILL_PATHS = [
     ROOT / ".codex" / "skills" / "gh-issue-autopilot" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-sequencer" / "SKILL.md",
     ROOT / ".codex" / "skills" / "gh-issue-creator" / "SKILL.md",
     ROOT / ".codex" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
     ROOT / ".codex" / "skills" / "gh-issue-clarifier" / "SKILL.md",

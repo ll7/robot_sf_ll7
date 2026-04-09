@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 import scripts.training.train_dreamerv3_rllib as dreamer
@@ -66,10 +67,54 @@ class _FakeAlgo:
 class _FakeEvalAlgo:
     """Policy stub for periodic evaluation tests."""
 
-    def compute_single_action(self, _observation, *, explore: bool):
-        """Return one deterministic action."""
-        assert explore is False
-        return 0.0
+    def __init__(self) -> None:
+        self.module = _FakeEvalModule()
+
+    def get_module(self):
+        """Expose an RLModule-like object."""
+        return self.module
+
+
+class _FakeEvalTensor:
+    """Tiny tensor-like wrapper that supports the conversion helpers used in tests."""
+
+    def __init__(self, value) -> None:
+        self._value = np.asarray(value)
+
+    def detach(self):
+        return self
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        return self._value
+
+
+class _FakeEvalModule:
+    """RLModule-like evaluation stub for DreamerV3 inference tests."""
+
+    def parameters(self):
+        """No parameters; force the codepath to use CPU fallback."""
+        return iter(())
+
+    def get_initial_state(self):
+        """Return one recurrent state vector without batch dimension."""
+        return {"h": np.array([0.0], dtype=np.float32)}
+
+    def forward_inference(self, batch):
+        """Return one deterministic action and updated state."""
+        obs = np.asarray(batch["obs"])
+        state_in = np.asarray(batch["state_in"]["h"])
+        is_first = np.asarray(batch["is_first"])
+        assert obs.shape == (1, 1)
+        assert state_in.shape == (1, 1)
+        assert is_first.shape == (1,)
+        action = 0.0 if bool(is_first[0]) else 1.0
+        return {
+            "actions": _FakeEvalTensor([[action]]),
+            "state_out": {"h": _FakeEvalTensor([[state_in[0, 0] + 1.0]])},
+        }
 
 
 class _FakeEvalEnv:
@@ -237,11 +282,14 @@ algorithm:
     assert summary["run_id"] == "smoke"
     assert summary["train_iterations"] == 2
     assert len(summary["history"]) == 2
+    assert summary["best_checkpoint"]["iteration"] == 2
+    assert summary["best_checkpoint"]["reward_mean"] == 2.0
 
     result_lines = result_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(result_lines) == 2
     assert json.loads(result_lines[0])["iteration"] == 1
     assert json.loads(result_lines[1])["iteration"] == 2
+    assert (checkpoint_dir / "best_reward").exists()
 
 
 def test_periodic_evaluation_writes_summary_and_records(
@@ -287,6 +335,7 @@ algorithm:
     records = [json.loads(line) for line in records_path.read_text(encoding="utf-8").splitlines()]
     assert [record["episode"] for record in records] == [1, 2]
     assert {record["success"] for record in records} == {True}
+    assert {record["return"] for record in records} == {1.0}
     assert (tmp_path / "evaluation" / "iteration_000003_summary.json").exists()
 
 

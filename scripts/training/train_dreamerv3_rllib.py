@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
+import numpy as np
 import yaml
 from loguru import logger
 
@@ -847,25 +848,150 @@ def _save_checkpoint(algo: Any, checkpoint_dir: Path) -> str:
     raise RuntimeError("Unable to save checkpoint: algorithm has neither save_to_path nor save.")
 
 
-def _predict_action(algo: Any, observation: Any) -> Any:
+def _tree_to_torch_batch(value: Any, *, torch: Any, device: Any, add_time_dim: bool) -> Any:
+    """Convert nested numpy/python structures into batched torch tensors."""
+    if isinstance(value, dict):
+        return {
+            key: _tree_to_torch_batch(
+                nested,
+                torch=torch,
+                device=device,
+                add_time_dim=add_time_dim,
+            )
+            for key, nested in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(
+            _tree_to_torch_batch(nested, torch=torch, device=device, add_time_dim=add_time_dim)
+            for nested in value
+        )
+    if isinstance(value, list):
+        return [
+            _tree_to_torch_batch(nested, torch=torch, device=device, add_time_dim=add_time_dim)
+            for nested in value
+        ]
+    tensor = value if torch.is_tensor(value) else torch.as_tensor(value)
+    tensor = tensor.to(device=device)
+    if tensor.dtype == torch.float64:
+        tensor = tensor.float()
+    tensor = tensor.unsqueeze(0)
+    if add_time_dim:
+        tensor = tensor.unsqueeze(1)
+    return tensor
+
+
+def _tree_to_numpy(value: Any) -> Any:
+    """Detach nested torch structures into numpy/python values."""
+    if isinstance(value, dict):
+        return {key: _tree_to_numpy(nested) for key, nested in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_tree_to_numpy(nested) for nested in value)
+    if isinstance(value, list):
+        return [_tree_to_numpy(nested) for nested in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "numpy"):
+        return value.numpy()
+    return value
+
+
+def _tree_strip_batch_dim(value: Any) -> Any:
+    """Remove the leading batch axis from nested inference outputs."""
+    if isinstance(value, dict):
+        return {key: _tree_strip_batch_dim(nested) for key, nested in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_tree_strip_batch_dim(nested) for nested in value)
+    if isinstance(value, list):
+        return [_tree_strip_batch_dim(nested) for nested in value]
+    if isinstance(value, np.ndarray) and value.ndim > 0 and value.shape[0] == 1:
+        return value[0]
+    return value
+
+
+def _normalize_action_output(action: Any) -> Any:
+    """Collapse batch/time dimensions from single-step action outputs."""
+    if isinstance(action, tuple):
+        action = action[0]
+    if hasattr(action, "detach") or hasattr(action, "numpy"):
+        action = _tree_to_numpy(action)
+    if isinstance(action, np.ndarray):
+        while action.ndim > 0 and action.shape[0] == 1:
+            action = action[0]
+        if action.ndim == 0:
+            return action.item()
+    return action
+
+
+def _predict_action(
+    algo: Any,
+    observation: Any,
+    *,
+    policy_state: Any | None = None,
+    is_first: bool = False,
+) -> tuple[Any, Any | None]:
     """Compute one deterministic action across common RLlib Algorithm APIs."""
     compute_single_action = getattr(algo, "compute_single_action", None)
     if callable(compute_single_action):
         action = compute_single_action(observation, explore=False)
-    else:
-        compute_actions = getattr(algo, "compute_actions", None)
-        if not callable(compute_actions):
-            raise RuntimeError(
-                "Unable to evaluate DreamerV3 policy: algorithm exposes neither "
-                "compute_single_action nor compute_actions."
+        return _normalize_action_output(action), policy_state
+
+    get_module = getattr(algo, "get_module", None)
+    if callable(get_module):
+        module = get_module()
+        if module is not None:
+            import torch
+            from ray.rllib.core.columns import Columns
+
+            try:
+                device = next(module.parameters()).device
+            except (AttributeError, StopIteration):
+                device = torch.device("cpu")
+            if policy_state is None:
+                policy_state = module.get_initial_state()
+            module_inputs = {
+                Columns.OBS: _tree_to_torch_batch(
+                    observation,
+                    torch=torch,
+                    device=device,
+                    add_time_dim=True,
+                ),
+                Columns.STATE_IN: _tree_to_torch_batch(
+                    policy_state,
+                    torch=torch,
+                    device=device,
+                    add_time_dim=False,
+                ),
+                "is_first": torch.as_tensor([is_first], dtype=torch.float32, device=device),
+            }
+            module_outputs = module.forward_inference(module_inputs)
+            action = _normalize_action_output(module_outputs[Columns.ACTIONS])
+            next_state = _tree_strip_batch_dim(
+                _tree_to_numpy(module_outputs.get(Columns.STATE_OUT, policy_state))
             )
-        action = compute_actions([observation], explore=False)
-        if isinstance(action, tuple):
-            action = action[0]
-        action = action[0]
+            return action, next_state
+
+    compute_actions = getattr(algo, "compute_actions", None)
+    if not callable(compute_actions):
+        raise RuntimeError(
+            "Unable to evaluate DreamerV3 policy: algorithm exposes neither "
+            "compute_single_action, get_module, nor compute_actions."
+        )
+    action = compute_actions([observation], explore=False)
     if isinstance(action, tuple):
-        return action[0]
-    return action
+        action = action[0]
+    action = action[0]
+    return _normalize_action_output(action), policy_state
+
+
+def _is_better_reward(candidate: float | int | None, incumbent: float | int | None) -> bool:
+    """Return whether a new scalar reward should replace the tracked best value."""
+    if candidate is None:
+        return False
+    if incumbent is None:
+        return True
+    return float(candidate) > float(incumbent)
 
 
 def _episode_flags(info: dict[str, Any]) -> dict[str, bool]:
@@ -920,15 +1046,23 @@ def _run_periodic_evaluation(
             done = False
             episode_return = 0.0
             steps = 0
+            policy_state = None
+            is_first = True
             last_info: dict[str, Any] = {}
             max_steps = int(getattr(getattr(env, "state", None), "max_sim_steps", 1000))
             while not done and steps < max_steps:
-                action = _predict_action(algo, observation)
+                action, policy_state = _predict_action(
+                    algo,
+                    observation,
+                    policy_state=policy_state,
+                    is_first=is_first,
+                )
                 observation, reward, terminated, truncated, info = env.step(action)
                 episode_return += float(reward)
                 steps += 1
                 last_info = dict(info or {})
                 done = bool(terminated or truncated)
+                is_first = False
             flags = _episode_flags(last_info)
             records.append(
                 {
@@ -1101,9 +1235,11 @@ def _run_training_iterations(
     evaluation_dir: Path,
     result_log_path: Path,
     wandb_run: Any | None,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], dict[str, object] | None]:
     """Execute iterations, logging metrics and writing checkpoints."""
     history: list[dict[str, object]] = []
+    best_checkpoint: dict[str, object] | None = None
+    best_reward_mean: float | int | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
         reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
@@ -1144,6 +1280,27 @@ def _run_training_iterations(
                 step=iteration,
             )
 
+        if _is_better_reward(reward_mean, best_reward_mean):
+            best_reward_mean = reward_mean
+            best_path = _save_checkpoint(algo, checkpoint_dir / "best_reward")
+            best_checkpoint = {
+                "iteration": iteration,
+                "reward_mean": reward_mean,
+                "timesteps_total": timesteps_total,
+                "path": best_path,
+            }
+            history[-1]["best_checkpoint"] = dict(best_checkpoint)
+            logger.info(
+                "best_reward_checkpoint_saved iteration={} reward_mean={} path={}",
+                iteration,
+                reward_mean,
+                best_path,
+            )
+            if wandb_run is not None:
+                wandb_run.summary["best_reward_mean"] = reward_mean
+                wandb_run.summary["best_reward_iteration"] = iteration
+                wandb_run.summary["best_reward_checkpoint_path"] = best_path
+
         is_periodic_ckpt = (iteration % run_config.experiment.checkpoint_every) == 0
         is_final_ckpt = iteration == run_config.experiment.train_iterations
         if is_periodic_ckpt or is_final_ckpt:
@@ -1169,7 +1326,7 @@ def _run_training_iterations(
                     },
                     step=iteration,
                 )
-    return history
+    return history, best_checkpoint
 
 
 def run_training(run_config: DreamerRunConfig) -> int:
@@ -1203,7 +1360,7 @@ def run_training(run_config: DreamerRunConfig) -> int:
             capacity=shared_capacity,
         )
         algo = _build_algorithm_instance(algo_config)
-        history = _run_training_iterations(
+        history, best_checkpoint = _run_training_iterations(
             algo,
             run_config,
             checkpoint_dir=checkpoint_dir,
@@ -1238,12 +1395,17 @@ def run_training(run_config: DreamerRunConfig) -> int:
                     "episodes": run_config.evaluation.evaluation_episodes,
                     "every_iterations": run_config.evaluation.every_iterations,
                 },
+                "best_checkpoint": best_checkpoint,
                 "history": history,
             },
         )
         if wandb_run is not None:
             wandb_run.summary["run_summary_path"] = str(summary_path)
             wandb_run.summary["checkpoint_dir"] = str(checkpoint_dir)
+            if best_checkpoint is not None:
+                wandb_run.summary["best_reward_timesteps_total"] = best_checkpoint[
+                    "timesteps_total"
+                ]
         logger.info("DreamerV3 run summary written to {}", summary_path)
         return 0
     finally:

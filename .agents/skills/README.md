@@ -13,6 +13,7 @@ read the specific `SKILL.md` before applying a skill.
 - Run only the standard gate: `pr-ready-check`
 - Review benchmark-sensitive changes: `review-benchmark-change`
 - Update docs after code changes: `update-docs-on-code-change`
+- Create or refresh linked context notes: `context-note-maintainer`
 - Gather repository context before editing: `context-map`, `benchmark-overview`, or
   `experiment-context`
 
@@ -57,6 +58,7 @@ read the specific `SKILL.md` before applying a skill.
 | `benchmark-overview` | Getting fast benchmark-faithful orientation for scenario splits, baselines, metrics, and artifacts. |
 | `clean-up` | Tidying the current branch with Ruff, tests, changed-file gates, and docstring TODO checks. |
 | `context-map` | Building a focused map of relevant files, docs, commands, and risks before multi-file work. |
+| `context-note-maintainer` | Creating or refreshing linked `docs/context/` notes so reusable agent knowledge stays discoverable and current. |
 | `experiment-context` | Finding canonical config-first training/evaluation paths, artifact lineage, and validation gates. |
 | `gh-issue-autopilot` | Selecting or executing an issue through implementation, validation, push, and draft PR. |
 | `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |

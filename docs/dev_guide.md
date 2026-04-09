@@ -136,6 +136,19 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
 - Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
 - Cache project and field IDs once per shell session instead of rediscovering them for every issue.
 
+### Context note workflow
+
+For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+handoff context in Markdown instead of leaving them trapped in chat or PR history.
+
+- Use `docs/context/README.md` as the canonical workflow and naming guide.
+- Prefer updating an existing canonical note before creating a new one.
+- If a touched note is outdated or superseded, update it, remove it, or mark it clearly with a
+  pointer to the current source.
+- Link notes to the related issue/PR, canonical docs, validation commands, and replacement notes.
+- Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
+  refreshing context notes.
+
 On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
 validation wrappers hanging after child processes should have exited. Override with

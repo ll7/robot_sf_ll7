@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added canonical `classic_cross_trap_*` scenario IDs and manifests for the former
   `classic_crossing_*` cross-shaped local-minimum trap scenarios, with legacy
   compatibility aliases and migration notes for existing configs.
+* Added a canonical Markdown context-note workflow under `docs/context/README.md`, explicit
+  `AGENTS.md` / Copilot / dev-guide guidance for linked handoff notes, a new
+  `context-note-maintainer` repo-local skill, and an issue-796 policy note so reusable agent
+  knowledge is easier to preserve, discover, and update without adding external infrastructure.
 
 * Paper results handoff export (`robot_sf.benchmark.paper_results_handoff`) now emits interval-inclusive planner-summary rows from frozen publication bundles, with CLI wrapper (`scripts/tools/paper_results_handoff.py`), confidence-interval metadata, seed/repeat provenance, deterministic JSON/CSV outputs, and contract documentation in `docs/context/issue_750_paper_results_handoff.md`.
 

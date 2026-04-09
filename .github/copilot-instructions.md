@@ -20,6 +20,10 @@ It is everyones guide on how to use this repository effectively.
   See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.
 - For context discovery, use `.agents/skills/context-map/SKILL.md` before multi-file changes and
   `.agents/skills/what-context-needed/SKILL.md` when the task is underspecified.
+- For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+  handoff context in linked Markdown notes under `docs/context/` when that context would otherwise
+  be lost. Prefer updating the canonical existing note over creating a duplicate, and use
+  `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing those notes.
 - For proof-first quality work, use `.agents/skills/quality-playbook/SKILL.md` for non-trivial
   changes, `.agents/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
   `.agents/skills/review-and-refactor/SKILL.md` for narrow review-then-refactor passes.

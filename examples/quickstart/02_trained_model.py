@@ -7,11 +7,14 @@ Prerequisites:
     - None (uses bundled scenario matrix and PPO baseline config)
 
 Expected Output:
-    - Prints available algorithms and benchmark progress messages to stdout.
+    - Prints benchmark progress messages to stdout.
+    - Prints available algorithms first when not running in fast-demo mode.
     - Writes PPO episode metrics to output/results/episodes_demo_ppo.jsonl.
 
 Limitations:
-    - Requires several seconds to execute the benchmark even with horizon=50.
+    - Fast-demo mode skips algorithm listing and reduces the benchmark horizon to keep smoke
+      execution short.
+    - The normal interactive path still takes several seconds to execute with horizon=50.
     - Falls back to a goal-seeking policy if the PPO weights are unavailable.
 
 References:
@@ -43,8 +46,11 @@ def _fast_demo_enabled() -> bool:
 def _horizon() -> str:
     """Return the benchmark horizon override for the current execution mode."""
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
-    if override and override.isdigit():
-        return str(max(1, int(override)))
+    if override:
+        try:
+            return str(max(1, int(override)))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
     if _fast_demo_enabled():
         return "4"
     return "50"
@@ -64,6 +70,7 @@ def main() -> int:
     out_dir = ensure_output_dir(out.parent)
     out = out_dir / out.name
 
+    # Keep the full quickstart output for normal runs, but skip extra discovery work in smoke mode.
     if not _fast_demo_enabled():
         print("[quickstart] Listing available benchmark algorithms...", flush=True)
         code = cli_main(["list-algorithms"])
@@ -88,6 +95,7 @@ def main() -> int:
         "--dt",
         "0.1",
     ]
+    # Force-heavy metrics are useful in the default demo, but not needed in fast smoke mode.
     if not _fast_demo_enabled():
         argv.append("--record-forces")
 

@@ -38,12 +38,11 @@ class _Cfg:
         self.workers = 1
         self.master_seed = 123
         self.smoke = smoke
-        self.smoke_limit_jobs = True
-        self.smoke_episodes = 1
-        self.smoke_horizon_cap = 10
         self.disable_videos = disable_videos
         self.max_videos = 1
         self.capture_replay = True
+        # Tight smoke caps keep this artifact-presence check fast; validate broader runtime
+        # behavior with the full tests/ suite and targeted slow-marker reruns before merge.
         self.smoke_limit_jobs = True
         self.smoke_episodes = 1
         self.smoke_horizon_cap = 5

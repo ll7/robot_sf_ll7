@@ -156,8 +156,8 @@ def run_simulation_with_single_pedestrians(num_steps: int = 500):
         try:
             num_steps = max(1, int(override))
         except ValueError:  # pragma: no cover - defensive guard
-            pass
-    elif os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
+            override = None
+    if override is None and os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
         num_steps = min(num_steps, 8)
 
     print(f"\nRunning simulation for {num_steps} steps...")

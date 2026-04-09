@@ -60,9 +60,10 @@ git clone https://github.com/TommasoVandermeer/social-jym.git output/repos/socia
 git -C output/repos/social-jym rev-parse HEAD
 git -C output/repos/social-jym submodule status
 git -C output/repos/social-jym submodule update --init --recursive
-uv run python -c "import socialjym; print('import_ok')"
-uv run python -c "from socialjym.envs.socialnav import SocialNav; print('socialnav_import_ok')"
-uv run --with jax --with jax_tqdm --with dm-haiku --with optax --with scipy --with pandas \
+PYTHONPATH=output/repos/social-jym uv run python -c "import socialjym; print('import_ok')"
+PYTHONPATH=output/repos/social-jym uv run python -c \
+  "from socialjym.envs.socialnav import SocialNav; print('socialnav_import_ok')"
+PYTHONPATH=output/repos/social-jym uv run --with jax --with jax_tqdm --with dm-haiku --with optax --with scipy --with pandas \
   python -c "from socialjym.envs.socialnav import SocialNav; print('socialnav_import_ok')"
 ```
 
@@ -70,7 +71,8 @@ Observed results:
 
 - `git ls-remote` resolved upstream `HEAD` to `212ea7759f614ff646f39462c4f51dca67d01ed0`.
 - The root repository cloned at that revision.
-- Root package namespace import succeeded from the checkout: `import_ok`.
+- Root package namespace import succeeded from the cloned checkout when it was placed on
+  `PYTHONPATH`: `import_ok`.
 - `SocialNav` import failed in the current Robot SF environment because JAX is not installed:
   `ModuleNotFoundError: No module named 'jax'`.
 - After injecting the declared Python dependencies ephemerally with `uv run --with ...`, `SocialNav`

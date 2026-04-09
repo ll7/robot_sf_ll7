@@ -61,6 +61,18 @@ def test_build_policy_sac_accepts_unicycle_action(monkeypatch):
     assert callable(getattr(policy, "_planner_close", None))
 
 
+def test_build_policy_sac_sets_native_env_action_flag(monkeypatch):
+    """SAC policy must carry _planner_native_env_action=True so _run_map_episode
+    passes delta outputs directly to env.step() without double-delta conversion."""
+    monkeypatch.setattr(map_runner, "SACPlanner", _DummySACPlanner)
+    policy, _ = map_runner._build_policy(
+        "sac",
+        {"test_action": {"v": 0.5, "omega": 0.0}},
+    )
+
+    assert getattr(policy, "_planner_native_env_action", False) is True
+
+
 def test_build_policy_sac_dict_mode_passes_raw_observation(monkeypatch):
     """Benchmark SAC checkpoints should receive flattened dict observations unchanged."""
     dummy = _DummySACPlanner({"obs_mode": "dict", "test_action": {"v": 0.3, "omega": 0.0}})

@@ -14,6 +14,11 @@ policy_id: sac_full_v1
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 3000000
 seed: 42
+# NOTE: delta action semantics — map_runner bypasses _policy_command_to_env_action
+# for SAC via _planner_native_env_action, so the model output is passed directly
+# to env.step().  Do NOT set action_semantics: absolute here.
+action_semantics: delta
+relative_obs: true
 
 output_dir: output/models/sac
 
@@ -27,6 +32,9 @@ sac_hyperparams:
   gradient_steps: 1
   ent_coef: "auto"
   learning_starts: 5000
+
+env_overrides:
+  observation_mode: socnav_struct
 
 env_factory_kwargs:
   reward_name: route_completion_v3

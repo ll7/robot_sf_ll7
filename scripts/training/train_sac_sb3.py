@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import gymnasium
+import numpy as np
 import yaml
 from gymnasium import ObservationWrapper
 from gymnasium import spaces as gym_spaces
@@ -41,8 +43,9 @@ try:
 except ImportError as exc:
     raise RuntimeError("Stable-Baselines3 must be installed to run SAC training.") from exc
 
-from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -93,8 +96,19 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "tracking",
         "output_dir",
         "seed",
+        "device",
+        "action_semantics",
+        "relative_obs",
     }
 )
+
+# Action semantics options:
+# "delta"    — SAC outputs delta velocities. This is now the canonical setting
+#              because map_runner can pass SAC commands directly to env.step()
+#              through the _planner_native_env_action hook.
+# "absolute" — Experimental path that wraps target velocities back into deltas
+#              for the DifferentialDrive env. Kept for comparison/debugging.
+_DEFAULT_ACTION_SEMANTICS = "delta"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +129,9 @@ class SACTrainingConfig:
     tracking: dict[str, object] = field(default_factory=dict)
     output_dir: Path = field(default_factory=lambda: Path("output/models/sac"))
     seed: int | None = None
+    device: str = "auto"
+    action_semantics: str = _DEFAULT_ACTION_SEMANTICS
+    relative_obs: bool = True
 
 
 def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
@@ -161,6 +178,13 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
 
     seed_raw = data.get("seed")
     seed = int(seed_raw) if seed_raw is not None else None
+    device = str(data.get("device", "auto")).strip() or "auto"
+    action_semantics = (
+        str(data.get("action_semantics", _DEFAULT_ACTION_SEMANTICS)).strip().lower()
+        or _DEFAULT_ACTION_SEMANTICS
+    )
+    relative_obs_raw = data.get("relative_obs", True)
+    relative_obs = bool(relative_obs_raw) if not isinstance(relative_obs_raw, bool) else relative_obs_raw
 
     return SACTrainingConfig(
         policy_id=str(data["policy_id"]),
@@ -172,6 +196,9 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         tracking=dict(data.get("tracking", {}) or {}),
         output_dir=output_dir,
         seed=seed,
+        device=device,
+        action_semantics=action_semantics,
+        relative_obs=relative_obs,
     )
 
 
@@ -220,9 +247,16 @@ def _build_env(
     if config.seed is not None:
         env_kwargs["seed"] = config.seed
 
+    use_abs = config.action_semantics.strip().lower() == "absolute"
+
     def _make() -> Any:
         env = make_robot_env(**env_kwargs)
-        return _maybe_flatten_nested_dict_env(env)
+        env = _maybe_flatten_nested_dict_env(env)
+        if config.relative_obs:
+            env = _RelativeSocNavObservation(env)
+        if use_abs:
+            env = _VelocityTargetActionWrapper(env)
+        return env
 
     return DummyVecEnv([_make])
 
@@ -301,6 +335,136 @@ def _maybe_flatten_nested_dict_env(env: Any) -> Any:
     if _has_nested_dict_space(obs_space):
         return _FlattenNestedDictObservation(env)
     return env
+
+
+def _relative_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
+    """Convert SocNav structured observations to a robot-relative frame.
+
+    The SAC checkpoint otherwise overfits to absolute map coordinates because
+    training scenarios occupy a different world-coordinate range than benchmark
+    maps. Keeping the same keys but translating position-like fields by the
+    robot position makes the policy invariant to map origin offsets.
+    """
+    converted = {str(key): value for key, value in observation.items()}
+    if "robot_position" not in converted:
+        return converted
+
+    robot_position = np.asarray(converted["robot_position"], dtype=np.float32).reshape(-1)
+    if robot_position.size < 2:
+        return converted
+    robot_xy = robot_position[:2]
+
+    def _shift_xy(key: str) -> None:
+        if key not in converted:
+            return
+        arr = np.asarray(converted[key], dtype=np.float32)
+        if arr.ndim == 1 and arr.size >= 2:
+            rel = arr.copy()
+            rel[:2] = np.clip(rel[:2] - robot_xy, -SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M)
+            converted[key] = rel
+            return
+        if arr.ndim >= 2 and arr.shape[-1] >= 2:
+            rel = arr.copy()
+            mask = np.any(np.abs(rel[..., :2]) > 1e-8, axis=-1)
+            rel[..., :2][mask] = np.clip(
+                rel[..., :2][mask] - robot_xy,
+                -SOCNAV_POSITION_CAP_M,
+                SOCNAV_POSITION_CAP_M,
+            )
+            converted[key] = rel
+
+    converted["robot_position"] = np.zeros_like(np.asarray(converted["robot_position"], dtype=np.float32))
+    _shift_xy("goal_current")
+    _shift_xy("goal_next")
+    _shift_xy("pedestrians_positions")
+    return converted
+
+
+class _RelativeSocNavObservation(ObservationWrapper):
+    """Translate flat SocNav observations into a robot-relative coordinate frame."""
+
+    def __init__(self, env: Any) -> None:
+        super().__init__(env)
+        self.observation_space = self._relative_observation_space(env.observation_space)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward unknown attribute lookups to the wrapped environment."""
+        return getattr(self.env, name)
+
+    def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        return _relative_socnav_obs(observation)
+
+    @staticmethod
+    def _relative_observation_space(obs_space: gym_spaces.Space) -> gym_spaces.Space:
+        if not isinstance(obs_space, gym_spaces.Dict):
+            return obs_space
+
+        spaces = dict(obs_space.spaces)
+        rel_cap = np.array([SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M], dtype=np.float32)
+        rel_low = -rel_cap
+        rel_high = rel_cap
+
+        for key in ("robot_position", "goal_current", "goal_next"):
+            space = spaces.get(key)
+            if isinstance(space, gym_spaces.Box) and space.shape == (2,):
+                spaces[key] = gym_spaces.Box(low=rel_low, high=rel_high, dtype=np.float32)
+
+        ped_space = spaces.get("pedestrians_positions")
+        if isinstance(ped_space, gym_spaces.Box) and len(ped_space.shape) == 2 and ped_space.shape[1] == 2:
+            ped_low = np.broadcast_to(rel_low, ped_space.shape).astype(np.float32)
+            ped_high = np.broadcast_to(rel_high, ped_space.shape).astype(np.float32)
+            spaces["pedestrians_positions"] = gym_spaces.Box(
+                low=ped_low,
+                high=ped_high,
+                dtype=np.float32,
+            )
+
+        return gym_spaces.Dict(spaces)
+
+
+class _VelocityTargetActionWrapper(gymnasium.ActionWrapper):
+    """Convert absolute velocity target actions to delta actions for DifferentialDrive envs.
+
+    The benchmark runner (``map_runner._policy_command_to_env_action``) converts
+    SAC policy commands to absolute velocity targets before calling ``env.step()``.
+    Specifically it computes ``delta = target_v - current_v`` then passes this
+    delta to the underlying env whose dynamics are ``new_v = current_v + delta``,
+    so the robot ultimately moves at ``target_v``.
+
+    Without this wrapper the SAC model trains with raw-delta semantics
+    (``env.step(delta)`` → ``new_v = old_v + delta``).  With the wrapper,
+    ``env.step(target)`` → ``delta = target - current_v`` → underlying env
+    applies ``new_v = current_v + delta = target``.  This makes training
+    semantics identical to benchmark runner semantics.
+    """
+
+    def __init__(self, env: Any) -> None:
+        super().__init__(env)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward unknown attribute lookups to the wrapped environment."""
+        return getattr(self.env, name)
+
+    def action(self, action: np.ndarray) -> np.ndarray:
+        """Convert absolute velocity target to delta action.
+
+        Args:
+            action: Target velocity ``[v_target, omega_target]``.
+
+        Returns:
+            np.ndarray: Delta velocity ``[v_target - v_current, omega_target - omega_current]``.
+        """
+        try:
+            robots = self.env.simulator.robots  # type: ignore[attr-defined]
+            if robots:
+                current_v, current_omega = robots[0].current_speed
+                return np.array(
+                    [float(action[0]) - float(current_v), float(action[1]) - float(current_omega)],
+                    dtype=np.float32,
+                )
+        except (AttributeError, IndexError):
+            pass
+        return np.asarray(action, dtype=np.float32)
 
 
 def _resolve_policy_name(observation_space: gym_spaces.Space) -> str:
@@ -395,6 +559,7 @@ def run_sac_training(
             vec_env,
             verbose=1,
             seed=config.seed,
+            device=config.device,
             policy_kwargs=policy_kwargs,
             **hyperparams,  # type: ignore[arg-type]
         )

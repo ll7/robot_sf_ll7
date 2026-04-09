@@ -1,27 +1,28 @@
-# SAC gate training configuration on benchmark-compatible SocNav structured observations.
+# SAC gate training config v2 — benchmark-compatible absolute-velocity semantics.
 #
-# Purpose: produce the first SAC checkpoint that can be evaluated through the
-# benchmark stack without inventing a drive_state+rays adapter.
+# Key change vs v1: action_semantics: absolute
+#   The training env now wraps each env.step(target_v, target_omega) call with:
+#     delta = (target_v - current_v, target_omega - current_omega)
+#   so the robot moves at the target velocity in one step.  This matches what
+#   map_runner._policy_command_to_env_action does at benchmark evaluation time,
+#   ensuring the trained checkpoint produces correct behaviour in benchmark runs.
 #
 # Usage:
 #   uv run python scripts/training/train_sac_sb3.py \
-#     --config configs/training/sac/gate_socnav_struct.yaml
+#     --config configs/training/sac/gate_socnav_struct_v2.yaml
 
-policy_id: sac_gate_socnav_struct_v1
+policy_id: sac_gate_socnav_struct_v2
 scenario_config: ../../scenarios/classic_interactions.yaml
-total_timesteps: 50000
+total_timesteps: 200000
 seed: 42
-# Canonical benchmark-facing SAC gate profile:
-# - delta action semantics, consumed natively by map_runner
-# - relative SocNav observations, so the checkpoint is not tied to a map origin
-action_semantics: delta
+action_semantics: absolute
 relative_obs: true
 
 output_dir: output/models/sac
 
 sac_hyperparams:
   learning_rate: 3.0e-4
-  buffer_size: 50000
+  buffer_size: 100000
   batch_size: 256
   tau: 0.005
   gamma: 0.99
@@ -49,9 +50,10 @@ env_factory_kwargs:
 tracking:
   enabled: false
   project: robot_sf_sac
-  run_name: sac_gate_socnav_struct_v1
+  run_name: sac_gate_socnav_struct_v2
   tags:
     - sac
     - gate
     - socnav-struct
+    - absolute-velocity
     - issue-790

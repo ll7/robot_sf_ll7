@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - runtime-only dependency
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
+from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
 
 
 @dataclass
@@ -32,6 +33,7 @@ class SACPlannerConfig:
     action_space: str = "unicycle"  # "velocity" | "unicycle"
     v_max: float = 2.0
     omega_max: float = 1.0
+    relative_obs: bool = True
     fallback_to_goal: bool = True
 
 
@@ -179,11 +181,13 @@ class SACPlanner:
 
     def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
         if self._model is None:
-            return {str(k): np.asarray(v) for k, v in obs.items()}
+            converted = {str(k): np.asarray(v) for k, v in obs.items()}
+            return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
         space = getattr(self._model, "observation_space", None)
         spaces = getattr(space, "spaces", None)
         if not isinstance(spaces, dict):
-            return {str(k): np.asarray(v) for k, v in obs.items()}
+            converted = {str(k): np.asarray(v) for k, v in obs.items()}
+            return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
         aliases: dict[str, tuple[str, ...]] = {
@@ -214,6 +218,44 @@ class SACPlanner:
         if missing:
             preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {preview}")
+        return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
+
+    def _apply_relative_socnav_obs(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Translate position-like SocNav keys into a robot-relative frame."""
+        if "robot_position" not in obs:
+            return obs
+
+        robot_position = np.asarray(obs["robot_position"], dtype=np.float32).reshape(-1)
+        if robot_position.size < 2:
+            return obs
+        robot_xy = robot_position[:2]
+        converted = dict(obs)
+
+        def _shift_xy(key: str) -> None:
+            if key not in converted:
+                return
+            arr = np.asarray(converted[key], dtype=np.float32)
+            if arr.ndim == 1 and arr.size >= 2:
+                rel = arr.copy()
+                rel[:2] = np.clip(rel[:2] - robot_xy, -SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M)
+                converted[key] = rel
+                return
+            if arr.ndim >= 2 and arr.shape[-1] >= 2:
+                rel = arr.copy()
+                mask = np.any(np.abs(rel[..., :2]) > 1e-8, axis=-1)
+                rel[..., :2][mask] = np.clip(
+                    rel[..., :2][mask] - robot_xy,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+                converted[key] = rel
+
+        converted["robot_position"] = np.zeros_like(
+            np.asarray(converted["robot_position"], dtype=np.float32)
+        )
+        _shift_xy("goal_current")
+        _shift_xy("goal_next")
+        _shift_xy("pedestrians_positions")
         return converted
 
     def _vectorize(self, obs: Observation) -> np.ndarray:

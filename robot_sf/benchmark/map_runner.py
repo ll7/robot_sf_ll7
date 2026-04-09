@@ -1355,6 +1355,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = sac_planner.close
+        # SAC checkpoints are trained with delta-velocity semantics — the model
+        # output is already a (delta_v, delta_omega) pair suitable for env.step().
+        # Bypassing _policy_command_to_env_action prevents double-delta conversion.
+        _policy._planner_native_env_action = True
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "sac")
@@ -2093,6 +2097,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
     planner_stats = getattr(policy_fn, "_planner_stats", None)
+    planner_native_action = getattr(policy_fn, "_planner_native_env_action", False)
 
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -2116,11 +2121,16 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     try:
         for step_idx in range(horizon_val):
             policy_command = policy_fn(obs)
-            action = _policy_command_to_env_action(
-                env=env,
-                config=config,
-                command=policy_command,
-            )
+            if planner_native_action:
+                # Policy already outputs native env actions (e.g. delta velocities);
+                # skip the absolute→delta conversion done by _policy_command_to_env_action.
+                action = np.asarray(policy_command, dtype=np.float32)
+            else:
+                action = _policy_command_to_env_action(
+                    env=env,
+                    config=config,
+                    command=policy_command,
+                )
             obs, _reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.

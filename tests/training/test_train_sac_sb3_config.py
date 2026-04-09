@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from gymnasium import spaces as gym_spaces
 
@@ -11,6 +12,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_sac_sb3 import (
     SACTrainingConfig,
     _build_env,
+    _relative_socnav_obs,
     build_arg_parser,
     load_sac_training_config,
     run_sac_training,
@@ -85,6 +87,8 @@ def test_socnav_gate_config_loads() -> None:
     assert _SOCNAV_GATE_CONFIG.exists(), f"Missing gate config: {_SOCNAV_GATE_CONFIG}"
     config = load_sac_training_config(_SOCNAV_GATE_CONFIG)
     assert config.env_overrides == {"observation_mode": "socnav_struct"}
+    assert config.action_semantics == "delta"
+    assert config.relative_obs is True
 
 
 def test_load_rejects_unknown_hyperparams(tmp_path: Path) -> None:
@@ -149,6 +153,25 @@ def test_build_env_applies_socnav_struct_override() -> None:
         assert vec_env.action_space.shape == (2,)
     finally:
         vec_env.close()
+
+
+def test_relative_socnav_obs_rebases_position_like_keys() -> None:
+    """Relative observation preprocessing should remove absolute map offsets."""
+    obs = {
+        "robot_position": np.array([10.0, 5.0], dtype=np.float32),
+        "goal_current": np.array([13.0, 7.0], dtype=np.float32),
+        "goal_next": np.array([15.0, 9.0], dtype=np.float32),
+        "pedestrians_positions": np.array([[11.0, 6.0], [0.0, 0.0]], dtype=np.float32),
+        "robot_speed": np.array([0.2, 0.0], dtype=np.float32),
+    }
+
+    rel = _relative_socnav_obs(obs)
+
+    assert rel["robot_position"] == pytest.approx(np.array([0.0, 0.0], dtype=np.float32))
+    assert rel["goal_current"] == pytest.approx(np.array([3.0, 2.0], dtype=np.float32))
+    assert rel["goal_next"] == pytest.approx(np.array([5.0, 4.0], dtype=np.float32))
+    assert rel["pedestrians_positions"][0] == pytest.approx(np.array([1.0, 1.0], dtype=np.float32))
+    assert rel["pedestrians_positions"][1] == pytest.approx(np.array([0.0, 0.0], dtype=np.float32))
 
 
 def test_dry_run_completes(tmp_path: Path) -> None:
@@ -229,3 +252,58 @@ def test_config_dataclass_seed_optional() -> None:
         total_timesteps=1000,
     )
     assert config.seed is None
+
+
+def test_config_dataclass_device_defaults_to_auto() -> None:
+    """SACTrainingConfig device field should default to 'auto'."""
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("/dev/null"),
+        total_timesteps=1000,
+    )
+    assert config.device == "auto"
+
+
+def test_gate_v2_config_loads() -> None:
+    """Benchmark-compatible v2 gate config should load with absolute action semantics."""
+    cfg_path = Path("configs/training/sac/gate_socnav_struct_v2.yaml")
+    assert cfg_path.exists(), f"Missing v2 config: {cfg_path}"
+    config = load_sac_training_config(cfg_path)
+    assert config.action_semantics == "absolute"
+    assert config.relative_obs is True
+    assert config.total_timesteps == 200_000
+
+
+def test_config_action_semantics_defaults_to_delta() -> None:
+    """SACTrainingConfig action_semantics should default to 'delta'."""
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("/dev/null"),
+        total_timesteps=1000,
+    )
+    assert config.action_semantics == "delta"
+
+
+def test_config_relative_obs_defaults_to_true() -> None:
+    """SACTrainingConfig should enable relative observations by default."""
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("/dev/null"),
+        total_timesteps=1000,
+    )
+    assert config.relative_obs is True
+
+
+def test_config_device_loaded_from_yaml(tmp_path: Path) -> None:
+    """Device field in YAML should propagate to SACTrainingConfig."""
+    scenario_path = _CLASSIC_SCENARIO
+    content = f"""\
+policy_id: test
+scenario_config: {scenario_path}
+total_timesteps: 1000
+device: cpu
+"""
+    cfg = tmp_path / "with_device.yaml"
+    cfg.write_text(content, encoding="utf-8")
+    config = load_sac_training_config(cfg)
+    assert config.device == "cpu"

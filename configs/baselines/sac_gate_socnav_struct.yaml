@@ -1,6 +1,11 @@
 # Experimental SAC baseline config for benchmark smoke/evaluation runs.
 #
-# This points at the benchmark-compatible `socnav_struct` training profile.
+# Points at the v1 checkpoint trained with delta-velocity semantics.
+# map_runner bypasses _policy_command_to_env_action for SAC via the
+# _planner_native_env_action flag, so the model's delta outputs are passed
+# directly to env.step(), matching training semantics.
+# The benchmark adapter also translates SocNav position keys into a robot-relative
+# frame to match the SAC training observation contract.
 # Do not promote to paper-facing matrices until checkpoint-specific quality-gate
 # evidence has been recorded.
 
@@ -13,6 +18,7 @@ obs_mode: dict
 action_space: unicycle
 v_max: 2.0
 omega_max: 1.0
+relative_obs: true
 
 fallback_to_goal: false
 profile: experimental

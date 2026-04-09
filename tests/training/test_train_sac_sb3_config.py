@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import gymnasium
 from gymnasium import spaces as gym_spaces
 
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_sac_sb3 import (
     SACTrainingConfig,
     _build_env,
+    _ego_socnav_obs,
     _relative_socnav_obs,
     build_arg_parser,
     load_sac_training_config,
@@ -155,6 +158,80 @@ def test_build_env_applies_socnav_struct_override() -> None:
         vec_env.close()
 
 
+def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SAC training env should sample across the loaded scenario list per reset."""
+
+    class _DummyEnv(gymnasium.Env):
+        metadata: dict[str, object] = {}
+
+        def __init__(self, *, config: object, seed: int | None, scenario_name: str, **_: object) -> None:
+            super().__init__()
+            self.observation_space = gym_spaces.Dict(
+                {
+                    "robot_position": gym_spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32),
+                    "goal_current": gym_spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32),
+                }
+            )
+            self.action_space = gym_spaces.Box(
+                low=np.array([0.0, -1.0], dtype=np.float32),
+                high=np.array([2.0, 1.0], dtype=np.float32),
+                dtype=np.float32,
+            )
+            self.applied_seed = seed
+            self.scenario_name = scenario_name
+            self.config = config
+
+        def reset(self, *, seed: int | None = None, options: dict | None = None):
+            if seed is not None:
+                self.applied_seed = seed
+            obs = {
+                "robot_position": np.zeros(2, dtype=np.float32),
+                "goal_current": np.ones(2, dtype=np.float32),
+            }
+            return obs, {"scenario_name": self.scenario_name}
+
+        def step(self, action: np.ndarray):
+            obs = {
+                "robot_position": np.zeros(2, dtype=np.float32),
+                "goal_current": np.ones(2, dtype=np.float32),
+            }
+            return obs, 0.0, False, False, {"scenario_name": self.scenario_name}
+
+    def _fake_build_robot_config_from_scenario(scenario: dict[str, object], *, scenario_path: Path):
+        return SimpleNamespace(
+            scenario_name=scenario["name"],
+            scenario_path=scenario_path,
+            observation_mode="socnav_struct",
+        )
+
+    monkeypatch.setattr(
+        "scripts.training.train_sac_sb3.build_robot_config_from_scenario",
+        _fake_build_robot_config_from_scenario,
+    )
+    monkeypatch.setattr("scripts.training.train_sac_sb3.make_robot_env", _DummyEnv)
+
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("configs/scenarios/classic_interactions.yaml").resolve(),
+        total_timesteps=1000,
+        seed=7,
+        relative_obs=False,
+        obs_transform="none",
+    )
+    scenario_definitions = [{"name": "scenario_a"}, {"name": "scenario_b"}]
+    vec_env = _build_env(config, scenario_definitions=scenario_definitions)
+
+    try:
+        seen: set[str] = set()
+        for _ in range(8):
+            vec_env.reset()
+            active = vec_env.envs[0]
+            seen.add(str(getattr(active, "scenario_id", "")))
+        assert seen == {"scenario_a", "scenario_b"}
+    finally:
+        vec_env.close()
+
+
 def test_relative_socnav_obs_rebases_position_like_keys() -> None:
     """Relative observation preprocessing should remove absolute map offsets."""
     obs = {
@@ -172,6 +249,31 @@ def test_relative_socnav_obs_rebases_position_like_keys() -> None:
     assert rel["goal_next"] == pytest.approx(np.array([5.0, 4.0], dtype=np.float32))
     assert rel["pedestrians_positions"][0] == pytest.approx(np.array([1.0, 1.0], dtype=np.float32))
     assert rel["pedestrians_positions"][1] == pytest.approx(np.array([0.0, 0.0], dtype=np.float32))
+
+
+def test_ego_socnav_obs_rotates_goal_and_pedestrians_into_robot_frame() -> None:
+    """Ego transform should rotate translated position-like keys by robot heading."""
+    obs = {
+        "robot_position": np.array([10.0, 5.0], dtype=np.float32),
+        "robot_heading": np.array([np.pi / 2], dtype=np.float32),
+        "goal_current": np.array([13.0, 5.0], dtype=np.float32),
+        "pedestrians_positions": np.array([[11.0, 5.0], [10.0, 7.0]], dtype=np.float32),
+    }
+
+    ego = _ego_socnav_obs(obs)
+
+    assert np.allclose(ego["robot_position"], np.array([0.0, 0.0], dtype=np.float32), atol=1e-6)
+    assert np.allclose(ego["goal_current"], np.array([0.0, -3.0], dtype=np.float32), atol=1e-6)
+    assert np.allclose(
+        ego["pedestrians_positions"][0],
+        np.array([0.0, -1.0], dtype=np.float32),
+        atol=1e-6,
+    )
+    assert np.allclose(
+        ego["pedestrians_positions"][1],
+        np.array([2.0, 0.0], dtype=np.float32),
+        atol=1e-6,
+    )
 
 
 def test_dry_run_completes(tmp_path: Path) -> None:
@@ -272,6 +374,24 @@ def test_gate_v2_config_loads() -> None:
     assert config.action_semantics == "absolute"
     assert config.relative_obs is True
     assert config.total_timesteps == 200_000
+
+
+def test_gate_ego_config_loads() -> None:
+    """Ego SAC gate config should resolve the explicit obs transform."""
+    cfg_path = Path("configs/training/sac/gate_socnav_struct_ego.yaml")
+    assert cfg_path.exists(), f"Missing ego config: {cfg_path}"
+    config = load_sac_training_config(cfg_path)
+    assert config.obs_transform == "ego"
+    assert config.action_semantics == "delta"
+
+
+def test_gate_ego_multi_config_loads() -> None:
+    """Multi-scenario ego SAC config should load with the expected transform."""
+    cfg_path = Path("configs/training/sac/gate_socnav_struct_ego_multi_v1.yaml")
+    assert cfg_path.exists(), f"Missing ego multi config: {cfg_path}"
+    config = load_sac_training_config(cfg_path)
+    assert config.obs_transform == "ego"
+    assert config.action_semantics == "delta"
 
 
 def test_config_action_semantics_defaults_to_delta() -> None:

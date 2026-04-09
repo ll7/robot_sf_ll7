@@ -35,8 +35,13 @@
 
 - `map_runner` now supports a SAC-native action path via `_planner_native_env_action`, so SAC delta
   outputs can go directly to `env.step(...)` without the benchmark’s absolute-to-delta conversion.
-- SAC training and inference now both support `relative_obs`, which subtracts `robot_position` from
-  `goal_current`, `goal_next`, and `pedestrians_positions` for SocNav-structured dict observations.
+- SAC training now uses `ScenarioSwitchingEnv`, so training episodes sample across the loaded
+  scenario manifest instead of silently locking onto the first scenario entry.
+- SAC training and inference now both support SocNav dict observation transforms:
+  - `relative`: subtract `robot_position` from `goal_current`, `goal_next`, and
+    `pedestrians_positions`
+  - `ego`: apply the same translation and then rotate those vectors into the robot frame using
+    `robot_heading`
 - `scripts/validation/evaluate_sac.py` exists and mirrors the benchmark-style eval flow for SAC.
 
 # Observation Contract Clarification
@@ -71,7 +76,7 @@ uv run python -m pytest \
 
 Observed result:
 
-- `28 passed`
+- `33 passed`
 
 Latest gate retrain:
 
@@ -121,6 +126,117 @@ Observed result:
 - `mean_avg_speed: 0.1785`
 - still effectively a timeout problem rather than a horizon-only problem
 
+Ego-frame SAC ablation:
+
+```bash
+uv run python scripts/training/train_sac_sb3.py \
+  --config configs/training/sac/gate_socnav_struct_ego.yaml
+
+uv run python scripts/validation/evaluate_sac.py \
+  --checkpoint output/models/sac/sac_gate_socnav_struct_ego_v1.zip \
+  --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --algo-config configs/baselines/sac_gate_socnav_struct_ego.yaml \
+  --workers 1 \
+  --output-dir /tmp/sac_eval_ego_v1
+```
+
+Observed result:
+
+- checkpoint saved to `output/models/sac/sac_gate_socnav_struct_ego_v1.zip`
+- training finished in about 667 seconds on CPU
+- rollout success reached `0.99` by `47,891` timesteps
+- benchmark subset `success_rate: 0.3667`
+- `mean_min_distance: 3.564`
+- `mean_avg_speed: 1.920`
+- failure taxonomy: `13 collision`, `6 max_steps`
+
+Per-scenario split:
+
+- `empty_map_8_directions_east`: `3/3`
+- `empty_map_8_directions_north`: `3/3`
+- `empty_map_8_directions_west`: `2/3`
+- `goal_behind_robot`: `3/3`
+- `head_on_interaction`: `0/3`
+- `line_wall_detour`: `0/3`
+- `narrow_passage`: `0/3`
+- `overtaking_interaction`: `0/3`
+- `single_obstacle_circle`: `0/3`
+- `single_ped_crossing_orthogonal`: `0/3`
+
+Safety-focused reward shaping on top of ego-frame:
+
+```bash
+uv run python scripts/training/train_sac_sb3.py \
+  --config configs/training/sac/gate_socnav_struct_ego_safe_v1.yaml
+
+uv run python scripts/validation/evaluate_sac.py \
+  --checkpoint output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip \
+  --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --algo-config configs/baselines/sac_gate_socnav_struct_ego_safe.yaml \
+  --workers 1 \
+  --output-dir /tmp/sac_eval_ego_safe_v1
+```
+
+Observed result:
+
+- checkpoint saved to `output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip`
+- training finished in about 657 seconds on CPU
+- rollout success reached `0.98` by `48,580` timesteps
+- benchmark subset `success_rate: 0.2667`
+- `mean_min_distance: 3.524`
+- `mean_avg_speed: 1.618`
+- failure taxonomy: `14 collision`, `8 max_steps`
+
+Per-scenario split:
+
+- `empty_map_8_directions_east`: `0/3`
+- `empty_map_8_directions_north`: `3/3`
+- `empty_map_8_directions_west`: `3/3`
+- `goal_behind_robot`: `2/3`
+- `head_on_interaction`: `0/3`
+- `line_wall_detour`: `0/3`
+- `narrow_passage`: `0/3`
+- `overtaking_interaction`: `0/3`
+- `single_obstacle_circle`: `0/3`
+- `single_ped_crossing_orthogonal`: `0/3`
+
+Corrected multi-scenario ego-frame retrain:
+
+```bash
+uv run python scripts/training/train_sac_sb3.py \
+  --config configs/training/sac/gate_socnav_struct_ego_multi_v1.yaml
+
+uv run python scripts/validation/evaluate_sac.py \
+  --checkpoint output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip \
+  --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --algo-config configs/baselines/sac_gate_socnav_struct_ego_multi.yaml \
+  --workers 1 \
+  --output-dir /tmp/sac_eval_ego_multi_v1
+```
+
+Observed result:
+
+- checkpoint saved to `output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip`
+- training finished in about 684 seconds on CPU
+- rollout success stayed low on the full distribution, reaching only `0.10` by `46,715` timesteps
+- benchmark subset `success_rate: 0.4667`
+- `mean_min_distance: 5.486`
+- `mean_avg_speed: 1.787`
+- failure taxonomy: `10 max_steps`, `6 collision`
+
+Per-scenario split:
+
+- `empty_map_8_directions_east`: `3/3`
+- `empty_map_8_directions_north`: `3/3`
+- `empty_map_8_directions_west`: `3/3`
+- `goal_behind_robot`: `0/3`
+- `head_on_interaction`: `0/3`
+- `line_wall_detour`: `2/3`
+- `narrow_passage`: `0/3`
+- `overtaking_interaction`: `0/3`
+- `single_obstacle_circle`: `3/3`
+- `single_ped_crossing_orthogonal`: `0/3`
+
 # Key Observations
 
 1. The original benchmark-action bug is real and is now fixed.
@@ -143,6 +259,32 @@ Observed result:
    The failed transfer is therefore not caused by the benchmark violating an all-local-coordinate
    contract. Instead, SAC appears to need a stronger model-side invariance transform than the base
    repository observation contract provides.
+
+6. Ego-frame preprocessing materially improves transfer on open-space directional tasks.
+   The ego-frame ablation moved the verified-simple subset from `0.0%` to `36.7%` success and
+   solved the empty-map east/north/goal-behind cases. That is strong evidence that heading /
+   orientation invariance was a real blocker.
+
+7. The remaining failures have shifted from stalling to unsafe interaction behavior.
+   After the ego-frame change, the dominant failure mode is no longer timeout-only. The remaining
+   errors are mostly collisions on interaction, detour, and obstacle scenarios.
+
+8. A first safety-shaped reward pass was a regression, not an improvement.
+   The `ego_safe_v1` run dropped from `36.7%` to `26.7%` success, lowered average speed, and still
+   ended mostly in collisions or timeouts. That makes the current safety-shaped reward weights a
+   discard rather than a new baseline candidate.
+
+9. The earlier SAC training evidence was materially distorted by a trainer bug.
+   Before the `ScenarioSwitchingEnv` fix, SAC training loaded a scenario manifest but trained only
+   on its first entry. That explains why earlier rollout success values were near `1.0` while
+   transfer remained poor.
+
+10. The corrected multi-scenario trainer improves benchmark robustness even though training looks
+    much harder.
+    The multi-scenario ego run improved verified-simple success from `36.7%` to `46.7%` and cut
+    collisions from `13` to `6`, but in-training rollout success on the full source distribution
+    stayed low. This suggests the old train-time metric was over-optimistic rather than the new
+    run being worse at benchmark transfer.
 
 # Improvement Hypotheses
 
@@ -167,19 +309,31 @@ Recommended next change:
 - keep this transform identical in both `scripts/training/train_sac_sb3.py` and
   `robot_sf/baselines/sac.py`.
 
-## 2. Add an explicit anti-stall / anti-spin training signal
+Status:
 
-The observed benchmark behavior is not collision-seeking; it is safe but inert. That usually means
-the reward lets the policy survive with too little pressure to commit to forward progress.
+- implemented and validated as `gate_socnav_struct_ego.yaml`
+- improves directional transfer substantially
+- does not yet solve interaction safety
 
-Recommended next experiments:
+## 2. Do not keep the current safety-shaped reward variant
 
-- increase the living penalty magnitude,
-- add a penalty for near-zero linear speed when the goal is still far away,
-- add a penalty for sustained angular velocity with near-zero linear speed,
-- optionally reward alignment between heading and goal direction if the robot is stalled.
+The first safety-focused reward pass was a useful experiment, but it did not improve benchmark
+behavior. It reduced success from `36.7%` to `26.7%`, increased failed episodes from `19` to `22`,
+and did not materially reduce collision-heavy failures.
 
-This should be tested conservatively because it can also create reckless goal-seeking.
+Interpretation:
+
+- the ego-frame transform addressed a real representation problem,
+- the current reward weights are now over-constraining the controller without teaching the missing
+  interaction policy,
+- more penalty magnitude alone is unlikely to be the highest-value next step.
+
+Recommended next stance:
+
+- keep `gate_socnav_struct_ego.yaml` as the current best SAC config,
+- keep `gate_socnav_struct_ego_safe_v1.yaml` only as a recorded negative result,
+- avoid spending another immediate loop on reward-only tuning unless a more targeted hypothesis
+  emerges from interaction-specific traces.
 
 ## 3. Train on a more benchmark-like scenario curriculum
 
@@ -193,8 +347,16 @@ Recommended next experiments:
 - include `verified_simple_subset_v1` archetype coverage or a training-safe analogue,
 - keep `classic_interactions` as part of the curriculum rather than the whole curriculum.
 
-Observed evidence supports this: training success is high on the source distribution, but transfer
-to the benchmark subset is still zero.
+Observed evidence supports this: ego-frame transfer is now good on directional open-space tasks,
+but it remains zero on detour, obstacle, and social-interaction scenarios. That is exactly the kind
+of split a curriculum or source-distribution gap would produce.
+
+Updated interpretation after the multi-scenario fix:
+
+- a stronger scenario distribution already helped benchmark transfer,
+- the remaining gaps are now specific capability gaps, not just a generic coordinate mismatch,
+- the next curriculum work should be weighted rather than purely broader so we do not regress on
+  cases like `goal_behind_robot` while adding more detour and interaction coverage.
 
 ## 4. Check whether deterministic SAC inference is collapsing a multimodal policy
 
@@ -230,11 +392,18 @@ This is higher risk because it changes the control contract rather than just imp
 
 # Recommended Next Step
 
-- Implement ego-frame observation rotation on top of the current relative translation contract.
-- Retrain `configs/training/sac/gate_socnav_struct.yaml`.
-- Re-run `scripts/validation/evaluate_sac.py` on `configs/scenarios/sets/verified_simple_subset_v1.yaml`.
-- Only if that still fails, move to explicit anti-stall reward shaping or a benchmark-like training
-  curriculum.
+- Keep the ego-frame observation transform.
+- Treat `gate_socnav_struct_ego_multi_v1.yaml` as the current best SAC checkpoint/config.
+- Treat `gate_socnav_struct_ego_safe_v1.yaml` as a negative result and do not promote it.
+- Keep multi-scenario episode switching enabled for all future SAC runs.
+- Build the next SAC training config around a weighted curriculum that preserves directional cases
+  like `goal_behind_robot` while adding more benchmark-faithful detour, obstacle, and interaction
+  coverage.
+- Prefer a longer run or higher replay coverage on that weighted curriculum before switching to
+  TD3.
+- Re-run `scripts/validation/evaluate_sac.py` on
+  `configs/scenarios/sets/verified_simple_subset_v1.yaml` before attempting any broader benchmark
+  matrix.
 
 # Risks / Follow-ups
 

@@ -49,8 +49,8 @@ from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
-    select_scenario,
 )
+from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
 
 # ---------------------------------------------------------------------------
 # Supported SAC hyperparameter keys (mirrors SB3 SAC constructor arguments).
@@ -99,6 +99,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "device",
         "action_semantics",
         "relative_obs",
+        "obs_transform",
     }
 )
 
@@ -109,6 +110,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
 # "absolute" — Experimental path that wraps target velocities back into deltas
 #              for the DifferentialDrive env. Kept for comparison/debugging.
 _DEFAULT_ACTION_SEMANTICS = "delta"
+_DEFAULT_OBS_TRANSFORM = "none"
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +134,7 @@ class SACTrainingConfig:
     device: str = "auto"
     action_semantics: str = _DEFAULT_ACTION_SEMANTICS
     relative_obs: bool = True
+    obs_transform: str = _DEFAULT_OBS_TRANSFORM
 
 
 def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
@@ -184,7 +187,15 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         or _DEFAULT_ACTION_SEMANTICS
     )
     relative_obs_raw = data.get("relative_obs", True)
-    relative_obs = bool(relative_obs_raw) if not isinstance(relative_obs_raw, bool) else relative_obs_raw
+    relative_obs = (
+        bool(relative_obs_raw) if not isinstance(relative_obs_raw, bool) else relative_obs_raw
+    )
+    obs_transform = (
+        str(data.get("obs_transform", _DEFAULT_OBS_TRANSFORM)).strip().lower()
+        or _DEFAULT_OBS_TRANSFORM
+    )
+    if obs_transform == _DEFAULT_OBS_TRANSFORM and relative_obs:
+        obs_transform = "relative"
 
     return SACTrainingConfig(
         policy_id=str(data["policy_id"]),
@@ -199,6 +210,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         device=device,
         action_semantics=action_semantics,
         relative_obs=relative_obs,
+        obs_transform=obs_transform,
     )
 
 
@@ -233,27 +245,39 @@ def _build_env(
     Returns:
         DummyVecEnv: A single-environment vectorised wrapper.
     """
-    scenario = select_scenario(scenario_definitions, scenario_id=None)
-    robot_config = build_robot_config_from_scenario(
-        scenario,
-        scenario_path=config.scenario_config,
-    )
-    _apply_env_overrides(robot_config, config.env_overrides)
-
-    env_kwargs: dict[str, Any] = {
-        "config": robot_config,
-        **config.env_factory_kwargs,
-    }
-    if config.seed is not None:
-        env_kwargs["seed"] = config.seed
-
     use_abs = config.action_semantics.strip().lower() == "absolute"
+    obs_transform = config.obs_transform.strip().lower()
+    scenario_sampler = ScenarioSampler(
+        scenario_definitions,
+        seed=config.seed,
+        strategy="random",
+    )
+
+    def _build_robot_config_for_sampling(scenario: Mapping[str, Any]) -> Any:
+        robot_config = build_robot_config_from_scenario(
+            scenario,
+            scenario_path=config.scenario_config,
+        )
+        _apply_env_overrides(robot_config, config.env_overrides)
+        return robot_config
 
     def _make() -> Any:
-        env = make_robot_env(**env_kwargs)
+        env = ScenarioSwitchingEnv(
+            scenario_sampler=scenario_sampler,
+            scenario_path=config.scenario_config,
+            env_factory=make_robot_env,
+            config_builder=_build_robot_config_for_sampling,
+            env_factory_kwargs=config.env_factory_kwargs,
+            suite_name="sac_training",
+            algorithm_name="sac",
+            switch_per_reset=True,
+            seed=config.seed,
+        )
         env = _maybe_flatten_nested_dict_env(env)
-        if config.relative_obs:
+        if obs_transform == "relative":
             env = _RelativeSocNavObservation(env)
+        elif obs_transform == "ego":
+            env = _EgoSocNavObservation(env)
         if use_abs:
             env = _VelocityTargetActionWrapper(env)
         return env
@@ -380,6 +404,57 @@ def _relative_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
     return converted
 
 
+def _rotate_xy_to_ego(xy_values: np.ndarray, heading: float) -> np.ndarray:
+    """Rotate XY vectors from world frame into the robot ego frame."""
+    cos_h = float(np.cos(heading))
+    sin_h = float(np.sin(heading))
+    x_ego = cos_h * xy_values[..., 0] + sin_h * xy_values[..., 1]
+    y_ego = -sin_h * xy_values[..., 0] + cos_h * xy_values[..., 1]
+    rotated = np.array(xy_values, copy=True, dtype=np.float32)
+    rotated[..., 0] = x_ego
+    rotated[..., 1] = y_ego
+    return rotated
+
+
+def _ego_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
+    """Convert flat SocNav observations to robot ego-frame position-like features."""
+    converted = _relative_socnav_obs(observation)
+    if "robot_heading" not in converted:
+        return converted
+
+    heading_arr = np.asarray(converted["robot_heading"], dtype=np.float32).reshape(-1)
+    if heading_arr.size == 0:
+        return converted
+    heading = float(heading_arr[0])
+
+    def _rotate_key(key: str) -> None:
+        if key not in converted:
+            return
+        arr = np.asarray(converted[key], dtype=np.float32)
+        if arr.ndim == 1 and arr.size >= 2:
+            rotated = _rotate_xy_to_ego(arr[:2].reshape(1, 2), heading).reshape(2)
+            rel = arr.copy()
+            rel[:2] = np.clip(rotated, -SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M)
+            converted[key] = rel
+            return
+        if arr.ndim >= 2 and arr.shape[-1] >= 2:
+            rel = arr.copy()
+            mask = np.any(np.abs(rel[..., :2]) > 1e-8, axis=-1)
+            if np.any(mask):
+                rotated = _rotate_xy_to_ego(rel[..., :2][mask], heading)
+                rel[..., :2][mask] = np.clip(
+                    rotated,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+            converted[key] = rel
+
+    _rotate_key("goal_current")
+    _rotate_key("goal_next")
+    _rotate_key("pedestrians_positions")
+    return converted
+
+
 class _RelativeSocNavObservation(ObservationWrapper):
     """Translate flat SocNav observations into a robot-relative coordinate frame."""
 
@@ -420,6 +495,13 @@ class _RelativeSocNavObservation(ObservationWrapper):
             )
 
         return gym_spaces.Dict(spaces)
+
+
+class _EgoSocNavObservation(_RelativeSocNavObservation):
+    """Rotate relative SocNav observations into the robot ego frame."""
+
+    def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        return _ego_socnav_obs(observation)
 
 
 class _VelocityTargetActionWrapper(gymnasium.ActionWrapper):

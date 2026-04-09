@@ -34,6 +34,7 @@ class SACPlannerConfig:
     v_max: float = 2.0
     omega_max: float = 1.0
     relative_obs: bool = True
+    obs_transform: str = "none"
     fallback_to_goal: bool = True
 
 
@@ -180,14 +181,15 @@ class SACPlanner:
             return None
 
     def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
+        obs_transform = self._effective_obs_transform()
         if self._model is None:
             converted = {str(k): np.asarray(v) for k, v in obs.items()}
-            return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
+            return self._apply_obs_transform(converted, obs_transform)
         space = getattr(self._model, "observation_space", None)
         spaces = getattr(space, "spaces", None)
         if not isinstance(spaces, dict):
             converted = {str(k): np.asarray(v) for k, v in obs.items()}
-            return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
+            return self._apply_obs_transform(converted, obs_transform)
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
         aliases: dict[str, tuple[str, ...]] = {
@@ -218,7 +220,24 @@ class SACPlanner:
         if missing:
             preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {preview}")
-        return self._apply_relative_socnav_obs(converted) if self.config.relative_obs else converted
+        return self._apply_obs_transform(converted, obs_transform)
+
+    def _effective_obs_transform(self) -> str:
+        """Resolve the observation transform mode from config, preserving legacy `relative_obs`."""
+        raw = str(getattr(self.config, "obs_transform", "none")).strip().lower()
+        if raw == "none" and self.config.relative_obs:
+            return "relative"
+        return raw
+
+    def _apply_obs_transform(
+        self, obs: dict[str, np.ndarray], obs_transform: str
+    ) -> dict[str, np.ndarray]:
+        """Apply the configured SAC observation transform."""
+        if obs_transform == "relative":
+            return self._apply_relative_socnav_obs(obs)
+        if obs_transform == "ego":
+            return self._apply_ego_socnav_obs(obs)
+        return obs
 
     def _apply_relative_socnav_obs(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """Translate position-like SocNav keys into a robot-relative frame."""
@@ -256,6 +275,64 @@ class SACPlanner:
         _shift_xy("goal_current")
         _shift_xy("goal_next")
         _shift_xy("pedestrians_positions")
+        return converted
+
+    def _apply_ego_socnav_obs(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Rotate position-like SocNav keys into the robot ego frame."""
+        converted = self._apply_relative_socnav_obs(obs)
+        if "robot_heading" not in converted:
+            return converted
+
+        heading_arr = np.asarray(converted["robot_heading"], dtype=np.float32).reshape(-1)
+        if heading_arr.size == 0:
+            return converted
+        heading = float(heading_arr[0])
+        cos_h = float(np.cos(heading))
+        sin_h = float(np.sin(heading))
+
+        def _rotate_key(key: str) -> None:
+            if key not in converted:
+                return
+            arr = np.asarray(converted[key], dtype=np.float32)
+            if arr.ndim == 1 and arr.size >= 2:
+                rel = arr.copy()
+                x_val = float(rel[0])
+                y_val = float(rel[1])
+                rel[0] = np.clip(
+                    cos_h * x_val + sin_h * y_val,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+                rel[1] = np.clip(
+                    -sin_h * x_val + cos_h * y_val,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+                converted[key] = rel
+                return
+            if arr.ndim >= 2 and arr.shape[-1] >= 2:
+                rel = arr.copy()
+                mask = np.any(np.abs(rel[..., :2]) > 1e-8, axis=-1)
+                if not np.any(mask):
+                    converted[key] = rel
+                    return
+                x_vals = rel[..., 0][mask]
+                y_vals = rel[..., 1][mask]
+                rel[..., 0][mask] = np.clip(
+                    cos_h * x_vals + sin_h * y_vals,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+                rel[..., 1][mask] = np.clip(
+                    -sin_h * x_vals + cos_h * y_vals,
+                    -SOCNAV_POSITION_CAP_M,
+                    SOCNAV_POSITION_CAP_M,
+                )
+                converted[key] = rel
+
+        _rotate_key("goal_current")
+        _rotate_key("goal_next")
+        _rotate_key("pedestrians_positions")
         return converted
 
     def _vectorize(self, obs: Observation) -> np.ndarray:

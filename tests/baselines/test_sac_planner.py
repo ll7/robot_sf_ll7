@@ -59,3 +59,35 @@ def test_build_model_obs_dict_can_leave_absolute_socnav_transform_disabled() -> 
 
     assert np.allclose(converted["robot_position"], np.array([10.0, 5.0]))
     assert np.allclose(converted["goal_current"], np.array([13.0, 7.0]))
+
+
+def test_build_model_obs_dict_can_rotate_socnav_positions_to_ego_frame() -> None:
+    """Inference adapter ego transform should match training-side rotation semantics."""
+    planner = _planner_without_model(relative_obs=False)
+    planner.config.obs_transform = "ego"
+
+    converted = planner._build_model_obs_dict(
+        {
+            "robot_position": [10.0, 5.0],
+            "robot_heading": [np.pi / 2],
+            "goal_current": [13.0, 5.0],
+            "pedestrians_positions": [[11.0, 5.0], [10.0, 7.0]],
+        }
+    )
+
+    assert np.allclose(
+        converted["robot_position"], np.array([0.0, 0.0], dtype=np.float32), atol=1e-6
+    )
+    assert np.allclose(
+        converted["goal_current"], np.array([0.0, -3.0], dtype=np.float32), atol=1e-6
+    )
+    assert np.allclose(
+        converted["pedestrians_positions"][0],
+        np.array([0.0, -1.0], dtype=np.float32),
+        atol=1e-6,
+    )
+    assert np.allclose(
+        converted["pedestrians_positions"][1],
+        np.array([2.0, 0.0], dtype=np.float32),
+        atol=1e-6,
+    )

@@ -130,11 +130,18 @@ outside the current worktree. That path-resolution bug has now been fixed in
 `scripts/tools/analyze_camera_ready_campaign.py` and regression-covered in
 `tests/tools/test_analyze_camera_ready_campaign.py` .
 
-After rerunning the analyzer on the same campaign:
+Fresh proof on 2026-04-09:
 
+* the published bundle was restored into a checkout-shaped
+  `output/benchmarks/camera_ready/<campaign_id>` tree before rerunning the analyzer
 * per-planner episode counts resolve correctly at `141`
-* scenario difficulty analysis loads correctly from campaign artifacts
+* scenario difficulty analysis loads correctly with `47` scenario rows
 * automated consistency findings drop to none
+
+This matters because the published archive itself unpacks under `payload/`, while the benchmark
+summary still points at repo-relative `output/...` artifact paths. The successful rerun therefore
+proves the analyzer fix against the intended checkout-style contract, not just against a synthetic
+unit fixture.
 
 That means the remaining release caveats are benchmark-semantic concerns, not analysis-tooling
 breakage.

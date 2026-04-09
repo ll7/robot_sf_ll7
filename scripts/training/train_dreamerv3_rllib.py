@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import logging
+import math
 import os
 import sys
 from dataclasses import dataclass, fields, is_dataclass
@@ -836,6 +837,109 @@ def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
     return None
 
 
+def _is_finite_scalar(value: Any) -> bool:
+    """Return True when value is an int/float and finite."""
+    return isinstance(value, int | float) and math.isfinite(float(value))
+
+
+def _find_nonfinite_scalars(
+    value: Any,
+    *,
+    prefix: str = "",
+    limit: int = 32,
+) -> list[dict[str, object]]:
+    """Collect paths for non-finite scalar values inside nested results."""
+    findings: list[dict[str, object]] = []
+
+    def _visit(current: Any, path: str) -> None:
+        if len(findings) >= limit:
+            return
+        if isinstance(current, int | float):
+            numeric = float(current)
+            if not math.isfinite(numeric):
+                findings.append(
+                    {
+                        "path": path or "<root>",
+                        "value": str(current),
+                    }
+                )
+            return
+        if isinstance(current, dict):
+            for key, nested in current.items():
+                child_path = f"{path}.{key}" if path else str(key)
+                _visit(nested, child_path)
+                if len(findings) >= limit:
+                    return
+        elif isinstance(current, list | tuple):
+            for index, nested in enumerate(current):
+                child_path = f"{path}[{index}]" if path else f"[{index}]"
+                _visit(nested, child_path)
+                if len(findings) >= limit:
+                    return
+
+    _visit(value, prefix)
+    return findings
+
+
+def _build_nonfinite_diagnostics(
+    result: dict[str, Any],
+    *,
+    iteration: int,
+    reward_mean: float | int | None,
+    timesteps_total: float | int | None,
+) -> dict[str, object]:
+    """Build a compact, JSON-safe diagnostic payload for non-finite training metrics."""
+    interesting_paths = {
+        "env_episode_return_mean": _extract_metric(result, "episode_return_mean", "episode_reward_mean"),
+        "env_episode_len_mean": _extract_metric(result, "episode_len_mean", "episode_len_mean"),
+        "num_env_steps_sampled_lifetime": _extract_metric(result, "num_env_steps_sampled_lifetime"),
+        "num_env_steps_trained_lifetime": _extract_metric(result, "num_env_steps_trained_lifetime"),
+        "learner_total_loss": (
+            result.get("learners", {})
+            .get("__all_modules__", {})
+            .get("total_loss")
+            if isinstance(result.get("learners"), dict)
+            else None
+        ),
+        "learner_policy_total_loss": (
+            result.get("learners", {})
+            .get("default_policy", {})
+            .get("total_loss")
+            if isinstance(result.get("learners"), dict)
+            else None
+        ),
+        "learner_world_model_loss": (
+            result.get("learners", {})
+            .get("default_policy", {})
+            .get("world_model_loss")
+            if isinstance(result.get("learners"), dict)
+            else None
+        ),
+        "learner_actor_loss": (
+            result.get("learners", {})
+            .get("default_policy", {})
+            .get("actor_loss")
+            if isinstance(result.get("learners"), dict)
+            else None
+        ),
+        "learner_critic_loss": (
+            result.get("learners", {})
+            .get("default_policy", {})
+            .get("critic_loss")
+            if isinstance(result.get("learners"), dict)
+            else None
+        ),
+    }
+    return {
+        "iteration": iteration,
+        "reward_mean": reward_mean,
+        "timesteps_total": timesteps_total,
+        "top_level_keys": sorted(result.keys()),
+        "interesting_metrics": interesting_paths,
+        "nonfinite_scalars": _find_nonfinite_scalars(result),
+    }
+
+
 def _save_checkpoint(algo: Any, checkpoint_dir: Path) -> str:
     """Persist one checkpoint and return its path as string."""
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -932,11 +1036,6 @@ def _predict_action(
     is_first: bool = False,
 ) -> tuple[Any, Any | None]:
     """Compute one deterministic action across common RLlib Algorithm APIs."""
-    compute_single_action = getattr(algo, "compute_single_action", None)
-    if callable(compute_single_action):
-        action = compute_single_action(observation, explore=False)
-        return _normalize_action_output(action), policy_state
-
     get_module = getattr(algo, "get_module", None)
     if callable(get_module):
         module = get_module()
@@ -971,6 +1070,15 @@ def _predict_action(
                 _tree_to_numpy(module_outputs.get(Columns.STATE_OUT, policy_state))
             )
             return action, next_state
+
+    compute_single_action = getattr(algo, "compute_single_action", None)
+    if callable(compute_single_action):
+        try:
+            action = compute_single_action(observation, explore=False)
+        except NotImplementedError:
+            logger.debug("algorithm.compute_single_action() is unsupported; falling back.")
+        else:
+            return _normalize_action_output(action), policy_state
 
     compute_actions = getattr(algo, "compute_actions", None)
     if not callable(compute_actions):
@@ -1240,6 +1348,8 @@ def _run_training_iterations(
     history: list[dict[str, object]] = []
     best_checkpoint: dict[str, object] | None = None
     best_reward_mean: float | int | None = None
+    diagnostics_dir = result_log_path.parent / "diagnostics"
+    first_nonfinite_iteration: int | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
         reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
@@ -1279,6 +1389,38 @@ def _run_training_iterations(
                 },
                 step=iteration,
             )
+
+        if reward_mean is not None and not _is_finite_scalar(reward_mean):
+            diagnostics = _build_nonfinite_diagnostics(
+                result,
+                iteration=iteration,
+                reward_mean=reward_mean,
+                timesteps_total=timesteps_total,
+            )
+            diagnostics_path = diagnostics_dir / f"iteration_{iteration:06d}_nonfinite.json"
+            _write_json(diagnostics_path, diagnostics)
+            history[-1]["nonfinite_diagnostics_path"] = str(diagnostics_path)
+            history[-1]["nonfinite_diagnostics"] = diagnostics
+            logger.warning(
+                "non_finite_reward_mean iteration={} reward_mean={} diagnostics_path={}",
+                iteration,
+                reward_mean,
+                diagnostics_path,
+            )
+            if first_nonfinite_iteration is None:
+                first_nonfinite_iteration = iteration
+                if wandb_run is not None:
+                    wandb_run.summary["first_nonfinite_reward_iteration"] = iteration
+                    wandb_run.summary["first_nonfinite_reward_diagnostics_path"] = str(
+                        diagnostics_path
+                    )
+            if wandb_run is not None:
+                wandb_run.log(
+                    {
+                        "reward_mean_nonfinite": 1,
+                    },
+                    step=iteration,
+                )
 
         if _is_better_reward(reward_mean, best_reward_mean):
             best_reward_mean = reward_mean

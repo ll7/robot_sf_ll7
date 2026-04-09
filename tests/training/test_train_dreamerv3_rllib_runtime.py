@@ -41,8 +41,14 @@ class _FakeRay:
 class _FakeAlgo:
     """Simple algorithm stub exposing train/save/stop lifecycle hooks."""
 
-    def __init__(self, *, fail_on_train: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_on_train: bool = False,
+        reward_sequence: list[float] | None = None,
+    ) -> None:
         self.fail_on_train = fail_on_train
+        self.reward_sequence = list(reward_sequence or [])
         self.train_calls = 0
         self.stop_called = False
 
@@ -50,9 +56,21 @@ class _FakeAlgo:
         if self.fail_on_train:
             raise RuntimeError("train failed")
         self.train_calls += 1
+        reward_mean = (
+            self.reward_sequence[self.train_calls - 1]
+            if self.train_calls - 1 < len(self.reward_sequence)
+            else float(self.train_calls)
+        )
         return {
-            "episode_return_mean": float(self.train_calls),
+            "episode_return_mean": reward_mean,
             "num_env_steps_sampled_lifetime": self.train_calls * 10,
+            "learners": {
+                "__all_modules__": {"total_loss": reward_mean},
+                "default_policy": {
+                    "total_loss": reward_mean,
+                    "world_model_loss": reward_mean,
+                },
+            },
         }
 
     def save_to_path(self, checkpoint_dir: str) -> str:
@@ -337,6 +355,52 @@ algorithm:
     assert {record["success"] for record in records} == {True}
     assert {record["return"] for record in records} == {1.0}
     assert (tmp_path / "evaluation" / "iteration_000003_summary.json").exists()
+
+
+def test_run_training_records_nonfinite_reward_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Non-finite reward_mean values should produce diagnostic artifacts for debugging."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_nonfinite.yaml",
+        f"""
+experiment:
+  run_id: smoke_nonfinite
+  output_root: {tmp_path.as_posix()}/output
+  train_iterations: 2
+  checkpoint_every: 1
+  seed: 11
+  log_level: WARNING
+algorithm:
+  framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_ray = _FakeRay()
+    fake_algo = _FakeAlgo(reward_sequence=[1.0, float("nan")])
+
+    monkeypatch.setattr(dreamer, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(
+        dreamer,
+        "_import_rllib",
+        lambda: (fake_ray, object, lambda _env_name, _creator: None),
+    )
+    monkeypatch.setattr(dreamer, "_init_wandb_tracking", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dreamer, "_build_algorithm_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(dreamer, "_build_algorithm_instance", lambda _cfg: fake_algo)
+
+    exit_code = dreamer.run_training(run_config)
+
+    assert exit_code == 0
+    run_dir = run_config.experiment.output_root / "smoke_nonfinite_20260211T120000Z"
+    summary = json.loads((run_dir / "run_summary.json").read_text(encoding="utf-8"))
+    second = summary["history"][1]
+    assert second["reward_mean"] != second["reward_mean"]  # NaN
+    diagnostics_path = Path(second["nonfinite_diagnostics_path"])
+    assert diagnostics_path.exists()
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    assert diagnostics["iteration"] == 2
+    assert diagnostics["nonfinite_scalars"]
 
 
 def test_run_training_cleans_up_ray_and_algo_on_failure(

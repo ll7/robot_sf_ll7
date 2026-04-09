@@ -524,7 +524,8 @@ def test_repo_br08_configs_load_with_expected_reward_contract(
         assert run_config.env.config_overrides["use_occupancy_grid"] is True
         assert run_config.env.config_overrides["include_grid_in_observation"] is True
     else:
-        assert run_config.env.config_overrides["randomize_seeds"] is True
+        assert run_config.env.flatten_keys == ("drive_state", "rays")
+        assert run_config.env.config_overrides["include_grid_in_observation"] is False
 
 
 def test_repo_benchmark_socnav_grid_full_enables_periodic_eval() -> None:

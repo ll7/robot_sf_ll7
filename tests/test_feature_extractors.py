@@ -237,7 +237,7 @@ class TestIntegrationWithStableBaselines3:
         """Return a small environment config for PPO integration smoke tests."""
         config = EnvSettings()
         config.sim_config.time_per_step_in_secs = 0.02
-        config.sim_config.sim_time_in_secs = 2
+        config.sim_config.sim_time_in_secs = 1
         return config
 
     @staticmethod

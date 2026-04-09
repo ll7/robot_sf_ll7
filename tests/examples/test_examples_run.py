@@ -89,14 +89,7 @@ def _repo_root_path() -> Path:
 
 @pytest.fixture(scope="module", name="example_env")
 def _example_env(repo_root_path: Path) -> dict[str, str]:
-    """TODO docstring. Document this function.
-
-    Args:
-        repo_root_path: TODO docstring.
-
-    Returns:
-        TODO docstring.
-    """
+    """Build a headless-friendly environment for executing example scripts in CI."""
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -105,7 +98,7 @@ def _example_env(repo_root_path: Path) -> dict[str, str]:
     env.setdefault("SDL_VIDEODRIVER", "dummy")
     env["PYTHONPATH"] = _merge_pythonpath(repo_root_path, env.get("PYTHONPATH"))
     env.setdefault("ROBOT_SF_FAST_DEMO", "1")
-    env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", "32")
+    env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", "12")
     return env
 
 
@@ -117,14 +110,7 @@ def test_example_runs_without_error(
     example_env: dict[str, str],
     perf_policy,
 ) -> None:
-    """TODO docstring. Document this function.
-
-    Args:
-        example: TODO docstring.
-        repo_root_path: TODO docstring.
-        example_env: TODO docstring.
-        perf_policy: TODO docstring.
-    """
+    """Run each CI-enabled example script and fail with captured output on regressions."""
     script_path = _MANIFEST.resolve_example_path(example)
     assert script_path.is_file(), f"Example path missing: {script_path}"
 

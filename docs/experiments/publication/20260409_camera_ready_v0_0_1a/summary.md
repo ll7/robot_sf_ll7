@@ -57,3 +57,4 @@ Confidence intervals in the companion CSV/JSON are the benchmark-owned handoff v
 
 - `release_metadata.json`: compact release, asset, campaign, and publication metadata
 - `paper_results_handoff_snapshot.csv`: tracked copy of the interval-inclusive planner rows
+- `benchmark_analysis.md`: release-readiness analysis and benchmark health caveats

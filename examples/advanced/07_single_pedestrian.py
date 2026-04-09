@@ -16,6 +16,7 @@ References:
     - docs/single_pedestrians.md
 """
 
+import os
 from typing import TYPE_CHECKING
 
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -149,6 +150,15 @@ def run_simulation_with_single_pedestrians(num_steps: int = 500):
     # Create environment
     # The map doesn't have ped_crowded_zones, so no crowd pedestrians will spawn
     env = make_robot_env(config=config, debug=True)
+
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            num_steps = max(1, int(override))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
+    elif os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
+        num_steps = min(num_steps, 8)
 
     print(f"\nRunning simulation for {num_steps} steps...")
     print("Press Ctrl+C to stop early\n")

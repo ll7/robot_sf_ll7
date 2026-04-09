@@ -137,28 +137,17 @@ def test_verified_simple_subset_scenarios_include_metadata_contract() -> None:
 
 def test_atomic_issue_596_maps_pass_repo_verifier(tmp_path: Path) -> None:
     """The new atomic SVG maps should be accepted by the repository map verifier."""
-    import subprocess
-    import sys
+    from robot_sf.maps.verification.runner import verify_maps
 
     for map_name in ATOMIC_MAP_FILENAMES:
         output_path = tmp_path / f"{map_name}.json"
-        result = subprocess.run(
-            [
-                sys.executable,
-                "scripts/validation/verify_maps.py",
-                "--scope",
-                map_name,
-                "--mode",
-                "ci",
-                "--output",
-                str(output_path),
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = verify_maps(
+            scope=map_name,
+            mode="ci",
+            output_path=output_path,
         )
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.total_maps == 1, f"Expected one map result for {map_name}"
+        assert result.failed == 0, f"Verifier failed for {map_name}: {result.results[0].message}"
         assert output_path.exists(), f"Verifier did not emit a manifest for {map_name}"
 
 

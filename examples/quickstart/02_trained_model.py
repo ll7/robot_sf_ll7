@@ -21,6 +21,7 @@ References:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +33,21 @@ def project_root() -> Path:
     """Return the repository root regardless of the quickstart subdirectory."""
 
     return Path(__file__).resolve().parents[2]
+
+
+def _fast_demo_enabled() -> bool:
+    """Return whether the benchmark demo should prefer smoke-sized settings."""
+    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1"
+
+
+def _horizon() -> str:
+    """Return the benchmark horizon override for the current execution mode."""
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override and override.isdigit():
+        return str(max(1, int(override)))
+    if _fast_demo_enabled():
+        return "4"
+    return "50"
 
 
 def main() -> int:
@@ -48,11 +64,12 @@ def main() -> int:
     out_dir = ensure_output_dir(out.parent)
     out = out_dir / out.name
 
-    print("[quickstart] Listing available benchmark algorithms...", flush=True)
-    code = cli_main(["list-algorithms"])
-    if code != 0:
-        print("[quickstart] list-algorithms failed", file=sys.stderr)
-        return code
+    if not _fast_demo_enabled():
+        print("[quickstart] Listing available benchmark algorithms...", flush=True)
+        code = cli_main(["list-algorithms"])
+        if code != 0:
+            print("[quickstart] list-algorithms failed", file=sys.stderr)
+            return code
 
     argv = [
         "run",
@@ -67,11 +84,12 @@ def main() -> int:
         "--repeats",
         "1",
         "--horizon",
-        "50",
+        _horizon(),
         "--dt",
         "0.1",
-        "--record-forces",
     ]
+    if not _fast_demo_enabled():
+        argv.append("--record-forces")
 
     print("[quickstart] Running benchmark with the PPO baseline...", flush=True)
     code = cli_main(argv)

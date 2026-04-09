@@ -15,13 +15,13 @@ SURFACE_PATHS = {
     ROOT / "docs" / "project_prioritization.md": WORKFLOW_NOTE_PATH_STR,
 }
 SKILL_PATHS = [
-    ROOT / ".codex" / "skills" / "gh-issue-autopilot" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-sequencer" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-creator" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-clarifier" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-autopilot" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-clarifier" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
 ]
+SKILLS_README = ROOT / ".agents" / "skills" / "README.md"
 
 
 def test_batch_first_workflow_note_is_linked_from_repo_guidance() -> None:
@@ -46,3 +46,7 @@ def test_batch_first_workflow_note_is_linked_from_repo_guidance() -> None:
             f"missing note link in {path.name}"
         )
         assert "batch" in text.lower(), f"missing batch guidance in {path.name}"
+
+    skills_readme_text = SKILLS_README.read_text(encoding="utf-8")
+    assert "Priority Score" in skills_readme_text
+    assert "gh-issue-priority-assessor" in skills_readme_text

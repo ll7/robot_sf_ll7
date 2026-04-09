@@ -38,6 +38,9 @@ class _Cfg:
         self.workers = 1
         self.master_seed = 123
         self.smoke = smoke
+        self.smoke_limit_jobs = True
+        self.smoke_episodes = 1
+        self.smoke_horizon_cap = 10
         self.disable_videos = disable_videos
         self.max_videos = 1
         self.capture_replay = True

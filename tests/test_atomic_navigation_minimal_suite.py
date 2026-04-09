@@ -141,13 +141,15 @@ def test_atomic_issue_596_maps_pass_repo_verifier(tmp_path: Path) -> None:
 
     for map_name in ATOMIC_MAP_FILENAMES:
         output_path = tmp_path / f"{map_name}.json"
-        result = verify_maps(
+        summary = verify_maps(
             scope=map_name,
             mode="ci",
             output_path=output_path,
         )
-        assert result.total_maps == 1, f"Expected one map result for {map_name}"
-        assert result.failed == 0, f"Verifier failed for {map_name}: {result.results[0].message}"
+        assert summary.total_maps == 1, (
+            f"Verifier scope matched {summary.total_maps} maps for {map_name}; expected 1"
+        )
+        assert summary.failed == 0, f"Map verifier failed for {map_name}: {summary.results}"
         assert output_path.exists(), f"Verifier did not emit a manifest for {map_name}"
 
 

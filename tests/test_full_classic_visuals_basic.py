@@ -32,12 +32,15 @@ class _Cfg:
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"  # assuming exists
         self.initial_episodes = 1
-        self.max_episodes = 2
+        self.max_episodes = 1
         self.batch_size = 1
         self.algo = "ppo"
         self.workers = 1
         self.master_seed = 123
         self.smoke = smoke
+        self.smoke_limit_jobs = True
+        self.smoke_episodes = 1
+        self.smoke_horizon_cap = 10
         self.disable_videos = disable_videos
         self.max_videos = 1
         self.capture_replay = True

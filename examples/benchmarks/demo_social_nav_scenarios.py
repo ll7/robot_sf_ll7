@@ -67,7 +67,21 @@ def _step_budget(default: int) -> int:
     return default
 
 
+def _scenario_budget(default: int) -> int:
+    """Return the number of scenarios to execute for the current run mode."""
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_SCENARIOS")
+    if override:
+        try:
+            return max(1, min(default, int(override)))
+        except ValueError:  # pragma: no cover
+            pass
+    if _fast_demo_enabled():
+        return 1
+    return default
+
+
 STEPS_PER_SCENARIO = _step_budget(200)
+SCENARIOS_TO_RUN = _scenario_budget(len(SVG_MAPS))
 
 
 def run_svg_scenario(name: str, svg_path: str) -> None:
@@ -99,7 +113,7 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
 
 def main() -> None:
     """TODO docstring. Document this function."""
-    for name, svg_path in SVG_MAPS:
+    for name, svg_path in SVG_MAPS[:SCENARIOS_TO_RUN]:
         run_svg_scenario(name, svg_path)
     print("\nAll scenarios completed.")
 

@@ -36,6 +36,11 @@ from robot_sf.data_analysis.extract_obj_from_pickle import (
 from robot_sf.render.playback_recording import load_states
 
 
+def _fast_demo_enabled() -> bool:
+    """Return True when the example should run in smoke-friendly fast mode."""
+    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
+
+
 def show_from_pkl(filename: str, unique_id: str):
     """
     Extract and plot data from a pickle file.
@@ -94,9 +99,16 @@ if __name__ == "__main__":
         if recording_path:
             recording_id = extract_timestamp(str(recording_path))
 
-            show_from_json(str(recording_path), recording_id)
-
-            show_from_pkl(str(recording_path), recording_id)
+            if _fast_demo_enabled():
+                dataset_dir = Path("examples/datasets")
+                if dataset_dir.exists():
+                    save_to_json(str(recording_path), f"{dataset_dir}/{recording_id}.json")
+                    logger.info("Fast demo mode: exported JSON only")
+                else:
+                    logger.error("'examples/datasets' directory not found")
+            else:
+                show_from_json(str(recording_path), recording_id)
+                show_from_pkl(str(recording_path), recording_id)
 
             logger.info(f"Successfully extracted and plotted data from {recording_path}")
             logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")

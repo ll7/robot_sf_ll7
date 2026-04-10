@@ -160,6 +160,23 @@ def test_astar_without_clearance_may_not_centre() -> None:
     assert path, "path must still exist without clearance penalty"
 
 
+def test_astar_narrow_passage_routes_through_gap() -> None:
+    """Narrow passages should route through the single available opening."""
+    planner = GridRoutePlannerAdapter(GridRoutePlannerConfig(clearance_penalty_weight=0.5))
+    blocked = np.ones((7, 14), dtype=bool)
+    blocked[1:6, :] = False
+    blocked[3, :] = True
+    blocked[3, 7] = False
+
+    clearance_map = planner._compute_clearance_map(blocked)
+    path = planner._astar(blocked, (1, 0), (5, 13), clearance_map=clearance_map)
+
+    assert path, "path must exist through the narrow passage"
+    assert path[0] == (1, 0)
+    assert path[-1] == (5, 13)
+    assert (3, 7) in path, "Path must go through the narrow opening in the wall"
+
+
 def test_build_grid_route_config_clearance_penalty() -> None:
     """build_grid_route_config should round-trip clearance_penalty_weight."""
     cfg = build_grid_route_config({"clearance_penalty_weight": 0.75})

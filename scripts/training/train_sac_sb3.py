@@ -212,7 +212,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         )
 
     output_dir_raw = data.get("output_dir", "output/models/sac")
-    output_dir = _resolve_output_dir(output_dir_raw)
+    output_dir = _resolve_output_dir(output_dir_raw, base_dir=path.parent)
 
     seed_raw = data.get("seed")
     seed = int(seed_raw) if seed_raw is not None else None
@@ -255,15 +255,15 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
     )
 
 
-def _resolve_output_dir(raw_value: object) -> Path:
-    """Resolve output directories against the repository working tree.
+def _resolve_output_dir(raw_value: object, *, base_dir: Path) -> Path:
+    """Resolve output directories against the training config location.
 
     Returns:
         Path: Absolute output directory path.
     """
     path_value = Path(str(raw_value).strip())
     if not path_value.is_absolute():
-        path_value = (Path.cwd() / path_value).resolve()
+        path_value = (base_dir / path_value).resolve()
     return path_value
 
 
@@ -306,7 +306,10 @@ def _load_eval_config(raw_value: object, *, config_dir: Path) -> SACEvaluationCo
         )
         or None,
         algo_config=_resolve_config_path(raw_value.get("algo_config"), config_dir=config_dir),
-        output_dir=_resolve_output_dir(raw_value.get("output_dir", "output/tmp/sac_eval")),
+        output_dir=_resolve_output_dir(
+            raw_value.get("output_dir", "output/tmp/sac_eval"),
+            base_dir=config_dir,
+        ),
         tag_prefix=str(raw_value.get("tag_prefix", "sac_eval")).strip() or "sac_eval",
         horizon=int(raw_value.get("horizon", 120)),
         dt=float(raw_value.get("dt", 0.1)),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import gymnasium
 import numpy as np
@@ -75,7 +76,7 @@ def test_gate_config_loads() -> None:
     assert config.policy_id
     assert config.total_timesteps == 50_000
     assert config.scenario_config.exists()
-    assert config.output_dir == Path("output/models/sac").resolve()
+    assert config.output_dir == (_GATE_CONFIG.parent / "output/models/sac").resolve()
 
 
 def test_full_config_loads() -> None:
@@ -85,7 +86,7 @@ def test_full_config_loads() -> None:
     assert config.policy_id
     assert config.total_timesteps == 3_000_000
     assert config.scenario_config.exists()
-    assert config.output_dir == Path("output/models/sac").resolve()
+    assert config.output_dir == (_FULL_CONFIG.parent / "output/models/sac").resolve()
 
 
 def test_socnav_gate_config_loads() -> None:
@@ -199,7 +200,7 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
     """SAC training env should sample across the loaded scenario list per reset."""
 
     class _DummyEnv(gymnasium.Env):
-        metadata: dict[str, object] = {}
+        metadata: ClassVar[dict[str, object]] = {}
 
         def __init__(
             self, *, config: object, seed: int | None, scenario_name: str, **_: object
@@ -496,7 +497,7 @@ evaluation:
     assert config.evaluation.frequency_steps == 250
     assert config.evaluation.scenario_matrix == scenario_matrix.resolve()
     assert config.evaluation.algo_config == algo_config.resolve()
-    assert config.evaluation.output_dir == Path("output/tmp/sac_eval_custom").resolve()
+    assert config.evaluation.output_dir == (cfg.parent / "output/tmp/sac_eval_custom").resolve()
     assert config.evaluation.tag_prefix == "custom_eval"
     assert config.evaluation.horizon == 64
     assert config.evaluation.dt == 0.2

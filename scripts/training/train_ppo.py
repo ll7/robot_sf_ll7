@@ -873,6 +873,16 @@ def _resolved_reward_name(env_factory_kwargs: Mapping[str, object]) -> str:
     """Resolve named reward profile for startup logs."""
     if "reward_func" in env_factory_kwargs:
         return "custom_callable"
+    reward_curriculum = env_factory_kwargs.get("reward_curriculum")
+    if reward_curriculum is not None:
+        stage_count = "?"
+        if isinstance(reward_curriculum, Mapping):
+            stages = reward_curriculum.get("stages")
+            if isinstance(stages, Sequence) and not isinstance(stages, (str, bytes)):
+                stage_count = str(len(stages))
+        reward_name = env_factory_kwargs.get("reward_name")
+        base_reward = str(reward_name) if reward_name is not None else "route_completion_v2"
+        return f"curriculum[{stage_count} stages]: {base_reward}"
     reward_name = env_factory_kwargs.get("reward_name")
     if reward_name is None:
         return "route_completion_v2 (default)"

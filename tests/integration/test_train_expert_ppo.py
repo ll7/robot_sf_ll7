@@ -165,6 +165,58 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
 
 
+def test_load_expert_training_config_preserves_reward_curriculum(tmp_path) -> None:
+    """Loader should preserve staged reward curriculum config for factory wiring."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "reward_curriculum.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_reward_curriculum_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+                "env_factory_kwargs": {
+                    "reward_name": "route_completion_v3",
+                    "reward_curriculum": {
+                        "stages": [
+                            {
+                                "until_episodes": 4,
+                                "reward_kwargs": {
+                                    "weights": {"terminal_bonus": 1.0},
+                                },
+                            },
+                            {
+                                "reward_kwargs": {
+                                    "weights": {"terminal_bonus": 5.0},
+                                },
+                            },
+                        ]
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    curriculum = config.env_factory_kwargs["reward_curriculum"]
+    assert curriculum["stages"][0]["until_episodes"] == 4
+    assert curriculum["stages"][1]["reward_kwargs"]["weights"]["terminal_bonus"] == 5.0
+
+
 def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path) -> None:
     """Omitted randomize_seeds should keep deterministic seed handling."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()

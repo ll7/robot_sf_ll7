@@ -81,7 +81,20 @@ def _capture_startup_summary(monkeypatch, tmp_path: Path) -> str:
             step_schedule=((None, 60_000),),
             randomize_seeds=False,
         ),
-        env_factory_kwargs={"reward_name": "route_completion_v3"},
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "reward_curriculum": {
+                "stages": [
+                    {
+                        "until_episodes": 1,
+                        "reward_kwargs": {"weights": {"terminal_bonus": 1.0}},
+                    },
+                    {
+                        "reward_kwargs": {"weights": {"terminal_bonus": 5.0}},
+                    },
+                ]
+            },
+        },
         scenario_sampling={"strategy": "random"},
         num_envs="auto_stable",
         worker_mode="subproc",
@@ -112,7 +125,7 @@ def test_log_startup_summary_reports_training_settings(monkeypatch, tmp_path: Pa
     """Startup summary should report resolved reward, worker, and resume settings."""
     summary = _capture_startup_summary(monkeypatch, tmp_path)
 
-    assert "reward_profile=route_completion_v3" in summary
+    assert "reward_profile=curriculum[2 stages]: route_completion_v3" in summary
     assert "requested_num_envs=auto_stable" in summary
     assert "num_envs=3" in summary
     assert "worker_mode=subproc" in summary

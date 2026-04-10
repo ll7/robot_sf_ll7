@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -52,17 +53,41 @@ def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str,
     return out
 
 
+def _planner_row_signature(row: dict[str, Any]) -> dict[str, Any]:
+    """Return a canonical signature for a planner summary row."""
+    metrics: dict[str, float] = {}
+    for metric in _METRICS:
+        value = _safe_float(row.get(metric))
+        if value is not None:
+            metrics[metric] = value
+    return {
+        "status": str(row.get("status") or "unknown"),
+        "episodes": int(row.get("episodes") or 0),
+        "metrics": metrics,
+    }
+
+
+def _planner_row_digest(signature: dict[str, Any]) -> str:
+    """Return a stable digest for a planner row signature."""
+    payload = json.dumps(signature, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _build_markdown(payload: dict[str, Any]) -> str:
     lines = [
         "# Camera-Ready Campaign Comparison",
         "",
         f"- Base campaign: `{payload['base_campaign_id']}`",
         f"- Candidate campaign: `{payload['candidate_campaign_id']}`",
+        (
+            "- Reproducibility verdict: "
+            f"`{payload.get('reproducibility', {}).get('status', 'unknown')}`"
+        ),
         "",
         "## Planner Deltas",
         "",
-        "| planner | base_status | candidate_status | base_episodes | candidate_episodes | metric | base | candidate | delta(candidate-base) |",
-        "|---|---|---|---:|---:|---|---:|---:|---:|",
+        "| planner | base_status | candidate_status | base_episodes | candidate_episodes | exact_match | metric | base | candidate | delta(candidate-base) |",
+        "|---|---|---|---:|---:|---|---|---:|---:|---:|",
     ]
     for planner in payload["planner_deltas"]:
         planner_key = planner["planner_key"]
@@ -70,20 +95,21 @@ def _build_markdown(payload: dict[str, Any]) -> str:
         candidate_status = planner.get("candidate_status", "unknown")
         base_episodes = int(planner.get("base_episodes", 0) or 0)
         candidate_episodes = int(planner.get("candidate_episodes", 0) or 0)
+        exact_match = "yes" if planner.get("exact_match") else "no"
         metrics = planner.get("metrics", {})
         if isinstance(metrics, dict) and metrics:
             for metric, values in metrics.items():
                 lines.append(
                     "| "
                     f"{planner_key} | {base_status} | {candidate_status} | "
-                    f"{base_episodes} | {candidate_episodes} | {metric} | "
+                    f"{base_episodes} | {candidate_episodes} | {exact_match} | {metric} | "
                     f"{values['base']:.4f} | {values['candidate']:.4f} | {values['delta']:.4f} |"
                 )
             continue
         lines.append(
             "| "
             f"{planner_key} | {base_status} | {candidate_status} | "
-            f"{base_episodes} | {candidate_episodes} | N/A | N/A | N/A | N/A |"
+            f"{base_episodes} | {candidate_episodes} | {exact_match} | N/A | N/A | N/A | N/A |"
         )
     missing_in_base = payload.get("missing_in_base", [])
     missing_in_candidate = payload.get("missing_in_candidate", [])
@@ -94,6 +120,16 @@ def _build_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- Missing in candidate campaign: `{', '.join(missing_in_candidate)}`")
     if not missing_in_base and not missing_in_candidate:
         lines.append("- No planner coverage gaps.")
+    reproducibility = payload.get("reproducibility")
+    if isinstance(reproducibility, dict):
+        lines.extend(["", "## Reproducibility", ""])
+        lines.append(f"- Status: `{reproducibility.get('status', 'unknown')}`")
+        exact = reproducibility.get("exact_match_planners", [])
+        mismatched = reproducibility.get("mismatched_planners", [])
+        if exact:
+            lines.append(f"- Exact-match planners: `{', '.join(map(str, exact))}`")
+        if mismatched:
+            lines.append(f"- Mismatched planners: `{', '.join(map(str, mismatched))}`")
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -110,9 +146,18 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
     missing_in_candidate = sorted(set(base_rows) - set(candidate_rows))
 
     planner_deltas: list[dict[str, Any]] = []
+    exact_match_planners: list[str] = []
+    mismatched_planners: list[str] = []
     for planner_key in common_planners:
         base_row = base_rows[planner_key]
         candidate_row = candidate_rows[planner_key]
+        base_signature = _planner_row_signature(base_row)
+        candidate_signature = _planner_row_signature(candidate_row)
+        exact_match = base_signature == candidate_signature
+        if exact_match:
+            exact_match_planners.append(planner_key)
+        else:
+            mismatched_planners.append(planner_key)
         metrics: dict[str, dict[str, float]] = {}
         for metric in _METRICS:
             base_value = _safe_float(base_row.get(metric))
@@ -131,9 +176,16 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
                 "candidate_status": str(candidate_row.get("status", "unknown")),
                 "base_episodes": int(base_row.get("episodes", 0) or 0),
                 "candidate_episodes": int(candidate_row.get("episodes", 0) or 0),
+                "exact_match": exact_match,
+                "base_signature_sha256": _planner_row_digest(base_signature),
+                "candidate_signature_sha256": _planner_row_digest(candidate_signature),
                 "metrics": metrics,
             }
         )
+
+    reproducibility_status = "reproduced"
+    if missing_in_base or missing_in_candidate or mismatched_planners:
+        reproducibility_status = "drift_detected"
 
     return {
         "base_campaign_id": str(
@@ -147,6 +199,12 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
         "planner_deltas": planner_deltas,
         "missing_in_base": missing_in_base,
         "missing_in_candidate": missing_in_candidate,
+        "reproducibility": {
+            "status": reproducibility_status,
+            "exact_match_planners": exact_match_planners,
+            "mismatched_planners": mismatched_planners,
+            "coverage_complete": not missing_in_base and not missing_in_candidate,
+        },
     }
 
 
@@ -164,6 +222,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-campaign-root", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-md", type=Path, required=True)
+    parser.add_argument(
+        "--require-identical",
+        action="store_true",
+        help="Exit non-zero when the comparison reports drift instead of exact reproducibility.",
+    )
     return parser
 
 
@@ -186,6 +249,8 @@ def main() -> int:
             indent=2,
         )
     )
+    if args.require_identical and payload.get("reproducibility", {}).get("status") != "reproduced":
+        return 1
     return 0
 
 

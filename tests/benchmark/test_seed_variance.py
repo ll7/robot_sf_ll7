@@ -16,7 +16,7 @@ def _sample_records() -> list[dict]:
     return [
         {
             "episode_id": "ep-b",
-            "scenario_id": "classic_crossing_low",
+            "scenario_id": "classic_cross_trap_low",
             "seed": 111,
             "algo": "orca",
             "planner_key": "orca",
@@ -33,7 +33,7 @@ def _sample_records() -> list[dict]:
         },
         {
             "episode_id": "ep-a",
-            "scenario_id": "classic_crossing_low",
+            "scenario_id": "classic_cross_trap_low",
             "seed": 111,
             "algo": "orca",
             "planner_key": "orca",
@@ -50,7 +50,7 @@ def _sample_records() -> list[dict]:
         },
         {
             "episode_id": "ep-c",
-            "scenario_id": "classic_crossing_low",
+            "scenario_id": "classic_cross_trap_low",
             "seed": 112,
             "algo": "orca",
             "planner_key": "orca",
@@ -170,7 +170,7 @@ def test_build_seed_episode_rows_groups_repeat_index_by_kinematics() -> None:
     records = _sample_records() + [
         {
             "episode_id": "ep-z",
-            "scenario_id": "classic_crossing_low",
+            "scenario_id": "classic_cross_trap_low",
             "seed": 111,
             "algo": "orca",
             "planner_key": "orca",
@@ -205,7 +205,7 @@ def test_build_seed_episode_rows_uses_algorithm_metadata_fallback() -> None:
         [
             {
                 "episode_id": "ep-meta",
-                "scenario_id": "classic_crossing_low",
+                "scenario_id": "classic_cross_trap_low",
                 "seed": 111,
                 "kinematics": "differential_drive",
                 "algorithm_metadata": {"algorithm": "orca"},

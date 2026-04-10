@@ -87,20 +87,16 @@ jobs:
         run: uv run python scripts/tools/migrate_artifacts.py
 
       - name: Lint
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
+        run: scripts/dev/ci_driver.sh lint
 
       - name: Type check
-        run: uvx ty check . --exit-zero
+        run: scripts/dev/ci_driver.sh typecheck
 
       - name: Unit tests
-        run: uv run pytest -q -n auto --max-worker-restart=0
+        run: scripts/dev/ci_driver.sh test
 
-      - name: Map verification (CI mode)
-        run: |
-          echo "Running map verification in CI mode (scope=ci)"
-          uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output output/validation/map_verification.json
+      - name: Validation smoke tests
+        run: scripts/dev/ci_driver.sh smoke
 
       - name: Upload map verification manifest
         if: always()
@@ -172,58 +168,6 @@ jobs:
           path: output/recordings/
           if-no-files-found: ignore
 
-      - name: Validation smoke tests
-        run: |
-          echo "Running environment validation tests..."
-          ./scripts/validation/test_basic_environment.sh
-          ./scripts/validation/test_model_prediction.sh
-
-          # Run full performance smoke test only on main branch or workflow_dispatch
-          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "Running full performance smoke test..."
-            uv run python scripts/validation/performance_smoke_test.py
-          else
-            echo "Skipping full performance smoke test on PR branch"
-          fi
-
-      - name: Cold/warm perf regression smoke
-        run: |
-          BASELINE="configs/benchmarks/perf_baseline_classic_cold_warm_v1.json"
-          MAX_SLOWDOWN="0.60"
-          MAX_THROUGHPUT_DROP="0.50"
-          MIN_SECONDS_DELTA="0.15"
-          MIN_THROUGHPUT_DELTA="0.75"
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "Using conservative PR perf gate profile"
-            MAX_SLOWDOWN="0.75"
-            MAX_THROUGHPUT_DROP="0.60"
-            MIN_SECONDS_DELTA="0.20"
-            MIN_THROUGHPUT_DELTA="1.00"
-          fi
-          CMD=(
-            uv run python -m robot_sf.benchmark.perf_cold_warm
-            --scenario-config configs/scenarios/archetypes/classic_crossing.yaml
-            --scenario-name classic_crossing_low
-            --episode-steps 48
-            --cold-runs 1
-            --warm-runs 2
-            --baseline "$BASELINE"
-            --output-json output/benchmarks/perf/cold_warm_pr_smoke.json
-            --output-markdown output/benchmarks/perf/cold_warm_pr_smoke.md
-            --max-slowdown-pct "$MAX_SLOWDOWN"
-            --max-throughput-drop-pct "$MAX_THROUGHPUT_DROP"
-            --min-seconds-delta "$MIN_SECONDS_DELTA"
-            --min-throughput-delta "$MIN_THROUGHPUT_DELTA"
-            --require-baseline
-          )
-          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "Enforcing cold/warm regression gate"
-            "${CMD[@]}" --fail-on-regression
-          else
-            echo "Running cold/warm smoke in advisory mode on PR branch"
-            "${CMD[@]}"
-          fi
-
       - name: Upload cold/warm perf smoke artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -233,66 +177,6 @@ jobs:
             output/benchmarks/perf/cold_warm_pr_smoke.json
             output/benchmarks/perf/cold_warm_pr_smoke.md
           if-no-files-found: warn
-
-      - name: Telemetry tracker/perf smoke
-        run: |
-          echo "Running telemetry tracker smoke + perf wrapper"
-          uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
-
-      - name: Preflight for Tiny batch smoke
-        run: |
-          set -euo pipefail
-          echo "Preflight: checking schema file, uv availability, and optional jq"
-          SCHEMA_PATH="docs/dev/issues/social-navigation-benchmark/episode_schema.json"
-          if [ ! -r "$SCHEMA_PATH" ]; then
-            echo "ERROR: Schema file not found or not readable: $SCHEMA_PATH" >&2
-            ls -la "$(dirname "$SCHEMA_PATH")" || true
-            exit 1
-          fi
-          if ! command -v uv >/dev/null 2>&1; then
-            echo "ERROR: 'uv' CLI not found in PATH" >&2
-            exit 1
-          fi
-          if [ ! -x "$(command -v uv)" ]; then
-            echo "ERROR: 'uv' CLI is not executable" >&2
-            exit 1
-          fi
-          if command -v jq >/dev/null 2>&1; then
-            echo "jq found; JSONL validation will be performed after smoke run"
-          else
-            echo "jq not found; JSONL validation will be skipped (episodes.jsonl size will still be checked)"
-          fi
-
-      - name: Tiny batch smoke
-        run: |
-          cat > matrix.yaml <<'YAML'
-          - id: ci-smoke-uni-low-open
-            density: low
-            flow: uni
-            obstacle: open
-            groups: 0.0
-            speed_var: low
-            goal_topology: point
-            robot_context: embedded
-            repeats: 1
-          YAML
-          mkdir -p output/benchmarks/ci_smoke
-          uv run robot_sf_bench run \
-            --matrix matrix.yaml \
-            --out output/benchmarks/ci_smoke/episodes.jsonl \
-            --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
-            --horizon 3 --dt 0.1 --base-seed 0
-          test -s output/benchmarks/ci_smoke/episodes.jsonl
-
-      - name: Validate JSONL (optional jq)
-        run: |
-          set -euo pipefail
-          if command -v jq >/dev/null 2>&1; then
-            echo "Validating first JSONL record with jq…"
-            head -n1 output/benchmarks/ci_smoke/episodes.jsonl | jq type >/dev/null
-          else
-            echo "jq not installed; skipping JSONL validation"
-          fi
 
       - name: Upload smoke artifact on failure
         if: failure()
@@ -316,4 +200,4 @@ jobs:
 
       - name: Enforce artifact root policy
         if: always()
-        run: uv run python scripts/tools/check_artifact_root.py
+        run: scripts/dev/ci_driver.sh artifact-policy

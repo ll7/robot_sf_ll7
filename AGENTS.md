@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Use `.specify/memory/constitution.md`, `docs/dev_guide.md` and `.github/copilot-instructions.md` to guide AI assistants.
+Use `AGENTS.md`, `.specify/memory/constitution.md`, and `docs/dev_guide.md` to guide AI assistants.
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -12,10 +12,30 @@ Treat the following files as the repository-native context stack for Codex-style
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
-  mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
+  mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.
+- `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
+  and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
+
+## Knowledge Capture & Context Notes
+
+Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump
+of incidental scratch notes.
+
+- For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+  handoff context in Markdown when that context would otherwise be trapped in chat, PR text, or
+  issue comments.
+- Prefer updating an existing canonical note when it already covers the same topic. Create a new
+  note only when the subject is distinct enough that merging would hide the decision trail.
+- Link notes to the related issue/PR, relevant canonical docs, proof artifacts, and any predecessor
+  or successor note when a document is superseded.
+- If a touched note contains outdated or superseded statements, update them, remove them, or mark
+  them clearly with a pointer to the current source of truth.
+- Keep note names and links discoverable from normal contributor entry points. Start with
+  `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
+  or refreshing context notes.
 
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
@@ -143,6 +163,7 @@ understanding or reviewing benchmark/planner context rather than executing GitHu
 automation:
 
 - `.agents/skills/benchmark-overview/SKILL.md`
+- `.agents/skills/context-note-maintainer/SKILL.md`
 - `.agents/skills/experiment-context/SKILL.md`
 - `.agents/skills/planner-integration/SKILL.md`
 - `.agents/skills/paper-facing-docs/SKILL.md`

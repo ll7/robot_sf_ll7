@@ -73,8 +73,8 @@ scenario_sampling:
   strategy: random
   profile_strategy: cycle
   weights:
-    classic_crossing_medium: 3.0
-    classic_crossing_high: 4.0
+    classic_cross_trap_medium: 3.0
+    classic_cross_trap_high: 4.0
     classic_doorway_low: 3.0
     classic_doorway_high: 4.0
     classic_bottleneck_medium: 3.0

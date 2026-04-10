@@ -20,6 +20,7 @@ References:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,19 @@ STEP_COUNT = 30
 SEED = 87234
 MAP_ALIAS = "quickstart_svg"
 MAP_PATH = Path(__file__).resolve().parents[2] / "maps/svg_maps/debug_06.svg"
+
+
+def _step_budget(default: int) -> int:
+    """Return a rollout budget compatible with the example smoke harness."""
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
+    if os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
+        return min(default, 4)
+    return default
 
 
 def load_svg_map(path: Path) -> MapDefinition:
@@ -70,7 +84,7 @@ def run_demo() -> None:
         print("Environment reset using the custom map.")
         print(f"Robot spawn zones: {len(map_definition.robot_spawn_zones)}")
 
-        for step in range(1, STEP_COUNT + 1):
+        for step in range(1, _step_budget(STEP_COUNT) + 1):
             action = env.action_space.sample()
             step_result = env.step(action)
             _, reward, done = _normalize_step(step_result)

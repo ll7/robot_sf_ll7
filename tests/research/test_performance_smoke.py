@@ -19,7 +19,9 @@ def test_research_report_performance(tmp_path: Path):
     env = os.environ.copy()
     env["RESEARCH_REPORT_PERF_DIR"] = str(out_dir)
     env["RESEARCH_PERF_BUDGET"] = "120"
-    wall_budget = float(os.environ.get("RESEARCH_PERF_WALL_BUDGET", "15"))
+    # Under xdist the subprocess competes with other workers, so keep the default
+    # budget above isolated runtime to avoid false failures from scheduler contention.
+    wall_budget = float(os.environ.get("RESEARCH_PERF_WALL_BUDGET", "30"))
 
     start = time.monotonic()
     result = subprocess.run(

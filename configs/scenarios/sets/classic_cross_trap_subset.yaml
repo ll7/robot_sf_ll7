@@ -1,0 +1,8 @@
+# Example manifest combining per-scenario and per-archetype files, then selecting a subset.
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+select_scenarios:
+  - classic_cross_trap_low
+  - classic_cross_trap_high
+map_search_paths:
+  - ../../../maps/svg_maps

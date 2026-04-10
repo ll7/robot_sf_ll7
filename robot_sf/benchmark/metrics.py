@@ -770,28 +770,29 @@ def per_ped_force_quantiles(
     >>> # Per-ped medians: 10, 1, 1 → mean = 4.0
     >>> # Aggregated median (force_q50): 1.0 (6 samples of 1, 3 samples of 10)
     """
+    qs_array = np.asarray(tuple(qs), dtype=float)
     K = data.peds_pos.shape[1]
     T = data.peds_pos.shape[0]
 
     # Handle edge cases: no pedestrians or no timesteps
     if K == 0 or T == 0:
-        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
+        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs_array}
 
     if not has_force_data(data):
-        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
+        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs_array}
 
     # Compute force magnitudes: (T,K)
-    mags = np.linalg.norm(data.ped_forces, axis=2)
+    mags = np.hypot(data.ped_forces[..., 0], data.ped_forces[..., 1])
 
     # Compute quantiles per pedestrian: (len(qs), K)
     # Use nanquantile to handle NaN values (missing timesteps)
-    per_ped_quantiles = np.nanquantile(mags, q=list(qs), axis=0)
+    per_ped_quantiles = np.nanquantile(mags, q=qs_array, axis=0)
 
     # Average across pedestrians: (len(qs),)
     # Use nanmean to exclude pedestrians with all-NaN samples
     mean_quantiles = np.nanmean(per_ped_quantiles, axis=1)
 
-    return {f"ped_force_q{int(q * 100)}": float(mean_quantiles[i]) for i, q in enumerate(qs)}
+    return {f"ped_force_q{int(q * 100)}": float(mean_quantiles[i]) for i, q in enumerate(qs_array)}
 
 
 def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHOLD) -> float:

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class GridSocNavExtractor(BaseFeaturesExtractor):
     """CNN+MLP extractor for occupancy grid plus flattened SocNav inputs."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913,C901
         self,
         observation_space: spaces.Dict,
         *,
@@ -24,6 +24,8 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         exclude_prefixes: tuple[str, ...] = ("occupancy_grid_meta_",),
         include_socnav_keys: list[str] | tuple[str, ...] | None = None,
         exclude_socnav_keys: list[str] | tuple[str, ...] | None = None,
+        privileged_state_key: str | None = None,
+        include_privileged_state: bool = False,
         grid_channels: list[int] | None = None,
         grid_kernel_sizes: list[int] | None = None,
         socnav_hidden_dims: list[int] | None = None,
@@ -67,6 +69,18 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
                     f"{sorted(unknown_keys)}"
                 )
             socnav_keys = [key for key in socnav_keys if key in include_key_set]
+
+        if privileged_state_key is not None:
+            if include_privileged_state:
+                if privileged_state_key not in observation_space.spaces:
+                    raise ValueError(
+                        "GridSocNavExtractor expected privileged_state_key to exist in observation space: "
+                        f"{privileged_state_key}"
+                    )
+                socnav_keys.append(privileged_state_key)
+            else:
+                socnav_keys = [key for key in socnav_keys if key != privileged_state_key]
+
         self._socnav_keys = tuple(sorted(socnav_keys))
         self._grid_key = grid_key
 

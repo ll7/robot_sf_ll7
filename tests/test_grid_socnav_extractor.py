@@ -71,6 +71,40 @@ def test_grid_socnav_extractor_supports_explicit_socnav_key_subset() -> None:
     assert features.shape[1] == extractor.features_dim
 
 
+def test_grid_socnav_extractor_can_include_privileged_state_for_critic() -> None:
+    """The extractor should optionally consume critic-only privileged state."""
+    obs_space = spaces.Dict(
+        {
+            "occupancy_grid": spaces.Box(low=0.0, high=1.0, shape=(3, 32, 32), dtype=np.float32),
+            "robot_position": spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32),
+            "robot_heading": spaces.Box(low=-3.14, high=3.14, shape=(1,), dtype=np.float32),
+            "goal_next": spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32),
+            "critic_privileged_state": spaces.Box(
+                low=-10.0, high=10.0, shape=(8,), dtype=np.float32
+            ),
+        }
+    )
+
+    actor_extractor = GridSocNavExtractor(
+        obs_space,
+        privileged_state_key="critic_privileged_state",
+        include_privileged_state=False,
+    )
+    critic_extractor = GridSocNavExtractor(
+        obs_space,
+        privileged_state_key="critic_privileged_state",
+        include_privileged_state=True,
+    )
+
+    assert "critic_privileged_state" not in actor_extractor._socnav_keys
+    assert "critic_privileged_state" in critic_extractor._socnav_keys
+
+    obs = _make_obs_dict(obs_space, batch=2)
+    actor_features = actor_extractor(obs)
+    critic_features = critic_extractor(obs)
+    assert actor_features.shape == critic_features.shape
+
+
 def test_grid_socnav_extractor_rejects_unknown_included_socnav_keys() -> None:
     """Misconfigured include lists should fail closed at construction time."""
     obs_space = spaces.Dict(

@@ -7,11 +7,13 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
 from scripts.training import train_ppo
 
 if TYPE_CHECKING:
@@ -138,6 +140,46 @@ def test_log_startup_summary_reports_num_envs_resolution(monkeypatch, tmp_path: 
 
     assert "num_envs resolution" in summary
     assert "mode=auto_stable" in summary
+
+
+def test_resolve_policy_selection_uses_asymmetric_grid_socnav_policy(tmp_path: Path) -> None:
+    """Asymmetric critic config should select the dedicated policy class."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_asymmetric_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "asymmetric_critic": True,
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    policy_cls, policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert policy_cls is AsymmetricGridSocNavPolicy
+    assert policy_kwargs["features_extractor_class"] is GridSocNavExtractor
+    assert critic_profile == "asymmetric_grid_socnav"
 
 
 def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) -> None:

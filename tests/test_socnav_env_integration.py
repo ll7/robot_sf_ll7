@@ -40,6 +40,19 @@ def test_socnav_structured_observation_exposes_robot_angular_velocity():
     assert len(obs["robot"]["angular_velocity"]) == 1
 
 
+def test_socnav_structured_observation_can_expose_critic_privileged_state():
+    """Asymmetric critic mode should append a critic-only privileged vector."""
+    env = RobotEnv(
+        env_config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT),
+        asymmetric_critic=True,
+    )
+    obs, _ = env.reset()
+
+    assert "critic_privileged_state" in obs
+    assert obs["critic_privileged_state"].ndim == 1
+    assert env.observation_space.contains(obs)
+
+
 def test_socnav_holonomic_observation_distinguishes_speed_from_velocity_xy():
     """Holonomic structured observations should expose world velocity separately from speed."""
     env = RobotEnv(

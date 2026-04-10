@@ -65,6 +65,7 @@ from robot_sf.training.imitation_config import (
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -898,15 +899,21 @@ def _log_startup_summary(
 ) -> None:
     """Emit one structured startup summary for run-critical resolved config."""
     num_envs_details = _describe_num_envs_resolution(config)
+    policy_cls, _policy_kwargs, critic_profile = _resolve_policy_selection(config)
+    policy_name = policy_cls if isinstance(policy_cls, str) else policy_cls.__name__
     logger.info(
         "Training startup summary: policy_id={} config_path={} scenario_config={} "
-        "total_timesteps={} reward_profile={} requested_num_envs={} num_envs={} worker_mode={} "
-        "randomize_seeds={} evaluation_randomize_seeds={} resume_from={} scenario_sampling={}",
+        "total_timesteps={} reward_profile={} feature_extractor={} critic_profile={} "
+        "policy={} requested_num_envs={} num_envs={} worker_mode={} randomize_seeds={} "
+        "evaluation_randomize_seeds={} resume_from={} scenario_sampling={}",
         config.policy_id,
         str(config_path) if config_path is not None else "<none>",
         config.scenario_config,
         config.total_timesteps,
         _resolved_reward_name(config.env_factory_kwargs),
+        config.feature_extractor,
+        critic_profile,
+        policy_name,
         config.num_envs if config.num_envs is not None else "auto_throughput",
         num_envs,
         worker_mode,
@@ -992,7 +999,6 @@ def _make_training_env(  # noqa: PLR0913
                 algorithm_name=algorithm_name,
                 **env_factory_kwargs,
             )
-
         if scenario_definitions is None:
             raise ValueError("scenario_definitions required when scenario is None.")
 
@@ -1031,13 +1037,44 @@ def _make_training_env(  # noqa: PLR0913
     return _factory
 
 
-def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
-    """Build policy kwargs for PPO from the training config."""
+def _resolve_policy_selection(
+    config: ExpertTrainingConfig,
+) -> tuple[type[Any] | str, dict[str, Any], str]:
+    """Resolve the PPO policy class, kwargs, and critic profile for a config."""
     policy_kwargs: dict[str, Any] = {"net_arch": list(config.policy_net_arch)}
-    extractor = config.feature_extractor.lower()
+    extractor = config.feature_extractor.lower().strip()
+    asymmetric_critic = bool(config.env_factory_kwargs.get("asymmetric_critic", False))
+    critic_profile = "standard"
+    policy: type[Any] | str = "MultiInputPolicy"
+
     if extractor == "grid_socnav":
         policy_kwargs["features_extractor_class"] = GridSocNavExtractor
         policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
+        critic_profile = "grid_socnav"
+        if asymmetric_critic:
+            observation_mode = config.env_overrides.get("observation_mode")
+            observation_mode_value = getattr(observation_mode, "value", observation_mode)
+            if str(observation_mode_value).lower() != ObservationMode.SOCNAV_STRUCT.value:
+                raise ValueError(
+                    "asymmetric_critic requires env_overrides.observation_mode=socnav_struct"
+                )
+            if not bool(config.env_overrides.get("use_occupancy_grid", False)):
+                raise ValueError("asymmetric_critic requires env_overrides.use_occupancy_grid=true")
+            if not bool(config.env_overrides.get("include_grid_in_observation", False)):
+                raise ValueError(
+                    "asymmetric_critic requires env_overrides.include_grid_in_observation=true"
+                )
+            policy = AsymmetricGridSocNavPolicy
+            critic_profile = "asymmetric_grid_socnav"
+    elif asymmetric_critic:
+        raise ValueError("asymmetric_critic requires feature_extractor=grid_socnav")
+
+    return policy, policy_kwargs, critic_profile
+
+
+def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
+    """Build policy kwargs for PPO from the training config."""
+    _policy, policy_kwargs, _critic_profile = _resolve_policy_selection(config)
     return policy_kwargs
 
 
@@ -2168,7 +2205,7 @@ def _init_training_model(
         vec_env = SubprocVecEnv(env_fns)
     else:
         vec_env = DummyVecEnv(env_fns)
-    policy_kwargs = _resolve_policy_kwargs(config)
+    policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)
     resolved_resume = _resolve_resume_checkpoint(config=config, resume_from=resume_from)
     if resolved_resume is not None:
         resume_path = resolved_resume
@@ -2191,7 +2228,7 @@ def _init_training_model(
     else:
         ppo_kwargs = _resolve_ppo_hyperparams(config)
         model = PPO(
-            "MultiInputPolicy",
+            policy_class,
             vec_env,
             verbose=1,
             seed=base_seed,
@@ -2200,10 +2237,11 @@ def _init_training_model(
             **ppo_kwargs,
         )
     logger.info(
-        "Training envs initialized num_envs={} worker_mode={} base_seed={}",
+        "Training envs initialized num_envs={} worker_mode={} base_seed={} critic_profile={}",
         num_envs,
         worker_mode,
         base_seed,
+        critic_profile,
     )
 
     return model, vec_env, tensorboard_log, num_envs, worker_mode

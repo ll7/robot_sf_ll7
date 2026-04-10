@@ -38,6 +38,7 @@ class RobotEnvWithImage(RobotEnv):
         scenario_name: str = "default",
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
+        asymmetric_critic: bool = False,
     ):
         """Initialize the robot environment variant with image observations.
 
@@ -56,6 +57,7 @@ class RobotEnvWithImage(RobotEnv):
             scenario_name: Scenario identifier stored in metadata.
             algorithm_name: Algorithm identifier stored in metadata.
             recording_seed: Optional seed stored with metadata.
+            asymmetric_critic: When True, expose critic-only privileged state in observations.
         """
         # Force debug mode if image observations are enabled to ensure SimulationView is created
         if env_config.use_image_obs:
@@ -77,6 +79,7 @@ class RobotEnvWithImage(RobotEnv):
             scenario_name=scenario_name,
             algorithm_name=algorithm_name,
             recording_seed=recording_seed,
+            asymmetric_critic=asymmetric_critic,
         )
 
         # Store configuration for factory pattern compatibility
@@ -87,6 +90,7 @@ class RobotEnvWithImage(RobotEnv):
             env_config,
             self.map_def,
         )
+        self._apply_asymmetric_critic_observation_space(env_config)
 
         # Override sensor initialization to include image sensors
         occupancies, sensors = init_collision_and_sensors_with_image(

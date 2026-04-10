@@ -45,6 +45,7 @@ def test_make_robot_env_signature_snapshot():
         "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
+    assert params[-2] == "asymmetric_critic"
 
 
 def test_make_image_robot_env_signature_snapshot():
@@ -67,6 +68,7 @@ def test_make_image_robot_env_signature_snapshot():
         "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
+    assert params[-2] == "asymmetric_critic"
 
 
 def test_make_pedestrian_env_signature_snapshot():

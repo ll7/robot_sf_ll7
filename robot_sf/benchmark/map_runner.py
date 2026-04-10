@@ -2250,7 +2250,7 @@ def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, A
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record) + "\n")
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
@@ -2587,13 +2587,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     }
                 )
     else:
+        results_by_idx: dict[int, dict[str, Any]] = {}
         with ProcessPoolExecutor(max_workers=int(workers)) as ex:
-            future_to_job: dict[Any, tuple[dict[str, Any], int]] = {}
-            for scenario, seed in jobs:
+            future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
+            for idx, (scenario, seed) in enumerate(jobs, start=1):
                 fut = ex.submit(_run_map_job_worker, (scenario, seed, fixed_params))
-                future_to_job[fut] = (scenario, seed)
+                future_to_job[fut] = (idx, scenario, seed)
             for fut in as_completed(future_to_job):
-                scenario, seed = future_to_job[fut]
+                idx, scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
                     requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
@@ -2607,8 +2608,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         runtime_algorithm_contract or {},
                         rec.get("algorithm_metadata"),
                     )
-                    _write_validated(out_path, schema, rec)
-                    wrote += 1
+                    results_by_idx[idx] = rec
                 except Exception as exc:  # pragma: no cover
                     failures.append(
                         {
@@ -2617,6 +2617,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "error": repr(exc),
                         }
                     )
+        for idx in sorted(results_by_idx):
+            _write_validated(out_path, schema, results_by_idx[idx])
+            wrote += 1
 
     impact_contract = algo_contract.get("adapter_impact")
     if (

@@ -61,16 +61,53 @@ If one of those changes materially, the release is no longer comparable and
 requires a major benchmark release increment.
 
 When comparing two frozen release reruns, use the camera-ready campaign
-comparison helper and require an exact match verdict:
+comparison helper:
 
 ```bash
 uv run python scripts/tools/compare_camera_ready_campaigns.py \
   --base-campaign-root output/benchmarks/camera_ready/<base_campaign_id> \
   --candidate-campaign-root output/benchmarks/camera_ready/<candidate_campaign_id> \
-  --output-json /tmp/camera_ready_compare.json \
-  --output-md /tmp/camera_ready_compare.md \
-  --require-identical
+  --output-json output/camera_ready_compare.json \
+  --output-md output/camera_ready_compare.md
 ```
+
+Pass `--require-identical` only when verifying tooling correctness, not as a
+release acceptance gate — the benchmark is outcome-stable but not bit-exact
+(see [Reproducibility Contract](#reproducibility-contract) below).
+
+## Reproducibility Contract
+
+Empirically verified by running the full frozen release twice under identical
+conditions (same commit, same manifest, `workers: 1`) on 2026-04-10:
+
+**Stable across reruns (primary paper metrics):**
+
+| Planner | `success_mean` | `collisions_mean` |
+|---|---|---|
+| `goal` | exact | exact |
+| `ppo` | exact | exact |
+| `sacadrl` | exact | exact |
+| `social_force` | exact | exact |
+| `socnav_sampling` | exact | exact |
+
+**Borderline (1-episode outcome flip observed):**
+
+| Planner | `success_mean` delta | `collisions_mean` delta |
+|---|---|---|
+| `orca` | ±0.0071 (1/141 episodes) | ±0.0071 |
+| `prediction_planner` | ±0.0071 (1/141 episodes) | ±0.0071 |
+
+**Inherently non-deterministic:**
+
+- `near_misses_mean` varies for all planners (±0.01–0.31 per run). This is
+  proximity-threshold nondeterminism in the simulation physics and cannot be
+  eliminated without fixing the underlying pedestrian dynamics RNG.
+
+**Interpretation:** The benchmark's primary outcome claims (success, collisions)
+are rerun-stable for 5/7 planners and within a 1-episode tolerance for the
+remaining 2. `near_misses_mean` should not be cited as a precision metric in
+publication tables — report it with an explicit tolerance or omit it from
+primary claims.
 
 ## What Counts As Comparable vs Non-Comparable
 

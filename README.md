@@ -21,7 +21,14 @@ map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
 
+## Release Artifact
+
+The current Zenodo-backed release DOI for the public benchmark artifact is:
+
+- https://doi.org/10.5281/zenodo.19482026
+
 - [About](#about)
+- [Release Artifact](#release-artifact)
 - [Attribution and Upstream Work](#attribution-and-upstream-work)
 - [Development and Intallation](#development-and-intallation)
   - [Prerequisites](#prerequisites)

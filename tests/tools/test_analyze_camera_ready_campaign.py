@@ -391,6 +391,10 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
             "planner_rows": [
                 {
                     "planner_key": "goal",
+                    "planner_group": "core",
+                    "status": "ok",
+                    "preflight_status": "ok",
+                    "benchmark_success": "true",
                     "success_mean": "0.5000",
                     "collision_mean": "0.5000",
                     "snqi_mean": "-0.2000",
@@ -415,6 +419,107 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
     analysis = analyze_campaign(campaign_root)
     assert analysis["findings"] == []
     assert analysis["runtime_hotspots"]["slowest_planners"][0]["planner_key"] == "goal"
+
+
+def test_analyze_campaign_accepts_repo_relative_paths_from_campaign_checkout(
+    tmp_path: Path,
+) -> None:
+    """Analyzer should resolve repo-relative output paths using the campaign checkout root."""
+    repo_root = tmp_path / "external_checkout"
+    campaign_root = repo_root / "output" / "benchmarks" / "camera_ready" / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    episodes_path = campaign_root / "runs" / "goal" / "episodes.jsonl"
+    scenario_breakdown_path = campaign_root / "reports" / "scenario_breakdown.csv"
+
+    rows = [
+        {
+            "status": "success",
+            "termination_reason": "success",
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
+            "metrics": {"success": True, "collisions": 0, "snqi": -0.3},
+            "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+        },
+        {
+            "status": "failure",
+            "termination_reason": "collision",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
+            "metrics": {"success": False, "collisions": 1, "snqi": -0.1},
+            "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+        },
+    ]
+    _write_jsonl(episodes_path, rows)
+    _write_csv(
+        scenario_breakdown_path,
+        [
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "scenario_family": "easy_family",
+                "scenario_id": "easy_case",
+                "episodes": "2",
+                "success_mean": "0.5000",
+                "collisions_mean": "0.5000",
+                "near_misses_mean": "0.0000",
+                "time_to_goal_norm_mean": "0.5000",
+                "snqi_mean": "-0.2000",
+            }
+        ],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "external_checkout_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 2.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "planner_group": "core",
+                    "status": "ok",
+                    "preflight_status": "ok",
+                    "benchmark_success": "true",
+                    "success_mean": "0.5000",
+                    "collision_mean": "0.5000",
+                    "snqi_mean": "-0.2000",
+                }
+            ],
+            "artifacts": {
+                "scenario_breakdown_csv": (
+                    "output/benchmarks/camera_ready/campaign/reports/scenario_breakdown.csv"
+                ),
+            },
+            "runs": [
+                {
+                    "planner": {"key": "goal", "algo": "goal"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "output/benchmarks/camera_ready/campaign/runs/goal/episodes.jsonl",
+                    "summary": {
+                        "written": 2,
+                        "episodes_per_second": 2.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+    assert analysis["findings"] == []
+    assert analysis["planners"][0]["episodes_file"] == 2
+    assert analysis["scenario_difficulty"]["scenario_rows"][0]["scenario_id"] == "easy_case"
 
 
 def test_analyze_campaign_accepts_legacy_success_rate_alias(tmp_path: Path) -> None:

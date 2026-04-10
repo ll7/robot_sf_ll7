@@ -144,6 +144,16 @@ def _get_repository_root() -> Path:
     return Path.cwd().resolve()
 
 
+def _infer_campaign_repository_root(campaign_root: Path) -> Path:
+    """Infer the repository root that produced a campaign rooted under output/benchmarks."""
+    resolved = campaign_root.resolve()
+    parts = resolved.parts
+    for idx in range(len(parts) - 2):
+        if parts[idx] == "output" and parts[idx + 1] == "benchmarks":
+            return Path(*parts[:idx]).resolve()
+    return resolved.parent.resolve()
+
+
 def _planner_row_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     rows = payload.get("planner_rows")
     if not isinstance(rows, list):
@@ -162,7 +172,16 @@ def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: st
     """Resolve campaign paths while preventing traversal outside trusted roots."""
     candidate_path = Path(raw_path)
     repo_root = _get_repository_root()
-    trusted_roots = (campaign_root.resolve(), repo_root.resolve())
+    campaign_repo_root = _infer_campaign_repository_root(campaign_root)
+    trusted_roots = tuple(
+        dict.fromkeys(
+            (
+                campaign_root.resolve(),
+                campaign_repo_root.resolve(),
+                repo_root.resolve(),
+            )
+        )
+    )
 
     if candidate_path.is_absolute():
         resolved = candidate_path.resolve()

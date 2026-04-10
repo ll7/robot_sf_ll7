@@ -2442,7 +2442,7 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
     # For each record, verify key order is consistent (deterministic serialization)
     recs1 = []
     recs2 = []
-    for i, (line1, line2) in enumerate(zip(lines1, lines2)):
+    for i, (line1, line2) in enumerate(zip(lines1, lines2, strict=True)):
         rec1 = json.loads(line1)
         rec2 = json.loads(line2)
         recs1.append(rec1)
@@ -2459,7 +2459,7 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
         )
 
     # Then verify semantic equality (ignoring runtime metadata)
-    for i, (rec1, rec2) in enumerate(zip(recs1, recs2)):
+    for i, (rec1, rec2) in enumerate(zip(recs1, recs2, strict=True)):
         norm1 = _normalize_episode_record(rec1)
         norm2 = _normalize_episode_record(rec2)
         assert norm1 == norm2, f"Episode {i} records differ: {norm1} vs {norm2}"

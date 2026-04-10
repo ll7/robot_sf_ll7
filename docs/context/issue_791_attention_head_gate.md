@@ -11,6 +11,9 @@ treatment of padded pedestrian arrays in the actor feature extractor.
 - `robot_sf/feature_extractors/grid_socnav_extractor.py`
   - Added `PedestrianAttentionHead`: one layer of multi-head self-attention with masked mean
     pooling over valid pedestrian slots.
+  - Hardened zero-pedestrian handling so fully masked batches no longer feed an all-masked
+    sequence into `nn.MultiheadAttention`, which previously produced NaNs during policy
+    evaluation.
   - Added `use_pedestrian_attention` flag to `GridSocNavExtractor`.
   - Slot keys (`pedestrians_positions`, `pedestrians_velocities`) are removed from the flat MLP
     path and processed by the attention head when the flag is set.
@@ -22,6 +25,8 @@ treatment of padded pedestrian arrays in the actor feature extractor.
 - Tests
   - Added unit coverage for `PedestrianAttentionHead` shape and masking behavior.
   - Added extractor-level coverage for slot key routing and fail-closed behavior.
+  - Added a regression check that zero-pedestrian batches keep the attention-enabled extractor
+    finite.
   - Added contract tests for both attention-only and attention + asymmetric critic profiles.
 - Config
   - Added `configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_stage1.yaml`.
@@ -37,11 +42,25 @@ uv run pytest tests/test_grid_socnav_extractor.py -q
 uv run pytest tests/training/test_train_expert_ppo_contract.py -q
 ```
 
-All targeted suites passed.
+Original stage-1 SLURM gate `11436` failed after training, during deterministic evaluation,
+with `tensor([[nan, nan]], device='cuda:0')` action means. The root cause was fully masked
+pedestrian batches when `pedestrians_count == 0`.
+
+Post-fix local repro evidence:
+
+- `PedestrianAttentionHead(...).forward(...)` stays finite for `count=[[2],[5],[0]]`.
+- `GridSocNavExtractor(..., use_pedestrian_attention=True)` stays finite when the entire batch
+  has `pedestrians_count == 0`.
+- `AsymmetricGridSocNavPolicy.predict(...)` now returns finite deterministic actions for an
+  attention-enabled zero-pedestrian observation.
 
 ## Follow-Up
 
-- Issue 791 is now fully implemented across all three gates.
-- Benchmark training runs using the stage-1 config will determine whether each gate improves
-  success rate; gates that do not improve should be documented as negative results.
-- Do not extend this issue further; open new issues for any follow-on architecture work.
+- Stage-1 evidence before the fix:
+  - reward curriculum gate completed and ended around `success_rate=0.0143`.
+  - asymmetric critic gate completed and ended around `success_rate=0.171`.
+  - attention gate matched stable training stats through 8k steps, then failed in evaluation.
+- Resubmit the fixed attention stage-1 gate first, then run the 32k follow-up configs for
+  reward curriculum, asymmetric critic, and the full stacked attention path.
+- If the fixed 32k attention run stays stable, issue 791 has executable evidence for all three
+  bounded improvements plus the stacked configuration.

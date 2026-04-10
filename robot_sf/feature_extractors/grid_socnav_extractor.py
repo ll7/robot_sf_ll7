@@ -68,12 +68,24 @@ class PedestrianAttentionHead(nn.Module):
         x = self.input_proj(slot_feats)  # (batch, max_peds, d_model)
 
         key_padding_mask: th.Tensor | None = None
+        attn_key_padding_mask: th.Tensor | None = None
         if count is not None:
             count_int = count.view(-1).long()  # (batch,)
             idx = th.arange(max_peds, device=slot_feats.device).unsqueeze(0)  # (1, max_peds)
             key_padding_mask = idx >= count_int.unsqueeze(1)  # (batch, max_peds); True=ignore
+            attn_key_padding_mask = key_padding_mask
 
-        attn_out, _ = self.attn(x, x, x, key_padding_mask=key_padding_mask)
+            # MultiheadAttention can emit NaNs when every token in a batch element is masked.
+            # Treat zero-pedestrian rows as a zero-input sequence for attention, then keep the
+            # original all-masked pool mask so the pooled feature collapses to zeros.
+            fully_masked = key_padding_mask.all(dim=1)
+            if th.any(fully_masked):
+                x = x.clone()
+                x[fully_masked] = 0.0
+                attn_key_padding_mask = key_padding_mask.clone()
+                attn_key_padding_mask[fully_masked] = False
+
+        attn_out, _ = self.attn(x, x, x, key_padding_mask=attn_key_padding_mask)
         x = self.norm(x + attn_out)
 
         # Masked mean-pool over valid slots

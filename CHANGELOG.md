@@ -95,6 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Issue-791 attention-head PPO training no longer emits NaN actions during evaluation when a
+  batch element contains zero pedestrians, and the dedicated issue-791 SLURM launchers now reuse
+  the repo `.venv` directly while syncing the actual job artifact root instead of an empty temp
+  directory.
 * Legacy `scripts/training_ppo.py` invocations now fail closed and point to the canonical PPO
   training workflow docs.
 * Restored the existing `socnav_sacadrl` CLI choice in `scripts/tools/policy_analysis_run.py` after the issue-768 ORCA variant additions, preventing a regression where the builder still supported SA-CADRL but the parser rejected it.

@@ -135,6 +135,7 @@ def test_pedestrian_attention_head_produces_correct_output_shape() -> None:
     count = th.tensor([[2.0], [5.0], [0.0]])
     out = head(slot_feats, count)
     assert out.shape == (batch, 16)
+    assert th.isfinite(out).all()
 
 
 def test_pedestrian_attention_head_masks_padding_slots() -> None:
@@ -165,6 +166,26 @@ def test_grid_socnav_extractor_with_pedestrian_attention_forward_shape() -> None
     features = extractor(obs)
     assert features.shape[0] == 2
     assert features.shape[1] == extractor.features_dim
+
+
+def test_grid_socnav_extractor_attention_stays_finite_with_zero_pedestrians() -> None:
+    """Zero-pedestrian batches must not yield NaNs in the attention-enabled extractor."""
+    obs_space = _make_ped_obs_space(max_peds=4)
+    extractor = GridSocNavExtractor(
+        obs_space,
+        use_pedestrian_attention=True,
+        attn_d_model=32,
+        attn_num_heads=4,
+        attn_output_dim=16,
+    )
+    obs = _make_obs_dict(obs_space, batch=2)
+    obs["pedestrians_positions"] = th.zeros_like(obs["pedestrians_positions"])
+    obs["pedestrians_velocities"] = th.zeros_like(obs["pedestrians_velocities"])
+    obs["pedestrians_count"] = th.zeros_like(obs["pedestrians_count"])
+
+    features = extractor(obs)
+
+    assert th.isfinite(features).all()
 
 
 def test_grid_socnav_extractor_attention_removes_slot_keys_from_mlp_path() -> None:

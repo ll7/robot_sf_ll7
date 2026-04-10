@@ -12,9 +12,12 @@ from gymnasium import spaces as gym_spaces
 
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_sac_sb3 import (
+    SACEvaluationConfig,
     SACTrainingConfig,
     _build_env,
+    _default_eval_algo_config,
     _ego_socnav_obs,
+    _PeriodicSACEvaluationCallback,
     _relative_socnav_obs,
     build_arg_parser,
     load_sac_training_config,
@@ -429,3 +432,121 @@ device: cpu
     cfg.write_text(content, encoding="utf-8")
     config = load_sac_training_config(cfg)
     assert config.device == "cpu"
+
+
+def test_eval_config_loads_and_resolves_relative_paths(tmp_path: Path) -> None:
+    """SAC evaluation settings should parse and resolve relative paths."""
+    scenario_matrix = Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml").resolve()
+    algo_config = Path("configs/baselines/sac_gate_socnav_struct.yaml").resolve()
+    content = f"""\
+policy_id: test
+scenario_config: {_CLASSIC_SCENARIO}
+total_timesteps: 1000
+evaluation:
+  enabled: true
+  frequency_steps: 250
+  scenario_matrix: {scenario_matrix}
+  algo_config: {algo_config}
+  output_dir: output/tmp/sac_eval_custom
+  tag_prefix: custom_eval
+  horizon: 64
+  dt: 0.2
+  workers: 2
+  min_success_rate: 0.4
+  device: cpu
+"""
+    cfg = tmp_path / "with_eval.yaml"
+    cfg.write_text(content, encoding="utf-8")
+    config = load_sac_training_config(cfg)
+    assert config.evaluation.enabled is True
+    assert config.evaluation.frequency_steps == 250
+    assert config.evaluation.scenario_matrix == scenario_matrix.resolve()
+    assert config.evaluation.algo_config == algo_config.resolve()
+    assert config.evaluation.output_dir == Path("output/tmp/sac_eval_custom").resolve()
+    assert config.evaluation.tag_prefix == "custom_eval"
+    assert config.evaluation.horizon == 64
+    assert config.evaluation.dt == 0.2
+    assert config.evaluation.workers == 2
+    assert config.evaluation.min_success_rate == 0.4
+    assert config.evaluation.device == "cpu"
+
+
+def test_default_eval_algo_config_switches_for_ego_mode() -> None:
+    """Periodic eval should use the ego-specific baseline config when needed."""
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=_CLASSIC_SCENARIO,
+        total_timesteps=1000,
+        obs_transform="ego",
+    )
+    assert _default_eval_algo_config(config) == Path(
+        "configs/baselines/sac_gate_socnav_struct_ego.yaml"
+    )
+
+
+def test_periodic_eval_callback_runs_wrapper_and_logs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Periodic callback should save a checkpoint and call the reusable eval wrapper."""
+
+    class _DummyModel:
+        def __init__(self) -> None:
+            self.saved_paths: list[Path] = []
+
+        def save(self, path: str) -> None:
+            self.saved_paths.append(Path(path))
+            Path(path).write_text("stub", encoding="utf-8")
+
+    class _DummyWandb:
+        def __init__(self) -> None:
+            self.logs: list[dict[str, float]] = []
+
+        def log(self, payload, step=None):
+            self.logs.append(dict(payload))
+
+    eval_calls: list[dict[str, object]] = []
+
+    def _fake_eval(**kwargs):
+        eval_calls.append(kwargs)
+        return {
+            "success_rate": 0.75,
+            "mean_min_distance": 0.8,
+            "mean_avg_speed": 0.5,
+            "gate_pass": True,
+        }
+
+    monkeypatch.setattr("scripts.validation.evaluate_sac.run_sac_evaluation", _fake_eval)
+
+    training_config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=_CLASSIC_SCENARIO,
+        total_timesteps=1000,
+        output_dir=tmp_path / "models",
+    )
+    evaluation_config = SACEvaluationConfig(
+        enabled=True,
+        frequency_steps=10,
+        scenario_matrix=Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml").resolve(),
+        algo_config=Path("configs/baselines/sac_gate_socnav_struct.yaml").resolve(),
+        output_dir=tmp_path / "eval",
+        tag_prefix="periodic",
+        horizon=20,
+        dt=0.1,
+        workers=1,
+        min_success_rate=0.3,
+        device="cpu",
+    )
+    callback = _PeriodicSACEvaluationCallback(
+        training_config=training_config,
+        evaluation_config=evaluation_config,
+        wandb_run=_DummyWandb(),
+    )
+    callback.model = _DummyModel()
+    callback.num_timesteps = 10
+
+    assert callback._on_step() is True
+    assert len(eval_calls) == 1
+    assert eval_calls[0]["scenario_matrix"] == evaluation_config.scenario_matrix
+    assert eval_calls[0]["tag"] == "periodic_00000010"
+    assert callback.model.saved_paths[0].name == "test_00000010.zip"
+    assert callback._wandb_run.logs[0]["sac/eval_success_rate"] == 0.75

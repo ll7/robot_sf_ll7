@@ -32,6 +32,7 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import yaml
 from loguru import logger
@@ -159,56 +160,59 @@ def _nan_to_none(value: object) -> object:
     return value
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
-def main() -> int:
-    """Run SAC benchmark evaluation and enforce the quality gate.
+def run_sac_evaluation(  # noqa: PLR0913 - CLI-facing wrapper groups the evaluation knobs.
+    *,
+    checkpoint: Path,
+    scenario_matrix: Path,
+    algo_config: Path | None = None,
+    schema_path: Path = _SCHEMA_PATH,
+    horizon: int = 120,
+    dt: float = 0.1,
+    workers: int = 1,
+    min_success_rate: float = 0.3,
+    output_dir: Path = Path("output/tmp/sac_eval/latest"),
+    tag: str = "sac_eval",
+    device: str = "auto",
+) -> dict[str, Any]:
+    """Run SAC benchmark evaluation and persist summary artifacts.
 
     Returns:
-        int: 0 on success, 1 if the quality gate fails.
+        dict[str, Any]: Evaluation report including `gate_pass`.
     """
-    args = parse_args()
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    if not checkpoint.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+    if not scenario_matrix.exists():
+        raise FileNotFoundError(f"Scenario matrix not found: {scenario_matrix}")
 
-    if not args.checkpoint.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
-    if not args.scenario_matrix.exists():
-        raise FileNotFoundError(f"Scenario matrix not found: {args.scenario_matrix}")
-
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    algo_cfg_path = args.output_dir / f"{args.tag}_algo_config.yaml"
-    jsonl_path = args.output_dir / f"{args.tag}.jsonl"
-    summary_path = args.output_dir / f"{args.tag}_summary.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    algo_cfg_path = output_dir / f"{tag}_algo_config.yaml"
+    jsonl_path = output_dir / f"{tag}.jsonl"
+    summary_path = output_dir / f"{tag}_summary.json"
 
     if jsonl_path.exists():
         jsonl_path.unlink()
 
-    # Build algo config from the baseline template or user override.
-    base_cfg_path = args.algo_config or _DEFAULT_ALGO_CONFIG
+    base_cfg_path = algo_config or _DEFAULT_ALGO_CONFIG
     if not base_cfg_path.exists():
         raise FileNotFoundError(f"Algo config not found: {base_cfg_path}")
     base_cfg: dict = yaml.safe_load(base_cfg_path.read_text(encoding="utf-8")) or {}
-    base_cfg["model_path"] = str(args.checkpoint.resolve())
-    base_cfg["device"] = args.device
+    base_cfg["model_path"] = str(checkpoint.resolve())
+    base_cfg["device"] = device
     algo_cfg_path.write_text(yaml.safe_dump(base_cfg, sort_keys=False), encoding="utf-8")
 
-    logger.info("SAC checkpoint: {}", args.checkpoint)
-    logger.info("Scenario matrix: {}", args.scenario_matrix)
-    logger.info("Output dir: {}", args.output_dir)
+    logger.info("SAC checkpoint: {}", checkpoint)
+    logger.info("Scenario matrix: {}", scenario_matrix)
+    logger.info("Output dir: {}", output_dir)
 
     summary = run_map_batch(
-        args.scenario_matrix,
+        scenario_matrix,
         jsonl_path,
-        schema_path=args.schema_path,
+        schema_path=schema_path,
         algo="sac",
         algo_config_path=str(algo_cfg_path),
-        horizon=int(args.horizon),
-        dt=float(args.dt),
-        workers=int(args.workers),
+        horizon=int(horizon),
+        dt=float(dt),
+        workers=int(workers),
         resume=False,
         benchmark_profile="experimental",
     )
@@ -262,11 +266,11 @@ def main() -> int:
         ),
     }
 
-    report: dict = {
-        "tag": args.tag,
-        "checkpoint": str(args.checkpoint),
-        "scenario_matrix": str(args.scenario_matrix),
-        "device": args.device,
+    report: dict[str, Any] = {
+        "tag": tag,
+        "checkpoint": str(checkpoint),
+        "scenario_matrix": str(scenario_matrix),
+        "device": device,
         "total_episodes": len(rows),
         "success_rate": success_rate,
         "mean_min_distance": mean_min_distance,
@@ -276,6 +280,7 @@ def main() -> int:
         "run_summary": summary,
     }
     report = _nan_to_none(report)  # type: ignore[assignment]
+    report["gate_pass"] = bool(success_rate >= min_success_rate)
     summary_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     safe_dist = 0.0 if math.isnan(mean_min_distance) else mean_min_distance
@@ -286,16 +291,45 @@ def main() -> int:
     logger.info("Mean avg-speed:   {:.3f} m/s", mean_speed)
     logger.info("Summary written:  {}", summary_path)
 
-    gate_pass = success_rate >= args.min_success_rate
-    if not gate_pass:
+    if not report["gate_pass"]:
         logger.error(
             "Quality gate FAILED: success_rate={:.1%} < min={:.1%}",
             success_rate,
-            args.min_success_rate,
+            min_success_rate,
         )
-        return 1
-    logger.success("Quality gate PASSED: success_rate={:.1%}", success_rate)
-    return 0
+    else:
+        logger.success("Quality gate PASSED: success_rate={:.1%}", success_rate)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    """Run SAC benchmark evaluation and enforce the quality gate.
+
+    Returns:
+        int: 0 on success, 1 if the quality gate fails.
+    """
+    args = parse_args()
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
+    report = run_sac_evaluation(
+        checkpoint=args.checkpoint,
+        scenario_matrix=args.scenario_matrix,
+        algo_config=args.algo_config,
+        schema_path=args.schema_path,
+        horizon=int(args.horizon),
+        dt=float(args.dt),
+        workers=int(args.workers),
+        min_success_rate=float(args.min_success_rate),
+        output_dir=args.output_dir,
+        tag=args.tag,
+        device=args.device,
+    )
+    return 0 if report["gate_pass"] else 1
 
 
 if __name__ == "__main__":

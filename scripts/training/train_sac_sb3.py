@@ -39,6 +39,7 @@ from loguru import logger
 
 try:
     from stable_baselines3 import SAC
+    from stable_baselines3.common.callbacks import BaseCallback
     from stable_baselines3.common.vec_env import DummyVecEnv
 except ImportError as exc:
     raise RuntimeError("Stable-Baselines3 must be installed to run SAC training.") from exc
@@ -51,6 +52,7 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
 )
 from robot_sf.training.scenario_sampling import ScenarioSampler, ScenarioSwitchingEnv
+from scripts.validation import evaluate_sac as sac_eval
 
 # ---------------------------------------------------------------------------
 # Supported SAC hyperparameter keys (mirrors SB3 SAC constructor arguments).
@@ -93,6 +95,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "sac_hyperparams",
         "env_overrides",
         "env_factory_kwargs",
+        "evaluation",
         "tracking",
         "output_dir",
         "seed",
@@ -111,11 +114,30 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
 #              for the DifferentialDrive env. Kept for comparison/debugging.
 _DEFAULT_ACTION_SEMANTICS = "delta"
 _DEFAULT_OBS_TRANSFORM = "none"
+_DEFAULT_EVAL_SCENARIO_MATRIX = Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml")
+_DEFAULT_EVAL_ALGO_CONFIG = Path("configs/baselines/sac_gate_socnav_struct.yaml")
 
 
 # ---------------------------------------------------------------------------
 # Config dataclass
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class SACEvaluationConfig:
+    """Periodic benchmark-evaluation settings for SAC training."""
+
+    enabled: bool = False
+    frequency_steps: int = 0
+    scenario_matrix: Path | None = None
+    algo_config: Path | None = None
+    output_dir: Path = field(default_factory=lambda: Path("output/tmp/sac_eval"))
+    tag_prefix: str = "sac_eval"
+    horizon: int = 120
+    dt: float = 0.1
+    workers: int = 1
+    min_success_rate: float = 0.3
+    device: str | None = None
 
 
 @dataclass
@@ -135,6 +157,7 @@ class SACTrainingConfig:
     action_semantics: str = _DEFAULT_ACTION_SEMANTICS
     relative_obs: bool = True
     obs_transform: str = _DEFAULT_OBS_TRANSFORM
+    evaluation: SACEvaluationConfig = field(default_factory=SACEvaluationConfig)
 
 
 def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
@@ -196,6 +219,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
     )
     if obs_transform == _DEFAULT_OBS_TRANSFORM and relative_obs:
         obs_transform = "relative"
+    evaluation = _load_eval_config(data.get("evaluation", {}) or {}, config_dir=path.parent)
 
     return SACTrainingConfig(
         policy_id=str(data["policy_id"]),
@@ -211,6 +235,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         action_semantics=action_semantics,
         relative_obs=relative_obs,
         obs_transform=obs_transform,
+        evaluation=evaluation,
     )
 
 
@@ -224,6 +249,59 @@ def _resolve_output_dir(raw_value: object) -> Path:
     if not path_value.is_absolute():
         path_value = (Path.cwd() / path_value).resolve()
     return path_value
+
+
+def _resolve_config_path(raw_value: object | None, *, config_dir: Path) -> Path | None:
+    """Resolve an optional config path relative to the training config file."""
+    if raw_value in (None, ""):
+        return None
+    raw_path = Path(str(raw_value))
+    if raw_path.is_absolute():
+        return raw_path.resolve()
+    return (config_dir / raw_path).resolve()
+
+
+def _load_eval_config(raw_value: object, *, config_dir: Path) -> SACEvaluationConfig:
+    """Load periodic evaluation settings from the training config."""
+    if not isinstance(raw_value, Mapping):
+        raise ValueError(f"evaluation block must be a mapping; got {type(raw_value)!r}")
+
+    unknown = set(raw_value) - {
+        "enabled",
+        "frequency_steps",
+        "scenario_matrix",
+        "algo_config",
+        "output_dir",
+        "tag_prefix",
+        "horizon",
+        "dt",
+        "workers",
+        "min_success_rate",
+        "device",
+    }
+    if unknown:
+        raise ValueError(f"Unknown evaluation config keys: {sorted(unknown)}")
+
+    return SACEvaluationConfig(
+        enabled=bool(raw_value.get("enabled", False)),
+        frequency_steps=int(raw_value.get("frequency_steps", 0) or 0),
+        scenario_matrix=_resolve_config_path(
+            raw_value.get("scenario_matrix"), config_dir=config_dir
+        )
+        or None,
+        algo_config=_resolve_config_path(raw_value.get("algo_config"), config_dir=config_dir),
+        output_dir=_resolve_output_dir(raw_value.get("output_dir", "output/tmp/sac_eval")),
+        tag_prefix=str(raw_value.get("tag_prefix", "sac_eval")).strip() or "sac_eval",
+        horizon=int(raw_value.get("horizon", 120)),
+        dt=float(raw_value.get("dt", 0.1)),
+        workers=int(raw_value.get("workers", 1)),
+        min_success_rate=float(raw_value.get("min_success_rate", 0.3)),
+        device=(
+            str(raw_value.get("device")).strip()
+            if raw_value.get("device") not in (None, "")
+            else None
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -608,6 +686,118 @@ def _maybe_init_wandb(
         return None
 
 
+def _default_eval_algo_config(config: SACTrainingConfig) -> Path:
+    """Return the benchmark algo config template used for periodic evaluation."""
+    obs_mode = str(config.env_overrides.get("observation_mode", "")).strip().lower()
+    if config.obs_transform == "ego":
+        return Path("configs/baselines/sac_gate_socnav_struct_ego.yaml")
+    if obs_mode == "socnav_struct":
+        return Path("configs/baselines/sac_gate_socnav_struct.yaml")
+    return _DEFAULT_EVAL_ALGO_CONFIG
+
+
+def _save_sac_checkpoint_with_gym_shim(model: SAC, checkpoint_path: Path) -> None:
+    """Save an SB3 SAC checkpoint while preserving gym compatibility shims."""
+    gym_module = sys.modules.get("gym")
+    restore_gym_module = gym_module is None or not hasattr(gym_module, "__version__")
+    if restore_gym_module:
+        sys.modules["gym"] = gymnasium
+    try:
+        model.save(str(checkpoint_path))
+    finally:
+        if restore_gym_module:
+            if gym_module is None:
+                sys.modules.pop("gym", None)
+            else:
+                sys.modules["gym"] = gym_module
+
+
+class _PeriodicSACEvaluationCallback(BaseCallback):
+    """Periodically evaluate SAC checkpoints against a real scenario matrix."""
+
+    def __init__(
+        self,
+        *,
+        training_config: SACTrainingConfig,
+        evaluation_config: SACEvaluationConfig,
+        wandb_run: object | None = None,
+    ) -> None:
+        super().__init__()
+        self._training_config = training_config
+        self._evaluation_config = evaluation_config
+        self._wandb_run = wandb_run
+        self._last_eval_step = 0
+        self._eval_index = 0
+
+    def _on_step(self) -> bool:
+        if not self._evaluation_config.enabled:
+            return True
+        frequency = int(self._evaluation_config.frequency_steps)
+        if frequency <= 0:
+            return True
+        if self.num_timesteps - self._last_eval_step < frequency:
+            return True
+        self._run_periodic_evaluation()
+        self._last_eval_step = self.num_timesteps
+        return True
+
+    def _run_periodic_evaluation(self) -> None:
+        scenario_matrix = (
+            self._evaluation_config.scenario_matrix or self._training_config.scenario_config
+        )
+        algo_config = self._evaluation_config.algo_config or _default_eval_algo_config(
+            self._training_config
+        )
+        eval_tag = f"{self._evaluation_config.tag_prefix}_{self.num_timesteps:08d}"
+        eval_dir = self._evaluation_config.output_dir / eval_tag
+        checkpoint_path = (
+            eval_dir / f"{self._training_config.policy_id}_{self.num_timesteps:08d}.zip"
+        )
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            _save_sac_checkpoint_with_gym_shim(self.model, checkpoint_path)
+            report = sac_eval.run_sac_evaluation(
+                checkpoint=checkpoint_path,
+                scenario_matrix=scenario_matrix,
+                algo_config=algo_config,
+                output_dir=eval_dir,
+                tag=eval_tag,
+                device=self._evaluation_config.device or self._training_config.device,
+                horizon=self._evaluation_config.horizon,
+                dt=self._evaluation_config.dt,
+                workers=self._evaluation_config.workers,
+                min_success_rate=self._evaluation_config.min_success_rate,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging for long runs
+            logger.warning(
+                "Periodic SAC evaluation failed at step {}: {}",
+                self.num_timesteps,
+                exc,
+            )
+            return
+
+        logger.info(
+            "Periodic SAC evaluation step={} success_rate={:.1%} gate_pass={}",
+            self.num_timesteps,
+            float(report.get("success_rate", 0.0)),
+            bool(report.get("gate_pass", False)),
+        )
+        if self._wandb_run is not None:
+            try:
+                self._wandb_run.log(
+                    {
+                        "sac/eval_success_rate": float(report.get("success_rate", 0.0)),
+                        "sac/eval_mean_min_distance": float(report.get("mean_min_distance") or 0.0),
+                        "sac/eval_mean_avg_speed": float(report.get("mean_avg_speed", 0.0)),
+                        "sac/eval_gate_pass": 1.0 if report.get("gate_pass", False) else 0.0,
+                        "sac/eval_step": float(self.num_timesteps),
+                    },
+                    step=self.num_timesteps,
+                )
+            except Exception:  # pragma: no cover - wandb is optional
+                logger.warning("Failed to log periodic SAC eval metrics to W&B.")
+
+
 # ---------------------------------------------------------------------------
 # Core training entry point
 # ---------------------------------------------------------------------------
@@ -653,27 +843,29 @@ def run_sac_training(
         )
 
         wandb_run = _maybe_init_wandb(config, dry_run=dry_run)
+        eval_callback = (
+            _PeriodicSACEvaluationCallback(
+                training_config=config,
+                evaluation_config=config.evaluation,
+                wandb_run=wandb_run,
+            )
+            if config.evaluation.enabled and not dry_run
+            else None
+        )
         timesteps = _DRY_RUN_TIMESTEPS if dry_run else config.total_timesteps
         try:
-            model.learn(total_timesteps=timesteps, log_interval=100)
+            model.learn(
+                total_timesteps=timesteps,
+                log_interval=100,
+                callback=eval_callback,
+            )
         finally:
             if wandb_run is not None:
                 wandb_run.finish()
 
         config.output_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = config.output_dir / f"{config.policy_id}.zip"
-        gym_module = sys.modules.get("gym")
-        restore_gym_module = gym_module is None or not hasattr(gym_module, "__version__")
-        if restore_gym_module:
-            sys.modules["gym"] = gymnasium
-        try:
-            model.save(str(checkpoint_path))
-        finally:
-            if restore_gym_module:
-                if gym_module is None:
-                    sys.modules.pop("gym", None)
-                else:
-                    sys.modules["gym"] = gym_module
+        _save_sac_checkpoint_with_gym_shim(model, checkpoint_path)
         logger.info("Checkpoint saved to {}", checkpoint_path)
         return checkpoint_path
     finally:

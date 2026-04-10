@@ -33,6 +33,16 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert resolved["planners"]["keys"][0] == "prediction_planner"
 
 
+def test_release_campaign_config_runs_single_worker() -> None:
+    """The canonical camera-ready release config should stay sequential."""
+    manifest = load_release_manifest(
+        Path("configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml")
+    )
+    cfg = release_protocol.load_campaign_config(manifest.canonical_campaign_config_path)
+
+    assert cfg.workers == 1
+
+
 def test_load_release_manifest_rejects_invalid_protocol_version(tmp_path: Path) -> None:
     """Protocol versions must be pinned to the supported benchmark protocol."""
     payload = {

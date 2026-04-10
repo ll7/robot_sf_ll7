@@ -13,6 +13,9 @@ Canonical campaign config:
 
 - `configs/benchmarks/paper_experiment_matrix_v1.yaml`
 
+That canonical release config runs with `workers: 1` so the frozen release path
+does not depend on process-pool scheduling for its published metrics.
+
 Reduced smoke manifest for validation:
 
 - `configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml`
@@ -56,6 +59,18 @@ Comparable benchmark releases must keep these surfaces stable:
 
 If one of those changes materially, the release is no longer comparable and
 requires a major benchmark release increment.
+
+When comparing two frozen release reruns, use the camera-ready campaign
+comparison helper and require an exact match verdict:
+
+```bash
+uv run python scripts/tools/compare_camera_ready_campaigns.py \
+  --base-campaign-root output/benchmarks/camera_ready/<base_campaign_id> \
+  --candidate-campaign-root output/benchmarks/camera_ready/<candidate_campaign_id> \
+  --output-json /tmp/camera_ready_compare.json \
+  --output-md /tmp/camera_ready_compare.md \
+  --require-identical
+```
 
 ## What Counts As Comparable vs Non-Comparable
 

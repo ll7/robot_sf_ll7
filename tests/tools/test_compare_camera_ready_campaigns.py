@@ -65,6 +65,7 @@ def test_compare_campaigns_reports_prediction_success_gain(tmp_path: Path) -> No
     assert planner["base_episodes"] == 0
     assert planner["candidate_episodes"] == 135
     assert planner["metrics"]["success_mean"]["delta"] > 0.9
+    assert payload["reproducibility"]["status"] == "drift_detected"
 
 
 def test_compare_campaigns_reports_missing_planners(tmp_path: Path) -> None:
@@ -173,6 +174,56 @@ def test_build_markdown_keeps_planners_without_numeric_metrics() -> None:
     assert "base_status" in markdown
     assert "candidate_status" in markdown
     assert (
-        "| prediction_planner | partial-failure | ok | 0 | 135 | N/A | N/A | N/A | N/A |"
+        "| prediction_planner | partial-failure | ok | 0 | 135 | no | N/A | N/A | N/A | N/A |"
         in markdown
     )
+
+
+def test_compare_campaigns_marks_exact_match_reproducible(tmp_path: Path) -> None:
+    """Identical planner rows should yield an exact reproducibility verdict."""
+    base_root = tmp_path / "base_campaign"
+    candidate_root = tmp_path / "candidate_campaign"
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "base"},
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "status": "ok",
+                    "episodes": 10,
+                    "success_mean": "1.0",
+                    "collisions_mean": "0.0",
+                    "near_misses_mean": "0.0",
+                    "snqi_mean": "-0.1",
+                    "time_to_goal_norm_mean": "0.2",
+                }
+            ],
+        },
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "candidate"},
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "status": "ok",
+                    "episodes": 10,
+                    "success_mean": "1.0",
+                    "collisions_mean": "0.0",
+                    "near_misses_mean": "0.0",
+                    "snqi_mean": "-0.1",
+                    "time_to_goal_norm_mean": "0.2",
+                }
+            ],
+        },
+    )
+
+    payload = compare_campaigns(base_root, candidate_root)
+    assert payload["reproducibility"]["status"] == "reproduced"
+    assert payload["reproducibility"]["exact_match_planners"] == ["goal"]
+    assert payload["planner_deltas"][0]["exact_match"] is True
+    markdown = _build_markdown(payload)
+    assert "Reproducibility" in markdown
+    assert "reproduced" in markdown

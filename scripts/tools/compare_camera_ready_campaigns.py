@@ -61,8 +61,8 @@ def _planner_row_signature(row: dict[str, Any]) -> dict[str, Any]:
         if value is not None:
             metrics[metric] = value
     return {
-        "status": str(row.get("status", "unknown")),
-        "episodes": int(row.get("episodes", 0) or 0),
+        "status": str(row.get("status") or "unknown"),
+        "episodes": int(row.get("episodes") or 0),
         "metrics": metrics,
     }
 

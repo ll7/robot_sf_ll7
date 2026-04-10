@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,6 +12,7 @@ from scripts.tools.compare_camera_ready_campaigns import (
     _build_markdown,
     _resolve_safe_output_path,
     compare_campaigns,
+    main,
 )
 
 if TYPE_CHECKING:
@@ -227,3 +229,137 @@ def test_compare_campaigns_marks_exact_match_reproducible(tmp_path: Path) -> Non
     markdown = _build_markdown(payload)
     assert "Reproducibility" in markdown
     assert "reproduced" in markdown
+
+
+def test_main_require_identical_exits_nonzero_on_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI with --require-identical should return 1 when campaigns differ."""
+    base_root = tmp_path / "base"
+    candidate_root = tmp_path / "candidate"
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "base"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 10, "success_mean": "1.0"},
+            ],
+        },
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "candidate"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 10, "success_mean": "0.8"},
+            ],
+        },
+    )
+    out_json = tmp_path / "out.json"
+    out_md = tmp_path / "out.md"
+    # Monkeypatch cwd so the safe-root check accepts paths under tmp_path
+    monkeypatch.setattr("pathlib.Path.cwd", lambda: tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_camera_ready_campaigns.py",
+            "--base-campaign-root",
+            str(base_root),
+            "--candidate-campaign-root",
+            str(candidate_root),
+            "--output-json",
+            str(out_json),
+            "--output-md",
+            str(out_md),
+            "--require-identical",
+        ],
+    )
+    result = main()
+    assert result == 1, "Expected exit code 1 when campaigns differ and --require-identical is set"
+
+
+def test_main_require_identical_exits_zero_on_exact_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI with --require-identical should return 0 when campaigns are identical."""
+    base_root = tmp_path / "base"
+    candidate_root = tmp_path / "candidate"
+    same_row = {"planner_key": "goal", "status": "ok", "episodes": 10, "success_mean": "1.0"}
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "base"}, "planner_rows": [same_row]},
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "candidate"}, "planner_rows": [same_row]},
+    )
+    out_json = tmp_path / "out.json"
+    out_md = tmp_path / "out.md"
+    # Monkeypatch cwd so the safe-root check accepts paths under tmp_path
+    monkeypatch.setattr("pathlib.Path.cwd", lambda: tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_camera_ready_campaigns.py",
+            "--base-campaign-root",
+            str(base_root),
+            "--candidate-campaign-root",
+            str(candidate_root),
+            "--output-json",
+            str(out_json),
+            "--output-md",
+            str(out_md),
+            "--require-identical",
+        ],
+    )
+    result = main()
+    assert result == 0, "Expected exit code 0 when campaigns are identical"
+
+
+def test_main_without_require_identical_exits_zero_on_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI without --require-identical should return 0 even when campaigns differ."""
+    base_root = tmp_path / "base"
+    candidate_root = tmp_path / "candidate"
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "base"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 10, "success_mean": "1.0"},
+            ],
+        },
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "candidate"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 10, "success_mean": "0.5"},
+            ],
+        },
+    )
+    out_json = tmp_path / "out.json"
+    out_md = tmp_path / "out.md"
+    # Monkeypatch cwd so the safe-root check accepts paths under tmp_path
+    monkeypatch.setattr("pathlib.Path.cwd", lambda: tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_camera_ready_campaigns.py",
+            "--base-campaign-root",
+            str(base_root),
+            "--candidate-campaign-root",
+            str(candidate_root),
+            "--output-json",
+            str(out_json),
+            "--output-md",
+            str(out_md),
+        ],
+    )
+    result = main()
+    assert result == 0, "Expected exit code 0 when --require-identical is not set"

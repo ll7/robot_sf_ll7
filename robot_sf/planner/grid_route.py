@@ -224,7 +224,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
 
         queue: deque[tuple[int, int]] = deque()
         occ_rows, occ_cols = np.where(blocked)
-        for r, c in zip(occ_rows.tolist(), occ_cols.tolist()):
+        for r, c in zip(occ_rows.tolist(), occ_cols.tolist(), strict=True):
             queue.append((int(r), int(c)))
 
         while queue:

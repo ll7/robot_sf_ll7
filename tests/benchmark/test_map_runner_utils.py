@@ -2050,6 +2050,53 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
     assert records[1]["episode_id"].startswith("fast-")
 
 
+def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parallel write failures should report the record-level scenario_id when present."""
+    scenarios = [
+        {"name": "s1", "metadata": {"supported": True}},
+        {"name": "s2", "metadata": {"supported": True}},
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+
+    def fake_run(job):
+        scenario, seed, _ = job
+        return {
+            "scenario_id": f"record-{scenario['name']}",
+            "seed": seed,
+            "episode_id": f"{scenario['name']}-{seed}",
+        }
+
+    def fake_write(*_args, **_kwargs):
+        raise RuntimeError("forced write failure")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+
+    result = run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        workers=2,
+        resume=False,
+    )
+
+    assert result["written"] == 0
+    assert result["failed_jobs"] == 2
+    assert {failure["scenario_id"] for failure in result["failures"]} == {
+        "record-s1",
+        "record-s2",
+    }
+
+
 def test_run_map_batch_filters_and_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

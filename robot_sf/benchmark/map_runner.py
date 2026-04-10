@@ -2625,7 +2625,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 rec = results_by_idx[idx]
                 failures.append(
                     {
-                        "scenario_id": rec.get("scenario", {}).get("name", "unknown"),
+                        "scenario_id": rec.get("scenario_id")
+                        or rec.get("scenario", {}).get("name", "unknown"),
                         "seed": rec.get("seed", -1),
                         "error": repr(exc),
                     }

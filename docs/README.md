@@ -81,6 +81,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts

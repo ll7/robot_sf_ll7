@@ -31,7 +31,8 @@ Then branch by task type:
 - benchmark semantics: `docs/benchmark_spec.md`, `docs/benchmark.md`
 - planner family support: `docs/benchmark_planner_family_coverage.md`
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
-- issue execution history: `docs/context/`
+- issue execution history and handoff knowledge base: `docs/context/`
+- context note workflow: `docs/context/README.md`
 
 ## Key Repository Areas
 
@@ -48,7 +49,7 @@ Then branch by task type:
 - `configs/`: canonical YAML configs for training, benchmarks, scenarios, and baselines
 - `scripts/`: runnable entrypoints and validation helpers
 - `output/`: git-ignored canonical artifact root
-- `docs/context/`: execution notes and issue-specific evidence logs
+- `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
 
 ### Existing agent workflow surfaces
 
@@ -58,6 +59,8 @@ Then branch by task type:
   measurable improvement loops and smaller refinement passes
 - `.agents/skills/context-map/` and `.agents/skills/what-context-needed/`: context-gathering skills
   for locating the right files or requesting the minimum missing context
+- `.agents/skills/context-note-maintainer/`: note-creation and stale-note-maintenance workflow for
+  durable Markdown handoff context
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,
   `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
   and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and

@@ -19,6 +19,24 @@ Treat the following files as the repository-native context stack for Codex-style
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
 
+## Knowledge Capture & Context Notes
+
+Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump
+of incidental scratch notes.
+
+- For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+  handoff context in Markdown when that context would otherwise be trapped in chat, PR text, or
+  issue comments.
+- Prefer updating an existing canonical note when it already covers the same topic. Create a new
+  note only when the subject is distinct enough that merging would hide the decision trail.
+- Link notes to the related issue/PR, relevant canonical docs, proof artifacts, and any predecessor
+  or successor note when a document is superseded.
+- If a touched note contains outdated or superseded statements, update them, remove them, or mark
+  them clearly with a pointer to the current source of truth.
+- Keep note names and links discoverable from normal contributor entry points. Start with
+  `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
+  or refreshing context notes.
+
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
@@ -145,6 +163,7 @@ understanding or reviewing benchmark/planner context rather than executing GitHu
 automation:
 
 - `.agents/skills/benchmark-overview/SKILL.md`
+- `.agents/skills/context-note-maintainer/SKILL.md`
 - `.agents/skills/experiment-context/SKILL.md`
 - `.agents/skills/planner-integration/SKILL.md`
 - `.agents/skills/paper-facing-docs/SKILL.md`

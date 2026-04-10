@@ -10,6 +10,7 @@ navigation notes each time.
 Available skills:
 
 - `benchmark-overview`
+- `context-note-maintainer`
 - `experiment-context`
 - `planner-integration`
 - `paper-facing-docs`

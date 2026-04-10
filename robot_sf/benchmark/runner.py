@@ -1217,8 +1217,19 @@ def _run_batch_parallel(  # noqa: C901
                         f.cancel()
                     raise
     for idx in sorted(results_by_idx):
-        _write_validated_record(out_path, schema, results_by_idx[idx])
-        wrote += 1
+        try:
+            _write_validated_record(out_path, schema, results_by_idx[idx])
+            wrote += 1
+        except Exception as e:  # pragma: no cover - write/validate path
+            failures.append(
+                {
+                    "scenario_id": results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
+                    "seed": results_by_idx[idx].get("seed", -1),
+                    "error": repr(e),
+                },
+            )
+            if fail_fast:
+                raise
     return wrote, failures
 
 

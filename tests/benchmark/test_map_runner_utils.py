@@ -2434,9 +2434,35 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
         resume=False,
     )
 
-    rec1 = json.loads(out1.read_text(encoding="utf-8").splitlines()[0])
-    rec2 = json.loads(out2.read_text(encoding="utf-8").splitlines()[0])
-    assert _normalize_episode_record(rec1) == _normalize_episode_record(rec2)
+    # Parse both outputs
+    lines1 = out1.read_text(encoding="utf-8").splitlines()
+    lines2 = out2.read_text(encoding="utf-8").splitlines()
+    assert len(lines1) == len(lines2), "Line count differs between runs"
+
+    # For each record, verify key order is consistent (deterministic serialization)
+    recs1 = []
+    recs2 = []
+    for i, (line1, line2) in enumerate(zip(lines1, lines2)):
+        rec1 = json.loads(line1)
+        rec2 = json.loads(line2)
+        recs1.append(rec1)
+        recs2.append(rec2)
+
+        # Verify top-level key ordering is consistent
+        keys1 = list(rec1.keys())
+        keys2 = list(rec2.keys())
+        assert keys1 == keys2, (
+            f"Top-level key order differs at line {i} "
+            f"(JSON serialization may be non-deterministic):\n"
+            f"Run 1 keys: {keys1}\n"
+            f"Run 2 keys: {keys2}"
+        )
+
+    # Then verify semantic equality (ignoring runtime metadata)
+    for i, (rec1, rec2) in enumerate(zip(recs1, recs2)):
+        norm1 = _normalize_episode_record(rec1)
+        norm2 = _normalize_episode_record(rec2)
+        assert norm1 == norm2, f"Episode {i} records differ: {norm1} vs {norm2}"
 
 
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:

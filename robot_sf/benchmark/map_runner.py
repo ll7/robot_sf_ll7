@@ -2618,8 +2618,18 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         }
                     )
         for idx in sorted(results_by_idx):
-            _write_validated(out_path, schema, results_by_idx[idx])
-            wrote += 1
+            try:
+                _write_validated(out_path, schema, results_by_idx[idx])
+                wrote += 1
+            except Exception as exc:  # pragma: no cover - write/validate path
+                rec = results_by_idx[idx]
+                failures.append(
+                    {
+                        "scenario_id": rec.get("scenario", {}).get("name", "unknown"),
+                        "seed": rec.get("seed", -1),
+                        "error": repr(exc),
+                    }
+                )
 
     impact_contract = algo_contract.get("adapter_impact")
     if (

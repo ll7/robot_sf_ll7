@@ -99,6 +99,21 @@ def test_run_batch_repeated_runs_produce_stable_metrics(tmp_path: Path) -> None:
         workers=1,
         resume=False,
     )
-    rec1 = json.loads(out1.read_text(encoding="utf-8").splitlines()[0])
-    rec2 = json.loads(out2.read_text(encoding="utf-8").splitlines()[0])
+    # Parse both outputs
+    raw1 = out1.read_text(encoding="utf-8").splitlines()[0]
+    raw2 = out2.read_text(encoding="utf-8").splitlines()[0]
+    rec1 = json.loads(raw1)
+    rec2 = json.loads(raw2)
+
+    # Verify JSON key ordering is consistent (deterministic serialization)
+    # by comparing the key order at the top level
+    keys1 = list(rec1.keys())
+    keys2 = list(rec2.keys())
+    assert keys1 == keys2, (
+        f"Top-level key order differs (JSON serialization may be non-deterministic):\n"
+        f"Run 1 keys: {keys1}\n"
+        f"Run 2 keys: {keys2}"
+    )
+
+    # Then verify semantic equality (ignoring runtime metadata)
     assert _normalize_episode_record(rec1) == _normalize_episode_record(rec2)

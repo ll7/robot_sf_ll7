@@ -216,10 +216,13 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         A* naturally picks routes that run through the centre of corridors.
 
         Returns:
-            np.ndarray: Per-cell clearance; 0 for obstacles, ≥1 for free cells.
+            np.ndarray: Per-cell clearance. Obstacle cells are 0; free cells are >= 1
+            when at least one obstacle exists, and remain 0 when the grid has no
+            blocked cells.
         """
         rows, cols = blocked.shape
-        clearance = np.zeros(blocked.shape, dtype=float)
+        clearance = np.full(blocked.shape, np.inf, dtype=float)
+        clearance[blocked] = 0.0
         visited = blocked.copy()  # obstacle cells are already "visited"
 
         queue: deque[tuple[int, int]] = deque()
@@ -295,7 +298,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                     if clearance_map is not None
                     else 0.0
                 )
-                new_cost = cost_so_far[current] + step_cost + clearance_penalty
+                new_cost = cost_so_far[current] + step_cost * (1.0 + clearance_penalty)
                 if nxt not in cost_so_far or new_cost < cost_so_far[nxt]:
                     cost_so_far[nxt] = new_cost
                     priority = new_cost + self._heuristic(nxt, goal)

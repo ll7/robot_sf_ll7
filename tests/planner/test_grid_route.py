@@ -120,17 +120,17 @@ def test_clearance_map_free_cells_get_positive_distance() -> None:
 
 
 def test_clearance_map_all_free_grid() -> None:
-    """A grid with no obstacles should leave all cells at 0 clearance."""
+    """A grid with no obstacles should leave all cells at +inf clearance."""
     planner = GridRoutePlannerAdapter()
     blocked = np.zeros((4, 4), dtype=bool)
     cm = planner._compute_clearance_map(blocked)
-    assert np.all(cm == 0.0)
+    assert np.all(np.isinf(cm))
 
 
 def test_astar_with_clearance_prefers_corridor_centre() -> None:
     """With clearance penalty, A* should route through the centre of a corridor.
 
-    Setup: 3-cell-wide horizontal corridor (rows 1–3 of a 5×10 grid, all free;
+    Setup: 3-cell-wide horizontal corridor (rows 1-3 of a 5x10 grid, all free;
     rows 0 and 4 are walls).  A star from (2,0) to (2,9) should stay at row 2
     (the centre) rather than drifting to row 1 or 3.
     """

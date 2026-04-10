@@ -1051,6 +1051,11 @@ def _resolve_policy_selection(
         policy_kwargs["features_extractor_class"] = GridSocNavExtractor
         policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
         critic_profile = "grid_socnav"
+        use_pedestrian_attention = bool(
+            config.feature_extractor_kwargs.get("use_pedestrian_attention", False)
+        )
+        if use_pedestrian_attention:
+            critic_profile = "attention_grid_socnav"
         if asymmetric_critic:
             observation_mode = config.env_overrides.get("observation_mode")
             observation_mode_value = getattr(observation_mode, "value", observation_mode)
@@ -1065,7 +1070,11 @@ def _resolve_policy_selection(
                     "asymmetric_critic requires env_overrides.include_grid_in_observation=true"
                 )
             policy = AsymmetricGridSocNavPolicy
-            critic_profile = "asymmetric_grid_socnav"
+            critic_profile = (
+                "asymmetric_attention_grid_socnav"
+                if use_pedestrian_attention
+                else "asymmetric_grid_socnav"
+            )
     elif asymmetric_critic:
         raise ValueError("asymmetric_critic requires feature_extractor=grid_socnav")
 

@@ -12,9 +12,87 @@ from torch import nn
 if TYPE_CHECKING:
     from gymnasium import spaces
 
+_DEFAULT_PEDESTRIAN_SLOT_KEYS = ("pedestrians_positions", "pedestrians_velocities")
+_DEFAULT_PEDESTRIAN_COUNT_KEY = "pedestrians_count"
+
+
+class PedestrianAttentionHead(nn.Module):
+    """Masked multi-head self-attention over variable-length pedestrian sequences.
+
+    Each pedestrian slot is projected to d_model, then passed through one layer of
+    multi-head self-attention. Padding slots (beyond the live count) are masked out.
+    The output is mean-pooled over valid slots and projected to output_dim.
+    """
+
+    def __init__(
+        self,
+        slot_input_dim: int,
+        d_model: int = 64,
+        num_heads: int = 4,
+        output_dim: int = 64,
+        dropout_rate: float = 0.1,
+    ) -> None:
+        """Initialize the pedestrian attention head."""
+        if d_model % num_heads != 0:
+            raise ValueError(f"d_model ({d_model}) must be divisible by num_heads ({num_heads}).")
+        super().__init__()
+        self.input_proj = nn.Linear(slot_input_dim, d_model)
+        self.attn = nn.MultiheadAttention(
+            d_model, num_heads, dropout=dropout_rate, batch_first=True
+        )
+        self.norm = nn.LayerNorm(d_model)
+        self.output_proj = nn.Linear(d_model, output_dim)
+        self._output_dim = output_dim
+
+    @property
+    def output_dim(self) -> int:
+        """Dimension of the output feature vector."""
+        return self._output_dim
+
+    def forward(
+        self,
+        slot_feats: th.Tensor,
+        count: th.Tensor | None,
+    ) -> th.Tensor:
+        """Compute attention-pooled pedestrian features.
+
+        Args:
+            slot_feats: (batch, max_peds, slot_input_dim) pedestrian slot tensor.
+            count: (batch, 1) or (batch,) float tensor with live pedestrian counts,
+                or None to treat all slots as valid.
+
+        Returns:
+            th.Tensor: (batch, output_dim) pooled feature vector.
+        """
+        batch_size, max_peds, _ = slot_feats.shape
+        x = self.input_proj(slot_feats)  # (batch, max_peds, d_model)
+
+        key_padding_mask: th.Tensor | None = None
+        if count is not None:
+            count_int = count.view(-1).long()  # (batch,)
+            idx = th.arange(max_peds, device=slot_feats.device).unsqueeze(0)  # (1, max_peds)
+            key_padding_mask = idx >= count_int.unsqueeze(1)  # (batch, max_peds); True=ignore
+
+        attn_out, _ = self.attn(x, x, x, key_padding_mask=key_padding_mask)
+        x = self.norm(x + attn_out)
+
+        # Masked mean-pool over valid slots
+        if key_padding_mask is not None:
+            valid = (~key_padding_mask).float().unsqueeze(-1)  # (batch, max_peds, 1)
+        else:
+            valid = th.ones(batch_size, max_peds, 1, device=slot_feats.device)
+        valid_count = valid.sum(dim=1).clamp(min=1.0)  # (batch, 1)
+        pooled = (x * valid).sum(dim=1) / valid_count  # (batch, d_model)
+
+        return self.output_proj(pooled)  # (batch, output_dim)
+
 
 class GridSocNavExtractor(BaseFeaturesExtractor):
-    """CNN+MLP extractor for occupancy grid plus flattened SocNav inputs."""
+    """CNN+MLP extractor for occupancy grid plus flattened SocNav inputs.
+
+    Optionally replaces the flat-MLP treatment of pedestrian slot arrays with a
+    masked multi-head self-attention head (``use_pedestrian_attention=True``).
+    """
 
     def __init__(  # noqa: PLR0913,C901
         self,
@@ -31,6 +109,12 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         socnav_hidden_dims: list[int] | None = None,
         dropout_rate: float = 0.1,
         include_ego_goal_vector: bool = True,
+        use_pedestrian_attention: bool = False,
+        pedestrian_slot_keys: list[str] | tuple[str, ...] | None = None,
+        pedestrian_count_key: str = _DEFAULT_PEDESTRIAN_COUNT_KEY,
+        attn_d_model: int = 64,
+        attn_num_heads: int = 4,
+        attn_output_dim: int = 64,
     ) -> None:
         """Initialize the grid + SocNav feature extractor."""
         if grid_channels is None:
@@ -81,6 +165,38 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
             else:
                 socnav_keys = [key for key in socnav_keys if key != privileged_state_key]
 
+        # --- pedestrian attention setup ---
+        self._pedestrian_attn: PedestrianAttentionHead | None = None
+        self._pedestrian_slot_keys: tuple[str, ...] = ()
+        self._pedestrian_count_key: str | None = None
+        attn_out_dim = 0
+
+        if use_pedestrian_attention:
+            resolved_slot_keys = list(pedestrian_slot_keys or _DEFAULT_PEDESTRIAN_SLOT_KEYS)
+            resolved_slot_keys = [k for k in resolved_slot_keys if k in observation_space.spaces]
+            if not resolved_slot_keys:
+                raise ValueError(
+                    "use_pedestrian_attention=True but none of the pedestrian slot keys "
+                    f"({list(pedestrian_slot_keys or _DEFAULT_PEDESTRIAN_SLOT_KEYS)}) "
+                    "are present in the observation space."
+                )
+            self._pedestrian_slot_keys = tuple(resolved_slot_keys)
+            # Remove slot keys from the flat MLP path
+            slot_key_set = set(self._pedestrian_slot_keys)
+            socnav_keys = [k for k in socnav_keys if k not in slot_key_set]
+
+            if pedestrian_count_key in observation_space.spaces:
+                self._pedestrian_count_key = pedestrian_count_key
+
+            # Compute slot input dim: sum of per-slot feature dims (all but first axis)
+            slot_input_dim = int(
+                sum(
+                    int(np.prod(observation_space.spaces[k].shape[1:]))
+                    for k in self._pedestrian_slot_keys
+                )
+            )
+            attn_out_dim = attn_output_dim
+
         self._socnav_keys = tuple(sorted(socnav_keys))
         self._grid_key = grid_key
 
@@ -104,7 +220,7 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         grid_output_dim = self._infer_grid_output_dim(grid_extractor, grid_space.shape)
 
         socnav_output_dim = socnav_hidden_dims[-1] if socnav_hidden_dims else socnav_input_dim
-        total_features = int(grid_output_dim + socnav_output_dim)
+        total_features = int(grid_output_dim + socnav_output_dim + attn_out_dim)
 
         super().__init__(observation_space, features_dim=total_features)
 
@@ -114,6 +230,14 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
             hidden_dims=socnav_hidden_dims,
             dropout_rate=dropout_rate,
         )
+        if use_pedestrian_attention:
+            self._pedestrian_attn = PedestrianAttentionHead(
+                slot_input_dim=slot_input_dim,
+                d_model=attn_d_model,
+                num_heads=attn_num_heads,
+                output_dim=attn_output_dim,
+                dropout_rate=dropout_rate,
+            )
 
     @staticmethod
     def _build_grid_cnn(
@@ -190,4 +314,13 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         )
         socnav_features = self.socnav_mlp(socnav_concat)
 
-        return th.cat([grid_features, socnav_features], dim=1)
+        parts = [grid_features, socnav_features]
+
+        if self._pedestrian_attn is not None:
+            # Stack slot arrays along the feature axis: (batch, max_peds, slot_dim)
+            slot_tensors = [obs[k] for k in self._pedestrian_slot_keys]
+            slot_feats = th.cat(slot_tensors, dim=-1)
+            count = obs[self._pedestrian_count_key] if self._pedestrian_count_key else None
+            parts.append(self._pedestrian_attn(slot_feats, count))
+
+        return th.cat(parts, dim=1)

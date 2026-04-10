@@ -182,6 +182,87 @@ def test_resolve_policy_selection_uses_asymmetric_grid_socnav_policy(tmp_path: P
     assert critic_profile == "asymmetric_grid_socnav"
 
 
+def test_resolve_policy_selection_attention_head_sets_profile(tmp_path: Path) -> None:
+    """Attention head config should set the attention_grid_socnav critic profile."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_attention_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        feature_extractor_kwargs={"use_pedestrian_attention": True},
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    _policy_cls, policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert critic_profile == "attention_grid_socnav"
+    assert policy_kwargs["features_extractor_kwargs"].get("use_pedestrian_attention") is True
+
+
+def test_resolve_policy_selection_attention_plus_asymmetric_sets_combined_profile(
+    tmp_path: Path,
+) -> None:
+    """Attention + asymmetric critic together should set the combined profile."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_attention_asymmetric_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        feature_extractor_kwargs={"use_pedestrian_attention": True},
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "asymmetric_critic": True,
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    policy_cls, _policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert policy_cls is AsymmetricGridSocNavPolicy
+    assert critic_profile == "asymmetric_attention_grid_socnav"
+
+
 def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) -> None:
     """Perf summary writer should produce machine-readable aggregate keys."""
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))

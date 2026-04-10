@@ -102,3 +102,66 @@ def test_grid_route_fails_safe_on_malformed_observation() -> None:
     """Malformed observations should fail safely to a stop."""
     planner = GridRoutePlannerAdapter()
     assert planner.plan({"robot": object()}) == (0.0, 0.0)
+
+
+def test_clearance_map_free_cells_get_positive_distance() -> None:
+    """Free cells adjacent to an obstacle should receive clearance ≥ 1."""
+    planner = GridRoutePlannerAdapter()
+    blocked = np.zeros((5, 5), dtype=bool)
+    blocked[2, 2] = True
+    cm = planner._compute_clearance_map(blocked)
+
+    assert cm[2, 2] == 0.0, "obstacle cell must have clearance 0"
+    # The four immediate 4-neighbours are at BFS distance 1
+    for r, c in [(1, 2), (3, 2), (2, 1), (2, 3)]:
+        assert cm[r, c] == 1.0
+    # Corner cells are at BFS distance 2 (4-connected)
+    assert cm[0, 0] >= 2.0
+
+
+def test_clearance_map_all_free_grid() -> None:
+    """A grid with no obstacles should leave all cells at 0 clearance."""
+    planner = GridRoutePlannerAdapter()
+    blocked = np.zeros((4, 4), dtype=bool)
+    cm = planner._compute_clearance_map(blocked)
+    assert np.all(cm == 0.0)
+
+
+def test_astar_with_clearance_prefers_corridor_centre() -> None:
+    """With clearance penalty, A* should route through the centre of a corridor.
+
+    Setup: 3-cell-wide horizontal corridor (rows 1–3 of a 5×10 grid, all free;
+    rows 0 and 4 are walls).  A star from (2,0) to (2,9) should stay at row 2
+    (the centre) rather than drifting to row 1 or 3.
+    """
+    planner = GridRoutePlannerAdapter(GridRoutePlannerConfig(clearance_penalty_weight=1.0))
+    blocked = np.ones((5, 10), dtype=bool)
+    blocked[1:4, :] = False  # rows 1, 2, 3 are free
+
+    clearance_map = planner._compute_clearance_map(blocked)
+    path = planner._astar(blocked, (2, 0), (2, 9), clearance_map=clearance_map)
+
+    assert path, "path must exist through the corridor"
+    assert path[0] == (2, 0)
+    assert path[-1] == (2, 9)
+    # Every step in the path should stay at the centre row (row 2)
+    assert all(r == 2 for r, _c in path), (
+        "clearance-penalised A* should route through corridor centre"
+    )
+
+
+def test_astar_without_clearance_may_not_centre() -> None:
+    """Without clearance penalty, A* is not required to stay centred."""
+    planner = GridRoutePlannerAdapter(GridRoutePlannerConfig(clearance_penalty_weight=0.0))
+    blocked = np.ones((5, 10), dtype=bool)
+    blocked[1:4, :] = False
+
+    path = planner._astar(blocked, (2, 0), (2, 9))
+    assert path, "path must still exist without clearance penalty"
+
+
+def test_build_grid_route_config_clearance_penalty() -> None:
+    """build_grid_route_config should round-trip clearance_penalty_weight."""
+    cfg = build_grid_route_config({"clearance_penalty_weight": 0.75})
+    assert cfg.clearance_penalty_weight == 0.75
+    assert build_grid_route_config(None).clearance_penalty_weight == 0.5

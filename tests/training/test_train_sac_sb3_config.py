@@ -97,6 +97,40 @@ def test_socnav_gate_config_loads() -> None:
     assert config.relative_obs is True
 
 
+def test_scenario_sampling_config_loads(tmp_path: Path) -> None:
+    """SAC config should accept weighted scenario sampling settings."""
+    content = f"""\
+policy_id: sac_sample_test
+scenario_config: {_CLASSIC_SCENARIO}
+total_timesteps: 1000
+seed: 0
+scenario_sampling:
+  strategy: cycle
+  include_scenarios: [head_on_interaction, narrow_passage]
+  weights:
+    head_on_interaction: 3.0
+    narrow_passage: 1.0
+sac_hyperparams:
+  buffer_size: 2000
+  learning_starts: 100
+  batch_size: 64
+env_factory_kwargs:
+  reward_name: route_completion_v2
+tracking:
+  enabled: false
+"""
+    cfg = tmp_path / "sac_sample.yaml"
+    cfg.write_text(content, encoding="utf-8")
+
+    config = load_sac_training_config(cfg)
+    assert config.scenario_sampling.strategy == "cycle"
+    assert config.scenario_sampling.include_scenarios == ("head_on_interaction", "narrow_passage")
+    assert config.scenario_sampling.weights == {
+        "head_on_interaction": 3.0,
+        "narrow_passage": 1.0,
+    }
+
+
 def test_load_rejects_unknown_hyperparams(tmp_path: Path) -> None:
     """Config loader should raise on unrecognised SAC hyperparameter keys."""
     scenario_path = _CLASSIC_SCENARIO

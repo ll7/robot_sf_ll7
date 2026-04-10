@@ -95,6 +95,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "sac_hyperparams",
         "env_overrides",
         "env_factory_kwargs",
+        "scenario_sampling",
         "evaluation",
         "tracking",
         "output_dir",
@@ -141,6 +142,16 @@ class SACEvaluationConfig:
 
 
 @dataclass
+class SACScenarioSamplingConfig:
+    """Scenario sampling settings for SAC training."""
+
+    include_scenarios: tuple[str, ...] = field(default_factory=tuple)
+    exclude_scenarios: tuple[str, ...] = field(default_factory=tuple)
+    weights: dict[str, float] = field(default_factory=dict)
+    strategy: str = "random"
+
+
+@dataclass
 class SACTrainingConfig:
     """Typed container for SAC training configuration."""
 
@@ -150,6 +161,7 @@ class SACTrainingConfig:
     sac_hyperparams: dict[str, object] = field(default_factory=dict)
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
+    scenario_sampling: SACScenarioSamplingConfig = field(default_factory=SACScenarioSamplingConfig)
     tracking: dict[str, object] = field(default_factory=dict)
     output_dir: Path = field(default_factory=lambda: Path("output/models/sac"))
     seed: int | None = None
@@ -228,6 +240,10 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         sac_hyperparams=raw_hyperparams,
         env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
+        scenario_sampling=_load_scenario_sampling_config(
+            data.get("scenario_sampling"),
+            config_dir=path.parent,
+        ),
         tracking=dict(data.get("tracking", {}) or {}),
         output_dir=output_dir,
         seed=seed,
@@ -304,6 +320,43 @@ def _load_eval_config(raw_value: object, *, config_dir: Path) -> SACEvaluationCo
     )
 
 
+def _load_scenario_sampling_config(
+    raw_value: object | None,
+    *,
+    config_dir: Path,
+) -> SACScenarioSamplingConfig:
+    """Load scenario sampling settings from the training config."""
+    if raw_value in (None, {}):
+        return SACScenarioSamplingConfig()
+    if not isinstance(raw_value, Mapping):
+        raise ValueError(f"scenario_sampling block must be a mapping; got {type(raw_value)!r}")
+
+    unknown = set(raw_value) - {
+        "include_scenarios",
+        "exclude_scenarios",
+        "weights",
+        "strategy",
+    }
+    if unknown:
+        raise ValueError(f"Unknown scenario_sampling config keys: {sorted(unknown)}")
+
+    include_scenarios = tuple(str(x).strip() for x in raw_value.get("include_scenarios", ()) or [])
+    exclude_scenarios = tuple(str(x).strip() for x in raw_value.get("exclude_scenarios", ()) or [])
+    weights = {str(k): float(v) for k, v in dict(raw_value.get("weights", {}) or {}).items()}
+    strategy = str(raw_value.get("strategy", "random")).strip().lower() or "random"
+    if strategy not in {"random", "cycle"}:
+        raise ValueError(
+            f"Unknown scenario_sampling.strategy: {strategy}; expected 'random' or 'cycle'"
+        )
+
+    return SACScenarioSamplingConfig(
+        include_scenarios=include_scenarios,
+        exclude_scenarios=exclude_scenarios,
+        weights=weights,
+        strategy=strategy,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Environment factory helper
 # ---------------------------------------------------------------------------
@@ -325,11 +378,6 @@ def _build_env(
     """
     use_abs = config.action_semantics.strip().lower() == "absolute"
     obs_transform = config.obs_transform.strip().lower()
-    scenario_sampler = ScenarioSampler(
-        scenario_definitions,
-        seed=config.seed,
-        strategy="random",
-    )
 
     def _build_robot_config_for_sampling(scenario: Mapping[str, Any]) -> Any:
         robot_config = build_robot_config_from_scenario(
@@ -341,7 +389,14 @@ def _build_env(
 
     def _make() -> Any:
         env = ScenarioSwitchingEnv(
-            scenario_sampler=scenario_sampler,
+            scenario_sampler=ScenarioSampler(
+                scenarios=scenario_definitions,
+                include_scenarios=config.scenario_sampling.include_scenarios,
+                exclude_scenarios=config.scenario_sampling.exclude_scenarios,
+                weights=(config.scenario_sampling.weights or None),
+                seed=config.seed,
+                strategy=config.scenario_sampling.strategy,
+            ),
             scenario_path=config.scenario_config,
             env_factory=make_robot_env,
             config_builder=_build_robot_config_for_sampling,

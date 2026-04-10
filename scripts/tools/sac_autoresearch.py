@@ -8,9 +8,10 @@ import csv
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
 
 import yaml
+
+from scripts.training.train_sac_sb3 import load_sac_training_config
 
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = ROOT / "output" / "ai" / "autoresearch" / "sac"
@@ -37,13 +38,6 @@ def _load_experiment_list(path: Path) -> list[dict[str, str]]:
     if not isinstance(data, list):
         raise ValueError("Experiment file must contain a YAML list of experiment entries.")
     return data
-
-
-def _read_config(config_path: Path) -> dict[str, Any]:
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    if not isinstance(config, dict):
-        raise ValueError(f"Training config is not a YAML mapping: {config_path}")
-    return config
 
 
 def _format_result_row(experiment: dict[str, str], summary: dict[str, object]) -> list[str]:
@@ -122,13 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     for experiment in experiments:
         config_path = _resolve_path(experiment["config"], base=experiments_path.parent)
         assert config_path.exists(), f"Config missing: {config_path}"
-        config = _read_config(config_path)
-        output_dir = _resolve_path(config.get("output_dir", "output/models/sac"), base=ROOT)
-        policy_id = str(config["policy_id"])
+        config = load_sac_training_config(config_path)
+        output_dir = config.output_dir
+        policy_id = config.policy_id
         checkpoint = output_dir / f"{policy_id}.zip"
-        eval_settings = config.get("evaluation", {}) or {}
-        if not isinstance(eval_settings, dict):
-            raise ValueError(f"evaluation block must be a mapping in {config_path}")
+        eval_settings = config.evaluation
 
         if args.dry_run:
             print(f"Would run experiment: {experiment.get('name')} ({config_path})")
@@ -151,10 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError(f"Expected checkpoint not found after training: {checkpoint}")
 
         eval_output_dir = RESULTS_DIR / policy_id
-        scenario_matrix = _resolve_path(
-            eval_settings.get("scenario_matrix", VERIFIED_SIMPLE_SUBSET),
-            base=config_path.parent,
-        )
+        scenario_matrix = eval_settings.scenario_matrix or VERIFIED_SIMPLE_SUBSET
         eval_cmd = [
             "uv",
             "run",
@@ -165,25 +154,20 @@ def main(argv: list[str] | None = None) -> int:
             "--output-dir",
             str(eval_output_dir),
             "--workers",
-            str(eval_settings.get("workers", 1)),
+            str(eval_settings.workers),
             "--scenario-matrix",
             str(scenario_matrix),
             "--horizon",
-            str(eval_settings.get("horizon", 120)),
+            str(eval_settings.horizon),
             "--dt",
-            str(eval_settings.get("dt", 0.1)),
+            str(eval_settings.dt),
             "--min-success-rate",
-            str(eval_settings.get("min_success_rate", 0.3)),
+            str(eval_settings.min_success_rate),
         ]
-        algo_config = eval_settings.get("algo_config")
+        algo_config = eval_settings.algo_config
         if algo_config not in (None, ""):
-            eval_cmd.extend(
-                [
-                    "--algo-config",
-                    str(_resolve_path(algo_config, base=config_path.parent)),
-                ]
-            )
-        device = eval_settings.get("device")
+            eval_cmd.extend(["--algo-config", str(algo_config)])
+        device = eval_settings.device
         if device not in (None, ""):
             eval_cmd.extend(["--device", str(device)])
         print(f"Running evaluation for: {policy_id}")

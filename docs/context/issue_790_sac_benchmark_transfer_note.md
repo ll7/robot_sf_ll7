@@ -93,7 +93,7 @@ uv run python scripts/validation/evaluate_sac.py \
   --checkpoint output/models/sac/sac_gate_socnav_struct_v1.zip \
   --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
   --workers 1 \
-  --output-dir /tmp/sac_eval_v1_rel
+  --output-dir output/tmp/sac_eval_v1_rel
 ```
 
 Observed result:
@@ -111,7 +111,7 @@ uv run python scripts/validation/evaluate_sac.py \
   --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
   --workers 1 \
   --horizon 250 \
-  --output-dir /tmp/sac_eval_v1_rel_h250
+  --output-dir output/tmp/sac_eval_v1_rel_h250
 ```
 
 Observed result:
@@ -132,7 +132,7 @@ uv run python scripts/validation/evaluate_sac.py \
   --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
   --algo-config configs/baselines/sac_gate_socnav_struct_ego.yaml \
   --workers 1 \
-  --output-dir /tmp/sac_eval_ego_v1
+  --output-dir output/tmp/sac_eval_ego_v1
 ```
 
 Observed result:
@@ -169,7 +169,7 @@ uv run python scripts/validation/evaluate_sac.py \
   --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
   --algo-config configs/baselines/sac_gate_socnav_struct_ego_safe.yaml \
   --workers 1 \
-  --output-dir /tmp/sac_eval_ego_safe_v1
+  --output-dir output/tmp/sac_eval_ego_safe_v1
 ```
 
 Observed result:
@@ -206,7 +206,7 @@ uv run python scripts/validation/evaluate_sac.py \
   --scenario-matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
   --algo-config configs/baselines/sac_gate_socnav_struct_ego_multi.yaml \
   --workers 1 \
-  --output-dir /tmp/sac_eval_ego_multi_v1
+  --output-dir output/tmp/sac_eval_ego_multi_v1
 ```
 
 Observed result:

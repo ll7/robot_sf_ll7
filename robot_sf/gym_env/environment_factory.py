@@ -47,6 +47,7 @@ from __future__ import annotations
 import importlib
 import os
 import random
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -65,7 +66,11 @@ except (ImportError, ModuleNotFoundError):
 from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
-from robot_sf.gym_env.reward import build_reward_function, simple_ped_reward
+from robot_sf.gym_env.reward import (
+    build_reward_curriculum_function,
+    build_reward_function,
+    simple_ped_reward,
+)
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -482,6 +487,7 @@ def make_robot_env(  # noqa: PLR0913
     reward_func: Callable | None = None,
     reward_name: str | None = None,
     reward_kwargs: Mapping[str, object] | None = None,
+    reward_curriculum: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -522,6 +528,8 @@ def make_robot_env(  # noqa: PLR0913
             `simple`, `punish_action`, `snqi_step`, `alyassi`).
             Ignored when ``reward_func`` is provided.
         reward_kwargs: Optional keyword arguments passed to the named reward preset builder.
+        reward_curriculum: Optional staged reward curriculum. When provided, the reward callable
+            is wrapped so stage selection advances after terminal episodes.
         debug: Enable debug/visual features (may trigger view creation when recording).
         recording_enabled: Master switch gating recording runtime even if options request
             it (feature flag style).
@@ -573,7 +581,14 @@ def make_robot_env(  # noqa: PLR0913
 
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
-        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
+        if reward_curriculum is not None:
+            reward_func = build_reward_curriculum_function(
+                reward_curriculum,
+                default_reward_name=reward_name,
+                default_reward_kwargs=reward_kwargs,
+            )
+        else:
+            reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
 
     _apply_global_seed(seed)
 
@@ -635,6 +650,7 @@ def make_image_robot_env(  # noqa: PLR0913
     reward_func: Callable | None = None,
     reward_name: str | None = None,
     reward_kwargs: Mapping[str, object] | None = None,
+    reward_curriculum: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -665,7 +681,14 @@ def make_image_robot_env(  # noqa: PLR0913
         recording_options = _apply_recording(mapped, recording_options)
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
-        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
+        if reward_curriculum is not None:
+            reward_func = build_reward_curriculum_function(
+                reward_curriculum,
+                default_reward_name=reward_name,
+                default_reward_kwargs=reward_kwargs,
+            )
+        else:
+            reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
     _apply_global_seed(seed)
 
     # Validate configuration and log resolved config (T030/T031)

@@ -5,15 +5,13 @@ This module defines the reward function for the robot environment.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.gym_env.reward_alyassi import alyassi_reward
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 
 _DEFAULT_SNQI_REWARD_WEIGHTS: dict[str, float] = {
     "w_success": 1.0,
@@ -31,6 +29,76 @@ _DEFAULT_SNQI_REWARD_BASELINE: dict[str, dict[str, float]] = {
     "jerk_mean": {"med": 0.0, "p95": 1.0},
 }
 _SNQI_COMPUTE_FN = None
+
+
+@dataclass(frozen=True, slots=True)
+class RewardCurriculumStage:
+    """One stage in a staged reward curriculum."""
+
+    until_episodes: int | None = None
+    reward_name: str | None = None
+    reward_kwargs: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class RewardCurriculumReward:
+    """Stateful reward wrapper that advances across curriculum stages per episode."""
+
+    stage_callables: tuple[Callable[[dict], float], ...]
+    stage_boundaries: tuple[int | None, ...]
+    stage_labels: tuple[str, ...]
+    episodes_completed: int = field(init=False, default=0)
+    _terminal_latched: bool = field(init=False, default=False)
+
+    def __post_init__(self) -> None:
+        """Validate that curriculum metadata is internally consistent."""
+        if not self.stage_callables:
+            raise ValueError("reward_curriculum requires at least one stage")
+        if len(self.stage_callables) != len(self.stage_boundaries):
+            raise ValueError("reward_curriculum stage metadata is inconsistent")
+        if len(self.stage_callables) != len(self.stage_labels):
+            raise ValueError("reward_curriculum stage labels are inconsistent")
+
+    def __call__(self, meta: dict) -> float:
+        """Score a step with the active curriculum stage and advance on terminals.
+
+        Returns:
+            float: Reward from the currently active curriculum stage.
+        """
+        stage_idx = self.current_stage_index
+        reward = float(self.stage_callables[stage_idx](meta))
+        if self._is_terminal(meta):
+            if not self._terminal_latched:
+                self.episodes_completed += 1
+                self._terminal_latched = True
+        else:
+            step_of_episode = int(meta.get("step_of_episode", 0) or 0)
+            if step_of_episode <= 1:
+                self._terminal_latched = False
+        return reward
+
+    @property
+    def current_stage_index(self) -> int:
+        """Return the currently active curriculum stage index."""
+        for idx, until_episodes in enumerate(self.stage_boundaries):
+            if until_episodes is None or self.episodes_completed < until_episodes:
+                return idx
+        return len(self.stage_boundaries) - 1
+
+    @property
+    def current_stage_label(self) -> str:
+        """Return the current stage label for logging and diagnostics."""
+        return self.stage_labels[self.current_stage_index]
+
+    @staticmethod
+    def _is_terminal(meta: Mapping[str, object]) -> bool:
+        return bool(
+            meta.get("is_route_complete")
+            or meta.get("is_timesteps_exceeded")
+            or meta.get("is_pedestrian_collision")
+            or meta.get("is_robot_collision")
+            or meta.get("is_obstacle_collision")
+        )
 
 
 def _compute_snqi_reward_score(
@@ -583,3 +651,56 @@ def build_reward_function(
         "ped_stationary_collision",
     )
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")
+
+
+def build_reward_curriculum_function(
+    curriculum: Mapping[str, object],
+    *,
+    default_reward_name: str,
+    default_reward_kwargs: Mapping[str, object] | None = None,
+) -> RewardCurriculumReward:
+    """Build a staged reward callable from a curriculum config.
+
+    Returns:
+        RewardCurriculumReward: Stateful wrapper that switches stages after terminal episodes.
+    """
+
+    raw_stages = curriculum.get("stages")
+    if not isinstance(raw_stages, Sequence) or not raw_stages:
+        raise ValueError("reward_curriculum.stages must be a non-empty sequence")
+
+    stage_callables: list[Callable[[dict], float]] = []
+    stage_boundaries: list[int | None] = []
+    stage_labels: list[str] = []
+    previous_boundary = -1
+    for index, raw_stage in enumerate(raw_stages):
+        if not isinstance(raw_stage, Mapping):
+            raise ValueError("reward_curriculum.stages entries must be mappings")
+        until_episodes_raw = raw_stage.get("until_episodes")
+        until_episodes = int(until_episodes_raw) if until_episodes_raw is not None else None
+        if until_episodes is None and index != len(raw_stages) - 1:
+            raise ValueError("Only the final reward curriculum stage may omit until_episodes")
+        if until_episodes is not None:
+            if until_episodes <= previous_boundary:
+                raise ValueError(
+                    "reward_curriculum.stages must use strictly increasing until_episodes"
+                )
+            previous_boundary = until_episodes
+        reward_name = str(raw_stage.get("reward_name", default_reward_name))
+        reward_kwargs = dict(default_reward_kwargs or {})
+        stage_kwargs = raw_stage.get("reward_kwargs")
+        if stage_kwargs is not None:
+            if not isinstance(stage_kwargs, Mapping):
+                raise ValueError("reward_curriculum stage reward_kwargs must be a mapping")
+            reward_kwargs.update(stage_kwargs)
+        stage_callables.append(build_reward_function(reward_name, reward_kwargs=reward_kwargs))
+        stage_boundaries.append(until_episodes)
+        stage_labels.append(
+            f"{reward_name}:{until_episodes if until_episodes is not None else 'final'}"
+        )
+
+    return RewardCurriculumReward(
+        stage_callables=tuple(stage_callables),
+        stage_boundaries=tuple(stage_boundaries),
+        stage_labels=tuple(stage_labels),
+    )

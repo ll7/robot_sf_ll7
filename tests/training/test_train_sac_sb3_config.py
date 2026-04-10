@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import gymnasium
 import numpy as np
 import pytest
-import gymnasium
 from gymnasium import spaces as gym_spaces
 
 from robot_sf.training.scenario_loader import load_scenarios
@@ -164,7 +164,9 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
     class _DummyEnv(gymnasium.Env):
         metadata: dict[str, object] = {}
 
-        def __init__(self, *, config: object, seed: int | None, scenario_name: str, **_: object) -> None:
+        def __init__(
+            self, *, config: object, seed: int | None, scenario_name: str, **_: object
+        ) -> None:
             super().__init__()
             self.observation_space = gym_spaces.Dict(
                 {

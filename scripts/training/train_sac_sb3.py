@@ -397,7 +397,9 @@ def _relative_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
             )
             converted[key] = rel
 
-    converted["robot_position"] = np.zeros_like(np.asarray(converted["robot_position"], dtype=np.float32))
+    converted["robot_position"] = np.zeros_like(
+        np.asarray(converted["robot_position"], dtype=np.float32)
+    )
     _shift_xy("goal_current")
     _shift_xy("goal_next")
     _shift_xy("pedestrians_positions")
@@ -485,7 +487,11 @@ class _RelativeSocNavObservation(ObservationWrapper):
                 spaces[key] = gym_spaces.Box(low=rel_low, high=rel_high, dtype=np.float32)
 
         ped_space = spaces.get("pedestrians_positions")
-        if isinstance(ped_space, gym_spaces.Box) and len(ped_space.shape) == 2 and ped_space.shape[1] == 2:
+        if (
+            isinstance(ped_space, gym_spaces.Box)
+            and len(ped_space.shape) == 2
+            and ped_space.shape[1] == 2
+        ):
             ped_low = np.broadcast_to(rel_low, ped_space.shape).astype(np.float32)
             ped_high = np.broadcast_to(rel_high, ped_space.shape).astype(np.float32)
             spaces["pedestrians_positions"] = gym_spaces.Box(
@@ -656,7 +662,18 @@ def run_sac_training(
 
         config.output_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = config.output_dir / f"{config.policy_id}.zip"
-        model.save(str(checkpoint_path))
+        gym_module = sys.modules.get("gym")
+        restore_gym_module = gym_module is None or not hasattr(gym_module, "__version__")
+        if restore_gym_module:
+            sys.modules["gym"] = gymnasium
+        try:
+            model.save(str(checkpoint_path))
+        finally:
+            if restore_gym_module:
+                if gym_module is None:
+                    sys.modules.pop("gym", None)
+                else:
+                    sys.modules["gym"] = gym_module
         logger.info("Checkpoint saved to {}", checkpoint_path)
         return checkpoint_path
     finally:

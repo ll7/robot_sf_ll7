@@ -60,9 +60,7 @@ def parse_args() -> argparse.Namespace:
         "--scenario-matrix",
         type=Path,
         default=_DEFAULT_SCENARIO_MATRIX,
-        help=(
-            "YAML scenario matrix (default: configs/scenarios/classic_interactions.yaml)."
-        ),
+        help=("YAML scenario matrix (default: configs/scenarios/classic_interactions.yaml)."),
     )
     parser.add_argument(
         "--algo-config",
@@ -215,9 +213,7 @@ def main() -> int:
         benchmark_profile="experimental",
     )
 
-    lines = [
-        line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not lines:
         raise RuntimeError("No episodes written by map-runner evaluation.")
     rows = [json.loads(line) for line in lines]
@@ -226,12 +222,9 @@ def main() -> int:
     min_dist_vals = [
         float(row["metrics"]["min_distance"])
         for row in rows
-        if isinstance(row.get("metrics"), dict)
-        and row["metrics"].get("min_distance") is not None
+        if isinstance(row.get("metrics"), dict) and row["metrics"].get("min_distance") is not None
     ]
-    avg_speed_vals = [
-        float(row.get("metrics", {}).get("avg_speed", 0.0)) for row in rows
-    ]
+    avg_speed_vals = [float(row.get("metrics", {}).get("avg_speed", 0.0)) for row in rows]
 
     success_rate = _mean(success_vals)
     mean_min_distance = _mean(min_dist_vals) if min_dist_vals else float("nan")
@@ -240,9 +233,7 @@ def main() -> int:
     per_scenario: dict[str, dict] = {}
     for row in rows:
         sid = str(row.get("scenario_id", "unknown"))
-        entry = per_scenario.setdefault(
-            sid, {"episodes": 0, "successes": 0, "failed_seeds": []}
-        )
+        entry = per_scenario.setdefault(sid, {"episodes": 0, "successes": 0, "failed_seeds": []})
         entry["episodes"] += 1
         if _episode_success(row):
             entry["successes"] += 1

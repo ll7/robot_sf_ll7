@@ -38,9 +38,7 @@ def test_evaluate_sac_smoke(monkeypatch, tmp_path: Path) -> None:
 
     # Write a minimal algo config template so the script can read it.
     algo_cfg = tmp_path / "algo.yaml"
-    algo_cfg.write_text(
-        "model_path: stub\ndevice: auto\nobs_mode: dict\n", encoding="utf-8"
-    )
+    algo_cfg.write_text("model_path: stub\ndevice: auto\nobs_mode: dict\n", encoding="utf-8")
 
     monkeypatch.setattr(mod, "run_map_batch", _fake_run_map_batch)
     monkeypatch.setattr(
@@ -79,9 +77,7 @@ def test_evaluate_sac_quality_gate_failure(monkeypatch, tmp_path: Path) -> None:
     scenario_matrix.write_text("scenarios: []\n", encoding="utf-8")
     output_dir = tmp_path / "eval_out"
     algo_cfg = tmp_path / "algo.yaml"
-    algo_cfg.write_text(
-        "model_path: stub\ndevice: auto\nobs_mode: dict\n", encoding="utf-8"
-    )
+    algo_cfg.write_text("model_path: stub\ndevice: auto\nobs_mode: dict\n", encoding="utf-8")
 
     def _fake_fail_batch(*args, **kwargs):
         jsonl_path = Path(args[1])

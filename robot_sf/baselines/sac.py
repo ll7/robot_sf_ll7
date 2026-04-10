@@ -44,6 +44,7 @@ class SACPlanner:
     EPS: float = 1e-9
 
     def __init__(self, config: SACPlannerConfig | dict[str, Any], *, seed: int | None = None):
+        """Create a SAC planner wrapper and load the configured checkpoint."""
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
@@ -125,13 +126,20 @@ class SACPlanner:
             )
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Reset planner state between episodes."""
         if seed is not None:
             self._seed = seed
 
     def close(self) -> None:
+        """Release the loaded SAC model."""
         self._model = None
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
+        """Predict one action for either the structured or flattened obs contract.
+
+        Returns:
+            dict[str, float]: SAC action in the configured output space.
+        """
         if isinstance(obs, dict) and self._uses_dict_observation():
             return self._step_dict_obs(obs)
         if isinstance(obs, dict):
@@ -190,40 +198,18 @@ class SACPlanner:
         if not isinstance(spaces, dict):
             converted = {str(k): np.asarray(v) for k, v in obs.items()}
             return self._apply_obs_transform(converted, obs_transform)
-        converted: dict[str, np.ndarray] = {}
-        missing: list[str] = []
-        aliases: dict[str, tuple[str, ...]] = {
-            "robot_speed": ("robot_velocity_xy",),
-            "robot_velocity_xy": ("robot_speed",),
-        }
-        for key, sub_space in spaces.items():
-            source = obs.get(key)
-            if source is None:
-                for alias in aliases.get(str(key), ()):
-                    if alias in obs:
-                        source = obs[alias]
-                        break
-            if source is None:
-                missing.append(str(key))
-                continue
-            target_shape = getattr(sub_space, "shape", None)
-            target_dtype = getattr(sub_space, "dtype", None)
-            arr = np.asarray(source, dtype=target_dtype)
-            if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
-                if int(arr.size) != int(np.prod(target_shape)):
-                    raise ValueError(
-                        f"Observation key '{key}' shape mismatch: got {arr.shape}, "
-                        f"expected {target_shape}",
-                    )
-                arr = arr.reshape(target_shape)
-            converted[key] = arr
+        converted, missing = self._coerce_dict_observation(obs, spaces)
         if missing:
             preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {preview}")
         return self._apply_obs_transform(converted, obs_transform)
 
     def _effective_obs_transform(self) -> str:
-        """Resolve the observation transform mode from config, preserving legacy `relative_obs`."""
+        """Resolve the observation transform mode from config.
+
+        Returns:
+            str: ``relative`` or ``ego`` when configured explicitly, otherwise ``none``.
+        """
         raw = str(getattr(self.config, "obs_transform", "none")).strip().lower()
         if raw == "none" and self.config.relative_obs:
             return "relative"
@@ -232,7 +218,11 @@ class SACPlanner:
     def _apply_obs_transform(
         self, obs: dict[str, np.ndarray], obs_transform: str
     ) -> dict[str, np.ndarray]:
-        """Apply the configured SAC observation transform."""
+        """Apply the configured SAC observation transform.
+
+        Returns:
+            dict[str, np.ndarray]: The transformed observation mapping.
+        """
         if obs_transform == "relative":
             return self._apply_relative_socnav_obs(obs)
         if obs_transform == "ego":
@@ -240,7 +230,11 @@ class SACPlanner:
         return obs
 
     def _apply_relative_socnav_obs(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        """Translate position-like SocNav keys into a robot-relative frame."""
+        """Translate position-like SocNav keys into a robot-relative frame.
+
+        Returns:
+            dict[str, np.ndarray]: A copy of ``obs`` with position-like keys rebased.
+        """
         if "robot_position" not in obs:
             return obs
 
@@ -278,7 +272,11 @@ class SACPlanner:
         return converted
 
     def _apply_ego_socnav_obs(self, obs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        """Rotate position-like SocNav keys into the robot ego frame."""
+        """Rotate position-like SocNav keys into the robot ego frame.
+
+        Returns:
+            dict[str, np.ndarray]: A copy of ``obs`` with translated coordinates rotated.
+        """
         converted = self._apply_relative_socnav_obs(obs)
         if "robot_heading" not in converted:
             return converted
@@ -334,6 +332,69 @@ class SACPlanner:
         _rotate_key("goal_next")
         _rotate_key("pedestrians_positions")
         return converted
+
+    def _coerce_dict_observation(
+        self,
+        obs: dict[str, Any],
+        spaces: dict[str, Any],
+    ) -> tuple[dict[str, np.ndarray], list[str]]:
+        """Coerce a flat dict observation into the model's expected dict space.
+
+        Returns:
+            tuple[dict[str, np.ndarray], list[str]]: Coerced values plus missing keys.
+        """
+        converted: dict[str, np.ndarray] = {}
+        missing: list[str] = []
+        aliases: dict[str, tuple[str, ...]] = {
+            "robot_speed": ("robot_velocity_xy",),
+            "robot_velocity_xy": ("robot_speed",),
+        }
+        for key, sub_space in spaces.items():
+            source = self._resolve_dict_observation_source(obs, str(key), aliases)
+            if source is None:
+                missing.append(str(key))
+                continue
+            converted[key] = self._coerce_dict_observation_value(
+                source, key=str(key), sub_space=sub_space
+            )
+        return converted, missing
+
+    @staticmethod
+    def _resolve_dict_observation_source(
+        obs: dict[str, Any],
+        key: str,
+        aliases: dict[str, tuple[str, ...]],
+    ) -> Any | None:
+        """Resolve a dict observation field, falling back to known aliases.
+
+        Returns:
+            Any | None: The first matching source value, or ``None`` when missing.
+        """
+        source = obs.get(key)
+        if source is not None:
+            return source
+        for alias in aliases.get(key, ()):
+            if alias in obs:
+                return obs[alias]
+        return None
+
+    @staticmethod
+    def _coerce_dict_observation_value(source: Any, *, key: str, sub_space: Any) -> np.ndarray:
+        """Cast one observation value to the dtype and shape required by the model.
+
+        Returns:
+            np.ndarray: Array converted to the target dtype and shape.
+        """
+        target_shape = getattr(sub_space, "shape", None)
+        target_dtype = getattr(sub_space, "dtype", None)
+        arr = np.asarray(source, dtype=target_dtype)
+        if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
+            if int(arr.size) != int(np.prod(target_shape)):
+                raise ValueError(
+                    f"Observation key '{key}' shape mismatch: got {arr.shape}, expected {target_shape}",
+                )
+            arr = arr.reshape(target_shape)
+        return arr
 
     def _vectorize(self, obs: Observation) -> np.ndarray:
         rp = np.asarray(obs.robot["position"], dtype=float)
@@ -391,7 +452,10 @@ class SACPlanner:
                 "v": float(min(self.config.v_max, dist)),
                 "omega": float(np.clip(error, -self.config.omega_max, self.config.omega_max)),
             }
-        return {"vx": float(direction[0] * self.config.v_max), "vy": float(direction[1] * self.config.v_max)}
+        return {
+            "vx": float(direction[0] * self.config.v_max),
+            "vy": float(direction[1] * self.config.v_max),
+        }
 
     def _fallback_action_dict(self, obs: dict[str, Any]) -> dict[str, float]:
         position = np.asarray(obs.get("robot_position", [0.0, 0.0]), dtype=float)
@@ -410,9 +474,13 @@ class SACPlanner:
                 "v": float(min(self.config.v_max, dist)),
                 "omega": float(np.clip(error, -self.config.omega_max, self.config.omega_max)),
             }
-        return {"vx": float(direction[0] * self.config.v_max), "vy": float(direction[1] * self.config.v_max)}
+        return {
+            "vx": float(direction[0] * self.config.v_max),
+            "vy": float(direction[1] * self.config.v_max),
+        }
 
     def get_metadata(self) -> dict[str, Any]:
+        """Return a serializable description of the loaded SAC planner state."""
         cfg = asdict(self.config)
         cfg["model_path"] = Path(self.config.model_path).name
         payload: dict[str, Any] = {"algorithm": "sac", "status": self._status, "config": cfg}

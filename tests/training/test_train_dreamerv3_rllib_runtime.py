@@ -357,6 +357,39 @@ algorithm:
     assert (tmp_path / "evaluation" / "iteration_000003_summary.json").exists()
 
 
+def test_periodic_evaluation_works_without_scenario_matrix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Evaluation should fall back to the base env path when no scenario matrix is configured."""
+    config_path = _write_yaml(
+        tmp_path / "dreamer_eval_plain.yaml",
+        """
+experiment:
+  run_id: smoke
+  seed: 11
+evaluation:
+  enabled: true
+  every_iterations: 1
+  evaluation_episodes: 2
+algorithm:
+  framework: torch
+""",
+    )
+    run_config = dreamer.load_run_config(config_path)
+    fake_env = _FakeEvalEnv()
+    monkeypatch.setattr(dreamer, "_make_env_creator", lambda _config: lambda _payload: fake_env)
+
+    summary = dreamer._run_periodic_evaluation(
+        _FakeEvalAlgo(),
+        run_config,
+        iteration=3,
+        evaluation_dir=tmp_path / "evaluation",
+    )
+
+    assert summary["scenario_matrix"] is None
+    assert summary["success_rate"] == 1.0
+
+
 def test_run_training_records_nonfinite_reward_diagnostics(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -395,7 +428,9 @@ algorithm:
     run_dir = run_config.experiment.output_root / "smoke_nonfinite_20260211T120000Z"
     summary = json.loads((run_dir / "run_summary.json").read_text(encoding="utf-8"))
     second = summary["history"][1]
-    assert second["reward_mean"] != second["reward_mean"]  # NaN
+    assert second["reward_mean"] is None
+    assert second["reward_mean_status"] == "nonfinite"
+    assert second["reward_mean_raw"] != second["reward_mean_raw"]  # NaN
     diagnostics_path = Path(second["nonfinite_diagnostics_path"])
     assert diagnostics_path.exists()
     diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))

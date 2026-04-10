@@ -837,6 +837,12 @@ def _extract_metric(result: dict[str, Any], *keys: str) -> float | int | None:
     return None
 
 
+def _extract_finite_metric(result: dict[str, Any], *keys: str) -> float | int | None:
+    """Extract a scalar metric, but return None when the value is non-finite."""
+    value = _extract_metric(result, *keys)
+    return value if _is_finite_scalar(value) else None
+
+
 def _is_finite_scalar(value: Any) -> bool:
     """Return True when value is an int/float and finite."""
     return isinstance(value, int | float) and math.isfinite(float(value))
@@ -1129,14 +1135,11 @@ def _run_periodic_evaluation(
 ) -> dict[str, object]:
     """Evaluate the in-memory policy on the configured scenario matrix."""
     matrix = run_config.evaluation.scenario_matrix or run_config.env.scenario_matrix
-    if matrix is None:
-        raise ValueError(
-            "DreamerV3 evaluation requires evaluation.scenario_matrix or env.scenario_matrix."
-        )
     eval_env_settings = copy.deepcopy(run_config.env)
-    eval_env_settings.scenario_matrix = copy.deepcopy(matrix)
-    eval_env_settings.scenario_matrix.strategy = "cycle"
-    eval_env_settings.scenario_matrix.switch_per_reset = True
+    if matrix is not None:
+        eval_env_settings.scenario_matrix = copy.deepcopy(matrix)
+        eval_env_settings.scenario_matrix.strategy = "cycle"
+        eval_env_settings.scenario_matrix.switch_per_reset = True
     eval_config = DreamerRunConfig(
         config_path=run_config.config_path,
         experiment=run_config.experiment,
@@ -1189,7 +1192,7 @@ def _run_periodic_evaluation(
     summary = {
         "iteration": iteration,
         "episodes": len(records),
-        "scenario_matrix": str(matrix.path),
+        "scenario_matrix": str(matrix.path) if matrix is not None else None,
         "success_rate": sum(bool(row["success"]) for row in records) / count,
         "collision_rate": sum(bool(row["collision"]) for row in records) / count,
         "timeout_rate": sum(bool(row["timeout"]) for row in records) / count,
@@ -1352,22 +1355,34 @@ def _run_training_iterations(
     first_nonfinite_iteration: int | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
-        reward_mean = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
+        reward_mean_raw = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
+        reward_mean = reward_mean_raw if _is_finite_scalar(reward_mean_raw) else None
         timesteps_total = _extract_metric(
             result,
             "num_env_steps_sampled_lifetime",
             "timesteps_total",
         )
+        reward_mean_status = (
+            "finite"
+            if reward_mean is not None
+            else "nonfinite"
+            if reward_mean_raw is not None
+            else "missing"
+        )
         logger.info(
-            "iter={} reward_mean={} timesteps_total={}",
+            "iter={} reward_mean={} reward_mean_raw={} reward_mean_status={} timesteps_total={}",
             iteration,
             reward_mean,
+            reward_mean_raw,
+            reward_mean_status,
             timesteps_total,
         )
         history.append(
             {
                 "iteration": iteration,
                 "reward_mean": reward_mean,
+                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             }
         )
@@ -1377,6 +1392,8 @@ def _run_training_iterations(
                 "ts_utc": datetime.now(UTC).isoformat(),
                 "iteration": iteration,
                 "reward_mean": reward_mean,
+                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             },
         )
@@ -1385,16 +1402,19 @@ def _run_training_iterations(
                 {
                     "iteration": iteration,
                     "reward_mean": reward_mean,
+                    "reward_mean_raw": reward_mean_raw,
+                    "reward_mean_status_nonfinite": 1 if reward_mean_status == "nonfinite" else 0,
+                    "reward_mean_status_missing": 1 if reward_mean_status == "missing" else 0,
                     "timesteps_total": timesteps_total,
                 },
                 step=iteration,
             )
 
-        if reward_mean is not None and not _is_finite_scalar(reward_mean):
+        if reward_mean_raw is not None and not _is_finite_scalar(reward_mean_raw):
             diagnostics = _build_nonfinite_diagnostics(
                 result,
                 iteration=iteration,
-                reward_mean=reward_mean,
+                reward_mean=reward_mean_raw,
                 timesteps_total=timesteps_total,
             )
             diagnostics_path = diagnostics_dir / f"iteration_{iteration:06d}_nonfinite.json"
@@ -1404,7 +1424,7 @@ def _run_training_iterations(
             logger.warning(
                 "non_finite_reward_mean iteration={} reward_mean={} diagnostics_path={}",
                 iteration,
-                reward_mean,
+                reward_mean_raw,
                 diagnostics_path,
             )
             if first_nonfinite_iteration is None:

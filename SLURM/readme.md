@@ -1,5 +1,9 @@
 # SLURM
 
+Canonical cluster workflow instructions for agents now live in `SLURM/AGENTS.md`.
+Use that file for reusable submission policy, runtime checks, and required insight capture
+between sessions.
+
 ```bash
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 ```

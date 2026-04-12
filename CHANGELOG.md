@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added issue-791 promotion campaign infrastructure: (1) four-way 128k promotion experiment
+  (baseline + reward curriculum + asymmetric critic + attention head) with deterministic seeds
+  and fixed scenarios for fair ablation comparison, (2) optional 256k deeper-run configs for
+  all four variants if 128k shows convergence uncertainty, (3) reduced intermediate evaluation
+  overhead (every 65536 steps instead of 16384) to cut wall-clock cost while preserving
+  benchmark-faithful final evaluation, (4) comprehensive promotion campaign documentation
+  (`docs/context/issue_791_promotion_campaign_128k_256k.md`) with reproducibility constraints
+  and decision criteria, (5) explicit baseline reference policy for isolated effect measurement.
+* Updated the reusable issue-791 Auxme SLURM launchers with explicit WandB policy intent
+  (`ISSUE791_WANDB_POLICY=auto|require|allow-off`) plus fail-fast enforcement so follow-up/promotion
+  runs cannot silently launch with `tracking.wandb.enabled: false`.
+
 * Added canonical `classic_cross_trap_*` scenario IDs and manifests for the former
   `classic_crossing_*` cross-shaped local-minimum trap scenarios, with legacy
   compatibility aliases and migration notes for existing configs.

@@ -9,6 +9,8 @@ Use `.vscode/tasks.json` as thin wrappers around those scripts.
 Treat the following files as the repository-native context stack for Codex-style agents:
 
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+- `SLURM/AGENTS.md`: canonical cluster-job playbook for submission policy, runtime checks,
+  artifact paths, and post-run insight capture requirements.
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
@@ -144,6 +146,23 @@ When working issue batches or Project #5 updates:
 Canonical note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+
+## SLURM Insight Retention
+
+For any SLURM-backed training or benchmark run, always preserve newly learned operational
+insights in repository surfaces before ending the task.
+
+- Preferred capture order:
+  1. Update `SLURM/AGENTS.md` when the insight changes reusable execution practice.
+  2. Update `docs/context/` note(s) for issue- or campaign-specific findings.
+  3. Update `output/ai/autoresearch/.../results.tsv` (or equivalent ledger) with measured outcomes.
+- Examples of required captures:
+  - throughput and wall-clock behavior by `num_envs` / CPU allocation,
+  - queue or allocation failure signatures and mitigations,
+  - WandB or artifact-path pitfalls,
+  - evaluation cadence tradeoffs that changed decision quality.
+- Do not close a SLURM task as complete until at least one persistent insight surface was updated
+  when new evidence was produced.
 
 ## Key Codex Skills
 

@@ -60,7 +60,15 @@ Post-fix local repro evidence:
   - reward curriculum gate completed and ended around `success_rate=0.0143`.
   - asymmetric critic gate completed and ended around `success_rate=0.171`.
   - attention gate matched stable training stats through 8k steps, then failed in evaluation.
-- Resubmit the fixed attention stage-1 gate first, then run the 32k follow-up configs for
-  reward curriculum, asymmetric critic, and the full stacked attention path.
-- If the fixed 32k attention run stays stable, issue 791 has executable evidence for all three
-  bounded improvements plus the stacked configuration.
+- Post-fix follow-up status:
+  - `11439` reward curriculum 32k: completed with `success_rate=0.014285714285714285`.
+  - `11440` asymmetric critic 32k: completed with `success_rate=0.014285714285714285`.
+  - `11441` attention + asymmetric critic 32k: completed with `success_rate=0.014285714285714285`
+    and no NaN regression.
+- Interpretation: issue 791 now has executable stability evidence for all three bounded
+  improvements and the stacked configuration, but no quality uplift at 32k yet.
+- Next promotion step is a longer-horizon 128k campaign using:
+  - `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml`
+  - `configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_128k.yaml`
+  - `configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_128k.yaml`
+  with explicit WandB-required launch policy in the reusable issue-791 SLURM wrappers.

@@ -62,22 +62,27 @@ class SACPlanner:
 
     def _load_model(self) -> None:
         if SAC is None:  # pragma: no cover - runtime dependency
-            warn_soft_degrade(
-                "SAC",
-                "stable_baselines3 not installed",
-                "will use fallback-to-goal if enabled",
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "SAC",
+                    "stable_baselines3 not installed",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "sb3_missing"
+                return
+            raise_fatal_with_remedy(
+                "stable_baselines3 is not installed; SAC planner cannot be initialized.",
+                "Install stable-baselines3 or set fallback_to_goal=true in the planner config.",
             )
-            self._model = None
-            self._status = "fallback"
-            self._fallback_reason = "sb3_missing"
-            return
         try:
             mp = (
                 resolve_model_path(self.config.model_id)
                 if self.config.model_id
                 else Path(self.config.model_path)
             )
-        except (KeyError, RuntimeError, ValueError) as exc:
+        except (FileNotFoundError, KeyError, RuntimeError, ValueError) as exc:
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
                     "SAC model",
@@ -443,7 +448,9 @@ class SACPlanner:
         vec = rg - rp
         dist = float(np.linalg.norm(vec))
         if dist < self.EPS:
-            return {"v": 0.0, "omega": 0.0}
+            if self.config.action_space == "unicycle":
+                return {"v": 0.0, "omega": 0.0}
+            return {"vx": 0.0, "vy": 0.0}
         direction = vec / max(dist, self.EPS)
         if self.config.action_space == "unicycle":
             heading = float(obs.robot.get("heading", 0.0))
@@ -464,7 +471,9 @@ class SACPlanner:
         vec = goal - position
         dist = float(np.linalg.norm(vec))
         if dist < self.EPS:
-            return {"v": 0.0, "omega": 0.0}
+            if self.config.action_space == "unicycle":
+                return {"v": 0.0, "omega": 0.0}
+            return {"vx": 0.0, "vy": 0.0}
         direction = vec / max(dist, self.EPS)
         if self.config.action_space == "unicycle":
             heading_arr = np.asarray(obs.get("robot_heading", [0.0]), dtype=float).reshape(-1)

@@ -143,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError(f"Expected checkpoint not found after training: {checkpoint}")
 
         eval_output_dir = RESULTS_DIR / policy_id
+        summary_path = eval_output_dir / "sac_eval_summary.json"
+        if summary_path.exists():
+            summary_path.unlink()
         scenario_matrix = eval_settings.scenario_matrix or VERIFIED_SIMPLE_SUBSET
         eval_cmd = [
             "uv",
@@ -174,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
         _run_process(eval_cmd, allow_failure=True)
         duration = time.time() - start
 
-        summary_path = eval_output_dir / "sac_eval_summary.json"
+        if not summary_path.exists():
+            print(f"WARNING: eval summary not written for {policy_id}; skipping result row.")
+            continue
         summary = _parse_summary(summary_path)
         summary["duration_s"] = f"{duration:.2f}"
         rows.append(_format_result_row(experiment, summary))

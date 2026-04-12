@@ -1355,10 +1355,13 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = sac_planner.close
-        # SAC checkpoints are trained with delta-velocity semantics — the model
-        # output is already a (delta_v, delta_omega) pair suitable for env.step().
-        # Bypassing _policy_command_to_env_action prevents double-delta conversion.
-        _policy._planner_native_env_action = True
+        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
+        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
+        # Only raw delta-unicycle SAC outputs can be forwarded directly to env.step().
+        # Absolute or velocity-space outputs must go through _policy_command_to_env_action.
+        _policy._planner_native_env_action = (
+            sac_action_semantics == "delta" and sac_action_space == "unicycle"
+        )
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "sac")

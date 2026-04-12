@@ -99,3 +99,77 @@ def test_teb_blocked_commit_ttl_ages_each_blocked_step() -> None:
     assert planner._commit_ttl == 1
     planner.plan(obs)
     assert planner._commit_ttl == 2
+
+
+def test_teb_symmetry_bias_drives_deterministic_side_choice() -> None:
+    """Positive symmetry_bias should commit left (side=1) in a symmetric, obstacle-free stall."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(
+            symmetry_bias=0.3,
+            commit_persistence_steps=2,
+            low_speed_threshold=0.15,
+            progress_epsilon=0.05,
+        )
+    )
+    # Obstacle-free scene: symmetry_bias is the only side-score contributor.
+    obs = _obs(goal=(3.0, 0.0), speed=0.05)
+    planner.plan(obs)  # prime _last_goal_distance
+    planner.plan(obs)  # stall detected → _choose_side called with score = symmetry_bias
+
+    # Positive bias with no grid asymmetry → left (side=1) must be committed.
+    assert planner._commit_side == 1
+
+
+def test_teb_negative_symmetry_bias_commits_right() -> None:
+    """Negative symmetry_bias should commit right (side=-1) in a symmetric, obstacle-free stall."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(
+            symmetry_bias=-0.3,
+            commit_persistence_steps=2,
+            low_speed_threshold=0.15,
+            progress_epsilon=0.05,
+        )
+    )
+    obs = _obs(goal=(3.0, 0.0), speed=0.05)
+    planner.plan(obs)
+    planner.plan(obs)
+
+    assert planner._commit_side == -1
+
+
+def test_teb_stall_triggers_progress_recovery_commitment() -> None:
+    """A low-speed, no-progress stall should activate side commitment even without obstacles."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(
+            symmetry_bias=0.1,
+            commit_persistence_steps=4,
+            low_speed_threshold=0.15,
+            progress_epsilon=0.05,
+        )
+    )
+    # First step primes _last_goal_distance; robot moves slowly.
+    obs = _obs(goal=(3.0, 0.0), speed=0.05)
+    planner.plan(obs)
+    assert planner._commit_ttl == 0  # no stall yet on first step
+
+    # Second step: same distance, same low speed → stalled → should commit.
+    planner.plan(obs)
+
+    assert planner._commit_ttl > 0
+    assert planner._commit_side != 0
+
+
+def test_teb_reset_clears_stall_and_commitment_state() -> None:
+    """reset() must wipe all per-episode state so a fresh episode starts clean."""
+    planner = TEBCommitmentPlannerAdapter(
+        TEBCommitmentConfig(commit_persistence_steps=5, symmetry_bias=0.1)
+    )
+    obs = _obs(goal=(3.0, 0.0), obstacle_cells=[(2, 3)])
+    planner.plan(obs)
+    planner.plan(obs)  # build up state
+
+    planner.reset()
+
+    assert planner._commit_ttl == 0
+    assert planner._commit_side == 0
+    assert planner._last_goal_distance is None

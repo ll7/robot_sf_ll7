@@ -33,7 +33,8 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 
-workers: 2
+# Keep the canonical camera-ready release single-worker to avoid ordering variance.
+workers: 1
 horizon: 100
 dt: 0.1
 record_forces: true

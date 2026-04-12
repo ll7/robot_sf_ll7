@@ -19,6 +19,7 @@ from loguru import logger
 from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
 from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.baselines.sac import SACPlanner
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
@@ -1297,6 +1298,77 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta["paper_gate_reason"] = paper_reason
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
+    elif algo_key in {"sac"}:
+        sac_planner = SACPlanner(algo_config, seed=None)
+        planner_cfg = getattr(sac_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            sac_obs_mode = str(planner_cfg.get("obs_mode", "dict")).strip().lower()
+        else:
+            sac_obs_mode = str(getattr(planner_cfg, "obs_mode", "dict")).strip().lower()
+        if hasattr(sac_planner, "get_metadata"):
+            planner_meta = sac_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+        sac_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
+                sac_obs = obs
+            else:
+                sac_obs = _obs_to_ppo_format(obs)
+            action = sac_planner.step(sac_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=sac_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=sac_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+            _update_adapter_impact_metrics(meta, conversion_mode)
+            return linear, angular
+
+        _policy._planner_close = sac_planner.close
+        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
+        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
+        # Only raw delta-unicycle SAC outputs can be forwarded directly to env.step().
+        # Absolute or velocity-space outputs must go through _policy_command_to_env_action.
+        _policy._planner_native_env_action = (
+            sac_action_semantics == "delta" and sac_action_space == "unicycle"
+        )
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "sac")
+        meta.setdefault("config", algo_config)
+        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
     elif algo_key == "drl_vo":
         drl_planner = DrlVoPlanner(algo_config, seed=None)
         if hasattr(drl_planner, "get_metadata"):
@@ -2028,6 +2100,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
     planner_stats = getattr(policy_fn, "_planner_stats", None)
+    planner_native_action = getattr(policy_fn, "_planner_native_env_action", False)
 
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -2051,11 +2124,16 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     try:
         for step_idx in range(horizon_val):
             policy_command = policy_fn(obs)
-            action = _policy_command_to_env_action(
-                env=env,
-                config=config,
-                command=policy_command,
-            )
+            if planner_native_action:
+                # Policy already outputs native env actions (e.g. delta velocities);
+                # skip the absolute→delta conversion done by _policy_command_to_env_action.
+                action = np.asarray(policy_command, dtype=np.float32)
+            else:
+                action = _policy_command_to_env_action(
+                    env=env,
+                    config=config,
+                    command=policy_command,
+                )
             obs, _reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.

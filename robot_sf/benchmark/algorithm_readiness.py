@@ -121,6 +121,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Learned PPO baseline (paper profile requires provenance + quality gate).",
     ),
     AlgorithmReadiness(
+        canonical_name="sac",
+        tier="experimental",
+        aliases=("sac",),
+        note="Learned SB3 SAC baseline; benchmarkable only after checkpoint-specific quality gate.",
+    ),
+    AlgorithmReadiness(
         canonical_name="guarded_ppo",
         tier="experimental",
         aliases=("guarded_ppo",),

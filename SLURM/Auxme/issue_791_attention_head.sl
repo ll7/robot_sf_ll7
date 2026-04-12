@@ -22,6 +22,8 @@ RESULTS_ROOT=${AUXME_RESULTS_DIR:-${LOCAL_OUTPUT_ROOT}/issue791-attention-head-j
 WORKDIR=${SLURM_TMPDIR:-/tmp/${USER}/${SLURM_JOB_ID}}
 TRAIN_CONFIG=${ISSUE791_TRAIN_CONFIG:-configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_stage1.yaml}
 LOG_LEVEL=${ISSUE791_LOG_LEVEL:-INFO}
+ISSUE791_WANDB_POLICY=${ISSUE791_WANDB_POLICY:-auto}
+ISSUE791_REQUIRE_WANDB=${ISSUE791_REQUIRE_WANDB:-}
 PYTHON_BIN=${PROJECT_ROOT}/.venv/bin/python
 MODULES_AVAILABLE=0
 RUN_OUTPUT_DIR=""
@@ -80,6 +82,92 @@ fi
 mkdir -p "${WORKDIR}"
 mkdir -p "${LOCAL_OUTPUT_ROOT}"
 
+# Resolve to an absolute config path so policy checks and launch use the same file.
+if [[ "${TRAIN_CONFIG}" = /* ]]; then
+  TRAIN_CONFIG_PATH=${TRAIN_CONFIG}
+else
+  TRAIN_CONFIG_PATH=${PROJECT_ROOT}/${TRAIN_CONFIG}
+fi
+
+if [[ ! -f "${TRAIN_CONFIG_PATH}" ]]; then
+  echo "[issue791] Training config not found: ${TRAIN_CONFIG_PATH}" >&2
+  exit 1
+fi
+
+detect_wandb_enabled() {
+  local config_path="$1"
+  awk '
+    BEGIN { in_wandb = 0 }
+    {
+      line = $0
+      if (line ~ /^[[:space:]]*wandb:[[:space:]]*$/) {
+        in_wandb = 1
+        next
+      }
+      if (in_wandb && line ~ /^[^[:space:]]/) {
+        in_wandb = 0
+      }
+      if (in_wandb && line ~ /^[[:space:]]*enabled:[[:space:]]*/) {
+        sub(/^[[:space:]]*enabled:[[:space:]]*/, "", line)
+        gsub(/[[:space:]]+/, "", line)
+        print tolower(line)
+        exit
+      }
+    }
+  ' "${config_path}"
+}
+
+resolve_wandb_requirement() {
+  if [[ -n "${ISSUE791_REQUIRE_WANDB}" ]]; then
+    case "${ISSUE791_REQUIRE_WANDB,,}" in
+      1|true|yes|on) echo "true" ;;
+      0|false|no|off) echo "false" ;;
+      *)
+        echo "[issue791] ISSUE791_REQUIRE_WANDB must be true/false-like, got: ${ISSUE791_REQUIRE_WANDB}" >&2
+        exit 1
+        ;;
+    esac
+    return
+  fi
+
+  case "${ISSUE791_WANDB_POLICY}" in
+    auto)
+      if [[ "${TRAIN_CONFIG_PATH}" == *followup* || "${TRAIN_CONFIG_PATH}" == *promotion* ]]; then
+        echo "true"
+      else
+        echo "false"
+      fi
+      ;;
+    require)
+      echo "true"
+      ;;
+    allow-off)
+      echo "false"
+      ;;
+    *)
+      echo "[issue791] Unsupported ISSUE791_WANDB_POLICY='${ISSUE791_WANDB_POLICY}'. Use auto|require|allow-off." >&2
+      exit 1
+      ;;
+  esac
+}
+
+WAND_ENABLED=$(detect_wandb_enabled "${TRAIN_CONFIG_PATH}")
+if [[ -z "${WAND_ENABLED}" ]]; then
+  echo "[issue791] Could not resolve tracking.wandb.enabled from ${TRAIN_CONFIG_PATH}" >&2
+  exit 1
+fi
+WAND_REQUIRED=$(resolve_wandb_requirement)
+
+echo "[issue791] WandB policy: ${ISSUE791_WANDB_POLICY}"
+echo "[issue791] WandB required: ${WAND_REQUIRED}"
+echo "[issue791] WandB enabled in config: ${WAND_ENABLED}"
+
+if [[ "${WAND_REQUIRED}" == "true" && "${WAND_ENABLED}" != "true" ]]; then
+  echo "[issue791] Refusing to launch: promotion/follow-up runs require tracking.wandb.enabled: true." >&2
+  echo "[issue791] Set ISSUE791_WANDB_POLICY=allow-off only for explicit stage-gate debugging." >&2
+  exit 1
+fi
+
 if [[ ! -x "${PYTHON_BIN}" ]]; then
   echo "[issue791] Expected repo virtualenv python at ${PYTHON_BIN}" >&2
   exit 1
@@ -91,14 +179,17 @@ RUN_OUTPUT_DIR=${ROBOT_SF_ARTIFACT_ROOT}
 
 cd "${PROJECT_ROOT}"
 
-echo "[issue791] Starting training with config: ${TRAIN_CONFIG}"
+echo "[issue791] Starting training with config: ${TRAIN_CONFIG_PATH}"
 echo "[issue791] Output root: ${ROBOT_SF_ARTIFACT_ROOT}"
 echo "[issue791] Job ID: ${SLURM_JOB_ID}"
 echo "[issue791] Log level: ${LOG_LEVEL}"
 
+# Reusable intent: stage gates can opt out of WandB, but follow-up/promotion runs should be tracked.
+# Override with ISSUE791_WANDB_POLICY=require|allow-off or ISSUE791_REQUIRE_WANDB=true|false.
+
 srun --cpu_bind=cores --gpus-per-node=1 \
   "${PYTHON_BIN}" scripts/training/train_ppo.py \
-  --config "${TRAIN_CONFIG}" \
+  --config "${TRAIN_CONFIG_PATH}" \
   --log-level "${LOG_LEVEL}"
 
 echo "[issue791] Training completed. Artifacts will be synced to ${RESULTS_ROOT}"

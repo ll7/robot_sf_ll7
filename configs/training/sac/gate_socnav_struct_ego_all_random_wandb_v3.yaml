@@ -4,6 +4,7 @@
 policy_id: sac_gate_socnav_struct_ego_all_random_wandb_v3
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 100000
+num_envs: 4
 action_semantics: delta
 relative_obs: true
 obs_transform: ego

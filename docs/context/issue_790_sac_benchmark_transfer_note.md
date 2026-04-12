@@ -32,7 +32,7 @@
 * SAC training now uses `ScenarioSwitchingEnv`, so training episodes sample across the loaded
   scenario manifest instead of silently locking onto the first scenario entry.
 * SAC training and inference now both support SocNav dict observation transforms:
-  + `relative`: subtract `robot_position` from `goal_current`,  `goal_next`, and
+  + `relative`: subtract `robot_position` from `goal_current`,   `goal_next`, and
  `pedestrians_positions`
 
   + `ego`: apply the same translation and then rotate those vectors into the robot frame using
@@ -46,7 +46,7 @@ all-ego-frame contract.
 
 Per `docs/dev/observation_contract.md` and `robot_sf/sensor/socnav_observation.py` :
 
-* `robot.position`,  `goal.current`,  `goal.next`, and `robot.velocity_xy` are world-frame.
+* `robot.position`,   `goal.current`,   `goal.next`, and `robot.velocity_xy` are world-frame.
 * `pedestrians.positions` are world-frame.
 * `pedestrians.velocities` are rotated into the robot ego frame.
 * flattened SB3 keys such as `robot_position`,  `goal_current`, and `pedestrians_positions` preserve
@@ -101,7 +101,7 @@ Observed result:
 * `success_rate: 0.0`
 * `mean_min_distance: 12.9503`
 * `mean_avg_speed: 0.1469`
-* failure taxonomy: `29 max_steps`,  `1 collision`
+* failure taxonomy: `29 max_steps`,   `1 collision`
 
 Longer-horizon check:
 
@@ -143,7 +143,7 @@ Observed result:
 * benchmark subset `success_rate: 0.3667`
 * `mean_min_distance: 3.564`
 * `mean_avg_speed: 1.920`
-* failure taxonomy: `13 collision`,  `6 max_steps`
+* failure taxonomy: `13 collision`,   `6 max_steps`
 
 Per-scenario split:
 
@@ -180,7 +180,7 @@ Observed result:
 * benchmark subset `success_rate: 0.2667`
 * `mean_min_distance: 3.524`
 * `mean_avg_speed: 1.618`
-* failure taxonomy: `14 collision`,  `8 max_steps`
+* failure taxonomy: `14 collision`,   `8 max_steps`
 
 Per-scenario split:
 
@@ -217,7 +217,7 @@ Observed result:
 * benchmark subset `success_rate: 0.4667`
 * `mean_min_distance: 5.486`
 * `mean_avg_speed: 1.787`
-* failure taxonomy: `10 max_steps`,  `6 collision`
+* failure taxonomy: `10 max_steps`,   `6 collision`
 
 Per-scenario split:
 
@@ -338,7 +338,7 @@ Why this likely matters:
 
 Recommended next change:
 
-* rotate `goal_current`,  `goal_next`, and `pedestrians_positions` into the robot ego frame using
+* rotate `goal_current`,   `goal_next`, and `pedestrians_positions` into the robot ego frame using
 `robot_heading` , 
 * keep this transform identical in both `scripts/training/train_sac_sb3.py` and
 `robot_sf/baselines/sac.py` .

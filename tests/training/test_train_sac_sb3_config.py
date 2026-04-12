@@ -96,6 +96,41 @@ def test_socnav_gate_config_loads() -> None:
     assert config.env_overrides == {"observation_mode": "socnav_struct"}
     assert config.action_semantics == "delta"
     assert config.relative_obs is True
+    assert config.num_envs == 1
+
+
+def test_num_envs_config_loads(tmp_path: Path) -> None:
+    """SAC config should parse num_envs from YAML."""
+    content = f"""\
+policy_id: sac_env_count_test
+scenario_config: {_CLASSIC_SCENARIO}
+total_timesteps: 1000
+num_envs: 3
+tracking:
+  enabled: false
+"""
+    cfg = tmp_path / "num_envs.yaml"
+    cfg.write_text(content, encoding="utf-8")
+
+    config = load_sac_training_config(cfg)
+    assert config.num_envs == 3
+
+
+def test_num_envs_must_be_positive(tmp_path: Path) -> None:
+    """SAC config should reject non-positive num_envs values."""
+    content = f"""\
+policy_id: sac_env_count_bad
+scenario_config: {_CLASSIC_SCENARIO}
+total_timesteps: 1000
+num_envs: 0
+tracking:
+  enabled: false
+"""
+    cfg = tmp_path / "num_envs_bad.yaml"
+    cfg.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="num_envs"):
+        load_sac_training_config(cfg)
 
 
 def test_scenario_sampling_config_loads(tmp_path: Path) -> None:
@@ -272,6 +307,94 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
         vec_env.close()
 
 
+def test_build_env_uses_subproc_vec_env_for_multi_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SAC training env should use subprocess vectorization when num_envs > 1."""
+
+    class _DummyEnv(gymnasium.Env):
+        metadata: ClassVar[dict[str, object]] = {}
+
+        def __init__(
+            self, *, config: object, seed: int | None, scenario_name: str, **_: object
+        ) -> None:
+            super().__init__()
+            self.observation_space = gym_spaces.Dict(
+                {
+                    "robot_position": gym_spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32),
+                    "goal_current": gym_spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32),
+                }
+            )
+            self.action_space = gym_spaces.Box(
+                low=np.array([0.0, -1.0], dtype=np.float32),
+                high=np.array([2.0, 1.0], dtype=np.float32),
+                dtype=np.float32,
+            )
+            self.applied_seed = seed
+            self.scenario_name = scenario_name
+            self.config = config
+
+        def reset(self, *, seed: int | None = None, options: dict | None = None):
+            if seed is not None:
+                self.applied_seed = seed
+            obs = {
+                "robot_position": np.zeros(2, dtype=np.float32),
+                "goal_current": np.ones(2, dtype=np.float32),
+            }
+            return obs, {"scenario_name": self.scenario_name}
+
+        def step(self, action: np.ndarray):
+            obs = {
+                "robot_position": np.zeros(2, dtype=np.float32),
+                "goal_current": np.ones(2, dtype=np.float32),
+            }
+            return obs, 0.0, False, False, {"scenario_name": self.scenario_name}
+
+    class _FakeSubprocVecEnv:
+        def __init__(self, env_fns: list[object]) -> None:
+            self.envs = [fn() for fn in env_fns]
+            self.observation_space = self.envs[0].observation_space
+            self.action_space = self.envs[0].action_space
+
+        def close(self) -> None:
+            for env in self.envs:
+                close = getattr(env, "close", None)
+                if callable(close):
+                    close()
+
+    def _fake_build_robot_config_from_scenario(scenario: dict[str, object], *, scenario_path: Path):
+        return SimpleNamespace(
+            scenario_name=scenario["name"],
+            scenario_path=scenario_path,
+            observation_mode="socnav_struct",
+        )
+
+    monkeypatch.setattr(
+        "scripts.training.train_sac_sb3.build_robot_config_from_scenario",
+        _fake_build_robot_config_from_scenario,
+    )
+    monkeypatch.setattr("scripts.training.train_sac_sb3.make_robot_env", _DummyEnv)
+    monkeypatch.setattr("scripts.training.train_sac_sb3.SubprocVecEnv", _FakeSubprocVecEnv)
+
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("configs/scenarios/classic_interactions.yaml").resolve(),
+        total_timesteps=1000,
+        seed=11,
+        relative_obs=False,
+        obs_transform="none",
+        num_envs=3,
+    )
+    scenario_definitions = [{"name": "scenario_a"}, {"name": "scenario_b"}]
+    vec_env = _build_env(config, scenario_definitions=scenario_definitions)
+
+    try:
+        assert len(vec_env.envs) == 3
+        assert [env.applied_seed for env in vec_env.envs] == [11, 12, 13]
+    finally:
+        vec_env.close()
+
+
 def test_relative_socnav_obs_rebases_position_like_keys() -> None:
     """Relative observation preprocessing should remove absolute map offsets."""
     obs = {
@@ -404,6 +527,16 @@ def test_config_dataclass_device_defaults_to_auto() -> None:
         total_timesteps=1000,
     )
     assert config.device == "auto"
+
+
+def test_config_dataclass_num_envs_defaults_to_one() -> None:
+    """SACTrainingConfig num_envs field should default to one environment."""
+    config = SACTrainingConfig(
+        policy_id="test",
+        scenario_config=Path("/dev/null"),
+        total_timesteps=1000,
+    )
+    assert config.num_envs == 1
 
 
 def test_gate_v2_config_loads() -> None:

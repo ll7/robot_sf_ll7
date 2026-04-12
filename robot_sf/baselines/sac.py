@@ -145,9 +145,7 @@ class SACPlanner:
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         if not isinstance(obs, Observation):
-            raise TypeError(
-                f"Expected Observation or dict input, got {type(obs).__name__}"
-            )
+            raise TypeError(f"Expected Observation or dict input, got {type(obs).__name__}")
         try:
             action_vec = self._predict_action(self._vectorize(obs))
             if action_vec is None:

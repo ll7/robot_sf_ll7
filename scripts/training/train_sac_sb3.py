@@ -40,7 +40,7 @@ from loguru import logger
 try:
     from stable_baselines3 import SAC
     from stable_baselines3.common.callbacks import BaseCallback
-    from stable_baselines3.common.vec_env import DummyVecEnv
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
 except ImportError as exc:
     raise RuntimeError("Stable-Baselines3 must be installed to run SAC training.") from exc
 
@@ -100,6 +100,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "tracking",
         "output_dir",
         "seed",
+        "num_envs",
         "device",
         "action_semantics",
         "relative_obs",
@@ -165,6 +166,7 @@ class SACTrainingConfig:
     tracking: dict[str, object] = field(default_factory=dict)
     output_dir: Path = field(default_factory=lambda: Path("output/models/sac"))
     seed: int | None = None
+    num_envs: int = 1
     device: str = "auto"
     action_semantics: str = _DEFAULT_ACTION_SEMANTICS
     relative_obs: bool = True
@@ -216,6 +218,10 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
 
     seed_raw = data.get("seed")
     seed = int(seed_raw) if seed_raw is not None else None
+    num_envs_raw = data.get("num_envs", 1)
+    num_envs = int(num_envs_raw)
+    if num_envs < 1:
+        raise ValueError(f"num_envs must be >= 1; got {num_envs}")
     device = str(data.get("device", "auto")).strip() or "auto"
     action_semantics = (
         str(data.get("action_semantics", _DEFAULT_ACTION_SEMANTICS)).strip().lower()
@@ -247,6 +253,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         tracking=dict(data.get("tracking", {}) or {}),
         output_dir=output_dir,
         seed=seed,
+        num_envs=num_envs,
         device=device,
         action_semantics=action_semantics,
         relative_obs=relative_obs,
@@ -369,15 +376,15 @@ def _build_env(
     config: SACTrainingConfig,
     *,
     scenario_definitions: list[Mapping[str, Any]],
-) -> DummyVecEnv:
-    """Build a vectorised single-env wrapper for SAC training.
+) -> VecEnv:
+    """Build a vectorised environment for SAC training.
 
     Args:
         config: SAC training configuration.
         scenario_definitions: List of scenario definitions loaded from YAML.
 
     Returns:
-        DummyVecEnv: A single-environment vectorised wrapper.
+        VecEnv: Vectorized environment wrapper (dummy for one env, subprocess for many envs).
     """
     use_abs = config.action_semantics.strip().lower() == "absolute"
     obs_transform = config.obs_transform.strip().lower()
@@ -390,14 +397,16 @@ def _build_env(
         _apply_env_overrides(robot_config, config.env_overrides)
         return robot_config
 
-    def _make() -> Any:
+    def _make(env_index: int) -> Any:
+        base_seed = config.seed
+        env_seed = None if base_seed is None else int(base_seed) + int(env_index)
         env = ScenarioSwitchingEnv(
             scenario_sampler=ScenarioSampler(
                 scenarios=scenario_definitions,
                 include_scenarios=config.scenario_sampling.include_scenarios,
                 exclude_scenarios=config.scenario_sampling.exclude_scenarios,
                 weights=(config.scenario_sampling.weights or None),
-                seed=config.seed,
+                seed=env_seed,
                 strategy=config.scenario_sampling.strategy,
             ),
             scenario_path=config.scenario_config,
@@ -407,7 +416,7 @@ def _build_env(
             suite_name="sac_training",
             algorithm_name="sac",
             switch_per_reset=True,
-            seed=config.seed,
+            seed=env_seed,
         )
         env = _maybe_flatten_nested_dict_env(env)
         if obs_transform == "relative":
@@ -418,7 +427,10 @@ def _build_env(
             env = _VelocityTargetActionWrapper(env)
         return env
 
-    return DummyVecEnv([_make])
+    env_fns = [(lambda idx=i: _make(idx)) for i in range(config.num_envs)]
+    if config.num_envs == 1:
+        return DummyVecEnv(env_fns)
+    return SubprocVecEnv(env_fns)
 
 
 def _apply_env_overrides(robot_config: Any, overrides: Mapping[str, object]) -> None:
@@ -876,9 +888,10 @@ def run_sac_training(
         Path: Path to the saved checkpoint file.
     """
     logger.info(
-        "Starting SAC training: policy_id={}, total_timesteps={}, dry_run={}",
+        "Starting SAC training: policy_id={}, total_timesteps={}, num_envs={}, dry_run={}",
         config.policy_id,
         config.total_timesteps,
+        config.num_envs,
         dry_run,
     )
 

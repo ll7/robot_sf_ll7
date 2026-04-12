@@ -346,6 +346,9 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
     - `AGENTS.md`
+  - For the repository's cross-agent compatibility stance and the retrieval → planning → execution
+    → verification discipline mapped to repo-local skills, see
+    `docs/context/issue_728_coding_agents_compatibility.md`.
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.

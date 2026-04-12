@@ -13,6 +13,8 @@ DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 REPO_OVERVIEW = ROOT / "docs" / "ai" / "repo_overview.md"
 COPILOT_INSTRUCTIONS = ROOT / ".github" / "copilot-instructions.md"
 ADAPTATION_NOTE = ROOT / "docs" / "ai" / "awesome_copilot_adaptation.md"
+CODING_AGENTS_NOTE = ROOT / "docs" / "context" / "issue_728_coding_agents_compatibility.md"
+AGENTS_MD = ROOT / "AGENTS.md"
 
 
 def test_ai_skill_files_exist() -> None:
@@ -143,3 +145,30 @@ def test_ai_docs_reference_the_new_skill_surfaces() -> None:
     assert "agentic-eval" in adaptation_text
     assert "review-and-refactor" in adaptation_text
     assert "update-docs-on-code-change" in adaptation_text
+
+
+def test_coding_agents_compatibility_note_is_discoverable() -> None:
+    """The coding-agents compatibility note must exist and be linked from the three agent entry points.
+
+    Verifies that a contributor or AI assistant can find the cross-agent compatibility stance
+    and the retrieval -> planning -> execution -> verification discipline by reading AGENTS.md,
+    .github/copilot-instructions.md, or docs/dev_guide.md.
+    """
+
+    assert CODING_AGENTS_NOTE.exists(), (
+        "canonical coding-agents compatibility note missing: "
+        "docs/context/issue_728_coding_agents_compatibility.md"
+    )
+
+    note_ref = "issue_728_coding_agents_compatibility.md"
+
+    agents_text = AGENTS_MD.read_text(encoding="utf-8")
+    assert note_ref in agents_text, (
+        f"{note_ref!r} not linked from AGENTS.md; add it to the Cross-Agent Compatibility section"
+    )
+
+    copilot_text = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
+    assert note_ref in copilot_text, f"{note_ref!r} not linked from .github/copilot-instructions.md"
+
+    dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
+    assert note_ref in dev_guide_text, f"{note_ref!r} not linked from docs/dev_guide.md"

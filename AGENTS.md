@@ -37,6 +37,15 @@ of incidental scratch notes.
   `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
   or refreshing context notes.
 
+## Cross-Agent Compatibility
+
+For the repository's stance on adapting external agent-workflow sources (coding-agents, Awesome
+Copilot, etc.) and the retrieval → planning → execution → verification discipline, see:
+
+- `docs/context/issue_728_coding_agents_compatibility.md` — canonical accept/reject record for
+  `vultuk/coding-agents` concepts and the four-phase agent loop mapped to Robot SF skills.
+- `docs/ai/awesome_copilot_adaptation.md` — decisions for the Awesome Copilot List adaptation.
+
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 

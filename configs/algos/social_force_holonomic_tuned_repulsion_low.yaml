@@ -1,0 +1,21 @@
+# Issue #697 parameter sweep variant: reduced repulsion weight.
+# The issue #690 data shows that after the direct holonomic path was applied:
+#   success: 0.0071 -> 0.0000, jerk: 0.4338 -> 1.7103
+# This pattern is consistent with repulsion forces dominating goal-seeking,
+# deflecting the robot from its path without recovering.
+# Reducing the repulsion weight tests whether the goal-seeking force can
+# regain influence while still avoiding direct collisions.
+#
+# Changed from default SocNavPlannerConfig:
+#   social_force_repulsion_weight: 0.8 -> 0.3
+
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+angular_gain: 1.0
+goal_tolerance: 0.25
+
+social_force_tau: 0.5
+social_force_desired_speed: 1.0
+social_force_repulsion_weight: 0.3
+social_force_factor: 5.1
+social_force_obstacle_factor: 10.0

@@ -68,7 +68,7 @@ Run with:
 ```bash
 uv run python scripts/tools/run_camera_ready_benchmark.py \
   --config configs/benchmarks/holonomic_social_force_diagnosis.yaml \
-  --mode preflight \
+  --mode run \
   --label issue697_holonomic_sf_diagnosis
 ```
 
@@ -76,7 +76,7 @@ For the upstream socialforce wrapper, the `socialforce==0.2.3` package must be i
 ```bash
 uv run --with socialforce==0.2.3 python scripts/tools/run_camera_ready_benchmark.py \
   --config configs/benchmarks/holonomic_social_force_diagnosis.yaml \
-  --mode preflight \
+  --mode run \
   --label issue697_holonomic_sf_diagnosis_upstream
 ```
 
@@ -121,14 +121,121 @@ difficulty.  If both fail similarly, scenario difficulty is the primary explanat
 5. The upstream wrapper comparison is necessary to separate "tunable" from "planner mismatch"
    failure modes.
 
+## Execution Results (Issue #811)
+
+### Campaign Commands
+
+```bash
+# Local planners (upstream fails-fast without socialforce package):
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/holonomic_social_force_diagnosis.yaml \
+  --mode run \
+  --label issue697_holonomic_sf_diagnosis
+
+# Upstream wrapper (with socialforce==0.2.3):
+uv run --with socialforce==0.2.3 python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/holonomic_social_force_diagnosis.yaml \
+  --mode run \
+  --label issue697_holonomic_sf_diagnosis_upstream
+```
+
+Campaign IDs (2026-04-13):
+- Local: `holonomic_social_force_diagnosis_issue697_holonomic_sf_diagnosis_20260413_134959`
+- Upstream: `holonomic_social_force_diagnosis_issue697_holonomic_sf_diagnosis_upstream_20260413_135143`
+
+Scenario: `planner_sanity_matrix_v1` → `planner_sanity_simple` (open map, no pedestrians, 3 seeds × horizon 150).
+
+### Metric Table
+
+| Planner                          | success | collisions | jerk   | path_efficiency | notes                        |
+| -------------------------------- | ------- | ---------- | ------ | --------------- | ---------------------------- |
+| `social_force` (tau=0.5, rep=0.8) | 0.0000 | 0.0000     | 2.2015 | 0.6924          | all 3 seeds timeout          |
+| `social_force_tau_high` (tau=2.0) | 0.0000 | 0.0000     | 1.6796 | 0.9920          | reduced jerk, near-optimal path |
+| `social_force_tau_low` (tau=0.2)  | 0.0000 | 0.0000     | 0.7649 | 1.0000          | lowest jerk, optimal path    |
+| `social_force_repulsion_low` (rep=0.3) | 0.0000 | 0.0000 | 0.7263 | 1.0000          | lowest jerk, optimal path    |
+| `social_navigation_pyenvs_socialforce` | n/a | n/a    | n/a    | n/a             | partial-failure (see below)  |
+
+### Key Findings
+
+**Finding 1 — All variants fail even on an empty open-map sanity scenario.**
+The `planner_sanity_simple` map has no pedestrians and no obstacles.  All four local
+social-force variants hit the 150-step horizon without reaching the goal on all 3 seeds.
+Zero collisions confirms the robot is moving but not reaching the goal — consistent with
+the pre-execution failure-mode classification (force integration produces insufficient
+net forward motion in holonomic mode).
+
+**Finding 2 — Parameter tuning reduces jerk and improves path efficiency but does not fix
+goal-reaching.**
+- `repulsion_low` (weight 0.8→0.3): jerk 2.2015→0.7263 (−67%), path efficiency 0.6924→1.0
+- `tau_low` (tau 0.5→0.2): jerk 2.2015→0.7649 (−65%), path efficiency 0.6924→1.0
+- `tau_high` (tau 0.5→2.0): jerk 2.2015→1.6796 (−24%), path efficiency 0.6924→0.992
+
+The repulsion_low and tau_low variants move along the optimal path (`path_efficiency=1.0`)
+but still time out.  This means the stall is partially a **speed/throughput issue** on
+top of the oscillation hypothesis: even moving along the correct path, the effective
+forward speed is insufficient to reach the goal within 150 steps.
+
+**Finding 3 — Upstream wrapper cannot run in holonomic passthrough mode.**
+With `socialforce==0.2.3` installed, the upstream `social_navigation_pyenvs_socialforce`
+planner passes preflight but produces `partial-failure` at runtime.  The campaign report
+shows it runs as `execution_mode=adapter`, `planner_cmd=unicycle_vw`,
+`projection_policy=heading_safe_velocity_to_unicycle_vw` rather than the intended
+`world_velocity_passthrough`.  This is not a valid holonomic comparison — the upstream
+wrapper falls back to unicycle projection.  A separate issue is needed to diagnose and
+fix the holonomic projection path for this wrapper before an upstream comparison can be
+drawn.
+
+### Video Artifact
+
+```bash
+uv run python scripts/tools/render_scenario_videos.py \
+  --scenario configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --policy socnav_social_force \
+  --all --seed 101 --max-steps 150 \
+  --output output/videos/issue697_diagnosis
+```
+
+Rendered: `output/videos/issue697_diagnosis/planner_sanity_simple_seed101_socnav_social_force.mp4`
+
+Visual interpretation: the robot oscillates in place near the start position under the
+default social-force parameters.  The repulsion_low and tau_low sweep variants cannot
+be rendered separately with the current `render_scenario_videos.py` tool because it
+does not expose custom algo-config injection for the SF adapter.  A follow-up is needed
+to render sweep-variant trajectories.
+
+### Outcome Decision
+
+All four local social-force variants fail on the simplest sanity scenario.  Parameter
+tuning helps jerk and path efficiency but does not recover goal-reaching.  The
+upstream wrapper comparison is inconclusive (unicycle fallback, not holonomic).
+
+**Decision: document `social_force` as inherently limited in holonomic mode.**
+
+The holonomic benchmark profile should be updated to reflect that:
+- `social_force` (local) is expected to have zero success in holonomic `vx_vy` mode
+- The repulsion_low variant is the best-performing sweep but still does not succeed
+- The upstream wrapper holonomic projection path is broken and requires a separate fix
+- No parameter in the current `SocNavPlannerConfig` range produces non-zero success
+
 ## Validation / Follow-up
 
-- [ ] Run `holonomic_social_force_diagnosis.yaml` and record metrics per planner key.
-- [ ] Run upstream wrapper with `--with socialforce==0.2.3` for the direct comparison.
-- [ ] Render at least one short diagnostic video per planner variant via
+- [x] Run `holonomic_social_force_diagnosis.yaml` and record metrics per planner key.
+- [x] Run upstream wrapper with `--with socialforce==0.2.3` for the direct comparison.
+- [x] Render at least one short diagnostic video per planner variant via
   `scripts/tools/render_scenario_videos.py` to visualize the stall/oscillation pattern.
-- [ ] Update this note with actual metric rows and video interpretation.
+- [x] Update this note with actual metric rows and video interpretation.
 - [ ] If a parameter sweep shows clear improvement, open a follow-up issue to promote the
   tuned config and update the holonomic benchmark entry.
-- [ ] If all variants fail similarly, update the holonomic benchmark profile to document
+- [x] If all variants fail similarly, update the holonomic benchmark profile to document
   `social_force` as inherently weak in holonomic mode and note the upstream wrapper result.
+
+### Deferred Follow-up Items
+
+- **Upstream holonomic projection fix**: the `social_navigation_pyenvs_socialforce` wrapper
+  does not route through world-velocity passthrough in holonomic mode — it falls back to
+  `heading_safe_velocity_to_unicycle_vw`.  A separate issue is needed to diagnose whether
+  the algo config `projection_policy` field is not wired to the execution path for this
+  wrapper.
+- **Sweep-variant video rendering**: `render_scenario_videos.py` does not support injecting
+  a custom `SocNavPlannerConfig` for SF parameter variants.  A follow-up enhancement would
+  add `--socnav-tau` and `--socnav-repulsion-weight` flags to allow direct visual comparison.

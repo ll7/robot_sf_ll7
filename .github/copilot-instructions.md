@@ -21,6 +21,9 @@ It is everyones guide on how to use this repository effectively.
 - For the repository's cross-agent compatibility stance (retrieval → planning → execution →
   verification discipline, accepted and rejected external concepts), see
   `docs/context/issue_728_coding_agents_compatibility.md`.
+- For stable cross-session repo memory, start with `memory/MEMORY.md`, then open only the relevant
+  linked topic files under `memory/`. Use `docs/context/` for issue-specific execution notes rather
+  than storing those narratives in `memory/`.
 - For context discovery, use `.agents/skills/context-map/SKILL.md` before multi-file changes and
   `.agents/skills/what-context-needed/SKILL.md` when the task is underspecified.
 - For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a repo-local agent memory layer with `CLAUDE.md` startup imports, a canonical
+  `memory/MEMORY.md` index, typed memory subdirectories (`architecture`, `decisions`,
+  `experiments`, `failures`, `benchmarks`), example notes for each type, and linked guidance in
+  `AGENTS.md`, `docs/dev_guide.md`, `docs/README.md`, and the AI-facing overview/deferral docs.
 * Added canonical `classic_cross_trap_*` scenario IDs and manifests for the former
 `classic_crossing_*` cross-shaped local-minimum trap scenarios, with legacy
   compatibility aliases and migration notes for existing configs.

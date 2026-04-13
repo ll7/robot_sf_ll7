@@ -151,7 +151,7 @@ Scenario: `planner_sanity_matrix_v1` → `planner_sanity_simple` (open map, no p
 | -------------------------------- | ------- | ---------- | ------ | --------------- | ---------------------------- |
 | `social_force` (tau=0.5, rep=0.8) | 0.0000 | 0.0000     | 2.2015 | 0.6924          | all 3 seeds timeout          |
 | `social_force_tau_high` (tau=2.0) | 0.0000 | 0.0000     | 1.6796 | 0.9920          | reduced jerk, near-optimal path |
-| `social_force_tau_low` (tau=0.2)  | 0.0000 | 0.0000     | 0.7649 | 1.0000          | lowest jerk, optimal path    |
+| `social_force_tau_low` (tau=0.2)  | 0.0000 | 0.0000     | 0.7649 | 1.0000          | significantly reduced jerk, optimal path |
 | `social_force_repulsion_low` (rep=0.3) | 0.0000 | 0.0000 | 0.7263 | 1.0000          | lowest jerk, optimal path    |
 | `social_navigation_pyenvs_socialforce` | n/a | n/a    | n/a    | n/a             | partial-failure (see below)  |
 
@@ -217,13 +217,20 @@ The holonomic benchmark profile should be updated to reflect that:
 - The upstream wrapper holonomic projection path is broken and requires a separate fix
 - No parameter in the current `SocNavPlannerConfig` range produces non-zero success
 
+Follow-up speed-cap sweep on 2026-04-13 reinforced the conclusion: raising
+`max_linear_speed` and `social_force_desired_speed` to `1.5` improved
+`path_efficiency` only slightly on `planner_sanity_simple` (`0.9926` vs `1.0000` for
+`repulsion_low`) and still yielded `success=0.0000` for all 3 seeds.
+
 ## Validation / Follow-up
 
 - [x] Run `holonomic_social_force_diagnosis.yaml` and record metrics per planner key.
 - [x] Run upstream wrapper with `--with socialforce==0.2.3` for the direct comparison.
-- [x] Render at least one short diagnostic video per planner variant via
+- [x] Render at least one short diagnostic video via
   `scripts/tools/render_scenario_videos.py` to visualize the stall/oscillation pattern.
 - [x] Update this note with actual metric rows and video interpretation.
+- [x] Run a follow-up speed-cap sweep that raised `max_linear_speed` and
+  `social_force_desired_speed` to `1.5` and verify it still did not recover success.
 - [ ] If a parameter sweep shows clear improvement, open a follow-up issue to promote the
   tuned config and update the holonomic benchmark entry.
 - [x] If all variants fail similarly, update the holonomic benchmark profile to document

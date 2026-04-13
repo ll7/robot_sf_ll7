@@ -6,10 +6,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=48G
+#SBATCH --mem=96G
 #SBATCH --time=1-12:00:00
 #SBATCH --gres=gpu:a30:1
-#SBATCH --output=issue791-reward-curriculum-%j.out
+#SBATCH --output=output/slurm/%j-issue791-reward-curriculum.out
 
 set -euo pipefail
 

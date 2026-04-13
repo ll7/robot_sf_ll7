@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=22
 #SBATCH --mem=32G
 #SBATCH --time=01:00:00
-#SBATCH --output=auxme-uv-setup-%j.out
+#SBATCH --output=output/slurm/%j-auxme-uv-setup.out
 
 set -euo pipefail
 

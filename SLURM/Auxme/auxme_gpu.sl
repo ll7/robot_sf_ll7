@@ -9,7 +9,7 @@
 #SBATCH --mem=48G
 #SBATCH --time=1-12:00:00
 #SBATCH --gres=gpu:a30:1
-#SBATCH --output=auxme-gpu-%j.out
+#SBATCH --output=output/slurm/%j-auxme-gpu.out
 
 set -euo pipefail
 

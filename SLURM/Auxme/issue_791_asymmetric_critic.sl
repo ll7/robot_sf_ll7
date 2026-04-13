@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=robot-sf-issue791-asymmetric-critic
 #SBATCH --account=mitarbeiter
-#SBATCH --partition=a30
-#SBATCH --qos=a30-gpu
+#SBATCH --partition=l40s
+#SBATCH --qos=l40s-gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=48G
+#SBATCH --mem=96G
 #SBATCH --time=1-12:00:00
-#SBATCH --gres=gpu:a30:1
-#SBATCH --output=issue791-asymmetric-critic-%j.out
+#SBATCH --gres=gpu:1
+#SBATCH --output=output/slurm/%j-issue791-asymmetric-critic.out
 
 set -euo pipefail
 

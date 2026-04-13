@@ -4,6 +4,9 @@ Use this file as the canonical SLURM execution playbook for reusable cluster wor
 repository. Pair it with [AGENTS.md](../AGENTS.md), [SLURM/readme.md](readme.md), and
 [docs/dev/slurm_resource_audit.md](../docs/dev/slurm_resource_audit.md).
 
+For Auxme-cluster-specific details (partitions, QoS profiles, per-user job limits, and
+`num_envs` guidance), see [SLURM/Auxme/README.md](Auxme/README.md).
+
 ## Scope
 
 Apply these rules whenever submitting or reviewing jobs under [SLURM/](.) or related training
@@ -18,6 +21,9 @@ campaigns that run on cluster resources.
   explicitly requires fixed wall time.
 - Keep artifact output rooted in `output/slurm/` (or the configured mirrored destination) and
   confirm `ROBOT_SF_ARTIFACT_ROOT` is synced on exit.
+- Set `#SBATCH --output=output/slurm/%j-<description>.out` — job ID first so logs sort
+  chronologically and are gitignored via the root `output/` rule. Never write `.out` files
+  to the repo root.
 
 ## Tracking Policy (WandB)
 
@@ -33,8 +39,8 @@ campaigns that run on cluster resources.
 Before submission:
 
 1. Verify the selected YAML exists and is the intended horizon (`32k`, `128k`, `1m`, etc.).
-2. Verify `num_envs` matches host strategy (for Auxme 24 CPU jobs, high-throughput runs often use
-   14 to 22 envs; choose intentionally).
+2. Verify `num_envs` matches host strategy (see [Auxme/README.md](Auxme/README.md) for
+   per-cluster guidance; choose intentionally).
 3. Verify eval cadence (`evaluation.step_schedule`) is dense enough for decision quality but not so
    dense that wall-clock is dominated by evaluation.
 

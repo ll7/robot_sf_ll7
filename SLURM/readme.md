@@ -4,13 +4,10 @@ Canonical cluster workflow instructions for agents now live in `SLURM/AGENTS.md`
 Use that file for reusable submission policy, runtime checks, and required insight capture
 between sessions.
 
-```bash
-scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
-```
-
 For new long-running jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch`.
 The wrapper queries the current partition and QoS limits and submits with the effective
-max wall time by default.
+max wall time by default. For an Auxme-specific example and cluster reference, see
+[SLURM/Auxme/README.md](Auxme/README.md).
 
 For post-run sizing decisions, use the SLURM + W&B audit workflow in
 `docs/dev/slurm_resource_audit.md`. That runbook shows how to compare Slurm

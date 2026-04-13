@@ -706,9 +706,15 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=64)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
     """Load and convert a map definition, caching by absolute path.
+
+    The cache size is set to 64 to accommodate all unique maps across typical
+    multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
+    references 12 distinct SVG maps; the previous ``maxsize=8`` caused
+    repeated cache evictions and redundant SVG parsing whenever more than
+    8 unique maps were active in the same training session.
 
     Returns:
         MapDefinition | None: Parsed map definition for supported formats, else ``None``.
@@ -1542,11 +1548,36 @@ def _apply_route_overrides(
     config.map_pool.map_defs[map_name] = map_copy
 
 
+def map_cache_info() -> dict[str, int]:
+    """Return hit/miss/eviction statistics for the map-definition cache.
+
+    Useful for diagnosing cache churn during multi-scenario training runs.
+    Example::
+
+        from robot_sf.training.scenario_loader import map_cache_info
+
+        info = map_cache_info()
+        # {'hits': 42, 'misses': 12, 'maxsize': 64, 'currsize': 12}
+
+    Returns:
+        dict[str, int]: Mapping of ``hits``, ``misses``, ``maxsize``, and
+        ``currsize`` from the underlying LRU cache.
+    """
+    ci = _load_map_definition.cache_info()
+    return {
+        "hits": ci.hits,
+        "misses": ci.misses,
+        "maxsize": ci.maxsize,
+        "currsize": ci.currsize,
+    }
+
+
 __all__ = [
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
+    "map_cache_info",
     "resolve_map_definition",
     "select_scenario",
 ]

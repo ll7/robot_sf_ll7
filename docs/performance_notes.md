@@ -160,11 +160,38 @@ Location: `robot_sf/benchmark/runner.py`
 
 ## Optimization Notes
 
+### Multi-Scenario Map-Cache Profile
+Location: `robot_sf/benchmark/perf_scenario_cache.py`
+
+Measures LRU cache hit/miss/eviction rates during scenario-switching training,
+isolating SVG parsing overhead from per-episode env-creation cost.
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python -m robot_sf.benchmark.perf_scenario_cache \
+    --scenario-config configs/scenarios/classic_interactions.yaml \
+    --repetitions 3 \
+    --output-json output/benchmarks/perf/scenario_cache_profile.json \
+    --output-markdown output/benchmarks/perf/scenario_cache_profile.md
+```
+
+**Findings (2026-04-13, issue #806)**:
+
+- `classic_interactions.yaml` contains 22 scenarios across **12 unique maps**.
+- The previous `_load_map_definition` LRU cache had `maxsize=8`, guaranteeing
+  cache eviction for at least 4 maps on every training run touching all scenarios.
+- **Fix**: `maxsize` raised to **64** — covers all current maps (75 SVGs repo-wide)
+  and leaves room for growth without evictions.
+- The instrumentation helper `map_cache_info()` (exported from
+  `robot_sf.training.scenario_loader`) lets you verify hit/miss counts at runtime.
+
 ### Known Performance Bottlenecks
 1. **pygame/SDL initialization**: ~1s for headless setup
 2. **FastPysf compilation**: JIT overhead on first use  
 3. **Large episode JSON**: Serialization cost grows with trajectory length
 4. **File I/O**: JSONL append becomes slow with very large files
+5. **Map definition cache eviction** (fixed in #806): prior `maxsize=8` caused
+   repeated SVG parsing during multi-scenario SAC training runs with >8 unique maps.
 
 ### Optimization Strategies
 1. **Environment Reuse**: Keep environments alive across episodes when possible

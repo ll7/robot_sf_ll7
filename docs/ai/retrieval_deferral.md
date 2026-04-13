@@ -1,6 +1,7 @@
 # Retrieval And MCP Deferral Note
 
 Date: 2026-03-19
+Updated: 2026-04-13
 
 ## Decision
 

@@ -29,31 +29,31 @@ as the startup index, then put details in linked topic files that agents read on
 
 ### `architecture/`
 
-- [layered_agent_memory_architecture.md](architecture/layered_agent_memory_architecture.md)
+- [Layered Agent Memory Architecture](architecture/layered_agent_memory_architecture.md)
   Layer boundaries, `CLAUDE.md` import path, optional MCP exposure, and the retrieval-deferral
   boundary.
 
 ### `decisions/`
 
-- [2026-04-13_repo_local_memory_layer.md](decisions/2026-04-13_repo_local_memory_layer.md)
+- [Decision: Adopt A Repo-Local Markdown Memory Layer](decisions/2026-04-13_repo_local_memory_layer.md)
   Adopt a Markdown-first repo-local memory tree and keep retrieval/database infrastructure out of
   scope.
 
 ### `experiments/`
 
-- [2026-04-13_agent_memory_roundtrip_dry_run.md](experiments/2026-04-13_agent_memory_roundtrip_dry_run.md)
+- [Experiment: Agent Memory Round-Trip Dry Run](experiments/2026-04-13_agent_memory_roundtrip_dry_run.md)
   Example session log showing how a new memory entry should be indexed and replayed in a new
   session.
 
 ### `failures/`
 
-- [2026-04-13_memory_misuse_and_staleness.md](failures/2026-04-13_memory_misuse_and_staleness.md)
+- [Failure Patterns: Memory Misuse And Staleness](failures/2026-04-13_memory_misuse_and_staleness.md)
   Known failure modes for this memory layer: stale summaries, duplicated notes, and mixing issue
   logs into stable memory.
 
 ### `benchmarks/`
 
-- [2026-04-13_benchmark_memory_scope.md](benchmarks/2026-04-13_benchmark_memory_scope.md)
+- [Benchmark Memory Scope](benchmarks/2026-04-13_benchmark_memory_scope.md)
   What benchmark-facing evidence belongs in memory, what must stay in `docs/context/`, and why
   fallback/degraded outcomes cannot be stored as success claims.
 

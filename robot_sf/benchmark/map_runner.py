@@ -1330,6 +1330,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             command_limits=algo_config,
         )
 
+        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
+        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
+        # Native bypass is only valid for delta-unicycle outputs from the SAC model itself.
+        # Fallback steps emit absolute goal-directed commands that must go through the
+        # command→env-action conversion path.  We decide per step by checking the planner
+        # status *after* each sac_planner.step() call.
+        _sac_can_be_native = sac_action_semantics == "delta" and sac_action_space == "unicycle"
+
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
             if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
                 sac_obs = obs
@@ -1338,6 +1346,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             action = sac_planner.step(sac_obs)
             if not isinstance(action, dict):
                 raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
+            # Track per step whether this output is a native env action (model ran) or an
+            # absolute goal-directed fallback command (planner in fallback mode).
+            _policy._last_step_native = (
+                _sac_can_be_native and getattr(sac_planner, "_status", "fallback") == "ok"
+            )
             linear, angular, conversion_mode = _ppo_action_to_unicycle(
                 action,
                 obs,
@@ -1355,13 +1368,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = sac_planner.close
-        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
-        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
-        # Only raw delta-unicycle SAC outputs can be forwarded directly to env.step().
-        # Absolute or velocity-space outputs must go through _policy_command_to_env_action.
-        _policy._planner_native_env_action = (
-            sac_action_semantics == "delta" and sac_action_space == "unicycle"
-        )
+        _policy._planner_native_env_action = _sac_can_be_native
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "sac")
@@ -2124,7 +2131,10 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     try:
         for step_idx in range(horizon_val):
             policy_command = policy_fn(obs)
-            if planner_native_action:
+            # Use per-step flag when available (e.g. SAC with fallback); fall back to the
+            # static cached value for planners that set _planner_native_env_action once.
+            step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
+            if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
                 action = np.asarray(policy_command, dtype=np.float32)

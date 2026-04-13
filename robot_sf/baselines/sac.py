@@ -31,6 +31,7 @@ class SACPlannerConfig:
     obs_mode: str = "dict"  # "dict" for flattened socnav_struct checkpoints
     nearest_k: int = 5
     action_space: str = "unicycle"  # "velocity" | "unicycle"
+    action_semantics: str = "delta"  # "delta" | "absolute"
     v_max: float = 2.0
     omega_max: float = 1.0
     relative_obs: bool = True
@@ -430,8 +431,12 @@ class SACPlanner:
         if self.config.action_space == "unicycle":
             v = float(act[0]) if act.size >= 1 else 0.0
             w = float(act[1]) if act.size >= 2 else 0.0
-            v = max(0.0, min(v, self.config.v_max))
-            w = max(-self.config.omega_max, min(w, self.config.omega_max))
+            # Delta actions are already bounded by the SAC action space; clamping
+            # would incorrectly zero out negative d_v (reverse deltas) and clip
+            # omega deltas that the model is entitled to produce.
+            if str(self.config.action_semantics).strip().lower() != "delta":
+                v = max(0.0, min(v, self.config.v_max))
+                w = max(-self.config.omega_max, min(w, self.config.omega_max))
             return {"v": v, "omega": w}
         vx = float(act[0]) if act.size >= 1 else 0.0
         vy = float(act[1]) if act.size >= 2 else 0.0

@@ -190,13 +190,14 @@ def test_step_vector_mode_uses_model_prediction_and_fallback_action(
             "model_path": str(model_path),
             "obs_mode": "vector",
             "action_space": "unicycle",
+            "action_semantics": "absolute",  # test that absolute mode clamps v and omega
             "nearest_k": 1,
             "fallback_to_goal": True,
         }
     )
 
     action = planner.step(_make_observation())
-    assert action == {"v": 2.0, "omega": 1.0}
+    assert action == {"v": 2.0, "omega": 1.0}  # clamped: v_max=2.0, omega_max=1.0
     assert isinstance(fake_model.last_obs, np.ndarray)
     assert fake_model.last_obs.shape == (6,)
 

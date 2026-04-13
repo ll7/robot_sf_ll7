@@ -9,6 +9,9 @@ Use `.vscode/tasks.json` as thin wrappers around those scripts.
 Treat the following files as the repository-native context stack for Codex-style agents:
 
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+- `CLAUDE.md`: Claude Code entrypoint that imports `AGENTS.md` plus the repo-local memory index.
+- `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
+  detailed topic files under `memory/`.
 - `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
@@ -24,9 +27,16 @@ Read only the surfaces relevant to the task. Prefer these repo-local files over 
 Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump
 of incidental scratch notes.
 
+Treat `memory/` as the complementary repo-local memory layer for stable cross-session facts:
+architecture summaries, durable decisions, reusable experiment outcomes, known failure modes, and
+benchmark memory boundaries. Keep `memory/MEMORY.md` concise and update linked topic files for
+detail instead of turning the index into another full instruction document.
+
 - For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
   handoff context in Markdown when that context would otherwise be trapped in chat, PR text, or
   issue comments.
+- Use `docs/context/` for issue-specific execution history and validation detail; use `memory/`
+  for knowledge that should be reused across multiple future sessions.
 - Prefer updating an existing canonical note when it already covers the same topic. Create a new
   note only when the subject is distinct enough that merging would hide the decision trail.
 - Link notes to the related issue/PR, relevant canonical docs, proof artifacts, and any predecessor

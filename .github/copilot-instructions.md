@@ -18,6 +18,9 @@ It is everyones guide on how to use this repository effectively.
 - For measurement-driven improvement loops, use `.agents/skills/autoresearch/SKILL.md`.
   For shorter refinement passes, use `.agents/skills/auto-improvement/SKILL.md`.
   See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.
+- For the repository's cross-agent compatibility stance (retrieval → planning → execution →
+  verification discipline, accepted and rejected external concepts), see
+  `docs/context/issue_728_coding_agents_compatibility.md`.
 - For context discovery, use `.agents/skills/context-map/SKILL.md` before multi-file changes and
   `.agents/skills/what-context-needed/SKILL.md` when the task is underspecified.
 - For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and

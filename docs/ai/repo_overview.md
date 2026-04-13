@@ -21,10 +21,12 @@ delivery rather than generic robotics breadth.
 Start here before expanding:
 
 1. `AGENTS.md`
-2. `.specify/memory/constitution.md`
-3. `docs/dev_guide.md`
-4. `code_review.md`
-5. `.agent/PLANS.md` for non-trivial work
+2. `CLAUDE.md` when the agent runtime supports it
+3. `memory/MEMORY.md` for stable repo-local memory
+4. `.specify/memory/constitution.md`
+5. `docs/dev_guide.md`
+6. `code_review.md`
+7. `.agent/PLANS.md` for non-trivial work
 
 Then branch by task type:
 
@@ -50,6 +52,7 @@ Then branch by task type:
 - `scripts/`: runnable entrypoints and validation helpers
 - `output/`: git-ignored canonical artifact root
 - `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
+- `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 
 ### Existing agent workflow surfaces
 
@@ -61,6 +64,8 @@ Then branch by task type:
   for locating the right files or requesting the minimum missing context
 - `.agents/skills/context-note-maintainer/`: note-creation and stale-note-maintenance workflow for
   durable Markdown handoff context
+- `CLAUDE.md` + `memory/MEMORY.md`: startup-oriented memory/index pair for agent runtimes that
+  support imported project instructions
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,
   `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
   and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and

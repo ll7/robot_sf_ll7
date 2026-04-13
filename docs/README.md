@@ -90,6 +90,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
 * **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,  `auto-improvement`, context-discovery, quality, and doc-sync skills
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
+* **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs

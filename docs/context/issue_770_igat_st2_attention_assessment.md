@@ -32,17 +32,18 @@ is the same CrowdNav-lineage contract that HEIGHT uses.
 
 **Action contract:**
 Continuous velocity control inheriting the CrowdNav lineage. Likely delta-v / delta-theta outputs
-rather than direct `unicycle_vw`. Explicit projection to Robot SF `unicycle_vw` required.
+rather than direct `unicycle_vw`; explicit projection to Robot SF `unicycle_vw` is required.
 
 **Integration tier decision:** `prototype only`
 
 **Rationale:**
 IGAT is a direct CrowdNav_HEIGHT sibling from the same author (Shuijing Liu). The architectural
 difference is an intent-prediction module layered above the same interaction-graph backbone.
-Integration burden, legacy Python stack, and adapter shape are identical to HEIGHT. There is no
-reason to prefer IGAT over the existing `crowdnav_height` wrapper unless a source-harness
-comparison with an intent-prediction ablation is specifically required. Do not add a second
-wrapper without that concrete research motivation.
+Integration burden and legacy Python stack are identical to HEIGHT, while the adapter shape is
+similar but requires additional pedestrian trajectory history. There is no reason to prefer IGAT
+over the existing `crowdnav_height` wrapper unless a source-harness comparison with an
+intent-prediction ablation is specifically required. Do not add a second wrapper without that
+concrete research motivation.
 
 ---
 
@@ -72,9 +73,9 @@ adapter burden, or source-harness reproducibility. There is nothing to wrap.
 | Runnable test path | Yes | Yes | No |
 | Legacy Python stack | Python 3.6–3.8 | Python 3.6–3.8 | Unknown |
 | Observation contract | CrowdNav structured state | CrowdNav structured state + intent | Unknown |
-| Action contract | delta-v/delta-theta | delta-v/delta-theta | Unknown |
-| Adapter burden | Medium (existing wrapper) | Medium (would duplicate HEIGHT wrapper) | N/A |
-| Benchmark surface result | Failed: success 0.24 → 0.12, collisions 0.11 → 0.57 | Untested; no reason to expect better | Untested |
+| Action contract | delta-v/delta-theta | likely delta-v/delta-theta, requiring projection to `unicycle_vw` | Unknown |
+| Adapter burden | Medium (existing wrapper) | Medium+ (would extend HEIGHT wrapper with history) | N/A |
+| Benchmark surface result | Failed: success 0.24 → 0.12, collisions 0.11 → 0.57 (provenance: `output/tmp/camera_ready_compare_799.md`) | Untested; no reason to expect better | Untested |
 | Integration tier | prototype only (implemented) | prototype only (not pursued) | do not pursue now |
 
 ## Decision
@@ -82,9 +83,9 @@ adapter burden, or source-harness reproducibility. There is nothing to wrap.
 **Neither IGAT nor ST2 is a better benchmark candidate than HEIGHT for the current benchmark
 surface.**
 
-- IGAT is the same architectural tier, same legacy stack, same adapter shape, and same failure
-  risk as HEIGHT. Adding a second wrapper buys no new information unless an explicit intent-prediction
-  ablation is the research goal.
+- IGAT is the same architectural tier, same legacy stack, and similar adapter shape with additional
+  history requirements, plus the same failure risk as HEIGHT. Adding a second wrapper buys no new
+  information unless an explicit intent-prediction ablation is the research goal.
 - ST2 cannot be evaluated without a public implementation.
 
 **HEIGHT remains the ceiling representative** for this attention-based family in the current repo.

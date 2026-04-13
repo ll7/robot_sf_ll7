@@ -36,7 +36,11 @@ fi
 cleanup() {
   if [[ -n "${RUN_OUTPUT_DIR}" && -d "${RUN_OUTPUT_DIR}" ]]; then
     mkdir -p "${RESULTS_ROOT}"
-    rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/" || true
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/" || true
+    else
+      cp -r "${RUN_OUTPUT_DIR}/." "${RESULTS_ROOT}/" || true
+    fi
   fi
 }
 trap cleanup EXIT

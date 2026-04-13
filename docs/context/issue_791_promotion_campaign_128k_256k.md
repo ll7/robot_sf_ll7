@@ -47,11 +47,15 @@ does not meet the +3–5% promotion threshold.
 | Job   | Config                          | Best success | Best step | Best collision | WandB run ID | Outcome   |
 |-------|---------------------------------|-------------|-----------|----------------|--------------|-----------|
 | 11468 | Attention head **256k**         | **0.214**   | 229376    | 0.743          | lrxcp863     | ✓ Done    |
-| **11474** | **Baseline 256k**           | —           | —         | —              | —            | **Running** |
-| **11475** | **Asymmetric critic 256k**  | —           | —         | —              | —            | **Running** |
+| **11474** | **Baseline 256k**           | **0.257**   | 196608    | 0.686          | —            | **Running** (~221k/256k, 2026-04-13) |
+| **11475** | **Asymmetric critic 256k**  | —           | —         | —              | —            | **Pending** (a30 QoS queue) |
+| **11507** | **Asymmetric critic 256k**  | —           | —         | —              | —            | **Running** (l40s, 2026-04-13) |
 
-Key finding: attention head at 256k (0.214) beats the 128k baseline (0.186). Fair comparison
-requires baseline 256k to be complete (job 11474).
+**Revised finding:** baseline 256k is currently peaking at **0.257** (step 196k, collision
+0.686), which **exceeds** attention head 256k (0.214). If this holds to completion, attention
+head does NOT beat the 256k baseline and is not promotion-ready at this budget. Full verdict
+pending 11474 completion. (Prior note about attention head beating the 128k baseline still
+holds — the 128k baseline was 0.186 — but the matched-budget comparison is the deciding one.)
 
 ### 1m Env-22 — High-throughput exploration (22 parallel envs)
 
@@ -83,8 +87,10 @@ allocation. All three issue-791 SLURM scripts bumped to `--mem=96G` on 2026-04-1
 3. **Asymmetric critic was still climbing at 128k end** (best at step 114688 / 128k = 90%
    through). Very likely under-converged. 256k run (11475) will clarify.
 
-4. **Attention head scales with compute.** 128k → 0.171, 256k → 0.214. The 256k result
-   exceeds the 128k baseline, but fair comparison needs baseline 256k (11474).
+4. **Attention head scales with compute but likely does not beat the 256k baseline.**
+   128k → 0.171, 256k → 0.214. The 256k result exceeds the *128k* baseline (0.186), but
+   the *256k* baseline (11474) is currently peaking at 0.257 — above the attention head.
+   Verdict pending 11474 completion.
 
 5. **1m env22 is viable after the OOM fix.** 48G was the bottleneck; 96G should clear it.
    The baseline 1m env22 (11469) is still running and will provide the long-horizon reference.
@@ -103,28 +109,32 @@ allocation. All three issue-791 SLURM scripts bumped to `--mem=96G` on 2026-04-1
 
 ## Active Jobs (as of 2026-04-13)
 
-| Job   | Config                          | Budget | Priority |
-|-------|---------------------------------|--------|----------|
-| 11469 | Baseline 1m env22               | 1M     | Reference |
-| 11474 | Baseline 256k                   | 256k   | **Urgent** — needed to close attention head comparison |
-| 11475 | Asymmetric critic 256k          | 256k   | High — was still climbing at 128k end |
-| 11476 | Attention head 1m env22         | 1M     | Medium — OOM rerun after mem fix |
-| 11477 | Asymmetric critic 1m env22      | 1M     | Medium — OOM rerun after mem fix |
+| Job   | Config                          | Budget | Partition | Priority |
+|-------|---------------------------------|--------|-----------|----------|
+| 11469 | Baseline 1m env22               | 1M     | a30       | Reference (~630k/1M) |
+| 11474 | Baseline 256k                   | 256k   | a30       | **Urgent** — nearly done (~221k/256k); verdict gate for attention head |
+| 11475 | Asymmetric critic 256k          | 256k   | a30       | Pending (QoS queue) |
+| 11507 | Asymmetric critic 256k          | 256k   | **l40s**  | High — parallel run, free slot used 2026-04-13 |
+| 11476 | Attention head 1m env22         | 1M     | a30       | Medium — OOM rerun after mem fix |
+| 11477 | Asymmetric critic 1m env22      | 1M     | a30       | Medium — OOM rerun after mem fix |
 
 ---
 
 ## Next Decisions (after active jobs complete)
 
-1. **If attention head 256k (0.214) > baseline 256k (11474):**
-   → Attention head is promotion-ready. Open promotion PR.
+1. **Attention head 256k verdict (after 11474 done):**
+   Current data suggests baseline 256k (0.257 peak) > attention head 256k (0.214).
+   → If confirmed: attention head is NOT promotion-ready at 256k budget. Consider 1m run.
+   → If 11474 drops back and final best < 0.214: re-open promotion case.
 
-2. **If asymmetric critic 256k (11475) > baseline 256k:**
-   → Asymmetric critic is also promotion-ready. Consider stacking it with attention head.
+2. **If asymmetric critic 256k (11475 or 11507) > baseline 256k:**
+   → Asymmetric critic is promotion-ready. Consider stacking it with attention head.
 
-3. **Reward curriculum:**
-   → Do not extend to 256k yet. First fix the curriculum schedule (increase
-   `until_episodes` from 4 to ~50–100, or use a time-based trigger instead of episode
-   count) and re-run a 128k gate to confirm the early-peak regression is resolved.
+3. **Reward curriculum v2 (config prepared, not yet submitted):**
+   Config: `expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml`
+   Fix: `until_episodes` raised from 4 to 100 (~15k warmup steps with 2 envs).
+   → Submit once an a30 or l40s slot is free after the current 256k wave completes.
+   → If v2 still shows early-peak regression, raise to 200–500 or switch to step-based.
 
 4. **1m env22 results (11476, 11477, 11469):**
    → If 1m env22 attention head beats 256k attention head by a meaningful margin,
@@ -140,7 +150,8 @@ configs/training/ppo/ablations/
 ├── expert_ppo_issue_791_baseline_promotion_256k.yaml         ← running (11474)
 ├── expert_ppo_issue_791_baseline_promotion_1m_env22.yaml     ← running (11469)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml ✓ done (11445)
-├── expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml  (hold — fix schedule first)
+├── expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml  (ready — until_episodes=100 fix)
+├── expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml  (hold — run v2 128k gate first)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_128k.yaml ✓ done (11446)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_256k.yaml ← running (11475)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_1m_env22.yaml ← running (11477)
@@ -154,6 +165,10 @@ configs/training/ppo/ablations/
 All three issue-791 SLURM wrappers bumped to `--mem=96G` on 2026-04-13 to support 22-env
 runs without OOM (previously 48G; 22 subproc workers × ~2 GB CPU predictive foresight model
 per worker exceeded 48G at evaluation time).
+
+Cleanup trap fixed on 2026-04-13: `rsync` is not available on l40s nodes. All three scripts
+now fall back to `cp -r` when `rsync` is missing. Job 11504 (l40s test) exposed this —
+artifacts were not synced on exit. Jobs submitted after this fix: 11507+.
 
 ## Relevant Docs
 

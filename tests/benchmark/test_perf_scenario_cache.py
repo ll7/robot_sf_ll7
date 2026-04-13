@@ -275,9 +275,9 @@ class TestMapCacheInfo:
         info = map_cache_info()
         assert set(info.keys()) == {"hits", "misses", "maxsize", "currsize"}
 
-    def test_map_cache_info_maxsize_is_64(self) -> None:
-        """The map definition cache must have maxsize=64 to hold all scenario maps."""
+    def test_map_cache_info_maxsize_is_256(self) -> None:
+        """The map definition cache must have maxsize=256 to hold all scenario maps."""
         from robot_sf.training.scenario_loader import map_cache_info
 
         info = map_cache_info()
-        assert info["maxsize"] == 64
+        assert info["maxsize"] == 256

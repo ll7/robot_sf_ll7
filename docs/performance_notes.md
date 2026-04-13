@@ -180,7 +180,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 - `classic_interactions.yaml` contains 22 scenarios across **12 unique maps**.
 - The previous `_load_map_definition` LRU cache had `maxsize=8`, guaranteeing
   cache eviction for at least 4 maps on every training run touching all scenarios.
-- **Fix**: `maxsize` raised to **64** — covers all current maps (75 SVGs repo-wide)
+- **Fix**: `maxsize` raised to **256** — covers all current maps (75 SVGs repo-wide)
   and leaves room for growth without evictions.
 - The instrumentation helper `map_cache_info()` (exported from
   `robot_sf.training.scenario_loader`) lets you verify hit/miss counts at runtime.

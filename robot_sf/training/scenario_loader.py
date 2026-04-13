@@ -706,11 +706,11 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
     """Load and convert a map definition, caching by absolute path.
 
-    The cache size is set to 64 to accommodate all unique maps across typical
+    The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
     references 12 distinct SVG maps; the previous ``maxsize=8`` caused
     repeated cache evictions and redundant SVG parsing whenever more than

@@ -416,6 +416,33 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
         return self._grid_to_world(path[waypoint_idx], meta)
 
+    def route_waypoint(self, observation: dict[str, Any]) -> np.ndarray | None:
+        """Resolve a topology-aware waypoint without converting it into a command.
+
+        Returns:
+            np.ndarray | None: World-space waypoint target, or ``None`` when the
+            structured occupancy-grid route cannot be computed safely.
+        """
+        try:
+            robot_pos, _heading, goal, radius = self._extract_state(observation)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return None
+
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta = payload
+        try:
+            return self._route_target(
+                robot_pos=robot_pos,
+                goal=goal,
+                radius=radius,
+                grid=grid,
+                meta=meta,
+            )
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return None
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a bounded ``(v, omega)`` command from grid routing and waypoint tracking."""
         try:
@@ -503,4 +530,8 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
     )
 
 
-__all__ = ["GridRoutePlannerAdapter", "GridRoutePlannerConfig", "build_grid_route_config"]
+__all__ = [
+    "GridRoutePlannerAdapter",
+    "GridRoutePlannerConfig",
+    "build_grid_route_config",
+]

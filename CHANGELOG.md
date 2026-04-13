@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* TEB corridor-commitment planner improvements for issue #805: multi-step corridor occupancy scoring, escalated lateral commitment gains, blocked-side flip fallback, route-waypoint guidance integration, and reproducible topology-slice artifacts (`configs/scenarios/sets/issue_805_teb_topology_slice.yaml`, `docs/context/issue_805_teb_corridor_commitment_iteration.md`).
+
 * Added a repo-local agent memory layer with `CLAUDE.md` startup imports, a canonical
   `memory/MEMORY.md` index, typed memory subdirectories (`architecture`, `decisions`,
   `experiments`, `failures`, `benchmarks`), example notes for each type, and linked guidance in

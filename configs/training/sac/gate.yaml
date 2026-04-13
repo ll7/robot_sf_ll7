@@ -1,0 +1,56 @@
+# SAC gate training configuration (50 000 steps)
+#
+# Purpose: Confirm that the SAC training pipeline connects correctly to
+# Robot SF and that the reward signal is plausible before committing to a
+# full training budget.  A successful gate run shows improving success rate
+# and decreasing collision rate vs. a random policy.
+#
+# Usage:
+#   uv run python scripts/training/train_sac_sb3.py \
+#     --config configs/training/sac/gate.yaml
+#
+# Dry-run (CI smoke test, 64 steps):
+#   uv run python scripts/training/train_sac_sb3.py \
+#     --config configs/training/sac/gate.yaml --dry-run
+
+policy_id: sac_gate_v1
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 50000
+seed: 42
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 3.0e-4
+  # Smaller buffer to keep memory overhead within 4 GiB for gate runs.
+  buffer_size: 50000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 1000
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0
+
+# W&B tracking (disabled by default for gate runs; enable to inspect reward curve)
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_gate_v1
+  tags:
+    - sac
+    - gate
+    - issue-790

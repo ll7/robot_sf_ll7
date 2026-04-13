@@ -30,10 +30,10 @@ def test_resolve_includes_rejects_directories(tmp_path: Path) -> None:
 
 def test_map_search_paths_skip_missing_entries(tmp_path: Path) -> None:
     """Ignore missing map_search_paths entries instead of crashing."""
-    root = tmp_path / "manifest.yaml"
+    source = tmp_path / "manifest.yaml"
     paths = scenario_loader._resolve_map_search_paths(
         {"map_search_paths": ["missing"]},
-        root=root,
+        source=source,
     )
     assert paths == []
 

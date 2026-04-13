@@ -56,8 +56,9 @@ raise an error so subset manifests fail closed when the source data is
 ambiguous.
 
 If `map_file` paths in included scenarios are not resolvable, you can set
-`map_search_paths` to help locate map files. The loader logs a warning with
-the attempted paths and suggestion.
+`map_search_paths` to help locate map files. Each manifest resolves its own
+`map_search_paths` entries relative to that manifest file, and the loader logs
+a warning with the attempted paths and suggestion.
 
 ## Map references
 

@@ -287,6 +287,54 @@ map_search_paths:
     assert scenarios[0]["map_file"] == "maps/map.svg"
 
 
+def test_nested_manifests_resolve_map_search_paths_from_each_manifest(
+    tmp_path: Path,
+) -> None:
+    """Nested include manifests should keep their own map_search_paths roots."""
+    maps_dir = tmp_path / "maps" / "svg_maps"
+    maps_dir.mkdir(parents=True)
+    (maps_dir / "demo.svg").write_text("<svg></svg>", encoding="utf-8")
+
+    scenarios_dir = tmp_path / "configs" / "scenarios"
+    archetypes_dir = scenarios_dir / "archetypes"
+    sets_dir = scenarios_dir / "sets"
+    archetypes_dir.mkdir(parents=True)
+    sets_dir.mkdir(parents=True)
+
+    archetype_file = archetypes_dir / "demo.yaml"
+    _write_yaml(
+        archetype_file,
+        """
+scenarios:
+  - name: nested_demo
+    map_file: demo.svg
+""",
+    )
+
+    child_manifest = scenarios_dir / "classic.yaml"
+    _write_yaml(
+        child_manifest,
+        """
+includes:
+  - archetypes/demo.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+""",
+    )
+
+    top_manifest = sets_dir / "combo.yaml"
+    _write_yaml(
+        top_manifest,
+        """
+includes:
+  - ../classic.yaml
+""",
+    )
+
+    scenarios = load_scenarios(top_manifest)
+    assert scenarios[0]["map_file"] == "../../../maps/svg_maps/demo.svg"
+
+
 def test_map_id_resolves_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Map ids resolve via the registry to keep map_id-based scenarios portable."""
     maps_dir = tmp_path / "maps"

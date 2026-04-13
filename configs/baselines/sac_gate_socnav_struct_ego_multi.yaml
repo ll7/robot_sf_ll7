@@ -1,0 +1,15 @@
+# Experimental SAC baseline config for the ego-frame multi-scenario training run.
+
+model_path: output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip
+
+device: auto
+deterministic: true
+
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+obs_transform: ego
+
+fallback_to_goal: false
+profile: experimental

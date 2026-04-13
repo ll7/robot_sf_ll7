@@ -1,0 +1,19 @@
+# Issue #697 parameter sweep variant: low relaxation time.
+# Counter-hypothesis: a very short tau makes the planner track goal velocity
+# more aggressively, reducing stall but increasing responsiveness.
+# This variant tests whether the failure is oscillation (low tau is bad) or
+# stall / over-damping (low tau helps).
+#
+# Changed from default SocNavPlannerConfig:
+#   social_force_tau: 0.5 -> 0.2
+
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+angular_gain: 1.0
+goal_tolerance: 0.25
+
+social_force_tau: 0.2
+social_force_desired_speed: 1.0
+social_force_repulsion_weight: 0.8
+social_force_factor: 5.1
+social_force_obstacle_factor: 10.0

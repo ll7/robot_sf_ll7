@@ -2543,3 +2543,83 @@ def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
         )
         == "holonomic_vxy_world"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #697 — holonomic social-force diagnosis config contracts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    [
+        "configs/algos/social_force_holonomic_tuned_tau_high.yaml",
+        "configs/algos/social_force_holonomic_tuned_tau_low.yaml",
+        "configs/algos/social_force_holonomic_tuned_repulsion_low.yaml",
+    ],
+)
+def test_social_force_holonomic_sweep_configs_produce_valid_socnav_config(
+    config_path: str,
+) -> None:
+    """Each issue-697 parameter-sweep YAML should parse into a valid SocNavPlannerConfig."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    cfg = _parse_algo_config(config_path)
+    socnav_cfg = _build_socnav_config(cfg)
+    assert isinstance(socnav_cfg, SocNavPlannerConfig)
+    assert socnav_cfg.max_linear_speed == pytest.approx(1.0)
+    assert socnav_cfg.social_force_tau > 0.0, "tau must be positive"
+    assert socnav_cfg.social_force_repulsion_weight >= 0.0, "repulsion_weight must be non-negative"
+
+
+def test_social_force_holonomic_tau_high_sweep_applies_higher_tau() -> None:
+    """High-tau sweep config must increase tau above the default 0.5."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    cfg = _parse_algo_config("configs/algos/social_force_holonomic_tuned_tau_high.yaml")
+    socnav_cfg = _build_socnav_config(cfg)
+    default_tau = SocNavPlannerConfig().social_force_tau
+    assert socnav_cfg.social_force_tau > default_tau, (
+        f"High-tau sweep must exceed default tau {default_tau}"
+    )
+
+
+def test_social_force_holonomic_tau_low_sweep_applies_lower_tau() -> None:
+    """Low-tau sweep config must reduce tau below the default 0.5."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    cfg = _parse_algo_config("configs/algos/social_force_holonomic_tuned_tau_low.yaml")
+    socnav_cfg = _build_socnav_config(cfg)
+    default_tau = SocNavPlannerConfig().social_force_tau
+    assert socnav_cfg.social_force_tau < default_tau, (
+        f"Low-tau sweep must be below default tau {default_tau}"
+    )
+
+
+def test_social_force_holonomic_repulsion_low_sweep_applies_lower_weight() -> None:
+    """Low-repulsion sweep config must reduce the repulsion weight below the default 0.8."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    cfg = _parse_algo_config("configs/algos/social_force_holonomic_tuned_repulsion_low.yaml")
+    socnav_cfg = _build_socnav_config(cfg)
+    default_weight = SocNavPlannerConfig().social_force_repulsion_weight
+    assert socnav_cfg.social_force_repulsion_weight < default_weight, (
+        f"Low-repulsion sweep must be below default {default_weight}"
+    )
+
+
+def test_holonomic_social_force_diagnosis_config_contains_expected_planners() -> None:
+    """The diagnosis benchmark config must list local social_force and the upstream wrapper."""
+    import yaml
+
+    config_path = Path("configs/benchmarks/holonomic_social_force_diagnosis.yaml")
+    assert config_path.exists(), f"Diagnosis config not found: {config_path}"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    planner_keys = {p["key"] for p in data.get("planners", [])}
+    assert "social_force" in planner_keys, "Diagnosis config must include local social_force"
+    assert "social_navigation_pyenvs_socialforce" in planner_keys, (
+        "Diagnosis config must include the upstream socialforce wrapper"
+    )
+    assert data.get("holonomic_command_mode") == "vx_vy", (
+        "Diagnosis config must use holonomic vx_vy command mode"
+    )

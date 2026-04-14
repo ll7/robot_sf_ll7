@@ -913,11 +913,11 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                 map_path = (base_dir / map_path).resolve()
             if not map_path.exists():
                 warn(idx, scenario_id, f"map_file not found at {map_path}", "/map_file")
-            elif map_path.suffix.lower() not in {".svg", ".json"}:
+            elif map_path.suffix.lower() != ".svg":
                 warn(
                     idx,
                     scenario_id,
-                    f"map_file extension '{map_path.suffix}' not supported",
+                    f"map_file extension '{map_path.suffix}' not supported; use SVG maps",
                     "/map_file",
                 )
 

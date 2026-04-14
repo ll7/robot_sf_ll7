@@ -2,7 +2,6 @@
 define the map configuration
 """
 
-import json
 import os
 import random
 from dataclasses import dataclass, field
@@ -637,15 +636,11 @@ class MapDefinitionPool:
             raise ValueError("Map pool is empty! Please specify some maps!")
 
     def _load_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
-        """Load map definitions from a folder, supporting both SVG and legacy JSON formats.
-
-        SVG files take precedence over JSON files of the same base name. JSON support
-        is retained for backward compatibility but is considered deprecated; prefer
-        SVG-authored maps for all new and migrated map definitions.
+        """Load SVG map definitions from a folder.
 
         Returns:
             dict[str, MapDefinition]: Dictionary mapping filenames (without extension) to
-                parsed MapDefinition objects for all recognised map files found in the folder.
+                parsed MapDefinition objects for all SVG map files found in the folder.
         """
         # Import here to avoid a circular import at module load time.
         from robot_sf.nav.svg_map_parser import convert_map  # noqa: PLC0415
@@ -657,12 +652,11 @@ class MapDefinitionPool:
             f for f in os.listdir(maps_folder) if os.path.isfile(os.path.join(maps_folder, f))
         ]
         svg_names = {os.path.splitext(f)[0] for f in entries if f.lower().endswith(".svg")}
-        json_names = {os.path.splitext(f)[0] for f in entries if f.lower().endswith(".json")}
-        map_names = sorted(svg_names | json_names)
+        map_names = sorted(svg_names)
 
         if not map_names:
             logger.debug(
-                "No SVG or JSON map definition files found in '{}'; returning empty map_defs",
+                "No SVG map definition files found in '{}'; returning empty map_defs",
                 maps_folder,
             )
             return {}
@@ -672,57 +666,19 @@ class MapDefinitionPool:
         # Load maps in deterministic order, preferring SVG when both formats exist.
         for name in map_names:
             svg_path = os.path.join(maps_folder, f"{name}.svg")
-            json_path = os.path.join(maps_folder, f"{name}.json")
-
-            if os.path.isfile(svg_path):
-                try:
-                    map_def = convert_map(svg_path)
-                except ValueError as exc:
-                    logger.warning(
-                        "SVG map '{}' failed validation ({}); falling back to JSON when available.",
-                        svg_path,
-                        exc,
-                    )
-                    map_def = None
-
-                if map_def is not None:
-                    map_defs[name] = map_def
-                    logger.debug("Loaded SVG map '{}' from '{}'", name, svg_path)
-                    continue
-
-                if not os.path.isfile(json_path):
-                    logger.warning("Failed to load SVG map '{}'; skipping", svg_path)
-                    continue
-
-                logger.warning(
-                    "Failed to load SVG map '{}'; loading legacy JSON fallback '{}' instead.",
-                    svg_path,
-                    json_path,
-                )
-
-            if os.path.isfile(json_path):
-                logger.warning(
-                    "Loading legacy JSON map '{}'. Consider migrating to SVG format "
-                    "(see scripts/dev/json_to_svg_map.py).",
-                    json_path,
-                )
-                with open(json_path, encoding="utf-8") as fh:
-                    map_def = serialize_map(json.load(fh))
-                map_defs[name] = map_def
+            try:
+                map_def = convert_map(svg_path)
+            except ValueError as exc:
+                logger.warning("SVG map '{}' failed validation ({}); skipping", svg_path, exc)
                 continue
 
-            logger.debug("Skipping map '{}'; no SVG or JSON file found", name)
+            if map_def is not None:
+                map_defs[name] = map_def
+                logger.debug("Loaded SVG map '{}' from '{}'", name, svg_path)
+            else:
+                logger.warning("Failed to load SVG map '{}'; skipping", svg_path)
 
         return map_defs
-
-    # Keep the old name as a deprecated alias so external callers are not broken.
-    def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
-        """Deprecated: use _load_map_definitions_from_folder instead.
-
-        Returns:
-            dict[str, MapDefinition]: The loaded map definitions.
-        """
-        return self._load_map_definitions_from_folder(maps_folder)
 
     def choose_random_map(self) -> MapDefinition:
         """
@@ -877,7 +833,7 @@ def _reverse_route(route: GlobalRoute) -> GlobalRoute:
 
 
 def _parse_wait_rules(wait_rules: list[dict] | None) -> list[PedestrianWaitRule] | None:
-    """Parse wait rules from JSON map definitions.
+    """Parse wait rules from map data.
 
     Returns:
         list[PedestrianWaitRule] | None: Parsed wait rules or ``None`` when unset.
@@ -913,7 +869,7 @@ def _parse_single_pedestrians(
     min_x: float,
     min_y: float,
 ) -> list[SinglePedestrianDefinition]:
-    """Parse single pedestrian definitions from a JSON map definition.
+    """Parse single pedestrian definitions from map data.
 
     Args:
         map_structure: Raw map structure dictionary.

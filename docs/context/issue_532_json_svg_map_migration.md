@@ -1,18 +1,19 @@
-# Issue 532 JSON-to-SVG Map Migration
+# Issue 532 SVG Map Cutover
 
 ## Scope
 
-Issue [#532](https://github.com/ll7/robot_sf_ll7/issues/532) tracks the safe migration from
-legacy JSON-authored map definitions to SVG-authored maps without breaking existing JSON support.
+Issue [#532](https://github.com/ll7/robot_sf_ll7/issues/532) tracks the cutover from legacy
+JSON-authored map definitions to SVG-authored maps.
 
 ## What Changed
 
 - Added a deterministic map-folder loader in `robot_sf/nav/map_config.py` that:
-  - prefers `.svg` files when both `.svg` and `.json` exist for the same base name,
-  - falls back to legacy JSON if SVG parsing/validation fails,
-  - loads map names in sorted order so the pool order is stable.
+  - loads SVG files only,
+  - loads map names in sorted order so the pool order is stable,
+  - fails closed when a folder contains no SVG maps.
 - Added the one-off migration helper `scripts/dev/json_to_svg_map.py`.
-- Migrated `robot_sf/maps/uni_campus_big.json` to `robot_sf/maps/uni_campus_big.svg`.
+- Migrated `robot_sf/maps/uni_campus_big.json` to `robot_sf/maps/uni_campus_big.svg` and removed
+  the legacy JSON asset from the repository.
 - Tightened scenario authoring guidance to SVG-first wording in `docs/scenario_spec_checklist.md`.
 
 ## Validation
@@ -24,6 +25,6 @@ legacy JSON-authored map definitions to SVG-authored maps without breaking exist
 
 ## Notes
 
-- JSON support remains available for legacy inputs, but new and migrated maps should use SVG.
-- The SVG migration was validated against the legacy JSON map definition rather than only by
-  visual inspection.
+- The repository no longer ships or loads JSON-based map assets.
+- The SVG migration was validated against the legacy JSON map definition before the cutover, then
+  the legacy asset and fallback paths were removed.

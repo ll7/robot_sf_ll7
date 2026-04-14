@@ -1,9 +1,8 @@
-"""Convert a legacy JSON map definition to the SVG format used by the SVG map parser.
+"""Historical JSON-to-SVG migration tool used for issue #532.
 
-This script is the one-time migration tool for issue #532. It converts
-``robot_sf/maps/uni_campus_big.json`` (and any other legacy JSON map) to an
-SVG file that, when parsed by ``robot_sf.nav.svg_map_parser.convert_map``,
-produces a ``MapDefinition`` equivalent to the one produced by
+This script converts a legacy JSON map definition to an SVG file that, when
+parsed by ``robot_sf.nav.svg_map_parser.convert_map``, produces a
+``MapDefinition`` equivalent to the one produced by
 ``robot_sf.nav.map_config.serialize_map``.
 
 Key mapping decisions
@@ -28,7 +27,7 @@ The generated SVG uses the same translated coordinate space so
 Usage::
 
     uv run python scripts/dev/json_to_svg_map.py \\
-        robot_sf/maps/uni_campus_big.json \\
+        path/to/legacy_map.json \\
         robot_sf/maps/uni_campus_big.svg
 
     # Verify parity after generating the SVG:

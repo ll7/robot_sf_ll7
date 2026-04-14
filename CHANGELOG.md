@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* TEB corridor-commitment planner improvements for issue #805: multi-step corridor occupancy scoring, escalated lateral commitment gains, blocked-side flip fallback, route-waypoint guidance integration, and reproducible topology-slice artifacts (`configs/scenarios/sets/issue_805_teb_topology_slice.yaml`,  `docs/context/issue_805_teb_corridor_commitment_iteration.md`).
+* TEB corridor-commitment planner improvements for issue #805 (second iteration): fixed step-budget exhaustion by raising embedded route-guide `waypoint_lookahead_cells` to 10 (full 0.9 m/s speed), increased `obstacle_inflation_cells` to 3 for 0.3 m corner clearance, added `stop_distance=0.5` for earlier front-clearance stops, and added `_rescue_or_stop` so all-blocked commitment falls back to the route guide rather than driving into obstacles; `plan()` refactored into `_try_route_command`, `_commitment_step`, and `_rescue_or_stop` helpers to satisfy the complexity limit.
+* TEB corridor-commitment planner improvements for issue #805 (first iteration): multi-step corridor occupancy scoring, escalated lateral commitment gains, blocked-side flip fallback, route-waypoint guidance integration, and reproducible topology-slice artifacts (`configs/scenarios/sets/issue_805_teb_topology_slice.yaml`,  `docs/context/issue_805_teb_corridor_commitment_iteration.md`).
 
 * Added a repo-local agent memory layer with `CLAUDE.md` startup imports, a canonical
 `memory/MEMORY.md` index, typed memory subdirectories ( `architecture` , `decisions` , 

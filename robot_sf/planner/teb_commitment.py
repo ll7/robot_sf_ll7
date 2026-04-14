@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.planner.grid_route import GridRoutePlannerAdapter
+from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 
@@ -53,7 +53,21 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: TEBCommitmentConfig | None = None) -> None:
         """Initialize the planner with optional config overrides."""
         self.config = config or TEBCommitmentConfig()
-        self._route_guide = GridRoutePlannerAdapter()
+        # Use a route-guide config tuned for topology-avoidance scenarios:
+        # - waypoint_lookahead_cells=10 ensures the 1.0m waypoint target drives at full
+        #   linear speed (capped at max_linear_speed=0.9 m/s), preventing step-budget
+        #   exhaustion on detour paths that default lookahead (5 cells, 0.5m) cannot complete.
+        # - obstacle_inflation_cells=3 gives 0.3m extra clearance around obstacle corners,
+        #   matching the default robot radius and reducing corner-clipping collisions.
+        # - stop_distance=0.5 stops the route guide earlier when an obstacle enters the
+        #   forward corridor, giving more time for the turn-in-place recovery.
+        self._route_guide = GridRoutePlannerAdapter(
+            GridRoutePlannerConfig(
+                waypoint_lookahead_cells=10,
+                obstacle_inflation_cells=3,
+                stop_distance=0.5,
+            )
+        )
         self.reset()
 
     def reset(self) -> None:
@@ -267,6 +281,82 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
             self._commit_ttl = max(int(self.config.commit_persistence_steps) - 1, 0)
         return best_heading, best_score >= float(self.config.occupancy_threshold)
 
+    def _try_route_command(
+        self,
+        *,
+        observation: dict[str, Any],
+        robot_pos: np.ndarray,
+        route_waypoint: np.ndarray,
+        has_large_grid: bool,
+    ) -> tuple[float, float] | None:
+        """Return a route-guide command when the grid route offers a clear escape.
+
+        Returns ``None`` when the route guide cannot produce a useful command and
+        the planner should fall through to its commitment logic.
+
+        Returns:
+            tuple[float, float] | None: ``(v, w)`` from the route guide or ``None``.
+        """
+        if np.linalg.norm(route_waypoint - robot_pos) <= self._EPS:
+            return None
+        if not has_large_grid:
+            return None
+        route_command = self._route_guide.plan(observation)
+        if abs(route_command[0]) + abs(route_command[1]) <= self._EPS:
+            return None
+        self._commit_side = 1 if route_command[1] >= 0.0 else -1
+        self._commit_ttl = max(int(self.config.commit_persistence_steps) - 1, 0)
+        return route_command
+
+    def _commitment_step(
+        self,
+        *,
+        observation: dict[str, Any],
+        robot_pos: np.ndarray,
+        forward: np.ndarray,
+        goal_next: np.ndarray,
+        ped_positions: np.ndarray,
+        route_waypoint: np.ndarray | None,
+    ) -> tuple[np.ndarray, bool]:
+        """Run the side-selection and committed-heading search.
+
+        Returns:
+            tuple[np.ndarray, bool]: Best heading and whether it remains blocked.
+        """
+        if route_waypoint is None and np.linalg.norm(goal_next - robot_pos) > self._EPS:
+            forward = self._normalize(goal_next - robot_pos)
+        lateral = np.array([-forward[1], forward[0]], dtype=float)
+        side = self._choose_side(
+            robot_pos=robot_pos,
+            forward=forward,
+            lateral=lateral,
+            ped_positions=ped_positions,
+            observation=observation,
+        )
+        return self._choose_committed_heading(
+            observation=observation,
+            robot_pos=robot_pos,
+            forward=forward,
+            lateral=lateral,
+            side=side,
+        )
+
+    def _rescue_or_stop(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return a route-guide rescue command or a full stop when all headings are blocked.
+
+        Called after commitment logic exhausts all candidate headings without
+        finding a clear corridor.  Yields control to the route guide so the robot
+        does not slowly drive into the obstacle; stops when no routed escape is
+        available.
+
+        Returns:
+            tuple[float, float]: ``(v, w)`` rescue command or ``(0, 0)`` stop.
+        """
+        rescue = self._route_guide.plan(observation)
+        if abs(rescue[0]) + abs(rescue[1]) > self._EPS:
+            return rescue
+        return 0.0, 0.0
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a committed corridor-following ``(v, w)`` command.
 
@@ -301,13 +391,15 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         )
 
         route_waypoint = self._route_guide.route_waypoint(observation)
-        if route_waypoint is not None and np.linalg.norm(route_waypoint - robot_pos) > self._EPS:
-            if has_large_grid:
-                route_command = self._route_guide.plan(observation)
-                if abs(route_command[0]) + abs(route_command[1]) > self._EPS:
-                    self._commit_side = 1 if route_command[1] >= 0.0 else -1
-                    self._commit_ttl = max(int(self.config.commit_persistence_steps) - 1, 0)
-                    return route_command
+        if route_waypoint is not None:
+            route_cmd = self._try_route_command(
+                observation=observation,
+                robot_pos=robot_pos,
+                route_waypoint=route_waypoint,
+                has_large_grid=has_large_grid,
+            )
+            if route_cmd is not None:
+                return route_cmd
             goal = route_waypoint
             goal_delta = goal - robot_pos
             goal_distance = float(np.linalg.norm(goal_delta))
@@ -322,23 +414,16 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         self._last_goal_distance = goal_distance
 
         if blocked or stalled:
-            if route_waypoint is None and np.linalg.norm(goal_next - robot_pos) > self._EPS:
-                forward = self._normalize(goal_next - robot_pos)
-            lateral = np.array([-forward[1], forward[0]], dtype=float)
-            side = self._choose_side(
+            forward, blocked = self._commitment_step(
+                observation=observation,
                 robot_pos=robot_pos,
                 forward=forward,
-                lateral=lateral,
+                goal_next=goal_next,
                 ped_positions=ped_positions,
-                observation=observation,
+                route_waypoint=route_waypoint,
             )
-            forward, blocked = self._choose_committed_heading(
-                observation=observation,
-                robot_pos=robot_pos,
-                forward=forward,
-                lateral=lateral,
-                side=side,
-            )
+            if blocked:
+                return self._rescue_or_stop(observation)
 
         return self._command_from_heading(
             forward=forward, robot_heading=robot_heading, blocked=blocked

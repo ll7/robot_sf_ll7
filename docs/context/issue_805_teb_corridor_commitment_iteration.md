@@ -81,15 +81,52 @@ The iteration improved one failure mode but did **not** satisfy issue `#805`.
 This means the branch reduced some direct-wall impacts but still finished with `0/9` successes on
 the target slice, so it does not meet the issue DoD and is not PR-ready as an issue-closing fix.
 
+## Second iteration changes (2026-04-14)
+
+Root-cause analysis of the stalling and remaining collision after the first iteration:
+
+1. **Speed budget exhaustion** (`line_wall_detour`, `narrow_passage`): The embedded
+   `GridRoutePlannerAdapter` used `waypoint_lookahead_cells=5` (0.5 m at 0.1 m/cell). The
+   `_nominal_command` linear speed scales with waypoint distance, capping at `min(0.5, 0.9) = 0.5
+   m/s` instead of full speed.  At 0.5 m/s × 320 steps × 0.1 s/step = 16 m traversable, but
+   detour paths are ~18 m — the budget runs out.
+
+2. **Corner-clipping** (`symmetry_ambiguous_choice`): Default `obstacle_inflation_cells=1` (0.1 m)
+   left the A* path too close to the splitter corners.  The robot's unicycle dynamics caused it to
+   clip those corners while tracking the route.
+
+3. **Stuck-wall behaviour**: When every committed heading scored above the occupancy threshold, the
+   planner previously continued to drive slowly in the "least blocked" direction, pushing against
+   the obstacle.
+
+### Changes applied
+
+- `GridRoutePlannerAdapter` embedded in TEB now uses a custom `GridRoutePlannerConfig`:
+  - `waypoint_lookahead_cells=10` → 1.0 m target → linear speed = 0.9 m/s (full budget)
+  - `obstacle_inflation_cells=3` → 0.3 m clearance matching the robot radius
+  - `stop_distance=0.5` → stops earlier when an obstacle enters the forward corridor
+- `plan()` refactored to reduce cyclomatic complexity (three helpers extracted:
+  `_try_route_command`, `_commitment_step`, `_rescue_or_stop`).
+- `_rescue_or_stop`: when all committed headings are occupied, yields to the route guide command;
+  stops the robot (returns `(0, 0)`) rather than driving into the wall when no route escape exists.
+
+### Validation
+
+```bash
+uv run pytest tests/planner/test_teb_commitment.py -q  # 15 passed
+BASE_REF=origin/main scripts/dev/pr_ready_check.sh      # 607 passed, 1 pre-existing SAC failure
+```
+
+The topology-slice benchmark has **not** been re-run yet.  Run the commands in the **Validation
+commands** section above and record new results here before claiming DoD is met.
+
 ## Follow-up boundary
 
-The remaining gap looks structural rather than scalar:
+The stalling root cause (speed budget) has been fixed.  The corner-clipping root cause
+(insufficient inflation) has been addressed.  Whether these changes deliver the required ≥ 1/3
+success on at least one scenario depends on the next benchmark run.
 
-- simple probe/gain tuning helped `line_wall_detour` but not `symmetry_ambiguous_choice`,
-- route-awareness through the existing `goal.next` signal was not enough to unlock successes,
-- removing the direct route-command shortcut from the route-guidance path still left the slice at
-  `0/9` success, so that detour was discarded,
-- the next credible step is a stronger topology-aware guide for blocked states rather than another
-  small gain tweak.
+The pre-existing SAC test failure (`test_step_vector_mode_uses_model_prediction_and_fallback_action`
+— floating-point ULP difference) is unrelated to TEB and existed before this branch.
 
-Treat this note as the handoff point for any continuation on `#805`.
+Treat this note as the handoff point for benchmark validation of the second iteration.

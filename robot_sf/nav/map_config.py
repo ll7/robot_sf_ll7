@@ -630,60 +630,99 @@ class MapDefinitionPool:
 
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
-            self.map_defs = self._load_json_map_definitions_from_folder(self.maps_folder)
+            self.map_defs = self._load_map_definitions_from_folder(self.maps_folder)
 
         # If map_defs is still empty, raise an error
         if not self.map_defs:
             raise ValueError("Map pool is empty! Please specify some maps!")
 
-    def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
-        """
-        Load json map definitions from a folder in the maps_folder directory.
+    def _load_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
+        """Load map definitions from a folder, supporting both SVG and legacy JSON formats.
+
+        SVG files take precedence over JSON files of the same base name. JSON support
+        is retained for backward compatibility but is considered deprecated; prefer
+        SVG-authored maps for all new and migrated map definitions.
 
         Returns:
             dict[str, MapDefinition]: Dictionary mapping filenames (without extension) to
-                parsed MapDefinition objects for all .json files found in the folder.
+                parsed MapDefinition objects for all recognised map files found in the folder.
         """
+        # Import here to avoid a circular import at module load time.
+        from robot_sf.nav.svg_map_parser import convert_map  # noqa: PLC0415
 
-        # Check if the maps_folder directory exists
         if not os.path.exists(maps_folder) or not os.path.isdir(maps_folder):
             raise ValueError(f"Map directory '{maps_folder}' does not exist!")
 
-        # Function to load a JSON file
-        def load_json(path: str) -> dict:
-            """Load and parse a JSON file from the given path.
-
-            Returns:
-                dict: Parsed JSON content as a Python dictionary.
-
-            Args:
-                path: TODO docstring.
-
-            Returns:
-                TODO docstring.
-            """
-            with open(path, encoding="utf-8") as file:
-                return json.load(file)
-
-        # Get only JSON files (skip directories and non-json entries)
-        map_files = [
-            os.path.join(maps_folder, f)
-            for f in os.listdir(maps_folder)
-            if f.lower().endswith(".json") and os.path.isfile(os.path.join(maps_folder, f))
+        entries = [
+            f for f in os.listdir(maps_folder) if os.path.isfile(os.path.join(maps_folder, f))
         ]
+        svg_names = {os.path.splitext(f)[0] for f in entries if f.lower().endswith(".svg")}
+        json_names = {os.path.splitext(f)[0] for f in entries if f.lower().endswith(".json")}
+        map_names = sorted(svg_names | json_names)
 
-        if not map_files:
+        if not map_names:
             logger.debug(
-                "No JSON map definition files found in '%s'; returning empty map_defs", maps_folder
+                "No SVG or JSON map definition files found in '{}'; returning empty map_defs",
+                maps_folder,
             )
             return {}
 
-        # Load the map definitions from the JSON files
-        map_defs = {
-            os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f)) for f in map_files
-        }
+        map_defs: dict[str, MapDefinition] = {}
+
+        # Load maps in deterministic order, preferring SVG when both formats exist.
+        for name in map_names:
+            svg_path = os.path.join(maps_folder, f"{name}.svg")
+            json_path = os.path.join(maps_folder, f"{name}.json")
+
+            if os.path.isfile(svg_path):
+                try:
+                    map_def = convert_map(svg_path)
+                except ValueError as exc:
+                    logger.warning(
+                        "SVG map '{}' failed validation ({}); falling back to JSON when available.",
+                        svg_path,
+                        exc,
+                    )
+                    map_def = None
+
+                if map_def is not None:
+                    map_defs[name] = map_def
+                    logger.debug("Loaded SVG map '{}' from '{}'", name, svg_path)
+                    continue
+
+                if not os.path.isfile(json_path):
+                    logger.warning("Failed to load SVG map '{}'; skipping", svg_path)
+                    continue
+
+                logger.warning(
+                    "Failed to load SVG map '{}'; loading legacy JSON fallback '{}' instead.",
+                    svg_path,
+                    json_path,
+                )
+
+            if os.path.isfile(json_path):
+                logger.warning(
+                    "Loading legacy JSON map '{}'. Consider migrating to SVG format "
+                    "(see scripts/dev/json_to_svg_map.py).",
+                    json_path,
+                )
+                with open(json_path, encoding="utf-8") as fh:
+                    map_def = serialize_map(json.load(fh))
+                map_defs[name] = map_def
+                continue
+
+            logger.debug("Skipping map '{}'; no SVG or JSON file found", name)
 
         return map_defs
+
+    # Keep the old name as a deprecated alias so external callers are not broken.
+    def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
+        """Deprecated: use _load_map_definitions_from_folder instead.
+
+        Returns:
+            dict[str, MapDefinition]: The loaded map definitions.
+        """
+        return self._load_map_definitions_from_folder(maps_folder)
 
     def choose_random_map(self) -> MapDefinition:
         """

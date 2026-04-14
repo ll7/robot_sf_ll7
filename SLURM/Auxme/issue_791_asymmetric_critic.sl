@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT=${SLURM_SUBMIT_DIR:-$(pwd)}
+PROJECT_ROOT=$(git -C "${SLURM_SUBMIT_DIR:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null || echo "${SLURM_SUBMIT_DIR:-$(pwd)}")
 LOCAL_OUTPUT_ROOT=${PROJECT_ROOT}/output/slurm
 SCRATCH_ROOT=${AUXME_SCRATCH_ROOT:-${LOCAL_OUTPUT_ROOT}}
 MODULE_LIST=${AUXME_MODULES:-"gcc/13.2.0"}

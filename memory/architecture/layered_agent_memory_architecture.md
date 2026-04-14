@@ -28,13 +28,14 @@ database, vector store, or background service that needs operational ownership.
 | Copilot       | `.github/copilot-instructions.md`          | explicit pointer in instructions file        | ✅ documented       |
 | Codex         | `AGENTS.md` (Codex Context Stack section)  | listed in stack; agent reads on demand       | ✅ documented       |
 | GitHub agents | `.agents/agents/github/` agent files       | not directly referenced; reads `AGENTS.md`   | ⚠️ indirect only   |
-| Opencode      | `AGENTS.md` via `docs/ai/repo_overview.md` | listed in "First Files To Read"              | ⚠️ no entrypoint   |
+| Opencode      | `opencode.json` (imports `AGENTS.md`)     | listed in "First Files To Read"              | ⚠️ indirect only   |
 
-**Opencode gap**: Opencode has `.opencode/skills/` (mirrored from `.agents/skills/`) and
-`.opencode/tools/` but no dedicated instruction entrypoint that imports `memory/MEMORY.md`.
-It relies on reading `AGENTS.md` and `docs/ai/repo_overview.md`, which list the memory index.
-This is sufficient for agents that read those files; a dedicated `opencode.md` or similar config
-would make the path explicit. Tracked as a known gap, not a critical failure.
+**Opencode gap**: Opencode uses `opencode.json` (repository root) as its configuration
+entrypoint, which currently imports `AGENTS.md` but does not explicitly list
+`memory/MEMORY.md` in its `instructions` array. It can still discover the memory index via
+`AGENTS.md` or `docs/ai/repo_overview.md`. Adding `memory/MEMORY.md` explicitly to
+`opencode.json`'s instructions would make the startup path explicit. Tracked as a known gap,
+not a critical failure.
 
 ## Auto-Memory Distinction
 

@@ -51,8 +51,9 @@ Issue #816 performed the live agent round-trip that this rollout deferred. Findi
   correctly guided task execution without re-reading the entire `memory/` tree.
 - **Multi-agent coverage**: Copilot via `.github/copilot-instructions.md`, Codex via `AGENTS.md`
   Codex Context Stack section, and GitHub agents via `.agents/agents/github/` all have structural
-  pointers or references. Opencode has no dedicated entrypoint but `docs/ai/repo_overview.md`
-  lists `memory/MEMORY.md` in "First Files To Read".
+  pointers or references. Opencode uses `opencode.json` as its configuration entrypoint; `docs/ai/repo_overview.md`
+  lists `memory/MEMORY.md` in "First Files To Read". The gap is that `opencode.json` does not
+  explicitly import `memory/MEMORY.md` in its `instructions` array; tracked as a known limitation.
 - **Auto-memory distinction clarified**: Claude Code's user-level auto-memory
   (`~/.claude/projects/`) is separate from this repo-local `memory/` layer and is not committed to
   the repository. Both coexist without conflict.

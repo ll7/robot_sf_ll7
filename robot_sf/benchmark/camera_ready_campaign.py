@@ -42,10 +42,14 @@ from robot_sf.benchmark.seed_variance import (
 )
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
+    build_positioning_recommendation,
     calibrate_weights,
     collect_episodes_from_campaign_runs,
     compute_baseline_stats_from_episodes,
+    compute_component_correlations,
     compute_component_dominance,
+    compute_planner_snqi_ordering,
+    compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
@@ -1630,7 +1634,7 @@ def _write_comparability_artifacts(
     return json_path, md_path
 
 
-def _write_snqi_diagnostics_artifacts(
+def _write_snqi_diagnostics_artifacts(  # noqa: C901
     reports_dir: Path,
     payload: dict[str, Any],
 ) -> tuple[Path, Path, Path]:
@@ -1668,31 +1672,126 @@ def _write_snqi_diagnostics_artifacts(
         f"- Source: `{payload.get('baseline_source', 'unknown')}`",
         f"- Degeneracy adjustments: `{payload.get('baseline_adjustments', 0)}`",
         "",
-        "## Component Dominance (mean absolute contribution)",
+        "## Positioning",
         "",
-        "| Component | Mean |",
-        "|---|---:|",
+        f"- Recommendation: `{payload.get('positioning', {}).get('recommendation', 'unknown')}`",
+        f"- Claim scope: `{payload.get('positioning', {}).get('claim_scope', 'unknown')}`",
+        f"- Aligned variable metrics: `{payload.get('positioning', {}).get('aligned_metric_count', 0)}` / `{payload.get('positioning', {}).get('variable_metric_count', 0)}`",
+        "",
+        "## Planner Ordering",
+        "",
+        "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
+        "|---:|---|---|---:|---:|",
     ]
+    ordering = payload.get("planner_ordering")
+    if isinstance(ordering, list):
+        for row in ordering:
+            lines.append(
+                "| {rank} | {planner_key} | {kinematics} | {mean_snqi:.6f} | {episode_count} |".format(
+                    rank=int(row.get("rank", 0) or 0),
+                    planner_key=str(row.get("planner_key", "unknown")),
+                    kinematics=str(row.get("kinematics", "unknown")),
+                    mean_snqi=float(row.get("mean_snqi", 0.0) or 0.0),
+                    episode_count=int(row.get("episode_count", 0) or 0),
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Correlations",
+            "",
+            "| Metric | Direction | Spearman | Variable | Aligned |",
+            "|---|---|---:|---|---|",
+        ]
+    )
+    correlations = payload.get("component_correlations")
+    if isinstance(correlations, dict):
+        for metric_name, row in sorted(correlations.items()):
+            spearman = row.get("spearman")
+            spearman_text = "n/a" if spearman is None else f"{float(spearman):.6f}"
+            aligned = row.get("aligned_with_expected_direction")
+            aligned_text = "n/a" if aligned is None else ("yes" if aligned else "no")
+            lines.append(
+                "| {metric} | {direction} | {spearman} | {variable} | {aligned} |".format(
+                    metric=_escape_markdown_cell(str(metric_name)),
+                    direction=_escape_markdown_cell(str(row.get("direction", "unknown"))),
+                    spearman=spearman_text,
+                    variable="yes" if bool(row.get("variable")) else "no",
+                    aligned=aligned_text,
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Dominance (mean absolute contribution)",
+            "",
+            "| Component | Mean |",
+            "|---|---:|",
+        ]
+    )
     dominance = payload.get("component_dominance")
     if isinstance(dominance, dict):
         for key, value in sorted(dominance.items()):
             lines.append(f"| {_escape_markdown_cell(key)} | {float(value):.6f} |")
+    caveats = payload.get("positioning", {}).get("caveats")
+    if isinstance(caveats, list) and caveats:
+        lines.extend(["", "## Caveats", ""])
+        for caveat in caveats:
+            lines.append(f"- {_escape_markdown_cell(str(caveat))}")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     calibrated = payload.get("calibrated_weights")
-    headers = ("component", "configured_weight", "calibrated_weight", "delta")
+    headers = (
+        "component",
+        "metric_name",
+        "configured_weight",
+        "configured_weight_share",
+        "calibrated_weight",
+        "delta",
+        "mean_abs_contribution",
+        "mean_abs_score_delta_if_ablated",
+        "episode_rank_correlation_if_ablated",
+        "planner_rank_correlation_if_ablated",
+        "planner_order_changed_if_ablated",
+        "sensitivity_rank",
+    )
     rows: list[dict[str, Any]] = []
+    sensitivity_rows = payload.get("weight_sensitivity")
+    sensitivity_by_component = (
+        {str(row.get("weight_name")): row for row in sensitivity_rows if isinstance(row, dict)}
+        if isinstance(sensitivity_rows, list)
+        else {}
+    )
     if isinstance(calibrated, dict):
         configured = payload.get("configured_weights", {})
         for name in WEIGHT_NAMES:
             configured_value = float((configured or {}).get(name, 1.0))
             calibrated_value = float(calibrated.get(name, configured_value))
+            sensitivity = sensitivity_by_component.get(name, {})
             rows.append(
                 {
                     "component": name,
+                    "metric_name": sensitivity.get("metric_name", ""),
                     "configured_weight": configured_value,
+                    "configured_weight_share": float(
+                        sensitivity.get("configured_weight_share", 0.0)
+                    ),
                     "calibrated_weight": calibrated_value,
                     "delta": calibrated_value - configured_value,
+                    "mean_abs_contribution": float(sensitivity.get("mean_abs_contribution", 0.0)),
+                    "mean_abs_score_delta_if_ablated": float(
+                        sensitivity.get("mean_abs_score_delta_if_ablated", 0.0)
+                    ),
+                    "episode_rank_correlation_if_ablated": float(
+                        sensitivity.get("episode_rank_correlation_if_ablated", 1.0)
+                    ),
+                    "planner_rank_correlation_if_ablated": float(
+                        sensitivity.get("planner_rank_correlation_if_ablated", 1.0)
+                    ),
+                    "planner_order_changed_if_ablated": bool(
+                        sensitivity.get("planner_order_changed_if_ablated")
+                    ),
+                    "sensitivity_rank": int(sensitivity.get("sensitivity_rank", 0) or 0),
                 }
             )
     _write_csv(csv_path, [{key: row.get(key) for key in headers} for row in rows])
@@ -1916,6 +2015,8 @@ def prepare_campaign_preflight(
         "snqi_contract_enabled": bool(cfg.snqi_contract.enabled),
         "snqi_contract_enforcement": cfg.snqi_contract.enforcement,
         "snqi_contract_status": "not_evaluated",
+        "snqi_positioning_recommendation": "not_evaluated",
+        "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
         "planners": [
             {
                 "key": planner.key,
@@ -2444,6 +2545,9 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         )
         lines.append(
             f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
+        )
+        lines.append(
+            f"- Positioning recommendation: `{campaign.get('snqi_positioning_recommendation', 'unknown')}`"
         )
         lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
         lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
@@ -3101,6 +3205,26 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         weights=configured_weights,
         baseline=baseline_for_eval,
     )
+    component_correlations = compute_component_correlations(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    planner_ordering = compute_planner_snqi_ordering(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    weight_sensitivity = compute_weight_sensitivity(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    positioning = build_positioning_recommendation(
+        component_correlations,
+        planner_ordering,
+        weight_sensitivity,
+    )
     weights_path = (
         _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
     )
@@ -3154,6 +3278,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "calibrated_weights": calibration.get("weights"),
         "calibration": calibration,
         "component_dominance": component_dominance,
+        "component_correlations": component_correlations,
+        "planner_ordering": planner_ordering,
+        "weight_sensitivity": weight_sensitivity,
+        "positioning": positioning,
     }
     snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
         _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
@@ -3232,6 +3360,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_contract_dominant_component_mean_abs": (
                 contract_eval.dominant_component_mean_abs
             ),
+            "snqi_positioning_recommendation": positioning.get("recommendation"),
+            "snqi_positioning_claim_scope": positioning.get("claim_scope"),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,

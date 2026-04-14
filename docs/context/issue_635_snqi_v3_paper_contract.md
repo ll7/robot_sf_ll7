@@ -218,7 +218,6 @@ Yes.
 
 All paper tables and plots that depend on benchmark numbers should be regenerated from the final
 canonical publication bundle:
-
 - `output/benchmarks/publication/paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407_publication_bundle`
 
 Why this is required:
@@ -254,6 +253,32 @@ Conservative interpretation:
 - but the final rerun should not be treated as a pure metadata-only or ranking-only update,
 - so paper-side logic should consume the final issue-579 bundle as a fresh canonical export rather
   than assuming issue-580 and issue-579 are interchangeable.
+
+## Follow-up From Issue 822
+
+On 2026-04-14, [issue 822](./issue_822_snqi_strengthening_analysis.md) replayed the frozen
+publication bundle against both the v1 and v3 SNQI assets and found that the v3 contract is
+materially better aligned with the planner and component signals on that slice.
+
+Observed follow-up signal:
+
+- planner ordering changed from `goal > orca > social_force` under the v1 contract to
+  `orca > goal > social_force` under the v3 contract
+- the v3 contract shows materially better alignment with `success`, `time_to_goal_norm`,
+  `near_misses`, `comfort_exposure`, and `force_exceed_events`
+- `collisions` is constant on the frozen slice, so collision correlation is undefined there
+
+Recommendation carried forward from issue 822:
+
+- keep SNQI in the main narrative as an operational multi-objective aggregation metric
+- keep the explicit caveat that it is a benchmark aggregate, not a universal ground-truth utility
+- use the strengthened `reports/snqi_diagnostics.{json,md}` and `reports/snqi_sensitivity.csv`
+  artifacts as the paper-facing evidence surface for that claim
+
+The scratch analysis artifacts live under:
+
+- `output/ai/autoresearch/snqi_issue822/v1`
+- `output/ai/autoresearch/snqi_issue822/v3`
 
 ## Conservative manuscript recommendation
 

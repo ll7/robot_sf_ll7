@@ -23,6 +23,51 @@ _STARTUP_METRIC_NAMES = (
     "jerk_mean",
 )
 
+_WEIGHT_COMPONENT_SPECS: tuple[dict[str, str], ...] = (
+    {
+        "weight_name": "w_success",
+        "metric_name": "success",
+        "contribution_name": "success_reward",
+        "direction": "positive",
+    },
+    {
+        "weight_name": "w_time",
+        "metric_name": "time_to_goal_norm",
+        "contribution_name": "time_penalty",
+        "direction": "negative",
+    },
+    {
+        "weight_name": "w_collisions",
+        "metric_name": "collisions",
+        "contribution_name": "collisions_penalty",
+        "direction": "negative",
+    },
+    {
+        "weight_name": "w_near",
+        "metric_name": "near_misses",
+        "contribution_name": "near_penalty",
+        "direction": "negative",
+    },
+    {
+        "weight_name": "w_comfort",
+        "metric_name": "comfort_exposure",
+        "contribution_name": "comfort_penalty",
+        "direction": "negative",
+    },
+    {
+        "weight_name": "w_force_exceed",
+        "metric_name": "force_exceed_events",
+        "contribution_name": "force_exceed_penalty",
+        "direction": "negative",
+    },
+    {
+        "weight_name": "w_jerk",
+        "metric_name": "jerk_mean",
+        "contribution_name": "jerk_penalty",
+        "direction": "negative",
+    },
+)
+
 
 @dataclass(frozen=True)
 class SnqiContractThresholds:
@@ -413,6 +458,281 @@ def compute_component_dominance(
     return {key: value / count for key, value in accum.items()}
 
 
+def compute_component_correlations(
+    episodes: Sequence[Mapping[str, Any]],
+    *,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+) -> dict[str, dict[str, Any]]:
+    """Compute per-metric Spearman correlations against episode-level SNQI scores.
+
+    Returns:
+        Mapping of metric name to correlation payload, including sign alignment and
+        degeneracy flags for non-varying metrics.
+    """
+    scores: list[float] = []
+    metric_values: dict[str, list[float]] = {
+        str(spec["metric_name"]): [] for spec in _WEIGHT_COMPONENT_SPECS
+    }
+    for episode in episodes:
+        metrics = episode.get("metrics")
+        if not isinstance(metrics, Mapping):
+            continue
+        score = _episode_score(metrics, weights=weights, baseline=baseline)
+        if not _is_finite(score):
+            continue
+        row: dict[str, float] = {}
+        valid_row = True
+        for spec in _WEIGHT_COMPONENT_SPECS:
+            metric_name = str(spec["metric_name"])
+            value = metrics.get(metric_name)
+            if not _is_finite(value):
+                valid_row = False
+                break
+            row[metric_name] = float(value)
+        if not valid_row:
+            continue
+        scores.append(float(score))
+        for metric_name, value in row.items():
+            metric_values[metric_name].append(value)
+
+    correlations: dict[str, dict[str, Any]] = {}
+    for spec in _WEIGHT_COMPONENT_SPECS:
+        metric_name = str(spec["metric_name"])
+        direction = str(spec["direction"])
+        values = metric_values.get(metric_name, [])
+        value_range = (max(values) - min(values)) if values else 0.0
+        variable = len(values) >= 2 and value_range > 0.0
+        score_range = (max(scores) - min(scores)) if scores else 0.0
+        score_variable = len(scores) >= 2 and score_range > 0.0
+        correlation: float | None
+        aligned: bool | None
+        if variable and score_variable:
+            correlation = float(spearman_correlation(scores, values))
+            aligned = correlation > 0.0 if direction == "positive" else correlation < 0.0
+        else:
+            correlation = None
+            aligned = None
+        correlations[metric_name] = {
+            "weight_name": str(spec["weight_name"]),
+            "direction": direction,
+            "spearman": correlation,
+            "variable": bool(variable),
+            "aligned_with_expected_direction": aligned,
+        }
+    return correlations
+
+
+def compute_planner_snqi_ordering(
+    episodes: Sequence[Mapping[str, Any]],
+    *,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+) -> list[dict[str, Any]]:
+    """Compute planner-level SNQI ordering from episode records.
+
+    Returns:
+        Sorted planner rows with ``rank``, ``mean_snqi``, and ``episode_count`` fields.
+    """
+    grouped: dict[str, dict[str, Any]] = {}
+    for episode in episodes:
+        metrics = episode.get("metrics")
+        if not isinstance(metrics, Mapping):
+            continue
+        score = _episode_score(metrics, weights=weights, baseline=baseline)
+        if not _is_finite(score):
+            continue
+        planner_key = str(episode.get("planner_key", "unknown"))
+        kinematics = str(episode.get("kinematics", "unknown"))
+        key = _episode_planner_key(episode)
+        bucket = grouped.setdefault(
+            key,
+            {
+                "planner_key": planner_key,
+                "kinematics": kinematics,
+                "episode_count": 0,
+                "score_sum": 0.0,
+            },
+        )
+        bucket["episode_count"] = int(bucket["episode_count"]) + 1
+        bucket["score_sum"] = float(bucket["score_sum"]) + float(score)
+
+    rows: list[dict[str, Any]] = []
+    for bucket in grouped.values():
+        episode_count = int(bucket["episode_count"])
+        mean_snqi = float(bucket["score_sum"]) / episode_count if episode_count > 0 else 0.0
+        rows.append(
+            {
+                "planner_key": str(bucket["planner_key"]),
+                "kinematics": str(bucket["kinematics"]),
+                "episode_count": episode_count,
+                "mean_snqi": mean_snqi,
+            }
+        )
+    rows.sort(
+        key=lambda row: (-float(row["mean_snqi"]), str(row["planner_key"]), str(row["kinematics"]))
+    )
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+    return rows
+
+
+def compute_weight_sensitivity(
+    episodes: Sequence[Mapping[str, Any]],
+    *,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+) -> list[dict[str, Any]]:
+    """Measure how ablation of each weight perturbs SNQI conclusions.
+
+    Returns:
+        Per-weight ablation rows sorted by descending sensitivity impact on planner and
+        episode ranking stability.
+    """
+    base_scores: list[float] = []
+    scored_episodes: list[Mapping[str, Any]] = []
+    for episode in episodes:
+        metrics = episode.get("metrics")
+        if not isinstance(metrics, Mapping):
+            continue
+        score = _episode_score(metrics, weights=weights, baseline=baseline)
+        if not _is_finite(score):
+            continue
+        scored_episodes.append(episode)
+        base_scores.append(float(score))
+
+    base_ordering = compute_planner_snqi_ordering(
+        scored_episodes, weights=weights, baseline=baseline
+    )
+    base_planner_order = [f"{row['planner_key']}::{row['kinematics']}" for row in base_ordering]
+    base_planner_scores = [float(row["mean_snqi"]) for row in base_ordering]
+    rows: list[dict[str, Any]] = []
+    dominance = compute_component_dominance(scored_episodes, weights=weights, baseline=baseline)
+    total_weight = sum(
+        float(weights.get(str(spec["weight_name"]), 0.0)) for spec in _WEIGHT_COMPONENT_SPECS
+    )
+
+    for spec in _WEIGHT_COMPONENT_SPECS:
+        weight_name = str(spec["weight_name"])
+        contribution_name = str(spec["contribution_name"])
+        ablated_weights = dict(weights)
+        ablated_weights[weight_name] = 0.0
+        ablated_scores: list[float] = []
+        for episode in scored_episodes:
+            metrics = episode.get("metrics")
+            if not isinstance(metrics, Mapping):
+                continue
+            ablated_scores.append(
+                _episode_score(metrics, weights=ablated_weights, baseline=baseline)
+            )
+        episode_rank_corr = (
+            float(spearman_correlation(base_scores, ablated_scores))
+            if len(base_scores) >= 2 and len(ablated_scores) == len(base_scores)
+            else 1.0
+        )
+        planner_ordering = compute_planner_snqi_ordering(
+            scored_episodes,
+            weights=ablated_weights,
+            baseline=baseline,
+        )
+        planner_order = [f"{row['planner_key']}::{row['kinematics']}" for row in planner_ordering]
+        planner_scores = [float(row["mean_snqi"]) for row in planner_ordering]
+        planner_rank_corr = (
+            float(spearman_correlation(base_planner_scores, planner_scores))
+            if len(base_planner_scores) >= 2 and len(planner_scores) == len(base_planner_scores)
+            else 1.0
+        )
+        rows.append(
+            {
+                "weight_name": weight_name,
+                "metric_name": str(spec["metric_name"]),
+                "direction": str(spec["direction"]),
+                "configured_weight": float(weights.get(weight_name, 0.0)),
+                "configured_weight_share": (
+                    float(weights.get(weight_name, 0.0)) / total_weight
+                    if total_weight > 0.0
+                    else 0.0
+                ),
+                "mean_abs_contribution": float(dominance.get(contribution_name, 0.0)),
+                "mean_abs_score_delta_if_ablated": (
+                    sum(
+                        abs(base - ablated)
+                        for base, ablated in zip(base_scores, ablated_scores, strict=False)
+                    )
+                    / len(base_scores)
+                    if base_scores
+                    else 0.0
+                ),
+                "episode_rank_correlation_if_ablated": episode_rank_corr,
+                "planner_rank_correlation_if_ablated": planner_rank_corr,
+                "planner_order_changed_if_ablated": planner_order != base_planner_order,
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            float(row["planner_rank_correlation_if_ablated"]),
+            float(row["episode_rank_correlation_if_ablated"]),
+            -float(row["mean_abs_score_delta_if_ablated"]),
+        )
+    )
+    for index, row in enumerate(rows, start=1):
+        row["sensitivity_rank"] = index
+    return rows
+
+
+def build_positioning_recommendation(
+    component_correlations: Mapping[str, Mapping[str, Any]],
+    planner_ordering: Sequence[Mapping[str, Any]],
+    weight_sensitivity: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Summarize whether SNQI is defensible as an operational aggregate.
+
+    Returns:
+        Recommendation payload with claim scope, caveats, and simple evidence counts.
+    """
+    aligned_metrics = 0
+    variable_metrics = 0
+    degenerate_metrics: list[str] = []
+    for metric_name, payload in component_correlations.items():
+        if bool(payload.get("variable")):
+            variable_metrics += 1
+            if payload.get("aligned_with_expected_direction") is True:
+                aligned_metrics += 1
+        else:
+            degenerate_metrics.append(metric_name)
+    planner_names = [str(row.get("planner_key", "unknown")) for row in planner_ordering]
+    ordering_is_informative = len(planner_names) >= 2 and len(set(planner_names)) >= 2
+    order_changes = sum(
+        1 for row in weight_sensitivity if bool(row.get("planner_order_changed_if_ablated"))
+    )
+    recommendation = (
+        "strengthen_as_operational_multi_objective_aggregation"
+        if aligned_metrics >= max(3, variable_metrics - 1) and ordering_is_informative
+        else "downgrade_to_appendix_or_implementation_aid"
+    )
+    caveats = []
+    if degenerate_metrics:
+        caveats.append(
+            "Degenerate metrics on this slice cannot be used as independent validation signals: "
+            + ", ".join(sorted(degenerate_metrics))
+        )
+    if order_changes <= 0:
+        caveats.append(
+            "Planner ordering is stable under one-at-a-time weight ablation on this slice."
+        )
+    return {
+        "recommendation": recommendation,
+        "claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+        "aligned_metric_count": aligned_metrics,
+        "variable_metric_count": variable_metrics,
+        "degenerate_metrics": sorted(degenerate_metrics),
+        "planner_ordering_informative": ordering_is_informative,
+        "ablation_order_change_count": order_changes,
+        "caveats": caveats,
+    }
+
+
 def calibrate_weights(
     planner_rows: Sequence[Mapping[str, Any]],
     episodes: Sequence[Mapping[str, Any]],
@@ -526,10 +846,14 @@ def collect_episodes_from_campaign_runs(
 __all__ = [
     "SnqiContractEvaluation",
     "SnqiContractThresholds",
+    "build_positioning_recommendation",
     "calibrate_weights",
     "collect_episodes_from_campaign_runs",
     "compute_baseline_stats_from_episodes",
+    "compute_component_correlations",
     "compute_component_dominance",
+    "compute_planner_snqi_ordering",
+    "compute_weight_sensitivity",
     "evaluate_snqi_contract",
     "resolve_weight_mapping",
     "sanitize_baseline_stats",

@@ -125,11 +125,30 @@ Threshold provenance and reproducibility contract:
 ### Composite Metrics
 
 #### SNQI (Social Navigation Quality Index)
-- **Definition**: Weighted combination of normalized component metrics
+- **Definition**: Weighted benchmark aggregate over task completion, efficiency, safety, and comfort signals
 - **Type**: Float
 - **Range**: Depends on normalization and weights
-- **Purpose**: Overall navigation quality assessment
-- **Formula**: SNQI = Σ(w_i × normalized_metric_i) where w_i are learned weights
+- **Purpose**: Operational multi-objective aggregation for AMV evaluation
+- **Formula**:
+
+  `SNQI = w_success * success`
+
+  `      - w_time * time_to_goal_norm`
+
+  `      - w_collisions * norm(collisions)`
+
+  `      - w_near * norm(near_misses)`
+
+  `      - w_comfort * comfort_exposure`
+
+  `      - w_force_exceed * norm(force_exceed_events)`
+
+  `      - w_jerk * norm(jerk_mean)`
+
+- **Interpretation**:
+  Higher is better.
+  SNQI is a benchmark aggregate for comparing planners under a fixed metric contract.
+  It is not a universal ground-truth social utility scalar.
 
 ## Normalization Strategy
 
@@ -143,11 +162,13 @@ For SNQI computation, metrics are normalized using baseline statistics:
 - Missing pedestrians (K=0): Distance-based metrics return appropriate defaults (NaN for min/mean distance, 0 for counts)
 - Zero-length trajectories: Motion metrics return 0 or NaN as appropriate
 - Force availability: Force-based metrics require `record_forces=True` during episode generation
+- Paper-facing benchmark runs should use the pinned `camera_ready_v3` SNQI weights and baseline assets.
+- Contract health, component correlations, planner ordering, and ablation-based weight sensitivity are emitted in benchmark `reports/snqi_diagnostics.{json,md}` and `reports/snqi_sensitivity.csv`.
 
 ## References
 
 - Collision and near-miss thresholds aligned with existing test suite for backward compatibility
 - Force threshold calibrated empirically for current fast-pysf physics model
-- SNQI methodology follows composite index best practices with learned weights
+- SNQI methodology follows bounded composite-index practice with versioned weights, baseline normalization, and explicit contract diagnostics
 
 *Last updated: February 2026*

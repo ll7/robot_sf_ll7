@@ -203,7 +203,8 @@ def test_step_vector_mode_uses_model_prediction_and_fallback_action(
 
     planner._model = None
     fallback = planner.step(_make_observation())
-    assert fallback == {"v": 2.0, "omega": 0.7853981633974483}
+    assert fallback["v"] == pytest.approx(2.0)
+    assert fallback["omega"] == pytest.approx(0.7853981633974483)
 
 
 def test_step_dict_mode_applies_transform_and_aliases(

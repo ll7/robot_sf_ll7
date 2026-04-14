@@ -20,7 +20,11 @@ def test_repository_map_assets_are_svg_only() -> None:
 
 
 def test_svg_maps_are_loaded_and_json_files_are_ignored(tmp_path: Path) -> None:
-    """Map folders should load SVG maps and ignore legacy JSON files."""
+    """Map folders should load SVG maps and ignore legacy JSON files.
+
+    Also checks that a single SVG robot_route is automatically mirrored so the
+    pool always exposes both directions, matching serialize_map semantics.
+    """
     (tmp_path / "alpha.json").write_text("{}", encoding="utf-8")
     (tmp_path / "alpha.svg").write_text(
         """
@@ -35,10 +39,16 @@ def test_svg_maps_are_loaded_and_json_files_are_ignored(tmp_path: Path) -> None:
     )
 
     pool = MapDefinitionPool(maps_folder=str(tmp_path))
+    alpha = pool.map_defs["alpha"]
 
     assert list(pool.map_defs) == ["alpha"]
-    assert pool.map_defs["alpha"].width == pytest.approx(20.0)
-    assert pool.map_defs["alpha"].height == pytest.approx(10.0)
+    assert alpha.width == pytest.approx(20.0)
+    assert alpha.height == pytest.approx(10.0)
+    # The SVG has one route (0→0); the symmetric-route normalisation must not
+    # add a duplicate because spawn_id == goal_id means the reverse is the same
+    # pair.  If the SVG had a 0→1 route, a 1→0 reverse would be added.
+    route_pairs = {(r.spawn_id, r.goal_id) for r in alpha.robot_routes}
+    assert (0, 0) in route_pairs
 
 
 def test_json_only_map_folder_is_rejected(tmp_path: Path) -> None:
@@ -86,6 +96,32 @@ def test_serialize_map_handles_core_map_contract() -> None:
     assert len(map_def.robot_routes) == 2
     assert len(map_def.ped_routes) == 1
     assert len(map_def.single_pedestrians) == 1
+
+
+def test_asymmetric_svg_routes_are_mirrored(tmp_path: Path) -> None:
+    """SVG maps with asymmetric routes get the missing reverse added by the loader."""
+    (tmp_path / "asym.svg").write_text(
+        """
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="20" height="10" viewBox="0 0 20 10">
+  <rect inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+  <rect inkscape:label="robot_spawn_zone_1" x="17" y="1" width="1" height="1" />
+  <rect inkscape:label="robot_goal_zone_0" x="1" y="7" width="1" height="1" />
+  <rect inkscape:label="robot_goal_zone_1" x="17" y="7" width="1" height="1" />
+  <path inkscape:label="robot_route_0_1" d="M 1.5 1.5 L 10 5 L 17.5 7.5" />
+</svg>
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    pool = MapDefinitionPool(maps_folder=str(tmp_path))
+    asym = pool.map_defs["asym"]
+
+    route_pairs = {(r.spawn_id, r.goal_id) for r in asym.robot_routes}
+    # SVG provides 0→1; loader must add the symmetric 1→0 reverse.
+    assert (0, 1) in route_pairs
+    assert (1, 0) in route_pairs
+    assert len(asym.robot_routes) == 2
 
 
 def test_migrated_svg_map_loads() -> None:

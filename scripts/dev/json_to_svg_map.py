@@ -136,13 +136,51 @@ def _path_elem(
 # ---------------------------------------------------------------------------
 
 
+_SUPPORTED_JSON_KEYS = frozenset(
+    {
+        "x_margin",
+        "y_margin",
+        "obstacles",
+        "robot_spawn_zones",
+        "robot_goal_zones",
+        "ped_spawn_zones",
+        "ped_goal_zones",
+        "ped_crowded_zones",
+        "ped_routes",
+        "robot_routes",
+    }
+)
+"""JSON map keys that this converter can represent in SVG.
+
+``serialize_map`` also handles ``single_pedestrians`` (individual ped
+trajectories) and any future extensions.  These cannot be expressed in the
+current SVG schema and are silently dropped unless explicitly detected here.
+"""
+
+
 def convert_json_to_svg(map_data: dict[str, Any], output_path: Path) -> None:
     """Convert a JSON map dictionary to an SVG file at *output_path*.
 
     Args:
         map_data: Parsed JSON map dictionary (as loaded from a ``.json`` map file).
         output_path: Destination ``.svg`` file path.
+
+    Raises:
+        SystemExit: If the map contains keys not supported by this converter
+            (e.g. ``single_pedestrians``).  Use ``--force`` to convert anyway
+            and accept that those fields will be dropped.
     """
+    unsupported = sorted(set(map_data.keys()) - _SUPPORTED_JSON_KEYS)
+    if unsupported:
+        print(
+            f"ERROR: the source map contains fields that cannot be represented "
+            f"in SVG and would be silently dropped:\n  {unsupported}\n"
+            f"Aborting conversion to prevent data loss.  Remove or migrate those "
+            f"fields before converting, or add SVG support for them.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     min_x, max_x = map_data["x_margin"]
     min_y, max_y = map_data["y_margin"]
     width = max_x - min_x

@@ -59,5 +59,6 @@ planner_key_mapping:
   social_navigation_pyenvs_hsfm_new_guo: social-navigation-pyenvs-hsfm-new-guo
   social_navigation_pyenvs_orca: social-navigation-pyenvs-orca
   social_navigation_pyenvs_socialforce: social-navigation-pyenvs-socialforce
+  socnav_bench: socnav-bench
   socnav_sampling: socnav-sampling
   stream_gap: stream-gap

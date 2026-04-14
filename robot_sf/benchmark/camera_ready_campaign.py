@@ -2107,6 +2107,11 @@ def _planner_report_row(  # noqa: C901
         "availability_status": availability.availability_status,
         "benchmark_success": str(availability.benchmark_success).lower(),
         "availability_reason": availability.availability_reason or "",
+        "most_likely_failure_reason": (
+            (availability.availability_reason or summary.get("error") or "")
+            if availability.availability_status != "available" or summary.get("status") == "failed"
+            else ""
+        ),
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
         "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
@@ -2456,6 +2461,25 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     else:
         lines.append("- No campaign-level warnings.")
 
+    failing_rows = [
+        row
+        for row in rows
+        if str(row.get("status", "")).lower() in {"failed", "partial-failure", "not_available"}
+    ]
+    lines.extend(["", "## Failed Planners And Likely Reasons", ""])
+    if failing_rows:
+        lines.append("| planner | status | most likely reason |")
+        lines.append("|---|---|---|")
+        for row in failing_rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('most_likely_failure_reason') or row.get('availability_reason') or 'unspecified')} |"
+            )
+    else:
+        lines.append("- No failed/partial/not-available planners.")
+
     publication = payload.get("publication_bundle")
     if isinstance(publication, dict):
         lines.extend(
@@ -2671,6 +2695,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             )
             planner_rows.append(row)
 
+            if status in {"failed", "partial-failure", "not_available"}:
+                reason = str(row.get("most_likely_failure_reason", "")).strip() or "unspecified"
+                warnings.append(
+                    "Planner failure recorded: "
+                    f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
+                    f"most_likely_reason='{reason}'"
+                )
+
             run_entries.append(
                 {
                     "planner": {
@@ -2756,6 +2788,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "readiness_status",
             "availability_status",
             "benchmark_success",
+            "most_likely_failure_reason",
             "availability_reason",
             "readiness_tier",
             "preflight_status",

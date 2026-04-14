@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
 
 MAPS_ROOT = Path(__file__).resolve().parents[1] / "robot_sf" / "maps"
@@ -47,6 +47,45 @@ def test_json_only_map_folder_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="empty"):
         MapDefinitionPool(maps_folder=str(tmp_path))
+
+
+def test_serialize_map_handles_core_map_contract() -> None:
+    """Synthetic map data should still round-trip through the legacy serializer."""
+    map_structure = {
+        "x_margin": [0, 10],
+        "y_margin": [0, 10],
+        "obstacles": [
+            [[1, 1], [3, 1], [3, 3], [1, 3]],
+        ],
+        "robot_spawn_zones": [[[0, 0], [1, 0], [1, 1]]],
+        "robot_goal_zones": [[[8, 8], [9, 8], [9, 9]]],
+        "robot_routes": [
+            {"spawn_id": 0, "goal_id": 0, "waypoints": [[0.5, 0.5], [5.0, 0.5], [8.5, 8.5]]}
+        ],
+        "ped_spawn_zones": [[[2, 2], [3, 2], [3, 3]]],
+        "ped_goal_zones": [[[6, 6], [7, 6], [7, 7]]],
+        "ped_crowded_zones": [[[4, 4], [5, 4], [5, 5]]],
+        "ped_routes": [
+            {"spawn_id": 0, "goal_id": 0, "waypoints": [[2.5, 2.5], [4.0, 4.0], [6.5, 6.5]]}
+        ],
+        "single_pedestrians": [
+            {
+                "id": "ped1",
+                "start": [1, 1],
+                "goal": [2, 2],
+                "wait_at": [{"waypoint_index": 0, "wait_s": 1.5, "note": "pause"}],
+            }
+        ],
+    }
+
+    map_def = serialize_map(map_structure)
+
+    assert map_def.width == pytest.approx(10.0)
+    assert map_def.height == pytest.approx(10.0)
+    assert len(map_def.obstacles) == 1
+    assert len(map_def.robot_routes) == 2
+    assert len(map_def.ped_routes) == 1
+    assert len(map_def.single_pedestrians) == 1
 
 
 def test_migrated_svg_map_loads() -> None:

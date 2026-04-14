@@ -1,7 +1,7 @@
 schema_version: benchmark-release-manifest.v0.1
 benchmark_protocol_version: 0.1.0
 release_id: paper_experiment_matrix_7planners_v1_v0_0_2
-release_tag: 0.0.2-scoped
+release_tag: 0.0.2
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_7planners_v1.yaml
 campaign_config_sha256: "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7"
@@ -60,7 +60,7 @@ artifacts:
 
 provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7
-  doi: 10.5281/zenodo.<record-id>
+  doi: 10.5281/zenodo.19563812
 
 citation_path: ../../../CITATION.cff
 release_checklist_path: ../../../RELEASE.md

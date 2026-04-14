@@ -178,8 +178,8 @@ To migrate to full 8-planner release in a future version:
 
 ## References
 
-* **Scoped Campaign Config**: [`configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`](../paper_experiment_matrix_7planners_v1.yaml)
-* **Scoped Release Manifest**: [`configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`](../releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml)
+* **Scoped Campaign Config**: [`configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`](../../configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml)
+* **Scoped Release Manifest**: [`configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`](../../configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml)
 * **SocNav Asset Setup**: [`docs/socnav_assets_setup.md`](../socnav_assets_setup.md)
 * **Benchmark Fallback Policy**: [`docs/context/issue_691_benchmark_fallback_policy.md`](issue_691_benchmark_fallback_policy.md)
-* **Original All-Planners Config**: [`configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`](../paper_experiment_matrix_all_planners_v1.yaml)
+* **Original All-Planners Config**: [`configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`](../../configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml)

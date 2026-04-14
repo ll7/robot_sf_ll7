@@ -2108,8 +2108,8 @@ def _planner_report_row(  # noqa: C901
         "benchmark_success": str(availability.benchmark_success).lower(),
         "availability_reason": availability.availability_reason or "",
         "most_likely_failure_reason": (
-            (availability.availability_reason or "")
-            if availability.availability_status != "available"
+            (availability.availability_reason or summary.get("error") or "")
+            if availability.availability_status != "available" or summary.get("status") == "failed"
             else ""
         ),
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),

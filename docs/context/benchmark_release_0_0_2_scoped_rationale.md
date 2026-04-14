@@ -1,8 +1,10 @@
 # Benchmark Release v0.0.2 Scoped (7-Planner Release) - Rationale
 
 **Date**: 2026-04-14  
-**Release ID**: `paper_experiment_matrix_7planners_v1_v0_0_2`  
-**Release Tag**: `0.0.2-scoped`  
+**Release ID**: `paper_experiment_matrix_7planners_v1_v0_0_2`
+
+**Release Tag**: `0.0.2-scoped`
+
 **Maturity**: pre-1.0 alpha  
 
 ## Executive Summary
@@ -26,22 +28,23 @@ The full benchmark campaign targets 8 planners:
 ### Why socnav_bench Cannot Run
 
 **socnav_bench** requires the **SocNavBench** external dataset, specifically:
-- **skfmm** Python package (scipy-compatible fast marching method)
-- **SD3DIS dataset** with traversibles pre-computed
-- Data directory structure: `$SOCNAV_BENCHMARK_DIRS/*/traversibles/`
+* **skfmm** Python package (scipy-compatible fast marching method)
+* **SD3DIS dataset** with traversibles pre-computed
+* Data directory structure: `$SOCNAV_BENCHMARK_DIRS/*/traversibles/`
 
 ### Problem Statement
 
 During preflight validation, socnav_bench fails with:
+
 ```
 SocNavBench control pipeline parameters failed to load:
   [errno 2] No such file or directory: '<data_root>/traversibles'
 ```
 
 This is **not a code regression** — it is a **missing external dataset dependency** that is:
-- Not distributed with the repository
-- Not installable via pip/conda
-- Requires manual user download and setup via `docs/socnav_assets_setup.md`
+* Not distributed with the repository
+* Not installable via pip/conda
+* Requires manual user download and setup via `docs/socnav_assets_setup.md`
 
 ### Historical Attempts (2026-04-13, 2026-04-14)
 
@@ -64,14 +67,15 @@ Given the alpha status and external dependency blocker, we proceed with:
 
 ## Scoped Release Configuration
 
-**Campaign Config**: `configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`  
-**Release Manifest**: `configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`  
+**Campaign Config**: `configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`
+
+**Release Manifest**: `configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`
 
 Changes from all-planners config:
-- Removed planner entry: `socnav_bench`
-- Kept identical: scenario matrix, seed policy, SNQI weights, contract thresholds, kinematics
-- Kept identical: workers, bootstrap, recording, resume policies
-- **Result**: 7-planner benchmark with identical experimental design to full release
+* Removed planner entry: `socnav_bench`
+* Kept identical: scenario matrix, seed policy, SNQI weights, contract thresholds, kinematics
+* Kept identical: workers, bootstrap, recording, resume policies
+* **Result**: 7-planner benchmark with identical experimental design to full release
 
 ## Publication & Discoverability
 
@@ -86,7 +90,9 @@ Changes from all-planners config:
 ### Release Notes
 
 **Primary Note** (GitHub release):
+
 ```
+
 ## v0.0.2 (Scoped)
 
 This release includes the **first stable benchmark of 7 core and experimental 
@@ -105,34 +111,40 @@ socnav_sampling, sacadrl
 ```
 
 **Disclosure in Docs**:
-- Update `docs/benchmark.md` to note scoped release status
-- Link to `socnav_assets_setup.md` in benchmark overview
-- Document how to upgrade to full release once assets are staged
+* Update `docs/benchmark.md` to note scoped release status
+* Link to `socnav_assets_setup.md` in benchmark overview
+* Document how to upgrade to full release once assets are staged
 
 ### Internal Documentation
 
-- This file: rationale and history
-- Campaign run logs: artifact paths in `output/benchmarks/camera_ready/`
-- Manifest: `configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`
+* This file: rationale and history
+* Campaign run logs: artifact paths in `output/benchmarks/camera_ready/`
+* Manifest: `configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`
 
 ## Follow-Up Path: Full Release
 
 To migrate to full 8-planner release in a future version:
 
 1. **Stage Assets** (out-of-band):
-   ```bash
+   
+
+```bash
    # User downloads SD3DIS dataset and runs:
    scripts/socnav/setup_socnav_assets.sh <data_root>
    ```
 
 2. **Verify socnav_bench Planner**:
-   ```bash
+   
+
+```bash
    uv run python scripts/validation/verify_planner.py --planner socnav_bench
    ```
 
 3. **Create New Release Config**:
    - Revert to `paper_experiment_matrix_all_planners_v1.yaml`
+
    - Create manifest `paper_experiment_matrix_all_planners_v1_release_v0_0_3.yaml`
+
    - Run full campaign
 
 4. **Publish as v0.0.3 (Full)**:
@@ -143,28 +155,31 @@ To migrate to full 8-planner release in a future version:
 ## Risk Assessment
 
 ### Low-Risk Decision
-- ✅ Code is unchanged; only configuration changes
-- ✅ No regressions to 7-planner reproducibility
-- ✅ SNQI normalization unaffected (7 planners sufficient for contract)
-- ✅ Publication bundle integrity maintained
-- ✅ Clear disclosure of scope in release notes
+
+* ✅ Code is unchanged; only configuration changes
+* ✅ No regressions to 7-planner reproducibility
+* ✅ SNQI normalization unaffected (7 planners sufficient for contract)
+* ✅ Publication bundle integrity maintained
+* ✅ Clear disclosure of scope in release notes
 
 ### Transparent Communication
-- ✅ Release tag explicitly labeled `-scoped`
-- ✅ Release ID distinct from all-planners release
-- ✅ Manifest includes rationale comment
-- ✅ Docs and GitHub notes disclose socnav_bench exclusion
+
+* ✅ Release tag explicitly labeled `-scoped`
+* ✅ Release ID distinct from all-planners release
+* ✅ Manifest includes rationale comment
+* ✅ Docs and GitHub notes disclose socnav_bench exclusion
 
 ### No Impact on Core Benchmark Value
-- 7 planners represent diverse algorithm families (sampling, learning, force-based, graph search)
-- All core baselines included (goal, social_force, orca)
-- Experimental planners well-represented (ppo, prediction_planner, socnav_sampling, sacadrl)
-- SNQI contract and rank alignment still enforce quality
+
+* 7 planners represent diverse algorithm families (sampling, learning, force-based, graph search)
+* All core baselines included (goal, social_force, orca)
+* Experimental planners well-represented (ppo, prediction_planner, socnav_sampling, sacadrl)
+* SNQI contract and rank alignment still enforce quality
 
 ## References
 
-- **Scoped Campaign Config**: [`configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`](../paper_experiment_matrix_7planners_v1.yaml)
-- **Scoped Release Manifest**: [`configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`](../releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml)
-- **SocNav Asset Setup**: [`docs/socnav_assets_setup.md`](../socnav_assets_setup.md)
-- **Benchmark Fallback Policy**: [`docs/context/issue_691_benchmark_fallback_policy.md`](issue_691_benchmark_fallback_policy.md)
-- **Original All-Planners Config**: [`configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`](../paper_experiment_matrix_all_planners_v1.yaml)
+* **Scoped Campaign Config**: [`configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml`](../paper_experiment_matrix_7planners_v1.yaml)
+* **Scoped Release Manifest**: [`configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`](../releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml)
+* **SocNav Asset Setup**: [`docs/socnav_assets_setup.md`](../socnav_assets_setup.md)
+* **Benchmark Fallback Policy**: [`docs/context/issue_691_benchmark_fallback_policy.md`](issue_691_benchmark_fallback_policy.md)
+* **Original All-Planners Config**: [`configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`](../paper_experiment_matrix_all_planners_v1.yaml)

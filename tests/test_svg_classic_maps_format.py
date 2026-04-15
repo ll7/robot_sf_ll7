@@ -86,6 +86,7 @@ def test_classic_crossing_ped_routes_avoid_obstacle_interior():
     converter = SvgMapConverter(str(SVG_DIR / "classic_crossing.svg"))
     md = converter.get_map_definition()
     obstacle_polys = [poly for ob in md.obstacles for poly in ob.iter_polygons()]
+    assert obstacle_polys, "Expected classic_crossing obstacles to expose polygon geometry"
 
     for route in md.ped_routes:
         if len(route.waypoints) < 2:

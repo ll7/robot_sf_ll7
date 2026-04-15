@@ -16,6 +16,8 @@ import optuna
 import yaml
 from loguru import logger
 from matplotlib import patches
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path as MplPath
 from shapely.geometry import LineString
 
 from robot_sf.nav.global_route import GlobalRoute
@@ -285,15 +287,27 @@ def _plot_map_background(ax: object, map_def: MapDefinition) -> None:
     )
     ax.add_patch(boundary)
     for obstacle in map_def.obstacles:
-        patch = patches.Polygon(
-            obstacle.vertices,
-            closed=True,
-            facecolor="#aaaaaa",
-            edgecolor="#444444",
-            linewidth=0.8,
-            alpha=0.7,
-        )
-        ax.add_patch(patch)
+        for polygon in obstacle.iter_polygons():
+            # Compound PathPatch so holes are subtracted rather than overpainted.
+            verts: list = []
+            codes: list = []
+            ext_coords = list(polygon.exterior.coords)
+            verts.extend(ext_coords)
+            codes.extend(
+                [MplPath.MOVETO] + [MplPath.LINETO] * (len(ext_coords) - 2) + [MplPath.CLOSEPOLY]
+            )
+            for interior in polygon.interiors:
+                int_coords = list(interior.coords)
+                verts.extend(int_coords)
+                codes.extend(
+                    [MplPath.MOVETO]
+                    + [MplPath.LINETO] * (len(int_coords) - 2)
+                    + [MplPath.CLOSEPOLY]
+                )
+            path = MplPath(verts, codes)
+            ax.add_patch(
+                PathPatch(path, facecolor="#aaaaaa", edgecolor="#444444", linewidth=0.8, alpha=0.7)
+            )
 
 
 def _plot_route_set(

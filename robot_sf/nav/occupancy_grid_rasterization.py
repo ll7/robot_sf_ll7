@@ -448,11 +448,18 @@ def rasterize_polygon(
         )
 
     if isinstance(polygon, _ShapelyPolygon):
-        poly = polygon if polygon.is_valid else polygon.buffer(0)
-        if poly.is_empty:
+        shape = polygon if polygon.is_valid else polygon.buffer(0)
+        if shape.is_empty:
             return 0
-        polygon = poly
-        coords = list(poly.exterior.coords)
+        # buffer(0) can return a MultiPolygon for self-intersecting inputs
+        if isinstance(shape, _ShapelyMultiPolygon):
+            return sum(
+                rasterize_polygon(poly, grid_array, config, grid_origin_x, grid_origin_y, value)
+                for poly in shape.geoms
+                if not poly.is_empty
+            )
+        polygon = shape
+        coords = list(shape.exterior.coords)
     else:
         if len(polygon) < 3:
             return 0

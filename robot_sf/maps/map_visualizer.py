@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 from loguru import logger
-from matplotlib.patches import Polygon
+from matplotlib.patches import PathPatch, Polygon
+from matplotlib.path import Path as MplPath
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -136,6 +137,35 @@ def create_map_figure(map_def: MapDefinition) -> tuple[plt.Figure, Axes]:
     return plt.subplots(figsize=figsize)
 
 
+def _plot_obstacle_patches(ax: Axes, map_def: MapDefinition) -> None:
+    """Add compound PathPatch for each obstacle polygon (including holes).
+
+    Each polygon is rendered as a single PathPatch so interior rings are subtracted
+    via the non-zero winding rule rather than overpainted on the canvas.
+    """
+    for obstacle in map_def.obstacles:
+        for polygon in obstacle.iter_polygons():
+            verts: list = []
+            codes: list = []
+            # Exterior ring
+            ext_coords = list(polygon.exterior.coords)
+            verts.extend(ext_coords)
+            codes.extend(
+                [MplPath.MOVETO] + [MplPath.LINETO] * (len(ext_coords) - 2) + [MplPath.CLOSEPOLY]
+            )
+            # Interior rings (holes) — opposite winding subtracts via non-zero rule
+            for interior in polygon.interiors:
+                int_coords = list(interior.coords)
+                verts.extend(int_coords)
+                codes.extend(
+                    [MplPath.MOVETO]
+                    + [MplPath.LINETO] * (len(int_coords) - 2)
+                    + [MplPath.CLOSEPOLY]
+                )
+            path = MplPath(verts, codes)
+            ax.add_patch(PathPatch(path, facecolor=OBSTACLE_COLOR, edgecolor="black", alpha=0.8))
+
+
 def render_map_definition(  # noqa: PLR0913
     map_def: MapDefinition,
     ax: Axes,
@@ -149,26 +179,7 @@ def render_map_definition(  # noqa: PLR0913
     show_pois: bool = True,
 ) -> None:
     """Render map geometry into an existing Matplotlib axes."""
-    # Obstacles
-    for obstacle in map_def.obstacles:
-        for polygon in obstacle.iter_polygons():
-            patch = Polygon(
-                list(polygon.exterior.coords),
-                closed=True,
-                facecolor=OBSTACLE_COLOR,
-                edgecolor="black",
-                alpha=0.8,
-            )
-            ax.add_patch(patch)
-            for interior in polygon.interiors:
-                hole_patch = Polygon(
-                    list(interior.coords),
-                    closed=True,
-                    facecolor=ax.get_facecolor(),
-                    edgecolor="black",
-                    alpha=1.0,
-                )
-                ax.add_patch(hole_patch)
+    _plot_obstacle_patches(ax, map_def)
 
     # Boundaries
     for x1, x2, y1, y2 in map_def.bounds:

@@ -493,13 +493,18 @@ class OccupancyGrid:
                         [_to_ego_polygon(poly) for poly in polygon.geoms if not poly.is_empty]
                     )
                 if isinstance(polygon, _ShapelyPolygon):
-                    poly = polygon if polygon.is_valid else polygon.buffer(0)
-                    if poly.is_empty:
-                        return poly
-                    exterior = [_to_ego_point(vertex) for vertex in poly.exterior.coords[:-1]]
+                    shape = polygon if polygon.is_valid else polygon.buffer(0)
+                    if shape.is_empty:
+                        return shape
+                    # buffer(0) can return a MultiPolygon for self-intersecting inputs
+                    if isinstance(shape, _ShapelyMultiPolygon):
+                        return _ShapelyMultiPolygon(
+                            [_to_ego_polygon(poly) for poly in shape.geoms if not poly.is_empty]
+                        )
+                    exterior = [_to_ego_point(vertex) for vertex in shape.exterior.coords[:-1]]
                     interiors = [
                         [_to_ego_point(vertex) for vertex in ring.coords[:-1]]
-                        for ring in poly.interiors
+                        for ring in shape.interiors
                     ]
                     return _ShapelyPolygon(exterior, interiors)
                 return _ShapelyPolygon([_to_ego_point(vertex) for vertex in polygon])

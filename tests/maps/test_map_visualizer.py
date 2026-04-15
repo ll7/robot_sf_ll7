@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import matplotlib
-import matplotlib.colors as mcolors
 
 matplotlib.use("Agg")
 
 from typing import TYPE_CHECKING
 
 from matplotlib import pyplot as plt
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path as MplPath
 from shapely.geometry import Polygon as ShapelyPolygon
 
 if TYPE_CHECKING:
@@ -79,8 +80,12 @@ def test_visualize_map_definition_writes_file(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def test_render_map_definition_draws_polygon_holes_with_axes_facecolor() -> None:
-    """Obstacle holes should be rendered as cutouts using the axes facecolor."""
+def test_render_map_definition_draws_polygon_holes_as_compound_path() -> None:
+    """Obstacle with a hole should be rendered as a single compound PathPatch.
+
+    The compound path has two MOVETO codes — one for the exterior ring and one
+    for the interior ring — so holes are cut out without overdrawing the canvas.
+    """
     obstacle = Obstacle.from_geometry(
         ShapelyPolygon(
             [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0), (1.0, 3.0)],
@@ -91,7 +96,6 @@ def test_render_map_definition_draws_polygon_holes_with_axes_facecolor() -> None
     map_def.obstacles = [obstacle]
 
     fig, ax = plt.subplots()
-    ax.set_facecolor("#abcdef")
 
     map_visualizer.render_map_definition(
         map_def,
@@ -101,7 +105,11 @@ def test_render_map_definition_draws_polygon_holes_with_axes_facecolor() -> None
         show_zone_labels=False,
     )
 
-    assert len(ax.patches) >= 2
-    hole_patch = ax.patches[1]
-    assert mcolors.to_rgba(hole_patch.get_facecolor()) == mcolors.to_rgba(ax.get_facecolor())
+    path_patches = [p for p in ax.patches if isinstance(p, PathPatch)]
+    assert len(path_patches) >= 1, "Expected at least one PathPatch for the obstacle"
+    compound_path = path_patches[0].get_path()
+    moveto_count = sum(1 for code in compound_path.codes if code == MplPath.MOVETO)
+    assert moveto_count == 2, (
+        f"Expected compound path with 2 MOVETO codes (exterior + interior), got {moveto_count}"
+    )
     plt.close(fig)

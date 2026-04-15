@@ -1551,6 +1551,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         "gensafenav_gst_predictor_rand_guarded",
         "gst_predictor_rand_guarded",
     }:
+        holonomic_vx_vy_mode = (
+            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+            and normalized_robot_command_mode == "vx_vy"
+        )
+        if holonomic_vx_vy_mode:
+            raise ValueError(
+                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
+                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
+                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
+                "commands, so this path fails closed instead of collapsing ActionXY through a "
+                "lossy (v, w) round-trip."
+            )
+
         guarded_root = {
             "gensafenav_ours_gst_guarded",
             "ours_gst_guarded",
@@ -1606,19 +1619,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
             planner_meta["guard_strategy"] = "short_horizon_safety_gate"
             planner_meta["fallback_policy"] = "goal"
-
-        holonomic_vx_vy_mode = (
-            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
-            and normalized_robot_command_mode == "vx_vy"
-        )
-        if holonomic_vx_vy_mode:
-            raise ValueError(
-                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
-                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
-                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
-                "commands, so this path fails closed instead of collapsing ActionXY through a "
-                "lossy (v, w) round-trip."
-            )
 
         guarded_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,

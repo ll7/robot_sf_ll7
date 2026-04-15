@@ -122,26 +122,36 @@ def _resolve_socnav_observation_layout(
     goal = observation.get("goal", {})
     pedestrians = observation.get("pedestrians", {})
     if robot or goal or pedestrians:
-        return robot, goal, pedestrians, {
-            "robot_position": ("position", "robot.position"),
-            "goal_current": ("current", "goal.current"),
-            "robot_heading": ("heading", "robot.heading"),
-            "robot_velocity_xy": ("velocity_xy", "robot.velocity_xy"),
-            "robot_radius": ("radius", "robot.radius"),
-            "ped_positions": ("positions", "pedestrians.positions"),
-            "ped_velocities": ("velocities", "pedestrians.velocities"),
-            "ped_count": ("count", "pedestrians.count"),
-        }
-    return observation, observation, observation, {
-        "robot_position": ("robot_position", "robot_position"),
-        "goal_current": ("goal_current", "goal_current"),
-        "robot_heading": ("robot_heading", "robot_heading"),
-        "robot_velocity_xy": ("robot_velocity_xy", "robot_velocity_xy"),
-        "robot_radius": ("robot_radius", "robot_radius"),
-        "ped_positions": ("pedestrians_positions", "pedestrians_positions"),
-        "ped_velocities": ("pedestrians_velocities", "pedestrians_velocities"),
-        "ped_count": ("pedestrians_count", "pedestrians_count"),
-    }
+        return (
+            robot,
+            goal,
+            pedestrians,
+            {
+                "robot_position": ("position", "robot.position"),
+                "goal_current": ("current", "goal.current"),
+                "robot_heading": ("heading", "robot.heading"),
+                "robot_velocity_xy": ("velocity_xy", "robot.velocity_xy"),
+                "robot_radius": ("radius", "robot.radius"),
+                "ped_positions": ("positions", "pedestrians.positions"),
+                "ped_velocities": ("velocities", "pedestrians.velocities"),
+                "ped_count": ("count", "pedestrians.count"),
+            },
+        )
+    return (
+        observation,
+        observation,
+        observation,
+        {
+            "robot_position": ("robot_position", "robot_position"),
+            "goal_current": ("goal_current", "goal_current"),
+            "robot_heading": ("robot_heading", "robot_heading"),
+            "robot_velocity_xy": ("robot_velocity_xy", "robot_velocity_xy"),
+            "robot_radius": ("robot_radius", "robot_radius"),
+            "ped_positions": ("pedestrians_positions", "pedestrians_positions"),
+            "ped_velocities": ("pedestrians_velocities", "pedestrians_velocities"),
+            "ped_count": ("pedestrians_count", "pedestrians_count"),
+        },
+    )
 
 
 def _extract_socnav_fields(

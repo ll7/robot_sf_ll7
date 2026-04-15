@@ -62,6 +62,12 @@ _DEFAULT_COLLISION_DIST = 0.25
 _DEFAULT_NEAR_MISS_DIST = 0.50
 _DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
 _SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
+_TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
+    "near_misses",
+    "force_exceed_events",
+    "comfort_exposure",
+    "jerk_mean",
+)
 
 
 @dataclass(slots=True)
@@ -243,6 +249,53 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
         "success": success,
         "is_success": success,
     }
+
+
+def _coerce_finite_float(value: Any) -> float | None:
+    """Return ``value`` as a finite float when possible."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(result):
+        return None
+    return result
+
+
+def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
+    """Extract finite reward-term scalars for telemetry replay.
+
+    Returns:
+        dict[str, float]: Weighted reward-term values suitable for analyzer replay.
+    """
+
+    reward_terms = meta.get("reward_terms")
+    if not isinstance(reward_terms, dict):
+        return {}
+    extracted: dict[str, float] = {}
+    for key, value in reward_terms.items():
+        if not isinstance(key, str):
+            continue
+        numeric = _coerce_finite_float(value)
+        if numeric is not None:
+            extracted[key] = numeric
+    return extracted
+
+
+def _extract_step_metrics(meta: dict[str, Any]) -> dict[str, float]:
+    """Select analyzer-friendly numeric step metrics from reward metadata.
+
+    Returns:
+        dict[str, float]: Numeric step metrics exposed to the recorded-step analyzer.
+    """
+
+    extracted: dict[str, float] = {}
+    for key in _TELEMETRY_ANALYZER_STEP_METRIC_KEYS:
+        numeric = _coerce_finite_float(meta.get(key))
+        if numeric is not None:
+            extracted[key] = numeric
+    return extracted
 
 
 def _extract_robot_xy(robot_pose: Any) -> np.ndarray:
@@ -498,6 +551,7 @@ class RobotEnv(BaseEnv):
         self._init_telemetry(env_config)
         self._last_wall_time = time.perf_counter()
         self._frame_idx = 0
+        self._telemetry_episode_id = -1
         self._snqi_proxy_state = _StepSNQIProxyState()
         self._prime_snqi_proxy_state()
 
@@ -742,7 +796,7 @@ class RobotEnv(BaseEnv):
         self.last_action = action
 
         # Telemetry update
-        self._emit_telemetry(reward, term, False, action)
+        self._emit_telemetry(reward, term, False, action, reward_dict)
         self._latest_observation = obs
 
         # if recording is enabled, record the state
@@ -770,6 +824,7 @@ class RobotEnv(BaseEnv):
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
         super().reset(seed=seed, options=options)
+        self._telemetry_episode_id += 1
         # Reset last_action
         self.last_action = None
         # Reset internal simulator state
@@ -833,7 +888,17 @@ class RobotEnv(BaseEnv):
                 ):  # pragma: no cover - safe if none active
                     pass
                 config_hash = _stable_config_hash(self.env_config)
-                self.start_episode_recording(config_hash=config_hash)
+                telemetry_path = None
+                if self._telemetry_session is not None and self.env_config.telemetry_record:
+                    telemetry_path = str(self._telemetry_session.telemetry_path)
+                telemetry_episode_id = (
+                    self._telemetry_episode_id if telemetry_path is not None else None
+                )
+                self.start_episode_recording(
+                    config_hash=config_hash,
+                    telemetry_path=telemetry_path,
+                    telemetry_episode_id=telemetry_episode_id,
+                )
             else:
                 # Legacy pickle recording
                 self.save_recording()
@@ -851,6 +916,7 @@ class RobotEnv(BaseEnv):
         terminated: bool,
         truncated: bool,
         action: Any,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         """Record telemetry and update live pane if enabled."""
         if self._telemetry_session is None:
@@ -890,9 +956,18 @@ class RobotEnv(BaseEnv):
         payload = {
             "timestamp_ms": int(time.time() * 1000),
             "frame_idx": self._frame_idx,
+            "episode_id": self._telemetry_episode_id,
             "status": status,
             "metrics": metrics,
+            "reward_total": float(reward) if reward is not None else None,
         }
+        if meta is not None:
+            reward_terms = _extract_reward_terms(meta)
+            if reward_terms:
+                payload["reward_terms"] = reward_terms
+            step_metrics = _extract_step_metrics(meta)
+            if step_metrics:
+                payload["step_metrics"] = step_metrics
         self._frame_idx += 1
         self._telemetry_session.append(payload)
 

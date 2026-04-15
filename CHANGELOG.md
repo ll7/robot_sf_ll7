@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Recorded-step playback analyzer for issue #585: telemetry replay now records per-step reward
+  terms plus selected step metrics with episode IDs, JSONL episode metadata can link back to the
+  corresponding telemetry stream, and interactive playback can show a synchronized analyzer overlay
+  with reward tables, visible-metric filtering, and a scrub-aligned metric timeline while remaining
+  backward compatible with older recordings.
+
 * TEB corridor-commitment planner improvements for issue #805 (second iteration): fixed corner-cutting by tuning embedded route-guide `waypoint_lookahead_cells` to 5 (1.0 m target at 0.2 m/cell, full 0.9 m/s speed without diagonal clipping), increased `obstacle_inflation_cells` to 3 for 0.6 m corner clearance, added `stop_distance=0.5` for earlier front-clearance stops, and added `_rescue_or_stop` so all-blocked commitment falls back to the route guide rather than driving into obstacles; `plan()` refactored into `_try_route_command`, `_commitment_step`, and `_rescue_or_stop` helpers to satisfy the complexity limit.
 * TEB corridor-commitment planner improvements for issue #805 (first iteration): multi-step corridor occupancy scoring, escalated lateral commitment gains, blocked-side flip fallback, route-waypoint guidance integration, and reproducible topology-slice artifacts (`configs/scenarios/sets/issue_805_teb_topology_slice.yaml`,  `docs/context/issue_805_teb_corridor_commitment_iteration.md`).
 

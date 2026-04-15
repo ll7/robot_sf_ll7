@@ -179,6 +179,42 @@ def test_adapter_translates_nested_robot_sf_observation_and_projects_action(tmp_
     assert float(inputs["spatial_edges"][0, 0, 1]) == pytest.approx(0.0)
 
 
+def test_adapter_plan_velocity_world_returns_upstream_action_xy(tmp_path: Path) -> None:
+    """The adapter should expose the raw upstream ActionXY command for holonomic passthrough."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root, action_xy=(0.3, -0.4))
+    adapter = SonicCrowdNavAdapter(
+        build_sonic_crowdnav_config(
+            {
+                "repo_root": str(repo_root),
+                "checkpoint_name": "05207.pt",
+                "max_linear_speed": 1.0,
+                "max_angular_speed": 1.0,
+            }
+        )
+    )
+
+    velocity_world = adapter.plan_velocity_world(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.25],
+                "velocity_xy": [0.0, 0.0],
+                "radius": [0.3],
+            },
+            "goal": {"current": [2.0, 0.0]},
+            "pedestrians": {
+                "positions": [[1.0, 0.0]],
+                "velocities": [[0.0, 0.0]],
+                "count": [1],
+            },
+            "sim": {"timestep": 0.25},
+        }
+    )
+
+    assert velocity_world == pytest.approx((0.3, -0.4))
+
+
 def test_adapter_accepts_flat_single_human_payloads(tmp_path: Path) -> None:
     """Flat XY payloads should still normalize to one-row arrays."""
     repo_root = tmp_path / "repo"

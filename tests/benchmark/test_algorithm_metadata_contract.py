@@ -295,7 +295,6 @@ def test_gensafenav_ours_guarded_metadata_exposes_mixed_guarded_contract() -> No
     meta = enrich_algorithm_metadata(
         algo="ours_gst_guarded",
         metadata={"status": "ok"},
-        execution_mode="mixed",
         robot_kinematics="differential_drive",
     )
     planner = meta["planner_kinematics"]
@@ -313,7 +312,6 @@ def test_gensafenav_gst_predictor_rand_guarded_metadata_exposes_mixed_guarded_co
     meta = enrich_algorithm_metadata(
         algo="gst_predictor_rand_guarded",
         metadata={"status": "ok"},
-        execution_mode="mixed",
         robot_kinematics="differential_drive",
     )
     planner = meta["planner_kinematics"]
@@ -324,6 +322,18 @@ def test_gensafenav_gst_predictor_rand_guarded_metadata_exposes_mixed_guarded_co
     assert planner["supports_adapter_commands"] is True
     assert planner["execution_mode"] == "mixed"
     assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
+def test_guarded_gensafenav_metadata_execution_mode_override_still_applies() -> None:
+    """Guarded wrappers should still honor an explicit execution-mode override."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
 def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:

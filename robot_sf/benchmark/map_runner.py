@@ -1607,6 +1607,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             planner_meta["guard_strategy"] = "short_horizon_safety_gate"
             planner_meta["fallback_policy"] = "goal"
 
+        holonomic_vx_vy_mode = (
+            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+            and normalized_robot_command_mode == "vx_vy"
+        )
+        if holonomic_vx_vy_mode:
+            raise ValueError(
+                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
+                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
+                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
+                "commands, so this path fails closed instead of collapsing ActionXY through a "
+                "lossy (v, w) round-trip."
+            )
+
         guarded_kinematics_model = resolve_benchmark_kinematics_model(
             robot_kinematics=robot_kinematics,
             command_limits=algo_config,
@@ -1824,6 +1837,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "social_nav_pyenvs_socialforce",
             "social_navigation_pyenvs_sfm_helbing",
             "social_nav_pyenvs_sfm_helbing",
+            "sonic_crowdnav",
+            "sonic_gst",
+            "gensafenav_ours_gst",
+            "gensafe_ours_gst",
+            "ours_gst",
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
         }
         and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
         and normalized_robot_command_mode == "vx_vy"
@@ -1852,6 +1873,28 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
                 "JointState contract, run upstream ORCA predict(), and forward the resulting "
                 "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+            adapter_boundary = (
+                "Run the upstream SoNIC checkpoint through the model-only Robot SF wrapper and "
+                "forward the resulting ActionXY world velocity directly into the holonomic vx_vy "
+                "benchmark action space."
+            )
+        elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav Ours_GST checkpoint through the model-only Robot SF "
+                "wrapper and forward the resulting ActionXY world velocity directly into the "
+                "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
+        }:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav GST_predictor_rand checkpoint through the model-only "
+                "Robot SF wrapper and forward the resulting ActionXY world velocity directly into "
+                "the holonomic vx_vy benchmark action space."
             )
         else:
             adapter_boundary = (

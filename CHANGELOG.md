@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added explicit guarded GenSafeNav benchmark aliases (`ours_gst_guarded`,  `gst_predictor_rand_guarded`) as separate mixed-mode experimental algorithms that keep the model-only SoNIC checkpoint path but apply a short-horizon safety guard with goal fallback; includes readiness/metadata contract wiring and benchmark runner guard decision telemetry (`guard_stats`).
+* Added fail-fast SoNIC / GenSafeNav benchmark wrapper aliases for the model-only checkpoint path: base aliases `sonic_crowdnav`, `gensafenav_ours_gst`, and `gensafenav_gst_predictor_rand`, plus guarded variants `ours_gst_guarded` and `gst_predictor_rand_guarded` with short-horizon guard telemetry (`guard_stats`) and goal fallback. This exposes the adapter surface explicitly for users and benchmark configs while keeping remaining risks visible: the base wrappers are still prototype-level model-only integrations, guarded behavior exists only on the guarded aliases, and guarded holonomic `vx_vy` runs now fail closed until the guard can preserve upstream ActionXY without a lossy `(v, w)` round-trip.
 
 * Recorded-step playback analyzer for issue #585: telemetry replay now records per-step reward
   terms plus selected step metrics with episode IDs, JSONL episode metadata can link back to the

@@ -588,6 +588,26 @@ class SonicCrowdNavAdapter:
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 
+    def plan_velocity_world(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return the upstream ActionXY command in world coordinates.
+
+        Returns:
+            World-frame `(vx, vy)` velocity produced by the upstream checkpoint.
+        """
+        dt_source = observation.get("dt", 0.1)
+        if "sim" in observation and isinstance(observation["sim"], dict):
+            dt_source = observation["sim"].get("timestep", dt_source)
+        dt = float(np.asarray(dt_source, dtype=float).reshape(-1)[0])
+        _linear, _angular, meta = self.act(observation, time_step=dt)
+        velocity_world = np.asarray(
+            meta.get("upstream_action_xy", [0.0, 0.0]), dtype=float
+        ).reshape(-1)
+        if velocity_world.size < 2:
+            raise ValueError(
+                "SoNIC wrapper expected upstream_action_xy metadata with two components."
+            )
+        return float(velocity_world[0]), float(velocity_world[1])
+
 
 __all__ = [
     "SonicCrowdNavAdapter",

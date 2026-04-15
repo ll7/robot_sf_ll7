@@ -95,11 +95,81 @@ Implementation boundary:
 
 ## Performance Status
 
-Current evidence is limited to integration and smoke validation.
+Current evidence now includes both smoke validation and a small benchmark probe.
 
 - `Ours_GST` and `GST_predictor_rand` both step through the Robot SF wrapper and produce finite
   commands.
-- There is no episode-level success/collision/runtime report yet for these GenSafeNav aliases in the
-  Robot SF benchmark stack.
-- Do not infer benchmark-quality performance from the current proof set; the wrappers are runnable,
-  but their comparative quality is still unmeasured here.
+- There is now episode-level evidence on `verified_simple_subset_v1`, recorded below.
+- That evidence is still too weak to support a strong performance claim; the wrappers are runnable,
+  but their benchmark quality remains limited here.
+
+## Verified-Simple Benchmark Probe
+
+Date: 2026-04-15
+
+Matrix:
+
+- `configs/scenarios/sets/verified_simple_subset_v1.yaml`
+- 30 episodes total (10 scenarios x 3 seeds)
+
+Canonical commands used:
+
+```bash
+LOGURU_LEVEL=INFO uv run robot_sf_bench run \
+  --matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --out output/ai/autoresearch/gensafenav_tuning/ours_gst_baseline.episodes.jsonl \
+  --algo ours_gst \
+  --benchmark-profile experimental \
+  --workers 1 \
+  --structured-output json \
+  --no-video \
+  --no-resume \
+  --external-log-noise suppress
+
+LOGURU_LEVEL=INFO uv run robot_sf_bench run \
+  --matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --out output/ai/autoresearch/gensafenav_tuning/gst_predictor_rand_baseline.episodes.jsonl \
+  --algo gst_predictor_rand \
+  --benchmark-profile experimental \
+  --workers 1 \
+  --structured-output json \
+  --no-video \
+  --no-resume \
+  --external-log-noise suppress
+```
+
+Observed baseline result:
+
+- `ours_gst`: success `0.3333`, timeout `0.4667`, mean runtime `1.2092s`
+- `gst_predictor_rand`: success `0.3000`, timeout `0.1333`, mean runtime `1.0506s`
+
+Observed failure pattern:
+
+- both checkpoints solve the east/north/west empty-map cases
+- both are weak on static-obstacle and social-interaction slices
+- `ours_gst` is more timeout-dominated
+- `gst_predictor_rand` is more collision-dominated
+
+Control comparison:
+
+- native `goal` on the same matrix also lands at success `0.3000`
+- interpretation: the verified-simple slice is not a trivial free win, but the GenSafeNav wrappers
+  still do not show evidence of strong benchmark behavior here
+
+Autoresearch experiments attempted:
+
+- `goal.next` route-waypoint substitution into the upstream goal slot
+  - result: discarded
+  - reason: regressed `ours_gst` to success `0.2000` and broke the empty-map east case
+- increased `max_angular_speed` from `1.0` to `2.0`
+  - config: `configs/algos/gensafenav_turnfast_probe.yaml`
+  - result: discarded
+  - reason: no aggregate success gain for either checkpoint
+
+Current interpretation:
+
+- the remaining weakness does not look like a simple cap-tuning problem
+- the wrappers appear structurally limited on static-obstacle and social-interaction cases under the
+  current model-only adapter contract
+- any stronger improvement likely requires a more explicit hybrid/guarded planner path or a source-
+  faithful reproduction that preserves more of the upstream runtime semantics

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -21,7 +20,6 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
-    serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -717,7 +715,7 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
     8 unique maps were active in the same training session.
 
     Returns:
-        MapDefinition | None: Parsed map definition for supported formats, else ``None``.
+        MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
     path = Path(map_path)
@@ -726,13 +724,6 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         return None
     if path.suffix.lower() == ".svg":
         return convert_map(str(path))
-    if path.suffix.lower() == ".json":
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-            logger.error("Invalid JSON map '{}': {}", path, exc)
-            return None
-        return serialize_map(data)
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
 

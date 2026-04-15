@@ -8,6 +8,10 @@ It is everyones guide on how to use this repository effectively.
 
 ## Additional Instructions
 
+- For machine-specific limits and execution routing, check local machine context files at repo
+  root when present: `local.machine.md` or `local.machine.<name>.md` (template:
+  `docs/templates/local.machine.example.md`). If absent, use conservative defaults.
+
 - Use scriptable interfaces instead of cli interfaces when possible.
 - Make everything reproducible.
 - In benchmark work, use the canonical fail-closed fallback policy in

@@ -47,6 +47,9 @@ dist/
 !.env.example
 .vscode/mcp.json
 
+# Local machine context for agents (template in docs/templates)
+/local.machine*.md
+
 .gemini/
 gha-creds-*.json
 

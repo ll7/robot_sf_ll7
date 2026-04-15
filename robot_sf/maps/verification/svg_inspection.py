@@ -18,7 +18,7 @@ from math import dist
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString
 
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 
@@ -330,9 +330,9 @@ def _route_crosses_obstacle_interior(
         return False
     line = LineString(waypoints)
     for obstacle in map_def.obstacles:
-        poly = Polygon(obstacle.vertices)
-        if line.crosses(poly) or line.within(poly):
-            return True
+        for poly in obstacle.iter_polygons():
+            if line.crosses(poly) or line.within(poly):
+                return True
     return False
 
 

@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from math import sqrt
 
 import matplotlib.axes
-import numpy as np
+import matplotlib.patches as mpl_patches
 from loguru import logger
+from matplotlib.path import Path as MplPath
 from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
@@ -541,8 +542,28 @@ class MapDefinition:
         if not isinstance(ax, matplotlib.axes.Axes):
             raise TypeError("ax must be a matplotlib.axes.Axes object")
         for obstacle in self.obstacles:
-            vertices = np.array(obstacle.vertices)
-            ax.fill(vertices[:, 0], vertices[:, 1], "black")
+            for polygon in obstacle.iter_polygons():
+                # Build a compound path so holes are subtracted rather than
+                # overpainted — prevents erasing obstacles drawn inside a hole.
+                verts: list = []
+                codes: list = []
+                ext_coords = list(polygon.exterior.coords)
+                verts.extend(ext_coords)
+                codes.extend(
+                    [MplPath.MOVETO]
+                    + [MplPath.LINETO] * (len(ext_coords) - 2)
+                    + [MplPath.CLOSEPOLY]
+                )
+                for interior in polygon.interiors:
+                    int_coords = list(interior.coords)
+                    verts.extend(int_coords)
+                    codes.extend(
+                        [MplPath.MOVETO]
+                        + [MplPath.LINETO] * (len(int_coords) - 2)
+                        + [MplPath.CLOSEPOLY]
+                    )
+                path = MplPath(verts, codes)
+                ax.add_patch(mpl_patches.PathPatch(path, facecolor="black", edgecolor="none"))
 
     def is_point_in_driveable_area(self, point: Vec2D) -> bool:
         """Check if a point is in a driveable area.

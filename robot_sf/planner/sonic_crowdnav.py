@@ -105,6 +105,45 @@ def _xy_rows(value: Any) -> np.ndarray:
     return arr[:, :2]
 
 
+def _resolve_socnav_observation_layout(
+    observation: dict[str, Any],
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, tuple[str, str]],
+]:
+    """Resolve nested vs flat Robot SF observation sources and field names.
+
+    Returns:
+        Robot, goal, pedestrian sources plus `(lookup_key, error_label)` field metadata.
+    """
+    robot = observation.get("robot", {})
+    goal = observation.get("goal", {})
+    pedestrians = observation.get("pedestrians", {})
+    if robot or goal or pedestrians:
+        return robot, goal, pedestrians, {
+            "robot_position": ("position", "robot.position"),
+            "goal_current": ("current", "goal.current"),
+            "robot_heading": ("heading", "robot.heading"),
+            "robot_velocity_xy": ("velocity_xy", "robot.velocity_xy"),
+            "robot_radius": ("radius", "robot.radius"),
+            "ped_positions": ("positions", "pedestrians.positions"),
+            "ped_velocities": ("velocities", "pedestrians.velocities"),
+            "ped_count": ("count", "pedestrians.count"),
+        }
+    return observation, observation, observation, {
+        "robot_position": ("robot_position", "robot_position"),
+        "goal_current": ("goal_current", "goal_current"),
+        "robot_heading": ("robot_heading", "robot_heading"),
+        "robot_velocity_xy": ("robot_velocity_xy", "robot_velocity_xy"),
+        "robot_radius": ("robot_radius", "robot_radius"),
+        "ped_positions": ("pedestrians_positions", "pedestrians_positions"),
+        "ped_velocities": ("pedestrians_velocities", "pedestrians_velocities"),
+        "ped_count": ("pedestrians_count", "pedestrians_count"),
+    }
+
+
 def _extract_socnav_fields(
     observation: dict[str, Any],
 ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, float, np.ndarray, np.ndarray, int]:
@@ -113,57 +152,42 @@ def _extract_socnav_fields(
     Returns:
         Parsed robot, goal, and pedestrian fields.
     """
-    robot = observation.get("robot", {})
-    goal = observation.get("goal", {})
-    pedestrians = observation.get("pedestrians", {})
-    if robot or goal or pedestrians:
-        robot_pos = _require_array(robot.get("position"), size=2, field="robot.position")
-        goal_pos = _require_array(goal.get("current"), size=2, field="goal.current")
-        heading = float(_require_array(robot.get("heading"), size=1, field="robot.heading")[0])
-        velocity_xy = _require_array(
-            robot.get("velocity_xy"),
-            size=2,
-            field="robot.velocity_xy",
-        )
-        robot_radius = float(_require_array(robot.get("radius"), size=1, field="robot.radius")[0])
-        ped_positions = _xy_rows(pedestrians.get("positions"))
-        ped_velocities = _xy_rows(pedestrians.get("velocities"))
-        ped_count_arr = np.asarray(
-            pedestrians.get("count", [ped_positions.shape[0]]),
-            dtype=float,
-        ).reshape(-1)
-        ped_count = int(ped_count_arr[0]) if ped_count_arr.size else int(ped_positions.shape[0])
-        ped_count = max(0, min(ped_count, ped_positions.shape[0], ped_velocities.shape[0]))
-        ped_positions = ped_positions[:ped_count]
-        ped_velocities = ped_velocities[:ped_count]
-        return (
-            robot_pos,
-            heading,
-            goal_pos,
-            velocity_xy,
-            robot_radius,
-            ped_positions,
-            ped_velocities,
-            ped_count,
-        )
-
-    robot_pos = _require_array(observation.get("robot_position"), size=2, field="robot_position")
-    goal_pos = _require_array(observation.get("goal_current"), size=2, field="goal_current")
+    robot_source, goal_source, pedestrian_source, field_names = _resolve_socnav_observation_layout(
+        observation
+    )
+    robot_pos = _require_array(
+        robot_source.get(field_names["robot_position"][0]),
+        size=2,
+        field=field_names["robot_position"][1],
+    )
+    goal_pos = _require_array(
+        goal_source.get(field_names["goal_current"][0]),
+        size=2,
+        field=field_names["goal_current"][1],
+    )
     heading = float(
-        _require_array(observation.get("robot_heading"), size=1, field="robot_heading")[0]
+        _require_array(
+            robot_source.get(field_names["robot_heading"][0]),
+            size=1,
+            field=field_names["robot_heading"][1],
+        )[0]
     )
     velocity_xy = _require_array(
-        observation.get("robot_velocity_xy"),
+        robot_source.get(field_names["robot_velocity_xy"][0]),
         size=2,
-        field="robot_velocity_xy",
+        field=field_names["robot_velocity_xy"][1],
     )
     robot_radius = float(
-        _require_array(observation.get("robot_radius"), size=1, field="robot_radius")[0]
+        _require_array(
+            robot_source.get(field_names["robot_radius"][0]),
+            size=1,
+            field=field_names["robot_radius"][1],
+        )[0]
     )
-    ped_positions = _xy_rows(observation.get("pedestrians_positions"))
-    ped_velocities = _xy_rows(observation.get("pedestrians_velocities"))
+    ped_positions = _xy_rows(pedestrian_source.get(field_names["ped_positions"][0]))
+    ped_velocities = _xy_rows(pedestrian_source.get(field_names["ped_velocities"][0]))
     ped_count_arr = np.asarray(
-        observation.get("pedestrians_count", [ped_positions.shape[0]]),
+        pedestrian_source.get(field_names["ped_count"][0], [ped_positions.shape[0]]),
         dtype=float,
     ).reshape(-1)
     ped_count = int(ped_count_arr[0]) if ped_count_arr.size else int(ped_positions.shape[0])

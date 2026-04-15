@@ -42,15 +42,16 @@ def _obs(*, robot=(0.0, 0.0), heading=0.0, speed=0.0, goal=(2.0, 0.0), obstacle_
     }
 
 
-def test_teb_route_guide_uses_high_lookahead_config() -> None:
-    """Route guide embedded in TEB should use waypoint_lookahead_cells >= 10.
+def test_teb_route_guide_uses_correct_config() -> None:
+    """Route guide embedded in TEB should use benchmark-tuned waypoint and inflation settings.
 
-    A lookahead of 10 cells (1.0 m at default 0.1 m resolution) ensures the
-    waypoint target is far enough away that _nominal_command drives at full
-    linear speed rather than throttling down due to a short distance.
+    At the benchmark grid resolution (0.2 m/cell):
+    - waypoint_lookahead_cells=5 → 1.0 m target, saturates max_linear_speed without
+      introducing corner-cutting artefacts that a longer lookahead (2.0 m) causes.
+    - obstacle_inflation_cells >= 3 → >= 0.6 m clearance, exceeding robot radius (0.25 m).
     """
     planner = TEBCommitmentPlannerAdapter()
-    assert planner._route_guide.config.waypoint_lookahead_cells >= 10
+    assert planner._route_guide.config.waypoint_lookahead_cells == 5
     assert planner._route_guide.config.obstacle_inflation_cells >= 3
 
 

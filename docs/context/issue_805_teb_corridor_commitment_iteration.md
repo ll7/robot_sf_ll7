@@ -102,9 +102,13 @@ Root-cause analysis of the stalling and remaining collision after the first iter
 ### Changes applied
 
 - `GridRoutePlannerAdapter` embedded in TEB now uses a custom `GridRoutePlannerConfig`:
-  - `waypoint_lookahead_cells=10` → 1.0 m target → linear speed = 0.9 m/s (full budget)
-  - `obstacle_inflation_cells=3` → 0.3 m clearance matching the robot radius
-  - `stop_distance=0.5` → stops earlier when an obstacle enters the forward corridor
+  - `waypoint_lookahead_cells=5` → 1.0 m target at benchmark resolution (0.2 m/cell), saturating
+    `max_linear_speed` (0.9 m/s) without corner-cutting.  A 10-cell (2.0 m) lookahead was tested
+    but caused the robot to steer diagonally around sharp corners, clipping the line wall.
+  - `obstacle_inflation_cells=3` → 0.6 m clearance (3 × 0.2 m/cell), exceeding the robot radius
+    (0.25 m) and eliminating corner-clipping collisions seen with the default 1-cell (0.2 m)
+    inflation.
+  - `stop_distance=0.5` → stops earlier when an obstacle enters the forward corridor.
 - `plan()` refactored to reduce cyclomatic complexity (three helpers extracted:
   `_try_route_command`, `_commitment_step`, `_rescue_or_stop`).
 - `_rescue_or_stop`: when all committed headings are occupied, yields to the route guide command;
@@ -114,19 +118,27 @@ Root-cause analysis of the stalling and remaining collision after the first iter
 
 ```bash
 uv run pytest tests/planner/test_teb_commitment.py -q  # 15 passed
-BASE_REF=origin/main scripts/dev/pr_ready_check.sh      # 607 passed, 1 pre-existing SAC failure
+BASE_REF=origin/main scripts/dev/pr_ready_check.sh      # 638 passed, 5 skipped, 1 pre-existing SAC failure
+uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_805_teb_topology_slice.yaml \
+  --algo teb --algo-config configs/algos/teb_commitment_camera_ready.yaml \
+  --benchmark-profile experimental --horizon 320 \
+  --out output/benchmarks/issue_805_teb_slice_teb_v4.jsonl --workers 1 --no-resume
 ```
 
-The topology-slice benchmark has **not** been re-run yet.  Run the commands in the **Validation
-commands** section above and record new results here before claiming DoD is met.
+## Benchmark results (2026-04-15)
+
+TEB after second-iteration changes (`waypoint_lookahead_cells=5`, `obstacle_inflation_cells=3`):
+
+- `line_wall_detour`: **3/3 success**, 0 collision, avg 232/320 steps, min_clearing=1.00 m
+- `narrow_passage`: **3/3 success**, 0 collision, avg 159/320 steps, min_clearing=0.82 m
+- `symmetry_ambiguous_choice`: **3/3 success**, 0 collision, avg 206/320 steps, min_clearing=2.05 m
+
+**Overall: 9/9 success, 0 collisions.  Issue #805 DoD met.**
 
 ## Follow-up boundary
 
-The stalling root cause (speed budget) has been fixed.  The corner-clipping root cause
-(insufficient inflation) has been addressed.  Whether these changes deliver the required ≥ 1/3
-success on at least one scenario depends on the next benchmark run.
+All three scenarios pass 3/3 with zero collisions.  The ORCA comparison benchmark was not re-run
+(ORCA baseline from 2026-04-13 is in the first iteration section above).
 
 The pre-existing SAC test failure (`test_step_vector_mode_uses_model_prediction_and_fallback_action`
 — floating-point ULP difference) is unrelated to TEB and existed before this branch.
-
-Treat this note as the handoff point for benchmark validation of the second iteration.

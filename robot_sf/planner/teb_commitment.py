@@ -54,16 +54,18 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         """Initialize the planner with optional config overrides."""
         self.config = config or TEBCommitmentConfig()
         # Use a route-guide config tuned for topology-avoidance scenarios:
-        # - waypoint_lookahead_cells=10 ensures the 1.0m waypoint target drives at full
-        #   linear speed (capped at max_linear_speed=0.9 m/s), preventing step-budget
-        #   exhaustion on detour paths that default lookahead (5 cells, 0.5m) cannot complete.
-        # - obstacle_inflation_cells=3 gives 0.3m extra clearance around obstacle corners,
-        #   matching the default robot radius and reducing corner-clipping collisions.
+        # - waypoint_lookahead_cells=5 at the benchmark grid resolution (0.2 m/cell) places the
+        #   tracking target 1.0m ahead, which saturates max_linear_speed (0.9 m/s) without
+        #   corner-cutting artefacts.  A longer lookahead (10 cells = 2.0m) caused the robot to
+        #   steer diagonally across sharp bends and clip obstacle corners at high speed.
+        # - obstacle_inflation_cells=3 gives 0.6m clearance (3 × 0.2m/cell) around obstacle
+        #   surfaces, exceeding the robot radius (0.25m) by a comfortable margin and eliminating
+        #   the corner-clipping collisions seen with the default 1-cell (0.2m) inflation.
         # - stop_distance=0.5 stops the route guide earlier when an obstacle enters the
         #   forward corridor, giving more time for the turn-in-place recovery.
         self._route_guide = GridRoutePlannerAdapter(
             GridRoutePlannerConfig(
-                waypoint_lookahead_cells=10,
+                waypoint_lookahead_cells=5,
                 obstacle_inflation_cells=3,
                 stop_distance=0.5,
             )

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -190,33 +191,34 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
     sensitivity_by_component = {
         str(row.get("weight_name")): row for row in sensitivity_rows if isinstance(row, dict)
     }
-    rows = [",".join(headers)]
-    for component in sorted((configured or {}).keys()):
-        configured_value = float((configured or {}).get(component, 0.0))
-        calibrated_value = float((calibrated or {}).get(component, configured_value))
-        delta = calibrated_value - configured_value
-        sensitivity = sensitivity_by_component.get(component, {})
-        rows.append(
-            ",".join(
-                [
-                    component,
-                    str(sensitivity.get("metric_name", "")),
-                    f"{configured_value:.10f}",
-                    f"{float(sensitivity.get('configured_weight_share', 0.0)):.10f}",
-                    f"{calibrated_value:.10f}",
-                    f"{delta:.10f}",
-                    f"{float(sensitivity.get('mean_abs_contribution', 0.0)):.10f}",
-                    f"{float(sensitivity.get('mean_abs_score_delta_if_ablated', 0.0)):.10f}",
-                    f"{float(sensitivity.get('episode_rank_correlation_if_ablated', 1.0)):.10f}",
-                    f"{float(sensitivity.get('planner_rank_correlation_if_ablated', 1.0)):.10f}",
-                    "true"
-                    if bool(sensitivity.get("planner_order_changed_if_ablated"))
-                    else "false",
-                    str(int(sensitivity.get("sensitivity_rank", 0) or 0)),
-                ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        for component in sorted((configured or {}).keys()):
+            configured_value = float((configured or {}).get(component, 0.0))
+            calibrated_value = float((calibrated or {}).get(component, configured_value))
+            delta = calibrated_value - configured_value
+            sensitivity = sensitivity_by_component.get(component, {})
+            writer.writerow(
+                {
+                    "component": component,
+                    "metric_name": str(sensitivity.get("metric_name", "")),
+                    "configured_weight": f"{configured_value:.10f}",
+                    "configured_weight_share": f"{float(sensitivity.get('configured_weight_share', 0.0)):.10f}",
+                    "calibrated_weight": f"{calibrated_value:.10f}",
+                    "delta": f"{delta:.10f}",
+                    "mean_abs_contribution": f"{float(sensitivity.get('mean_abs_contribution', 0.0)):.10f}",
+                    "mean_abs_score_delta_if_ablated": f"{float(sensitivity.get('mean_abs_score_delta_if_ablated', 0.0)):.10f}",
+                    "episode_rank_correlation_if_ablated": f"{float(sensitivity.get('episode_rank_correlation_if_ablated', 1.0)):.10f}",
+                    "planner_rank_correlation_if_ablated": f"{float(sensitivity.get('planner_rank_correlation_if_ablated', 1.0)):.10f}",
+                    "planner_order_changed_if_ablated": (
+                        "true"
+                        if bool(sensitivity.get("planner_order_changed_if_ablated"))
+                        else "false"
+                    ),
+                    "sensitivity_rank": str(int(sensitivity.get("sensitivity_rank", 0) or 0)),
+                }
             )
-        )
-    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

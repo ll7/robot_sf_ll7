@@ -384,6 +384,8 @@ This emits:
 SNQI contract analyzer helper:
 
 ```bash
+# For v3 paper-facing campaigns only.  For other campaigns, replace --weights and
+# --baseline with the asset paths recorded in that campaign's manifest.json.
 uv run python scripts/tools/analyze_snqi_contract.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
   --weights configs/benchmarks/snqi_weights_camera_ready_v3.json \

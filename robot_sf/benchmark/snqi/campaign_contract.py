@@ -605,7 +605,10 @@ def compute_weight_sensitivity(
         scored_episodes, weights=weights, baseline=baseline
     )
     base_planner_order = [f"{row['planner_key']}::{row['kinematics']}" for row in base_ordering]
-    base_planner_scores = [float(row["mean_snqi"]) for row in base_ordering]
+    base_planner_ranks = {
+        f"{row['planner_key']}::{row['kinematics']}": index
+        for index, row in enumerate(base_ordering, start=1)
+    }
     rows: list[dict[str, Any]] = []
     dominance = compute_component_dominance(scored_episodes, weights=weights, baseline=baseline)
     total_weight = sum(
@@ -636,10 +639,19 @@ def compute_weight_sensitivity(
             baseline=baseline,
         )
         planner_order = [f"{row['planner_key']}::{row['kinematics']}" for row in planner_ordering]
-        planner_scores = [float(row["mean_snqi"]) for row in planner_ordering]
+        planner_ranks = {
+            f"{row['planner_key']}::{row['kinematics']}": index
+            for index, row in enumerate(planner_ordering, start=1)
+        }
+        shared_keys = [key for key in base_planner_ranks if key in planner_ranks]
         planner_rank_corr = (
-            float(spearman_correlation(base_planner_scores, planner_scores))
-            if len(base_planner_scores) >= 2 and len(planner_scores) == len(base_planner_scores)
+            float(
+                spearman_correlation(
+                    [base_planner_ranks[key] for key in shared_keys],
+                    [planner_ranks[key] for key in shared_keys],
+                )
+            )
+            if len(shared_keys) >= 2
             else 1.0
         )
         rows.append(
@@ -717,9 +729,9 @@ def build_positioning_recommendation(
             "Degenerate metrics on this slice cannot be used as independent validation signals: "
             + ", ".join(sorted(degenerate_metrics))
         )
-    if order_changes <= 0:
+    if order_changes > 0:
         caveats.append(
-            "Planner ordering is stable under one-at-a-time weight ablation on this slice."
+            f"Planner ordering changed under {order_changes} one-at-a-time weight ablation(s) on this slice."
         )
     return {
         "recommendation": recommendation,

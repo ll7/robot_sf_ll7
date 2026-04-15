@@ -3410,49 +3410,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         },
     }
 
-    publication_payload: dict[str, Any] | None = None
-    if (
-        cfg.export_publication_bundle
-        and not skip_publication_bundle
-        and not snqi_hard_fail
-        and benchmark_success
-    ):
-        publication_dir = get_artifact_category_path("benchmarks") / "publication"
-        bundle_name = f"{campaign_id}_publication_bundle"
-        try:
-            bundle = export_publication_bundle(
-                campaign_root,
-                publication_dir,
-                bundle_name=bundle_name,
-                include_videos=cfg.include_videos_in_publication,
-                repository_url=cfg.repository_url,
-                release_tag=cfg.release_tag,
-                doi=cfg.doi,
-                overwrite=cfg.overwrite_publication_bundle,
-            )
-            publication_payload = {
-                "bundle_dir": _repo_relative(bundle.bundle_dir),
-                "archive_path": _repo_relative(bundle.archive_path),
-                "manifest_path": _repo_relative(bundle.manifest_path),
-                "checksums_path": _repo_relative(bundle.checksums_path),
-                "file_count": bundle.file_count,
-                "total_bytes": bundle.total_bytes,
-            }
-            campaign_summary["publication_bundle"] = publication_payload
-        except Exception as exc:
-            warnings.append(f"Publication bundle export failed: {exc}")
-    elif (
-        cfg.export_publication_bundle
-        and not skip_publication_bundle
-        and not snqi_hard_fail
-        and not benchmark_success
-    ):
-        warnings.append("Publication bundle export skipped because benchmark_success=false.")
-
-    _write_json(summary_json_path, campaign_summary)
-    write_campaign_report(report_md_path, campaign_summary)
-
-    # Add run-level metadata files for publication provenance helpers.
+    # Write run-level files and the final campaign_manifest.json before the publication
+    # bundle export so the bundle copies the fully-evaluated manifest (including
+    # snqi_positioning_recommendation) rather than the placeholder written at campaign start.
     run_meta = {
         "repo": {
             "remote": git_meta.get("remote", "unknown"),
@@ -3533,6 +3493,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "runtime_sec": runtime_sec,
             "finished_at_utc": campaign_finished_at_utc,
             "snqi_contract_status": contract_eval.status,
+            "snqi_positioning_recommendation": positioning.get("recommendation"),
+            "snqi_positioning_claim_scope": positioning.get("claim_scope"),
             "artifacts": {
                 **dict(manifest_payload.get("artifacts") or {}),
                 "seed_variability_json": _repo_relative(seed_variability_json_path),
@@ -3548,6 +3510,48 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             },
         },
     )
+
+    publication_payload: dict[str, Any] | None = None
+    if (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and benchmark_success
+    ):
+        publication_dir = get_artifact_category_path("benchmarks") / "publication"
+        bundle_name = f"{campaign_id}_publication_bundle"
+        try:
+            bundle = export_publication_bundle(
+                campaign_root,
+                publication_dir,
+                bundle_name=bundle_name,
+                include_videos=cfg.include_videos_in_publication,
+                repository_url=cfg.repository_url,
+                release_tag=cfg.release_tag,
+                doi=cfg.doi,
+                overwrite=cfg.overwrite_publication_bundle,
+            )
+            publication_payload = {
+                "bundle_dir": _repo_relative(bundle.bundle_dir),
+                "archive_path": _repo_relative(bundle.archive_path),
+                "manifest_path": _repo_relative(bundle.manifest_path),
+                "checksums_path": _repo_relative(bundle.checksums_path),
+                "file_count": bundle.file_count,
+                "total_bytes": bundle.total_bytes,
+            }
+            campaign_summary["publication_bundle"] = publication_payload
+        except Exception as exc:
+            warnings.append(f"Publication bundle export failed: {exc}")
+    elif (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and not benchmark_success
+    ):
+        warnings.append("Publication bundle export skipped because benchmark_success=false.")
+
+    _write_json(summary_json_path, campaign_summary)
+    write_campaign_report(report_md_path, campaign_summary)
 
     if snqi_hard_fail:
         raise RuntimeError(

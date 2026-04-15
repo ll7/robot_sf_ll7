@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 from loguru import logger
+from shapely.geometry import Polygon as ShapelyPolygon
 
 from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
@@ -898,14 +899,14 @@ class RobotEnv(BaseEnv):
     @staticmethod
     def _normalize_obstacles_for_grid(
         obstacles: list[Obstacle] | list[Line2D], bounds: list[Line2D]
-    ) -> tuple[list[Line2D], list[Any]]:
+    ) -> tuple[list[Line2D], list[ShapelyPolygon]]:
         """Convert obstacles/bounds into grid-friendly primitives.
 
         Returns:
             tuple: (line segments, polygons) where polygons preserve compound obstacle geometry.
         """
         line_segments: list[Line2D] = []
-        polygons: list[object] = []
+        polygons: list[ShapelyPolygon] = []
 
         def _add_line(line) -> None:
             try:

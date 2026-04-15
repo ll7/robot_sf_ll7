@@ -546,7 +546,7 @@ class MapDefinition:
                 ax.fill(vertices[:, 0], vertices[:, 1], "black")
                 for interior in polygon.interiors:
                     hole_vertices = np.array(interior.coords)
-                    ax.fill(hole_vertices[:, 0], hole_vertices[:, 1], "white")
+                    ax.fill(hole_vertices[:, 0], hole_vertices[:, 1], ax.get_facecolor())
 
     def is_point_in_driveable_area(self, point: Vec2D) -> bool:
         """Check if a point is in a driveable area.

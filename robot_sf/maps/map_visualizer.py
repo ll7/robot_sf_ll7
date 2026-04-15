@@ -160,6 +160,15 @@ def render_map_definition(  # noqa: PLR0913
                 alpha=0.8,
             )
             ax.add_patch(patch)
+            for interior in polygon.interiors:
+                hole_patch = Polygon(
+                    list(interior.coords),
+                    closed=True,
+                    facecolor=ax.get_facecolor(),
+                    edgecolor="black",
+                    alpha=1.0,
+                )
+                ax.add_patch(hole_patch)
 
     # Boundaries
     for x1, x2, y1, y2 in map_def.bounds:

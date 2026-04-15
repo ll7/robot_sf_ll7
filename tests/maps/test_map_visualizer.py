@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import matplotlib
+import matplotlib.colors as mcolors
 
 matplotlib.use("Agg")
 
 from typing import TYPE_CHECKING
+
+from matplotlib import pyplot as plt
+from shapely.geometry import Polygon as ShapelyPolygon
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,3 +77,31 @@ def test_visualize_map_definition_writes_file(tmp_path: Path) -> None:
     out_path = tmp_path / "map.png"
     map_visualizer.visualize_map_definition(_map_def(), out_path, title="map")
     assert out_path.exists()
+
+
+def test_render_map_definition_draws_polygon_holes_with_axes_facecolor() -> None:
+    """Obstacle holes should be rendered as cutouts using the axes facecolor."""
+    obstacle = Obstacle.from_geometry(
+        ShapelyPolygon(
+            [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0), (1.0, 3.0)],
+            holes=[[(2.0, 1.5), (4.0, 1.5), (4.0, 2.5), (2.0, 2.5)]],
+        )
+    )
+    map_def = _map_def()
+    map_def.obstacles = [obstacle]
+
+    fig, ax = plt.subplots()
+    ax.set_facecolor("#abcdef")
+
+    map_visualizer.render_map_definition(
+        map_def,
+        ax,
+        show_routes=False,
+        show_pois=False,
+        show_zone_labels=False,
+    )
+
+    assert len(ax.patches) >= 2
+    hole_patch = ax.patches[1]
+    assert mcolors.to_rgba(hole_patch.get_facecolor()) == mcolors.to_rgba(ax.get_facecolor())
+    plt.close(fig)

@@ -38,6 +38,9 @@ EGO_PED_TRAJECTORY_COLOR = (200, 0, 200)  # Magenta
 
 # UI frame rate target (Hz)
 UI_FPS = 60
+DEFAULT_VISIBLE_METRICS = 4
+MAX_OVERLAY_ROWS = 8
+ROW_HEIGHT = 18
 _ANALYZER_TIMELINE_COLORS = (
     (59, 130, 246),
     (16, 185, 129),
@@ -132,6 +135,8 @@ class InteractivePlayback(SimulationView):
         self.available_metric_keys: list[str] = []
         self.visible_metric_keys: set[str] = set()
         self.selected_metric_idx = 0
+        self._metric_series: dict[str, list[tuple[int, float]]] = {}
+        self._max_telemetry_frame = 0
 
         # Initialize episode boundaries and reset points
         self._initialize_episode_data()
@@ -181,23 +186,46 @@ class InteractivePlayback(SimulationView):
         ]
 
     def _initialize_analyzer_state(self) -> None:
-        """Initialize analyzer metric selection state from telemetry samples."""
+        """Initialize analyzer metric selection state and pre-calculate series."""
 
         if self.telemetry_replay is None:
             return
+
         metric_keys: set[str] = set()
         for sample in self.telemetry_replay.samples:
-            if isinstance(sample.get("step_metrics"), dict):
-                metric_keys.update(key for key in sample["step_metrics"] if isinstance(key, str))
-            if isinstance(sample.get("metrics"), dict):
-                metric_keys.update(
-                    key
-                    for key in sample["metrics"]
-                    if isinstance(key, str) and key not in {"fps", "reward"}
-                )
+            frame_idx = sample.get("frame_idx")
+            if not isinstance(frame_idx, int):
+                continue
+            self._max_telemetry_frame = max(self._max_telemetry_frame, frame_idx)
+            self._collect_sample_metric_series(sample, frame_idx, metric_keys)
+
         self.available_metric_keys = sorted(metric_keys)
-        self.visible_metric_keys = set(self.available_metric_keys[:4])
+        self.visible_metric_keys = set(self.available_metric_keys[:DEFAULT_VISIBLE_METRICS])
         self.selected_metric_idx = 0
+
+    def _collect_sample_metric_series(
+        self,
+        sample: dict,
+        frame_idx: int,
+        metric_keys: set[str],
+    ) -> None:
+        """Accumulate analyzer metric series from one telemetry sample."""
+
+        for source in ("step_metrics", "metrics"):
+            data = sample.get(source)
+            if not isinstance(data, dict):
+                continue
+            for key, value in data.items():
+                if not isinstance(key, str):
+                    continue
+                if source == "metrics" and key in {"fps", "reward"}:
+                    continue
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                metric_keys.add(key)
+                self._metric_series.setdefault(key, []).append((frame_idx, numeric))
 
     def _add_help_text(self):
         """Override the help text method to include playback controls."""
@@ -596,6 +624,7 @@ class InteractivePlayback(SimulationView):
             rows=snapshot.reward_terms,
             origin=(8, 68),
             empty_label="No reward terms",
+            max_rows=MAX_OVERLAY_ROWS,
         )
 
         metric_rows = {
@@ -610,6 +639,7 @@ class InteractivePlayback(SimulationView):
             rows=metric_rows,
             origin=(metric_panel_x, 68),
             empty_label="No visible metrics",
+            max_rows=MAX_OVERLAY_ROWS,
         )
 
         timeline_rect = pygame.Rect(8, panel_h - 92, panel_w - 16, 80)
@@ -625,6 +655,7 @@ class InteractivePlayback(SimulationView):
         rows: dict[str, float],
         origin: tuple[int, int],
         empty_label: str,
+        max_rows: int = MAX_OVERLAY_ROWS,
     ) -> None:
         """Render a small key-value table into the analyzer overlay."""
 
@@ -632,9 +663,16 @@ class InteractivePlayback(SimulationView):
         if not rows:
             surface.blit(self.font.render(empty_label, True, TEXT_COLOR), (x, y))
             return
-        for idx, (key, value) in enumerate(sorted(rows.items())):
+
+        sorted_items = sorted(rows.items())
+        for idx, (key, value) in enumerate(sorted_items[:max_rows]):
             line = f"{key}: {value:.3f}"
-            surface.blit(self.font.render(line, True, TEXT_COLOR), (x, y + idx * 18))
+            surface.blit(self.font.render(line, True, TEXT_COLOR), (x, y + idx * ROW_HEIGHT))
+        if len(sorted_items) > max_rows:
+            surface.blit(
+                self.font.render("...", True, TEXT_COLOR),
+                (x, y + max_rows * ROW_HEIGHT),
+            )
 
     def _draw_metric_timeline(
         self,
@@ -657,15 +695,7 @@ class InteractivePlayback(SimulationView):
             1,
         )
 
-        max_frame = max(
-            (
-                sample.get("frame_idx", 0)
-                for sample in self.telemetry_replay.samples
-                if isinstance(sample.get("frame_idx"), int)
-            ),
-            default=0,
-        )
-        frame_span = max(max_frame, 1)
+        frame_span = max(self._max_telemetry_frame, 1)
 
         for color_idx, key in enumerate(sorted(self.visible_metric_keys)):
             series = self._timeline_series_for_key(key)
@@ -697,25 +727,7 @@ class InteractivePlayback(SimulationView):
         Returns:
             list[tuple[int, float]]: Ordered ``(frame_idx, value)`` pairs for ``key``.
         """
-
-        if self.telemetry_replay is None:
-            return []
-        series: list[tuple[int, float]] = []
-        for sample in self.telemetry_replay.samples:
-            frame_idx = sample.get("frame_idx")
-            if not isinstance(frame_idx, int):
-                continue
-            value = None
-            if isinstance(sample.get("step_metrics"), dict):
-                value = sample["step_metrics"].get(key)
-            if value is None and isinstance(sample.get("metrics"), dict):
-                value = sample["metrics"].get(key)
-            try:
-                numeric = float(value)
-            except (TypeError, ValueError):
-                continue
-            series.append((frame_idx, numeric))
-        return series
+        return self._metric_series.get(key, [])
 
     def update(self):
         """Update the playback state and render the current frame."""

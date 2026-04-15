@@ -69,6 +69,7 @@ class JSONLPlaybackLoader:
     def __init__(self):
         """Initialize the playback loader."""
         self.schema_version = "1.0"
+        self._telemetry_cache: dict[str, list[dict[str, Any]]] = {}
 
     def _deserialize_state(
         self, state_dict: dict[str, Any], timestep: int = 0
@@ -354,7 +355,10 @@ class JSONLPlaybackLoader:
         if not isinstance(telemetry_path, str) or not telemetry_path:
             return None
         try:
-            samples = load_telemetry_stream(telemetry_path)
+            samples = self._telemetry_cache.get(telemetry_path)
+            if samples is None:
+                samples = load_telemetry_stream(telemetry_path)
+                self._telemetry_cache[telemetry_path] = samples
         except (FileNotFoundError, OSError, json.JSONDecodeError) as err:
             logger.warning(f"Failed to load telemetry from {telemetry_path}: {err}")
             return None

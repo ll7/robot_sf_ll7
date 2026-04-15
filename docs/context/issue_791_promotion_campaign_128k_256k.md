@@ -89,7 +89,9 @@ allocation. All three issue-791 SLURM scripts bumped to `--mem=96G` on 2026-04-1
 | 11562 | Attention-head config via asymmetric wrapper, 10m env22 on a30 | Running | Long-run GPU-foresight comparison arm |
 | 11566 | Reward curriculum 10m env22 on l40s | Running | Corrected resubmission with explicit 10m config |
 | 11572 | Baseline 1m env22 on a30 | Failed | Transient SLURM allocation handshake failure (`Zero Bytes were transmitted or received`) |
-| 11573 | Baseline 1m env22 on a30 (retry) | Pending | One-for-one retry of 11572 with identical config |
+| 11573 | Baseline 1m env22 on a30 (retry) | Failed | Same transient allocation handshake failure as 11572 |
+| 11577 | Baseline 1m env22 on l40s | Pending | Re-routed baseline retry after repeated a30 handshake failures |
+| 11578 | Baseline 3m env22 on a30 | Pending (dependency) | Pre-committed extension queued with `afterok:11577` |
 
 GPU foresight bug root cause:
 
@@ -166,7 +168,8 @@ GPU foresight smoke evidence:
 |-------|---------------------------------------|--------|-----------|----------|
 | 11562 | **Attention-head config via asymmetric wrapper, 10M env22** | 10M | a30 | Running |
 | 11566 | **Reward curriculum 10M env22**       | 10M    | l40s      | Running  |
-| 11573 | **Baseline 1M env22**                 | 1M     | a30       | Pending  |
+| 11577 | **Baseline 1M env22**                 | 1M     | l40s      | Pending  |
+| 11578 | **Baseline 3M env22**                 | 3M     | a30       | Pending (dependency) |
 
 **Current throughput note:** with GPU foresight enabled, the restarted long runs are no longer in
 the single-digit fps regime. Observed live throughput is about 155 to 186 fps for job 11562 on
@@ -180,7 +183,7 @@ wall-time behavior relative to the old CPU-foresight estimates.
 Commands used to justify the current update:
 
 ```bash
-sacct -j 11544,11560,11561,11562,11566,11572 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
+sacct -j 11544,11560,11561,11562,11566,11572,11573,11577,11578 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
 squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" | grep 'robot-sf-issue791'
 tail -n 120 output/slurm/11560-issue791-asymmetric-critic.out
 tail -n 60 output/slurm/11561-issue791-reward-curriculum.out
@@ -190,7 +193,7 @@ grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|va
 
 ## Next Decisions / Follow-ups
 
-1. **Confirm job 11573 startup provenance.** The baseline job uses the reward-curriculum wrapper
+1. **Confirm job 11577 startup provenance.** The baseline job uses the reward-curriculum wrapper
    with an explicit `ISSUE791_TRAIN_CONFIG` override. Check the startup summary once it begins to
    confirm that it resolves to `ppo_expert_issue_791_baseline_promotion_1m_env22` and not the
    wrapper's stage1 default.
@@ -209,7 +212,7 @@ grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|va
    A follow-up hardening change should either default the promotion wrappers to the promotion YAMLs
    or fail fast when a long-run submission lacks an explicit config override.
 
-5. **Decide whether the baseline should be extended beyond 1m only if 11572 is competitive.** If
+5. **Decide whether the baseline should be extended beyond 1m only if 11577 is competitive.** If
    the baseline remains clearly below the leading reward-curriculum run even with GPU foresight,
    further baseline scaling is low value. If it stays close, extend it before making a final
    promotion call.
@@ -268,6 +271,9 @@ Auxme reliability helpers added on 2026-04-15:
 - `scripts/dev/auxme_partition_status.sh` for live `a30`/`l40s` free-GPU and queue-pressure checks,
 - `scripts/dev/sbatch_auxme_issue791.sh` for explicit-config submission with partition recommendation
    plus max-time-safe routing through `scripts/dev/sbatch_use_max_time.sh`.
+- Reliability helper follow-up: ensure partition/qos are forwarded to `sbatch` as explicit args;
+   routing hints used only for wall-time discovery are insufficient and can silently fall back to
+   the script-local partition defaults.
 
 ## Relevant Docs
 

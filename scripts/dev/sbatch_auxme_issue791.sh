@@ -145,6 +145,8 @@ fi
 echo "[issue791-submit] selected partition=$PARTITION qos=$QOS config=$TRAIN_CONFIG wandb_policy=$WANDB_POLICY" >&2
 
 wrapper_args=("--partition" "$PARTITION" "--qos" "$QOS")
+# Ensure sbatch receives the chosen routing, not just the time-discovery hints.
+wrapper_args+=("--sbatch-arg" "--partition=$PARTITION" "--sbatch-arg" "--qos=$QOS")
 if [[ "$DRY_RUN" == "1" ]]; then
   wrapper_args+=("--dry-run")
 fi

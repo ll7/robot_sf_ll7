@@ -66,7 +66,6 @@ import matplotlib.pyplot as plt
 from loguru import logger
 from matplotlib.image import imread
 from shapely.geometry import Point, Polygon
-from shapely.ops import unary_union
 
 try:
     from shapely.ops import nearest_points
@@ -1016,9 +1015,6 @@ class OSMZonesEditor:
             Shapely polygon describing the obstacle.
         """
         if hasattr(obstacle, "vertices"):
-            polygons = obstacle.iter_polygons() if hasattr(obstacle, "iter_polygons") else []
-            if polygons:
-                return unary_union(polygons)
             return ShapelyPolygon(obstacle.vertices)
         return self._to_polygon(obstacle)
 

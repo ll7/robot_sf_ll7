@@ -7,6 +7,7 @@ from textwrap import dedent
 
 from shapely.geometry import GeometryCollection, Polygon
 
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 
 
@@ -66,6 +67,18 @@ def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> No
     assert obstacle.contains_point((1.0, 1.0))
     assert obstacle.contains_point((7.0, 1.0))
     assert not obstacle.contains_point((5.0, 1.0))
+
+
+def test_obstacle_geometry_adapter_promotes_short_vertex_lists() -> None:
+    """Geometry-backed obstacles should normalize short legacy vertex lists."""
+    geometry = Polygon([(0.0, 0.0), (3.0, 0.0), (3.0, 2.0), (0.0, 0.0)])
+    obstacle = Obstacle(vertices=[(0.0, 0.0)], geometry=geometry)
+
+    assert obstacle.geometry is not None
+    assert obstacle.geometry.is_valid
+    assert len(obstacle.vertices) == 3
+    assert obstacle.contains_point((1.0, 0.5))
+    assert obstacle.iter_polygons() == [geometry]
 
 
 def test_polygon_members_handles_deep_nested_geometry_collection() -> None:

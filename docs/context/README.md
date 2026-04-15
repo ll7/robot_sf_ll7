@@ -84,3 +84,8 @@ knowledge, not every transient iteration detail.
 
 - [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 - [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
+
+## Reasoning Notes
+
+Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve
+why a change was made rather than a full issue execution transcript.

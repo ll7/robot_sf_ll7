@@ -87,11 +87,13 @@ allocation. All three issue-791 SLURM scripts bumped to `--mem=96G` on 2026-04-1
 | 11560 | Asymmetric critic stage1 smoke, foresight on CUDA (post-fix) | Completed | `Using cuda device`, `fps=73`, no device mismatch |
 | 11561 | Reward curriculum 10m submission attempt on a30 | Completed but invalid | Wrapper defaulted to stage1 config; not a promotion run |
 | 11562 | Attention-head config via asymmetric wrapper, 10m env22 on a30 | Running | Long-run GPU-foresight comparison arm |
-| 11566 | Reward curriculum 10m env22 on l40s | Running | Corrected resubmission with explicit 10m config |
+| 11566 | Reward curriculum 10m env22 on l40s | Completed | Final eval `success_rate=0.571`, `collision_rate=0.400`; best checkpoint `success_rate=0.58571` at step `8912896` |
 | 11572 | Baseline 1m env22 on a30 | Failed | Transient SLURM allocation handshake failure (`Zero Bytes were transmitted or received`) |
 | 11573 | Baseline 1m env22 on a30 (retry) | Failed | Same transient allocation handshake failure as 11572 |
-| 11577 | Baseline 1m env22 on l40s | Pending | Re-routed baseline retry after repeated a30 handshake failures |
-| 11578 | Baseline 3m env22 on a30 | Pending (dependency) | Pre-committed extension queued with `afterok:11577` |
+| 11577 | Baseline 1m env22 on l40s | Failed | Malformed YAML in `expert_ppo_issue_791_baseline_promotion_1m_env22.yaml` caused `yaml.scanner.ScannerError` before training started |
+| 11578 | Baseline 3m env22 on a30 | Cancelled | Stale `afterok:11577` dependency after the failed 1m baseline attempt |
+| 11582 | Baseline 1m env22 on l40s (corrected rerun) | Running | Startup summary confirms `ppo_expert_issue_791_baseline_promotion_1m_env22` with explicit config override |
+| 11583 | Baseline 3m env22 on a30 (replacement) | Pending (dependency) | Fresh extension queued with `afterok:11582` |
 
 GPU foresight bug root cause:
 
@@ -140,15 +142,21 @@ GPU foresight smoke evidence:
    (11469) still matters historically, but future env22 comparisons should treat the GPU-foresight
    restart as the canonical high-throughput path.
 
-6. **Reward curriculum is the current leader among the restarted long runs.** As of 2026-04-15,
-   job 11566 on l40s reached about 1.62M steps at roughly 389 to 391 fps with success_rate about
-   0.386, collision_rate about 0.586, eval_episode_return about -2.59, and SNQI about -1.31.
+6. **Reward curriculum is still the current leader among the restarted long runs.** Job 11566 on
+   l40s completed its 10m run with final eval `success_rate=0.571`, `collision_rate=0.400`,
+   `eval_episode_return=-0.617`, and `SNQI=-0.814`. The best W&B checkpoint reached
+   `success_rate=0.58571` with `collision_rate=0.37143` at step `8912896`.
 
 7. **The restarted asymmetric/attention-head arm is viable but lagging.** As of 2026-04-15,
-   job 11562 on a30 reached about 1.31M steps at roughly 155 to 186 fps with recent
-   success_rate about 0.214, collision_rate about 0.771, eval_episode_return about -15.2, and
-   SNQI about -2.07. It is learning, but currently trails reward curriculum on both throughput and
-   quality.
+   job 11562 on a30 reached about 4.5M steps at roughly 157 to 196 fps with recent eval
+   `success_rate=0.271`, `collision_rate=0.686`, `eval_episode_return=-11.1`, and
+   `SNQI=-1.69`. Rollout success was fluctuating in the `0.42` to `0.54` range, but the eval
+   surface still trails reward curriculum on both throughput and quality.
+
+8. **The immediate issue with job 11578 was a dead dependency chain, not a scheduler anomaly.**
+   Job 11578 was queued with `afterok:11577`, and 11577 failed because the 1m baseline YAML had a
+   misindented `predictive_foresight_device` key. The corrected replacement chain is
+   `11582 -> 11583`.
 
 ---
 
@@ -167,14 +175,14 @@ GPU foresight smoke evidence:
 | Job   | Config                                | Budget | Partition | Status   |
 |-------|---------------------------------------|--------|-----------|----------|
 | 11562 | **Attention-head config via asymmetric wrapper, 10M env22** | 10M | a30 | Running |
-| 11566 | **Reward curriculum 10M env22**       | 10M    | l40s      | Running  |
-| 11577 | **Baseline 1M env22**                 | 1M     | l40s      | Pending  |
-| 11578 | **Baseline 3M env22**                 | 3M     | a30       | Pending (dependency) |
+| 11582 | **Baseline 1M env22**                 | 1M     | l40s      | Running  |
+| 11583 | **Baseline 3M env22**                 | 3M     | a30       | Pending (dependency) |
 
 **Current throughput note:** with GPU foresight enabled, the restarted long runs are no longer in
-the single-digit fps regime. Observed live throughput is about 155 to 186 fps for job 11562 on
-a30 and about 389 to 391 fps for job 11566 on l40s. These values materially change the expected
-wall-time behavior relative to the old CPU-foresight estimates.
+the single-digit fps regime. Observed live throughput is about 157 to 196 fps for job 11562 on
+a30, and the completed reward-curriculum run 11566 finished its endgame around 475 to 510 fps on
+l40s. These values materially change the expected wall-time behavior relative to the old
+CPU-foresight estimates.
 
 ---
 
@@ -183,20 +191,22 @@ wall-time behavior relative to the old CPU-foresight estimates.
 Commands used to justify the current update:
 
 ```bash
-sacct -j 11544,11560,11561,11562,11566,11572,11573,11577,11578 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
+sacct -j 11544,11560,11561,11562,11566,11572,11573,11577,11578,11582,11583 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
 squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" | grep 'robot-sf-issue791'
 tail -n 120 output/slurm/11560-issue791-asymmetric-critic.out
 tail -n 60 output/slurm/11561-issue791-reward-curriculum.out
 grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|value_loss|fps ' output/slurm/11562-issue791-asymmetric-critic.out | tail -n 24
 grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|value_loss|fps ' output/slurm/11566-issue791-reward-curriculum.out | tail -n 24
+sed -n '1,60p' output/slurm/11577-issue791-reward-curriculum.out
+sed -n '1,40p' output/slurm/11582-issue791-reward-curriculum.out
 ```
 
 ## Next Decisions / Follow-ups
 
-1. **Confirm job 11577 startup provenance.** The baseline job uses the reward-curriculum wrapper
-   with an explicit `ISSUE791_TRAIN_CONFIG` override. Check the startup summary once it begins to
-   confirm that it resolves to `ppo_expert_issue_791_baseline_promotion_1m_env22` and not the
-   wrapper's stage1 default.
+1. **Monitor job 11582 early eval quality before letting 11583 run too far.** The corrected 1m
+   baseline startup provenance is now confirmed, so the next decision is quality: if the 1m GPU
+   baseline remains clearly below reward curriculum early, the queued 3m extension may still be
+   cancelled later to save compute.
 
 2. **Decide whether attention head needs its own dedicated 10m rerun.** Job 11562 currently runs
    the attention-head promotion config through the asymmetric wrapper/job naming path. If this arm
@@ -212,10 +222,9 @@ grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|va
    A follow-up hardening change should either default the promotion wrappers to the promotion YAMLs
    or fail fast when a long-run submission lacks an explicit config override.
 
-5. **Decide whether the baseline should be extended beyond 1m only if 11577 is competitive.** If
-   the baseline remains clearly below the leading reward-curriculum run even with GPU foresight,
-   further baseline scaling is low value. If it stays close, extend it before making a final
-   promotion call.
+5. **Keep baseline extension conditional on the corrected 1m rerun, not on the broken 11577
+   attempt.** The original 11578 dependency is obsolete; use 11582 as the real gate for whether
+   the baseline deserves further overnight compute.
 
 ---
 
@@ -225,11 +234,12 @@ grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|va
 configs/training/ppo/ablations/
 ├── expert_ppo_issue_791_baseline_promotion_128k.yaml          ✓ done (11467, best=0.186)
 ├── expert_ppo_issue_791_baseline_promotion_256k.yaml          ✓ done (11474, best=0.343)
-├── expert_ppo_issue_791_baseline_promotion_1m_env22.yaml      ✓ done (11469, best=0.314, CPU foresight historical) / ← pending rerun (11572, CUDA foresight)
+├── expert_ppo_issue_791_baseline_promotion_1m_env22.yaml      ✓ done (11469, best=0.314, CPU foresight historical) / ✗ handshake failures (11572, 11573) / ✗ malformed-YAML failure (11577) / ← running corrected rerun (11582)
+├── expert_ppo_issue_791_baseline_promotion_3m_env22.yaml      ← pending extension (11583, afterok:11582)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml ✓ done (11445, best=0.157 — early peak v1)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml  ← running (11510)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml    (hold — gate on v2 128k result)
-├── expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml  ← running (11566, l40s, CUDA foresight)
+├── expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml  ✓ done (11566, best success=0.58571 @ 8.91M; final eval success=0.571)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_128k.yaml ✓ done (11446, best=0.171)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_256k.yaml ✓ done (11475, best=0.257) — FAIL
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_1m_env22.yaml ✗ cancelled (11477)
@@ -261,6 +271,11 @@ because the loaded `PredictiveTrajectoryModel` stayed on CPU while inference ten
 CUDA. `PredictionPlannerAdapter._build_model()` now calls `model.to(self._device)` after loading
 the checkpoint. Smoke proof: job 11544 failed with a CPU/CUDA mismatch; job 11560 succeeded with
 `Using cuda device` and `fps=73`.
+
+Baseline config parse fix on 2026-04-15: job 11577 exposed a malformed
+`configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22.yaml` where
+`predictive_foresight_device` was misindented. The corrected rerun is job 11582, and the stale
+dependent extension 11578 was replaced with 11583.
 
 Issue-791 wrapper hardening on 2026-04-15: `ISSUE791_TRAIN_CONFIG` is now required by
 `issue_791_reward_curriculum.sl`, `issue_791_asymmetric_critic.sl`, and

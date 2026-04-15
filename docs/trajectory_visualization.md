@@ -13,6 +13,9 @@ The trajectory visualization feature allows you to display movement trails of en
 - **Configurable trail length**: Adjust how many previous positions to show in the trail
 - **Color-coded trails**: Different colors for different entity types
 - **Interactive controls**: Toggle display on/off and adjust settings during playback
+- **Recorded-step analyzer**: When the episode metadata links a telemetry JSONL stream, playback
+  shows the current frame alongside reward terms, selected step metrics, and a scrub-synced metric
+  timeline for debugging reward/metric behavior.
 
 ## Controls
 
@@ -31,6 +34,11 @@ The trajectory visualization feature allows you to display movement trails of en
 - **K**: Speed up playback
 - **J**: Slow down playback
 - **H**: Show help with all controls
+
+### Analyzer Controls
+- **]**: Select next metric key
+- **[**: Select previous metric key
+- **F**: Toggle the selected metric key in the analyzer timeline/table
 
 ## Usage
 
@@ -60,6 +68,17 @@ A complete demo is available in `examples/trajectory_demo.py`:
 ```bash
 python examples/trajectory_demo.py path/to/recording.pkl
 ```
+
+### Recorded-Step Analyzer Workflow
+
+The analyzer is optional and backward compatible. It activates only when:
+
+1. telemetry recording is enabled for the run, and
+2. the JSONL episode metadata records the telemetry path and episode identifier.
+
+For new JSONL recordings created from `RobotEnv`, the metadata link is written automatically when
+both recording systems are enabled. Older recordings still load normally; they simply omit the
+analyzer overlay.
 
 ## Visual Elements
 
@@ -135,6 +154,7 @@ Tests cover:
 - Length limiting functionality
 - Trajectory clearing
 - Display toggle behavior
+- Telemetry replay alignment and metric filtering for the recorded-step analyzer
 
 ## Future Enhancements
 

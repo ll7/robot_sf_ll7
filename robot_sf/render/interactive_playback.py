@@ -29,6 +29,7 @@ from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableSimState,
 )
+from robot_sf.telemetry.history import TelemetryReplay, TelemetryReplaySnapshot
 
 # Trajectory visualization colors
 ROBOT_TRAJECTORY_COLOR = (0, 100, 255)  # Blue
@@ -37,6 +38,13 @@ EGO_PED_TRAJECTORY_COLOR = (200, 0, 200)  # Magenta
 
 # UI frame rate target (Hz)
 UI_FPS = 60
+_ANALYZER_TIMELINE_COLORS = (
+    (59, 130, 246),
+    (16, 185, 129),
+    (245, 158, 11),
+    (239, 68, 68),
+    (168, 85, 247),
+)
 
 
 class InteractivePlayback(SimulationView):
@@ -78,6 +86,7 @@ class InteractivePlayback(SimulationView):
         caption: str = "RobotSF Interactive Playback",
         # New episode-aware parameters
         episodes: list[PlaybackEpisode] | None = None,
+        telemetry_replay: TelemetryReplay | None = None,
     ):
         """
         Initialize the interactive playback viewer.
@@ -88,6 +97,7 @@ class InteractivePlayback(SimulationView):
             sleep_time: Time to sleep between frames (default: 0.1s)
             caption: Window caption
             episodes: Optional list of episodes for batch playback
+            telemetry_replay: Optional replay-aligned telemetry stream for analyzer overlays.
         """
         super().__init__(map_def=map_def, caption=caption)
         self.states = states
@@ -114,12 +124,18 @@ class InteractivePlayback(SimulationView):
 
         # Episode-aware attributes
         self.episodes = episodes
+        self.telemetry_replay = telemetry_replay
         self.current_episode_idx = 0
         self.episode_boundaries = []
         self.reset_points = []
+        self.current_snapshot: TelemetryReplaySnapshot | None = None
+        self.available_metric_keys: list[str] = []
+        self.visible_metric_keys: set[str] = set()
+        self.selected_metric_idx = 0
 
         # Initialize episode boundaries and reset points
         self._initialize_episode_data()
+        self._initialize_analyzer_state()
 
         # Add playback controls to the help text
         self._extend_help_text()
@@ -158,7 +174,30 @@ class InteractivePlayback(SimulationView):
             "b: Increase trail length",
             "c: Decrease trail length",
             "x: Clear trajectories",
+            "--- Analyzer Controls ---",
+            "]: Next metric",
+            "[: Previous metric",
+            "f: Toggle selected metric",
         ]
+
+    def _initialize_analyzer_state(self) -> None:
+        """Initialize analyzer metric selection state from telemetry samples."""
+
+        if self.telemetry_replay is None:
+            return
+        metric_keys: set[str] = set()
+        for sample in self.telemetry_replay.samples:
+            if isinstance(sample.get("step_metrics"), dict):
+                metric_keys.update(key for key in sample["step_metrics"] if isinstance(key, str))
+            if isinstance(sample.get("metrics"), dict):
+                metric_keys.update(
+                    key
+                    for key in sample["metrics"]
+                    if isinstance(key, str) and key not in {"fps", "reward"}
+                )
+        self.available_metric_keys = sorted(metric_keys)
+        self.visible_metric_keys = set(self.available_metric_keys[:4])
+        self.selected_metric_idx = 0
 
     def _add_help_text(self):
         """Override the help text method to include playback controls."""
@@ -205,6 +244,9 @@ class InteractivePlayback(SimulationView):
 
         # Trajectory controls
         if self._handle_trajectory_key(e):
+            return
+
+        if self._handle_analyzer_key(e):
             return
 
         # If not a playback control key, let parent handle it
@@ -286,6 +328,38 @@ class InteractivePlayback(SimulationView):
         if e.key == pygame.K_x:
             self._clear_trajectories()
             logger.info("Trajectories cleared")
+            return True
+
+        return False
+
+    def _handle_analyzer_key(self, e) -> bool:
+        """Handle metric-filter controls for the recorded-step analyzer.
+
+        Returns:
+            bool: True when the key event was consumed by analyzer controls.
+        """
+
+        if not self.available_metric_keys:
+            return False
+
+        if e.key == pygame.K_RIGHTBRACKET:
+            self.selected_metric_idx = (self.selected_metric_idx + 1) % len(
+                self.available_metric_keys
+            )
+            return True
+
+        if e.key == pygame.K_LEFTBRACKET:
+            self.selected_metric_idx = (self.selected_metric_idx - 1) % len(
+                self.available_metric_keys
+            )
+            return True
+
+        if e.key == pygame.K_f:
+            selected = self.available_metric_keys[self.selected_metric_idx]
+            if selected in self.visible_metric_keys:
+                self.visible_metric_keys.remove(selected)
+            else:
+                self.visible_metric_keys.add(selected)
             return True
 
         return False
@@ -459,6 +533,7 @@ class InteractivePlayback(SimulationView):
         """Render the current frame at a smooth UI framerate."""
         if 0 <= self.current_frame < len(self.states):
             current_state = self.states[self.current_frame]
+            self.current_snapshot = self._scrub_analyzer_snapshot()
 
             # Update trajectories with current state
             self._update_trajectories(current_state)
@@ -468,11 +543,179 @@ class InteractivePlayback(SimulationView):
 
             # Draw trajectories on top of everything else before finalizing
             self._draw_all_trajectories()
+            self._render_analyzer_panel()
 
             # Finalize at UI FPS (avoid using sleep_time as FPS)
             self._finalize_frame(UI_FPS)
         else:
             logger.error(f"Invalid frame index: {self.current_frame}")
+
+    def _scrub_analyzer_snapshot(self) -> TelemetryReplaySnapshot | None:
+        """Return the telemetry snapshot nearest the currently displayed frame."""
+
+        if self.telemetry_replay is None:
+            return None
+        try:
+            return self.telemetry_replay.scrub_snapshot_to_frame(self.current_frame, tolerance=1)
+        except ValueError:
+            return None
+
+    def _render_analyzer_panel(self) -> None:
+        """Render a recorded-step analyzer overlay when telemetry replay is available."""
+
+        snapshot = self.current_snapshot
+        if snapshot is None:
+            return
+
+        panel_w = min(460, max(320, self.width // 2))
+        panel_h = min(280, max(220, self.height // 3))
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 180))
+
+        header = (
+            f"Analyzer frame={snapshot.frame_idx} "
+            f"episode={snapshot.episode_id if snapshot.episode_id is not None else '-'} "
+            f"status={snapshot.status or 'unknown'}"
+        )
+        panel.blit(self.font.render(header, True, TEXT_COLOR), (8, 8))
+
+        selected_metric = (
+            self.available_metric_keys[self.selected_metric_idx]
+            if self.available_metric_keys
+            else None
+        )
+        if selected_metric is not None:
+            metric_hint = f"selected={selected_metric} visible={'yes' if selected_metric in self.visible_metric_keys else 'no'}"
+            panel.blit(self.font.render(metric_hint, True, TEXT_COLOR), (8, 26))
+
+        reward_total = "n/a" if snapshot.reward_total is None else f"{snapshot.reward_total:.3f}"
+        reward_title = self.font.render(f"Reward total: {reward_total}", True, TEXT_COLOR)
+        panel.blit(reward_title, (8, 48))
+        self._blit_mapping_rows(
+            panel,
+            rows=snapshot.reward_terms,
+            origin=(8, 68),
+            empty_label="No reward terms",
+        )
+
+        metric_rows = {
+            key: value
+            for key, value in snapshot.step_metrics.items()
+            if not self.visible_metric_keys or key in self.visible_metric_keys
+        }
+        metric_panel_x = panel_w // 2
+        panel.blit(self.font.render("Step metrics", True, TEXT_COLOR), (metric_panel_x, 48))
+        self._blit_mapping_rows(
+            panel,
+            rows=metric_rows,
+            origin=(metric_panel_x, 68),
+            empty_label="No visible metrics",
+        )
+
+        timeline_rect = pygame.Rect(8, panel_h - 92, panel_w - 16, 80)
+        pygame.draw.rect(panel, (255, 255, 255, 50), timeline_rect, width=1)
+        self._draw_metric_timeline(panel, timeline_rect, snapshot.frame_idx)
+
+        self.screen.blit(panel, (8, self.height - panel_h - 8))
+
+    def _blit_mapping_rows(
+        self,
+        surface: pygame.Surface,
+        *,
+        rows: dict[str, float],
+        origin: tuple[int, int],
+        empty_label: str,
+    ) -> None:
+        """Render a small key-value table into the analyzer overlay."""
+
+        x, y = origin
+        if not rows:
+            surface.blit(self.font.render(empty_label, True, TEXT_COLOR), (x, y))
+            return
+        for idx, (key, value) in enumerate(sorted(rows.items())):
+            line = f"{key}: {value:.3f}"
+            surface.blit(self.font.render(line, True, TEXT_COLOR), (x, y + idx * 18))
+
+    def _draw_metric_timeline(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        current_frame: int,
+    ) -> None:
+        """Draw a simple metric timeline aligned to the current playback frame."""
+
+        if self.telemetry_replay is None or not self.visible_metric_keys:
+            label = self.font.render("Timeline: no visible metrics", True, TEXT_COLOR)
+            surface.blit(label, (rect.x + 6, rect.y + 6))
+            return
+
+        pygame.draw.line(
+            surface,
+            (255, 255, 255, 80),
+            (rect.x, rect.bottom - 16),
+            (rect.right, rect.bottom - 16),
+            1,
+        )
+
+        max_frame = max(
+            (
+                sample.get("frame_idx", 0)
+                for sample in self.telemetry_replay.samples
+                if isinstance(sample.get("frame_idx"), int)
+            ),
+            default=0,
+        )
+        frame_span = max(max_frame, 1)
+
+        for color_idx, key in enumerate(sorted(self.visible_metric_keys)):
+            series = self._timeline_series_for_key(key)
+            if len(series) < 2:
+                continue
+
+            values = [value for _, value in series]
+            min_val = min(values)
+            max_val = max(values)
+            denom = max(max_val - min_val, 1e-6)
+            color = _ANALYZER_TIMELINE_COLORS[color_idx % len(_ANALYZER_TIMELINE_COLORS)]
+            points = []
+            for frame_idx, value in series:
+                x = rect.x + int((frame_idx / frame_span) * max(rect.width - 1, 1))
+                normalized = (value - min_val) / denom
+                y = rect.bottom - 18 - int(normalized * max(rect.height - 24, 1))
+                points.append((x, y))
+            if len(points) >= 2:
+                pygame.draw.lines(surface, color, False, points, 2)
+                label = self.font.render(key, True, color)
+                surface.blit(label, (rect.x + 6, rect.y + 6 + color_idx * 16))
+
+        marker_x = rect.x + int((current_frame / frame_span) * max(rect.width - 1, 1))
+        pygame.draw.line(surface, (255, 255, 255), (marker_x, rect.y), (marker_x, rect.bottom), 1)
+
+    def _timeline_series_for_key(self, key: str) -> list[tuple[int, float]]:
+        """Collect numeric timeline values for one metric key.
+
+        Returns:
+            list[tuple[int, float]]: Ordered ``(frame_idx, value)`` pairs for ``key``.
+        """
+
+        if self.telemetry_replay is None:
+            return []
+        series: list[tuple[int, float]] = []
+        for sample in self.telemetry_replay.samples:
+            frame_idx = sample.get("frame_idx")
+            if not isinstance(frame_idx, int):
+                continue
+            value = None
+            if isinstance(sample.get("step_metrics"), dict):
+                value = sample["step_metrics"].get(key)
+            if value is None and isinstance(sample.get("metrics"), dict):
+                value = sample["metrics"].get(key)
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                continue
+            series.append((frame_idx, numeric))
+        return series
 
     def update(self):
         """Update the playback state and render the current frame."""
@@ -641,10 +884,26 @@ def create_interactive_playback_from_batch(batch: BatchPlayback) -> InteractiveP
     """
     # Concatenate all episode states
     states = []
+    telemetry_samples = []
+    frame_offset = 0
     for episode in batch.episodes:
         states.extend(episode.states)
+        for sample in episode.telemetry_samples or []:
+            merged = dict(sample)
+            frame_idx = merged.get("frame_idx")
+            if isinstance(frame_idx, int):
+                merged["frame_idx"] = frame_idx + frame_offset
+            merged.setdefault("episode_id", episode.episode_id)
+            telemetry_samples.append(merged)
+        frame_offset += len(episode.states)
 
-    return InteractivePlayback(states, batch.map_def, episodes=batch.episodes)
+    telemetry_replay = TelemetryReplay(samples=telemetry_samples) if telemetry_samples else None
+    return InteractivePlayback(
+        states,
+        batch.map_def,
+        episodes=batch.episodes,
+        telemetry_replay=telemetry_replay,
+    )
 
 
 if __name__ == "__main__":

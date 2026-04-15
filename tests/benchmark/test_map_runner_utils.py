@@ -632,6 +632,7 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
         "ours_gst_guarded",
         {},
         robot_kinematics="differential_drive",
+        adapter_impact_eval=True,
     )
     linear, angular = policy(
         {
@@ -650,6 +651,8 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
     assert meta["planner_kinematics"]["execution_mode"] == "mixed"
     assert meta["planner_kinematics"]["fallback_policy"] == "goal"
     assert meta["guard_stats"]["fallback_safe"] == 1
+    assert meta["adapter_impact"]["native_steps"] == 0
+    assert meta["adapter_impact"]["adapted_steps"] == 1
 
 
 def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(

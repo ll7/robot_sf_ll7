@@ -22,7 +22,11 @@ def _write_fake_upstream_repo(
     *,
     action_xy: tuple[float, float] = (1.2, 0.0),
     kinematics: str = "holonomic",
+    missing_keys: list[str] | tuple[str, ...] | None = None,
+    unexpected_keys: list[str] | tuple[str, ...] | None = None,
 ) -> None:
+    missing_keys = ["dist.logstd._bias"] if missing_keys is None else list(missing_keys)
+    unexpected_keys = [] if unexpected_keys is None else list(unexpected_keys)
     _write(repo_root / "trained_models" / "__init__.py", "")
     _write(repo_root / "trained_models" / "SoNIC_GST" / "__init__.py", "")
     _write(repo_root / "trained_models" / "SoNIC_GST" / "configs" / "__init__.py", "")
@@ -99,7 +103,7 @@ class Policy(nn.Module):
 
     def load_state_dict(self, _state, strict=False):
         del strict
-        return ["dist.logstd._bias"], []
+        return {missing_keys!r}, {unexpected_keys!r}
 
     def to(self, _device):
         return self
@@ -252,6 +256,49 @@ def test_adapter_accepts_flat_single_human_payloads(tmp_path: Path) -> None:
     assert float(inputs["visible_masks"][0, 0]) == pytest.approx(1.0)
 
 
+def test_adapter_pads_missing_pedestrian_velocity_rows(tmp_path: Path) -> None:
+    """Missing velocity rows should not drop visible pedestrians from the upstream contract."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SonicCrowdNavAdapter(
+        build_sonic_crowdnav_config(
+            {
+                "repo_root": str(repo_root),
+                "checkpoint_name": "05207.pt",
+            }
+        )
+    )
+
+    linear, angular, meta = adapter.act(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.0],
+                "velocity_xy": [0.0, 0.0],
+                "radius": [0.3],
+            },
+            "goal": {"current": [5.0, 0.0]},
+            "pedestrians": {
+                "positions": [[1.0, 0.0], [3.0, 1.0]],
+                "velocities": [[0.2, 0.0]],
+                "count": [2],
+            },
+        },
+        time_step=0.25,
+    )
+
+    assert math.isfinite(linear)
+    assert math.isfinite(angular)
+    assert meta["human_count"] == 2
+    assert meta["detected_human_num"] == 2
+
+    inputs = adapter._policy.__class__.LAST_INPUTS
+    assert inputs is not None
+    assert float(inputs["visible_masks"][0, 0]) == pytest.approx(1.0)
+    assert float(inputs["visible_masks"][0, 1]) == pytest.approx(1.0)
+    assert np.allclose(inputs["spatial_edges"][0, 1, 0:2], inputs["spatial_edges"][0, 1, 6:8])
+
+
 def test_adapter_fails_fast_on_missing_assets_or_incompatible_source(tmp_path: Path) -> None:
     """The adapter should refuse to load missing assets or unsupported upstream kinematics."""
     with pytest.raises(FileNotFoundError, match="SoNIC-Social-Nav checkout not found"):
@@ -268,6 +315,31 @@ def test_adapter_fails_fast_on_missing_assets_or_incompatible_source(tmp_path: P
                 }
             )
         )
+
+
+def test_adapter_fails_fast_on_incompatible_checkpoint_state_dict(tmp_path: Path) -> None:
+    """The adapter should reject checkpoints with unsupported missing or extra keys."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(
+        repo_root,
+        missing_keys=["dist.logstd._bias", "encoder.weight"],
+        unexpected_keys=["unexpected.bias"],
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        SonicCrowdNavAdapter(
+            build_sonic_crowdnav_config(
+                {
+                    "repo_root": str(repo_root),
+                    "checkpoint_name": "05207.pt",
+                }
+            )
+        )
+
+    message = str(excinfo.value)
+    assert str((repo_root / "trained_models" / "SoNIC_GST" / "checkpoints" / "05207.pt").resolve()) in message
+    assert "encoder.weight" in message
+    assert "unexpected.bias" in message
 
 
 def test_real_upstream_checkout_smoke_runs_if_assets_are_available() -> None:

@@ -201,8 +201,13 @@ def _extract_socnav_fields(
         dtype=float,
     ).reshape(-1)
     ped_count = int(ped_count_arr[0]) if ped_count_arr.size else int(ped_positions.shape[0])
-    ped_count = max(0, min(ped_count, ped_positions.shape[0], ped_velocities.shape[0]))
+    ped_count = max(0, min(ped_count, ped_positions.shape[0]))
     ped_positions = ped_positions[:ped_count]
+    if ped_velocities.shape[0] < ped_count:
+        missing_rows = ped_count - ped_velocities.shape[0]
+        ped_velocities = np.vstack(
+            [ped_velocities, np.zeros((missing_rows, 2), dtype=ped_velocities.dtype)]
+        )
     ped_velocities = ped_velocities[:ped_count]
     return (
         robot_pos,
@@ -325,6 +330,15 @@ class SonicCrowdNavAdapter:
         missing, unexpected = self._policy.load_state_dict(state, strict=False)
         self._missing_state_keys = list(missing)
         self._unexpected_state_keys = list(unexpected)
+        allowed_missing = {"dist.logstd._bias"}
+        disallowed_missing = sorted(set(self._missing_state_keys) - allowed_missing)
+        disallowed_unexpected = sorted(set(self._unexpected_state_keys))
+        if disallowed_missing or disallowed_unexpected:
+            raise RuntimeError(
+                "SoNIC checkpoint is incompatible with the wrapper policy at "
+                f"{self.checkpoint_path}: missing={disallowed_missing}, "
+                f"unexpected={disallowed_unexpected}"
+            )
         self._policy.to(self._device)
         self._policy.eval()
         self._mask = torch.zeros((1, 1), dtype=torch.float32, device=self._device)

@@ -1639,17 +1639,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            used_fallback = decision in {
-                "fallback_safe",
-                "fallback_best_effort",
-                "stop_safe",
-                "stop_best_effort",
-                "goal_reached",
-            }
             _update_adapter_impact_metrics(
                 meta,
-                "native" if used_fallback else "adapter",
-                count_native=used_fallback,
+                "adapter",
+                count_native=False,
             )
             return linear, angular
 

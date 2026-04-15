@@ -97,6 +97,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.sonic_crowdnav import SonicCrowdNavAdapter, build_sonic_crowdnav_config
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
@@ -131,6 +132,8 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_orca_relaxed",
     "socnav_hrvo",
     "crowdnav_height",
+    "sonic_crowdnav",
+    "sonic_gst",
     "sicnav",
     "dr_mpc",
 }
@@ -1583,6 +1586,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
     elif algo_key in {"crowdnav_height"}:
         adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
+    elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+        adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

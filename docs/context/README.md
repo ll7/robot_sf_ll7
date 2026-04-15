@@ -64,6 +64,7 @@ contradictory prose.
 Use the smallest structure that keeps the note reusable. Most notes should include:
 
 - the goal or decision,
+- the assumptions made and why they matter,
 - the key evidence or reasoning,
 - the validation path,
 - the current conclusion or follow-up boundary.

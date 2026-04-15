@@ -113,3 +113,22 @@ Interpretation:
 - The bundled SoNIC checkpoint is reusable at inference time only with narrow compatibility shims.
 - This is enough to justify future model-only adapter work.
 - It is not enough to claim source-harness parity or benchmark-readiness.
+
+## Aggressive Source Repro Follow-up
+
+Date: 2026-04-15
+
+I retried the source harness in a side environment with the first missing dependency filled in
+(`gym==0.26.2` on top of a `uv`-managed venv with system site packages).
+
+Observed result:
+
+- the upstream `test.py` advanced past the original `No module named 'gym'` blocker
+- the next failure is now `ModuleNotFoundError: No module named 'matplotlib'`
+
+Interpretation:
+
+- the source harness remains blocked
+- the failure has moved forward, which confirms the probe is now exercising the upstream entrypoint
+- the environment still needs a broader dependency set before the source harness can be called
+  reproducible here

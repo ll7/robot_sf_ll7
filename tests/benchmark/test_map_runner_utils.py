@@ -468,6 +468,49 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
     assert meta["upstream_reference"]["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
 
 
+def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The SoNIC key should build the upstream checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.4, 0.1)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "sonic_gst",
+        {
+            "repo_root": "output/repos/SoNIC-Social-Nav",
+            "checkpoint_name": "05207.pt",
+        },
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.4, 0.1)
+    policy._planner_reset(seed=9)
+    assert planners
+    assert meta["policy_semantics"] == "upstream_sonic_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+
+
 def test_build_policy_sicnav_wires_external_mpc_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

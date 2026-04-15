@@ -115,6 +115,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Upstream CrowdNav_HEIGHT model-only checkpoint wrapper.",
     ),
     AlgorithmReadiness(
+        canonical_name="sonic_crowdnav",
+        tier="experimental",
+        aliases=("sonic_crowdnav", "sonic_gst"),
+        note="Upstream SoNIC model-only checkpoint wrapper with fail-fast source asset checks.",
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),

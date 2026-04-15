@@ -22,6 +22,22 @@ Treat the following files as the repository-native context stack for Codex-style
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
 
+## Local Machine Context (Gitignored)
+
+To support multi-machine workflows, agents may consume machine-specific guidance from local-only
+files at the repository root.
+
+- Committed template: `docs/templates/local.machine.example.md`
+- Local overrides (gitignored): `local.machine.md` or `local.machine.<name>.md`
+
+Execution rules:
+
+- If a local machine context file exists, read it before running expensive commands.
+- Follow local limits for concurrency and execution location (for example CPU worker caps, tmux
+  requirements, GPU-only jobs, or SLURM submission constraints).
+- If no local machine context exists, use conservative defaults and repository-safe commands.
+- Never store secrets in local machine context files.
+
 ## Knowledge Capture & Context Notes
 
 Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump

@@ -20,6 +20,31 @@ def test_replay_alignment_within_tolerance():
     assert snap["frame_idx"] == 5
 
 
+def test_replay_snapshot_surfaces_reward_terms_and_step_metrics():
+    """Structured replay snapshots should expose analyzer-ready scalar fields."""
+    samples = [
+        {
+            "episode_id": 3,
+            "frame_idx": 4,
+            "status": "running",
+            "metrics": {"reward": 1.5, "collisions": 0, "fps": 10.0},
+            "reward_total": 1.5,
+            "reward_terms": {"progress": 0.7, "living": -0.1},
+            "step_metrics": {"near_misses": 1.0, "comfort_exposure": 0.25},
+        }
+    ]
+    replay = TelemetryReplay(samples=samples)
+
+    snapshot = replay.current_snapshot()
+
+    assert snapshot.episode_id == 3
+    assert snapshot.frame_idx == 4
+    assert snapshot.reward_total == 1.5
+    assert snapshot.reward_terms["progress"] == 0.7
+    assert snapshot.step_metrics["near_misses"] == 1.0
+    assert snapshot.metrics["collisions"] == 0.0
+
+
 def test_export_combined_image(tmp_path):
     """Combined export writes a PNG with both view and pane content."""
     main = np.zeros((100, 150, 4), dtype=np.uint8)

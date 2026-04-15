@@ -212,5 +212,57 @@ def test_legacy_pickle_compatibility():
     assert episode.reset_points is not None
 
 
+def test_jsonl_playback_loader_reads_episode_telemetry_sidecar(tmp_path: Path) -> None:
+    """Episode playback should load telemetry samples linked from metadata."""
+    recorder = JSONLRecorder(
+        output_dir=str(tmp_path),
+        suite="telemetry",
+        scenario="linked",
+        algorithm="manual",
+        seed=7,
+    )
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    telemetry_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"episode_id": 2, "frame_idx": 0, "metrics": {"reward": 1.0}}),
+                json.dumps({"episode_id": 2, "frame_idx": 1, "metrics": {"reward": 1.5}}),
+                json.dumps({"episode_id": 9, "frame_idx": 0, "metrics": {"reward": 9.0}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    recorder.current_episode_id = 2
+    recorder.start_episode(
+        telemetry_path=str(telemetry_path),
+        telemetry_episode_id=2,
+    )
+
+    import numpy as np
+
+    from robot_sf.render.sim_view import VisualizableSimState
+
+    recorder.record_step(
+        VisualizableSimState(
+            timestep=0,
+            robot_action=None,
+            robot_pose=((0.0, 0.0), 0.0),
+            pedestrian_positions=np.array([]),
+            ray_vecs=np.array([]),
+            ped_actions=np.array([]),
+        )
+    )
+    recorder.end_episode()
+
+    loader = JSONLPlaybackLoader()
+    episode_path = tmp_path / "telemetry_linked_manual_7_ep0002.jsonl"
+    episode, _ = loader.load_single_episode(episode_path)
+
+    assert episode.telemetry_samples is not None
+    assert [sample["frame_idx"] for sample in episode.telemetry_samples] == [0, 1]
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

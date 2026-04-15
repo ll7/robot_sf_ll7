@@ -17,8 +17,12 @@ campaigns that run on cluster resources.
 - Prefer repo-local wrappers and config-first commands.
 - Use `ISSUE*_TRAIN_CONFIG`-style environment selection and keep configs under
   [configs/training/](../configs/training/).
+- For issue-791 wrappers, treat `ISSUE791_TRAIN_CONFIG` as required and always pass it
+  explicitly. Do not rely on wrapper defaults for promotion or long-horizon submissions.
 - For long jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch` unless the task
   explicitly requires fixed wall time.
+- For Auxme issue-791 submissions, prefer `scripts/dev/sbatch_auxme_issue791.sh` so partition
+  availability and per-user QoS slots are checked before submit.
 - Keep artifact output rooted in `output/slurm/` (or the configured mirrored destination) and
   confirm `ROBOT_SF_ARTIFACT_ROOT` is synced on exit.
 - Set `#SBATCH --output=output/slurm/%j-<description>.out` — job ID first so logs sort

@@ -259,6 +259,16 @@ CUDA. `PredictionPlannerAdapter._build_model()` now calls `model.to(self._device
 the checkpoint. Smoke proof: job 11544 failed with a CPU/CUDA mismatch; job 11560 succeeded with
 `Using cuda device` and `fps=73`.
 
+Issue-791 wrapper hardening on 2026-04-15: `ISSUE791_TRAIN_CONFIG` is now required by
+`issue_791_reward_curriculum.sl`, `issue_791_asymmetric_critic.sl`, and
+`issue_791_attention_head.sl`. This prevents accidental stage1 fallback for promotion/long runs.
+
+Auxme reliability helpers added on 2026-04-15:
+
+- `scripts/dev/auxme_partition_status.sh` for live `a30`/`l40s` free-GPU and queue-pressure checks,
+- `scripts/dev/sbatch_auxme_issue791.sh` for explicit-config submission with partition recommendation
+   plus max-time-safe routing through `scripts/dev/sbatch_use_max_time.sh`.
+
 ## Relevant Docs
 
 - [Issue 791 Attention Head Gate](issue_791_attention_head_gate.md)

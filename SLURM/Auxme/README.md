@@ -65,3 +65,37 @@ Submit with max wall time via the repo wrapper:
 ```bash
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 ```
+
+## Reliable Issue-791 Submission Workflow
+
+Issue-791 wrappers now require an explicit config path to avoid accidental stage1 fallback.
+
+Recommended submission path:
+
+```bash
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml \
+  --job-name robot-sf-issue791-reward-curriculum \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+The helper does three things before submission:
+
+- prints live partition pressure (`a30`, `l40s`) with free GPUs, pending depth, and per-user slot headroom,
+- recommends `partition`/`qos` from the live snapshot when not explicitly passed,
+- submits through `scripts/dev/sbatch_use_max_time.sh` so wall-time matches current policy.
+
+Dry-run with recommendation visible:
+
+```bash
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml \
+  --dry-run \
+  SLURM/Auxme/issue_791_attention_head.sl
+```
+
+### Partition guidance
+
+- Prefer spreading long jobs across `a30` and `l40s` to respect `QOSMaxJobsPerUserLimit=2` and maximize concurrency.
+- If one partition is saturated (low `free_gpu`, high `pending`, or `slots_left=0`), submit the next job to the other partition.
+- Treat `srun: Unable to confirm allocation ... Zero Bytes were transmitted or received` as transient infrastructure noise; resubmit once with identical config.

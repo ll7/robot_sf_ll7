@@ -52,3 +52,29 @@ scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/Auxme/auxme_gpu.sl
   the wrapper can resolve the correct limit without extra flags.
 - If Slurm tools are unavailable in the current shell, fall back to a manual `sbatch`
   command with an explicit `--time`.
+
+## Auxme issue-791 reliability helper
+
+For issue-791 wrappers on Auxme, use:
+
+```bash
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml \
+  --job-name robot-sf-issue791-reward-curriculum \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+This helper adds pre-submit partition availability checks and recommendation logic based on
+current cluster pressure, then submits through `sbatch_use_max_time.sh`.
+
+Raw status table only:
+
+```bash
+scripts/dev/auxme_partition_status.sh
+```
+
+Machine-readable recommendation only:
+
+```bash
+scripts/dev/auxme_partition_status.sh --recommend
+```

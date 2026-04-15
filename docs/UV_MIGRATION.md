@@ -148,15 +148,15 @@ uvx ty check . --exit-zero
 
 ### Modified Files
 - `pyproject.toml` - Updated with all dependencies and workspace config
-- `setup.py` - Simplified (kept for compatibility)
 - `README.md` - Updated installation instructions
 - `.github/workflows/ci.yml` - Updated CI to use uv
 - `.vscode/tasks.json` - Updated tasks to use uv
 
-### Legacy Files (can be removed after migration)
+### Legacy Files Removed
 - `requirements.txt` - Dependencies now in pyproject.toml
 - `fast-pysf/requirements.txt` - Dependencies now in fast-pysf/pyproject.toml
 - `fast-pysf/setup.py` - Configuration now in fast-pysf/pyproject.toml
+- `setup.py` - Root packaging stub removed; packaging now relies on `pyproject.toml`
 
 ## Benefits of the Migration
 

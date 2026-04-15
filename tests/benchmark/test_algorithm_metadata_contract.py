@@ -290,6 +290,42 @@ def test_gensafenav_gst_predictor_rand_metadata_exposes_checkpoint_wrapper_contr
     assert upstream["default_model_name"] == "GST_predictor_rand"
 
 
+def test_gensafenav_ours_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded Ours_GST metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        execution_mode="mixed",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "Ours_GST"
+
+
+def test_gensafenav_gst_predictor_rand_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded GST_predictor_rand metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="gst_predictor_rand_guarded",
+        metadata={"status": "ok"},
+        execution_mode="mixed",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
 def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
     """NMPC metadata should classify the planner as a native optimizer-style adapter."""
     meta = enrich_algorithm_metadata(

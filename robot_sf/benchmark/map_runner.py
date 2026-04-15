@@ -137,9 +137,13 @@ _SOCNAV_ALGO_KEYS = {
     "gensafenav_ours_gst",
     "gensafe_ours_gst",
     "ours_gst",
+    "gensafenav_ours_gst_guarded",
+    "ours_gst_guarded",
     "gensafenav_gst_predictor_rand",
     "gensafe_gst_predictor_rand",
     "gst_predictor_rand",
+    "gensafenav_gst_predictor_rand_guarded",
+    "gst_predictor_rand_guarded",
     "sicnav",
     "dr_mpc",
 }
@@ -902,6 +906,16 @@ def _obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+class _GoalFallbackAdapter:
+    """Simple goal-policy fallback adapter for guarded wrapper experiments."""
+
+    def __init__(self, *, max_speed: float) -> None:
+        self._max_speed = float(max_speed)
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        return _goal_policy(observation, max_speed=self._max_speed)
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1530,6 +1544,105 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta.setdefault("status", "ok")
         meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key in {
+        "gensafenav_ours_gst_guarded",
+        "ours_gst_guarded",
+        "gensafenav_gst_predictor_rand_guarded",
+        "gst_predictor_rand_guarded",
+    }:
+        guarded_root = {
+            "gensafenav_ours_gst_guarded",
+            "ours_gst_guarded",
+        }
+        model_name = (
+            str(algo_config.get("model_name", "Ours_GST"))
+            if algo_key in guarded_root
+            else str(algo_config.get("model_name", "GST_predictor_rand"))
+        )
+        sonic_adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": model_name,
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+        guard_adapter = GuardedPPOAdapter(
+            config=build_guarded_ppo_config(algo_config),
+            fallback_adapter=_GoalFallbackAdapter(
+                max_speed=float(algo_config.get("guard_fallback_max_speed", 1.0)),
+            ),
+        )
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="sonic_guarded_goal_fallback",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        meta["guard_stats"] = {
+            "ppo_clear": 0,
+            "ppo_safe": 0,
+            "fallback_safe": 0,
+            "stop_safe": 0,
+            "fallback_best_effort": 0,
+            "stop_best_effort": 0,
+            "goal_reached": 0,
+        }
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+            planner_meta["guard_strategy"] = "short_horizon_safety_gate"
+            planner_meta["fallback_policy"] = "goal"
+
+        guarded_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            sonic_command = sonic_adapter.plan(obs)
+            chosen, decision = guard_adapter.choose_command(
+                obs,
+                (float(sonic_command[0]), float(sonic_command[1])),
+            )
+            linear, angular = _project_with_feasibility(
+                model=guarded_kinematics_model,
+                command=(float(chosen[0]), float(chosen[1])),
+                meta=meta,
+            )
+            guard_stats = meta.get("guard_stats")
+            if isinstance(guard_stats, dict):
+                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            used_fallback = decision in {
+                "fallback_safe",
+                "fallback_best_effort",
+                "stop_safe",
+                "stop_best_effort",
+                "goal_reached",
+            }
+            _update_adapter_impact_metrics(
+                meta,
+                "native" if used_fallback else "adapter",
+                count_native=used_fallback,
+            )
+            return linear, angular
+
+        _attach_planner_reset(_policy, sonic_adapter)
+        if hasattr(sonic_adapter, "close"):
+            _policy._planner_close = sonic_adapter.close
         return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))

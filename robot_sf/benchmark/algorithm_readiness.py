@@ -127,6 +127,15 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Upstream GenSafeNav constrained learned checkpoint wrapper with fail-fast asset checks.",
     ),
     AlgorithmReadiness(
+        canonical_name="gensafenav_ours_gst_guarded",
+        tier="experimental",
+        aliases=("gensafenav_ours_gst_guarded", "ours_gst_guarded"),
+        note=(
+            "GenSafeNav Ours_GST wrapper with explicit short-horizon safety guard and goal fallback "
+            "for static-risk-heavy slices."
+        ),
+    ),
+    AlgorithmReadiness(
         canonical_name="gensafenav_gst_predictor_rand",
         tier="experimental",
         aliases=(
@@ -137,6 +146,18 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note=(
             "Upstream GenSafeNav CrowdNav++-style learned checkpoint wrapper with fail-fast "
             "asset checks."
+        ),
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_gst_predictor_rand_guarded",
+        tier="experimental",
+        aliases=(
+            "gensafenav_gst_predictor_rand_guarded",
+            "gst_predictor_rand_guarded",
+        ),
+        note=(
+            "GenSafeNav GST_predictor_rand wrapper with explicit short-horizon safety guard and "
+            "goal fallback for static-risk-heavy slices."
         ),
     ),
     AlgorithmReadiness(

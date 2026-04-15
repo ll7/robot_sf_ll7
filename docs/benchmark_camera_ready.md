@@ -103,8 +103,10 @@ SNQI calibration assets used by camera-ready presets:
 
 * `configs/benchmarks/snqi_weights_camera_ready_v1.json`
 * `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
-* `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
-* `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
+* `configs/benchmarks/snqi_weights_camera_ready_v2.json`
+* `configs/benchmarks/snqi_baseline_camera_ready_v2.json`
+* `configs/benchmarks/snqi_weights_camera_ready_v3.json` (current paper-facing default)
+* `configs/benchmarks/snqi_baseline_camera_ready_v3.json` (current paper-facing default)
 
 ## Produced Artifacts
 
@@ -226,6 +228,7 @@ Benchmark mode is fail-closed:
 * planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
 * statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
 * SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
+  + includes contract health, planner ordering, component correlations, and ablation-based weight sensitivity
 * warning list
 * explicit per-planner failure reason field (`most_likely_failure_reason`) in planner rows/tables
 * publication bundle paths (if export enabled)
@@ -381,10 +384,12 @@ This emits:
 SNQI contract analyzer helper:
 
 ```bash
+# For v3 paper-facing campaigns only.  For other campaigns, replace --weights and
+# --baseline with the asset paths recorded in that campaign's manifest.json.
 uv run python scripts/tools/analyze_snqi_contract.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
-  --weights configs/benchmarks/snqi_weights_camera_ready_v2.json \
-  --baseline configs/benchmarks/snqi_baseline_camera_ready_v2.json
+  --weights configs/benchmarks/snqi_weights_camera_ready_v3.json \
+  --baseline configs/benchmarks/snqi_baseline_camera_ready_v3.json
 ```
 
 This emits:
@@ -392,6 +397,13 @@ This emits:
 * `reports/snqi_diagnostics.json`
 * `reports/snqi_diagnostics.md`
 * `reports/snqi_sensitivity.csv`
+
+The diagnostics now include:
+
+* a positioning recommendation for SNQI under the current contract
+* planner ordering by mean SNQI
+* per-component Spearman correlations against episode-level SNQI
+* per-weight ablation sensitivity rows in `snqi_sensitivity.csv`
 
 The analyzer now also emits runtime hotspot diagnostics:
 

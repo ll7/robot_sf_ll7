@@ -2,6 +2,11 @@
 
 This tool measures how removing each SNQI component (setting its weight to 0) affects algorithm rankings.
 
+For paper-facing benchmark work, prefer `scripts/tools/analyze_snqi_contract.py` first. That report
+now packages the same one-at-a-time ablation signal together with contract health, component
+correlations, planner ordering, and positioning guidance. Use `robot_sf_bench snqi-ablate` when you
+need a standalone rank-shift table outside the camera-ready contract flow.
+
 What it does
 - Computes a base ranking by mean SNQI per group (default: per algorithm).
 - For each weight in the SNQI formula, recomputes the ranking with that weight set to 0.

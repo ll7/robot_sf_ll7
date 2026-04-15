@@ -236,8 +236,8 @@ uv run ruff check --fix . && uv run ruff format .
 # Run all tests (unified suite)
 uv run pytest
 
-# Legacy linter (for comparison)
-pylint robot_sf
+# Ruff linter
+uv run ruff check .
 ```
 
 #### GUI Tests

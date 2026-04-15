@@ -133,7 +133,7 @@ uv run pytest test_pygame  # GUI tests
 # Code quality
 uv run ruff check .
 uv run ruff format .
-uv run pylint robot_sf
+uvx ty check . --exit-zero
 
 # Update dependencies
 ./scripts/update_deps.sh

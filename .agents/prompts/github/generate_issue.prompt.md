@@ -63,7 +63,7 @@ TEMPLATE SECTIONS
 
 13. Definition of Done Reminder (auto-trim if redundant)
   - All acceptance criteria satisfied.
-  - Quality gates: Ruff clean, pylint errors-only clean, type check (no errors), tests green.
+  - Quality gates: Ruff clean, type check (no errors), tests green.
   - Docs & examples updated where relevant.
   - No stray large artifacts committed.
 

@@ -20,7 +20,7 @@ MODULE_LIST=${AUXME_MODULES:-"gcc/13.2.0"}
 CUDA_MODULE=${AUXME_CUDA_MODULE:-cuda/12.1}
 RESULTS_ROOT=${AUXME_RESULTS_DIR:-${LOCAL_OUTPUT_ROOT}/issue791-reward-curriculum-job-${SLURM_JOB_ID}}
 WORKDIR=${SLURM_TMPDIR:-/tmp/${USER}/${SLURM_JOB_ID}}
-TRAIN_CONFIG=${ISSUE791_TRAIN_CONFIG:-configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_stage1.yaml}
+TRAIN_CONFIG=${ISSUE791_TRAIN_CONFIG:-}
 LOG_LEVEL=${ISSUE791_LOG_LEVEL:-INFO}
 ISSUE791_WANDB_POLICY=${ISSUE791_WANDB_POLICY:-auto}
 ISSUE791_REQUIRE_WANDB=${ISSUE791_REQUIRE_WANDB:-}
@@ -85,6 +85,12 @@ fi
 
 mkdir -p "${WORKDIR}"
 mkdir -p "${LOCAL_OUTPUT_ROOT}"
+
+if [[ -z "${TRAIN_CONFIG}" ]]; then
+  echo "[issue791] ISSUE791_TRAIN_CONFIG is required for this wrapper." >&2
+  echo "[issue791] Example: ISSUE791_TRAIN_CONFIG=configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml sbatch $0" >&2
+  exit 2
+fi
 
 # Resolve to an absolute config path so policy checks and launch use the same file.
 if [[ "${TRAIN_CONFIG}" = /* ]]; then

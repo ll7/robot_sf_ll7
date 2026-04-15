@@ -49,6 +49,9 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon corridor planner with side-choice commitment."""
 
     _EPS = 1e-6
+    # Minimum grid side length (cells) required before the route guide is consulted.
+    # Grids smaller than this are unlikely to carry useful topology information.
+    _MIN_LARGE_GRID_CELLS = 20
 
     def __init__(self, config: TEBCommitmentConfig | None = None) -> None:
         """Initialize the planner with optional config overrides."""
@@ -70,6 +73,14 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
                 stop_distance=0.5,
             )
         )
+        # Pre-compute the commitment-gain ladder once; it depends only on config which is
+        # immutable after construction.  Building it here avoids rebuilding on every plan step.
+        _step = max(float(self.config.commit_gain_step), self._EPS)
+        _max = max(float(self.config.max_commit_gain), float(self.config.commit_gain))
+        _gains: list[float] = [float(self.config.commit_gain)]
+        while _gains[-1] + self._EPS < _max:
+            _gains.append(min(_max, _gains[-1] + _step))
+        self._commit_gains: tuple[float, ...] = tuple(_gains)
         self.reset()
 
     def reset(self) -> None:
@@ -88,6 +99,10 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> np.ndarray:
         """Select the active route target from current/next goal fields.
 
+        Falls back to ``robot_pos`` when both goals are non-finite or coincident
+        so that the planner emits a zero-velocity command rather than propagating
+        a non-finite waypoint through the heading computation.
+
         Returns:
             np.ndarray: The goal waypoint the planner should currently track.
         """
@@ -95,11 +110,14 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         next_dist = float(np.linalg.norm(goal_next - robot_pos))
         current_valid = bool(np.isfinite(goal_current).all()) and current_dist > 1e-6
         next_valid = bool(np.isfinite(goal_next).all()) and next_dist > 1e-6
+        target: np.ndarray | None = None
         if current_valid and current_dist > float(self.config.goal_tolerance):
-            return goal_current
-        if next_valid:
-            return goal_next
-        return goal_current if current_valid else goal_next
+            target = goal_current
+        elif next_valid:
+            target = goal_next
+        if target is not None:
+            return target
+        return goal_current if current_valid else robot_pos
 
     @staticmethod
     def _normalize(vec: np.ndarray) -> np.ndarray:
@@ -259,17 +277,11 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             tuple[np.ndarray, bool]: The chosen heading and whether it remains blocked.
         """
-        gains = [float(self.config.commit_gain)]
-        step_gain = max(float(self.config.commit_gain_step), self._EPS)
-        max_gain = max(float(self.config.max_commit_gain), gains[0])
-        while gains[-1] + self._EPS < max_gain:
-            gains.append(min(max_gain, gains[-1] + step_gain))
-
         best_heading = forward
         best_side = side
         best_score = float("inf")
         for candidate_side in (side, -side):
-            for gain in gains:
+            for gain in self._commit_gains:
                 heading = self._candidate_heading(
                     forward=forward, lateral=lateral, side=candidate_side, gain=gain
                 )
@@ -389,7 +401,9 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_positions = self._normalize_ped_positions(ped_state)
         payload = self._extract_grid_payload(observation)
         has_large_grid = bool(
-            payload is not None and payload[0].shape[1] >= 20 and payload[0].shape[2] >= 20
+            payload is not None
+            and payload[0].shape[1] >= self._MIN_LARGE_GRID_CELLS
+            and payload[0].shape[2] >= self._MIN_LARGE_GRID_CELLS
         )
 
         route_waypoint = self._route_guide.route_waypoint(observation)

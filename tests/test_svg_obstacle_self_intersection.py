@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import dedent
 
 from shapely.geometry import GeometryCollection, Polygon
 
@@ -30,9 +31,41 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
         assert svg_path.label == "obstacle"
 
         obstacle = converter._process_obstacle_path(svg_path)
-        polygon = Polygon(obstacle.vertices)
-        assert polygon.is_valid, f"Obstacle {path_id} should be repaired to a valid polygon"
-        assert polygon.area > 0.0
+        assert obstacle.geometry is not None, f"Obstacle {path_id} should keep repaired geometry"
+        assert obstacle.geometry.is_valid, (
+            f"Obstacle {path_id} should be repaired to valid geometry"
+        )
+        assert obstacle.geometry.area > 0.0
+
+
+def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> None:
+    """Compound SVG obstacle paths should keep all detached polygon members."""
+    svg_file = tmp_path / "compound_obstacles.svg"
+    svg_file.write_text(
+        dedent(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+                 width="12" height="4" viewBox="0 0 12 4">
+              <path id="compound_obstacle"
+                    inkscape:label="obstacle"
+                    d="M 0 0 L 4 0 L 4 4 L 0 4 Z M 6 0 L 10 0 L 10 4 L 6 4 Z"/>
+            </svg>
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    converter = SvgMapConverter(str(svg_file))
+    svg_path = _get_path_by_id(converter, "compound_obstacle")
+    obstacle = converter._process_obstacle_path(svg_path)
+
+    polygons = obstacle.iter_polygons()
+    assert len(polygons) == 2
+    assert all(poly.is_valid and poly.area > 0.0 for poly in polygons)
+    assert obstacle.contains_point((1.0, 1.0))
+    assert obstacle.contains_point((7.0, 1.0))
+    assert not obstacle.contains_point((5.0, 1.0))
 
 
 def test_polygon_members_handles_deep_nested_geometry_collection() -> None:

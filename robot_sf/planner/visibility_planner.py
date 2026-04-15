@@ -12,7 +12,7 @@ from itertools import pairwise
 
 from loguru import logger
 from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import nearest_points
+from shapely.ops import nearest_points, unary_union
 
 from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
@@ -431,7 +431,13 @@ class VisibilityPlanner:
         margin = self.config.robot_radius + self.config.min_safe_clearance
         inflated: list[Polygon] = []
         for obstacle in self.map_def.obstacles:
-            poly = Polygon(obstacle.vertices)
+            polygons = obstacle.iter_polygons()
+            if not polygons:
+                logger.warning(
+                    "Skipping degenerate obstacle with vertices: {verts}", verts=obstacle.vertices
+                )
+                continue
+            poly = unary_union(polygons)
             if poly.is_empty or poly.area <= 0:
                 logger.warning(
                     "Skipping degenerate obstacle with vertices: {verts}", verts=obstacle.vertices
@@ -452,7 +458,13 @@ class VisibilityPlanner:
         margin = self.config.robot_radius
         inflated: list[Polygon] = []
         for obstacle in self.map_def.obstacles:
-            poly = Polygon(obstacle.vertices)
+            polygons = obstacle.iter_polygons()
+            if not polygons:
+                logger.warning(
+                    "Skipping degenerate obstacle with vertices: {verts}", verts=obstacle.vertices
+                )
+                continue
+            poly = unary_union(polygons)
             if poly.is_empty or poly.area <= 0:
                 logger.warning(
                     "Skipping degenerate obstacle with vertices: {verts}", verts=obstacle.vertices

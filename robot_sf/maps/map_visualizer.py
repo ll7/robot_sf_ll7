@@ -151,10 +151,15 @@ def render_map_definition(  # noqa: PLR0913
     """Render map geometry into an existing Matplotlib axes."""
     # Obstacles
     for obstacle in map_def.obstacles:
-        patch = Polygon(
-            obstacle.vertices, closed=True, facecolor=OBSTACLE_COLOR, edgecolor="black", alpha=0.8
-        )
-        ax.add_patch(patch)
+        for polygon in obstacle.iter_polygons():
+            patch = Polygon(
+                list(polygon.exterior.coords),
+                closed=True,
+                facecolor=OBSTACLE_COLOR,
+                edgecolor="black",
+                alpha=0.8,
+            )
+            ax.add_patch(patch)
 
     # Boundaries
     for x1, x2, y1, y2 in map_def.bounds:

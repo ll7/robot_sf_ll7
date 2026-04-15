@@ -541,8 +541,12 @@ class MapDefinition:
         if not isinstance(ax, matplotlib.axes.Axes):
             raise TypeError("ax must be a matplotlib.axes.Axes object")
         for obstacle in self.obstacles:
-            vertices = np.array(obstacle.vertices)
-            ax.fill(vertices[:, 0], vertices[:, 1], "black")
+            for polygon in obstacle.iter_polygons():
+                vertices = np.array(polygon.exterior.coords)
+                ax.fill(vertices[:, 0], vertices[:, 1], "black")
+                for interior in polygon.interiors:
+                    hole_vertices = np.array(interior.coords)
+                    ax.fill(hole_vertices[:, 0], hole_vertices[:, 1], "white")
 
     def is_point_in_driveable_area(self, point: Vec2D) -> bool:
         """Check if a point is in a driveable area.

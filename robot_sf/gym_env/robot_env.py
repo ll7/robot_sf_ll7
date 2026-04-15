@@ -898,14 +898,14 @@ class RobotEnv(BaseEnv):
     @staticmethod
     def _normalize_obstacles_for_grid(
         obstacles: list[Obstacle] | list[Line2D], bounds: list[Line2D]
-    ) -> tuple[list[Line2D], list[list[tuple[float, float]]]]:
+    ) -> tuple[list[Line2D], list[Any]]:
         """Convert obstacles/bounds into grid-friendly primitives.
 
         Returns:
-            tuple: (line segments, polygons) where polygons are only derived from Obstacle vertices.
+            tuple: (line segments, polygons) where polygons preserve compound obstacle geometry.
         """
         line_segments: list[Line2D] = []
-        polygons: list[list[tuple[float, float]]] = []
+        polygons: list[object] = []
 
         def _add_line(line) -> None:
             try:
@@ -916,7 +916,7 @@ class RobotEnv(BaseEnv):
 
         for obstacle in obstacles:
             if isinstance(obstacle, Obstacle):
-                polygons.append([tuple(v) for v in obstacle.vertices])
+                polygons.extend(obstacle.iter_polygons())
                 for line in obstacle.lines:
                     if len(line) == 4:
                         # Obstacle.lines stores (x1, x2, y1, y2); convert to Line2D ((x1, y1), (x2, y2))

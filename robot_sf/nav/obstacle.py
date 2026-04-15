@@ -1,9 +1,10 @@
 """Obstacle representation and construction for navigation and collision detection.
 
 This module provides the Obstacle dataclass for representing geometric obstacles
-in the simulation environment. Obstacles are defined by vertices forming a closed
-polygon and are automatically converted to line segments for efficient collision
-detection and path planning.
+in the simulation environment. Obstacles retain a legacy representative vertex
+ring for compatibility, but they can now also carry full Shapely polygon or
+MultiPolygon geometry for compound members and holes. Line segments are
+automatically derived for efficient collision detection and path planning.
 
 Key features:
 - Vertex-based obstacle definition with automatic edge generation
@@ -22,9 +23,10 @@ Typical usage:
 """
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 import numpy as np
-from shapely.geometry import Point, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
 
 from robot_sf.common.types import Line2D, Vec2D
 from robot_sf.nav.nav_types import SvgRectangle
@@ -32,16 +34,20 @@ from robot_sf.nav.nav_types import SvgRectangle
 
 @dataclass
 class Obstacle:
-    """Represents a geometric obstacle as a closed polygon.
+    """Represents a geometric obstacle with optional compound polygon geometry.
 
-    Obstacles are defined by a sequence of vertices forming a closed polygon boundary.
-    The class automatically generates line segments between consecutive vertices and
-    provides both list and numpy array representations for flexible downstream usage.
+    Obstacles retain a sequence of legacy representative vertices for compatibility,
+    but the canonical obstacle shape may be a Polygon or MultiPolygon. The class
+    automatically generates line segments from the full geometry and provides both
+    list and numpy array representations for flexible downstream usage.
 
     Attributes:
         vertices: List of 2D coordinate tuples defining the obstacle boundary vertices.
             Vertices are automatically normalized to tuples to ensure consistent equality
             checks regardless of input format (tuple vs numpy array).
+        geometry: Optional Shapely Polygon or MultiPolygon describing the canonical
+            obstacle shape. When provided, vertices remain as a representative exterior
+            ring for compatibility with legacy callers.
         lines: Line segments forming the obstacle edges, computed automatically from
             vertices. Degenerate edges (point-to-point) are filtered out. Each line is
             represented as (x1, x2, y1, y2).
@@ -58,9 +64,9 @@ class Obstacle:
     """
 
     vertices: list[Vec2D]
+    geometry: Polygon | MultiPolygon | None = field(default=None, repr=False, compare=False)
     lines: list[Line2D] = field(init=False)
     vertices_np: np.ndarray = field(init=False)
-    _polygon: Polygon | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
         """Validate and process vertices to generate lines and numpy array representation.
@@ -95,26 +101,103 @@ class Obstacle:
         # Convert vertices to numpy array
         self.vertices_np = np.array(self.vertices)
 
-        # Create edges from vertices
-        edges = [
-            *list(zip(self.vertices[:-1], self.vertices[1:], strict=False)),
-            (self.vertices[-1], self.vertices[0]),
-        ]
+        if self.geometry is not None:
+            self.geometry = self._normalize_geometry(self.geometry)
+            if self.geometry is not None and len(self.vertices) < 3:
+                self.vertices = self._representative_vertices(self.geometry)
+                self.vertices_np = np.array(self.vertices)
 
-        # Remove fake lines that are just points
-        edges = list(filter(lambda edge: edge[0] != edge[1], edges))
+        if self.geometry is None and len(self.vertices) >= 3:
+            self.geometry = Polygon(self.vertices)
 
-        # Create lines from edges
-        lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
-        self.lines = lines
-
-        self._polygon = Polygon(self.vertices) if len(self.vertices) >= 3 else None
+        self.lines = (
+            self._lines_from_geometry()
+            if self.geometry is not None
+            else self._lines_from_vertices()
+        )
 
     def contains_point(self, point: Vec2D) -> bool:
         """Return True if the point lies inside the obstacle polygon."""
-        if self._polygon is None:
+        if self.geometry is None or self.geometry.is_empty:
             return False
-        return self._polygon.contains(Point(point))
+        return self.geometry.contains(Point(point))
+
+    def iter_polygons(self) -> list[Polygon]:
+        """Return the polygon components that make up this obstacle."""
+        if self.geometry is None or self.geometry.is_empty:
+            return []
+        if isinstance(self.geometry, Polygon):
+            return [self.geometry]
+        if isinstance(self.geometry, MultiPolygon):
+            return [poly for poly in self.geometry.geoms if not poly.is_empty]
+        geoms = getattr(self.geometry, "geoms", None)
+        if geoms is None:
+            return []
+        return [geom for geom in geoms if isinstance(geom, Polygon) and not geom.is_empty]
+
+    @classmethod
+    def from_geometry(
+        cls,
+        geometry: Polygon | MultiPolygon,
+        *,
+        representative_vertices: list[Vec2D] | None = None,
+    ) -> "Obstacle":
+        """Build an obstacle from a Shapely geometry while keeping legacy vertices.
+
+        Returns:
+            Obstacle: Compatibility wrapper around the supplied geometry.
+        """
+        vertices = representative_vertices
+        if vertices is None:
+            vertices = cls._representative_vertices(geometry)
+        return cls(vertices=vertices, geometry=geometry)
+
+    @staticmethod
+    def _normalize_geometry(geometry: Polygon | MultiPolygon) -> Polygon | MultiPolygon | None:
+        if geometry.is_empty:
+            return None
+        if isinstance(geometry, (Polygon, MultiPolygon)):
+            return geometry
+        return None
+
+    @staticmethod
+    def _representative_vertices(geometry: Polygon | MultiPolygon) -> list[Vec2D]:
+        polygons: list[Polygon]
+        if isinstance(geometry, Polygon):
+            polygons = [geometry]
+        elif isinstance(geometry, MultiPolygon):
+            polygons = [poly for poly in geometry.geoms if not poly.is_empty]
+        else:
+            polygons = []
+        if not polygons:
+            return []
+        exterior = list(polygons[0].exterior.coords)[:-1]
+        return [tuple(vertex) for vertex in exterior]
+
+    @staticmethod
+    def _ring_to_lines(ring) -> list[Line2D]:
+        coords = [tuple(point) for point in ring.coords]
+        if len(coords) < 2:
+            return []
+        if coords[0] == coords[-1]:
+            coords = coords[:-1]
+        if len(coords) < 2:
+            return []
+        edges = [*pairwise(coords), (coords[-1], coords[0])]
+        return [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges if p1 != p2]
+
+    def _lines_from_vertices(self) -> list[Line2D]:
+        edges = [*pairwise(self.vertices), (self.vertices[-1], self.vertices[0])]
+        edges = list(filter(lambda edge: edge[0] != edge[1], edges))
+        return [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
+
+    def _lines_from_geometry(self) -> list[Line2D]:
+        lines: list[Line2D] = []
+        for polygon in self.iter_polygons():
+            lines.extend(self._ring_to_lines(polygon.exterior))
+            for interior in polygon.interiors:
+                lines.extend(self._ring_to_lines(interior))
+        return lines
 
 
 def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:

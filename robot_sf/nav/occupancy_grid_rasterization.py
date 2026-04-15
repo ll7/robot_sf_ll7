@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from loguru import logger
 from shapely import contains_xy as _shp_contains_xy
+from shapely.geometry import MultiPolygon as _ShapelyMultiPolygon
 from shapely.geometry import Polygon as _ShapelyPolygon
 
 from robot_sf.common.types import Circle2D, Line2D, RobotPose  # noqa: TC001
@@ -413,7 +414,7 @@ def rasterize_circle_fast(
 
 
 def rasterize_polygon(
-    polygon: list[tuple[float, float]],
+    polygon: list[tuple[float, float]] | _ShapelyPolygon | _ShapelyMultiPolygon,
     grid_array: np.ndarray,
     config: GridConfig,
     grid_origin_x: float = 0.0,
@@ -439,13 +440,27 @@ def rasterize_polygon(
         - If the polygon is partially outside the grid, only the overlapping region is rasterized.
         - Cells are marked as occupied if their center lies inside the polygon.
     """
-    if len(polygon) < 3:
-        return 0
+    if isinstance(polygon, _ShapelyMultiPolygon):
+        return sum(
+            rasterize_polygon(poly, grid_array, config, grid_origin_x, grid_origin_y, value)
+            for poly in polygon.geoms
+            if not poly.is_empty
+        )
 
-    if polygon[0] != polygon[-1]:
-        polygon = [*polygon, polygon[0]]
+    if isinstance(polygon, _ShapelyPolygon):
+        poly = polygon if polygon.is_valid else polygon.buffer(0)
+        if poly.is_empty:
+            return 0
+        polygon = poly
+        coords = list(poly.exterior.coords)
+    else:
+        if len(polygon) < 3:
+            return 0
+        coords = list(polygon)
+        if coords[0] != coords[-1]:
+            coords = [*coords, coords[0]]
 
-    xs, ys = zip(*polygon, strict=False)
+    xs, ys = zip(*coords, strict=False)
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
 
@@ -481,12 +496,17 @@ def rasterize_polygon(
 
 
 def _points_in_polygon(
-    mesh_x: np.ndarray, mesh_y: np.ndarray, polygon: list[tuple[float, float]]
+    mesh_x: np.ndarray,
+    mesh_y: np.ndarray,
+    polygon: list[tuple[float, float]] | _ShapelyPolygon,
 ) -> np.ndarray:
     """Return a boolean mask of points inside a polygon."""
-    poly = _ShapelyPolygon(polygon)
-    if not poly.is_valid:  # pragma: no cover - defensive
-        poly = poly.buffer(0)
+    if isinstance(polygon, _ShapelyPolygon):
+        poly = polygon if polygon.is_valid else polygon.buffer(0)
+    else:
+        poly = _ShapelyPolygon(polygon)
+        if not poly.is_valid:  # pragma: no cover - defensive
+            poly = poly.buffer(0)
     if poly.is_empty:
         return np.zeros_like(mesh_x, dtype=bool)
 

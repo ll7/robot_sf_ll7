@@ -16,7 +16,7 @@ import optuna
 import yaml
 from loguru import logger
 from matplotlib import patches
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString
 
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.planner import ClassicGlobalPlanner, PlanningError
@@ -193,7 +193,9 @@ def _compute_failure_proxy(
     Returns:
         float: Mean normalized low-clearance risk across valid routes.
     """
-    obstacle_polys = [Polygon(obstacle.vertices) for obstacle in map_def.obstacles]
+    obstacle_polys = [
+        polygon for obstacle in map_def.obstacles for polygon in obstacle.iter_polygons()
+    ]
     clearance_values: list[float] = []
     for route in routes:
         if len(route.waypoints) < 2:

@@ -511,6 +511,90 @@ def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
     assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
 
 
+def test_build_policy_gensafenav_ours_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GenSafeNav Ours_GST key should build the learned checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.35, 0.2)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "ours_gst",
+        {},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.35, 0.2)
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "Ours_GST"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+
+
+def test_build_policy_gensafenav_gst_predictor_rand_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GenSafeNav CrowdNav++-style key should build the learned checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.25, -0.1)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "gst_predictor_rand",
+        {},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.25, -0.1)
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "GST_predictor_rand"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+
+
 def test_build_policy_sicnav_wires_external_mpc_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

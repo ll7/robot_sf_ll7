@@ -134,6 +134,12 @@ _SOCNAV_ALGO_KEYS = {
     "crowdnav_height",
     "sonic_crowdnav",
     "sonic_gst",
+    "gensafenav_ours_gst",
+    "gensafe_ours_gst",
+    "ours_gst",
+    "gensafenav_gst_predictor_rand",
+    "gensafe_gst_predictor_rand",
+    "gst_predictor_rand",
     "sicnav",
     "dr_mpc",
 }
@@ -1588,6 +1594,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
     elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
         adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
+    elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "Ours_GST"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+    elif algo_key in {
+        "gensafenav_gst_predictor_rand",
+        "gensafe_gst_predictor_rand",
+        "gst_predictor_rand",
+    }:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "GST_predictor_rand"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

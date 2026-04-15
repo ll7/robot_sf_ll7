@@ -65,3 +65,41 @@ Reason:
 
 If the upstream source environment becomes reproducible, re-run the source-harness probe and then
 re-evaluate whether the wrapper can be promoted from prototype to benchmark-spike status.
+
+## GenSafeNav Follow-up
+
+Date: 2026-04-15
+
+`GenSafeNav` is close enough to the SoNIC runtime/model stack that the existing model-only adapter
+can be reused for the learned checkpoints without another wrapper class.
+
+Observed result:
+
+- `trained_models/Ours_GST/checkpoints/05207.pt` runs through the adapter
+- `trained_models/GST_predictor_rand/checkpoints/05207.pt` also runs through the adapter
+- both expose the same upstream `selfAttn_merge_srnn` policy family and holonomic `ActionXY`
+  contract
+
+Assumptions recorded:
+
+- `Ours_GST` is still a model-only wrapper path, not a source-harness parity result
+- `GST_predictor_rand` is a learned CrowdNav++-style comparison checkpoint and is wrapper-friendly
+- `ORCA` and `SF` in `GenSafeNav` should not be exposed as checkpoint wrappers because their saved
+  configs use source-side classical policies rather than learned checkpoint inference
+
+Implementation boundary:
+
+- safe to add benchmark aliases for `gensafenav_ours_gst` / `ours_gst`
+- safe to add benchmark aliases for `gensafenav_gst_predictor_rand` / `gst_predictor_rand`
+- not safe to add `GenSafeNav ORCA` or `GenSafeNav SF` as model-only checkpoint wrappers
+
+## Performance Status
+
+Current evidence is limited to integration and smoke validation.
+
+- `Ours_GST` and `GST_predictor_rand` both step through the Robot SF wrapper and produce finite
+  commands.
+- There is no episode-level success/collision/runtime report yet for these GenSafeNav aliases in the
+  Robot SF benchmark stack.
+- Do not infer benchmark-quality performance from the current proof set; the wrappers are runnable,
+  but their comparative quality is still unmeasured here.

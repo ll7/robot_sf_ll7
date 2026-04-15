@@ -277,3 +277,59 @@ def test_real_upstream_checkout_smoke_runs_if_assets_are_available() -> None:
     assert meta["upstream_policy"] == "rl.networks.model.Policy[selfAttn_merge_srnn]"
     assert meta["parity_gaps"]
     assert np.isfinite(np.asarray(meta["upstream_action_xy"], dtype=float)).all()
+
+
+@pytest.mark.parametrize(
+    ("model_name", "checkpoint_name"),
+    [
+        ("Ours_GST", "05207.pt"),
+        ("GST_predictor_rand", "05207.pt"),
+    ],
+)
+def test_real_gensafenav_checkout_smoke_runs_if_assets_are_available(
+    model_name: str,
+    checkpoint_name: str,
+) -> None:
+    """The checked-in GenSafeNav learned checkpoints should produce finite Robot SF commands."""
+    repo_root = Path("output/repos/GenSafeNav")
+    checkpoint_path = repo_root / "trained_models" / model_name / "checkpoints" / checkpoint_name
+    if not repo_root.exists() or not checkpoint_path.exists():
+        pytest.skip("GenSafeNav checkout or checkpoint is unavailable in this environment")
+
+    adapter = SonicCrowdNavAdapter(
+        build_sonic_crowdnav_config(
+            {
+                "repo_root": str(repo_root),
+                "model_name": model_name,
+                "checkpoint_name": checkpoint_name,
+                "max_linear_speed": 1.0,
+                "max_angular_speed": 1.0,
+            }
+        )
+    )
+    linear, angular, meta = adapter.act(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.0],
+                "velocity_xy": [0.0, 0.0],
+                "radius": [0.3],
+            },
+            "goal": {"current": [5.0, 0.0]},
+            "pedestrians": {
+                "positions": [[2.0, 0.0], [3.0, 1.0]],
+                "velocities": [[0.0, 0.0], [0.0, 0.0]],
+                "count": [2],
+            },
+        },
+        time_step=0.25,
+    )
+
+    assert math.isfinite(linear)
+    assert math.isfinite(angular)
+    assert -1.0 <= linear <= 1.0
+    assert -1.0 <= angular <= 1.0
+    assert meta["source_action_kinematics"] == "holonomic"
+    assert meta["upstream_policy"] == "rl.networks.model.Policy[selfAttn_merge_srnn]"
+    assert meta["parity_gaps"]
+    assert np.isfinite(np.asarray(meta["upstream_action_xy"], dtype=float)).all()

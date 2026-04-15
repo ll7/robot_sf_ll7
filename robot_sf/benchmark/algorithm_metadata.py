@@ -25,6 +25,8 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "socnav_hrvo": "classical",
     "crowdnav_height": "learning",
     "sonic_crowdnav": "learning",
+    "gensafenav_ours_gst": "learning",
+    "gensafenav_gst_predictor_rand": "learning",
     "ppo": "learning",
     "sac": "learning",
     "guarded_ppo": "learning",
@@ -66,6 +68,8 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
     "sonic_crowdnav": "upstream_sonic_checkpoint_wrapper",
+    "gensafenav_ours_gst": "upstream_gensafenav_checkpoint_wrapper",
+    "gensafenav_gst_predictor_rand": "upstream_gensafenav_checkpoint_wrapper",
     "sicnav": "upstream_sicnav_checkpoint_or_policy_wrapper",
     "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
@@ -247,6 +251,35 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "upstream ActionXY velocities into Robot SF unicycle_vw commands."
         ),
     },
+    "gensafenav_ours_gst": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "Ours_GST",
+        "default_checkpoint": "trained_models/Ours_GST/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the GenSafeNav model-only dict contract, run "
+            "the upstream constrained selfAttn_merge_srnn checkpoint with explicit import/runtime "
+            "shims, and project upstream ActionXY velocities into Robot SF unicycle_vw commands."
+        ),
+    },
+    "gensafenav_gst_predictor_rand": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "GST_predictor_rand",
+        "default_checkpoint": "trained_models/GST_predictor_rand/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the GenSafeNav CrowdNav++-style model-only "
+            "dict contract, run the upstream selfAttn_merge_srnn checkpoint with explicit "
+            "import/runtime shims, and project upstream ActionXY velocities into Robot SF "
+            "unicycle_vw commands."
+        ),
+    },
     "sicnav": {
         "repo_url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
         "commit": "local_vendor_reference",
@@ -423,6 +456,28 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_documented": True,
     },
     "sonic_crowdnav": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SonicCrowdNavAdapter",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_ours_gst": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SonicCrowdNavAdapter",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_gst_predictor_rand": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": False,
         "supports_adapter_commands": True,

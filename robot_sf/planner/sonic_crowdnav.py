@@ -214,12 +214,12 @@ def _load_model_modules(model_name: str) -> tuple[Any, Any, Any, Any]:
     Returns:
         Imported modules plus parsed upstream CLI arguments.
     """
-    args_mod = importlib.import_module(f"trained_models.{model_name}.arguments")
-    config_mod = importlib.import_module(f"trained_models.{model_name}.configs.config")
-    model_mod = importlib.import_module("rl.networks.model")
     original_argv = sys.argv[:]
     try:
         sys.argv = [f"{model_name}_arguments"]
+        args_mod = importlib.import_module(f"trained_models.{model_name}.arguments")
+        config_mod = importlib.import_module(f"trained_models.{model_name}.configs.config")
+        model_mod = importlib.import_module("rl.networks.model")
         args = args_mod.get_args()
     finally:
         sys.argv = original_argv

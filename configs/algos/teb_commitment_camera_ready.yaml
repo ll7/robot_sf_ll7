@@ -12,3 +12,8 @@ commit_persistence_steps: 12
 progress_epsilon: 0.025
 low_speed_threshold: 0.14
 clearance_speed_gain: 0.5
+blocked_probe_spacing: 0.6
+blocked_probe_steps: 5
+max_commit_gain: 1.4
+commit_gain_step: 0.45
+corridor_sample_offset: 0.3

@@ -1,6 +1,7 @@
 # Awesome Copilot Adaptation
 
 Date: 2026-04-02
+Updated: 2026-04-13
 
 ## Decision
 
@@ -58,10 +59,13 @@ These upstream ideas were kept because they add direct value to this repository'
 
 ## Concepts Rejected
 
-- a new retrieval database or MCP-backed memory layer,
+- a new retrieval database or MCP-managed memory store separate from repo Markdown,
 - a public Copilot marketplace clone,
 - prompt copies that depend on GitHub-specific runtime behavior,
 - copying upstream text verbatim when a shorter repo-native version is enough.
+
+Optional MCP exposure of repo-local Markdown under `memory/` is acceptable when it remains a thin
+file-access layer rather than a new knowledge service.
 
 ## Skill Selection Guide
 

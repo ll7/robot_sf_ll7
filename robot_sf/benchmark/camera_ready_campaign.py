@@ -42,10 +42,14 @@ from robot_sf.benchmark.seed_variance import (
 )
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
+    build_positioning_recommendation,
     calibrate_weights,
     collect_episodes_from_campaign_runs,
     compute_baseline_stats_from_episodes,
+    compute_component_correlations,
     compute_component_dominance,
+    compute_planner_snqi_ordering,
+    compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
@@ -1630,7 +1634,7 @@ def _write_comparability_artifacts(
     return json_path, md_path
 
 
-def _write_snqi_diagnostics_artifacts(
+def _write_snqi_diagnostics_artifacts(  # noqa: C901
     reports_dir: Path,
     payload: dict[str, Any],
 ) -> tuple[Path, Path, Path]:
@@ -1668,31 +1672,126 @@ def _write_snqi_diagnostics_artifacts(
         f"- Source: `{payload.get('baseline_source', 'unknown')}`",
         f"- Degeneracy adjustments: `{payload.get('baseline_adjustments', 0)}`",
         "",
-        "## Component Dominance (mean absolute contribution)",
+        "## Positioning",
         "",
-        "| Component | Mean |",
-        "|---|---:|",
+        f"- Recommendation: `{payload.get('positioning', {}).get('recommendation', 'unknown')}`",
+        f"- Claim scope: `{payload.get('positioning', {}).get('claim_scope', 'unknown')}`",
+        f"- Aligned variable metrics: `{payload.get('positioning', {}).get('aligned_metric_count', 0)}` / `{payload.get('positioning', {}).get('variable_metric_count', 0)}`",
+        "",
+        "## Planner Ordering",
+        "",
+        "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
+        "|---:|---|---|---:|---:|",
     ]
+    ordering = payload.get("planner_ordering")
+    if isinstance(ordering, list):
+        for row in ordering:
+            lines.append(
+                "| {rank} | {planner_key} | {kinematics} | {mean_snqi:.6f} | {episode_count} |".format(
+                    rank=int(row.get("rank", 0) or 0),
+                    planner_key=str(row.get("planner_key", "unknown")),
+                    kinematics=str(row.get("kinematics", "unknown")),
+                    mean_snqi=float(row.get("mean_snqi", 0.0) or 0.0),
+                    episode_count=int(row.get("episode_count", 0) or 0),
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Correlations",
+            "",
+            "| Metric | Direction | Spearman | Variable | Aligned |",
+            "|---|---|---:|---|---|",
+        ]
+    )
+    correlations = payload.get("component_correlations")
+    if isinstance(correlations, dict):
+        for metric_name, row in sorted(correlations.items()):
+            spearman = row.get("spearman")
+            spearman_text = "n/a" if spearman is None else f"{float(spearman):.6f}"
+            aligned = row.get("aligned_with_expected_direction")
+            aligned_text = "n/a" if aligned is None else ("yes" if aligned else "no")
+            lines.append(
+                "| {metric} | {direction} | {spearman} | {variable} | {aligned} |".format(
+                    metric=_escape_markdown_cell(str(metric_name)),
+                    direction=_escape_markdown_cell(str(row.get("direction", "unknown"))),
+                    spearman=spearman_text,
+                    variable="yes" if bool(row.get("variable")) else "no",
+                    aligned=aligned_text,
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Dominance (mean absolute contribution)",
+            "",
+            "| Component | Mean |",
+            "|---|---:|",
+        ]
+    )
     dominance = payload.get("component_dominance")
     if isinstance(dominance, dict):
         for key, value in sorted(dominance.items()):
             lines.append(f"| {_escape_markdown_cell(key)} | {float(value):.6f} |")
+    caveats = payload.get("positioning", {}).get("caveats")
+    if isinstance(caveats, list) and caveats:
+        lines.extend(["", "## Caveats", ""])
+        for caveat in caveats:
+            lines.append(f"- {_escape_markdown_cell(str(caveat))}")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     calibrated = payload.get("calibrated_weights")
-    headers = ("component", "configured_weight", "calibrated_weight", "delta")
+    headers = (
+        "component",
+        "metric_name",
+        "configured_weight",
+        "configured_weight_share",
+        "calibrated_weight",
+        "delta",
+        "mean_abs_contribution",
+        "mean_abs_score_delta_if_ablated",
+        "episode_rank_correlation_if_ablated",
+        "planner_rank_correlation_if_ablated",
+        "planner_order_changed_if_ablated",
+        "sensitivity_rank",
+    )
     rows: list[dict[str, Any]] = []
+    sensitivity_rows = payload.get("weight_sensitivity")
+    sensitivity_by_component = (
+        {str(row.get("weight_name")): row for row in sensitivity_rows if isinstance(row, dict)}
+        if isinstance(sensitivity_rows, list)
+        else {}
+    )
     if isinstance(calibrated, dict):
         configured = payload.get("configured_weights", {})
         for name in WEIGHT_NAMES:
             configured_value = float((configured or {}).get(name, 1.0))
             calibrated_value = float(calibrated.get(name, configured_value))
+            sensitivity = sensitivity_by_component.get(name, {})
             rows.append(
                 {
                     "component": name,
+                    "metric_name": sensitivity.get("metric_name", ""),
                     "configured_weight": configured_value,
+                    "configured_weight_share": float(
+                        sensitivity.get("configured_weight_share", 0.0)
+                    ),
                     "calibrated_weight": calibrated_value,
                     "delta": calibrated_value - configured_value,
+                    "mean_abs_contribution": float(sensitivity.get("mean_abs_contribution", 0.0)),
+                    "mean_abs_score_delta_if_ablated": float(
+                        sensitivity.get("mean_abs_score_delta_if_ablated", 0.0)
+                    ),
+                    "episode_rank_correlation_if_ablated": float(
+                        sensitivity.get("episode_rank_correlation_if_ablated", 1.0)
+                    ),
+                    "planner_rank_correlation_if_ablated": float(
+                        sensitivity.get("planner_rank_correlation_if_ablated", 1.0)
+                    ),
+                    "planner_order_changed_if_ablated": bool(
+                        sensitivity.get("planner_order_changed_if_ablated")
+                    ),
+                    "sensitivity_rank": int(sensitivity.get("sensitivity_rank", 0) or 0),
                 }
             )
     _write_csv(csv_path, [{key: row.get(key) for key in headers} for row in rows])
@@ -1916,6 +2015,8 @@ def prepare_campaign_preflight(
         "snqi_contract_enabled": bool(cfg.snqi_contract.enabled),
         "snqi_contract_enforcement": cfg.snqi_contract.enforcement,
         "snqi_contract_status": "not_evaluated",
+        "snqi_positioning_recommendation": "not_evaluated",
+        "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
         "planners": [
             {
                 "key": planner.key,
@@ -2107,6 +2208,11 @@ def _planner_report_row(  # noqa: C901
         "availability_status": availability.availability_status,
         "benchmark_success": str(availability.benchmark_success).lower(),
         "availability_reason": availability.availability_reason or "",
+        "most_likely_failure_reason": (
+            (availability.availability_reason or summary.get("error") or "")
+            if availability.availability_status != "available" or summary.get("status") == "failed"
+            else ""
+        ),
         "readiness_tier": str((summary.get("algorithm_readiness") or {}).get("tier", "unknown")),
         "preflight_status": preflight_status,
         "socnav_prereq_policy": planner.socnav_missing_prereq_policy,
@@ -2440,6 +2546,9 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         lines.append(
             f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
         )
+        lines.append(
+            f"- Positioning recommendation: `{campaign.get('snqi_positioning_recommendation', 'unknown')}`"
+        )
         lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
         lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
         if isinstance(snqi_diag_json, str):
@@ -2455,6 +2564,25 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             lines.append(f"- {warning}")
     else:
         lines.append("- No campaign-level warnings.")
+
+    failing_rows = [
+        row
+        for row in rows
+        if str(row.get("status", "")).lower() in {"failed", "partial-failure", "not_available"}
+    ]
+    lines.extend(["", "## Failed Planners And Likely Reasons", ""])
+    if failing_rows:
+        lines.append("| planner | status | most likely reason |")
+        lines.append("|---|---|---|")
+        for row in failing_rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('most_likely_failure_reason') or row.get('availability_reason') or 'unspecified')} |"
+            )
+    else:
+        lines.append("- No failed/partial/not-available planners.")
 
     publication = payload.get("publication_bundle")
     if isinstance(publication, dict):
@@ -2671,6 +2799,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             )
             planner_rows.append(row)
 
+            if status in {"failed", "partial-failure", "not_available"}:
+                reason = str(row.get("most_likely_failure_reason", "")).strip() or "unspecified"
+                warnings.append(
+                    "Planner failure recorded: "
+                    f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
+                    f"most_likely_reason='{reason}'"
+                )
+
             run_entries.append(
                 {
                     "planner": {
@@ -2756,6 +2892,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "readiness_status",
             "availability_status",
             "benchmark_success",
+            "most_likely_failure_reason",
             "availability_reason",
             "readiness_tier",
             "preflight_status",
@@ -3068,6 +3205,26 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         weights=configured_weights,
         baseline=baseline_for_eval,
     )
+    component_correlations = compute_component_correlations(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    planner_ordering = compute_planner_snqi_ordering(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    weight_sensitivity = compute_weight_sensitivity(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+    )
+    positioning = build_positioning_recommendation(
+        component_correlations,
+        planner_ordering,
+        weight_sensitivity,
+    )
     weights_path = (
         _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
     )
@@ -3121,6 +3278,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "calibrated_weights": calibration.get("weights"),
         "calibration": calibration,
         "component_dominance": component_dominance,
+        "component_correlations": component_correlations,
+        "planner_ordering": planner_ordering,
+        "weight_sensitivity": weight_sensitivity,
+        "positioning": positioning,
     }
     snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
         _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
@@ -3199,6 +3360,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_contract_dominant_component_mean_abs": (
                 contract_eval.dominant_component_mean_abs
             ),
+            "snqi_positioning_recommendation": positioning.get("recommendation"),
+            "snqi_positioning_claim_scope": positioning.get("claim_scope"),
         },
         "planner_rows": planner_rows,
         "runs": run_entries,
@@ -3247,49 +3410,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         },
     }
 
-    publication_payload: dict[str, Any] | None = None
-    if (
-        cfg.export_publication_bundle
-        and not skip_publication_bundle
-        and not snqi_hard_fail
-        and benchmark_success
-    ):
-        publication_dir = get_artifact_category_path("benchmarks") / "publication"
-        bundle_name = f"{campaign_id}_publication_bundle"
-        try:
-            bundle = export_publication_bundle(
-                campaign_root,
-                publication_dir,
-                bundle_name=bundle_name,
-                include_videos=cfg.include_videos_in_publication,
-                repository_url=cfg.repository_url,
-                release_tag=cfg.release_tag,
-                doi=cfg.doi,
-                overwrite=cfg.overwrite_publication_bundle,
-            )
-            publication_payload = {
-                "bundle_dir": _repo_relative(bundle.bundle_dir),
-                "archive_path": _repo_relative(bundle.archive_path),
-                "manifest_path": _repo_relative(bundle.manifest_path),
-                "checksums_path": _repo_relative(bundle.checksums_path),
-                "file_count": bundle.file_count,
-                "total_bytes": bundle.total_bytes,
-            }
-            campaign_summary["publication_bundle"] = publication_payload
-        except Exception as exc:
-            warnings.append(f"Publication bundle export failed: {exc}")
-    elif (
-        cfg.export_publication_bundle
-        and not skip_publication_bundle
-        and not snqi_hard_fail
-        and not benchmark_success
-    ):
-        warnings.append("Publication bundle export skipped because benchmark_success=false.")
-
-    _write_json(summary_json_path, campaign_summary)
-    write_campaign_report(report_md_path, campaign_summary)
-
-    # Add run-level metadata files for publication provenance helpers.
+    # Write run-level files and the final campaign_manifest.json before the publication
+    # bundle export so the bundle copies the fully-evaluated manifest (including
+    # snqi_positioning_recommendation) rather than the placeholder written at campaign start.
     run_meta = {
         "repo": {
             "remote": git_meta.get("remote", "unknown"),
@@ -3370,6 +3493,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "runtime_sec": runtime_sec,
             "finished_at_utc": campaign_finished_at_utc,
             "snqi_contract_status": contract_eval.status,
+            "snqi_positioning_recommendation": positioning.get("recommendation"),
+            "snqi_positioning_claim_scope": positioning.get("claim_scope"),
             "artifacts": {
                 **dict(manifest_payload.get("artifacts") or {}),
                 "seed_variability_json": _repo_relative(seed_variability_json_path),
@@ -3385,6 +3510,48 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             },
         },
     )
+
+    publication_payload: dict[str, Any] | None = None
+    if (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and benchmark_success
+    ):
+        publication_dir = get_artifact_category_path("benchmarks") / "publication"
+        bundle_name = f"{campaign_id}_publication_bundle"
+        try:
+            bundle = export_publication_bundle(
+                campaign_root,
+                publication_dir,
+                bundle_name=bundle_name,
+                include_videos=cfg.include_videos_in_publication,
+                repository_url=cfg.repository_url,
+                release_tag=cfg.release_tag,
+                doi=cfg.doi,
+                overwrite=cfg.overwrite_publication_bundle,
+            )
+            publication_payload = {
+                "bundle_dir": _repo_relative(bundle.bundle_dir),
+                "archive_path": _repo_relative(bundle.archive_path),
+                "manifest_path": _repo_relative(bundle.manifest_path),
+                "checksums_path": _repo_relative(bundle.checksums_path),
+                "file_count": bundle.file_count,
+                "total_bytes": bundle.total_bytes,
+            }
+            campaign_summary["publication_bundle"] = publication_payload
+        except Exception as exc:
+            warnings.append(f"Publication bundle export failed: {exc}")
+    elif (
+        cfg.export_publication_bundle
+        and not skip_publication_bundle
+        and not snqi_hard_fail
+        and not benchmark_success
+    ):
+        warnings.append("Publication bundle export skipped because benchmark_success=false.")
+
+    _write_json(summary_json_path, campaign_summary)
+    write_campaign_report(report_md_path, campaign_summary)
 
     if snqi_hard_fail:
         raise RuntimeError(

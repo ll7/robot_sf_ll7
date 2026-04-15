@@ -54,10 +54,10 @@ Current promoted all-planners baseline run:
 * root:
   + `output/benchmarks/camera_ready/camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
 * status:
-  + `8/8 planners ok`,  `1080 episodes`, runtime `386.54s`
+  + `8/8 planners ok`,   `1080 episodes`, runtime `386.54s`
 * predictive planner:
-  + `status=ok`,  `episodes=135`,  `failed_jobs=0`
-  + `success_mean=0.9778`,  `collisions_mean=0.0000`,  `near_misses_mean=0.0296`
+  + `status=ok`,   `episodes=135`,   `failed_jobs=0`
+  + `success_mean=0.9778`,   `collisions_mean=0.0000`,   `near_misses_mean=0.0296`
 
 ## Config Presets
 
@@ -69,6 +69,11 @@ Current promoted all-planners baseline run:
   + baseline + experimental planners on full scenario suite
   + prediction planner runs first for early fail-fast signal
   + `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
+* `configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`
+  + all-planners paper-facing contract for release rehearsal and analysis
+  + `stop_on_failure: false` so campaign execution continues and failed planners are surfaced
+    explicitly with reason fields in artifacts
+
 * `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
   + co-existing holonomic sibling profile for issue 690 feasibility work
   + keeps the same scenario matrix, seed policy, publication bundle, and report layout
@@ -98,8 +103,10 @@ SNQI calibration assets used by camera-ready presets:
 
 * `configs/benchmarks/snqi_weights_camera_ready_v1.json`
 * `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
-* `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
-* `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
+* `configs/benchmarks/snqi_weights_camera_ready_v2.json`
+* `configs/benchmarks/snqi_baseline_camera_ready_v2.json`
+* `configs/benchmarks/snqi_weights_camera_ready_v3.json` (current paper-facing default)
+* `configs/benchmarks/snqi_baseline_camera_ready_v3.json` (current paper-facing default)
 
 ## Produced Artifacts
 
@@ -221,7 +228,9 @@ Benchmark mode is fail-closed:
 * planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
 * statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
 * SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
+  + includes contract health, planner ordering, component correlations, and ablation-based weight sensitivity
 * warning list
+* explicit per-planner failure reason field (`most_likely_failure_reason`) in planner rows/tables
 * publication bundle paths (if export enabled)
 * interpretation profile metadata (`paper_interpretation_profile`)
 
@@ -232,11 +241,11 @@ Each campaign now stores the exact invocation and timing provenance.
 Captured fields include:
 
 * exact command used to launch the campaign (`invoked_command`)
-* campaign wallclock start/end (`started_at_utc`,  `finished_at_utc`)
-* campaign runtime and throughput (`runtime_sec`,  `episodes_per_second`)
+* campaign wallclock start/end (`started_at_utc`,   `finished_at_utc`)
+* campaign runtime and throughput (`runtime_sec`,   `episodes_per_second`)
 * per-planner start/end/runtime/throughput in run entries and planner summaries
 * seed-policy provenance (`mode`, configured seeds, resolved seed list)
-* preflight artifact paths (`validate_config`,  `preview_scenarios`)
+* preflight artifact paths (`validate_config`,   `preview_scenarios`)
 
 Primary locations:
 
@@ -375,10 +384,12 @@ This emits:
 SNQI contract analyzer helper:
 
 ```bash
+# For v3 paper-facing campaigns only.  For other campaigns, replace --weights and
+# --baseline with the asset paths recorded in that campaign's manifest.json.
 uv run python scripts/tools/analyze_snqi_contract.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
-  --weights configs/benchmarks/snqi_weights_camera_ready_v2.json \
-  --baseline configs/benchmarks/snqi_baseline_camera_ready_v2.json
+  --weights configs/benchmarks/snqi_weights_camera_ready_v3.json \
+  --baseline configs/benchmarks/snqi_baseline_camera_ready_v3.json
 ```
 
 This emits:
@@ -386,6 +397,13 @@ This emits:
 * `reports/snqi_diagnostics.json`
 * `reports/snqi_diagnostics.md`
 * `reports/snqi_sensitivity.csv`
+
+The diagnostics now include:
+
+* a positioning recommendation for SNQI under the current contract
+* planner ordering by mean SNQI
+* per-component Spearman correlations against episode-level SNQI
+* per-weight ablation sensitivity rows in `snqi_sensitivity.csv`
 
 The analyzer now also emits runtime hotspot diagnostics:
 
@@ -428,23 +446,23 @@ repository-relative for publication-grade portability).
 Core vs experimental partitions:
 
 * paper-facing profile (`paper_profile_version=paper-matrix-v1`):
-  partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
+  partitioning follows explicit planner tags from config ( `planner_group=core|experimental` )
   as part of the frozen execution contract.
 * non-paper runs:
   partitioning remains readiness-tier based. When the scenario-difficulty analyzer
   cannot find an eligible core benchmark-success set, the report falls back to the
   full scenario breakdown and says so explicitly instead of implying a core consensus.
 * `campaign_table_core.{csv,md}`:
-  core partition rows (`planner_group=core` for paper-facing runs;
+  core partition rows ( `planner_group=core` for paper-facing runs; 
 `readiness_tier=baseline-ready` for non-paper runs).
 * `campaign_table_experimental.{csv,md}`:
-  non-core rows (`planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
+  non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
 
 Portability guarantee:
 
 * Episode `scenario_params.map_file` is normalized to repository-relative paths
   when the map resides in the repository tree (for example
-`maps/svg_maps/classic_crossing.svg`).
+`maps/svg_maps/classic_crossing.svg` ).
 
 Additional diagnostics generated per campaign:
 
@@ -479,27 +497,27 @@ Validated on branch `codex/benchmark-camera-ready-pipeline` :
 
 * baseline-safe calibration campaign (multi-seed `eval` set):
   + `camera_ready_baseline_safe_snqi_calib_base_20260217_122711`
-  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + `total_runs=3`,   `successful_runs=3`,   `total_episodes=405`
   + output used to derive:
     - `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
 * baseline-safe verification with SNQI enabled:
   + `camera_ready_baseline_safe_snqi_verify_20260217_123159`
-  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + `total_runs=3`,   `successful_runs=3`,   `total_episodes=405`
   + `snqi_mean` is numeric in campaign table (no `nan`)
 * smoke all-planners with SNQI calibration enabled:
   + `camera_ready_smoke_all_planners_snqi_check_20260217_123000`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=7`
   + `snqi_mean` is numeric in campaign table (no `nan`)
 * full all-planners with multi-seed + SNQI enabled:
   + `camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=945`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=945`
   + `snqi_mean` is numeric for all planners in campaign table
 * smoke all-planners:
   + `camera_ready_smoke_all_planners_smoke3_20260217_112307`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=7`
 * full all-planners:
   + `camera_ready_all_planners_full2_20260217_112600`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=315`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=315`
   + campaign runtime: `130.03s`
   + publication bundle created
 

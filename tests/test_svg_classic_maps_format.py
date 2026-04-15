@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 import pytest
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import get_prepared_obstacles
@@ -85,7 +85,8 @@ def test_classic_crossing_ped_routes_avoid_obstacle_interior():
     """Crossing map pedestrian routes should not traverse obstacle interiors."""
     converter = SvgMapConverter(str(SVG_DIR / "classic_crossing.svg"))
     md = converter.get_map_definition()
-    obstacle_polys = [Polygon(ob.vertices) for ob in md.obstacles]
+    obstacle_polys = [poly for ob in md.obstacles for poly in ob.iter_polygons()]
+    assert obstacle_polys, "Expected classic_crossing obstacles to expose polygon geometry"
 
     for route in md.ped_routes:
         if len(route.waypoints) < 2:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -21,7 +20,6 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
-    serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -49,7 +47,6 @@ def _load_scenario_manifest(
     data: Any,
     *,
     source: Path,
-    root: Path,
 ) -> tuple[list[Any], list[Path], list[Path]]:
     """Extract scenario entries, includes, and search paths from loaded YAML.
 
@@ -60,7 +57,7 @@ def _load_scenario_manifest(
     scenarios: list[Any] = []
     includes: list[Path] = []
     local_map_search_paths = (
-        _resolve_map_search_paths(data, root=root) if isinstance(data, Mapping) else []
+        _resolve_map_search_paths(data, source=source) if isinstance(data, Mapping) else []
     )
     if local_map_search_paths:
         logger.info(
@@ -126,11 +123,13 @@ def _load_scenarios_recursive(
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
             data,
             source=resolved,
-            root=root,
         )
         combined: list[Mapping[str, Any]] = []
         inherited_search_paths = map_search_paths or []
-        effective_search_paths = local_map_search_paths or inherited_search_paths
+        effective_search_paths = _merge_map_search_paths(
+            inherited_search_paths,
+            local_map_search_paths,
+        )
         for include_path in includes:
             combined.extend(
                 _load_scenarios_recursive(
@@ -275,8 +274,8 @@ def _scenario_identifier(
     return normalized
 
 
-def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Path]:
-    """Resolve optional map search paths for the scenario root.
+def _resolve_map_search_paths(data: Mapping[str, Any], *, source: Path) -> list[Path]:
+    """Resolve optional map search paths for the scenario manifest.
 
     Returns:
         list[Path]: Resolved search paths.
@@ -289,12 +288,12 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
     elif isinstance(raw, list):
         entries = raw
     else:
-        raise ValueError(f"map_search_paths must be a list or string in '{root}'.")
+        raise ValueError(f"map_search_paths must be a list or string in '{source}'.")
     resolved: list[Path] = []
-    base_root = root if root.is_dir() else root.parent
+    base_root = source.parent
     for entry in entries:
         if not isinstance(entry, (str, Path)):
-            raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{root}'.")
+            raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{source}'.")
         candidate = Path(entry)
         if not candidate.is_absolute():
             candidate = (base_root / candidate).resolve()
@@ -303,6 +302,24 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
             continue
         resolved.append(candidate)
     return resolved
+
+
+def _merge_map_search_paths(*path_groups: list[Path]) -> list[Path]:
+    """Combine map search paths while preserving order and removing duplicates.
+
+    Returns:
+        list[Path]: Deduplicated search paths in first-seen order.
+    """
+    merged: list[Path] = []
+    seen: set[Path] = set()
+    for group in path_groups:
+        for path in group:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            merged.append(resolved)
+    return merged
 
 
 def _resolve_map_registry_path() -> Path | None:
@@ -687,12 +704,18 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
     """Load and convert a map definition, caching by absolute path.
 
+    The cache size is set to 256 to accommodate all unique maps across typical
+    multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
+    references 12 distinct SVG maps; the previous ``maxsize=8`` caused
+    repeated cache evictions and redundant SVG parsing whenever more than
+    8 unique maps were active in the same training session.
+
     Returns:
-        MapDefinition | None: Parsed map definition for supported formats, else ``None``.
+        MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
     path = Path(map_path)
@@ -701,13 +724,6 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         return None
     if path.suffix.lower() == ".svg":
         return convert_map(str(path))
-    if path.suffix.lower() == ".json":
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-            logger.error("Invalid JSON map '{}': {}", path, exc)
-            return None
-        return serialize_map(data)
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
 
@@ -1523,11 +1539,36 @@ def _apply_route_overrides(
     config.map_pool.map_defs[map_name] = map_copy
 
 
+def map_cache_info() -> dict[str, int]:
+    """Return hit/miss/eviction statistics for the map-definition cache.
+
+    Useful for diagnosing cache churn during multi-scenario training runs.
+    Example::
+
+        from robot_sf.training.scenario_loader import map_cache_info
+
+        info = map_cache_info()
+        # {'hits': 42, 'misses': 12, 'maxsize': 64, 'currsize': 12}
+
+    Returns:
+        dict[str, int]: Mapping of ``hits``, ``misses``, ``maxsize``, and
+        ``currsize`` from the underlying LRU cache.
+    """
+    ci = _load_map_definition.cache_info()
+    return {
+        "hits": ci.hits,
+        "misses": ci.misses,
+        "maxsize": ci.maxsize,
+        "currsize": ci.currsize,
+    }
+
+
 __all__ = [
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
+    "map_cache_info",
     "resolve_map_definition",
     "select_scenario",
 ]

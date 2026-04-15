@@ -25,6 +25,16 @@ def _get_ppo_planner():
     return module.PPOPlanner
 
 
+def _get_sac_planner():
+    """Lazy import for SAC baseline adapter.
+
+    Returns:
+        The SACPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.sac")
+    return module.SACPlanner
+
+
 def _get_random_planner():
     """Lazy import for Random baseline.
 
@@ -70,6 +80,7 @@ BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
     "baseline_sf": _get_social_force_planner,  # Backward compatibility
     "ppo": _get_ppo_planner,
+    "sac": _get_sac_planner,
     "random": _get_random_planner,
     "sicnav": _get_sicnav_planner,
     "dr_mpc": _get_drm_mp_planner,

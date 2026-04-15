@@ -8,6 +8,7 @@ reactive local controllers on static obstacle scenarios.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from math import sqrt
@@ -41,6 +42,7 @@ class GridRoutePlannerConfig:
     stop_distance: float = 0.25
     progress_weight: float = 1.0
     heading_weight: float = 1.0
+    clearance_penalty_weight: float = 0.5
 
 
 class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
@@ -205,6 +207,42 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         return None
 
     @staticmethod
+    def _compute_clearance_map(blocked: np.ndarray) -> np.ndarray:
+        """BFS clearance map: distance (in cells) from each cell to the nearest obstacle.
+
+        Obstacle cells are seeded at 0 and free cells receive the 4-connected
+        BFS distance.  The map is used by :meth:`_astar` to add a small
+        ``clearance_penalty_weight / (clearance + 1)`` cost per step so that
+        A* naturally picks routes that run through the centre of corridors.
+
+        Returns:
+            np.ndarray: Per-cell clearance. Obstacle cells are 0; free cells are >= 1
+            when at least one obstacle exists, and remain 0 when the grid has no
+            blocked cells.
+        """
+        rows, cols = blocked.shape
+        clearance = np.full(blocked.shape, np.inf, dtype=float)
+        clearance[blocked] = 0.0
+        visited = blocked.copy()  # obstacle cells are already "visited"
+
+        queue: deque[tuple[int, int]] = deque()
+        occ_rows, occ_cols = np.where(blocked)
+        for r, c in zip(occ_rows.tolist(), occ_cols.tolist(), strict=True):
+            queue.append((int(r), int(c)))
+
+        while queue:
+            r, c = queue.popleft()
+            dist_next = clearance[r, c] + 1.0
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols and not visited[nr, nc]:
+                    visited[nr, nc] = True
+                    clearance[nr, nc] = dist_next
+                    queue.append((nr, nc))
+
+        return clearance
+
+    @staticmethod
     def _heuristic(a: tuple[int, int], b: tuple[int, int]) -> float:
         """Euclidean heuristic for A* search.
 
@@ -214,14 +252,27 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         return float(np.hypot(a[0] - b[0], a[1] - b[1]))
 
     def _astar(
-        self, blocked: np.ndarray, start: tuple[int, int], goal: tuple[int, int]
+        self,
+        blocked: np.ndarray,
+        start: tuple[int, int],
+        goal: tuple[int, int],
+        clearance_map: np.ndarray | None = None,
     ) -> list[tuple[int, int]]:
         """Compute an 8-connected grid path between start and goal.
+
+        When ``clearance_map`` is provided, each step adds a small
+        ``clearance_penalty_weight / (clearance + 1)`` penalty so that A*
+        prefers routes that pass through the centre of corridors rather than
+        hugging the obstacle boundary.  This is the primary fix for the
+        ``narrow_passage`` failure pattern.
 
         Returns:
             list[tuple[int, int]]: Ordered row/col path, or an empty list when no
             route exists.
         """
+        penalty_weight = (
+            float(self.config.clearance_penalty_weight) if clearance_map is not None else 0.0
+        )
         frontier: list[tuple[float, tuple[int, int]]] = []
         came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
         cost_so_far: dict[tuple[int, int], float] = {start: 0.0}
@@ -242,7 +293,12 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                     continue
                 if blocked[nxt]:
                     continue
-                new_cost = cost_so_far[current] + step_cost
+                clearance_penalty = (
+                    penalty_weight / (float(clearance_map[nxt]) + 1.0)
+                    if clearance_map is not None
+                    else 0.0
+                )
+                new_cost = cost_so_far[current] + step_cost * (1.0 + clearance_penalty)
                 if nxt not in cost_so_far or new_cost < cost_so_far[nxt]:
                     cost_so_far[nxt] = new_cost
                     priority = new_cost + self._heuristic(nxt, goal)
@@ -348,12 +404,44 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         if free_start is None or free_goal is None:
             return None
 
-        path = self._astar(blocked, free_start, free_goal)
+        clearance_map = (
+            self._compute_clearance_map(blocked)
+            if float(self.config.clearance_penalty_weight) > 0.0
+            else None
+        )
+        path = self._astar(blocked, free_start, free_goal, clearance_map=clearance_map)
         if len(path) < 2:
             return goal
 
         waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
         return self._grid_to_world(path[waypoint_idx], meta)
+
+    def route_waypoint(self, observation: dict[str, Any]) -> np.ndarray | None:
+        """Resolve a topology-aware waypoint without converting it into a command.
+
+        Returns:
+            np.ndarray | None: World-space waypoint target, or ``None`` when the
+            structured occupancy-grid route cannot be computed safely.
+        """
+        try:
+            robot_pos, _heading, goal, radius = self._extract_state(observation)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return None
+
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta = payload
+        try:
+            return self._route_target(
+                robot_pos=robot_pos,
+                goal=goal,
+                radius=radius,
+                grid=grid,
+                meta=meta,
+            )
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return None
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a bounded ``(v, omega)`` command from grid routing and waypoint tracking."""
@@ -438,7 +526,12 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
         stop_distance=float(cfg.get("stop_distance", 0.25)),
         progress_weight=float(cfg.get("progress_weight", 1.0)),
         heading_weight=float(cfg.get("heading_weight", 1.0)),
+        clearance_penalty_weight=float(cfg.get("clearance_penalty_weight", 0.5)),
     )
 
 
-__all__ = ["GridRoutePlannerAdapter", "GridRoutePlannerConfig", "build_grid_route_config"]
+__all__ = [
+    "GridRoutePlannerAdapter",
+    "GridRoutePlannerConfig",
+    "build_grid_route_config",
+]

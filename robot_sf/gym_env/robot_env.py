@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 from loguru import logger
+from shapely.geometry import Polygon as ShapelyPolygon
 
 from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
@@ -61,7 +62,12 @@ _DEFAULT_COLLISION_DIST = 0.25
 _DEFAULT_NEAR_MISS_DIST = 0.50
 _DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
 _SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
-_ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
+_TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
+    "near_misses",
+    "force_exceed_events",
+    "comfort_exposure",
+    "jerk_mean",
+)
 
 
 @dataclass(slots=True)
@@ -245,80 +251,51 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _flatten_space_leaves(space: spaces.Space, prefix: str = "") -> list[tuple[str, spaces.Space]]:
-    """Flatten nested Dict spaces into a deterministic leaf sequence.
+def _coerce_finite_float(value: Any) -> float | None:
+    """Return ``value`` as a finite float when possible."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(result):
+        return None
+    return result
+
+
+def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
+    """Extract finite reward-term scalars for telemetry replay.
 
     Returns:
-        list[tuple[str, spaces.Space]]: Leaf spaces ordered by traversal.
+        dict[str, float]: Weighted reward-term values suitable for analyzer replay.
     """
-    if isinstance(space, spaces.Dict):
-        leaves: list[tuple[str, spaces.Space]] = []
-        for key, child in space.spaces.items():
-            child_prefix = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
-            leaves.extend(_flatten_space_leaves(child, child_prefix))
-        return leaves
-    return [(prefix, space)]
+
+    reward_terms = meta.get("reward_terms")
+    if not isinstance(reward_terms, dict):
+        return {}
+    extracted: dict[str, float] = {}
+    for key, value in reward_terms.items():
+        if not isinstance(key, str):
+            continue
+        numeric = _coerce_finite_float(value)
+        if numeric is not None:
+            extracted[key] = numeric
+    return extracted
 
 
-def _flatten_obs_from_space(space: spaces.Space, obs: Any) -> list[np.ndarray]:
-    """Flatten observations using the declared space ordering.
+def _extract_step_metrics(meta: dict[str, Any]) -> dict[str, float]:
+    """Select analyzer-friendly numeric step metrics from reward metadata.
 
     Returns:
-        list[np.ndarray]: Flattened leaf arrays aligned to the space traversal order.
+        dict[str, float]: Numeric step metrics exposed to the recorded-step analyzer.
     """
-    if isinstance(space, spaces.Dict):
-        leaves: list[np.ndarray] = []
-        for key, child_space in space.spaces.items():
-            leaves.extend(_flatten_obs_from_space(child_space, obs[key]))
-        return leaves
-    return [np.asarray(obs, dtype=np.float32).reshape(-1)]
 
-
-def _asymmetric_critic_state_spec(
-    obs_space: spaces.Dict,
-    *,
-    sim_time_limit: float,
-    max_sim_steps: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return low/high bounds for the critic-only privileged state vector.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: Low and high vectors for the privileged state.
-    """
-    low_parts: list[np.ndarray] = []
-    high_parts: list[np.ndarray] = []
-    for _key, space in _flatten_space_leaves(obs_space):
-        if not isinstance(space, spaces.Box):
-            raise TypeError(
-                "asymmetric_critic requires Box leaves in the observation space, got "
-                f"{type(space).__name__}"
-            )
-        low_parts.append(np.asarray(space.low, dtype=np.float32).reshape(-1))
-        high_parts.append(np.asarray(space.high, dtype=np.float32).reshape(-1))
-    low_parts.extend(
-        [
-            np.array([0.0], dtype=np.float32),  # step_of_episode
-            np.array([0.0], dtype=np.float32),  # sim_time_elapsed
-            np.array([float(max_sim_steps)], dtype=np.float32),  # max_sim_steps
-            np.array([0.0], dtype=np.float32),  # distance_to_goal
-            np.array([0.0], dtype=np.float32),  # prev_distance_to_goal
-            np.zeros(5, dtype=np.float32),  # terminal flags
-        ]
-    )
-    high_parts.extend(
-        [
-            np.array([float(max_sim_steps)], dtype=np.float32),
-            np.array([float(sim_time_limit)], dtype=np.float32),
-            np.array([float(max_sim_steps)], dtype=np.float32),
-            np.array([np.finfo(np.float32).max], dtype=np.float32),
-            np.array([np.finfo(np.float32).max], dtype=np.float32),
-            np.ones(5, dtype=np.float32),
-        ]
-    )
-    return (
-        np.concatenate(low_parts).astype(np.float32),
-        np.concatenate(high_parts).astype(np.float32),
-    )
+    extracted: dict[str, float] = {}
+    for key in _TELEMETRY_ANALYZER_STEP_METRIC_KEYS:
+        numeric = _coerce_finite_float(meta.get(key))
+        if numeric is not None:
+            extracted[key] = numeric
+    return extracted
 
 
 def _extract_robot_xy(robot_pose: Any) -> np.ndarray:
@@ -477,7 +454,6 @@ class RobotEnv(BaseEnv):
         scenario_name: str = "default",
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
-        asymmetric_critic: bool = False,
     ):
         """Initialize the robot environment.
 
@@ -497,11 +473,7 @@ class RobotEnv(BaseEnv):
             scenario_name: Scenario identifier stored in metadata.
             algorithm_name: Algorithm identifier stored in metadata.
             recording_seed: Optional seed stored alongside the recording metadata.
-            asymmetric_critic: When True, add a critic-only privileged state vector to
-                observations for asymmetric actor-critic training.
         """
-        self._asymmetric_critic_enabled = bool(asymmetric_critic)
-        self._critic_privileged_state_key = _ASYMMETRIC_CRITIC_STATE_KEY
         super().__init__(
             env_config=env_config,
             debug=debug,
@@ -579,6 +551,7 @@ class RobotEnv(BaseEnv):
         self._init_telemetry(env_config)
         self._last_wall_time = time.perf_counter()
         self._frame_idx = 0
+        self._telemetry_episode_id = -1
         self._snqi_proxy_state = _StepSNQIProxyState()
         self._prime_snqi_proxy_state()
 
@@ -621,82 +594,6 @@ class RobotEnv(BaseEnv):
             self.sim_ui.observation_space_mode = "grid"
             return
         self.sim_ui.observation_space_mode = "lidar"
-
-    def _apply_asymmetric_critic_observation_space(self, env_config: EnvSettings) -> None:
-        """Augment the active observation space with the critic-only privileged vector."""
-        if not self._asymmetric_critic_enabled:
-            return
-        if not isinstance(self.observation_space, spaces.Dict):
-            raise RuntimeError(
-                "asymmetric_critic requires Dict observations so the critic can consume the "
-                f"privileged state key '{self._critic_privileged_state_key}'."
-            )
-        sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
-        dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
-        max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
-        low, high = _asymmetric_critic_state_spec(
-            self.observation_space,
-            sim_time_limit=sim_time_limit,
-            max_sim_steps=max_sim_steps,
-        )
-        obs_dict = dict(self.observation_space.spaces)
-        obs_dict[self._critic_privileged_state_key] = spaces.Box(
-            low=low,
-            high=high,
-            dtype=np.float32,
-        )
-        self.observation_space = spaces.Dict(obs_dict)
-
-    def _build_asymmetric_critic_state(self, obs: Any) -> np.ndarray:
-        """Build the critic-only privileged state vector from the current observation payload.
-
-        Returns:
-            np.ndarray: Flattened privileged state for critic-only consumption.
-        """
-        if not self._asymmetric_critic_enabled:
-            raise RuntimeError("asymmetric critic state requested when disabled")
-
-        meta = self.state.meta_dict()
-        critic_obs_space = spaces.Dict(
-            {
-                key: value
-                for key, value in self.observation_space.spaces.items()
-                if key != self._critic_privileged_state_key
-            },
-        )
-        parts = _flatten_obs_from_space(critic_obs_space, obs)
-        parts.extend(
-            [
-                np.array([float(meta.get("step_of_episode", 0) or 0)], dtype=np.float32),
-                np.array([float(self.state.sim_time_elapsed)], dtype=np.float32),
-                np.array(
-                    [float(meta.get("max_sim_steps", self.state.max_sim_steps))], dtype=np.float32
-                ),
-                np.array([float(meta.get("distance_to_goal", 0.0))], dtype=np.float32),
-                np.array([float(meta.get("prev_distance_to_goal", 0.0))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_route_complete")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_timesteps_exceeded")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_pedestrian_collision")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_robot_collision")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_obstacle_collision")))], dtype=np.float32),
-            ]
-        )
-        return np.concatenate(parts).astype(np.float32)
-
-    def _attach_asymmetric_critic_state(self, obs: Any) -> Any:
-        """Attach the privileged critic state to dict observations when enabled.
-
-        Returns:
-            Any: Observation payload with the critic-only privileged state attached.
-        """
-        if not self._asymmetric_critic_enabled:
-            return obs
-        if not isinstance(obs, dict):
-            raise RuntimeError(
-                "asymmetric_critic requires dict observations so the privileged state can be attached"
-            )
-        obs[self._critic_privileged_state_key] = self._build_asymmetric_critic_state(obs)
-        return obs
 
     @staticmethod
     def _extract_observation_image(obs: Any) -> np.ndarray | None:
@@ -756,8 +653,6 @@ class RobotEnv(BaseEnv):
             obs_dict.update(meta_spaces)
             self.observation_space = spaces.Dict(obs_dict)
 
-        self._apply_asymmetric_critic_observation_space(env_config)
-
         # Wrap sensor adapter to flatten observations when needed
         if self._flatten_obs_space:
             return _FlatteningObservationWrapper(socnav_fusion)
@@ -790,8 +685,6 @@ class RobotEnv(BaseEnv):
             obs_dict["occupancy_grid"] = grid_box
             obs_dict.update(meta_spaces)
             self.observation_space = spaces.Dict(obs_dict)
-
-        self._apply_asymmetric_critic_observation_space(env_config)
 
         return sensor_adapter
 
@@ -877,8 +770,6 @@ class RobotEnv(BaseEnv):
                     _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
                 )
 
-        obs = self._attach_asymmetric_critic_state(obs)
-
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
         reward_dict.update(
@@ -905,7 +796,7 @@ class RobotEnv(BaseEnv):
         self.last_action = action
 
         # Telemetry update
-        self._emit_telemetry(reward, term, False, action)
+        self._emit_telemetry(reward, term, False, action, reward_dict)
         self._latest_observation = obs
 
         # if recording is enabled, record the state
@@ -933,6 +824,7 @@ class RobotEnv(BaseEnv):
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
         super().reset(seed=seed, options=options)
+        self._telemetry_episode_id += 1
         # Reset last_action
         self.last_action = None
         # Reset internal simulator state
@@ -981,7 +873,6 @@ class RobotEnv(BaseEnv):
                     f"Initial occupancy grid generated: "
                     f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
                 )
-        obs = self._attach_asymmetric_critic_state(obs)
         self._latest_observation = obs
 
         # Handle recording for both systems
@@ -997,7 +888,17 @@ class RobotEnv(BaseEnv):
                 ):  # pragma: no cover - safe if none active
                     pass
                 config_hash = _stable_config_hash(self.env_config)
-                self.start_episode_recording(config_hash=config_hash)
+                telemetry_path = None
+                if self._telemetry_session is not None and self.env_config.telemetry_record:
+                    telemetry_path = str(self._telemetry_session.telemetry_path)
+                telemetry_episode_id = (
+                    self._telemetry_episode_id if telemetry_path is not None else None
+                )
+                self.start_episode_recording(
+                    config_hash=config_hash,
+                    telemetry_path=telemetry_path,
+                    telemetry_episode_id=telemetry_episode_id,
+                )
             else:
                 # Legacy pickle recording
                 self.save_recording()
@@ -1015,6 +916,7 @@ class RobotEnv(BaseEnv):
         terminated: bool,
         truncated: bool,
         action: Any,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         """Record telemetry and update live pane if enabled."""
         if self._telemetry_session is None:
@@ -1054,23 +956,32 @@ class RobotEnv(BaseEnv):
         payload = {
             "timestamp_ms": int(time.time() * 1000),
             "frame_idx": self._frame_idx,
+            "episode_id": self._telemetry_episode_id,
             "status": status,
             "metrics": metrics,
+            "reward_total": float(reward) if reward is not None else None,
         }
+        if meta is not None:
+            reward_terms = _extract_reward_terms(meta)
+            if reward_terms:
+                payload["reward_terms"] = reward_terms
+            step_metrics = _extract_step_metrics(meta)
+            if step_metrics:
+                payload["step_metrics"] = step_metrics
         self._frame_idx += 1
         self._telemetry_session.append(payload)
 
     @staticmethod
     def _normalize_obstacles_for_grid(
         obstacles: list[Obstacle] | list[Line2D], bounds: list[Line2D]
-    ) -> tuple[list[Line2D], list[list[tuple[float, float]]]]:
+    ) -> tuple[list[Line2D], list[ShapelyPolygon]]:
         """Convert obstacles/bounds into grid-friendly primitives.
 
         Returns:
-            tuple: (line segments, polygons) where polygons are only derived from Obstacle vertices.
+            tuple: (line segments, polygons) where polygons preserve compound obstacle geometry.
         """
         line_segments: list[Line2D] = []
-        polygons: list[list[tuple[float, float]]] = []
+        polygons: list[ShapelyPolygon] = []
 
         def _add_line(line) -> None:
             try:
@@ -1081,7 +992,7 @@ class RobotEnv(BaseEnv):
 
         for obstacle in obstacles:
             if isinstance(obstacle, Obstacle):
-                polygons.append([tuple(v) for v in obstacle.vertices])
+                polygons.extend(obstacle.iter_polygons())
                 for line in obstacle.lines:
                     if len(line) == 4:
                         # Obstacle.lines stores (x1, x2, y1, y2); convert to Line2D ((x1, y1), (x2, y2))

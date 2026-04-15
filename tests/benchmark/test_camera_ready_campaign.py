@@ -840,6 +840,92 @@ def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, mon
     assert any("obs_mode=image mismatch" in warning for warning in summary_payload["warnings"])
 
 
+def test_run_campaign_continues_after_failure_when_stop_disabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Campaign should continue remaining planners when stop_on_failure is disabled."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_continue_on_failure.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_continue_on_failure",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: prediction_planner",
+                "    algo: prediction_planner",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, out_path, schema_path, benchmark_profile, kwargs
+        call_order.append(algo)
+        if algo == "prediction_planner":
+            return {
+                "total_jobs": 1,
+                "written": 0,
+                "failed_jobs": 1,
+                "failures": [{"scenario_id": "mock", "seed": 111, "error": "worker crash"}],
+                "preflight": {
+                    "status": "ok",
+                    "learned_policy_contract": {"status": "not_applicable"},
+                },
+            }
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="continue_failure")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_rows = summary_payload["planner_rows"]
+
+    assert call_order == ["prediction_planner", "goal"]
+    assert len(planner_rows) == 2
+    failed_row = next(row for row in planner_rows if row["planner_key"] == "prediction_planner")
+    assert failed_row["status"] == "partial-failure"
+    assert failed_row["most_likely_failure_reason"] == "worker crash"
+    assert any(
+        "most_likely_reason='worker crash'" in warning for warning in summary_payload["warnings"]
+    )
+
+
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     """Markdown report tables should escape raw cell separators from planner metadata."""
     report_path = tmp_path / "campaign_report.md"
@@ -880,6 +966,8 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     assert "holonomic\\|vx_vy" in report_text
     assert "direct_holonomic_world_velocity" in report_text
     assert "world_velocity_passthrough" in report_text
+    assert "## Failed Planners And Likely Reasons" in report_text
+    assert "No failed/partial/not-available planners." in report_text
 
 
 def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
@@ -1205,6 +1293,7 @@ def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, m
     assert summary_payload["planner_rows"][0]["status"] == "not_available"
     assert summary_payload["planner_rows"][0]["availability_status"] == "not_available"
     assert summary_payload["planner_rows"][0]["benchmark_success"] == "false"
+    assert summary_payload["planner_rows"][0]["most_likely_failure_reason"] == "unsupported"
     assert summary_payload["campaign"]["successful_runs"] == 0
     assert summary_payload["campaign"]["benchmark_success"] is False
     assert result["benchmark_success"] is False

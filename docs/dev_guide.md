@@ -157,6 +157,24 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
 - Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
   refreshing context notes.
 
+### Agent memory conventions
+
+The repository now keeps a repo-local Markdown memory layer under `memory/` for stable cross-session
+agent context.
+
+- Start with `memory/MEMORY.md`, which acts as the concise index.
+- Store reusable memory in typed subdirectories such as `memory/architecture/`,
+  `memory/decisions/`, `memory/experiments/`, `memory/failures/`, and `memory/benchmarks/`.
+- Use the experiment naming pattern `memory/experiments/YYYY-MM-DD_<topic>.md`.
+- Keep `memory/MEMORY.md` short and push detail into linked topic files so it stays compatible with
+  Claude-style startup loading.
+- Use `docs/context/` for issue execution history and validation detail; use `memory/` only for
+  knowledge worth reusing across future sessions.
+- If Claude Code is in use, `CLAUDE.md` imports both `AGENTS.md` and `memory/MEMORY.md` so the
+  shared instructions and memory index load together.
+- Optional MCP integration should expose the Markdown files directly; do not add a retrieval
+  database or vector store unless the repository's retrieval-deferral policy changes.
+
 On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
 validation wrappers hanging after child processes should have exited. Override with
@@ -346,6 +364,9 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
     - `AGENTS.md`
+  - For the repository's cross-agent compatibility stance and the retrieval → planning → execution
+    → verification discipline mapped to repo-local skills, see
+    `docs/context/issue_728_coding_agents_compatibility.md`.
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.

@@ -6,9 +6,13 @@ import pytest
 
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
+    build_positioning_recommendation,
     calibrate_weights,
     compute_baseline_stats_from_episodes,
+    compute_component_correlations,
     compute_component_dominance,
+    compute_planner_snqi_ordering,
+    compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
@@ -271,3 +275,169 @@ def test_compute_component_dominance_handles_non_finite_metrics() -> None:
         baseline=_baseline(),
     )
     assert all(value == 0.0 for value in dominance.values())
+
+
+def test_compute_component_correlations_marks_degenerate_metrics() -> None:
+    """Constant metrics should be called out instead of emitting fake correlations."""
+    correlations = compute_component_correlations(
+        [
+            {
+                "metrics": {
+                    "success": 1.0,
+                    "time_to_goal_norm": 0.2,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "comfort_exposure": 0.1,
+                    "force_exceed_events": 0.0,
+                    "jerk_mean": 0.1,
+                }
+            },
+            {
+                "metrics": {
+                    "success": 0.0,
+                    "time_to_goal_norm": 0.9,
+                    "collisions": 0.0,
+                    "near_misses": 2.0,
+                    "comfort_exposure": 0.7,
+                    "force_exceed_events": 2.0,
+                    "jerk_mean": 0.8,
+                }
+            },
+        ],
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    assert correlations["collisions"]["variable"] is False
+    assert correlations["collisions"]["spearman"] is None
+    assert correlations["success"]["aligned_with_expected_direction"] is True
+
+
+def test_compute_planner_snqi_ordering_sorts_high_to_low() -> None:
+    """Planner ordering should be ranked by descending mean SNQI."""
+    ordering = compute_planner_snqi_ordering(
+        _sample_episodes(),
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    assert [row["planner_key"] for row in ordering] == ["goal", "social_force"]
+    assert [row["rank"] for row in ordering] == [1, 2]
+
+
+def test_compute_weight_sensitivity_reports_ablation_rows() -> None:
+    """Weight sensitivity should expose one ablation row per configured component."""
+    rows = compute_weight_sensitivity(
+        _sample_episodes(),
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    assert len(rows) == 7
+    assert rows[0]["sensitivity_rank"] == 1
+    assert {row["weight_name"] for row in rows} == {
+        "w_success",
+        "w_time",
+        "w_collisions",
+        "w_near",
+        "w_comfort",
+        "w_force_exceed",
+        "w_jerk",
+    }
+
+
+def test_build_positioning_recommendation_records_degenerate_metric_caveat() -> None:
+    """Recommendation should carry the known degenerate-metric caveat forward."""
+    degenerate_episodes = [
+        {
+            "planner_key": "goal",
+            "kinematics": "differential_drive",
+            "metrics": {
+                "success": 1.0,
+                "time_to_goal_norm": 0.2,
+                "collisions": 0.0,
+                "near_misses": 0.0,
+                "comfort_exposure": 0.1,
+                "force_exceed_events": 0.0,
+                "jerk_mean": 0.1,
+            },
+        },
+        {
+            "planner_key": "social_force",
+            "kinematics": "differential_drive",
+            "metrics": {
+                "success": 0.0,
+                "time_to_goal_norm": 0.9,
+                "collisions": 0.0,
+                "near_misses": 2.0,
+                "comfort_exposure": 0.7,
+                "force_exceed_events": 2.0,
+                "jerk_mean": 0.8,
+            },
+        },
+    ]
+    correlations = compute_component_correlations(
+        degenerate_episodes,
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    ordering = compute_planner_snqi_ordering(
+        degenerate_episodes,
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    sensitivity = compute_weight_sensitivity(
+        degenerate_episodes,
+        weights={
+            "w_success": 0.2,
+            "w_time": 0.2,
+            "w_collisions": 0.2,
+            "w_near": 0.1,
+            "w_comfort": 0.1,
+            "w_force_exceed": 0.1,
+            "w_jerk": 0.1,
+        },
+        baseline=_baseline(),
+    )
+    recommendation = build_positioning_recommendation(correlations, ordering, sensitivity)
+    assert (
+        recommendation["recommendation"] == "strengthen_as_operational_multi_objective_aggregation"
+    )
+    assert "collisions" in recommendation["degenerate_metrics"]

@@ -214,10 +214,20 @@ class BaseEnv(Env):
             logger.info("Reset state list")
             self.recorded_states = []
 
-    def start_episode_recording(self, config_hash: str = "unknown") -> None:
+    def start_episode_recording(
+        self,
+        config_hash: str = "unknown",
+        *,
+        telemetry_path: str | None = None,
+        telemetry_episode_id: int | None = None,
+    ) -> None:
         """Start recording a new episode with JSONL recorder."""
         if self.jsonl_recorder is not None:
-            self.jsonl_recorder.start_episode(config_hash=config_hash)
+            self.jsonl_recorder.start_episode(
+                config_hash=config_hash,
+                telemetry_path=telemetry_path,
+                telemetry_episode_id=telemetry_episode_id,
+            )
 
     def record_simulation_step(self, state: VisualizableSimState) -> None:
         """Record a single simulation step to both recording systems."""

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -2001,6 +2004,99 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
     assert result["written"] == 0
 
 
+def test_run_map_batch_parallel_writes_results_in_job_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parallel map batch execution should preserve job order in output files."""
+    scenario_one = {"name": "slow", "metadata": {"supported": True}}
+    scenario_two = {"name": "fast", "metadata": {"supported": True}}
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    def fake_run(job):
+        scenario, seed, _ = job
+        if scenario["name"] == "slow":
+            time.sleep(0.05)
+        return {"episode_id": f"{scenario['name']}-{seed}"}
+
+    def fake_write(out_path_arg, schema, record):
+        out_path_arg.parent.mkdir(parents=True, exist_ok=True)
+        with out_path_arg.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+
+    result = run_map_batch(
+        [scenario_one, scenario_two],
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        workers=2,
+        resume=False,
+    )
+
+    assert result["written"] == 2
+    lines = out_path.read_text(encoding="utf-8").splitlines()
+    records = [json.loads(line) for line in lines]
+    assert records[0]["episode_id"].startswith("slow-")
+    assert records[1]["episode_id"].startswith("fast-")
+
+
+def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parallel write failures should report the record-level scenario_id when present."""
+    scenarios = [
+        {"name": "s1", "metadata": {"supported": True}},
+        {"name": "s2", "metadata": {"supported": True}},
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+
+    def fake_run(job):
+        scenario, seed, _ = job
+        return {
+            "scenario_id": f"record-{scenario['name']}",
+            "seed": seed,
+            "episode_id": f"{scenario['name']}-{seed}",
+        }
+
+    def fake_write(*_args, **_kwargs):
+        raise RuntimeError("forced write failure")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+
+    result = run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        workers=2,
+        resume=False,
+    )
+
+    assert result["written"] == 0
+    assert result["failed_jobs"] == 2
+    assert {failure["scenario_id"] for failure in result["failures"]} == {
+        "record-s1",
+        "record-s2",
+    }
+
+
 def test_run_map_batch_filters_and_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2252,6 +2348,170 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     assert "hrvo_smoke" in lines[0]
 
 
+def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:
+    normalized = dict(record)
+    normalized.pop("timestamps", None)
+    normalized.pop("wall_time_sec", None)
+    normalized.pop("timing", None)
+    return normalized
+
+
+def test_run_map_batch_repeated_runs_produce_stable_metrics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repeat a minimal map-run batch and assert stable episode contents ignoring runtime metadata."""
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+        def iter_obstacle_segments(self):
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            _ = seed
+            obs = {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }
+            return obs, {}
+
+        def step(self, action):
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    scenario = {
+        "name": "hrvo_repeat",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    out1 = tmp_path / "run1.jsonl"
+    out2 = tmp_path / "run2.jsonl"
+    schema_path = tmp_path / "episode.schema.json"
+    schema_path.write_text('{"type":"object"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    run_map_batch(
+        [scenario],
+        out1,
+        schema_path=schema_path,
+        algo="hrvo",
+        algo_config_path="configs/algos/hrvo_camera_ready.yaml",
+        benchmark_profile="experimental",
+        workers=1,
+        resume=False,
+    )
+    run_map_batch(
+        [scenario],
+        out2,
+        schema_path=schema_path,
+        algo="hrvo",
+        algo_config_path="configs/algos/hrvo_camera_ready.yaml",
+        benchmark_profile="experimental",
+        workers=1,
+        resume=False,
+    )
+
+    # Parse both outputs
+    lines1 = out1.read_text(encoding="utf-8").splitlines()
+    lines2 = out2.read_text(encoding="utf-8").splitlines()
+    assert len(lines1) == len(lines2), "Line count differs between runs"
+
+    # For each record, verify key order is consistent (deterministic serialization)
+    recs1 = []
+    recs2 = []
+    for i, (line1, line2) in enumerate(zip(lines1, lines2, strict=True)):
+        rec1 = json.loads(line1)
+        rec2 = json.loads(line2)
+        recs1.append(rec1)
+        recs2.append(rec2)
+
+        # Verify top-level key ordering is consistent
+        keys1 = list(rec1.keys())
+        keys2 = list(rec2.keys())
+        assert keys1 == keys2, (
+            f"Top-level key order differs at line {i} "
+            f"(JSON serialization may be non-deterministic):\n"
+            f"Run 1 keys: {keys1}\n"
+            f"Run 2 keys: {keys2}"
+        )
+
+    # Then verify semantic equality (ignoring runtime metadata)
+    for i, (rec1, rec2) in enumerate(zip(recs1, recs2, strict=True)):
+        norm1 = _normalize_episode_record(rec1)
+        norm2 = _normalize_episode_record(rec2)
+        assert norm1 == norm2, f"Episode {i} records differ: {norm1} vs {norm2}"
+
+
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
     """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
 
@@ -2282,4 +2542,93 @@ def test_default_robot_command_space_prefers_runtime_command_mode() -> None:
             robot_command_mode="vx_vy",
         )
         == "holonomic_vxy_world"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue #697 — holonomic social-force diagnosis config contracts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    [
+        "configs/algos/social_force_holonomic_tuned_tau_high.yaml",
+        "configs/algos/social_force_holonomic_tuned_tau_low.yaml",
+        "configs/algos/social_force_holonomic_tuned_repulsion_low.yaml",
+    ],
+)
+def test_social_force_holonomic_sweep_configs_produce_valid_socnav_config(
+    config_path: str,
+) -> None:
+    """Each issue-697 parameter-sweep YAML should parse into a valid SocNavPlannerConfig."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    cfg = _parse_algo_config(config_path)
+    socnav_cfg = _build_socnav_config(cfg)
+    assert isinstance(socnav_cfg, SocNavPlannerConfig)
+    assert socnav_cfg.max_linear_speed == pytest.approx(1.0)
+    assert socnav_cfg.social_force_tau > 0.0, "tau must be positive"
+    assert socnav_cfg.social_force_repulsion_weight >= 0.0, "repulsion_weight must be non-negative"
+
+
+@pytest.mark.parametrize(
+    ("config_rel_path", "param_name", "direction"),
+    [
+        (
+            "../../configs/algos/social_force_holonomic_tuned_tau_high.yaml",
+            "social_force_tau",
+            "higher",
+        ),
+        (
+            "../../configs/algos/social_force_holonomic_tuned_tau_low.yaml",
+            "social_force_tau",
+            "lower",
+        ),
+        (
+            "../../configs/algos/social_force_holonomic_tuned_repulsion_low.yaml",
+            "social_force_repulsion_weight",
+            "lower",
+        ),
+    ],
+)
+def test_social_force_holonomic_sweep_applies_correct_change(
+    config_rel_path: str,
+    param_name: str,
+    direction: str,
+) -> None:
+    """Each sweep config must move the target parameter in the stated direction vs. default."""
+    from robot_sf.planner.socnav import SocNavPlannerConfig
+
+    config_path = Path(__file__).parent / config_rel_path
+    cfg = _parse_algo_config(str(config_path))
+    socnav_cfg = _build_socnav_config(cfg)
+    default_value = getattr(SocNavPlannerConfig(), param_name)
+    tuned_value = getattr(socnav_cfg, param_name)
+    if direction == "higher":
+        assert tuned_value > default_value, (
+            f"{param_name}: tuned {tuned_value} must exceed default {default_value}"
+        )
+    else:
+        assert tuned_value < default_value, (
+            f"{param_name}: tuned {tuned_value} must be below default {default_value}"
+        )
+
+
+def test_holonomic_social_force_diagnosis_config_contains_expected_planners() -> None:
+    """The diagnosis benchmark config must list local social_force and the upstream wrapper."""
+    import yaml
+
+    config_path = (
+        Path(__file__).parent / "../../configs/benchmarks/holonomic_social_force_diagnosis.yaml"
+    )
+    assert config_path.exists(), f"Diagnosis config not found: {config_path}"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    planner_keys = {p["key"] for p in data.get("planners", [])}
+    assert "social_force" in planner_keys, "Diagnosis config must include local social_force"
+    assert "social_navigation_pyenvs_socialforce" in planner_keys, (
+        "Diagnosis config must include the upstream socialforce wrapper"
+    )
+    assert data.get("holonomic_command_mode") == "vx_vy", (
+        "Diagnosis config must use holonomic vx_vy command mode"
     )

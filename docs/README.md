@@ -88,8 +88,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
-* **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,  `auto-improvement`, context-discovery, quality, and doc-sync skills
+* **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
+* **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
@@ -117,7 +118,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,   `watch`,   `list`,   `summary`,   `export`,   `perf-tests`,   `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
 
 ### Benchmarking & Metrics
 
@@ -125,6 +126,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
+* **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
@@ -418,7 +420,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 * Report: Top 10 slowest tests printed with guidance at session end
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,   `ROBOT_SF_PERF_HARD`.
+* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 

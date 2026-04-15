@@ -29,3 +29,10 @@ planners:
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
     algo_config: configs/algos/social_navigation_pyenvs_sfm_helbing_probe.yaml
+
+  - key: social_navigation_pyenvs_socialforce
+    algo: social_navigation_pyenvs_socialforce
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+    algo_config: configs/algos/social_navigation_pyenvs_socialforce_holonomic_probe.yaml

@@ -83,3 +83,4 @@ knowledge, not every transient iteration detail.
 ## Example
 
 - [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
+- [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)

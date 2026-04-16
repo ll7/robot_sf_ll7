@@ -86,14 +86,15 @@ allocation. All three issue-791 SLURM scripts bumped to `--mem=96G` on 2026-04-1
 | 11544 | Asymmetric critic stage1 smoke, foresight on CUDA | Failed | CPU/CUDA tensor mismatch inside predictive model forward |
 | 11560 | Asymmetric critic stage1 smoke, foresight on CUDA (post-fix) | Completed | `Using cuda device`, `fps=73`, no device mismatch |
 | 11561 | Reward curriculum 10m submission attempt on a30 | Completed but invalid | Wrapper defaulted to stage1 config; not a promotion run |
-| 11562 | Attention-head config via asymmetric wrapper, 10m env22 on a30 | Running | Long-run GPU-foresight comparison arm |
+| 11562 | Attention-head config via asymmetric wrapper, 10m env22 on a30 | Failed | Reached about 5.4M steps, then hit the empty-map-pool runtime path later tracked in issue #830 |
 | 11566 | Reward curriculum 10m env22 on l40s | Completed | Final eval `success_rate=0.571`, `collision_rate=0.400`; best checkpoint `success_rate=0.58571` at step `8912896` |
 | 11572 | Baseline 1m env22 on a30 | Failed | Transient SLURM allocation handshake failure (`Zero Bytes were transmitted or received`) |
 | 11573 | Baseline 1m env22 on a30 (retry) | Failed | Same transient allocation handshake failure as 11572 |
 | 11577 | Baseline 1m env22 on l40s | Failed | Malformed YAML in `expert_ppo_issue_791_baseline_promotion_1m_env22.yaml` caused `yaml.scanner.ScannerError` before training started |
 | 11578 | Baseline 3m env22 on a30 | Cancelled | Stale `afterok:11577` dependency after the failed 1m baseline attempt |
-| 11582 | Baseline 1m env22 on l40s (corrected rerun) | Running | Startup summary confirms `ppo_expert_issue_791_baseline_promotion_1m_env22` with explicit config override |
-| 11583 | Baseline 3m env22 on a30 (replacement) | Pending (dependency) | Fresh extension queued with `afterok:11582` |
+| 11582 | Baseline 1m env22 on l40s (corrected rerun) | Completed | Best checkpoint reached `success_rate=0.31429`; final eval settled at `success_rate=0.18571`, `collision_rate=0.68571` |
+| 11583 | Baseline 3m env22 on a30 (replacement) | Failed | Transient SLURM allocation handshake failure during allocation startup |
+| 11584 | Baseline 3m env22 on l40s (replacement) | Failed | Full rerun reached the same empty-map-pool runtime path later tracked in issue #830 |
 
 GPU foresight bug root cause:
 
@@ -147,16 +148,18 @@ GPU foresight smoke evidence:
    `eval_episode_return=-0.617`, and `SNQI=-0.814`. The best W&B checkpoint reached
    `success_rate=0.58571` with `collision_rate=0.37143` at step `8912896`.
 
-7. **The restarted asymmetric/attention-head arm is viable but lagging.** As of 2026-04-15,
-   job 11562 on a30 reached about 4.5M steps at roughly 157 to 196 fps with recent eval
+7. **The restarted asymmetric/attention-head arm was viable but lagging before failing on the
+   loader bug.** Before the later empty-map-pool failure, job 11562 on a30 reached about 4.5M
+   steps at roughly 157 to 196 fps with recent eval
    `success_rate=0.271`, `collision_rate=0.686`, `eval_episode_return=-11.1`, and
    `SNQI=-1.69`. Rollout success was fluctuating in the `0.42` to `0.54` range, but the eval
    surface still trails reward curriculum on both throughput and quality.
 
 8. **The immediate issue with job 11578 was a dead dependency chain, not a scheduler anomaly.**
    Job 11578 was queued with `afterok:11577`, and 11577 failed because the 1m baseline YAML had a
-   misindented `predictive_foresight_device` key. The corrected replacement chain is
-   `11582 -> 11583`.
+   misindented `predictive_foresight_device` key. The corrected replacement chain was
+   `11582 -> 11583`, after which 11583 still hit a transient allocation-handshake failure and
+   11584 exposed the empty-map-pool runtime path that is now tracked separately.
 
 ---
 
@@ -170,7 +173,7 @@ GPU foresight smoke evidence:
 
 ---
 
-## Active Jobs (as of 2026-04-15)
+## Historical Active Jobs Snapshot (as of 2026-04-15)
 
 | Job   | Config                                | Budget | Partition | Status   |
 |-------|---------------------------------------|--------|-----------|----------|
@@ -184,47 +187,83 @@ a30, and the completed reward-curriculum run 11566 finished its endgame around 4
 l40s. These values materially change the expected wall-time behavior relative to the old
 CPU-foresight estimates.
 
+## Queue State And Next-Wave Decision (as of 2026-04-16)
+
+Current queue snapshot: job `11608` is running on `a30`, jobs `11609` and `11610` are pending on
+`a30`, and job `11606` remains pending on `pro6000`. The first reward warm-start retry (`11607`)
+failed fast on an observation-space mismatch and is now historical.
+
+### Best-checkpoint preference
+
+For the imech192 wave, prefer warm starts from `best.zip` instead of the most recent `step*.zip`
+when the goal is to continue from the strongest observed policy rather than preserve strict
+training chronology.
+
+### Submitted jobs and reasoning
+
+1. **11566 reward curriculum** — continue from `best.zip`.
+   Job `11607` was the first retry using [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml), but it still loaded the wrong model family and failed on an observation-space mismatch. The overlay was corrected back to the original `grid_socnav` / `MultiInputPolicy` contract and resubmitted as `11610`.
+
+2. **11582 baseline 1m env22** — continue from `best.zip`.
+   Job `11608` is the corrected retry of [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) and is currently running on `a30`.
+
+3. **11562 attention-head rerun** — direct SLURM rerun.
+   Job `11609` is the corrected retry of [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) and is currently pending on `a30`.
+
+4. **11584 baseline 3m env22 full rerun** — low-priority overnight job.
+   Job `11606` uses [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) and remains pending on `pro6000` by design.
+
+### Current retry status
+
+| Planned arm | Current job | Config | State | Partition |
+|-------------|-------------|--------|-------|-----------|
+| 11566 reward curriculum warm start | 11610 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml) | Pending | a30 |
+| 11582 baseline warm start | 11608 | [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) | Running | a30 |
+| 11562 attention-head rerun | 11609 | [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) | Pending | a30 |
+| 11584 full rerun | 11606 | [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) | Pending | pro6000 |
+
+### Contract Corrections Already Applied
+
+The first retry wave exposed two distinct compatibility problems. `RobotEnv.__init__()` no longer
+accepted `asymmetric_critic`, so the base contract was restored in
+`robot_sf/gym_env/robot_env.py` and covered by a regression test in
+`tests/test_socnav_env_integration.py`. The reward warm-start then exposed a second mismatch: the
+overlay had drifted to an asymmetric attention layout, but the source 11566 checkpoint was trained
+with `grid_socnav` and `MultiInputPolicy`. That overlay was corrected back to the original
+architecture and resubmitted as `11610`.
+
+Current expectation: the running and pending retries now line up with the intended checkpoint
+families, so the remaining verification is execution-time only.
+
 ---
 
 ## Validation / Proof Commands
 
-Commands used to justify the current update:
+Commands used to justify the current update and next-wave planning decision:
 
 ```bash
-sacct -j 11544,11560,11561,11562,11566,11572,11573,11577,11578,11582,11583 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
-squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" | grep 'robot-sf-issue791'
-tail -n 120 output/slurm/11560-issue791-asymmetric-critic.out
-tail -n 60 output/slurm/11561-issue791-reward-curriculum.out
-grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|value_loss|fps ' output/slurm/11562-issue791-asymmetric-critic.out | tail -n 24
-grep -E 'total_timesteps|success_rate|collision_rate|snqi|eval_episode_return|value_loss|fps ' output/slurm/11566-issue791-reward-curriculum.out | tail -n 24
-sed -n '1,60p' output/slurm/11577-issue791-reward-curriculum.out
-sed -n '1,40p' output/slurm/11582-issue791-reward-curriculum.out
+sacct -j 11606,11607,11608,11609,11610 --format=JobID,JobName%45,Partition,State,Elapsed,ExitCode -X -n
+squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" | grep 'robot-sf-issue791' || true
+grep -n 'Observation spaces do not match' output/slurm/11607-issue791-reward-curriculum.out
+grep -E 'Training startup summary: policy_id=ppo_expert_issue_791_reward_curriculum_promotion_10m_env22|critic_profile=|policy=' output/slurm/11566-issue791-reward-curriculum.out | head -n 4
+grep -E 'Training startup summary: policy_id=ppo_expert_issue_791_baseline_promotion_1m_env22|critic_profile=|policy=' output/slurm/11608-issue791-reward-curriculum.out | head -n 4
+grep -E 'Training startup summary: policy_id=ppo_expert_issue_791_attention_head_promotion_10m_env22|critic_profile=|policy=' output/slurm/11605-issue791-attention-head.out | head -n 4
 ```
 
 ## Next Decisions / Follow-ups
 
-1. **Monitor job 11582 early eval quality before letting 11583 run too far.** The corrected 1m
-   baseline startup provenance is now confirmed, so the next decision is quality: if the 1m GPU
-   baseline remains clearly below reward curriculum early, the queued 3m extension may still be
-   cancelled later to save compute.
+1. **Monitor 11566 and 11582 first.** Their warm starts now come from `best.zip`, which is the
+   preferred continuation path when the goal is to preserve the strongest observed policy.
 
-2. **Decide whether attention head needs its own dedicated 10m rerun.** Job 11562 currently runs
-   the attention-head promotion config through the asymmetric wrapper/job naming path. If this arm
-   becomes benchmark-relevant, submit a cleanly named wrapper or explicit attention-head script so
-   accounting and artifact lineage stay unambiguous.
+2. **Watch 11562 for the loader-fix validation signal.** This rerun is now the direct proof point
+   for the issue-830 fix under the full long-horizon configuration.
 
-3. **Re-evaluate promotion thresholds using the GPU-backed long runs, not the old CPU-foresight
-   env22 runs.** The reward-curriculum versus asymmetric comparison should be revisited after the
-   restarted runs reach a materially larger shared budget.
+3. **Expect 11584 to start later on `pro6000`.** That is intentional and matches the low-priority
+   weekday-overflow rule recorded in `local.machine.md`.
 
-4. **Consider making the 10m wrapper defaults safer.** Jobs 11561 and earlier submissions showed
-   that wrapper defaults can silently fall back to stage1 configs when the override is omitted.
-   A follow-up hardening change should either default the promotion wrappers to the promotion YAMLs
-   or fail fast when a long-run submission lacks an explicit config override.
-
-5. **Keep baseline extension conditional on the corrected 1m rerun, not on the broken 11577
-   attempt.** The original 11578 dependency is obsolete; use 11582 as the real gate for whether
-   the baseline deserves further overnight compute.
+4. **Keep the reasoning attached to the execution surfaces.** The warm-start source, priority
+   ordering, and `pro6000` routing are now recorded in this note and in the submission metadata
+   used to launch the jobs.
 
 ---
 
@@ -234,12 +273,12 @@ sed -n '1,40p' output/slurm/11582-issue791-reward-curriculum.out
 configs/training/ppo/ablations/
 ├── expert_ppo_issue_791_baseline_promotion_128k.yaml          ✓ done (11467, best=0.186)
 ├── expert_ppo_issue_791_baseline_promotion_256k.yaml          ✓ done (11474, best=0.343)
-├── expert_ppo_issue_791_baseline_promotion_1m_env22.yaml      ✓ done (11469, best=0.314, CPU foresight historical) / ✗ handshake failures (11572, 11573) / ✗ malformed-YAML failure (11577) / ← running corrected rerun (11582)
-├── expert_ppo_issue_791_baseline_promotion_3m_env22.yaml      ← pending extension (11583, afterok:11582)
+├── expert_ppo_issue_791_baseline_promotion_1m_env22.yaml      ✓ done (11469, best=0.314, CPU foresight historical) / ✗ handshake failures (11572, 11573) / ✗ malformed-YAML failure (11577) / ✓ done corrected rerun (11582; next step is a best.zip warm start)
+├── expert_ppo_issue_791_baseline_promotion_3m_env22.yaml      ✗ handshake failure during replacement run (11583) / ✗ empty-map-pool failure during rerun (11584) / ← planned low-priority full rerun
 ├── expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml ✓ done (11445, best=0.157 — early peak v1)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml  ← running (11510)
 ├── expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml    (hold — gate on v2 128k result)
-├── expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml  ✓ done (11566, best success=0.58571 @ 8.91M; final eval success=0.571)
+├── expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml  ✓ done (11566, best success=0.58571 @ 8.91M; final eval success=0.571) / ← planned best.zip warm start (resume overlay corrected back to the original grid_socnav contract)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_128k.yaml ✓ done (11446, best=0.171)
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_256k.yaml ✓ done (11475, best=0.257) — FAIL
 ├── expert_ppo_issue_791_asymmetric_critic_promotion_1m_env22.yaml ✗ cancelled (11477)
@@ -247,7 +286,7 @@ configs/training/ppo/ablations/
 ├── expert_ppo_issue_791_attention_head_promotion_128k.yaml    ✓ done (11447, best=0.171)
 ├── expert_ppo_issue_791_attention_head_promotion_256k.yaml    ✓ done (11468, best=0.214) — FAIL
 ├── expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml   ✗ cancelled (11476)
-└── expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml    ← running via wrapper override (11562, a30, CUDA foresight)
+└── expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml    ✗ partial long run failed after ~5.4M steps (11562) / ← planned direct SLURM retry
 ```
 
 ## SLURM Script Notes

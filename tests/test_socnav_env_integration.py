@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -50,6 +51,18 @@ def test_socnav_structured_observation_can_expose_critic_privileged_state():
 
     assert "critic_privileged_state" in obs
     assert obs["critic_privileged_state"].ndim == 1
+    assert env.observation_space.contains(obs)
+
+
+def test_socnav_structured_observation_can_expose_critic_privileged_state_via_factory():
+    """The public factory should pass asymmetric critic through to RobotEnv."""
+    env = make_robot_env(
+        config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT),
+        asymmetric_critic=True,
+    )
+    obs, _ = env.reset()
+
+    assert "critic_privileged_state" in obs
     assert env.observation_space.contains(obs)
 
 

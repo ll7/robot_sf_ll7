@@ -21,6 +21,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _jsonable_repo_relative,
     _load_campaign_scenarios,
     _planner_report_row,
+    _resolved_seed_inventory,
     _sanitize_csv_cell,
     _sanitize_git_remote,
     _sanitize_name,
@@ -237,6 +238,33 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
 
     ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
     assert ppo_cfg["fallback_to_goal"] is False
+
+
+def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
+    """Extended seed configs should change only the named seed schedule."""
+    base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))
+    s5_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml")
+    )
+    s10_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml")
+    )
+
+    for cfg, seed_set, expected_seeds in (
+        (s5_cfg, "paper_eval_s5", [111, 112, 113, 114, 115]),
+        (s10_cfg, "paper_eval_s10", [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]),
+    ):
+        assert cfg.paper_facing is True
+        assert cfg.paper_profile_version == base_cfg.paper_profile_version == "paper-matrix-v1"
+        assert cfg.scenario_matrix_path == base_cfg.scenario_matrix_path
+        assert cfg.comparability_mapping_path == base_cfg.comparability_mapping_path
+        assert cfg.kinematics_matrix == base_cfg.kinematics_matrix == ("differential_drive",)
+        assert cfg.seed_policy.mode == "seed-set"
+        assert cfg.seed_policy.seed_set == seed_set
+        assert [(p.key, p.algo, p.planner_group) for p in cfg.planners] == [
+            (p.key, p.algo, p.planner_group) for p in base_cfg.planners
+        ]
+        assert _resolved_seed_inventory(_load_campaign_scenarios(cfg)) == expected_seeds
 
 
 def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:

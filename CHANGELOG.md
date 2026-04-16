@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added issue-832 paper-matrix extended seed schedules (`paper_eval_s5`, `paper_eval_s10`,
+  `paper_eval_s20`), S5/S10 paper-matrix sibling configs that preserve the frozen
+  `paper-matrix-v1` contract, and `scripts/tools/compare_seed_schedule_campaigns.py` for
+  reproducible S3-vs-higher-seed CI-width, mean-drift, ranking, and scenario-winner comparisons.
+
 * Added fail-fast SoNIC / GenSafeNav benchmark wrapper aliases for the model-only checkpoint path: base aliases `sonic_crowdnav`, `gensafenav_ours_gst`, and `gensafenav_gst_predictor_rand`, plus guarded variants `ours_gst_guarded` and `gst_predictor_rand_guarded` with short-horizon guard telemetry (`guard_stats`) and goal fallback. This exposes the adapter surface explicitly for users and benchmark configs while keeping remaining risks visible: the base wrappers are still prototype-level model-only integrations, guarded behavior exists only on the guarded aliases, and guarded holonomic `vx_vy` runs now fail closed until the guard can preserve upstream ActionXY without a lossy `(v, w)` round-trip.
 
 * Recorded-step playback analyzer for issue #585: telemetry replay now records per-step reward

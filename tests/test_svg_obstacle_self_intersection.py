@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
+from loguru import logger
 from shapely.geometry import GeometryCollection, Polygon
 
 from robot_sf.nav.obstacle import Obstacle
@@ -37,6 +38,26 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
             f"Obstacle {path_id} should be repaired to valid geometry"
         )
         assert obstacle.geometry.area > 0.0
+
+
+def test_self_intersecting_obstacle_warnings_include_svg_filename() -> None:
+    """Obstacle repair warnings should name the SVG map file that triggered them."""
+    repo_root = Path(__file__).resolve().parents[1]
+    svg_fixture = (
+        repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
+    )
+
+    messages: list[str] = []
+    sink_id = logger.add(
+        lambda message: messages.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        SvgMapConverter(str(svg_fixture))
+    finally:
+        logger.remove(sink_id)
+
+    assert any(svg_fixture.name in message for message in messages)
+    assert any("invalid polygon" in message and svg_fixture.name in message for message in messages)
 
 
 def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> None:

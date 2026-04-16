@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* SVG obstacle-repair warnings now include the source `*.svg` filename, so invalid map repairs point directly to the offending asset; the regression test also checks the captured warning text.
 * Added issue-832 paper-matrix extended seed schedules (`paper_eval_s5`, `paper_eval_s10`,
   `paper_eval_s20`), S5/S10 paper-matrix sibling configs that preserve the frozen
   `paper-matrix-v1` contract, `run_camera_ready_benchmark.py --campaign-id` for resumable fixed

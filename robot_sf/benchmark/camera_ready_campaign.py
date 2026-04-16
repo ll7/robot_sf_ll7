@@ -2185,6 +2185,11 @@ def _planner_report_row(  # noqa: C901
                 continue
             if not math.isfinite(resolved_metrics[field_name]):
                 resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+    episode_count = (
+        len(records)
+        if records is not None
+        else int(summary.get("episodes_total", summary.get("written", 0)))
+    )
 
     row = {
         "planner_key": planner.key,
@@ -2192,7 +2197,7 @@ def _planner_report_row(  # noqa: C901
         "planner_group": planner.planner_group,
         "kinematics": kinematics,
         "status": status,
-        "episodes": int(summary.get("written", 0)),
+        "episodes": int(episode_count),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
         "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
         "runtime_sec": _safe_float(summary.get("runtime_sec")),

@@ -1102,6 +1102,35 @@ def test_planner_report_row_backfills_collision_means_from_termination_reason() 
     assert row["collision_ci_high"] == "nan"
 
 
+def test_planner_report_row_counts_existing_records_after_resume() -> None:
+    """Resumed campaign rows should report total records, not only newly written rows."""
+    planner = PlannerSpec(key="goal", algo="goal")
+    summary = {
+        "status": "ok",
+        "written": 0,
+        "episodes_total": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 0.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {},
+    }
+    records = [
+        {"termination_reason": "success", "metrics": {"success": 1.0, "snqi": -0.1}},
+        {"termination_reason": "timeout", "metrics": {"success": 0.0, "snqi": -0.2}},
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["episodes"] == 2
+
+
 def test_planner_report_row_uses_episode_ci_placeholders_when_means_are_backfilled() -> None:
     """Backfilled success/collision means should not keep stale aggregate CIs."""
     planner = PlannerSpec(key="ppo", algo="ppo")

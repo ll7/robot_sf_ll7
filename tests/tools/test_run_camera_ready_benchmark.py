@@ -27,8 +27,8 @@ def test_main_preflight_mode_emits_preflight_payload(
         return sentinel_cfg
 
     def _fake_prepare_campaign_preflight(cfg, **kwargs):
-        del kwargs
         assert cfg is sentinel_cfg
+        assert kwargs["campaign_id"] == "fixed-campaign"
         called["preflight"] = True
         return {
             "campaign_id": "cid",
@@ -83,7 +83,14 @@ def test_main_preflight_mode_emits_preflight_payload(
     monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _fake_run_campaign)
 
     exit_code = run_camera_ready_benchmark.main(
-        ["--config", str(config_path), "--mode", "preflight"],
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--campaign-id",
+            "fixed-campaign",
+        ],
     )
     assert exit_code == 0
     assert called["preflight"] is True
@@ -122,6 +129,7 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     def _fake_run_campaign(cfg, **kwargs):
         assert cfg is sentinel_cfg
         assert isinstance(kwargs.get("invoked_command"), str)
+        assert kwargs["campaign_id"] == "fixed-campaign"
         called["run"] = True
         return {
             "campaign_id": "cid",
@@ -139,7 +147,9 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     )
     monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _fake_run_campaign)
 
-    exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+    exit_code = run_camera_ready_benchmark.main(
+        ["--config", str(config_path), "--campaign-id", "fixed-campaign"]
+    )
     assert exit_code == 0
     assert called["run"] is True
     assert called["preflight"] is False

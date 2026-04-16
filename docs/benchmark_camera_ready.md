@@ -359,8 +359,11 @@ Canonical resumable S5 run in tmux:
 
 ```bash
 tmux new -d -s issue832_s5 -- \
-  zsh -lc 'cd /path/to/robot_sf_ll7 && source .venv/bin/activate && LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --label issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log'
+  zsh -lc 'cd /path/to/robot_sf_ll7 && source .venv/bin/activate && caffeinate -dimsu uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --campaign-id issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log'
 ```
+
+Re-run the same command to resume an interrupted root; `--campaign-id` keeps the output directory
+stable and `resume: true` skips completed episode ids.
 
 Grouping semantics:
 

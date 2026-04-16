@@ -1844,6 +1844,42 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     assert first["kinematics"] == "differential_drive"
 
 
+def test_prepare_campaign_preflight_accepts_fixed_campaign_id(tmp_path: Path) -> None:
+    """Fixed campaign ids should make interrupted campaign roots resumable."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: fixed_id",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(
+        cfg,
+        output_root=tmp_path / "out",
+        label="ignored",
+        campaign_id="Issue 832 S5 Resume",
+    )
+
+    assert prepared["campaign_id"] == "issue_832_s5_resume"
+    assert Path(prepared["campaign_root"]).name == "issue_832_s5_resume"
+
+
 def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

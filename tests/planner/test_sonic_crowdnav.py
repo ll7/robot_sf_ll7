@@ -337,7 +337,10 @@ def test_adapter_fails_fast_on_incompatible_checkpoint_state_dict(tmp_path: Path
         )
 
     message = str(excinfo.value)
-    assert str((repo_root / "trained_models" / "SoNIC_GST" / "checkpoints" / "05207.pt").resolve()) in message
+    assert (
+        str((repo_root / "trained_models" / "SoNIC_GST" / "checkpoints" / "05207.pt").resolve())
+        in message
+    )
     assert "encoder.weight" in message
     assert "unexpected.bias" in message
 

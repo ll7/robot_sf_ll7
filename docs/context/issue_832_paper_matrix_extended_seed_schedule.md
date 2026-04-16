@@ -130,8 +130,78 @@ degraded planner execution as successful benchmark evidence.
 
 ## Validation Log
 
-Pending commands for this branch:
+Code/config validation:
 
-- `uv run pytest -o addopts='' tests/tools/test_compare_seed_schedule_campaigns.py tests/tools/test_run_camera_ready_benchmark.py tests/benchmark/test_camera_ready_campaign.py -k 'seed_schedule or extended_seed or preflight_mode'`
-- `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --mode preflight --label issue832_s5_preflight`
-- S5 tmux run, analyzer, and seed-schedule comparison commands above.
+- `uv run ruff check scripts/tools/compare_seed_schedule_campaigns.py tests/tools/test_compare_seed_schedule_campaigns.py tests/benchmark/test_camera_ready_campaign.py`
+- `uv run pytest -o addopts='' tests/tools/test_compare_seed_schedule_campaigns.py tests/benchmark/test_camera_ready_campaign.py -k 'seed_schedule or extended_seed'`
+- `uv run pytest -o addopts='' tests/tools/test_compare_seed_schedule_campaigns.py tests/tools/test_run_camera_ready_benchmark.py tests/benchmark/test_camera_ready_campaign.py`
+- `uv run ruff check scripts/tools/run_camera_ready_benchmark.py robot_sf/benchmark/camera_ready_campaign.py tests/tools/test_run_camera_ready_benchmark.py tests/benchmark/test_camera_ready_campaign.py`
+- `uv run pytest -o addopts='' tests/tools/test_run_camera_ready_benchmark.py tests/benchmark/test_camera_ready_campaign.py -k 'campaign_id or run_mode or extended_seed'`
+- `uv run pytest -o addopts='' tests/benchmark/test_camera_ready_campaign.py -k 'planner_report_row_counts_existing_records_after_resume or campaign_id or extended_seed'`
+- `git diff --check`
+
+Preflight:
+
+- S5:
+  `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --mode preflight --label issue832_s5_preflight_committed`
+- S10:
+  `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml --mode preflight --label issue832_s10_preflight_committed`
+
+Executed campaigns:
+
+- S3 reference root:
+  `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae`
+  - episode execution commit: `bd60bae4401d075fc67436b42da6f5f4deb95aa7`
+  - final report-generation commit: `b993fd11cbeb91c44f7329b0f853ab76cc27a488`
+  - episodes: `987`
+  - runs: `7/7` successful
+  - SNQI contract: `pass`
+  - tmux session: `issue832_s3_bd60bae`
+  - execution wall clock: about `10.7` min (`11:52:14` to `12:02:56`)
+- S5 extended root:
+  `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae`
+  - episode execution commit: `bd60bae4401d075fc67436b42da6f5f4deb95aa7`
+  - final report-generation commit: `b993fd11cbeb91c44f7329b0f853ab76cc27a488`
+  - episodes: `1645`
+  - runs: `7/7` successful
+  - SNQI contract: `warn` with `snqi_contract.enforcement=warn`
+  - tmux sessions: `issue832_s5_bd60bae`, then `issue832_s5_bd60bae_resume1`
+  - execution wall clock including manual restart gap: about `22.9` min (`11:52:14` to `12:15:12`)
+  - active execution time estimate from logs excluding the restart gap: about `18.1` min
+
+The final reports were regenerated after adding fixed campaign ids and correcting resumed planner
+episode counts. The regeneration pass used `resume: true` and did not re-execute completed episode
+ids; this is why `campaign.runtime_sec` in the final JSON files reflects the short report
+regeneration invocation rather than total benchmark wall time.
+
+Analysis/export artifacts:
+
+- S3:
+  - `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae/reports/campaign_analysis.json`
+  - `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae/reports/campaign_analysis.md`
+  - `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae/reports/scenario_difficulty_analysis.json`
+  - `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae/reports/scenario_difficulty_analysis.md`
+- S5:
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/campaign_analysis.json`
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/campaign_analysis.md`
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/scenario_difficulty_analysis.json`
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/scenario_difficulty_analysis.md`
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/seed_schedule_comparison.json`
+  - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/seed_schedule_comparison.md`
+
+Comparison result:
+
+- Verdict: `review`
+- Ranking stability: stable (`Kendall tau = 1.0`, `Spearman rho = 1.0`)
+- Scenario winner changes: `7 / 47` scenarios (`14.9%`), above the `10%` threshold
+- Aggregate mean drift flags: `9 / 35` planner-metric rows
+- CI-width target misses: `success`, `near_misses`, `time_to_goal_norm`, `snqi`
+
+Interpretation:
+
+- The S5 extension does not change the aggregate SNQI planner ordering.
+- The S5 extension does change enough scenario-level winners and aggregate means that downstream
+  paper text should avoid strengthening seed-stability claims from the frozen S3 bundle.
+- The current paper-facing S3 numbers can remain a bounded initial full-matrix protocol, but this
+  benchmark-side follow-up should be cited as a caution that broader seeding preserves ranking while
+  exposing scenario-level and mean-drift sensitivity.

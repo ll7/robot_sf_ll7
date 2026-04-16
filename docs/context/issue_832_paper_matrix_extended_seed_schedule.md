@@ -174,7 +174,7 @@ episode counts. The regeneration pass used `resume: true` and did not re-execute
 ids; this is why `campaign.runtime_sec` in the final JSON files reflects the short report
 regeneration invocation rather than total benchmark wall time.
 
-Analysis/export artifacts:
+## Analysis/export artifacts:
 
 - S3:
   - `output/benchmarks/camera_ready/issue832_s3_reference_bd60bae/reports/campaign_analysis.json`
@@ -189,7 +189,7 @@ Analysis/export artifacts:
   - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/seed_schedule_comparison.json`
   - `output/benchmarks/camera_ready/issue832_s5_stage_bd60bae/reports/seed_schedule_comparison.md`
 
-Comparison result:
+## Comparison result:
 
 - Verdict: `review`
 - Ranking stability: stable (`Kendall tau = 1.0`, `Spearman rho = 1.0`)
@@ -197,7 +197,7 @@ Comparison result:
 - Aggregate mean drift flags: `9 / 35` planner-metric rows
 - CI-width target misses: `success`, `near_misses`, `time_to_goal_norm`, `snqi`
 
-Interpretation:
+## Interpretation:
 
 - The S5 extension does not change the aggregate SNQI planner ordering.
 - The S5 extension does change enough scenario-level winners and aggregate means that downstream
@@ -205,3 +205,5 @@ Interpretation:
 - The current paper-facing S3 numbers can remain a bounded initial full-matrix protocol, but this
   benchmark-side follow-up should be cited as a caution that broader seeding preserves ranking while
   exposing scenario-level and mean-drift sensitivity.
+
+The S5 comparison is best read as a robustness check on the frozen S3 publication bundle, not as a replacement for it. The main positive result is that the overall planner ranking does not change, which means the headline ordering is stable even when more seeds are added. The main caution is that the benchmark is still sensitive at a finer scale: a meaningful share of scenarios change winner, and several planner-metric means shift enough to cross the configured drift thresholds. In practical terms, the paper can keep the S3 numbers as the official reference, while describing the S5 run as evidence that the ranking is durable but some scenario-level outcomes remain seed-sensitive. The CI-width misses should be treated as a precision warning, not as evidence that the benchmark is invalid.

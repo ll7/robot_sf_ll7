@@ -5,8 +5,8 @@ This document covers briefly the repository structure, coding style, testing wor
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 
-## Codex Context Stack
-Treat the following files as the repository-native context stack for Codex-style agents:
+## Agent Context Stack
+Treat the following files as the repository-native context stack for Agent-style agents:
 
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
 - `CLAUDE.md`: Claude Code entrypoint that imports `AGENTS.md` plus the repo-local memory index.

@@ -632,7 +632,9 @@ def main(argv: list[str] | None = None) -> int:
                 fps_warn_threshold=args.fps_warn_threshold,
             )
         )
-        study.optimize(objective, n_trials=args.trials)
+        # Catch all exceptions so a single OOM or crash records a FAILED trial
+        # and the study continues rather than terminating the whole process.
+        study.optimize(objective, n_trials=args.trials, catch=(Exception,))
 
         completed = study.get_trials(states=[TrialState.COMPLETE])
         if not completed:

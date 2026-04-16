@@ -86,6 +86,12 @@ knowledge, not every transient iteration detail.
 - [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 - [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
 
+## Feature Extractor Notes
+
+- [Issue #193 Feature Extractor Evaluation](./issue_193_feature_extractor_evaluation.md)
+  GPU throughput microbenchmark + 32 K PPO comparison of DynamicsExtractor vs MLP/CNN/Attention;
+  recommends `mlp_small` as new default for fresh training runs.
+
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)

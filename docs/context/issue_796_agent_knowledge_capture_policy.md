@@ -21,6 +21,8 @@ important context does not remain trapped in chat, PR text, or issue comments.
   context, not just as a loose collection of execution notes.
 - Agents should persist non-trivial reusable insights, decisions, reasoning, and validation notes in
   Markdown when that context would otherwise be lost.
+- Agents should also record the key assumptions that underlie a decision, especially when those
+  assumptions are provisional, environment-specific, or likely to change across sessions.
 - Existing canonical notes should be updated in preference to creating duplicates.
 - Touched stale or superseded notes must be updated, removed, or clearly marked with a pointer to
   the current source of truth.

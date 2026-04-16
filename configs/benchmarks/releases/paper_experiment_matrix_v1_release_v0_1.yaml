@@ -63,4 +63,4 @@ provenance:
   doi: 10.5281/zenodo.<record-id>
 
 citation_path: ../../../CITATION.cff
-release_checklist_path: ../../../RELEASE.md
+release_checklist_path: ../../../docs/RELEASE.md

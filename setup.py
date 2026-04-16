@@ -1,7 +1,0 @@
-"""TODO docstring. Document this module."""
-
-# This file is kept for backwards compatibility
-# All configuration is now in pyproject.toml
-from setuptools import setup
-
-setup()

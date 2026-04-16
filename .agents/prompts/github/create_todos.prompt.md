@@ -25,7 +25,7 @@ INPUT SIGNAL SOURCES (SCAN IN THIS ORDER)
 4. Conversation / History
   - Unimplemented suggestions, deferred enhancements, optional improvements previously listed (e.g., metadata map serialization, schema versioning, retrofitting old logs).
 5. Configuration & CI
-  - Lints disabled with comments (`noqa`, `pylint: disable`) if they mask tech debt actionable items.
+  - Lints disabled with comments (`noqa`) if they mask tech debt actionable items.
 
 ==================================================
 CLASSIFICATION CATEGORIES

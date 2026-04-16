@@ -115,6 +115,52 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Upstream CrowdNav_HEIGHT model-only checkpoint wrapper.",
     ),
     AlgorithmReadiness(
+        canonical_name="sonic_crowdnav",
+        tier="experimental",
+        aliases=("sonic_crowdnav", "sonic_gst"),
+        note="Upstream SoNIC model-only checkpoint wrapper with fail-fast source asset checks.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_ours_gst",
+        tier="experimental",
+        aliases=("gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"),
+        note="Upstream GenSafeNav constrained learned checkpoint wrapper with fail-fast asset checks.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_ours_gst_guarded",
+        tier="experimental",
+        aliases=("gensafenav_ours_gst_guarded", "ours_gst_guarded"),
+        note=(
+            "GenSafeNav Ours_GST wrapper with explicit short-horizon safety guard and goal fallback "
+            "for static-risk-heavy slices."
+        ),
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_gst_predictor_rand",
+        tier="experimental",
+        aliases=(
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
+        ),
+        note=(
+            "Upstream GenSafeNav CrowdNav++-style learned checkpoint wrapper with fail-fast "
+            "asset checks."
+        ),
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_gst_predictor_rand_guarded",
+        tier="experimental",
+        aliases=(
+            "gensafenav_gst_predictor_rand_guarded",
+            "gst_predictor_rand_guarded",
+        ),
+        note=(
+            "GenSafeNav GST_predictor_rand wrapper with explicit short-horizon safety guard and "
+            "goal fallback for static-risk-heavy slices."
+        ),
+    ),
+    AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),

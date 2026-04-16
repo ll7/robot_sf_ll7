@@ -845,7 +845,7 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - Lint job → Task “Ruff: Format and Fix” → `uv run ruff check . && uv run ruff format --check .`
-- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uv run pylint robot_sf --errors-only`
+- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uvx ty check . --exit-zero`
 - Type check job → Task "Type Check" → `uvx ty check . --exit-zero`
 - Test job → Task “Run Tests” → `uv run pytest tests`
 
@@ -1210,7 +1210,7 @@ Use the following templates for specific tasks.
 uv sync && source .venv/bin/activate
 
 # Validate changes
-uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
+uv run ruff check . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest tests
 
 # Functional smoke (headless)
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \

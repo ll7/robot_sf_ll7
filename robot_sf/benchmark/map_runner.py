@@ -97,6 +97,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.sonic_crowdnav import SonicCrowdNavAdapter, build_sonic_crowdnav_config
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
@@ -131,6 +132,18 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_orca_relaxed",
     "socnav_hrvo",
     "crowdnav_height",
+    "sonic_crowdnav",
+    "sonic_gst",
+    "gensafenav_ours_gst",
+    "gensafe_ours_gst",
+    "ours_gst",
+    "gensafenav_ours_gst_guarded",
+    "ours_gst_guarded",
+    "gensafenav_gst_predictor_rand",
+    "gensafe_gst_predictor_rand",
+    "gst_predictor_rand",
+    "gensafenav_gst_predictor_rand_guarded",
+    "gst_predictor_rand_guarded",
     "sicnav",
     "dr_mpc",
 }
@@ -893,6 +906,16 @@ def _obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+class _GoalFallbackAdapter:
+    """Simple goal-policy fallback adapter for guarded wrapper experiments."""
+
+    def __init__(self, *, max_speed: float) -> None:
+        self._max_speed = float(max_speed)
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        return _goal_policy(observation, max_speed=self._max_speed)
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1522,6 +1545,111 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
+    elif algo_key in {
+        "gensafenav_ours_gst_guarded",
+        "ours_gst_guarded",
+        "gensafenav_gst_predictor_rand_guarded",
+        "gst_predictor_rand_guarded",
+    }:
+        holonomic_vx_vy_mode = (
+            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+            and normalized_robot_command_mode == "vx_vy"
+        )
+        if holonomic_vx_vy_mode:
+            raise ValueError(
+                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
+                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
+                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
+                "commands, so this path fails closed instead of collapsing ActionXY through a "
+                "lossy (v, w) round-trip."
+            )
+
+        guarded_root = {
+            "gensafenav_ours_gst_guarded",
+            "ours_gst_guarded",
+        }
+        model_name = (
+            str(algo_config.get("model_name", "Ours_GST"))
+            if algo_key in guarded_root
+            else str(algo_config.get("model_name", "GST_predictor_rand"))
+        )
+        sonic_adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": model_name,
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+        guard_adapter = GuardedPPOAdapter(
+            config=build_guarded_ppo_config(algo_config),
+            fallback_adapter=_GoalFallbackAdapter(
+                max_speed=float(algo_config.get("guard_fallback_max_speed", 1.0)),
+            ),
+        )
+        meta.update(
+            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="sonic_guarded_goal_fallback",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        meta["guard_stats"] = {
+            "ppo_clear": 0,
+            "ppo_safe": 0,
+            "fallback_safe": 0,
+            "stop_safe": 0,
+            "fallback_best_effort": 0,
+            "stop_best_effort": 0,
+            "goal_reached": 0,
+        }
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+            planner_meta["guard_strategy"] = "short_horizon_safety_gate"
+            planner_meta["fallback_policy"] = "goal"
+
+        guarded_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            sonic_command = sonic_adapter.plan(obs)
+            chosen, decision = guard_adapter.choose_command(
+                obs,
+                (float(sonic_command[0]), float(sonic_command[1])),
+            )
+            linear, angular = _project_with_feasibility(
+                model=guarded_kinematics_model,
+                command=(float(chosen[0]), float(chosen[1])),
+                meta=meta,
+            )
+            guard_stats = meta.get("guard_stats")
+            if isinstance(guard_stats, dict):
+                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            _update_adapter_impact_metrics(
+                meta,
+                "adapter",
+                count_native=False,
+            )
+            return linear, angular
+
+        _attach_planner_reset(_policy, sonic_adapter)
+        if hasattr(sonic_adapter, "close"):
+            _policy._planner_close = sonic_adapter.close
+        return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -1583,6 +1711,34 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
     elif algo_key in {"crowdnav_height"}:
         adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
+    elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+        adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
+    elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "Ours_GST"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+    elif algo_key in {
+        "gensafenav_gst_predictor_rand",
+        "gensafe_gst_predictor_rand",
+        "gst_predictor_rand",
+    }:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "GST_predictor_rand"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
     elif algo_key in {"sacadrl", "sa_cadrl"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -1674,6 +1830,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "social_nav_pyenvs_socialforce",
             "social_navigation_pyenvs_sfm_helbing",
             "social_nav_pyenvs_sfm_helbing",
+            "sonic_crowdnav",
+            "sonic_gst",
+            "gensafenav_ours_gst",
+            "gensafe_ours_gst",
+            "ours_gst",
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
         }
         and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
         and normalized_robot_command_mode == "vx_vy"
@@ -1702,6 +1866,28 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
                 "JointState contract, run upstream ORCA predict(), and forward the resulting "
                 "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+            adapter_boundary = (
+                "Run the upstream SoNIC checkpoint through the model-only Robot SF wrapper and "
+                "forward the resulting ActionXY world velocity directly into the holonomic vx_vy "
+                "benchmark action space."
+            )
+        elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav Ours_GST checkpoint through the model-only Robot SF "
+                "wrapper and forward the resulting ActionXY world velocity directly into the "
+                "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
+        }:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav GST_predictor_rand checkpoint through the model-only "
+                "Robot SF wrapper and forward the resulting ActionXY world velocity directly into "
+                "the holonomic vx_vy benchmark action space."
             )
         else:
             adapter_boundary = (

@@ -63,7 +63,7 @@ provenance:
   doi: 10.5281/zenodo.19563812
 
 citation_path: ../../../CITATION.cff
-release_checklist_path: ../../../RELEASE.md
+release_checklist_path: ../../../docs/RELEASE.md
 
 # Scoped release rationale:
 # socnav_bench is excluded due to missing external dependencies (SocNavBench SD3DIS dataset).

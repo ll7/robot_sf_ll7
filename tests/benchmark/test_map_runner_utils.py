@@ -468,6 +468,300 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
     assert meta["upstream_reference"]["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
 
 
+def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The SoNIC key should build the upstream checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.4, 0.1)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "sonic_gst",
+        {
+            "repo_root": "output/repos/SoNIC-Social-Nav",
+            "checkpoint_name": "05207.pt",
+        },
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.4, 0.1)
+    policy._planner_reset(seed=9)
+    assert planners
+    assert meta["policy_semantics"] == "upstream_sonic_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+    assert planners[0].config.model_name == "SoNIC_GST"
+    assert planners[0].config.repo_root.name == "SoNIC-Social-Nav"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+
+
+def test_build_policy_gensafenav_ours_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GenSafeNav Ours_GST key should build the learned checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.35, 0.2)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "ours_gst",
+        {},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.35, 0.2)
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "Ours_GST"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+
+
+def test_build_policy_gensafenav_gst_predictor_rand_wires_external_checkpoint_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GenSafeNav CrowdNav++-style key should build the learned checkpoint wrapper path."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.25, -0.1)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "gst_predictor_rand",
+        {},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert (linear, angular) == (0.25, -0.1)
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "GST_predictor_rand"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["adapter_name"] == "SonicCrowdNavAdapter"
+
+
+def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guarded Ours_GST alias should wire guard decisions and expose mixed metadata."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, _obs):
+            return (0.35, 0.2)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    class _DummyGuard:
+        def __init__(self, config, *, fallback_adapter) -> None:
+            del config
+            self.fallback_adapter = fallback_adapter
+
+        def choose_command(self, observation, ppo_command):
+            del ppo_command
+            return self.fallback_adapter.plan(observation), "fallback_safe"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.GuardedPPOAdapter", _DummyGuard)
+
+    policy, meta = _build_policy(
+        "ours_gst_guarded",
+        {},
+        robot_kinematics="differential_drive",
+        adapter_impact_eval=True,
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "Ours_GST"
+    assert (linear, angular) == (1.0, 0.0)
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["execution_mode"] == "mixed"
+    assert meta["planner_kinematics"]["fallback_policy"] == "goal"
+    assert meta["guard_stats"]["fallback_safe"] == 1
+    assert meta["adapter_impact"]["native_steps"] == 0
+    assert meta["adapter_impact"]["adapted_steps"] == 1
+
+
+def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guarded GST_predictor_rand alias should default to the correct upstream checkpoint."""
+
+    planners: list[object] = []
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+            planners.append(self)
+
+        def plan(self, _obs):
+            return (0.25, -0.1)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    class _DummyGuard:
+        def __init__(self, config, *, fallback_adapter) -> None:
+            del config, fallback_adapter
+
+        def choose_command(self, observation, ppo_command):
+            del observation
+            return ppo_command, "ppo_safe"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.GuardedPPOAdapter", _DummyGuard)
+
+    policy, meta = _build_policy(
+        "gst_predictor_rand_guarded",
+        {},
+        robot_kinematics="differential_drive",
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+
+    assert planners
+    assert planners[0].config.repo_root.name == "GenSafeNav"
+    assert planners[0].config.model_name == "GST_predictor_rand"
+    assert planners[0].config.checkpoint_name == "05207.pt"
+    assert (linear, angular) == (0.25, -0.1)
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert meta["planner_kinematics"]["execution_mode"] == "mixed"
+    assert meta["guard_stats"]["ppo_safe"] == 1
+
+
+def test_build_policy_sonic_gst_holonomic_vx_vy_uses_direct_world_velocity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Holonomic SoNIC runs should forward ActionXY directly instead of round-tripping via `(v, w)`."""
+
+    class _DummyAdapter:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            return (0.4, 0.1)
+
+        def plan_velocity_world(self, obs):
+            assert obs["goal"]["current"] == [1.0, 0.0]
+            return (0.6, -0.2)
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+
+    policy, meta = _build_policy(
+        "sonic_gst",
+        {},
+        robot_kinematics="holonomic",
+        robot_command_mode="vx_vy",
+    )
+    command = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.4], "velocity_xy": [0.0, 0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {},
+            "sim": {"timestep": 0.1},
+        }
+    )
+
+    assert command == {"command_kind": "holonomic_vxy_world", "vx": 0.6, "vy": -0.2}
+    assert meta["planner_kinematics"]["planner_command_space"] == "holonomic_vxy_world"
+
+
+def test_build_policy_guarded_gensafenav_holonomic_vx_vy_fails_closed() -> None:
+    """Guarded GenSafeNav aliases should fail closed until the guard supports ActionXY passthrough."""
+
+    with pytest.raises(
+        ValueError, match="do not support holonomic vx_vy benchmark action space yet"
+    ):
+        _build_policy(
+            "ours_gst_guarded",
+            {},
+            robot_kinematics="holonomic",
+            robot_command_mode="vx_vy",
+        )
+
+
 def test_build_policy_sicnav_wires_external_mpc_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

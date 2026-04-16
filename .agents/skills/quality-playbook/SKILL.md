@@ -16,7 +16,7 @@ the right proof, and making the result easy to review.
 ## Read First
 
 - `AGENTS.md`
-- `code_review.md`
+- `docs/code_review.md`
 - `docs/dev_guide.md`
 - `.specify/memory/constitution.md`
 - `.agent/PLANS.md` for larger tasks

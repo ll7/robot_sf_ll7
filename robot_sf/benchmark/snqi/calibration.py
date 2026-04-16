@@ -33,6 +33,7 @@ _NORMALIZED_METRIC_NAMES = (
 
 
 def _is_finite(value: Any) -> bool:
+    """Return whether a value can be losslessly treated as a finite float."""
     try:
         return math.isfinite(float(value))
     except (TypeError, ValueError):
@@ -43,9 +44,15 @@ def _quantile(values: Sequence[float], q: float) -> float:
     """Return a deterministic linear-interpolated quantile."""
     if not values:
         return 0.0
-    if len(values) == 1:
-        return float(values[0])
-    ordered = sorted(float(value) for value in values)
+    return _sorted_quantile(sorted(float(value) for value in values), q)
+
+
+def _sorted_quantile(ordered: Sequence[float], q: float) -> float:
+    """Return a deterministic quantile from an already sorted numeric sequence."""
+    if not ordered:
+        return 0.0
+    if len(ordered) == 1:
+        return float(ordered[0])
     clamped = max(0.0, min(1.0, float(q)))
     position = (len(ordered) - 1) * clamped
     lower = math.floor(position)
@@ -88,15 +95,14 @@ def derive_planner_rows_from_episodes(
         planner_key = str(episode.get("planner_key", "unknown"))
         kinematics = str(episode.get("kinematics", "unknown"))
         key = f"{planner_key}::{kinematics}"
-        bucket = grouped.setdefault(
-            key,
-            {
+        if key not in grouped:
+            grouped[key] = {
                 "planner_key": planner_key,
                 "kinematics": kinematics,
                 "count": 0,
                 **{f"{name}_sum": 0.0 for name in metric_names},
-            },
-        )
+            }
+        bucket = grouped[key]
         metrics = episode.get("metrics")
         if not isinstance(metrics, Mapping):
             continue
@@ -104,7 +110,7 @@ def derive_planner_rows_from_episodes(
         for metric_name in metric_names:
             value = metrics.get(metric_name)
             if _is_finite(value):
-                bucket[f"{metric_name}_sum"] = float(bucket[f"{metric_name}_sum"]) + float(value)
+                bucket[f"{metric_name}_sum"] += value
 
     rows: list[dict[str, Any]] = []
     for bucket in grouped.values():
@@ -153,21 +159,22 @@ def normalization_anchor_variants(
     for metric_name, values in values_by_metric.items():
         if not values:
             continue
+        ordered = sorted(values)
         raw_variants["dataset_median_p95"][metric_name] = {
-            "med": _quantile(values, 0.50),
-            "p95": _quantile(values, 0.95),
+            "med": _sorted_quantile(ordered, 0.50),
+            "p95": _sorted_quantile(ordered, 0.95),
         }
         raw_variants["dataset_median_p90"][metric_name] = {
-            "med": _quantile(values, 0.50),
-            "p95": _quantile(values, 0.90),
+            "med": _sorted_quantile(ordered, 0.50),
+            "p95": _sorted_quantile(ordered, 0.90),
         }
         raw_variants["dataset_median_max"][metric_name] = {
-            "med": _quantile(values, 0.50),
-            "p95": max(values),
+            "med": _sorted_quantile(ordered, 0.50),
+            "p95": ordered[-1],
         }
         raw_variants["dataset_p25_p75"][metric_name] = {
-            "med": _quantile(values, 0.25),
-            "p95": _quantile(values, 0.75),
+            "med": _sorted_quantile(ordered, 0.25),
+            "p95": _sorted_quantile(ordered, 0.75),
         }
 
     variants: dict[str, dict[str, dict[str, float]]] = {}
@@ -212,6 +219,7 @@ def _score_episodes(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> list[tuple[Mapping[str, Any], float]]:
+    """Return finite SNQI scores paired with their source episode records."""
     scored: list[tuple[Mapping[str, Any], float]] = []
     for episode in episodes:
         metrics = episode.get("metrics")
@@ -224,6 +232,7 @@ def _score_episodes(
 
 
 def _planner_rank_map(ordering: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Return planner identity to rank mapping for one ordering payload."""
     return {
         f"{row.get('planner_key', 'unknown')}::{row.get('kinematics', 'unknown')}": int(
             row.get("rank", index)
@@ -236,6 +245,11 @@ def _rank_stability(
     baseline_ordering: Sequence[Mapping[str, Any]],
     variant_ordering: Sequence[Mapping[str, Any]],
 ) -> tuple[float, float, bool]:
+    """Compare variant planner ranks against the baseline planner ranks.
+
+    Returns:
+        Planner-rank Spearman rho, mean absolute rank shift, and order-change flag.
+    """
     base_ranks = _planner_rank_map(baseline_ordering)
     variant_ranks = _planner_rank_map(variant_ordering)
     shared = [key for key in base_ranks if key in variant_ranks]
@@ -246,14 +260,19 @@ def _rank_stability(
         [float(variant_ranks[key]) for key in shared],
     )
     shifts = [abs(float(base_ranks[key] - variant_ranks[key])) for key in shared]
-    base_order = sorted(base_ranks, key=base_ranks.get)
-    variant_order = sorted(variant_ranks, key=variant_ranks.get)
+    base_order = sorted(base_ranks, key=lambda key: base_ranks[key])
+    variant_order = sorted(variant_ranks, key=lambda key: variant_ranks[key])
     return float(corr), float(sum(shifts) / len(shifts)), base_order != variant_order
 
 
 def _alignment_summary(
     correlations: Mapping[str, Mapping[str, Any]],
 ) -> tuple[int, int, float]:
+    """Summarize sign alignment and mean absolute component correlation.
+
+    Returns:
+        Aligned metric count, variable metric count, and mean absolute Spearman value.
+    """
     aligned = 0
     variable = 0
     abs_correlations: list[float] = []
@@ -398,6 +417,7 @@ def analyze_snqi_calibration(
 
 
 def _stddev(values: Sequence[float]) -> float:
+    """Return population standard deviation for deterministic report summaries."""
     if len(values) < 2:
         return 0.0
     mean = sum(values) / len(values)
@@ -405,6 +425,11 @@ def _stddev(values: Sequence[float]) -> float:
 
 
 def _summarize_sensitivity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate variant rows into decision-oriented sensitivity metrics.
+
+    Returns:
+        Summary mapping used by the recommendation decision boundary.
+    """
     weight_rows = [
         row
         for row in rows
@@ -439,7 +464,10 @@ def _summarize_sensitivity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _recommend(rows: Sequence[Mapping[str, Any]], sensitivity: Mapping[str, Any]) -> dict[str, Any]:
-    baseline = next(row for row in rows if row.get("variant_type") == "baseline")
+    """Return the conservative issue-facing recommendation for variant rows."""
+    baseline = next((row for row in rows if row.get("variant_type") == "baseline"), None)
+    if baseline is None:
+        raise ValueError("SNQI calibration recommendation requires a baseline variant row.")
     baseline_alignment = float(baseline.get("alignment_fraction", 0.0))
     baseline_dominance = float(baseline.get("dominant_component_mean_abs", 0.0))
 

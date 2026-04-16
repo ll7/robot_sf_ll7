@@ -24,10 +24,12 @@ The original `DynamicsExtractor` remains the only safe choice when loading pre-t
 **Static microbenchmark** (seconds, no training required):
 
 ```bash
-uv run python - <<'BENCH'
-# paste the script from the issue PR or reproduce via:
-# robot_sf/feature_extractor.py + robot_sf/feature_extractors/
-BENCH
+# Default: batch=256, 500 reps, auto-detects GPU
+uv run python scripts/tools/benchmark_feature_extractors.py
+
+# Save JSON artefact
+uv run python scripts/tools/benchmark_feature_extractors.py \
+    --batch 256 --reps 500 --out output/bench_fe_issue193.json
 ```
 
 **Full training comparison**:
@@ -86,7 +88,7 @@ policy head.
 
 ### Eval reward curves (mean over 5 episodes)
 
-```
+```text
 Step    dynamics_original   mlp_small   lightweight_cnn   attention_small
  4000   -31.29              -23.14      -26.22            -65.19
  8000    -6.86              -22.97      -18.97            -21.11
@@ -130,8 +132,9 @@ Step    dynamics_original   mlp_small   lightweight_cnn   attention_small
 ```python
 # before
 cuda_version = getattr(torch, "version", {}).get("cuda", None)
-# after
-cuda_version = getattr(getattr(torch, "version", None), "cuda", None)
+# after (safer — avoids AttributeError if torch.version is missing)
+version_mod = getattr(torch, "version", None)
+cuda_version = getattr(version_mod, "cuda", None) if version_mod is not None else None
 ```
 
 ---

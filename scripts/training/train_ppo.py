@@ -53,7 +53,12 @@ from robot_sf.benchmark.imitation_manifest import (
     write_training_run_manifest,
 )
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_imitation_report_dir
+from robot_sf.feature_extractor import DynamicsExtractor
+from robot_sf.feature_extractors.attention_extractor import AttentionFeatureExtractor
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
+from robot_sf.feature_extractors.lightweight_cnn_extractor import LightweightCNNExtractor
+from robot_sf.feature_extractors.lstm_extractor import LSTMFeatureExtractor
+from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.models import resolve_model_path
@@ -1031,13 +1036,32 @@ def _make_training_env(  # noqa: PLR0913
     return _factory
 
 
+_FEATURE_EXTRACTOR_REGISTRY: dict[str, type] = {
+    "grid_socnav": GridSocNavExtractor,
+    "dynamics": DynamicsExtractor,
+    "mlp": MLPFeatureExtractor,
+    "attention": AttentionFeatureExtractor,
+    "lightweight_cnn": LightweightCNNExtractor,
+    "lstm": LSTMFeatureExtractor,
+}
+
+
 def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
     """Build policy kwargs for PPO from the training config."""
     policy_kwargs: dict[str, Any] = {"net_arch": list(config.policy_net_arch)}
     extractor = config.feature_extractor.lower()
-    if extractor == "grid_socnav":
-        policy_kwargs["features_extractor_class"] = GridSocNavExtractor
-        policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
+    cls = _FEATURE_EXTRACTOR_REGISTRY.get(extractor)
+    if cls is not None:
+        policy_kwargs["features_extractor_class"] = cls
+        if config.feature_extractor_kwargs:
+            policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
+    elif extractor not in {"default", ""}:
+        logger.warning(
+            "Unknown feature_extractor '{}'; falling back to SB3 default. "
+            "Known values: {}",
+            extractor,
+            ", ".join(sorted(_FEATURE_EXTRACTOR_REGISTRY)),
+        )
     return policy_kwargs
 
 

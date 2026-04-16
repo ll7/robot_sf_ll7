@@ -24,6 +24,11 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "socnav_orca_relaxed": "classical",
     "socnav_hrvo": "classical",
     "crowdnav_height": "learning",
+    "sonic_crowdnav": "learning",
+    "gensafenav_ours_gst": "learning",
+    "gensafenav_ours_gst_guarded": "learning",
+    "gensafenav_gst_predictor_rand": "learning",
+    "gensafenav_gst_predictor_rand_guarded": "learning",
     "ppo": "learning",
     "sac": "learning",
     "guarded_ppo": "learning",
@@ -64,6 +69,11 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
     "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
     "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
+    "sonic_crowdnav": "upstream_sonic_checkpoint_wrapper",
+    "gensafenav_ours_gst": "upstream_gensafenav_checkpoint_wrapper",
+    "gensafenav_ours_gst_guarded": "guarded_upstream_gensafenav_checkpoint_wrapper",
+    "gensafenav_gst_predictor_rand": "upstream_gensafenav_checkpoint_wrapper",
+    "gensafenav_gst_predictor_rand_guarded": "guarded_upstream_gensafenav_checkpoint_wrapper",
     "sicnav": "upstream_sicnav_checkpoint_or_policy_wrapper",
     "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
@@ -229,6 +239,77 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "Rebuild the upstream lidar-plus-human dict observation from Robot SF SocNav state, "
             "run checkpoint inference, and translate the upstream discrete delta-v/delta-theta "
             "action table into stateful Robot SF unicycle_vw commands."
+        ),
+    },
+    "sonic_crowdnav": {
+        "repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "reference_repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "commit": "24d4a64",
+        "checkout_path": "output/repos/SoNIC-Social-Nav",
+        "default_model_name": "SoNIC_GST",
+        "default_checkpoint": "trained_models/SoNIC_GST/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the SoNIC model-only dict contract, run "
+            "upstream checkpoint inference with explicit import/runtime shims, and project "
+            "upstream ActionXY velocities into Robot SF unicycle_vw commands."
+        ),
+    },
+    "gensafenav_ours_gst": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "Ours_GST",
+        "default_checkpoint": "trained_models/Ours_GST/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the GenSafeNav model-only dict contract, run "
+            "the upstream constrained selfAttn_merge_srnn checkpoint with explicit import/runtime "
+            "shims, and project upstream ActionXY velocities into Robot SF unicycle_vw commands."
+        ),
+    },
+    "gensafenav_ours_gst_guarded": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "Ours_GST",
+        "default_checkpoint": "trained_models/Ours_GST/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Run the GenSafeNav model-only Ours_GST checkpoint through the SoNIC-compatible "
+            "adapter contract, then apply an explicit short-horizon safety guard with goal-policy "
+            "fallback before emitting Robot SF unicycle_vw commands."
+        ),
+    },
+    "gensafenav_gst_predictor_rand": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "GST_predictor_rand",
+        "default_checkpoint": "trained_models/GST_predictor_rand/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Map Robot SF SocNav observations into the GenSafeNav CrowdNav++-style model-only "
+            "dict contract, run the upstream selfAttn_merge_srnn checkpoint with explicit "
+            "import/runtime shims, and project upstream ActionXY velocities into Robot SF "
+            "unicycle_vw commands."
+        ),
+    },
+    "gensafenav_gst_predictor_rand_guarded": {
+        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
+        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
+        "commit": "01baf92",
+        "checkout_path": "output/repos/GenSafeNav",
+        "default_model_name": "GST_predictor_rand",
+        "default_checkpoint": "trained_models/GST_predictor_rand/checkpoints/05207.pt",
+        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
+        "adapter_boundary": (
+            "Run the GenSafeNav model-only GST_predictor_rand checkpoint through the "
+            "SoNIC-compatible adapter contract, then apply an explicit short-horizon safety "
+            "guard with goal-policy fallback before emitting Robot SF unicycle_vw commands."
         ),
     },
     "sicnav": {
@@ -404,6 +485,61 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "upstream_command_space": "discrete_delta_v_and_delta_theta",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "upstream_discrete_delta_vw_to_unicycle_vw_stateful",
+        "projection_documented": True,
+    },
+    "sonic_crowdnav": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SonicCrowdNavAdapter",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_ours_gst": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SonicCrowdNavAdapter",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_ours_gst_guarded": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "mixed",
+        "default_adapter_name": "sonic_guarded_goal_fallback",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_gst_predictor_rand": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "SonicCrowdNavAdapter",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
+    },
+    "gensafenav_gst_predictor_rand_guarded": {
+        "planner_command_space": "mixed_vw_or_unicycle",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "mixed",
+        "default_adapter_name": "sonic_guarded_goal_fallback",
+        "upstream_command_space": "holonomic_velocity_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
     "sicnav": {

@@ -64,6 +64,7 @@ contradictory prose.
 Use the smallest structure that keeps the note reusable. Most notes should include:
 
 - the goal or decision,
+- the assumptions made and why they matter,
 - the key evidence or reasoning,
 - the validation path,
 - the current conclusion or follow-up boundary.
@@ -84,6 +85,12 @@ knowledge, not every transient iteration detail.
 
 - [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 - [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
+
+## Planner Integration Notes
+
+- [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
+- [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
+- [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 
 ## Reasoning Notes
 

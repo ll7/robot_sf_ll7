@@ -96,3 +96,9 @@ knowledge, not every transient iteration detail.
 
 Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve
 why a change was made rather than a full issue execution transcript.
+
+## Execution Workflow Notes
+
+- [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
+  SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
+  virtualenv boundaries.

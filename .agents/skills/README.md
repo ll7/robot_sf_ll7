@@ -1,6 +1,6 @@
 # Robot SF Skills
 
-This directory contains repo-local skills for Codex-style agents. Use this file as a quick index;
+This directory contains repo-local skills for Coding Agents. Use this file as a quick index;
 read the specific `SKILL.md` before applying a skill.
 
 ## Selection Guide

@@ -22,7 +22,7 @@ adjacent batching.
 - `.github/ISSUE_TEMPLATE/enhancement.md`
 - `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
 - `scripts/tools/project_priority_score.py`
-- `.codex/skills/gh-issue-template-auditor/SKILL.md`
+- `.agents/skills/gh-issue-template-auditor/SKILL.md`
 
 ## Workflow
 

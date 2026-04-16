@@ -131,6 +131,7 @@ def test_migrated_svg_map_loads() -> None:
     assert map_def is not None
     assert map_def.robot_routes
     assert map_def.ped_routes
+    assert map_def.obstacles
     assert all(
         obstacle.geometry is not None and obstacle.geometry.is_valid
         for obstacle in map_def.obstacles

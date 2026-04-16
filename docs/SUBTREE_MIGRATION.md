@@ -62,7 +62,7 @@ After migration, the `fast-pysf/` directory contains:
 fast-pysf/
 ├── .github/          # CI workflows
 ├── .gitignore
-├── .pylintrc
+├── legacy lint config
 ├── LICENSE
 ├── README.md
 ├── benchmarks/       # Performance benchmarks

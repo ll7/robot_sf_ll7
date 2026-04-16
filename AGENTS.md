@@ -12,7 +12,7 @@ Treat the following files as the repository-native context stack for Codex-style
 - `CLAUDE.md`: Claude Code entrypoint that imports `AGENTS.md` plus the repo-local memory index.
 - `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
   detailed topic files under `memory/`.
-- `code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
+- `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
   mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.

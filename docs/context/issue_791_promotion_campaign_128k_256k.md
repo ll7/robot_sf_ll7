@@ -189,9 +189,9 @@ CPU-foresight estimates.
 
 ## Queue State And Next-Wave Decision (as of 2026-04-16)
 
-Current queue snapshot: job `11608` is running on `a30`, jobs `11609` and `11610` are pending on
-`a30`, and job `11606` remains pending on `pro6000`. The first reward warm-start retry (`11607`)
-failed fast on an observation-space mismatch and is now historical.
+Current queue snapshot: job `11609` is running on `a30`, job `11610` is pending on `a30`, and
+job `11606` remains pending on `pro6000`. Job `11608` completed successfully, and the first reward
+warm-start retry (`11607`) failed fast on an observation-space mismatch and is now historical.
 
 ### Best-checkpoint preference
 
@@ -205,10 +205,10 @@ training chronology.
    Job `11607` was the first retry using [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml), but it still loaded the wrong model family and failed on an observation-space mismatch. The overlay was corrected back to the original `grid_socnav` / `MultiInputPolicy` contract and resubmitted as `11610`.
 
 2. **11582 baseline 1m env22** — continue from `best.zip`.
-   Job `11608` is the corrected retry of [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) and is currently running on `a30`.
+   Job `11608` is the corrected retry of [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) and completed successfully on `a30`.
 
 3. **11562 attention-head rerun** — direct SLURM rerun.
-   Job `11609` is the corrected retry of [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) and is currently pending on `a30`.
+   Job `11609` is the corrected retry of [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) and is currently running on `a30`.
 
 4. **11584 baseline 3m env22 full rerun** — low-priority overnight job.
    Job `11606` uses [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) and remains pending on `pro6000` by design.
@@ -218,8 +218,8 @@ training chronology.
 | Planned arm | Current job | Config | State | Partition |
 |-------------|-------------|--------|-------|-----------|
 | 11566 reward curriculum warm start | 11610 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml) | Pending | a30 |
-| 11582 baseline warm start | 11608 | [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) | Running | a30 |
-| 11562 attention-head rerun | 11609 | [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) | Pending | a30 |
+| 11582 baseline warm start | 11608 | [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) | Completed | a30 |
+| 11562 attention-head rerun | 11609 | [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) | Running | a30 |
 | 11584 full rerun | 11606 | [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) | Pending | pro6000 |
 
 ### Contract Corrections Already Applied

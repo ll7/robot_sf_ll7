@@ -25,7 +25,7 @@ Start here before expanding:
 3. `memory/MEMORY.md` for stable repo-local memory
 4. `.specify/memory/constitution.md`
 5. `docs/dev_guide.md`
-6. `code_review.md`
+6. `docs/code_review.md`
 7. `.agent/PLANS.md` for non-trivial work
 
 Then branch by task type:

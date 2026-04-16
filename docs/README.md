@@ -214,7 +214,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[UV Migration Notes](./UV_MIGRATION.md)** - Migration to UV package manager
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
 * **[Agents & Contributor Onboarding](../AGENTS.md)** - High-level repository structure, coding/testing conventions, workflow tips
-* **[Benchmark/Planner Review Guide](../code_review.md)** - Review checklist for benchmark semantics, normalization, scenario distributions, reproducibility, and provenance
+* **[Benchmark/Planner Review Guide](./code_review.md)** - Review checklist for benchmark semantics, normalization, scenario distributions, reproducibility, and provenance
 
 ### Simulation & UI
 

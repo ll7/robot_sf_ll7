@@ -22,7 +22,7 @@ behavior has direct evidence.
 ## Read First
 
 - `AGENTS.md`
-- `code_review.md`
+- `docs/code_review.md`
 - `docs/dev_guide.md`
 - `.specify/memory/constitution.md`
 - `.agent/PLANS.md` when the branch changes benchmark, training, or public workflow semantics

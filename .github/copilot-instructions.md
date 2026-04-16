@@ -22,6 +22,7 @@ It is everyones guide on how to use this repository effectively.
 - For measurement-driven improvement loops, use `.agents/skills/autoresearch/SKILL.md`.
   For shorter refinement passes, use `.agents/skills/auto-improvement/SKILL.md`.
   See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.
+- For the end-to-end AI coding workflow from prompt to PR, see `docs/ai/ai-workflow.md`.
 - For the repository's cross-agent compatibility stance (retrieval → planning → execution →
   verification discipline, accepted and rejected external concepts), see
   `docs/context/issue_728_coding_agents_compatibility.md`.

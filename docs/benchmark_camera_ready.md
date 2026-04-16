@@ -147,8 +147,8 @@ Expected tree:
     seed_variability_by_scenario.csv
     seed_episode_rows.csv
     statistical_sufficiency.json
-    seed_schedule_comparison.json
-    seed_schedule_comparison.md
+    seed_schedule_comparison.json       # optional comparison-script output
+    seed_schedule_comparison.md         # optional comparison-script output
     snqi_diagnostics.json
     snqi_diagnostics.md
     snqi_sensitivity.csv

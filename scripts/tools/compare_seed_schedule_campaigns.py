@@ -746,7 +746,10 @@ def _build_markdown(payload: dict[str, Any]) -> str:
             f"{'yes' if row.get('flagged') else 'no'} |"
         )
     if len(drift_rows) > 40:
-        lines.append(f"| ... | ... | ... | ... | ... | ... | {len(drift_rows) - 40} more rows |")
+        lines.append(
+            "| Table truncated | ... | ... | ... | ... | ... | "
+            f"{len(drift_rows) - 40} more rows not shown |"
+        )
 
     ranking = payload.get("ranking_stability", {})
     lines.extend(
@@ -789,7 +792,9 @@ def _build_markdown(payload: dict[str, Any]) -> str:
                 f"{row.get('candidate_winner')} |"
             )
         if len(changed) > 40:
-            lines.append(f"| ... | ... | {len(changed) - 40} more scenarios |")
+            lines.append(
+                f"| Table truncated | ... | {len(changed) - 40} more scenarios not shown |"
+            )
 
     lines.append("")
     return "\n".join(lines)

@@ -93,8 +93,9 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 S5 run in tmux:
 
 ```bash
+REPO_ROOT="$(pwd)"
 tmux new -d -s issue832_s5 -- \
-  zsh -lc 'cd /Users/lennart/git/robot_sf_ll7 && source .venv/bin/activate && caffeinate -dimsu uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --campaign-id issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log'
+  zsh -lc "cd \"$REPO_ROOT\" && source .venv/bin/activate && caffeinate -dimsu uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --campaign-id issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log"
 ```
 
 If the session stops early, re-run the same tmux command. The fixed `--campaign-id` targets the

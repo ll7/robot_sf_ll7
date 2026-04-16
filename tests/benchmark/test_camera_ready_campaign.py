@@ -261,9 +261,7 @@ def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
         assert cfg.kinematics_matrix == base_cfg.kinematics_matrix == ("differential_drive",)
         assert cfg.seed_policy.mode == "seed-set"
         assert cfg.seed_policy.seed_set == seed_set
-        assert [(p.key, p.algo, p.planner_group) for p in cfg.planners] == [
-            (p.key, p.algo, p.planner_group) for p in base_cfg.planners
-        ]
+        assert cfg.planners == base_cfg.planners
         assert _resolved_seed_inventory(_load_campaign_scenarios(cfg)) == expected_seeds
 
 
@@ -952,6 +950,85 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     assert any(
         "most_likely_reason='worker crash'" in warning for warning in summary_payload["warnings"]
     )
+
+
+def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Existing episode records should stay visible when a resumed attempt fails."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_resume_failure.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resume_failure",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "resume: true",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, algo, benchmark_profile, kwargs
+        Path(out_path).write_text(
+            json.dumps(
+                {
+                    "scenario_id": "smoke",
+                    "seed": 111,
+                    "termination_reason": "success",
+                    "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "status": "failed",
+            "total_jobs": 1,
+            "written": 0,
+            "failed_jobs": 1,
+            "failures": [{"scenario_id": "smoke", "seed": 111, "error": "resume crash"}],
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="resume_failure")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_row = summary_payload["planner_rows"][0]
+
+    assert planner_row["status"] == "failed"
+    assert planner_row["episodes"] == 1
+    assert planner_row["most_likely_failure_reason"] == "resume crash"
 
 
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:

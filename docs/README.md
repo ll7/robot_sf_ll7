@@ -553,4 +553,4 @@ When contributing to the project:
 
 ---
 
-_Last updated: February 2026 - Cold/warm performance regression suite added_
+_Last updated: April 2026 - Paper-matrix extended seed schedule context added_

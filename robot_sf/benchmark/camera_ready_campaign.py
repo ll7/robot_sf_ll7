@@ -2794,7 +2794,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             _write_json(planner_dir / "summary.json", summary)
 
             records: list[dict[str, Any]] = []
-            if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
+            if episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
                 summary["episodes_total"] = len(records)
                 if status == "ok":

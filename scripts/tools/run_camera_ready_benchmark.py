@@ -47,6 +47,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional label suffix embedded into campaign_id.",
     )
     parser.add_argument(
+        "--campaign-id",
+        type=str,
+        default=None,
+        help=(
+            "Optional exact campaign directory id. Use with resume-enabled configs to continue "
+            "an interrupted campaign root."
+        ),
+    )
+    parser.add_argument(
         "--skip-publication-bundle",
         action="store_true",
         help="Skip publication bundle export even if enabled in config.",
@@ -82,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg,
             output_root=args.output_root,
             label=args.label,
+            campaign_id=args.campaign_id,
             invoked_command=invoked_command,
         )
         result = {
@@ -109,6 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg,
             output_root=args.output_root,
             label=args.label,
+            campaign_id=args.campaign_id,
             skip_publication_bundle=bool(args.skip_publication_bundle),
             invoked_command=invoked_command,
         )

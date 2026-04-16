@@ -87,6 +87,14 @@ Current promoted all-planners baseline run:
   + `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
+* `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
+  + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
+  + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,
+    and publication/export contract; only the named seed set changes
+* `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml`
+  + escalation target using `paper_eval_s10=[111..120]`
+  + use when the S5 comparison still shows material interval width, ranking, or scenario-winner
+    instability
 
 * `configs/algos/prediction_planner_camera_ready.yaml`
   + explicit `prediction_planner` camera-ready profile used by all-planners presets
@@ -139,6 +147,8 @@ Expected tree:
     seed_variability_by_scenario.csv
     seed_episode_rows.csv
     statistical_sufficiency.json
+    seed_schedule_comparison.json       # optional comparison-script output
+    seed_schedule_comparison.md         # optional comparison-script output
     snqi_diagnostics.json
     snqi_diagnostics.md
     snqi_sensitivity.csv
@@ -306,6 +316,55 @@ bootstrap_confidence: 0.95
 bootstrap_seed: 123
 ```
 
+For full paper-matrix seed-count extensions, use the named seed sets in
+`configs/benchmarks/seed_sets_v1.yaml`:
+
+* `eval` / S3: `[111,112,113]`, the frozen paper-facing baseline.
+* `paper_eval_s5` / S5: `[111,112,113,114,115]`, the first staged full-matrix extension.
+* `paper_eval_s10` / S10: `[111..120]`, the escalation target when S5 is still unstable.
+* `paper_eval_s20` / S20: `[111..130]`, a high-cost reference schedule for later variance
+  power checks.
+
+Interpret extended-seed comparisons with the following default decision criteria:
+
+* CI-width reduction target: at least 20% relative reduction in mean CI width per metric, while
+  accepting unchanged zero-width intervals as already tight.
+* Aggregate mean drift: flag planner/metric rows whose absolute drift exceeds
+  `max(0.02, 5% of the S3 mean)`.
+* Ranking stability: flag if Kendall tau on planner-level `snqi_mean` falls below `0.8`.
+* Scenario-winner stability: flag if more than 10% of comparable scenarios change winner under
+  scenario-level `snqi`.
+
+Staged stopping rule:
+
+* Run S5 first under the same matrix, planner, kinematics, SNQI, bootstrap, and export settings as
+  S3.
+* Stop at S5 when planner ranking is stable, scenario-winner changes are within threshold, and no
+  aggregate drift trigger changes the interpretation. CI-width target misses are reported as
+  precision caveats, not automatic headline changes.
+* Escalate to S10 when S5 crosses the ranking, scenario-winner, or aggregate-drift thresholds.
+* Reserve S20 for a dedicated high-cost reference run when S10 still leaves manuscript-relevant
+  uncertainty.
+
+Canonical S5 preflight:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml \
+  --mode preflight \
+  --label issue832_s5_preflight
+```
+
+Canonical resumable S5 run in tmux:
+
+```bash
+tmux new -d -s issue832_s5 -- \
+  zsh -lc 'cd /path/to/robot_sf_ll7 && source .venv/bin/activate && caffeinate -dimsu uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --campaign-id issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log'
+```
+
+Re-run the same command to resume an interrupted root; `--campaign-id` keeps the output directory
+stable and `resume: true` skips completed episode ids.
+
 Grouping semantics:
 
 * raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
@@ -423,6 +482,20 @@ uv run python scripts/tools/compare_camera_ready_campaigns.py \
 
 Use this to validate quality changes (for example predictive planner success/collision deltas)
 after compatibility or config fixes.
+
+Seed-schedule comparison helper:
+
+```bash
+uv run python scripts/tools/compare_seed_schedule_campaigns.py \
+  --base-campaign-root output/benchmarks/camera_ready/<s3_campaign_id> \
+  --candidate-campaign-root output/benchmarks/camera_ready/<s5_or_s10_campaign_id> \
+  --output-json output/benchmarks/camera_ready/<s5_or_s10_campaign_id>/reports/seed_schedule_comparison.json \
+  --output-md output/benchmarks/camera_ready/<s5_or_s10_campaign_id>/reports/seed_schedule_comparison.md
+```
+
+Use the seed-schedule comparison for issue-832-style stability checks. It consumes the versioned
+campaign outputs and reports CI-width changes, aggregate mean drift, planner ranking correlation,
+scenario-level winner changes, and a conservative `stable` / `review` interpretation.
 
 Analyzer findings now also include portability checks, including detection of
 absolute `scenario_params.map_file` paths in episodes (these should be

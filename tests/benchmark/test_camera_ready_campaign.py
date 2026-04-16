@@ -21,6 +21,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _jsonable_repo_relative,
     _load_campaign_scenarios,
     _planner_report_row,
+    _resolved_seed_inventory,
     _sanitize_csv_cell,
     _sanitize_git_remote,
     _sanitize_name,
@@ -237,6 +238,31 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
 
     ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
     assert ppo_cfg["fallback_to_goal"] is False
+
+
+def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
+    """Extended seed configs should change only the named seed schedule."""
+    base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))
+    s5_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml")
+    )
+    s10_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml")
+    )
+
+    for cfg, seed_set, expected_seeds in (
+        (s5_cfg, "paper_eval_s5", [111, 112, 113, 114, 115]),
+        (s10_cfg, "paper_eval_s10", [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]),
+    ):
+        assert cfg.paper_facing is True
+        assert cfg.paper_profile_version == base_cfg.paper_profile_version == "paper-matrix-v1"
+        assert cfg.scenario_matrix_path == base_cfg.scenario_matrix_path
+        assert cfg.comparability_mapping_path == base_cfg.comparability_mapping_path
+        assert cfg.kinematics_matrix == base_cfg.kinematics_matrix == ("differential_drive",)
+        assert cfg.seed_policy.mode == "seed-set"
+        assert cfg.seed_policy.seed_set == seed_set
+        assert cfg.planners == base_cfg.planners
+        assert _resolved_seed_inventory(_load_campaign_scenarios(cfg)) == expected_seeds
 
 
 def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:
@@ -926,6 +952,85 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     )
 
 
+def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Existing episode records should stay visible when a resumed attempt fails."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_resume_failure.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resume_failure",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "resume: true",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, algo, benchmark_profile, kwargs
+        Path(out_path).write_text(
+            json.dumps(
+                {
+                    "scenario_id": "smoke",
+                    "seed": 111,
+                    "termination_reason": "success",
+                    "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "status": "failed",
+            "total_jobs": 1,
+            "written": 0,
+            "failed_jobs": 1,
+            "failures": [{"scenario_id": "smoke", "seed": 111, "error": "resume crash"}],
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="resume_failure")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_row = summary_payload["planner_rows"][0]
+
+    assert planner_row["status"] == "failed"
+    assert planner_row["episodes"] == 1
+    assert planner_row["most_likely_failure_reason"] == "resume crash"
+
+
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     """Markdown report tables should escape raw cell separators from planner metadata."""
     report_path = tmp_path / "campaign_report.md"
@@ -1072,6 +1177,35 @@ def test_planner_report_row_backfills_collision_means_from_termination_reason() 
     assert row["success_ci_high"] == "nan"
     assert row["collision_ci_low"] == "nan"
     assert row["collision_ci_high"] == "nan"
+
+
+def test_planner_report_row_counts_existing_records_after_resume() -> None:
+    """Resumed campaign rows should report total records, not only newly written rows."""
+    planner = PlannerSpec(key="goal", algo="goal")
+    summary = {
+        "status": "ok",
+        "written": 0,
+        "episodes_total": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 0.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {},
+    }
+    records = [
+        {"termination_reason": "success", "metrics": {"success": 1.0, "snqi": -0.1}},
+        {"termination_reason": "timeout", "metrics": {"success": 0.0, "snqi": -0.2}},
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["episodes"] == 2
 
 
 def test_planner_report_row_uses_episode_ci_placeholders_when_means_are_backfilled() -> None:
@@ -1814,6 +1948,42 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     first = matrix_payload["rows"][0]
     assert first["planner_group"] == "core"
     assert first["kinematics"] == "differential_drive"
+
+
+def test_prepare_campaign_preflight_accepts_fixed_campaign_id(tmp_path: Path) -> None:
+    """Fixed campaign ids should make interrupted campaign roots resumable."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: fixed_id",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(
+        cfg,
+        output_root=tmp_path / "out",
+        label="ignored",
+        campaign_id="Issue 832 S5 Resume",
+    )
+
+    assert prepared["campaign_id"] == "issue_832_s5_resume"
+    assert Path(prepared["campaign_root"]).name == "issue_832_s5_resume"
 
 
 def test_prepare_campaign_preflight_emits_route_clearance_warnings(

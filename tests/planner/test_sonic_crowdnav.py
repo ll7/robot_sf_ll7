@@ -299,6 +299,47 @@ def test_adapter_pads_missing_pedestrian_velocity_rows(tmp_path: Path) -> None:
     assert np.allclose(inputs["spatial_edges"][0, 1, 0:2], inputs["spatial_edges"][0, 1, 6:8])
 
 
+def test_adapter_sorts_only_populated_pedestrian_rows(tmp_path: Path) -> None:
+    """Sentinel padding rows must not sort ahead of far visible pedestrians."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    adapter = SonicCrowdNavAdapter(
+        build_sonic_crowdnav_config(
+            {
+                "repo_root": str(repo_root),
+                "checkpoint_name": "05207.pt",
+            }
+        )
+    )
+
+    _linear, _angular, meta = adapter.act(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "heading": [0.0],
+                "velocity_xy": [0.0, 0.0],
+                "radius": [0.3],
+            },
+            "goal": {"current": [5.0, 0.0]},
+            "pedestrians": {
+                "positions": [[20.0, 0.0], [1.0, 0.0]],
+                "velocities": [[0.0, 0.0], [0.0, 0.0]],
+                "count": [2],
+            },
+        },
+        time_step=0.25,
+    )
+
+    assert meta["human_count"] == 2
+    assert meta["detected_human_num"] == 2
+    inputs = adapter._policy.__class__.LAST_INPUTS
+    assert inputs is not None
+    assert inputs["visible_masks"].tolist() == [[1.0, 1.0, 0.0]]
+    assert float(inputs["spatial_edges"][0, 0, 0]) == pytest.approx(1.0)
+    assert float(inputs["spatial_edges"][0, 1, 0]) == pytest.approx(20.0)
+    assert float(inputs["spatial_edges"][0, 2, 0]) == pytest.approx(15.0)
+
+
 def test_adapter_fails_fast_on_missing_assets_or_incompatible_source(tmp_path: Path) -> None:
     """The adapter should refuse to load missing assets or unsupported upstream kinematics."""
     with pytest.raises(FileNotFoundError, match="SoNIC-Social-Nav checkout not found"):

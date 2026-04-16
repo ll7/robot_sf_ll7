@@ -480,11 +480,11 @@ class SonicCrowdNavAdapter:
             visible_masks[i] = 1.0
 
         if used > 0:
-            distances = np.linalg.norm(spatial_edges[:, :2], axis=1)
+            distances = np.linalg.norm(spatial_edges[:used, :2], axis=1)
             order = np.argsort(distances, kind="stable")
-            spatial_edges = spatial_edges[order]
-            conformity_scores = conformity_scores[order]
-            visible_masks = visible_masks[order]
+            spatial_edges[:used] = spatial_edges[:used][order]
+            conformity_scores[:used] = conformity_scores[:used][order]
+            visible_masks[:used] = visible_masks[:used][order]
 
         detected_human_num = max(1, used)
         payload = {

@@ -8,7 +8,7 @@ description: "Run the repository PR readiness pipeline using shared scripts/dev 
 ## Overview
 
 Run the same PR validation pipeline used by local VS Code tasks, but via reusable
-`scripts/dev` commands that are stable for Codex automation.
+`scripts/dev` commands that are stable for Agent automation.
 
 ## Workflow
 

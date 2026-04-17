@@ -1,6 +1,6 @@
 # AI Repo Overview
 
-This document is the shortest reliable orientation for Codex-style agents working in
+This document is the shortest reliable orientation for Coding Agents working in
 `robot_sf_ll7`.
 
 ## Mission

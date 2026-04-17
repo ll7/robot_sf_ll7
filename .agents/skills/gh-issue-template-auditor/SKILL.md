@@ -25,7 +25,7 @@ metadata cleanup.
 - `.github/ISSUE_TEMPLATE/planner_integration.md`
 - `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
 - `scripts/tools/issue_template_audit.py`
-- `.codex/skills/gh-issue-clarifier/SKILL.md`
+- `.agents/skills/gh-issue-clarifier/SKILL.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
 
 ## What to Check

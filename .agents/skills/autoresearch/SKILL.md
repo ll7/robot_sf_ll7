@@ -10,7 +10,7 @@ description: "Autonomous iterative experimentation loop for measurable Robot SF 
 Use this skill when the task has a measurable metric and the user wants an autonomous improvement
 loop rather than a single pass fix.
 
-This is the Codex-compatible version of the upstream `autoresearch` idea adapted to Robot SF's
+This is the Agent-compatible version of the upstream `autoresearch` idea adapted to Robot SF's
 repo-local workflow, validation gates, and benchmark conservatism.
 
 ## Read First

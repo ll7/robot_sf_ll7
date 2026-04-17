@@ -213,14 +213,34 @@ training chronology.
 4. **11584 baseline 3m env22 full rerun** — low-priority overnight job.
    Job `11606` uses [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) and remains pending on `pro6000` by design.
 
-### Current retry status
+### Current retry status (updated 2026-04-17)
 
 | Planned arm | Current job | Config | State | Partition |
 |-------------|-------------|--------|-------|-----------|
-| 11566 reward curriculum warm start | 11610 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml) | Pending | a30 |
+| 11566 reward curriculum warm start | 11610 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml) | Completed 2026-04-17T02:37 (plateau confirmed) | a30 |
 | 11582 baseline warm start | 11608 | [expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml) | Completed | a30 |
-| 11562 attention-head rerun | 11609 | [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) | Running | a30 |
-| 11584 full rerun | 11606 | [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) | Pending | pro6000 |
+| 11562 attention-head rerun | 11609 | [expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml) | Running (~10.1M steps, near completion) | a30 |
+| 11584 full rerun | 11606 | [expert_ppo_issue_791_baseline_promotion_3m_env22.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml) | Failed (pro6000 allocation issue 2026-04-16) | pro6000 |
+
+### 2026-04-17 Latest Findings
+
+**Reward curriculum plateau confirmed.** Warm restart job 11610 (WandB run `x4qe2phu`) loaded `best.zip` from job 11566 and ran another ~10M steps over 1h 14m on a30. It reached exactly the same best checkpoint value as the source (`best/checkpoint_value=0.58571`, `best/collision_rate=0.38571` at step 9,961,472), and the final evaluation slipped back to `success_rate=0.529`, `collision_rate=0.414`. This is direct proof that the current recipe has exhausted its headroom at this compute budget: more steps from the best-known policy do not lift either metric.
+
+**Train/eval gap is the dominant ceiling, not compute or architecture.** Rollout `success_rate` in job 11609 stabilized at 0.70–0.82 from step ~3M onward, while the 70-episode eval oscillates in 0.30–0.40. The eval set (`ppo_full_maintained_eval_v1.yaml`) is a superset of the training set — it adds atomic navigation archetypes (`issue_596_frame_consistency`, `issue_596_static_obstacles`, `issue_596_topology`, `issue_596_dynamic`, `issue_596_robustness`) that the training distribution never samples. The ~0.30 gap between rollout and eval success is therefore an out-of-distribution generalization gap.
+
+**Attention head 10M ceiling is below reward curriculum.** Job 11609 WandB run `0hto2j2i` peaked at eval `success_rate=0.40` near 7.3M steps (collision 0.586) and has oscillated in 0.30–0.40 / 0.57–0.70 since. It matches curriculum at 128k/256k but does not surpass it at 10M and sits below the reward-curriculum leader (`0.586`).
+
+**Confirmed campaign leaderboard after 11610 completion:**
+
+| Run | Best eval success | Best eval collision | Best step | WandB |
+|-----|-------------------|---------------------|-----------|-------|
+| 11566 reward curriculum 10m | **0.58571** | 0.37143 | 8,912,896 | (historical) |
+| 11610 reward curriculum warm-restart | 0.58571 (tie, no gain) | 0.38571 | 9,961,472 | `x4qe2phu` |
+| 11609 attention-head 10m | ~0.40 (running, ~10.1M) | ~0.543 | ~7.3M | `0hto2j2i` |
+| 11474 baseline 256k | 0.343 | 0.629 | 262,144 | `bv04bj9h` |
+| 11608 baseline 1m warm | 0.31429 | 0.600 | 1,000,000 | `tbsty04a` |
+
+The leader is the reward-curriculum family; the remaining promotion gap is generalization, not optimization.
 
 ### Contract Corrections Already Applied
 
@@ -252,18 +272,32 @@ grep -E 'Training startup summary: policy_id=ppo_expert_issue_791_attention_head
 
 ## Next Decisions / Follow-ups
 
-1. **Monitor 11566 and 11582 first.** Their warm starts now come from `best.zip`, which is the
-   preferred continuation path when the goal is to preserve the strongest observed policy.
+### Previous wave (resolved)
 
-2. **Watch 11562 for the loader-fix validation signal.** This rerun is now the direct proof point
-   for the issue-830 fix under the full long-horizon configuration.
+1. ~~Monitor 11566 and 11582 warm starts.~~ Done: 11610 (reward curriculum warm) tied the source
+   checkpoint (plateau proof). 11608 (baseline warm) completed at 0.314.
+2. ~~Watch 11562 for the loader-fix validation signal.~~ Done: 11609 rerun ran cleanly through
+   ~10M steps with no loader crash; issue-830 fix is validated in production.
+3. ~~Expect 11584 to start later on `pro6000`.~~ Resolved: 11606 on pro6000 failed again on an
+   allocation issue; the 3M baseline arm is deprioritized since 11582 already gave a 1M anchor.
 
-3. **Expect 11584 to start later on `pro6000`.** That is intentional and matches the low-priority
-   weekday-overflow rule recorded in `local.machine.md`.
+### 2026-04-17 next-wave hypotheses (post-plateau)
 
-4. **Keep the reasoning attached to the execution surfaces.** The warm-start source, priority
-   ordering, and `pro6000` routing are now recorded in this note and in the submission metadata
-   used to launch the jobs.
+The dominant finding is a ~0.30 train/eval generalization gap that is not closed by more compute
+on the same distribution. The next wave should attack that gap directly rather than chase more
+training-rollout throughput:
+
+1. **Scenario-aligned training (top priority).** Train on `ppo_full_maintained_eval_v1.yaml` so
+   the atomic archetypes in the eval set are in the training distribution. Expected to close a
+   large portion of the OOD gap and lift eval success above the 0.586 plateau.
+2. **Reward-curriculum warm start with exploration boost.** Continue from 11566 `best.zip` with
+   `ent_coef` bumped from 0.008 → 0.02, `clip_range` 0.1 → 0.15, `target_kl` 0.02 → 0.03. Tests
+   whether the plateau is an exploitation lock-in and not a capability ceiling.
+3. **Curriculum + asymmetric critic combined at 10M.** Pair the two best single-factor wins
+   (reward curriculum + asymmetric critic) with GPU foresight and 22 envs. This combination was
+   not benchmarked together at 10M with GPU foresight.
+
+These are the three submitted arms — see "Wave 4 submissions" below.
 
 ---
 
@@ -328,6 +362,97 @@ Auxme reliability helpers added on 2026-04-15:
 - Reliability helper follow-up: ensure partition/qos are forwarded to `sbatch` as explicit args;
    routing hints used only for wall-time discovery are insufficient and can silently fall back to
    the script-local partition defaults.
+
+## Wave 4 — 10+ Proposed Approaches And Selected Submissions (2026-04-17)
+
+### Proposal list
+
+Every approach is framed against the current leader (11566 reward curriculum 10M,
+`success_rate=0.58571`, `collision=0.37143`). Ranked roughly by expected return on cluster
+budget.
+
+1. **Scenario-aligned training set.** Train on `ppo_full_maintained_eval_v1.yaml` so the atomic
+   `issue_596_*` archetypes in the eval set are in-distribution during training. The ~0.30 gap
+   between rollout success (0.75) and eval success (0.40) is almost entirely OOD generalization,
+   so this should move the ceiling more than any hyperparameter tweak.
+2. **Warm-start with exploration boost.** Resume from 11566 `best.zip`, raise `ent_coef`
+   (0.008 → 0.02), loosen `clip_range` (0.1 → 0.15) and `target_kl` (0.02 → 0.03). Tests whether
+   the plateau is exploitation lock-in rather than a capability ceiling.
+3. **Combined asymmetric critic + reward curriculum + GPU foresight + eval-aligned scenarios.**
+   Never benchmarked as a combined long-run with GPU foresight; compounds several working
+   ingredients on the bottleneck distribution.
+4. **LR schedule: linear decay from 1.5e-4 to 1e-5.** Fresh training with higher initial LR to
+   escape the 7.5e-5 flat plateau, then anneal for stability.
+5. **Longer PPO rollout horizon (`n_steps`) per env.** Default is 2048; moving to 4096 improves
+   advantage estimation and GAE quality, typically helps long-horizon tasks at a modest wall-time
+   cost.
+6. **Larger policy capacity.** Widen `grid_channels` to `[64, 128, 128]` and
+   `socnav_hidden_dims` to `[256, 256]`; the current grid CNN may be capacity-limited for the
+   atomic archetypes.
+7. **Recurrent PPO (LSTM policy).** Temporal memory over pedestrian dynamics; the current policy
+   is reactive and foresight-conditioned only, which can lose information on multi-step interaction
+   patterns.
+8. **Curriculum on scenario difficulty.** Phase-in harder sampling weights (low → medium → high
+   density) gated on running success-rate, instead of a static `weights` block.
+9. **Reward shaping: stronger terminal bonus or progress weight.** Raise `terminal_bonus`
+   (20 → 30) or `progress` (1.1 → 1.5); rollout success is already high so the policy may need
+   sharper signal on episode completion.
+10. **Multi-seed ensemble search (3 seeds × 3M each).** PPO is seed-sensitive; a cheap fan-out can
+    reveal whether the 0.586 plateau is seed-specific or a true distribution ceiling.
+11. **Disable predictive foresight at 10M.** Test if the GPU-predictive adapter actually helps at
+    long horizon, or is acting as noise against an already well-conditioned grid observation.
+12. **Domain randomization on pedestrian density.** Sample `max_peds_per_group` and pedestrian
+    count within an expanded range so the policy sees crowd-density OOD states during training.
+13. **Self-play / history-augmented sampling.** Mix scenarios where the robot starts from
+    mid-episode states that were previously collisions, forcing the policy to learn recovery.
+14. **Two-stage training pipeline.** Stage A (3M) on classic-only for fast progress acquisition,
+    Stage B (7M) warm-started on the eval-aligned superset for generalization lift.
+
+### Candidate selection
+
+Selected the three highest-expected-return arms that are independent enough to distinguish which
+lever moved the needle:
+
+| Wave 4 arm | Intervention | Expected lever | Cost |
+|------------|--------------|----------------|------|
+| **A (eval-aligned curriculum)** | Train on `ppo_full_maintained_eval_v1.yaml` | Generalization gap | 10M, a30/l40s |
+| **B (warm-start exploration boost)** | Resume 11566 `best.zip` with `ent_coef=0.02`, `clip_range=0.15`, `target_kl=0.03` | Exploitation lock-in | 10M, a30/l40s |
+| **C (asymmetric critic + eval-aligned)** | Combined asymmetric critic + reward curriculum + GPU foresight + eval-aligned set | Generalization × privileged-critic interaction | 10M, a30/l40s |
+
+Rationale: A tests the OOD hypothesis directly, B tests the exploitation-lockin hypothesis
+against the same source checkpoint, and C compounds the two ingredients we have strongest
+evidence for (reward curriculum leadership + asymmetric critic architecture) onto the
+eval-aligned distribution.
+
+### Wave 4 submissions
+
+| Arm | Config | Wrapper | Job | Partition | Node |
+|-----|--------|---------|-----|-----------|------|
+| A | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml) | `issue_791_reward_curriculum.sl` | **11660 (RUNNING)** | a30 | auxme-imech172 |
+| B | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml) | `issue_791_reward_curriculum.sl` | **11661 (RUNNING)** | l40s | auxme-imech091 |
+| C | [expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml) | `issue_791_asymmetric_critic.sl` | **11662 (RUNNING)** | l40s | auxme-imech093 |
+
+All three started within seconds of submission on 2026-04-17. Job 11609 (attention-head rerun)
+is also still running on a30 as the fourth concurrent issue-791 job this wave.
+
+Submission commands (run from repo root):
+
+```bash
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml \
+  --job-name robot-sf-issue791-rc-eval-aligned \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml \
+  --job-name robot-sf-issue791-rc-explore-boost \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml \
+  --job-name robot-sf-issue791-asym-eval-aligned \
+  SLURM/Auxme/issue_791_asymmetric_critic.sl
+```
 
 ## Relevant Docs
 

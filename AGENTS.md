@@ -4,6 +4,7 @@ Use `AGENTS.md`, `.specify/memory/constitution.md`, and `docs/dev_guide.md` to g
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
+Keep prompts, instructions, and handoff notes as streamlined and token-efficient as possible while preserving the same meaning and constraints.
 
 ## Agent Context Stack
 Treat the following files as the repository-native context stack for Agent-style agents:

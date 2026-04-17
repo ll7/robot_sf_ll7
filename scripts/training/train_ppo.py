@@ -1057,8 +1057,7 @@ def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
             policy_kwargs["features_extractor_kwargs"] = dict(config.feature_extractor_kwargs)
     elif extractor not in {"default", ""}:
         logger.warning(
-            "Unknown feature_extractor '{}'; falling back to SB3 default. "
-            "Known values: {}",
+            "Unknown feature_extractor '{}'; falling back to SB3 default. Known values: {}",
             extractor,
             ", ".join(sorted(_FEATURE_EXTRACTOR_REGISTRY)),
         )
@@ -2542,7 +2541,18 @@ def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
         if config.seeds:
             logger.warning("randomize_seeds enabled; ignoring provided seeds for training.")
     elif config.seeds:
-        common.set_global_seed(int(config.seeds[0]))
+        deterministic = True
+        feature_extractor = str(config.feature_extractor).strip().lower()
+        if feature_extractor == "lightweight_cnn":
+            deterministic = False
+            logger.warning(
+                "LIGHTWEIGHT_CNN DETerminism Override: this run intentionally disables "
+                "torch deterministic algorithms because lightweight_cnn hits CUDA adaptive "
+                "avg-pool backward kernels that are not deterministic on this backend. "
+                "The run is valid, but its training trajectory is not bitwise reproducible "
+                "and should not be compared as a deterministic baseline."
+            )
+        common.set_global_seed(int(config.seeds[0]), deterministic=deterministic)
 
 
 def _persist_expert_checkpoint(

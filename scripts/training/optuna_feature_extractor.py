@@ -25,7 +25,7 @@ SLURM distributed:
         --config configs/training/ppo/feature_extractor_sweep_base.yaml \\
         --trials 20 --trial-timesteps 4000000 \\
         --slurm --slurm-time 08:00:00 --slurm-gpus 1 --slurm-cpus 8 \\
-        --study-name feat_sweep_4m --storage sqlite:///output/optuna/feat_sweep_4m.db
+        --study-name feat_sweep_4m --storage sqlite:///output/optuna/feat_extractor/feat_sweep_4m.db
 
 Search space
 ------------
@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import copy
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -64,6 +65,9 @@ _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "
 _DEFAULT_STORAGE_ROOT = Path("output/optuna/feat_extractor").resolve()
 _ALLOWED_SQLITE_ROOT = Path("output").resolve()
 _DEFAULT_FPS_WARN_THRESHOLD = 100.0
+_KNOWN_DETERMINISTIC_CUDA_MARKER = (
+    "adaptive_avg_pool2d_backward_cuda does not have a deterministic implementation"
+)
 
 # ---------------------------------------------------------------------------
 # Architecture search space
@@ -122,7 +126,12 @@ def _extractor_kwargs(extractor_type: str, arch_size: str, dropout_rate: float) 
         cfg = {
             "small": {"hidden_size": 32, "num_layers": 1, "bidirectional": False},
             "medium": {"hidden_size": 64, "num_layers": 1, "bidirectional": False},
-            "large": {"hidden_size": 128, "num_layers": 2, "lstm_dropout": 0.1, "bidirectional": True},
+            "large": {
+                "hidden_size": 128,
+                "num_layers": 2,
+                "lstm_dropout": 0.1,
+                "bidirectional": True,
+            },
         }
         drive = {"small": [16, 8], "medium": [32, 16], "large": [64, 32]}
         return {**cfg[arch_size], "drive_hidden_dims": drive[arch_size]}
@@ -132,6 +141,7 @@ def _extractor_kwargs(extractor_type: str, arch_size: str, dropout_rate: float) 
 # ---------------------------------------------------------------------------
 # Optuna helpers
 # ---------------------------------------------------------------------------
+
 
 def _sanitize_name(raw: str, fallback: str = "optuna_feat") -> str:
     sanitized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in raw.strip())
@@ -168,9 +178,25 @@ def _configure_optuna_verbosity(log_level: str) -> None:
         optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 
+def _sampler_seed(base_seed: int, worker_index: int | None) -> int:
+    """Return the deterministic Optuna sampler seed for one worker process."""
+    if worker_index is None:
+        return base_seed
+    return (base_seed + worker_index * 1_000_003) % (2**32 - 1)
+
+
+def _classify_trial_failure(exc: BaseException) -> tuple[str, str]:
+    """Return a stable failure type plus a concise message for Optuna attrs."""
+    message = str(exc)
+    if _KNOWN_DETERMINISTIC_CUDA_MARKER in message:
+        return "deterministic_cuda_kernel", message
+    return type(exc).__name__, message
+
+
 # ---------------------------------------------------------------------------
 # Trial config builder
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class _TrialSpec:
@@ -206,7 +232,9 @@ def _suggest_trial(trial: optuna.Trial) -> _TrialSpec:
     )
 
 
-def _apply_trial_spec(base_config: Any, spec: _TrialSpec, trial_num: int, args: argparse.Namespace, study_name: str) -> Any:
+def _apply_trial_spec(
+    base_config: Any, spec: _TrialSpec, trial_num: int, args: argparse.Namespace, study_name: str
+) -> Any:
     """Patch a deep-copied base config with trial-specific values.
 
     Args:
@@ -220,7 +248,9 @@ def _apply_trial_spec(base_config: Any, spec: _TrialSpec, trial_num: int, args: 
         Modified config ready for ``run_expert_training``.
     """
     config = copy.deepcopy(base_config)
-    config.policy_id = f"{base_config.policy_id}_fe_{trial_num:03d}_{spec.extractor_type}_{spec.arch_size}"
+    config.policy_id = (
+        f"{base_config.policy_id}_fe_{trial_num:03d}_{spec.extractor_type}_{spec.arch_size}"
+    )
     config.feature_extractor = spec.extractor_type
     config.feature_extractor_kwargs = spec.extractor_kwargs
     config.policy_net_arch = spec.policy_arch
@@ -262,6 +292,7 @@ def _apply_trial_spec(base_config: Any, spec: _TrialSpec, trial_num: int, args: 
 # Objective
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class _ObjectiveContext:
     args: argparse.Namespace
@@ -297,10 +328,26 @@ def _make_objective(ctx: _ObjectiveContext):
         trial.set_user_attr("extractor_kwargs", spec.extractor_kwargs)
 
         # ---- train --------------------------------------------------------
-        from train_ppo import _resolve_num_envs, load_expert_training_config, run_expert_training  # noqa: F401
+        from train_ppo import (  # noqa: F401
+            _resolve_num_envs,
+            load_expert_training_config,
+            run_expert_training,
+        )
 
         t0 = time.monotonic()
-        result = run_expert_training(config, config_path=ctx.config_path, dry_run=False)
+        try:
+            result = run_expert_training(config, config_path=ctx.config_path, dry_run=False)
+        except Exception as exc:
+            failure_type, failure_message = _classify_trial_failure(exc)
+            trial.set_user_attr("failure_type", failure_type)
+            trial.set_user_attr("failure_message", failure_message[:1000])
+            logger.warning(
+                "Trial {} failed during training: {} ({})",
+                trial.number,
+                failure_type,
+                failure_message,
+            )
+            raise
         elapsed = max(time.monotonic() - t0, 1e-6)
 
         # FPS measured as total env steps / wall-clock seconds.
@@ -344,7 +391,8 @@ def _make_objective(ctx: _ObjectiveContext):
 # SLURM launcher
 # ---------------------------------------------------------------------------
 
-def _submit_slurm_jobs(
+
+def _submit_slurm_jobs(  # noqa: PLR0913
     *,
     n_trials: int,
     config: str,
@@ -362,6 +410,8 @@ def _submit_slurm_jobs(
     disable_wandb: bool,
     log_level: str,
     fps_warn_threshold: float,
+    seed: int,
+    extractor_exclude: list[str],
 ) -> None:
     """Submit N independent SLURM jobs that each pick up one Optuna trial.
 
@@ -386,34 +436,52 @@ def _submit_slurm_jobs(
         disable_wandb: Whether to disable W&B in SLURM jobs.
         log_level: Loguru log level for worker jobs.
         fps_warn_threshold: FPS below which a trial is flagged as slow.
+        seed: Base Optuna sampler seed.
+        extractor_exclude: Extractor types to exclude in worker jobs.
     """
     script = Path(__file__).resolve()
     python = sys.executable
 
     base_cmd = [
-        python, str(script),
-        "--config", config,
-        "--trials", "1",
-        "--storage", storage,
-        "--study-name", study_name,
-        "--trial-timesteps", str(trial_timesteps),
-        "--eval-every", str(eval_every),
-        "--eval-episodes", str(eval_episodes),
-        "--metric", metric,
-        "--fps-warn-threshold", str(fps_warn_threshold),
-        "--log-level", log_level,
+        python,
+        str(script),
+        "--config",
+        config,
+        "--trials",
+        "1",
+        "--storage",
+        storage,
+        "--study-name",
+        study_name,
+        "--trial-timesteps",
+        str(trial_timesteps),
+        "--eval-every",
+        str(eval_every),
+        "--eval-episodes",
+        str(eval_episodes),
+        "--metric",
+        metric,
+        "--fps-warn-threshold",
+        str(fps_warn_threshold),
+        "--log-level",
+        log_level,
+        "--seed",
+        str(seed),
     ]
     if disable_wandb:
         base_cmd.append("--disable-wandb")
+    if extractor_exclude:
+        base_cmd.append("--extractor-exclude")
+        base_cmd.extend(extractor_exclude)
 
     sbatch_flags = [
         f"--time={slurm_time}",
         f"--cpus-per-task={slurm_cpus}",
         f"--mem={slurm_mem}",
         f"--gres=gpu:{slurm_gpus}",
-        f"--output=output/slurm/feat_sweep_%j.out",
-        f"--error=output/slurm/feat_sweep_%j.err",
-        f"--job-name=feat_sweep",
+        "--output=output/slurm/feat_sweep_%j.out",
+        "--error=output/slurm/feat_sweep_%j.err",
+        "--job-name=feat_sweep",
     ]
     if slurm_partition:
         sbatch_flags.append(f"--partition={slurm_partition}")
@@ -423,12 +491,11 @@ def _submit_slurm_jobs(
     submitted = 0
     for i in range(n_trials):
         job_name = f"feat_sweep_t{i:03d}"
+        worker_cmd = base_cmd + ["--worker-index", str(i)]
         sbatch_cmd = (
-            ["sbatch", f"--job-name={job_name}"]
-            + sbatch_flags
-            + ["--wrap", " ".join(base_cmd)]
+            ["sbatch", f"--job-name={job_name}"] + sbatch_flags + ["--wrap", shlex.join(worker_cmd)]
         )
-        result = subprocess.run(sbatch_cmd, capture_output=True, text=True)
+        result = subprocess.run(sbatch_cmd, capture_output=True, text=True, check=False)
         if result.returncode == 0:
             submitted += 1
             logger.info("Submitted SLURM job {}/{}: {}", i + 1, n_trials, result.stdout.strip())
@@ -442,17 +509,18 @@ def _submit_slurm_jobs(
 
     logger.success(
         "Submitted {}/{} SLURM jobs for study '{}'. "
-        "Monitor progress with: uv run python scripts/tools/inspect_optuna_db.py --storage {}",
+        "Monitor progress with: uv run python scripts/tools/inspect_optuna_db.py --db {}",
         submitted,
         n_trials,
         study_name,
-        storage,
+        make_url(storage).database or storage,
     )
 
 
 # ---------------------------------------------------------------------------
 # FPS summary
 # ---------------------------------------------------------------------------
+
 
 def _log_fps_summary(study: optuna.Study, *, threshold: float) -> None:
     """Print per-extractor FPS stats and flag slow candidates.
@@ -497,46 +565,71 @@ def _log_fps_summary(study: optuna.Study, *, threshold: float) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser for the feature extractor sweep."""
     p = argparse.ArgumentParser(description="Optuna feature extractor architecture sweep.")
     p.add_argument("--config", required=True, help="Base training config YAML.")
     p.add_argument("--trials", type=int, default=10, help="Number of Optuna trials.")
-    p.add_argument("--metric", default="eval_episode_return",
-                   help="Metric to maximise (default: eval_episode_return).")
-    p.add_argument("--trial-timesteps", type=int, default=32_000,
-                   help="Training steps per trial (default: 32 000 for local smoke tests).")
-    p.add_argument("--eval-every", type=int, default=16_000,
-                   help="Evaluation cadence in steps.")
-    p.add_argument("--eval-episodes", type=int, default=5,
-                   help="Episodes per evaluation checkpoint.")
-    p.add_argument("--study-name", default=None,
-                   help="Optuna study name (defaults to policy_id + timestamp).")
-    p.add_argument("--storage", default=None,
-                   help="Optuna storage URL.  Defaults to sqlite under output/optuna/.")
-    p.add_argument("--seed", type=int, default=42,
-                   help="Optuna sampler seed.")
-    p.add_argument("--fps-warn-threshold", type=float, default=_DEFAULT_FPS_WARN_THRESHOLD,
-                   help=f"Flag trials below this FPS as slow (default: {_DEFAULT_FPS_WARN_THRESHOLD}).")
-    p.add_argument("--extractor-exclude", nargs="*", default=[],
-                   help="Extractor types to exclude from the search space.")
-    p.add_argument("--disable-wandb", action="store_true",
-                   help="Disable W&B for all trials.")
+    p.add_argument(
+        "--metric",
+        default="eval_episode_return",
+        help="Metric to maximise (default: eval_episode_return).",
+    )
+    p.add_argument(
+        "--trial-timesteps",
+        type=int,
+        default=32_000,
+        help="Training steps per trial (default: 32 000 for local smoke tests).",
+    )
+    p.add_argument("--eval-every", type=int, default=16_000, help="Evaluation cadence in steps.")
+    p.add_argument(
+        "--eval-episodes", type=int, default=5, help="Episodes per evaluation checkpoint."
+    )
+    p.add_argument(
+        "--study-name", default=None, help="Optuna study name (defaults to policy_id + timestamp)."
+    )
+    p.add_argument(
+        "--storage",
+        default=None,
+        help="Optuna storage URL.  Defaults to sqlite under output/optuna/.",
+    )
+    p.add_argument("--seed", type=int, default=42, help="Optuna sampler seed.")
+    p.add_argument("--worker-index", type=int, default=None, help=argparse.SUPPRESS)
+    p.add_argument(
+        "--fps-warn-threshold",
+        type=float,
+        default=_DEFAULT_FPS_WARN_THRESHOLD,
+        help=f"Flag trials below this FPS as slow (default: {_DEFAULT_FPS_WARN_THRESHOLD}).",
+    )
+    p.add_argument(
+        "--extractor-exclude",
+        nargs="*",
+        default=[],
+        help="Extractor types to exclude from the search space.",
+    )
+    p.add_argument("--disable-wandb", action="store_true", help="Disable W&B for all trials.")
     p.add_argument("--log-level", default="WARNING", choices=_LOG_LEVEL_CHOICES)
     # SLURM mode
     slurm_grp = p.add_argument_group("SLURM mode")
-    slurm_grp.add_argument("--slurm", action="store_true",
-                            help="Submit trials as SLURM jobs instead of running in-process.")
-    slurm_grp.add_argument("--slurm-time", default="04:00:00",
-                            help="SLURM time limit per job (default: 04:00:00).")
-    slurm_grp.add_argument("--slurm-gpus", type=int, default=1,
-                            help="GPUs per SLURM job (default: 1).")
-    slurm_grp.add_argument("--slurm-cpus", type=int, default=8,
-                            help="CPUs per SLURM task (default: 8).")
-    slurm_grp.add_argument("--slurm-mem", default="32G",
-                            help="Memory per SLURM job (default: 32G).")
-    slurm_grp.add_argument("--slurm-partition", default=None,
-                            help="Optional SLURM partition name.")
+    slurm_grp.add_argument(
+        "--slurm",
+        action="store_true",
+        help="Submit trials as SLURM jobs instead of running in-process.",
+    )
+    slurm_grp.add_argument(
+        "--slurm-time", default="04:00:00", help="SLURM time limit per job (default: 04:00:00)."
+    )
+    slurm_grp.add_argument(
+        "--slurm-gpus", type=int, default=1, help="GPUs per SLURM job (default: 1)."
+    )
+    slurm_grp.add_argument(
+        "--slurm-cpus", type=int, default=8, help="CPUs per SLURM task (default: 8)."
+    )
+    slurm_grp.add_argument(
+        "--slurm-mem", default="32G", help="Memory per SLURM job (default: 32G)."
+    )
+    slurm_grp.add_argument("--slurm-partition", default=None, help="Optional SLURM partition name.")
     return p
 
 
@@ -587,7 +680,7 @@ def main(argv: list[str] | None = None) -> int:
             make_url(storage).render_as_string(hide_password=True),
         )
 
-        sampler = optuna.samplers.TPESampler(seed=args.seed)
+        sampler = optuna.samplers.TPESampler(seed=_sampler_seed(int(args.seed), args.worker_index))
         study = optuna.create_study(
             direction="maximize",
             study_name=study_name,
@@ -614,6 +707,8 @@ def main(argv: list[str] | None = None) -> int:
                 disable_wandb=args.disable_wandb,
                 log_level=log_level,
                 fps_warn_threshold=args.fps_warn_threshold,
+                seed=int(args.seed),
+                extractor_exclude=list(args.extractor_exclude or []),
             )
             return 0
 

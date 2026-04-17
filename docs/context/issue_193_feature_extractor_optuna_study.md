@@ -2,7 +2,8 @@
 
 **Related issue:** #193  
 **Branch:** `codex/193-feature-extractor-evaluation`  
-**Status:** Local sweep infrastructure implemented; full SLURM runs pending.
+**Status:** 4 M-step SLURM sweep executed; results are a pipeline proof, not a valid architecture
+ranking.
 
 ---
 
@@ -77,6 +78,150 @@ The `_extractor_kwargs` function in `optuna_feature_extractor.py` maps
 
 ---
 
+## 2026-04-17 SLURM Sweep Result
+
+**Study DB:** `output/optuna/feat_extractor/feat_sweep_4m.db`  
+**SLURM logs:** `output/slurm/feat_sweep_*.err` / `output/slurm/feat_sweep_*.out`  
+**Submitted from handoff:** `docs/context/issue_193_slurm_handoff.md`
+
+The `feat_sweep_4m` study contains 20 trials:
+
+| State | Count | Interpretation |
+|-------|------:|----------------|
+| `COMPLETE` | 13 | All completed trials used the same `mlp / large / medium policy` config |
+| `FAIL` | 7 | All failed trials used `lightweight_cnn / small / large policy` |
+
+Best recorded trial:
+
+| Trial | Metric | Extractor | Arch | Policy arch | Dropout |
+|-------|-------:|-----------|------|-------------|--------:|
+| `#2` | `30.4144` | `mlp` | `large` | `medium` (`[128, 128]`) | `0.29097` |
+
+Completed `mlp_large` trial statistics:
+
+| Metric | Value |
+|--------|------:|
+| Eval return mean | `3.0501` |
+| Eval return median | `5.9244` |
+| Eval return min / max | `-43.4356` / `30.4144` |
+| FPS mean | `459.0` |
+| FPS min / max | `333.2` / `800.5` |
+
+### Interpretation
+
+This run should be treated as a **distributed-sweep plumbing proof**, not as evidence that
+`mlp_large` is the best feature extractor.  The completed trials have only one distinct completed
+hyperparameter set, so there is no meaningful cross-extractor ranking.  The wide return spread for
+the repeated `mlp_large` config also reinforces that 4 M steps remains a noisy pre-screen.
+
+The 7 failed trials were not the LSTM OOM described in the SLURM handoff.  They failed because the
+`lightweight_cnn` path uses CUDA adaptive average pooling whose backward pass is incompatible with
+`torch.use_deterministic_algorithms(True)` on this backend:
+
+```text
+adaptive_avg_pool2d_backward_cuda does not have a deterministic implementation
+```
+
+The deterministic setting comes from `robot_sf/common/seed.py`.  The current resolution is to relax
+determinism for `lightweight_cnn` explicitly rather than treating the extractor as invalid.  That
+means the extractor remains usable, but the run must be labeled as intentionally nondeterministic
+and must not be compared as a bitwise-reproducible baseline.
+
+### Follow-up boundary
+
+Before drawing architecture conclusions, use a rerun with worker-diversified sampler seeds and the
+explicit `lightweight_cnn` nondeterminism warning path.  The candidate-promotion criteria below
+still apply unchanged.
+
+---
+
+## 2026-04-17 Low-Priority Rerun
+
+The compromised `feat_sweep_4m` study should remain historical.  A fresh rerun was submitted as:
+
+- **Study name:** `feat_sweep_4m_rerun_lowprio_20260417`
+- **Storage:** `output/optuna/feat_extractor/feat_sweep_4m_rerun_lowprio_20260417.db`
+- **Partition/QoS/account:** `l40s` / `l40s-gpu` / `mitarbeiter`
+- **Priority policy:** `--nice=10000`, observed as `Nice=10000` and `Priority=1`
+- **Jobs:** `11670` through `11689`
+- **Reason for `l40s`:** `pro6000` was drained at submission time
+
+Submission command:
+
+```bash
+bash SLURM/submit_feature_extractor_sweep.sh \
+    --trials 20 \
+    --timesteps 4000000 \
+    --partition l40s \
+    --account mitarbeiter \
+    --qos l40s-gpu \
+    --study-name feat_sweep_4m_rerun_lowprio_20260417 \
+    --time 08:00:00 \
+    --gpus 1 \
+    --cpus 8 \
+    --mem 32G \
+    --nice 10000 \
+    --seed 42 \
+    --disable-wandb
+```
+
+Monitor:
+
+```bash
+squeue --me --format='%i %j %T %P %Q %y %b'
+uv run python scripts/tools/inspect_optuna_db.py \
+    --db output/optuna/feat_extractor/feat_sweep_4m_rerun_lowprio_20260417.db \
+    --study-name feat_sweep_4m_rerun_lowprio_20260417 \
+    --top-n 10 \
+    --show-params
+```
+
+### Superseded
+
+This rerun was replaced before meaningful results accumulated.  The active sweep is now a fresh
+split submission that probes `a30` first and delays the remaining workers onto `pro6000` for the
+weekend:
+
+- **Study name:** `feat_sweep_4m_split_a30_pro6000_20260417`
+- **Storage:** `output/optuna/feat_extractor/feat_sweep_4m_split_a30_pro6000_20260417.db`
+- **Partition/QoS/account:** `a30` / `a30-gpu` / `mitarbeiter` for the probe job, then
+  `pro6000` / `pro6000-gpu` / `mitarbeiter` for the remaining jobs
+- **Priority policy:** `--nice=10000` for both partitions
+- **Begin policy:** `--begin=2026-04-18T00:00:00` on the `pro6000` batch
+- **Jobs:** `11692` on `a30`, `11693` through `11711` on `pro6000`
+- **Worker indexing:** `--worker-offset 1` on the `pro6000` batch so the sampler seeds remain
+  unique across the split submission
+
+Submission commands:
+
+```bash
+bash SLURM/submit_feature_extractor_sweep.sh \
+    --trials 1 \
+    --timesteps 4000000 \
+    --partition a30 \
+    --account mitarbeiter \
+    --qos a30-gpu \
+    --nice 10000 \
+    --study-name feat_sweep_4m_split_a30_pro6000_20260417 \
+    --seed 42 \
+    --disable-wandb
+
+bash SLURM/submit_feature_extractor_sweep.sh \
+    --trials 19 \
+    --timesteps 4000000 \
+    --partition pro6000 \
+    --account mitarbeiter \
+    --qos pro6000-gpu \
+    --nice 10000 \
+    --begin 2026-04-18T00:00:00 \
+    --worker-offset 1 \
+    --study-name feat_sweep_4m_split_a30_pro6000_20260417 \
+    --seed 42 \
+    --disable-wandb
+```
+
+---
+
 ## Running the sweep
 
 ### Local smoke test (32 k steps, ~minutes)
@@ -106,7 +251,7 @@ bash SLURM/submit_feature_extractor_sweep.sh \
 
 # 2. Monitor progress
 uv run python scripts/tools/inspect_optuna_db.py \
-    --storage output/optuna/feat_extractor/feat_sweep_4m.db
+    --db output/optuna/feat_extractor/feat_sweep_4m.db
 
 # 3. After jobs complete, re-run the script with --trials 0 to print the FPS summary
 uv run python scripts/training/optuna_feature_extractor.py \
@@ -150,7 +295,9 @@ Do not adopt based on 32 k or 4 M step results alone — those are pre-screening
 |------|-----------|
 | LSTM has no true temporal memory under PPO | Deferred: add `sb3_contrib.RecurrentPPO` support as a follow-up issue |
 | 4 M steps may still be too short for attention/LSTM to converge | Accept — treat 4 M as candidate shortlist; full evidence requires 10 M+ |
+| Concurrent one-trial workers can duplicate early TPE suggestions when launched with identical sampler seeds | Worker commands now pass `--worker-index`; rerun evidence is still needed |
 | SQLite contention under heavy SLURM parallelism | Use `--storage postgresql://...` for > 20 concurrent jobs |
+| `lightweight_cnn` hits a non-deterministic CUDA adaptive-pooling backward kernel under the global deterministic setting | Relax determinism explicitly for this extractor and emit a loud non-reproducibility warning |
 | `_EXTRACTOR_TYPES` monkey-patched in-process | Harmless for sequential local runs; SLURM workers are independent processes |
 
 ---

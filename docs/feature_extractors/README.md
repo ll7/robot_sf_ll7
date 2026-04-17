@@ -118,7 +118,7 @@ For large-scale experiments on HPC clusters:
 # Submit complete comparison job
 sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
 
-# Or submit individual parallel jobs
+# Or submit the comparison as a throttled Slurm job array
 ./SLURM/feature_extractor_comparison/submit_parallel.sh
 ```
 

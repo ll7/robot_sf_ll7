@@ -2,7 +2,12 @@
 
 **Date:** 2026-04-16  
 **Branch:** `codex/193-feature-extractor-evaluation`  
-**Status:** Local smoke test passed (7/8 trials OK); ready to submit full sweep to SLURM.
+**Status:** Historical submission handoff.  The `feat_sweep_4m` run has completed; see
+`docs/context/issue_193_feature_extractor_optuna_study.md` for the April 17 result analysis.
+
+The original low-priority rerun on `l40s` was superseded before it produced useful results.  The
+active sweep is now the split `a30` probe + delayed `pro6000` weekend batch documented in
+`docs/context/issue_193_feature_extractor_optuna_study.md`.
 
 ---
 
@@ -101,7 +106,7 @@ tail -f output/slurm/feat_sweep_<jobid>.out
 
 # Inspect Optuna study (shows completed/failed trials and best so far)
 uv run python scripts/tools/inspect_optuna_db.py \
-    --storage sqlite:///output/optuna/feat_extractor/feat_sweep_4m.db
+    --db output/optuna/feat_extractor/feat_sweep_4m.db
 ```
 
 ---

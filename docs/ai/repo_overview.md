@@ -33,6 +33,7 @@ Then branch by task type:
 - benchmark semantics: `docs/benchmark_spec.md`, `docs/benchmark.md`
 - planner family support: `docs/benchmark_planner_family_coverage.md`
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
+- end-to-end AI workflow: `docs/ai/ai-workflow.md`
 - issue execution history and handoff knowledge base: `docs/context/`
 - context note workflow: `docs/context/README.md`
 
@@ -64,6 +65,8 @@ Then branch by task type:
   for locating the right files or requesting the minimum missing context
 - `.agents/skills/context-note-maintainer/`: note-creation and stale-note-maintenance workflow for
   durable Markdown handoff context
+- `docs/ai/ai-workflow.md`: end-to-end issue-to-PR workflow, validation gates, review loop, and
+  traceability conventions
 - `CLAUDE.md` + `memory/MEMORY.md`: startup-oriented memory/index pair for agent runtimes that
   support imported project instructions
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,

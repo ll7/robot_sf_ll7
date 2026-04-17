@@ -15,7 +15,8 @@ Treat the following files as the repository-native context stack for Codex-style
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
-  mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.
+  mirrored at `.codex/skills/`, `.opencode/skills/`, `.claude/skills/`, `.github/`, and `.gemini/`
+  for compatibility.
 - `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
@@ -91,7 +92,7 @@ Prefer a config-first workflow for reproducibility and reviewability. Add or upd
 The project enforces Ruff with a 4-space indent, 100-character lines, and double-quoted strings (`pyproject.toml`). Prefer type-annotated interfaces and keep factory functions (`environment_factory.make_*`) as the public entry point. Modules and files use `snake_case`; classes and dataclasses follow `PascalCase`. Name tests `test_<feature>.py` and keep fixtures under `conftest.py`. Avoid ad-hoc prints in library code—use the existing structured logging. Prefer to use more docstrings (for private methods also) and inline comments for clarity, especially in complex algorithms or data flows.
 
 ## Testing Guidelines
-Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs with committed artifacts in `output/` when benchmarks change. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows.
+Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs with committed artifacts in `output/` when benchmarks change. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows. The PR readiness gate (`scripts/dev/pr_ready_check.sh`) enforces an 80 percent coverage minimum on changed files by default; address coverage gaps before opening a PR.
 
 ## Proof-First Validation
 
@@ -184,12 +185,20 @@ Canonical note:
 
 For issue management and delivery, use these local skills:
 
+- `.agents/skills/skill-picker/SKILL.md`
+  - Routes an ambiguous request to the most appropriate repo skill.
+- `.agents/skills/gh-issue-creator/SKILL.md`
+  - Creates structured GitHub issues from vague prompts using repo templates and conservative assumptions.
 - `.agents/skills/gh-issue-autopilot/SKILL.md`
   - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open draft PR.
 - `.agents/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
 - `.agents/skills/gh-issue-priority-assessor/SKILL.md`
   - Reviews Project #5 priority inputs against the static rubric, explains plausibility, and keeps field writeback opt-in.
+- `.agents/skills/gh-pr-opener/SKILL.md`
+  - Opens PRs with MCP-first GitHub interaction and a conservative PR-readiness freshness gate.
+- `.agents/skills/gh-pr-comment-fixer/SKILL.md`
+  - Fetches PR review threads, implements fixes, runs tests, pushes, and resolves threads.
 - `.agents/skills/analyze-camera-ready-benchmark/SKILL.md`
   - Runs consistency diagnostics for camera-ready benchmark campaigns and summarizes runtime/quality/fallback signals.
 

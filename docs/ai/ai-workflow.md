@@ -230,7 +230,7 @@ flowchart TD
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
-uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main
+uv run python scripts/dev/pr_ready_freshness.py write --base-ref origin/main
 uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project-number 5
 ```
 

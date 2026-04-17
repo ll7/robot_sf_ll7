@@ -429,7 +429,7 @@ eval-aligned distribution.
 | Arm | Config | Wrapper | Job | Partition | Node |
 |-----|--------|---------|-----|-----------|------|
 | A | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml) | `issue_791_reward_curriculum.sl` | **11660 (RUNNING)** | a30 | auxme-imech172 |
-| B | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml) | `issue_791_reward_curriculum.sl` | **11661 (RUNNING)** | l40s | auxme-imech091 |
+| B | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml) | `issue_791_reward_curriculum.sl` | **11661 (COMPLETED)** | l40s | auxme-imech091 |
 | C | [expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml) | `issue_791_asymmetric_critic.sl` | **11662 (RUNNING)** | l40s | auxme-imech093 |
 
 All three started within seconds of submission on 2026-04-17. Job 11609 (attention-head rerun)
@@ -452,6 +452,55 @@ scripts/dev/sbatch_auxme_issue791.sh \
   --config configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml \
   --job-name robot-sf-issue791-asym-eval-aligned \
   SLURM/Auxme/issue_791_asymmetric_critic.sl
+```
+
+### Wave 5 weekend low-priority queue
+
+Queued on 2026-04-17 with `--nice=10000` and `ISSUE791_WANDB_POLICY=require` so these jobs should
+yield to normal-priority cluster work. The LR-decay idea was not submitted because
+`scripts/training/train_ppo.py` currently accepts only scalar PPO learning-rate config values, not
+schedule specifications.
+
+| Arm | Idea | Config | Wrapper | Job | Partition | Initial state |
+|-----|------|--------|---------|-----|-----------|---------------|
+| D | Longer PPO rollout horizon (`n_steps=4096`) | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml) | `issue_791_reward_curriculum.sl` | **11723** | l40s | PENDING (Priority) |
+| E | Larger policy capacity | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml) | `issue_791_reward_curriculum.sl` | **11724** | l40s | PENDING (Priority) |
+| F | Stronger progress and terminal reward | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml) | `issue_791_reward_curriculum.sl` | **11725** | a30 | PENDING (QOSMaxJobsPerUserLimit) |
+| G | Disable predictive foresight | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml) | `issue_791_reward_curriculum.sl` | **11726** | a30 | PENDING (QOSMaxJobsPerUserLimit) |
+| H | Attention head on eval-aligned scenarios | [expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml) | `issue_791_attention_head.sl` | **11727** | l40s | PENDING (Priority) |
+| I | 3M seed probe (`seed=231`) | [expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml) | `issue_791_reward_curriculum.sl` | **11728** | a30 | PENDING (QOSMaxJobsPerUserLimit) |
+| J | 3M seed probe (`seed=992`) | [expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml) | `issue_791_reward_curriculum.sl` | **11729** | l40s | PENDING (Priority) |
+| K | 3M seed probe (`seed=1337`) | [expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml) | `issue_791_reward_curriculum.sl` | **11730** | a30 | PENDING (QOSMaxJobsPerUserLimit) |
+
+Verification:
+
+```bash
+uv run python - <<'PY'
+from scripts.training.train_ppo import (
+    _resolve_policy_selection,
+    _resolve_ppo_hyperparams,
+    load_expert_training_config,
+)
+
+paths = [
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml",
+]
+for path in paths:
+    cfg = load_expert_training_config(path)
+    _resolve_ppo_hyperparams(cfg)
+    _resolve_policy_selection(cfg)
+    print(f"OK {path}: {cfg.policy_id}")
+PY
+
+squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" \
+  | rg '11723|11724|11725|11726|11727|11728|11729|11730'
 ```
 
 ## Relevant Docs

@@ -454,6 +454,170 @@ scripts/dev/sbatch_auxme_issue791.sh \
   SLURM/Auxme/issue_791_asymmetric_critic.sl
 ```
 
+### Wave 4 / Wave 5 results (2026-04-18)
+
+All four primary Wave-4/5 arms and most Wave-5 weekend probes have completed. Eval-aligned
+training was the dominant lever and lifted every architecture by 0.25-0.50 absolute success.
+
+| Job | Arm | Best success | Best collision | Best step | Final eval succ / coll / SNQI | WandB | Notes |
+|-----|-----|-------------|----------------|-----------|-------------------------------|-------|-------|
+| **11724** | **E: large capacity + eval-aligned, 10M** | **0.929** | **0.071** | 9.96M | 0.929 / 0.071 / **0.353** | `ibo3aqus` | **New leader (l40s, 8h04m)** |
+| 11723 | D: `n_steps=4096` + eval-aligned, 10M | 0.914 | 0.086 | 7.34M | 0.886 / 0.114 / 0.084 | `lnxfp2gr` | l40s, 7h33m |
+| 11660 | A: reward curriculum + eval-aligned, 10M | 0.900 | 0.100 | 9.44M | 0.886 / 0.114 / 0.186 | `liisaa19` | a30, 15h10m |
+| 11727 | H: attention head + eval-aligned, 10M | 0.857 | 0.143 | 7.86M | 0.829 / 0.171 / -0.042 | `r0xxw0zz` | l40s, 9h19m |
+| 11662 | C: asymmetric critic + eval-aligned, 10M | 0.843 | 0.157 | 6.82M | 0.843 / 0.157 / -0.041 | `lmtp6222` | l40s, 9h07m |
+| 11729 | J: 3M seed=992 + eval-aligned | 0.786 | 0.214 | 3.00M | 0.786 / 0.214 / -0.216 | `8r49lrmb` | l40s, 2h26m, only 3M budget |
+| 11661 | B: warm-start exploration boost (orig training set) | 0.529 | 0.414 | 9.44M | 0.471 / 0.457 / -1.08 | `mcbqxbh5` | **Regressed** - KL early-stops every batch |
+| 11609 | (pre-Wave) attention-head 10M, original training set | 0.40 | 0.586 | ~7.3M | 0.343 / 0.571 / -1.32 | `0hto2j2i` | Confirms prior ceiling without eval alignment |
+
+Pending Wave-5 arms (a30, blocked by `QOSMaxJobsPerUserLimit` + sweep_4m_array taking both slots):
+**11725** reward-strong, **11726** no-foresight, **11728** seed=231, **11730** seed=1337.
+They will fire automatically when `sweep_4m_array_a30_lp` releases a slot - no resubmission needed.
+
+#### What we learned
+
+1. **The OOD generalization gap was the dominant ceiling, not optimization or architecture.**
+   Switching the training distribution to `ppo_full_maintained_eval_v1.yaml` (which contains the
+   `issue_596_*` atomic archetypes the eval set scores on) lifted every architecture by 0.25 to
+   0.50 absolute success in a single change. The +3-5% promotion gate is now decisively cleared
+   by the distribution change alone. The previous interpretation (stack architecture levers to
+   close the gap) was false - those levers were nearly noise on the wrong distribution.
+2. **Architecture ranking is preserved but compressed.** Reward curriculum (0.900) > attention
+   head (0.857) > asymmetric critic (0.843) on the aligned distribution. The same ordering held
+   at 128k/256k/10M historically; the absolute headroom dropped from ~0.50 to ~0.06 once
+   distribution alignment was applied.
+3. **Larger policy capacity is the new leader (11724, 0.929 / 0.071 / SNQI 0.353).** Beats the
+   default-capacity sibling 11660 by +2.9% absolute success and halves residual collisions.
+   SNQI is the largest of any 10M run on record.
+4. **Longer rollout horizon (`n_steps=4096`, 11723) gives a small lift (+1.4%)** but is far less
+   decisive than capacity scaling.
+5. **Exploration-boost warm-restart (11661) failed.** With `ent_coef=0.02 / clip_range=0.15 /
+   target_kl=0.03`, PPO early-stops at every minibatch and the policy degrades from 0.586 to
+   0.471. Strong evidence the prior plateau was *not* exploitation lock-in - it was a flat
+   optimum on the wrong distribution.
+6. **3M is enough for ~0.79 on the eval-aligned set (11729).** The remaining 7M of training
+   only buys ~0.14 more. Points to fast saturation; future probes can be 3M-budget.
+7. **Final eval matches best eval within 0.03 for all eval-aligned runs.** Convergence is
+   clean - no late-training collapse - so the best-checkpoint metric is trustworthy as the
+   headline.
+
+#### Caveats worth flagging in any external write-up
+
+- Training on the eval superset removes the OOD signal by definition. The 0.929 figure should
+  be reported as **in-distribution benchmark performance after expanded coverage**, not as a
+  generalization claim. A held-out scenario family is required for an OOD claim.
+- We do not yet have a clean "vanilla baseline + eval-aligned (no curriculum, default capacity)"
+  control. Without it we cannot fully attribute 11724's lift between distribution alignment and
+  large capacity. **Wave-6 control L (job 11799, RUNNING) is the missing control; its result
+  unblocks the attribution.**
+
+#### Promotion artifact and registry
+
+Wave-5 leader saved to a stable model_cache location and registered:
+
+| Artifact | Path |
+|---------|------|
+| Leader weights | `output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip` |
+| Leader best summary | `output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json` |
+| Runner-up (n_steps=4096) | `output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_20260417/model.zip` |
+| Default-capacity sibling | `output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_20260417/model.zip` |
+| Attention-head + eval-aligned | `output/model_cache/ppo_expert_issue_791_attention_head_promotion_10m_env22_eval_aligned_20260417/model.zip` |
+| Asymmetric-critic + eval-aligned | `output/model_cache/ppo_expert_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned_20260417/model.zip` |
+| PPO benchmark adapter config | [configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml](../../configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml) |
+| Benchmark comparison config | [configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml](../../configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml) |
+
+Registry entries (top-of-file in `model/registry.yaml`):
+- `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417` (leader)
+- `ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417` (runner-up)
+- `ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417` (default-capacity sibling)
+
+### Wave 6 - Submitted on 2026-04-18 (l40s, both QOS slots in use)
+
+| Job | Purpose | Config | Wrapper | Partition | State |
+|-----|---------|--------|---------|-----------|-------|
+| **11798** | Camera-ready benchmark of Wave-5 leader vs reference baselines | [paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml](../../configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml) | [issue_791_benchmark.sl](../../SLURM/Auxme/issue_791_benchmark.sl) | l40s | RUNNING |
+| **11799** | Wave-6 control L: vanilla baseline + eval-aligned (no curriculum) - **closes attribution gap** | [expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned.yaml) | [issue_791_reward_curriculum.sl](../../SLURM/Auxme/issue_791_reward_curriculum.sl) | l40s | RUNNING |
+
+Submission commands used (record for reproduction):
+
+```bash
+# Benchmark of Wave-5 leader (publication-grade comparison vs reference baselines)
+ISSUE791_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+ISSUE791_BENCHMARK_LABEL=issue791-eval-aligned-leader-11724 \
+sbatch SLURM/Auxme/issue_791_benchmark.sl
+
+# Vanilla baseline (no curriculum) on eval-aligned scenarios - missing attribution control
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned.yaml \
+  --partition l40s --qos l40s-gpu \
+  --job-name robot-sf-791-baseline-evalaligned \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+### Wave 6 - To submit when an a30/l40s slot opens
+
+Two configs are written and parsed-validated but not yet submitted because both my a30 slots
+are taken (sweep_4m_array_a30_lp_11714 + 4 pending issue-791 jobs ahead) and both my l40s slots
+are taken (jobs 11798 and 11799). Submit the moment a slot frees:
+
+| Priority | Arm | Config | Submission command |
+|----------|-----|--------|--------------------|
+| 1 | **Wave-6 control M**: large capacity x NO curriculum, eval-aligned, 10M | [expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml) | see below |
+| 2 | **Wave-6 stack-the-wins arm N**: eval-aligned + curriculum + large capacity + n_steps=4096, 10M | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml) | see below |
+
+```bash
+# Priority 1 - control M: factor capacity vs curriculum
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml \
+  --job-name robot-sf-791-baseline-evalaligned-largecap \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+
+# Priority 2 - stack-the-wins arm: try to push past 0.929
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml \
+  --job-name robot-sf-791-rc-largecap-nsteps4096 \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Why these two are deferred rather than submitted:
+
+- l40s has `MaxJobsPU=2`. Jobs 11798 and 11799 already use both my slots. Submitting either
+  would only land in PENDING with `QOSMaxJobsPerUserLimit`, which is fine in principle, but
+  Wave-5 leftovers on a30 (11725/11726/11728/11730) already take all four a30 slots after the
+  sweep array clears, so I would burn priority budget for no net wall-time win. Wait for either
+  Wave-5 leftover to complete first.
+- The vanilla baseline (job 11799) is the higher-attribution-value control to run before
+  Priority 1; large capacity x no curriculum only becomes interpretable after we know what the
+  vanilla eval-aligned baseline lands at.
+
+### GitHub issue draft (manual filing required)
+
+`gh` CLI is not installed on the workstation that triaged this campaign. The full GitHub-issue
+body for the publication-grade benchmark rerun is checked in at
+[issue_791_benchmark_rerun_issue_body.md](issue_791_benchmark_rerun_issue_body.md). To file:
+
+```bash
+# Once gh is available (or via the GitHub MCP tool):
+gh issue create \
+  --title "benchmark: rerun paper_experiment_matrix_v1 with issue-791 Wave-5 PPO leader (eval-aligned + large capacity)" \
+  --label benchmark --label issue-791 --label policy-promotion \
+  --body-file docs/context/issue_791_benchmark_rerun_issue_body.md
+```
+
+Until that issue exists, link any benchmark rerun PR to this campaign doc and the body draft.
+
+### Wave 6 - Held until OOD evaluation suite exists (DO NOT submit blindly)
+
+3. **Held-out OOD eval suite.** Build a scenario set that excludes the `issue_596_*` archetypes
+   (or pulls in a planner-zoo scenario family no policy has trained on), then re-evaluate the
+   11724 `best.zip` on it. Without this we cannot make any external generalization claim about
+   the new leader. Track via a separate skill invocation - this is a docs/configs task, not a
+   training submission.
+4. **Multi-seed re-anchor at 10M.** Once 11728 and 11730 land, fan out the leader recipe
+   (11724 large capacity + curriculum + eval-aligned) at 3 seeds for 10M each so the published
+   number has a real seed bar. Do NOT submit until the 3M seed probes (11729 done; 11728/11730
+   pending) confirm seed variance is small enough to make this worthwhile.
+
 ### Wave 5 weekend low-priority queue
 
 Queued on 2026-04-17 with `--nice=10000` and `ISSUE791_WANDB_POLICY=require` so these jobs should

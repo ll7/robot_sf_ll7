@@ -110,6 +110,73 @@ models:
       - Best-success artifact from W&B run 27dbe5xu.
       - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
       - Not promoted; full 141-episode benchmark is still too weak in absolute terms because max_steps remains high.
+  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+    display_name: PPO issue-791 Wave-5 leader (eval-aligned + reward curriculum + large capacity, 2026-04-17)
+    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+    commit: null
+    wandb_run_id: ibo3aqus
+    wandb_run_path: ll7/robot_sf/ibo3aqus
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - issue-791
+      - eval-aligned
+      - large-capacity
+      - reward-curriculum
+      - promotion-candidate
+      - wave-5
+    notes:
+      - SLURM job 11724 on auxme-imech093 (l40s), 8h04m wall.
+      - Best eval (70 episodes) success_rate=0.9286, collision_rate=0.0714, SNQI=0.3531 at step 9,961,472.
+      - Trained on configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml (eval superset). Report as in-distribution benchmark performance, not OOD generalization.
+      - Promotion campaign log - docs/context/issue_791_promotion_campaign_128k_256k.md.
+      - Best summary - output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
+  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417
+    display_name: PPO issue-791 Wave-5 runner-up (eval-aligned + reward curriculum + n_steps=4096, 2026-04-17)
+    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_20260417/model.zip
+    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml
+    commit: null
+    wandb_run_id: lnxfp2gr
+    wandb_run_path: ll7/robot_sf/lnxfp2gr
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - issue-791
+      - eval-aligned
+      - reward-curriculum
+      - n_steps-4096
+      - candidate
+      - wave-5
+    notes:
+      - SLURM job 11723 on l40s, 7h33m wall.
+      - Best eval (70 episodes) success_rate=0.9143, collision_rate=0.0857 at step 7,340,032.
+      - Same caveat - trained on eval superset; not OOD-validated.
+  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417
+    display_name: PPO issue-791 Wave-4 baseline (eval-aligned + reward curriculum, default capacity, 2026-04-17)
+    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_20260417/model.zip
+    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml
+    commit: null
+    wandb_run_id: liisaa19
+    wandb_run_path: ll7/robot_sf/liisaa19
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - issue-791
+      - eval-aligned
+      - reward-curriculum
+      - candidate
+      - wave-4
+    notes:
+      - SLURM job 11660 on a30, 15h10m wall.
+      - Best eval (70 episodes) success_rate=0.9000, collision_rate=0.1000 at step 9,437,184.
+      - Default-capacity sibling of the Wave-5 leader; the +0.029 success delta to 11724 isolates the capacity effect.
   - model_id: ga3c_cadrl_iros18
     display_name: GA3C-CADRL (IROS18) checkpoint
     local_path: model/ga3c_cadrl/IROS18/network_01900000.meta

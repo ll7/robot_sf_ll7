@@ -1,0 +1,29 @@
+# PPO baseline pinned to the issue-791 Wave-5 leader
+# (eval-aligned scenarios + large-capacity grid_socnav + reward curriculum, 10M env22).
+#
+# Source job: 11724 (auxme-imech093, l40s, 8h04m).
+# WandB run: ll7/robot_sf/ibo3aqus
+# Best eval (70 episodes): success_rate=0.929, collision_rate=0.071, SNQI=0.353
+# Final eval: success_rate=0.929, collision_rate=0.071, SNQI=0.353
+# Best step: 9,961,472 / 10,000,000.
+#
+# Training config: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+# Promotion campaign log: docs/context/issue_791_promotion_campaign_128k_256k.md
+#
+# CAVEAT: this policy was trained on the eval superset
+# (configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml). Eval numbers above are
+# in-distribution; report as benchmark-set performance, not OOD generalization.
+# A held-out scenario family is still required to measure true OOD generalization.
+
+model_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+
+device: auto
+deterministic: true
+
+obs_mode: dict
+
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+
+fallback_to_goal: true

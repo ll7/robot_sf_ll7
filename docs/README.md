@@ -126,6 +126,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #832 Paper-Matrix Extended Seed Schedule](./context/issue_832_paper_matrix_extended_seed_schedule.md)** - Staged S5/S10/S20 seed extension policy, runtime estimates, tmux commands, and comparison artifact contract for the frozen paper matrix
+* **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment

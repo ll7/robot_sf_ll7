@@ -62,3 +62,4 @@ planner_key_mapping:
   socnav_bench: socnav-bench
   socnav_sampling: socnav-sampling
   stream_gap: stream-gap
+  teb: teb-corridor-commitment

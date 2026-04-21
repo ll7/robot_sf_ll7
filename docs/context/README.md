@@ -92,8 +92,9 @@ knowledge, not every transient iteration detail.
   GPU throughput microbenchmark + 32 K PPO comparison of DynamicsExtractor vs MLP/CNN/Attention;
   recommends `mlp_small` as new default for fresh training runs.
 - [Issue #193 Feature Extractor Optuna Study](./issue_193_feature_extractor_optuna_study.md)
-  4 M-step SLURM sweep infrastructure and April 17 result interpretation; current DB proves the
-  distributed pipeline but does not rank architectures because trial suggestions duplicated.
+  4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
+  `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
+  required before promotion.
 
 ## Planner Integration Notes
 

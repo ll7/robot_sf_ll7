@@ -2,8 +2,9 @@
 
 **Related issue:** #193  
 **Branch:** `codex/193-feature-extractor-evaluation`  
-**Status:** 4 M-step SLURM sweep executed; results are a pipeline proof, not a valid architecture
-ranking.
+**Status:** 4 M-step array sweep finished by 2026-04-19 with 38 completed Optuna trials and 2
+stale timeout trials.  Results are a pre-screening snapshot, not promotion evidence or a final
+architecture ranking.
 
 ---
 
@@ -178,8 +179,8 @@ uv run python scripts/tools/inspect_optuna_db.py \
 
 ### Superseded
 
-This rerun was replaced before meaningful results accumulated.  The active sweep is now a fresh
-split submission that probes `a30` first and delays the remaining workers onto `pro6000` for the
+This rerun was replaced before meaningful results accumulated.  The next attempt was a fresh split
+submission that probed `a30` first and delayed the remaining workers onto `pro6000` for the
 weekend:
 
 - **Study name:** `feat_sweep_4m_split_a30_pro6000_20260417`
@@ -218,6 +219,375 @@ bash SLURM/submit_feature_extractor_sweep.sh \
     --study-name feat_sweep_4m_split_a30_pro6000_20260417 \
     --seed 42 \
     --disable-wandb
+```
+
+This split study is also historical as of 2026-04-18.  It contains only the completed `a30` probe
+trial (`mlp / large / medium policy`, metric `-2.74468`) and did not become the current result
+surface.
+
+---
+
+## 2026-04-18 Active Array Sweep Snapshot
+
+> Superseded by the 2026-04-20 final analysis below.  Kept for handoff history.
+
+**Current study DB:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`  
+**Study name:** `feat_sweep_4m_array`  
+**SLURM arrays:** `11713` on `pro6000`, `11714` on `a30`  
+**SLURM logs:** `output/slurm/sweep_4m_array_11713_*.{out,err}` and
+`output/slurm/sweep_4m_array_a30_lp_11714_*.{out,err}`
+
+This is the active study to inspect before submitting anything new.  The four local DB files are
+not equivalent:
+
+| DB | Status | Notes |
+|----|--------|-------|
+| `feat_sweep_4m.db` | Historical | First 20-trial sweep; duplicated one `mlp_large` config and failed `lightweight_cnn` under deterministic CUDA pooling. |
+| `feat_sweep_4m_rerun_lowprio_20260417.db` | Superseded | `l40s` low-priority rerun; job `11670` was cancelled after ~9 minutes, leaving no completed trials. |
+| `feat_sweep_4m_split_a30_pro6000_20260417.db` | Superseded/stalled | Split rerun surface; only one completed probe trial is present. |
+| `feat_sweep_4m_array.db` | Active | Current diversified array sweep; use this for progress and next decisions. |
+
+Observed progress at 2026-04-18 20:58 Europe/Berlin:
+
+| State | Count | Notes |
+|-------|------:|-------|
+| `COMPLETE` | 28 | Completed across `dynamics`, `mlp`, `attention`, `lightweight_cnn`, and `lstm`. |
+| `RUNNING` | 4 | Trials `28`-`31`, all `lstm / large / medium policy`. |
+
+Current top trial:
+
+| Trial | Metric | Extractor | Arch | Policy arch | Dropout |
+|-------|-------:|-----------|------|-------------|--------:|
+| `#19` | `51.1163` | `dynamics` | `large` | `medium` (`[128, 128]`) | `0.00013` |
+
+Completed-trial aggregate snapshot:
+
+| Extractor | Completed | Mean return | Best return | Mean FPS | Min FPS |
+|-----------|----------:|------------:|------------:|---------:|--------:|
+| `dynamics` | 6 | `30.432` | `51.116` | `465.7` | `374.7` |
+| `lightweight_cnn` | 13 | `34.577` | `48.804` | `498.3` | `377.2` |
+| `mlp` | 5 | `20.764` | `34.137` | `436.4` | `351.2` |
+| `lstm` | 2 | `26.069` | `30.247` | `301.4` | `142.1` |
+| `attention` | 2 | `-5.797` | `-5.797` | `277.3` | `266.3` |
+
+### Current interpretation
+
+Do not submit a new array while `11713`/`11714` are still running or pending.  The active DB already
+has broad enough 4 M-step coverage to wait for completion and then shortlist candidates.  The
+current snapshot suggests `dynamics` and `lightweight_cnn` deserve follow-up scrutiny, while
+`attention` is weak at this budget and `lstm` is still under-sampled because the remaining running
+trials are LSTM-heavy.
+
+This is still **not** enough to promote a default extractor.  Treat the active array as a
+pre-screen: after it finishes, choose a small shortlist and run longer, cleaner validation rather
+than expanding the search immediately.
+
+Recommended next step after array completion:
+
+1. Inspect the final DB with:
+
+   ```bash
+   uv run python scripts/tools/inspect_optuna_db.py \
+       --db output/optuna/feat_extractor/feat_sweep_4m_array.db \
+       --study-name feat_sweep_4m_array \
+       --top-n 20 \
+       --show-params
+   ```
+
+2. Pick two or three candidate configs from the final top set plus the baseline.
+3. Run dedicated longer training, preferably 10 M+ steps with multiple seeds, before any default
+   extractor recommendation.
+
+---
+
+## 2026-04-20 Final Array Sweep Analysis
+
+**Current source of truth:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`  
+**Study name:** `feat_sweep_4m_array`  
+**Last DB modification:** 2026-04-19 13:29 Europe/Berlin  
+**Queue state checked:** `squeue --me` returned no active jobs on 2026-04-20.
+
+The active array sweep is done from SLURM's perspective.  Optuna still reports two `RUNNING` trials,
+but both are stale timeout records rather than active work:
+
+| Trial | Config | Why excluded |
+|-------|--------|--------------|
+| `#28` | `lstm / large / medium policy`, dropout `0.0701` | Corresponding `a30` task `11714_12` timed out at the 8-hour SLURM limit. |
+| `#29` | `lstm / large / medium policy`, dropout `0.0881` | Corresponding `a30` task `11714_13` timed out at the 8-hour SLURM limit. |
+
+Their partial logs contain intermediate metrics, but because Optuna did not commit final values,
+they should not be mixed into the ranking.
+
+### Final study status
+
+| State | Count | Interpretation |
+|-------|------:|----------------|
+| `COMPLETE` | 38 | Valid Optuna evidence for pre-screening. |
+| `RUNNING` | 2 | Stale timeout records from `a30`; exclude from ranking. |
+
+The older DBs remain historical:
+
+| DB | Trials | Completed | Best | Use |
+|----|------:|----------:|-----:|-----|
+| `feat_sweep_4m.db` | 20 | 13 | `30.4144` | Plumbing proof only; duplicated `mlp_large` suggestions and failed CNN deterministic CUDA pooling. |
+| `feat_sweep_4m_rerun_lowprio_20260417.db` | 1 | 0 | n/a | Superseded cancelled `l40s` attempt. |
+| `feat_sweep_4m_split_a30_pro6000_20260417.db` | 1 | 1 | `-2.7447` | Superseded one-probe split attempt. |
+| `feat_sweep_4m_array.db` | 40 | 38 | `51.1163` | Current pre-screening evidence. |
+
+### Top completed trials
+
+| Rank | Trial | Metric | Extractor | Arch | Policy arch | Dropout | FPS |
+|-----:|------:|-------:|-----------|------|-------------|--------:|----:|
+| 1 | `#19` | `51.116` | `dynamics` | `large` | `[128, 128]` | `0.0001` | `387.7` |
+| 2 | `#23` | `48.804` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0527` | `517.8` |
+| 3 | `#15` | `48.499` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0099` | `520.1` |
+| 4 | `#25` | `48.002` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0537` | `377.2` |
+| 5 | `#17` | `44.175` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0008` | `518.9` |
+| 6 | `#13` | `43.431` | `dynamics` | `large` | `[256, 256]` | `0.0005` | `374.7` |
+| 7 | `#36` | `41.593` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0390` | `358.8` |
+| 8 | `#14` | `40.010` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0171` | `524.0` |
+| 9 | `#37` | `39.555` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0379` | `369.7` |
+| 10 | `#31` | `37.869` | `lstm` | `large` | `[128, 128]` | `0.0341` | `210.7` |
+
+Full active-study trial table:
+
+| Trial | State | Extractor | Arch | Policy arch | Dropout | Return | FPS |
+|------:|-------|-----------|------|-------------|--------:|-------:|----:|
+| `#19` | `COMPLETE` | `dynamics` | `large` | `[128, 128]` | `0.0001` | `51.116` | `387.7` |
+| `#23` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0527` | `48.804` | `517.8` |
+| `#15` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0099` | `48.499` | `520.1` |
+| `#25` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0537` | `48.002` | `377.2` |
+| `#17` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0008` | `44.175` | `518.9` |
+| `#13` | `COMPLETE` | `dynamics` | `large` | `[256, 256]` | `0.0005` | `43.431` | `374.7` |
+| `#36` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0390` | `41.593` | `358.8` |
+| `#14` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0171` | `40.010` | `524.0` |
+| `#37` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0379` | `39.555` | `369.7` |
+| `#31` | `COMPLETE` | `lstm` | `large` | `[128, 128]` | `0.0341` | `37.869` | `210.7` |
+| `#30` | `COMPLETE` | `lstm` | `large` | `[128, 128]` | `0.0755` | `36.730` | `213.6` |
+| `#6` | `COMPLETE` | `mlp` | `large` | `[256, 256]` | `0.0390` | `34.137` | `351.2` |
+| `#24` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0567` | `33.350` | `533.7` |
+| `#7` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0668` | `33.153` | `552.1` |
+| `#9` | `COMPLETE` | `lightweight_cnn` | `medium` | `[256, 256]` | `0.1081` | `32.204` | `387.8` |
+| `#26` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0556` | `31.630` | `543.0` |
+| `#3` | `COMPLETE` | `lstm` | `large` | `[256, 256]` | `0.1774` | `30.247` | `142.1` |
+| `#18` | `COMPLETE` | `dynamics` | `small` | `[128, 128]` | `0.0173` | `28.062` | `378.8` |
+| `#16` | `COMPLETE` | `lightweight_cnn` | `small` | `[256, 256]` | `0.0222` | `27.848` | `521.7` |
+| `#39` | `COMPLETE` | `dynamics` | `small` | `[128, 128]` | `0.0552` | `27.376` | `400.6` |
+| `#11` | `COMPLETE` | `dynamics` | `medium` | `[256, 256]` | `0.2310` | `25.896` | `547.3` |
+| `#32` | `COMPLETE` | `attention` | `large` | `[64, 64]` | `0.0930` | `24.605` | `311.6` |
+| `#10` | `COMPLETE` | `mlp` | `medium` | `[128, 128]` | `0.2264` | `23.623` | `522.8` |
+| `#38` | `COMPLETE` | `dynamics` | `small` | `[128, 128]` | `0.0453` | `23.215` | `388.0` |
+| `#22` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.1227` | `23.005` | `389.2` |
+| `#34` | `COMPLETE` | `attention` | `large` | `[64, 64]` | `0.0888` | `22.831` | `149.1` |
+| `#33` | `COMPLETE` | `attention` | `large` | `[64, 64]` | `0.0870` | `22.808` | `311.7` |
+| `#35` | `COMPLETE` | `attention` | `large` | `[64, 64]` | `0.0963` | `22.736` | `150.0` |
+| `#0` | `COMPLETE` | `mlp` | `medium` | `[64, 64]` | `0.0942` | `22.376` | `425.1` |
+| `#4` | `COMPLETE` | `lstm` | `small` | `[64, 64]` | `0.1830` | `21.890` | `460.6` |
+| `#20` | `COMPLETE` | `dynamics` | `large` | `[128, 128]` | `0.1282` | `21.201` | `560.5` |
+| `#27` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.0737` | `21.015` | `538.8` |
+| `#2` | `COMPLETE` | `mlp` | `large` | `[64, 64]` | `0.2532` | `20.182` | `396.4` |
+| `#21` | `COMPLETE` | `lightweight_cnn` | `small` | `[128, 128]` | `0.1275` | `17.802` | `553.1` |
+| `#8` | `COMPLETE` | `dynamics` | `medium` | `[128, 128]` | `0.2363` | `12.887` | `545.2` |
+| `#5` | `COMPLETE` | `mlp` | `large` | `[128, 128]` | `0.2910` | `3.501` | `486.3` |
+| `#1` | `COMPLETE` | `attention` | `medium` | `[256, 256]` | `0.1694` | `-5.797` | `288.2` |
+| `#12` | `COMPLETE` | `attention` | `small` | `[64, 64]` | `0.2191` | `-5.797` | `266.3` |
+| `#28` | `RUNNING` | `lstm` | `large` | `[128, 128]` | `0.0701` | n/a | n/a |
+| `#29` | `RUNNING` | `lstm` | `large` | `[128, 128]` | `0.0881` | n/a | n/a |
+
+### Aggregate by extractor
+
+| Extractor | Completed | Mean return | Min return | Best return | Mean FPS | Min FPS | Max FPS |
+|-----------|----------:|------------:|-----------:|------------:|---------:|--------:|--------:|
+| `dynamics` | 8 | `29.148` | `12.887` | `51.116` | `447.9` | `374.7` | `560.5` |
+| `lightweight_cnn` | 15 | `35.376` | `17.802` | `48.804` | `480.4` | `358.8` | `553.1` |
+| `lstm` | 4 | `31.684` | `21.890` | `37.869` | `256.8` | `142.1` | `460.6` |
+| `mlp` | 5 | `20.764` | `3.501` | `34.137` | `436.4` | `351.2` | `522.8` |
+| `attention` | 6 | `13.564` | `-5.797` | `24.605` | `246.2` | `149.1` | `311.7` |
+
+### Aggregate by repeated config
+
+| Config | Completed | Mean return | Best return | Mean FPS | Interpretation |
+|--------|----------:|------------:|------------:|---------:|----------------|
+| `lightweight_cnn / small / [128,128]` | 13 | `36.200` | `48.804` | `484.3` | Strongest repeated candidate; high throughput and consistently competitive returns. |
+| `dynamics / large / [128,128]` | 2 | `36.159` | `51.116` | `474.1` | Best single trial, but the second replicate dropped to `21.201`, so variance is substantial. |
+| `lstm / large / [128,128]` | 2 | `37.300` | `37.869` | `212.2` | Competitive return, but slow and two same-config `a30` attempts timed out. |
+| `attention / large / [64,64]` | 4 | `23.245` | `24.605` | `230.6` | Recovered from earlier poor trials but still behind top candidates and relatively slow. |
+
+### Reasoning and recommendation
+
+The sweep should be treated as a candidate filter, not a decision to change defaults.  It used
+4 M-step Optuna trials, uneven sampler coverage, and a noisy single-trial objective.  The best
+single value is `dynamics / large / [128,128]`, but the best repeated family is
+`lightweight_cnn / small / [128,128]`: many of its repeats land in the top half, its mean return is
+highest among extractor families, and its throughput is better than the baseline-family mean in
+this run.
+
+The initial 32 k result that favored `mlp_small` does not survive this longer pre-screen.  MLP is
+still fast, but none of its 4 M trials matched the top `dynamics` or `lightweight_cnn` candidates.
+Attention should not be a promotion candidate from these results.  LSTM remains scientifically
+interesting, but under standard PPO it does not provide true cross-step memory, runs slower, and
+large LSTM variants are close to the wall-time limit on `a30`.
+
+Recommended shortlist for longer validation:
+
+1. `lightweight_cnn / small / [128,128]`, with low dropout around `0.01`-`0.06`.
+2. `dynamics / large / [128,128]`, dropout near zero, as the best single-trial baseline-family
+   candidate.
+3. Current/default `DynamicsExtractor` configuration as a compatibility and regression baseline.
+4. Optional: `lstm / large / [128,128]` only if the goal includes temporal/spatial-sequence
+   research and the run is placed on hardware/time limits that can finish it reliably.
+
+### Proposed next steps
+
+1. Do not submit another broad Optuna array yet.
+2. Run dedicated candidate validation at **10 M+ steps**, preferably 3 seeds per candidate:
+   `lightweight_cnn_small_medium-policy`, `dynamics_large_medium-policy`, and the current default.
+3. Use a wall time above 8 hours or avoid `a30` for LSTM/large candidates; the stale Optuna records
+   show the 8-hour `a30` limit is too tight.
+4. Evaluate each completed long-run policy with the promotion gate from this note:
+   `success_rate >= 0.85`, `collision_rate <= 0.08`, at least 80 % of baseline FPS, and no
+   benchmark regression on `snqi` or `path_efficiency`.
+5. Keep `lightweight_cnn` explicitly labeled as nondeterministic on CUDA adaptive-pooling backward
+   unless/until that implementation path is changed.
+
+### Validation commands used for this analysis
+
+```bash
+squeue --me --format='%i %j %T %P %Q %y %b %S'
+
+uv run python scripts/tools/inspect_optuna_db.py \
+    --db output/optuna/feat_extractor/feat_sweep_4m_array.db \
+    --study-name feat_sweep_4m_array \
+    --top-n 40 \
+    --show-params
+
+sqlite3 -header -column output/optuna/feat_extractor/feat_sweep_4m_array.db \
+    "select state, count(*) as n from trials group by state order by state;"
+
+sacct -j 11713,11714 \
+    --format=JobID,JobName%28,State,ExitCode,Partition,Elapsed,Start,End -P
+```
+
+---
+
+## 2026-04-20 12M Fixed-Candidate Submission
+
+The requested 16-hour `pro6000` plan was checked against live SLURM state before submission.
+`sinfo -p pro6000` reported a `13:00:00` partition time limit, while `pro6000-gpu` QoS had no
+stricter `MaxWall`.  The `pro6000` node was `IDLE+DRAIN` during the daytime with reason
+`Node is disabled during daytime`, so the jobs were submitted with the maximum valid `13:00:00`
+limit and low priority rather than the invalid `16:00:00` limit.
+
+The 12M hardening batch is a fixed candidate matrix, not a free Optuna sampler:
+
+- Candidate file: `configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml`
+- Runner: `scripts/training/fixed_feature_extractor_candidates.py`
+- Launcher: `SLURM/submit_feature_extractor_fixed_candidates.sh`
+- Study: `feat_extractor_12m_hardening_20260420`
+- Storage: `output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db`
+- SLURM array: `11874`, tasks `0-9%2`
+- Partition/QoS/account: `pro6000` / `pro6000-gpu` / `mitarbeiter`
+- Priority: `--nice=10000`, observed priority `1`
+- Time limit: `13:00:00`
+
+Submission command:
+
+```bash
+bash SLURM/submit_feature_extractor_fixed_candidates.sh \
+    --candidate-file configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml \
+    --study-name feat_extractor_12m_hardening_20260420 \
+    --storage sqlite:///output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db \
+    --partition pro6000 \
+    --account mitarbeiter \
+    --qos pro6000-gpu \
+    --nice 10000 \
+    --time 13:00:00 \
+    --array-concurrency 2 \
+    --disable-wandb
+```
+
+Initial queue state after submission:
+
+```text
+11874_[0-9%2] feat_12m_fixed PENDING pro6000 priority=1 nice=10000 time=13:00:00
+Reason: Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions
+```
+
+This pending reason is expected during the daytime drain window.  If it remains unchanged during
+the next night window, re-check the node reason with:
+
+```bash
+scontrol show node auxme-imech142 | rg 'State=|Reason=|Partitions=|Gres='
+```
+
+Candidate allocation:
+
+| Tasks | Candidate | Seeds | Reason |
+|-------|-----------|-------|--------|
+| `0-3` | `lightweight_cnn / small / [128,128] / dropout=0.05` | `123`, `231`, `1337`, `2026` | Strongest repeated 4M family; extra fourth seed hardens the likely promotion candidate. |
+| `4-6` | `dynamics / large / [128,128] / dropout=0.0` | `123`, `231`, `1337` | Best single 4M trial, needs variance check. |
+| `7-9` | original/default `DynamicsExtractor` shape (`dynamics`, empty kwargs, `[64,64]`) | `123`, `231`, `1337` | Compatibility and regression baseline. |
+
+LSTM was intentionally left out of this 10-job batch.  The stale 4M Optuna records showed
+`lstm / large / [128,128]` timing out under the 8-hour `a30` limit, and extrapolating its 4M
+runtime makes a 12M `13:00:00` pro6000 job risky.  If LSTM remains interesting, submit it as a
+separate long-wall-time job on a partition that can actually provide the wall time.
+
+Monitor:
+
+```bash
+squeue -j 11874 --format='%i %j %T %P %Q %y %b %S %R'
+
+uv run python scripts/tools/inspect_optuna_db.py \
+    --db output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db \
+    --study-name feat_extractor_12m_hardening_20260420 \
+    --top-n 10
+```
+
+### 2026-04-21 retry for cancelled tasks
+
+Progress check on 2026-04-21 showed:
+
+| Original task | Candidate | State | Action |
+|---------------|-----------|-------|--------|
+| `11874_6` | `dyn_large_med_s1337` | `CANCELLED by 1002` after `03:02:08` | Original Optuna trial marked `FAIL` with `failure_type=slurm_cancelled`; candidate resubmitted. |
+| `11874_7` | `dyn_default_s123` | `CANCELLED by 1002` after `02:57:28` | Original Optuna trial marked `FAIL` with `failure_type=slurm_cancelled`; candidate resubmitted. |
+| `11874_8-9` | default dynamics seeds `231`, `1337` | still `PENDING` on `pro6000` | Left in place for the next `pro6000` availability window. |
+
+The retry was moved to `l40s` because `pro6000` daytime drain cancelled the first attempts and the
+remaining `pro6000` tasks were still pending for node availability.  `l40s` reported a 3-day
+partition limit and no stricter `l40s-gpu` QoS wall-time cap, so the retries use a conservative
+24-hour low-priority wall time.
+
+Retry submission:
+
+```bash
+sbatch \
+    --job-name=feat_12m_retry \
+    --array=6-7%2 \
+    --time=24:00:00 \
+    --cpus-per-task=8 \
+    --mem=32G \
+    --gres=gpu:1 \
+    --output=output/slurm/feat_12m_retry_%A_%a.out \
+    --error=output/slurm/feat_12m_retry_%A_%a.err \
+    --partition=l40s \
+    --account=mitarbeiter \
+    --qos=l40s-gpu \
+    --nice=10000 \
+    --wrap 'uv run python scripts/training/fixed_feature_extractor_candidates.py --candidate-file configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml --candidate-index $SLURM_ARRAY_TASK_ID --study-name feat_extractor_12m_hardening_20260420 --storage sqlite:///output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db --log-level WARNING --disable-wandb'
+```
+
+Retry job:
+
+| Job | Tasks | Partition | State at submission check |
+|-----|-------|-----------|---------------------------|
+| `11907` | `6-7%2` | `l40s` | `PENDING`, reason `Priority`; task `6` had estimated start `2026-04-23T09:36:17`. |
+
+Monitor both arrays:
+
+```bash
+squeue -j 11874,11907 --format='%i %j %T %P %Q %y %b %M %l %S %R'
 ```
 
 ---

@@ -32,32 +32,46 @@ def _write_campaign_table(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
-def test_build_analysis_reports_top_ties_without_decisive_winner_change() -> None:
+def test_cli_reports_top_ties_without_decisive_winner_change(tmp_path: Path) -> None:
     """A tied single-metric top should not be reported as a decisive winner change."""
-    rows = [
-        {
-            "planner_key": "alpha",
-            "algo": "alpha",
-            "planner_group": "core",
-            "kinematics": "differential_drive",
-            "success_mean": 1.0,
-            "collisions_mean": 0.0,
-            "near_misses_mean": 0.0,
-            "snqi_mean": 0.4,
-        },
-        {
-            "planner_key": "zulu",
-            "algo": "zulu",
-            "planner_group": "core",
-            "kinematics": "differential_drive",
-            "success_mean": 1.0,
-            "collisions_mean": 0.0,
-            "near_misses_mean": 0.0,
-            "snqi_mean": 0.8,
-        },
-    ]
+    campaign_root = tmp_path / "campaign"
+    reports_dir = campaign_root / "reports"
+    _write_campaign_table(
+        reports_dir / "campaign_table.csv",
+        [
+            {
+                "planner_key": "alpha",
+                "algo": "alpha",
+                "planner_group": "core",
+                "kinematics": "differential_drive",
+                "benchmark_success": "true",
+                "success_mean": 1.0,
+                "collisions_mean": 0.0,
+                "near_misses_mean": 0.0,
+                "snqi_mean": 0.4,
+            },
+            {
+                "planner_key": "zulu",
+                "algo": "zulu",
+                "planner_group": "core",
+                "kinematics": "differential_drive",
+                "benchmark_success": "true",
+                "success_mean": 1.0,
+                "collisions_mean": 0.0,
+                "near_misses_mean": 0.0,
+                "snqi_mean": 0.8,
+            },
+        ],
+    )
 
-    payload = analyze_snqi_vs_single_metric_ranking._build_analysis(rows)
+    exit_code = analyze_snqi_vs_single_metric_ranking.main(
+        ["--campaign-root", str(campaign_root), "--core-only"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(
+        (reports_dir / "snqi_vs_single_metric_ranking.json").read_text(encoding="utf-8")
+    )
 
     assert payload["snqi_order"] == ["zulu", "alpha"]
     assert payload["comparisons"]["success_mean"]["order"] == ["alpha", "zulu"]

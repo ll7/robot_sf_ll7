@@ -265,6 +265,18 @@ def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
         assert _resolved_seed_inventory(_load_campaign_scenarios(cfg)) == expected_seeds
 
 
+def test_issue_821_extended_matrix_is_evidence_only_until_release_doi_exists() -> None:
+    """Issue 821 matrix should not export bundles while its DOI is a placeholder."""
+    cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_issue_821_extended.yaml")
+    )
+
+    assert cfg.paper_facing is True
+    assert cfg.export_publication_bundle is False
+    assert cfg.release_tag == "{release_tag}"
+    assert cfg.doi == "10.5281/zenodo.<record-id>"
+
+
 def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> None:
     """Hash helper should raise a path-specific error for missing or unreadable files."""
     missing_path = tmp_path / "missing.json"

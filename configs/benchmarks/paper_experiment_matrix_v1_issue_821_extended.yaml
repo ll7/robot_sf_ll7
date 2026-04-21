@@ -69,7 +69,9 @@ bootstrap_seed: 123
 kinematics_matrix:
   - differential_drive
 
-export_publication_bundle: true
+# Evidence-only extension while the Zenodo DOI remains a release-time placeholder.
+# Do not emit publication bundles from this config until a concrete release record exists.
+export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7

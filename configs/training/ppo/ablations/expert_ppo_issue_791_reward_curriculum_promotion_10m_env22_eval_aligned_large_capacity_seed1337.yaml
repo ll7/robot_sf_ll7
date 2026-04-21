@@ -1,0 +1,136 @@
+# 10M seed replica (seed 1337) of the Wave-5 leader recipe.
+# Same as ..._eval_aligned_large_capacity.yaml with seed set to 1337.
+# Purpose: close the seed-variance question for the 0.929 leader at full budget
+# (3M probe 11730 landed at 0.829 but did not run to 10M).
+policy_id: ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337
+scenario_config: ../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
+num_envs: 22
+worker_mode: subproc
+seeds:
+- 1337
+randomize_seeds: true
+total_timesteps: 10000000
+best_checkpoint_metric: success_rate
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels:
+  - 64
+  - 128
+  - 128
+  grid_kernel_sizes:
+  - 5
+  - 3
+  - 3
+  socnav_hidden_dims:
+  - 256
+  - 256
+  dropout_rate: 0.1
+ppo_hyperparams:
+  learning_rate: 7.5e-05
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.008
+  clip_range: 0.1
+  target_kl: 0.02
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  predictive_foresight_enabled: true
+  predictive_foresight_model_id: predictive_proxy_selected_v2_full
+  predictive_foresight_device: cuda
+  predictive_foresight_max_agents: 16
+  predictive_foresight_horizon_steps: 8
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels:
+    - obstacles
+    - pedestrians
+    - combined
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.1
+      living: -0.015
+      collision: -15.0
+      near_miss: -1.5
+      ttc_risk: -1.2
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -0.8
+      terminal_bonus: 20.0
+  reward_curriculum:
+    stages:
+    - until_episodes: 100
+      reward_kwargs:
+        weights:
+          progress: 1.1
+          collision: -15.0
+          timeout: -6.5
+          terminal_bonus: 20.0
+    - reward_kwargs:
+        weights:
+          progress: 1.1
+          living: -0.015
+          collision: -15.0
+          near_miss: -1.5
+          ttc_risk: -1.2
+          comfort: -0.5
+          smoothness: -0.18
+          timeout: -6.5
+          stagnation: -0.8
+          terminal_bonus: 20.0
+  peds_have_obstacle_forces: true
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+convergence:
+  success_rate: 0.95
+  collision_rate: 0.05
+  plateau_window: 32
+evaluation:
+  evaluation_episodes: 70
+  hold_out_scenarios: []
+  randomize_seeds: false
+  scenario_config: ../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
+  full_policy_analysis_on_new_best: false
+  full_policy_analysis_videos: false
+  step_schedule:
+  - every_steps: 524288
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-791-reward-curriculum
+    job_type: expert-ppo-10m-eval-aligned-large-capacity-seed1337
+    tags:
+    - issue-791
+    - reward-curriculum
+    - ppo
+    - promotion-10m-env22
+    - eval-aligned
+    - large-capacity
+    - seed-1337
+    - wave-7
+    - seed-replica

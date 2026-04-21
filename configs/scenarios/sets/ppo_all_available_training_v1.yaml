@@ -1,0 +1,19 @@
+# Broadest available training scenario manifest for issue-791 PPO promotion.
+#
+# Combines:
+# - Maintained eval superset (classic + francis 2023 + atomic issue_596 archetypes)
+# - Simple-map validated subset (empty-map 8-direction, single obstacles)
+# - Safety barrier static slice (6 static/obstacle scenarios)
+# - TEB topology slice (line wall, narrow passage, symmetry)
+#
+# Rationale: maximize scenario/map diversity under random seeding during training
+# while keeping all scenarios curated and plausibility-reviewed somewhere in the
+# repo. Simple/atomic scenarios are zero-density; they teach straight-line
+# traversal and basic obstacle avoidance without interfering with crowd-nav
+# learning. Used by `expert_ppo_issue_791_all_scenarios_*` configs.
+includes:
+  - ../classic_interactions_francis2023.yaml
+  - atomic_navigation_minimal_full_v1.yaml
+  - verified_simple_subset_v1.yaml
+  - safety_barrier_static_slice_v1.yaml
+  - issue_805_teb_topology_slice.yaml

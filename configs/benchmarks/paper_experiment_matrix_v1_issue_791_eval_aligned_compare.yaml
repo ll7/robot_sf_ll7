@@ -51,7 +51,12 @@ horizon: 100
 dt: 0.1
 record_forces: true
 resume: true
-stop_on_failure: true
+# Continue past per-planner prereq/environmental failures; 11798 (orca/rvo2) and
+# 11871 (sacadrl/tensorflow) both halted the entire campaign on one dependency
+# miss. The downstream per-planner status columns already surface
+# partial-failure clearly, so tolerance here keeps the leader and all ready
+# baselines scored in a single submission.
+stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123

@@ -669,6 +669,9 @@ squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" \
 
 ## Relevant Docs
 
+- [Issue 791 Wave-6 Results + Benchmark ORCA Block](issue_791_wave6_results_and_benchmark_orca_block.md)
+  — 2026-04-20 follow-up: attribution resolved (distribution alignment dominates),
+  benchmark 11798 halted on missing `rvo2`, next-step priority list.
 - [Issue 791 Attention Head Gate](issue_791_attention_head_gate.md)
 - [Issue 791 Reward Curriculum Gate](issue_791_reward_curriculum_gate.md)
 - [Issue 791 Asymmetric Critic Gate](issue_791_asymmetric_critic_gate.md)

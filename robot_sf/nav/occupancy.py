@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     """
     Checks if two circles intersect.
@@ -65,7 +65,7 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     return dist_sq <= rad_sum_sq
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def _circle_collides_any_points(
     center_x: float,
     center_y: float,
@@ -86,7 +86,7 @@ def _circle_collides_any_points(
     return False
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     """Simple vector math implementation using quadratic solution formula.
 
@@ -124,7 +124,7 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def _circle_collides_any_flat_segments(
     c_x: float,
     c_y: float,

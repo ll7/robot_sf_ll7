@@ -49,8 +49,31 @@ steps, with two repeats per map and fixed seed `12345`. The artifact log is
 | `classic_crossing` | 2 | 28 | 6286.04 | yes |
 | `uni_campus_big` | 81 | 862 | 593.98 | yes |
 
-This check broadens coverage across empty, sparse, bottleneck/crossing, and dense-campus maps. It
-does not replace an A/B benchmark against the pre-optimization commits.
+This check broadens coverage across empty, sparse, bottleneck/crossing, and dense-campus maps.
+
+## Multi-Map A/B Check
+
+The same sweep was run against pre-optimization commit `e3ef0a98` in a detached worktree and
+compared with current commit `89e05c01`.
+
+Artifacts:
+
+- `output/ai/autoresearch/simulation_speed/multimap_base_e3ef0a98.tsv`
+- `output/ai/autoresearch/simulation_speed/multimap_current.tsv`
+- `output/ai/autoresearch/simulation_speed/multimap_ab_comparison.tsv`
+- `output/ai/autoresearch/simulation_speed/multimap_ab_summary.json`
+
+| Map | Base steps/sec | Current steps/sec | Speedup | State hash match |
+| --- | ---: | ---: | ---: | --- |
+| `planner_sanity_open` | 7208.91 | 7990.17 | 10.84% | yes |
+| `classic_head_on_corridor` | 5946.53 | 6422.43 | 8.00% | yes |
+| `classic_bottleneck_high` | 3987.49 | 4436.35 | 11.26% | yes |
+| `classic_crossing` | 5487.31 | 6286.04 | 14.56% | yes |
+| `uni_campus_big` | 423.93 | 593.98 | 40.11% | yes |
+
+All A/B map comparisons matched state hash, total reward, and reset count. Mean unweighted speedup
+across maps was 16.95%; the dense `uni_campus_big` case showed the largest gain because it exercises
+the optimized obstacle, group, and pedestrian-collision paths most heavily.
 
 ## Follow-Up Experiments
 
@@ -80,9 +103,13 @@ Discarded experiments:
 - Multi-map current-branch sweep over `planner_sanity_open`, `classic_head_on_corridor`,
   `classic_bottleneck_high`, `classic_crossing`, and `uni_campus_big`; artifact:
   `output/ai/autoresearch/simulation_speed/multimap_current.tsv`.
+- Multi-map A/B sweep against `e3ef0a98`; artifacts:
+  `output/ai/autoresearch/simulation_speed/multimap_base_e3ef0a98.tsv`,
+  `output/ai/autoresearch/simulation_speed/multimap_ab_comparison.tsv`, and
+  `output/ai/autoresearch/simulation_speed/multimap_ab_summary.json`.
 
 ## Follow-Up Boundary
 
-These are local throughput checks, not camera-ready benchmark results. Before making broad runtime
-claims, run an A/B benchmark against the pre-optimization commits or a dedicated release-style
-throughput suite.
+These are local throughput checks, not camera-ready benchmark results. Before making paper-facing or
+release-wide runtime claims, run a dedicated release-style throughput suite with more repeats and
+documented hardware isolation.

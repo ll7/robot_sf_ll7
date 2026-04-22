@@ -185,6 +185,27 @@ def test_continuous_occupancy_dynamic_and_pedestrian_collision() -> None:
     assert occ_no_dynamic.is_dynamic_collision is False
 
 
+def test_continuous_occupancy_pedestrian_array_matches_circle_collision() -> None:
+    """Array-backed pedestrian collision checks must match the circle helper contract."""
+    ped_positions = np.array([[2.0, 2.0], [0.4, 0.0]], dtype=float)
+    occ = ContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (0.0, 0.0),
+        get_goal_coords=lambda: (1.0, 1.0),
+        get_obstacle_coords=lambda: np.empty((0, 4)),
+        get_pedestrian_coords=lambda: ped_positions,
+        agent_radius=0.25,
+        ped_radius=0.2,
+    )
+
+    expected = circle_collides_any(
+        ((0.0, 0.0), 0.25),
+        [((ped_x, ped_y), 0.2) for ped_x, ped_y in ped_positions],
+    )
+    assert occ.is_pedestrian_collision is expected
+
+
 def test_continuous_occupancy_obstacle_collision_detects_lines() -> None:
     """Obstacle collision uses obstacle line segments from the callback."""
     occ = ContinuousOccupancy(

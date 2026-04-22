@@ -30,8 +30,9 @@ iterable segment path remains unchanged.
 | numba obstacle segments | 451.18 | 2.216 s | `eb2e1ccf6d9e6ec916f7fc4daa6c1a81` | -216.11873176486793 | 13 |
 | direct group centroid | 485.39 | 2.060 s | `eb2e1ccf6d9e6ec916f7fc4daa6c1a81` | -216.11873176486793 | 13 |
 | numba group repulsive | 566.22 | 1.766 s | `eb2e1ccf6d9e6ec916f7fc4daa6c1a81` | -216.11873176486793 | 13 |
+| numba pedestrian collision | 576.71 | 1.734 s | `eb2e1ccf6d9e6ec916f7fc4daa6c1a81` | -216.11873176486793 | 13 |
 
-Observed retained improvement on this short local contract: about 57.1% higher steady-state
+Observed retained improvement on this short local contract: about 60.0% higher steady-state
 steps/sec with identical rollout hash and reward.
 
 ## Follow-Up Experiments
@@ -41,6 +42,15 @@ steps/sec with identical rollout hash and reward.
 - `numba group repulsive`: replaced the `each_diff` allocation path in
   `fast-pysf/pysocialforce/forces.py::GroupRepulsiveForce` with a Numba helper for one group's
   pairwise repulsive force.
+- `numba pedestrian collision`: replaced generator-based circle checks for NumPy pedestrian
+  position arrays in `robot_sf/nav/occupancy.py::ContinuousOccupancy.is_pedestrian_collision`.
+
+Discarded experiments:
+
+- `numba group coherence`: improved speed but changed the exact rollout state hash, including when
+  compiled without `fastmath`.
+- `inplace force accumulation`: preserved the state hash but measured slower than the retained
+  current best.
 
 ## Validation
 

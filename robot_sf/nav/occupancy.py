@@ -66,6 +66,27 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
 
 
 @numba.njit(fastmath=True)
+def _circle_collides_any_points(
+    center_x: float,
+    center_y: float,
+    radius: float,
+    points: np.ndarray,
+    other_radius: float,
+) -> bool:
+    """Check one circle against equal-radius circles centered at an ``(N, 2)`` array.
+
+    Returns:
+        bool: True if any point-centered circle intersects the query circle.
+    """
+    rad_sum_sq = (radius + other_radius) ** 2
+    for idx in range(points.shape[0]):
+        dist_sq = (center_x - points[idx, 0]) ** 2 + (center_y - points[idx, 1]) ** 2
+        if dist_sq <= rad_sum_sq:
+            return True
+    return False
+
+
+@numba.njit(fastmath=True)
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     """Simple vector math implementation using quadratic solution formula.
 
@@ -297,8 +318,20 @@ class ContinuousOccupancy:
         """
         collision_distance = self.agent_radius
         ped_radius = self.ped_radius
-        circle_agent = (self.get_agent_coords(), collision_distance)
-        ped_circles = (((ped_x, ped_y), ped_radius) for ped_x, ped_y in self.pedestrian_coords)
+        agent_x, agent_y = self.get_agent_coords()
+        pedestrian_coords = self.pedestrian_coords
+        if isinstance(pedestrian_coords, np.ndarray):
+            return bool(
+                _circle_collides_any_points(
+                    agent_x,
+                    agent_y,
+                    collision_distance,
+                    pedestrian_coords,
+                    ped_radius,
+                )
+            )
+        circle_agent = ((agent_x, agent_y), collision_distance)
+        ped_circles = (((ped_x, ped_y), ped_radius) for ped_x, ped_y in pedestrian_coords)
         return circle_collides_any(circle_agent, ped_circles)
 
     @property

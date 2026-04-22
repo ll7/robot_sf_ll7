@@ -103,6 +103,47 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
 
 
+@numba.njit(fastmath=True)
+def _circle_collides_any_flat_segments(
+    c_x: float,
+    c_y: float,
+    radius: float,
+    segments: np.ndarray,
+) -> bool:
+    """Check collision against an ``(N, 4)`` segment array without Python loop overhead.
+
+    Returns:
+        bool: True if any segment intersects the circle.
+    """
+    r_sq = radius**2
+    for idx in range(segments.shape[0]):
+        p1_x = segments[idx, 0] - c_x
+        p1_y = segments[idx, 1] - c_y
+        p2_x = segments[idx, 2] - c_x
+        p2_y = segments[idx, 3] - c_y
+
+        norm_p1 = p1_x**2 + p1_y**2
+        norm_p2 = p2_x**2 + p2_y**2
+        if norm_p1 <= r_sq or norm_p2 <= r_sq:
+            return True
+
+        s_x = p2_x - p1_x
+        s_y = p2_y - p1_y
+        a = s_x**2 + s_y**2
+        b = 2 * (s_x * p1_x + s_y * p1_y)
+        c = norm_p1 - r_sq
+
+        disc = b**2 - 4 * a * c
+        if disc < 0:
+            continue
+
+        disc_root = disc**0.5
+        if 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a:
+            return True
+
+    return False
+
+
 def circle_collides_any(circle: Circle2D, others: Iterable[Circle2D]) -> bool:
     """Check whether a circle collides with any other circles.
 
@@ -130,10 +171,8 @@ def circle_collides_any_lines(circle: Circle2D, segments: Iterable[Line2D] | np.
         bool: True if any intersection is found.
     """
     if isinstance(segments, np.ndarray):
-        for s_x, s_y, e_x, e_y in segments:
-            if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
-                return True
-        return False
+        (c_x, c_y), radius = circle
+        return bool(_circle_collides_any_flat_segments(c_x, c_y, radius, segments))
 
     for idx, seg in enumerate(segments):
         try:

@@ -133,6 +133,27 @@ def test_circle_collides_any_lines_accepts_array_and_flat_segments() -> None:
     assert circle_collides_any_lines(circle, invalid_segments) is False
 
 
+def test_circle_collides_any_lines_array_matches_nested_segments() -> None:
+    """The optimized ndarray path must preserve the nested segment collision contract."""
+    circle = ((1.0, 1.0), 0.5)
+    segments = np.array(
+        [
+            [3.0, 3.0, 4.0, 4.0],
+            [1.25, 0.25, 1.25, 1.75],
+            [-2.0, -2.0, -1.0, -1.0],
+        ],
+        dtype=float,
+    )
+    nested_segments = [
+        ((float(s_x), float(s_y)), (float(e_x), float(e_y))) for s_x, s_y, e_x, e_y in segments
+    ]
+
+    assert circle_collides_any_lines(circle, segments) is circle_collides_any_lines(
+        circle,
+        nested_segments,
+    )
+
+
 def test_continuous_occupancy_dynamic_and_pedestrian_collision() -> None:
     """Check dynamic object and pedestrian collision helpers."""
     occ = ContinuousOccupancy(

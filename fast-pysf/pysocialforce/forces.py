@@ -688,20 +688,38 @@ class GroupRepulsiveForce:
             if not group:
                 continue
 
-            size = len(group)
             member_pos = self.peds.pos()[group, :]
 
-            # Calculate the relative positions among members in the group.
-            diff = each_diff(member_pos)  # others - self
-            # Normalize the relative position vectors and get their norms.
-            _, norms = normalize(diff)
-            # Zero out the relative positions of members outside the threshold distance.
-            diff[norms > threshold, :] = 0
-            # Sum the adjusted relative positions to compute forces for the current group.
-            forces[group, :] += np.sum(diff.reshape((size, -1, 2)), axis=1)
+            forces[group, :] += group_repulsive_force(member_pos, threshold)
 
         # Multiply the forces by a scaling factor from the configuration and return the result.
         return forces * self.config.factor
+
+
+@njit(fastmath=True)
+def group_repulsive_force(member_pos: np.ndarray, threshold: float) -> np.ndarray:
+    """Compute intra-group repulsive forces for one pedestrian group.
+
+    Args:
+        member_pos: Group member positions with shape ``(N, 2)``.
+        threshold: Maximum pairwise distance contributing to the force.
+
+    Returns:
+        np.ndarray: Per-member force vectors with shape ``(N, 2)``.
+    """
+    size = member_pos.shape[0]
+    forces = np.zeros((size, 2))
+    for ped_idx in range(size):
+        for other_idx in range(size):
+            if ped_idx == other_idx:
+                continue
+            diff_x = member_pos[ped_idx, 0] - member_pos[other_idx, 0]
+            diff_y = member_pos[ped_idx, 1] - member_pos[other_idx, 1]
+            norm = (diff_x**2 + diff_y**2) ** 0.5
+            if norm <= threshold:
+                forces[ped_idx, 0] += diff_x
+                forces[ped_idx, 1] += diff_y
+    return forces
 
 
 class GroupGazeForceAlt:

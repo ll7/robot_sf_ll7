@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -133,6 +134,27 @@ def test_circle_collides_any_lines_accepts_array_and_flat_segments() -> None:
     assert circle_collides_any_lines(circle, invalid_segments) is False
 
 
+def test_circle_collides_any_lines_array_matches_nested_segments() -> None:
+    """The optimized ndarray path must preserve the nested segment collision contract."""
+    circle = ((1.0, 1.0), 0.5)
+    segments = np.array(
+        [
+            [3.0, 3.0, 4.0, 4.0],
+            [1.25, 0.25, 1.25, 1.75],
+            [-2.0, -2.0, -1.0, -1.0],
+        ],
+        dtype=float,
+    )
+    nested_segments = [
+        ((float(s_x), float(s_y)), (float(e_x), float(e_y))) for s_x, s_y, e_x, e_y in segments
+    ]
+
+    assert circle_collides_any_lines(circle, segments) is circle_collides_any_lines(
+        circle,
+        nested_segments,
+    )
+
+
 def test_continuous_occupancy_dynamic_and_pedestrian_collision() -> None:
     """Check dynamic object and pedestrian collision helpers."""
     occ = ContinuousOccupancy(
@@ -162,6 +184,43 @@ def test_continuous_occupancy_dynamic_and_pedestrian_collision() -> None:
         goal_radius=0.2,
     )
     assert occ_no_dynamic.is_dynamic_collision is False
+
+
+def test_continuous_occupancy_pedestrian_array_matches_circle_collision() -> None:
+    """Array-backed pedestrian collision checks must match the circle helper contract."""
+    ped_positions = np.array([[2.0, 2.0], [0.4, 0.0]], dtype=float)
+    occ = ContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (0.0, 0.0),
+        get_goal_coords=lambda: (1.0, 1.0),
+        get_obstacle_coords=lambda: np.empty((0, 4)),
+        get_pedestrian_coords=lambda: ped_positions,
+        agent_radius=0.25,
+        ped_radius=0.2,
+    )
+
+    expected = circle_collides_any(
+        ((0.0, 0.0), 0.25),
+        [((ped_x, ped_y), 0.2) for ped_x, ped_y in ped_positions],
+    )
+    assert occ.is_pedestrian_collision is expected
+
+
+def test_continuous_occupancy_pedestrian_iterable_path() -> None:
+    """Non-array pedestrian iterables should keep using the generic circle helper path."""
+    occ = ContinuousOccupancy(
+        width=2.0,
+        height=2.0,
+        get_agent_coords=lambda: (0.0, 0.0),
+        get_goal_coords=lambda: (1.0, 1.0),
+        get_obstacle_coords=lambda: np.empty((0, 4)),
+        get_pedestrian_coords=lambda: [(0.4, 0.0)],
+        agent_radius=0.25,
+        ped_radius=0.2,
+    )
+
+    assert occ.is_pedestrian_collision is True
 
 
 def test_continuous_occupancy_obstacle_collision_detects_lines() -> None:
@@ -269,6 +328,24 @@ def test_check_quality_of_map_point_supports_flat_bounds_and_invalid_entries() -
         (0.0, 0.0, 0.0, 2.0),
     ]
     map_def = _make_map(obstacles=[], bounds=flat_bounds)
+
+    assert check_quality_of_map_point(map_def, (1.0, 1.0), radius=0.1) is True
+    assert check_quality_of_map_point(map_def, (1.0, 0.0), radius=0.1) is False
+
+
+def test_check_quality_of_map_point_supports_pair_bounds() -> None:
+    """Pair-of-points bounds should be accepted by the map quality helper."""
+    map_def = SimpleNamespace(
+        width=2.0,
+        height=2.0,
+        obstacles=[],
+        bounds=[
+            ((0.0, 0.0), (2.0, 0.0)),
+            ((2.0, 0.0), (2.0, 2.0)),
+            ((2.0, 2.0), (0.0, 2.0)),
+            ((0.0, 2.0), (0.0, 0.0)),
+        ],
+    )
 
     assert check_quality_of_map_point(map_def, (1.0, 1.0), radius=0.1) is True
     assert check_quality_of_map_point(map_def, (1.0, 0.0), radius=0.1) is False

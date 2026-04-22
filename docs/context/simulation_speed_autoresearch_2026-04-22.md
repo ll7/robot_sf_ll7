@@ -35,6 +35,23 @@ iterable segment path remains unchanged.
 Observed retained improvement on this short local contract: about 60.0% higher steady-state
 steps/sec with identical rollout hash and reward.
 
+## Multi-Map Current-Branch Check
+
+After retaining the speedups, a broader current-branch sweep ran 500 measured steps after 30 warmup
+steps, with two repeats per map and fixed seed `12345`. The artifact log is
+`output/ai/autoresearch/simulation_speed/multimap_current.tsv`.
+
+| Map | Pedestrians | Obstacle segments | Mean steps/sec | Repeat hashes match |
+| --- | ---: | ---: | ---: | --- |
+| `planner_sanity_open` | 0 | 20 | 7990.17 | yes |
+| `classic_head_on_corridor` | 1 | 20 | 6422.43 | yes |
+| `classic_bottleneck_high` | 4 | 36 | 4436.35 | yes |
+| `classic_crossing` | 2 | 28 | 6286.04 | yes |
+| `uni_campus_big` | 81 | 862 | 593.98 | yes |
+
+This check broadens coverage across empty, sparse, bottleneck/crossing, and dense-campus maps. It
+does not replace an A/B benchmark against the pre-optimization commits.
+
 ## Follow-Up Experiments
 
 - `direct group centroid`: replaced allocation-heavy `pos_of_many` plus `np.mean` in
@@ -60,9 +77,12 @@ Discarded experiments:
 - `.venv/bin/python -m ruff check fast-pysf/pysocialforce/forces.py robot_sf/ped_npc/ped_grouping.py tests/ped_grouping_test.py`
 - `.venv/bin/python -m ruff format --check robot_sf/nav/occupancy.py tests/test_occupancy_additional.py`
 - `.venv/bin/python -m ruff format --check fast-pysf/pysocialforce/forces.py robot_sf/ped_npc/ped_grouping.py tests/ped_grouping_test.py`
+- Multi-map current-branch sweep over `planner_sanity_open`, `classic_head_on_corridor`,
+  `classic_bottleneck_high`, `classic_crossing`, and `uni_campus_big`; artifact:
+  `output/ai/autoresearch/simulation_speed/multimap_current.tsv`.
 
 ## Follow-Up Boundary
 
-This is a short local micro-benchmark, not a camera-ready benchmark result. Before making broad
-runtime claims, rerun a larger benchmark or environment throughput suite across representative maps
-and obstacle densities.
+These are local throughput checks, not camera-ready benchmark results. Before making broad runtime
+claims, run an A/B benchmark against the pre-optimization commits or a dedicated release-style
+throughput suite.

@@ -213,8 +213,8 @@ def _flatten_obs_from_space(space: spaces.Space, obs: Any) -> list[np.ndarray]:
 def _asymmetric_critic_state_spec(
     obs_space: spaces.Dict,
     *,
-    sim_time_limit: float,
-    max_sim_steps: int,
+    sim_time_limit: float,  # noqa: ARG001 — retained for caller compatibility
+    max_sim_steps: int,  # noqa: ARG001 — retained for caller compatibility
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return low/high bounds for the critic-only privileged state vector.
 
@@ -229,11 +229,16 @@ def _asymmetric_critic_state_spec(
             raise TypeError(f"asymmetric_critic requires Box leaves; got {type(space).__name__}")
         low_parts.append(np.asarray(space.low, dtype=np.float32).reshape(-1))
         high_parts.append(np.asarray(space.high, dtype=np.float32).reshape(-1))
+    # Bounds for the privileged time/step scalars use np.finfo(np.float32).max so that
+    # scenario-level overrides extending max_sim_steps or sim_time_limit do not violate
+    # the declared observation space. Emitted values are clipped to the configured limits
+    # in _build_asymmetric_critic_state.
+    finfo_max = float(np.finfo(np.float32).max)
     low_parts.extend(
         [
             np.array([0.0], dtype=np.float32),
             np.array([0.0], dtype=np.float32),
-            np.array([float(max_sim_steps)], dtype=np.float32),
+            np.array([0.0], dtype=np.float32),
             np.array([0.0], dtype=np.float32),
             np.array([0.0], dtype=np.float32),
             np.zeros(5, dtype=np.float32),
@@ -241,11 +246,11 @@ def _asymmetric_critic_state_spec(
     )
     high_parts.extend(
         [
-            np.array([float(max_sim_steps)], dtype=np.float32),
-            np.array([float(sim_time_limit)], dtype=np.float32),
-            np.array([float(max_sim_steps)], dtype=np.float32),
-            np.array([np.finfo(np.float32).max], dtype=np.float32),
-            np.array([np.finfo(np.float32).max], dtype=np.float32),
+            np.array([finfo_max], dtype=np.float32),
+            np.array([finfo_max], dtype=np.float32),
+            np.array([finfo_max], dtype=np.float32),
+            np.array([finfo_max], dtype=np.float32),
+            np.array([finfo_max], dtype=np.float32),
             np.ones(5, dtype=np.float32),
         ]
     )
@@ -723,15 +728,24 @@ class RobotEnv(BaseEnv):
             },
         )
         parts = _flatten_obs_from_space(critic_obs_space, obs)
+        # Clamp non-negative scalars at zero; the privileged Box upper bound is finfo.max
+        # so values cannot exceed it in practice but negatives could still appear from
+        # malformed meta entries and would violate the [0, finfo.max] declaration.
+        finfo_max = float(np.finfo(np.float32).max)
+
+        def _nonneg(value: float) -> float:
+            return float(np.clip(value, 0.0, finfo_max))
+
         parts.extend(
             [
-                np.array([float(meta.get("step_of_episode", 0) or 0)], dtype=np.float32),
-                np.array([float(self.state.sim_time_elapsed)], dtype=np.float32),
+                np.array([_nonneg(meta.get("step_of_episode", 0) or 0)], dtype=np.float32),
+                np.array([_nonneg(self.state.sim_time_elapsed)], dtype=np.float32),
                 np.array(
-                    [float(meta.get("max_sim_steps", self.state.max_sim_steps))], dtype=np.float32
+                    [_nonneg(meta.get("max_sim_steps", self.state.max_sim_steps))],
+                    dtype=np.float32,
                 ),
-                np.array([float(meta.get("distance_to_goal", 0.0))], dtype=np.float32),
-                np.array([float(meta.get("prev_distance_to_goal", 0.0))], dtype=np.float32),
+                np.array([_nonneg(meta.get("distance_to_goal", 0.0))], dtype=np.float32),
+                np.array([_nonneg(meta.get("prev_distance_to_goal", 0.0))], dtype=np.float32),
                 np.array([float(bool(meta.get("is_route_complete")))], dtype=np.float32),
                 np.array([float(bool(meta.get("is_timesteps_exceeded")))], dtype=np.float32),
                 np.array([float(bool(meta.get("is_pedestrian_collision")))], dtype=np.float32),

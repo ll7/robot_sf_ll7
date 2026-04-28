@@ -106,16 +106,24 @@ fi
 
 detect_wandb_enabled() {
   local config_path="$1"
+  # Track indentation so the wandb block is exited when a sibling key (same or
+  # lower indent than the `wandb:` line) appears. Without this the parser would
+  # keep matching `enabled:` keys from sibling tracking blocks (e.g. tensorboard).
   awk '
-    BEGIN { in_wandb = 0 }
+    BEGIN { in_wandb = 0; wandb_indent = -1 }
     {
       line = $0
+      if (line ~ /^[[:space:]]*(#|$)/) next
+      match(line, /^[[:space:]]*/)
+      indent = RLENGTH
       if (line ~ /^[[:space:]]*wandb:[[:space:]]*$/) {
         in_wandb = 1
+        wandb_indent = indent
         next
       }
-      if (in_wandb && line ~ /^[^[:space:]]/) {
+      if (in_wandb && indent <= wandb_indent && line ~ /^[[:space:]]*[^[:space:]#-].*:/) {
         in_wandb = 0
+        wandb_indent = -1
       }
       if (in_wandb && line ~ /^[[:space:]]*enabled:[[:space:]]*/) {
         sub(/^[[:space:]]*enabled:[[:space:]]*/, "", line)

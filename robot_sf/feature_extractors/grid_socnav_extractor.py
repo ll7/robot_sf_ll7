@@ -173,7 +173,8 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
                         "GridSocNavExtractor expected privileged_state_key to exist in observation space: "
                         f"{privileged_state_key}"
                     )
-                socnav_keys.append(privileged_state_key)
+                if privileged_state_key not in socnav_keys:
+                    socnav_keys.append(privileged_state_key)
             else:
                 socnav_keys = [key for key in socnav_keys if key != privileged_state_key]
 

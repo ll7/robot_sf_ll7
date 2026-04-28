@@ -23,8 +23,8 @@ they can be included in context notes or CI artefacts.
 
 Observation space used (matches the default robot environment)
 --------------------------------------------------------------
-- ``rays``:        shape (1, 272) — one timestep × 272 LiDAR rays
-- ``drive_state``: shape (1, 7)  — one timestep × 7 drive state dims
+- ``rays``:        shape (1, 272) — one timestep x 272 LiDAR rays
+- ``drive_state``: shape (1, 7)  — one timestep x 7 drive state dims
 
 These match the ``DEFAULT_GYM`` observation mode produced by
 ``robot_sf.gym_env.robot_env.RobotEnv`` with default ``EnvSettings``.
@@ -60,12 +60,12 @@ if TYPE_CHECKING:
 # Benchmark configuration
 # ---------------------------------------------------------------------------
 
-_DEFAULT_RAY_SHAPE = (1, 272)    # (timesteps, num_rays)
-_DEFAULT_DRIVE_SHAPE = (1, 7)    # (timesteps, drive_dim)
+_DEFAULT_RAY_SHAPE = (1, 272)  # (timesteps, num_rays)
+_DEFAULT_DRIVE_SHAPE = (1, 7)  # (timesteps, drive_dim)
 _DEFAULT_BATCH = 256
 _DEFAULT_WARMUP = 50
 _DEFAULT_REPS = 500
-_FPS_WARN_THRESHOLD = 200_000    # obs/s below which a warning is printed
+_FPS_WARN_THRESHOLD = 200_000  # obs/s below which a warning is printed
 
 
 def _make_obs_space(ray_shape: tuple[int, ...], drive_shape: tuple[int, ...]) -> spaces.Dict:
@@ -78,10 +78,12 @@ def _make_obs_space(ray_shape: tuple[int, ...], drive_shape: tuple[int, ...]) ->
     Returns:
         ``spaces.Dict`` suitable for feature extractor constructors.
     """
-    return spaces.Dict({
-        OBS_RAYS: spaces.Box(low=0.0, high=1.0, shape=ray_shape, dtype=np.float32),
-        OBS_DRIVE_STATE: spaces.Box(low=-1.0, high=1.0, shape=drive_shape, dtype=np.float32),
-    })
+    return spaces.Dict(
+        {
+            OBS_RAYS: spaces.Box(low=0.0, high=1.0, shape=ray_shape, dtype=np.float32),
+            OBS_DRIVE_STATE: spaces.Box(low=-1.0, high=1.0, shape=drive_shape, dtype=np.float32),
+        }
+    )
 
 
 def _make_batch(obs_space: spaces.Dict, batch_size: int, device: str) -> dict[str, th.Tensor]:
@@ -109,6 +111,7 @@ def _make_batch(obs_space: spaces.Dict, batch_size: int, device: str) -> dict[st
 # Extractor definitions
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _ExtractorSpec:
     """Specification for one extractor variant to benchmark.
@@ -133,26 +136,40 @@ def _build_specs() -> list[_ExtractorSpec]:
     dyn_defaults = FeatureExtractorPresets.dynamics_original()
     return [
         _ExtractorSpec("dynamics_original", DynamicsExtractor, dyn_defaults.params),
-        _ExtractorSpec("mlp_small", MLPFeatureExtractor,
-                       FeatureExtractorPresets.mlp_small().params),
-        _ExtractorSpec("mlp_large", MLPFeatureExtractor,
-                       FeatureExtractorPresets.mlp_large().params),
-        _ExtractorSpec("lightweight_cnn", LightweightCNNExtractor,
-                       FeatureExtractorPresets.lightweight_cnn().params),
-        _ExtractorSpec("attention_small", AttentionFeatureExtractor,
-                       FeatureExtractorPresets.attention_small().params),
-        _ExtractorSpec("attention_large", AttentionFeatureExtractor,
-                       FeatureExtractorPresets.attention_large().params),
-        _ExtractorSpec("lstm_small", LSTMFeatureExtractor,
-                       FeatureExtractorPresets.lstm_small().params),
-        _ExtractorSpec("lstm_medium", LSTMFeatureExtractor,
-                       FeatureExtractorPresets.lstm_medium().params),
+        _ExtractorSpec(
+            "mlp_small", MLPFeatureExtractor, FeatureExtractorPresets.mlp_small().params
+        ),
+        _ExtractorSpec(
+            "mlp_large", MLPFeatureExtractor, FeatureExtractorPresets.mlp_large().params
+        ),
+        _ExtractorSpec(
+            "lightweight_cnn",
+            LightweightCNNExtractor,
+            FeatureExtractorPresets.lightweight_cnn().params,
+        ),
+        _ExtractorSpec(
+            "attention_small",
+            AttentionFeatureExtractor,
+            FeatureExtractorPresets.attention_small().params,
+        ),
+        _ExtractorSpec(
+            "attention_large",
+            AttentionFeatureExtractor,
+            FeatureExtractorPresets.attention_large().params,
+        ),
+        _ExtractorSpec(
+            "lstm_small", LSTMFeatureExtractor, FeatureExtractorPresets.lstm_small().params
+        ),
+        _ExtractorSpec(
+            "lstm_medium", LSTMFeatureExtractor, FeatureExtractorPresets.lstm_medium().params
+        ),
     ]
 
 
 # ---------------------------------------------------------------------------
 # Benchmark runner
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BenchmarkResult:
@@ -164,7 +181,7 @@ class BenchmarkResult:
         features_dim: Output feature dimension.
         throughput_obs_per_s: Forward-pass throughput in observations per second.
         latency_ms: Mean batch latency in milliseconds.
-        speedup: Throughput relative to the first (baseline) extractor.
+        speedup: Throughput relative to the explicit ``dynamics_original`` baseline.
         slow: Whether throughput falls below the warning threshold.
     """
 
@@ -177,7 +194,7 @@ class BenchmarkResult:
     slow: bool = False
 
 
-def _count_params(model: "BaseFeaturesExtractor") -> int:
+def _count_params(model: BaseFeaturesExtractor) -> int:
     """Count trainable parameters in a feature extractor.
 
     Args:
@@ -235,10 +252,10 @@ def _benchmark_one(
 
     return BenchmarkResult(
         name=spec.name,
-        params=n_params,
-        features_dim=features_dim,
-        throughput_obs_per_s=throughput,
-        latency_ms=latency_ms,
+        params=int(n_params),
+        features_dim=int(features_dim),
+        throughput_obs_per_s=float(throughput),
+        latency_ms=float(latency_ms),
         slow=throughput < _FPS_WARN_THRESHOLD,
     )
 
@@ -268,10 +285,31 @@ def run_benchmark(
     obs_space = _make_obs_space(ray_shape, drive_shape)
     batch = _make_batch(obs_space, batch_size, device)
     specs = _build_specs()
-    results: list[BenchmarkResult] = []
     baseline_throughput: float | None = None
+    for spec in specs:
+        if spec.name == "dynamics_original":
+            logger.info("Benchmarking explicit baseline {} ...", spec.name)
+            try:
+                baseline = _benchmark_one(
+                    spec,
+                    obs_space=obs_space,
+                    batch=batch,
+                    warmup=warmup,
+                    reps=reps,
+                    device=device,
+                )
+            except Exception as exc:
+                raise RuntimeError("Baseline extractor 'dynamics_original' failed") from exc
+            baseline_throughput = baseline.throughput_obs_per_s
+            baseline.speedup = 1.0
+            results: list[BenchmarkResult] = [baseline]
+            break
+    else:
+        raise RuntimeError("Baseline extractor 'dynamics_original' is missing")
 
     for spec in specs:
+        if spec.name == "dynamics_original":
+            continue
         logger.info("Benchmarking {} ...", spec.name)
         try:
             r = _benchmark_one(
@@ -282,13 +320,11 @@ def run_benchmark(
                 reps=reps,
                 device=device,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("  {} failed: {}", spec.name, exc)
             continue
 
-        if baseline_throughput is None:
-            baseline_throughput = r.throughput_obs_per_s
-        r.speedup = r.throughput_obs_per_s / baseline_throughput if baseline_throughput else 1.0
+        r.speedup = r.throughput_obs_per_s / baseline_throughput
         results.append(r)
 
     return results
@@ -297,6 +333,7 @@ def run_benchmark(
 # ---------------------------------------------------------------------------
 # Output formatting
 # ---------------------------------------------------------------------------
+
 
 def _print_table(results: list[BenchmarkResult], *, device: str, batch_size: int) -> None:
     """Print benchmark results as a Markdown table.
@@ -319,7 +356,7 @@ def _print_table(results: list[BenchmarkResult], *, device: str, batch_size: int
         print(
             f"{r.name:<22} {r.params:>10,} {r.features_dim:>9} "
             f"{r.throughput_obs_per_s:>20,.0f} {r.latency_ms:>14.3f} "
-            f"{r.speedup:>8.2f}×{flag}"
+            f"{r.speedup:>8.2f}x{flag}"
         )
     print()
 
@@ -327,6 +364,7 @@ def _print_table(results: list[BenchmarkResult], *, device: str, batch_size: int
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _parse_shape(raw: str) -> tuple[int, ...]:
     """Parse a comma-separated shape string into a tuple of ints.
@@ -337,26 +375,70 @@ def _parse_shape(raw: str) -> tuple[int, ...]:
     Returns:
         Shape tuple.
     """
-    return tuple(int(x) for x in raw.split(","))
+    shape = tuple(_positive_int(x.strip()) for x in raw.split(",") if x.strip())
+    if not shape:
+        raise argparse.ArgumentTypeError("shape must contain at least one dimension")
+    return shape
+
+
+def _positive_int(raw: str) -> int:
+    """Parse a positive integer for CLI validation."""
+    value = int(raw)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be > 0")
+    return value
+
+
+def _non_negative_int(raw: str) -> int:
+    """Parse a non-negative integer for CLI validation."""
+    value = int(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError("value must be >= 0")
+    return value
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     p = argparse.ArgumentParser(description="Feature extractor GPU throughput benchmark.")
-    p.add_argument("--batch", type=int, default=_DEFAULT_BATCH,
-                   help=f"Batch size (default: {_DEFAULT_BATCH}).")
-    p.add_argument("--warmup", type=int, default=_DEFAULT_WARMUP,
-                   help=f"Warm-up iterations (default: {_DEFAULT_WARMUP}).")
-    p.add_argument("--reps", type=int, default=_DEFAULT_REPS,
-                   help=f"Timed repetitions (default: {_DEFAULT_REPS}).")
-    p.add_argument("--device", default="auto",
-                   help="Device: 'cuda', 'cpu', or 'auto' (default: auto).")
-    p.add_argument("--ray-shape", default=",".join(str(d) for d in _DEFAULT_RAY_SHAPE),
-                   help=f"LiDAR shape as T,N (default: {_DEFAULT_RAY_SHAPE}).")
-    p.add_argument("--drive-shape", default=",".join(str(d) for d in _DEFAULT_DRIVE_SHAPE),
-                   help=f"Drive-state shape as T,D (default: {_DEFAULT_DRIVE_SHAPE}).")
-    p.add_argument("--out", default=None, type=Path,
-                   help="Optional output path for JSON results (e.g. output/bench_fe.json).")
+    p.add_argument(
+        "--batch",
+        type=_positive_int,
+        default=_DEFAULT_BATCH,
+        help=f"Batch size (default: {_DEFAULT_BATCH}).",
+    )
+    p.add_argument(
+        "--warmup",
+        type=_non_negative_int,
+        default=_DEFAULT_WARMUP,
+        help=f"Warm-up iterations (default: {_DEFAULT_WARMUP}).",
+    )
+    p.add_argument(
+        "--reps",
+        type=_positive_int,
+        default=_DEFAULT_REPS,
+        help=f"Timed repetitions (default: {_DEFAULT_REPS}).",
+    )
+    p.add_argument(
+        "--device", default="auto", help="Device: 'cuda', 'cpu', or 'auto' (default: auto)."
+    )
+    p.add_argument(
+        "--ray-shape",
+        type=_parse_shape,
+        default=_DEFAULT_RAY_SHAPE,
+        help=f"LiDAR shape as T,N (default: {_DEFAULT_RAY_SHAPE}).",
+    )
+    p.add_argument(
+        "--drive-shape",
+        type=_parse_shape,
+        default=_DEFAULT_DRIVE_SHAPE,
+        help=f"Drive-state shape as T,D (default: {_DEFAULT_DRIVE_SHAPE}).",
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        type=Path,
+        help="Optional output path for JSON results (e.g. output/bench_fe.json).",
+    )
     return p
 
 
@@ -369,12 +451,16 @@ def main(argv: list[str] | None = None) -> int:
     if device == "auto":
         device = "cuda" if th.cuda.is_available() else "cpu"
 
-    ray_shape = _parse_shape(args.ray_shape)
-    drive_shape = _parse_shape(args.drive_shape)
+    ray_shape = args.ray_shape
+    drive_shape = args.drive_shape
 
     logger.info(
         "Benchmark: device={} batch={} reps={} ray_shape={} drive_shape={}",
-        device, args.batch, args.reps, ray_shape, drive_shape,
+        device,
+        args.batch,
+        args.reps,
+        ray_shape,
+        drive_shape,
     )
 
     results = run_benchmark(

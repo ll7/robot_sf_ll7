@@ -22,15 +22,18 @@ MLP, CNN, and attention extractors under identical PPO conditions.
 
 from __future__ import annotations
 
-from typing import cast
+from itertools import pairwise
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch as th
-from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch import nn
 
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+
+if TYPE_CHECKING:
+    from gymnasium import spaces
 
 
 class LSTMFeatureExtractor(BaseFeaturesExtractor):
@@ -73,6 +76,7 @@ class LSTMFeatureExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: list[int] | None = None,
         bidirectional: bool = False,
     ) -> None:
+        """Initialize the ray-sequence LSTM and drive-state MLP branches."""
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
 
@@ -103,7 +107,7 @@ class LSTMFeatureExtractor(BaseFeaturesExtractor):
         # Drive-state MLP
         drive_layers: list[nn.Module] = [nn.Flatten()]
         drive_dims = [drive_input_dim] + drive_hidden_dims
-        for in_dim, out_dim in zip(drive_dims[:-1], drive_dims[1:]):
+        for in_dim, out_dim in pairwise(drive_dims):
             drive_layers += [nn.Linear(in_dim, out_dim), nn.ReLU()]
         self.drive_mlp = nn.Sequential(*drive_layers)
 

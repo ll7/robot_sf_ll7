@@ -13,6 +13,7 @@ from gymnasium import spaces
 from robot_sf.feature_extractors import (
     AttentionFeatureExtractor,
     LightweightCNNExtractor,
+    LSTMFeatureExtractor,
     MLPFeatureExtractor,
 )
 from robot_sf.feature_extractors.config import (
@@ -151,12 +152,69 @@ class TestFeatureExtractors:
         total_params = sum(p.numel() for p in extractor.parameters())
         assert total_params > 0
 
+    def test_lstm_extractor_initialization(self, observation_space):
+        """Test LSTM feature extractor initialization."""
+        extractor = LSTMFeatureExtractor(observation_space)
+
+        assert isinstance(extractor, LSTMFeatureExtractor)
+        assert extractor.features_dim == 80
+        assert extractor.ray_lstm.input_size == 1
+        assert extractor.ray_lstm.hidden_size == 64
+        assert not extractor.ray_lstm.bidirectional
+        assert hasattr(extractor, "drive_mlp")
+
+    def test_lstm_extractor_forward(self, observation_space, sample_observation):
+        """Test LSTM feature extractor forward pass."""
+        extractor = LSTMFeatureExtractor(observation_space)
+
+        features = extractor(sample_observation)
+
+        assert isinstance(features, th.Tensor)
+        assert features.shape == (2, extractor.features_dim)
+        assert not th.isnan(features).any()
+
+    def test_lstm_extractor_bidirectional_custom_params(
+        self, observation_space, sample_observation
+    ):
+        """Test bidirectional LSTM with stacked layers and custom drive branch."""
+        extractor = LSTMFeatureExtractor(
+            observation_space,
+            hidden_size=8,
+            num_layers=2,
+            lstm_dropout=0.1,
+            drive_hidden_dims=[10, 6],
+            bidirectional=True,
+        )
+
+        features = extractor(sample_observation)
+
+        assert extractor.features_dim == 22
+        assert extractor.ray_lstm.bidirectional
+        assert extractor.ray_lstm.dropout == 0.1
+        assert features.shape == (2, extractor.features_dim)
+
+    def test_lstm_extractor_without_drive_hidden_layers(
+        self, observation_space, sample_observation
+    ):
+        """Test LSTM feature dimension when the drive branch is only flattening."""
+        extractor = LSTMFeatureExtractor(
+            observation_space,
+            hidden_size=7,
+            drive_hidden_dims=[],
+        )
+
+        features = extractor(sample_observation)
+
+        assert extractor.features_dim == 32
+        assert features.shape == (2, extractor.features_dim)
+
     def test_all_extractors_same_interface(self, observation_space, sample_observation):
         """Test that all extractors follow the same interface."""
         extractors = [
             MLPFeatureExtractor(observation_space),
             AttentionFeatureExtractor(observation_space),
             LightweightCNNExtractor(observation_space),
+            LSTMFeatureExtractor(observation_space),
         ]
 
         for extractor in extractors:
@@ -389,6 +447,7 @@ class TestParameterCounting:
                 observation_space, embed_dim=128, num_layers=3
             ),
             "lightweight_cnn": LightweightCNNExtractor(observation_space, num_filters=[16, 8]),
+            "lstm": LSTMFeatureExtractor(observation_space, hidden_size=16, drive_hidden_dims=[8]),
         }
 
         param_counts = {}

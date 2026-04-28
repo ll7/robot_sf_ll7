@@ -3,6 +3,13 @@
 **Issue**: [#193 – Evaluate current feature extraction in the robot environment](https://github.com/ll7/robot_sf_ll7/issues/193)
 **Branch**: `codex/193-feature-extractor-evaluation`
 **Date**: 2026-04-16
+
+> **Superseded recommendation, 2026-04-28:** the 32 K result below is useful historical
+> pre-screening evidence, but it is no longer the promotion recommendation.  The later Optuna and
+> 12 M fixed-candidate study in
+> `docs/context/issue_193_feature_extractor_optuna_study.md` selects `dyn_large_med` as the
+> preferred architecture candidate and rejects default promotion until collision failures are fixed
+> in follow-up issue #850.
 **Machine**: imech156-u — AMD Ryzen 9 3950X, RTX 3070 8 GB, CUDA 12.8, Ubuntu 24.04
 
 ---

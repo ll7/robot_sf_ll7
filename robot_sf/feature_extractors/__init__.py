@@ -17,7 +17,7 @@ from .mlp_extractor import MLPFeatureExtractor
 __all__ = [
     "AttentionFeatureExtractor",
     "GridSocNavExtractor",
-    "LightweightCNNExtractor",
     "LSTMFeatureExtractor",
+    "LightweightCNNExtractor",
     "MLPFeatureExtractor",
 ]

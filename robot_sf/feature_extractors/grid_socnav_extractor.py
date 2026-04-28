@@ -106,7 +106,7 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
     masked multi-head self-attention head (``use_pedestrian_attention=True``).
     """
 
-    def __init__(  # noqa: PLR0913,C901
+    def __init__(  # noqa: C901,PLR0912,PLR0913,PLR0915
         self,
         observation_space: spaces.Dict,
         *,

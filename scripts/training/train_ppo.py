@@ -1052,6 +1052,35 @@ _FEATURE_EXTRACTOR_REGISTRY: dict[str, type] = {
 }
 
 
+def _resolve_grid_socnav_policy_selection(
+    config: ExpertTrainingConfig,
+    asymmetric_critic: bool,
+) -> tuple[type[Any] | str, str]:
+    """Resolve policy class and critic profile for grid SocNav PPO configs."""
+    use_pedestrian_attention = bool(
+        config.feature_extractor_kwargs.get("use_pedestrian_attention", False)
+    )
+    critic_profile = "attention_grid_socnav" if use_pedestrian_attention else "grid_socnav"
+    if not asymmetric_critic:
+        return "MultiInputPolicy", critic_profile
+
+    observation_mode = config.env_overrides.get("observation_mode")
+    observation_mode_value = getattr(observation_mode, "value", observation_mode)
+    if str(observation_mode_value).lower() != ObservationMode.SOCNAV_STRUCT.value:
+        raise ValueError("asymmetric_critic requires env_overrides.observation_mode=socnav_struct")
+    if not bool(config.env_overrides.get("use_occupancy_grid", False)):
+        raise ValueError("asymmetric_critic requires env_overrides.use_occupancy_grid=true")
+    if not bool(config.env_overrides.get("include_grid_in_observation", False)):
+        raise ValueError(
+            "asymmetric_critic requires env_overrides.include_grid_in_observation=true"
+        )
+
+    critic_profile = (
+        "asymmetric_attention_grid_socnav" if use_pedestrian_attention else "asymmetric_grid_socnav"
+    )
+    return AsymmetricGridSocNavPolicy, critic_profile
+
+
 def _resolve_policy_selection(
     config: ExpertTrainingConfig,
 ) -> tuple[type[Any] | str, dict[str, Any], str]:
@@ -1075,31 +1104,7 @@ def _resolve_policy_selection(
         )
 
     if extractor == "grid_socnav":
-        critic_profile = "grid_socnav"
-        use_pedestrian_attention = bool(
-            config.feature_extractor_kwargs.get("use_pedestrian_attention", False)
-        )
-        if use_pedestrian_attention:
-            critic_profile = "attention_grid_socnav"
-        if asymmetric_critic:
-            observation_mode = config.env_overrides.get("observation_mode")
-            observation_mode_value = getattr(observation_mode, "value", observation_mode)
-            if str(observation_mode_value).lower() != ObservationMode.SOCNAV_STRUCT.value:
-                raise ValueError(
-                    "asymmetric_critic requires env_overrides.observation_mode=socnav_struct"
-                )
-            if not bool(config.env_overrides.get("use_occupancy_grid", False)):
-                raise ValueError("asymmetric_critic requires env_overrides.use_occupancy_grid=true")
-            if not bool(config.env_overrides.get("include_grid_in_observation", False)):
-                raise ValueError(
-                    "asymmetric_critic requires env_overrides.include_grid_in_observation=true"
-                )
-            policy = AsymmetricGridSocNavPolicy
-            critic_profile = (
-                "asymmetric_attention_grid_socnav"
-                if use_pedestrian_attention
-                else "asymmetric_grid_socnav"
-            )
+        policy, critic_profile = _resolve_grid_socnav_policy_selection(config, asymmetric_critic)
     elif asymmetric_critic:
         raise ValueError("asymmetric_critic requires feature_extractor=grid_socnav")
 

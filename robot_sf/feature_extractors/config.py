@@ -14,6 +14,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.feature_extractors.attention_extractor import AttentionFeatureExtractor
 from robot_sf.feature_extractors.lightweight_cnn_extractor import LightweightCNNExtractor
+from robot_sf.feature_extractors.lstm_extractor import LSTMFeatureExtractor
 from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor
 
 
@@ -24,6 +25,7 @@ class FeatureExtractorType(Enum):
     MLP = "mlp"  # Simple MLP-based extractor
     ATTENTION = "attention"  # Attention-based extractor
     LIGHTWEIGHT_CNN = "lightweight_cnn"  # Lightweight CNN extractor
+    LSTM = "lstm"  # LSTM sequential extractor (spatial, not temporal with standard PPO)
 
 
 @dataclass
@@ -68,6 +70,7 @@ _EXTRACTOR_REGISTRY: dict[FeatureExtractorType, type[BaseFeaturesExtractor]] = {
     FeatureExtractorType.MLP: MLPFeatureExtractor,
     FeatureExtractorType.ATTENTION: AttentionFeatureExtractor,
     FeatureExtractorType.LIGHTWEIGHT_CNN: LightweightCNNExtractor,
+    FeatureExtractorType.LSTM: LSTMFeatureExtractor,
 }
 
 
@@ -157,6 +160,36 @@ class FeatureExtractorPresets:
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.LIGHTWEIGHT_CNN,
             params={"num_filters": [32, 16], "kernel_sizes": [5, 3], "dropout_rate": 0.1},
+        )
+
+    @staticmethod
+    def lstm_small() -> FeatureExtractorConfig:
+        """Small LSTM extractor — fast, treats rays as a 1-D sequence.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
+        return FeatureExtractorConfig(
+            extractor_type=FeatureExtractorType.LSTM,
+            params={"hidden_size": 64, "num_layers": 1, "drive_hidden_dims": [32, 16]},
+        )
+
+    @staticmethod
+    def lstm_medium() -> FeatureExtractorConfig:
+        """Medium LSTM extractor — deeper sequence encoding with bidirectional scan.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
+        return FeatureExtractorConfig(
+            extractor_type=FeatureExtractorType.LSTM,
+            params={
+                "hidden_size": 128,
+                "num_layers": 2,
+                "lstm_dropout": 0.1,
+                "drive_hidden_dims": [64, 32],
+                "bidirectional": True,
+            },
         )
 
 

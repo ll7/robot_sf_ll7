@@ -1,0 +1,119 @@
+# Issue #193 fixed 12M-step feature-extractor hardening matrix.
+#
+# This is not a free Optuna search.  Each row is one concrete validation job:
+# candidate architecture + PPO training seed + 12M steps.
+
+base_config: configs/training/ppo/feature_extractor_sweep_base.yaml
+total_timesteps: 12000000
+metric: eval_episode_return
+eval_every: 48000
+eval_episodes: 5
+
+candidates:
+  - id: lc_small_med_s123
+    extractor_type: lightweight_cnn
+    arch_size: small
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.05
+    seed: 123
+    extractor_kwargs:
+      num_filters: [16, 8]
+      kernel_sizes: [5, 3]
+      dropout_rate: 0.05
+
+  - id: lc_small_med_s231
+    extractor_type: lightweight_cnn
+    arch_size: small
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.05
+    seed: 231
+    extractor_kwargs:
+      num_filters: [16, 8]
+      kernel_sizes: [5, 3]
+      dropout_rate: 0.05
+
+  - id: lc_small_med_s1337
+    extractor_type: lightweight_cnn
+    arch_size: small
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.05
+    seed: 1337
+    extractor_kwargs:
+      num_filters: [16, 8]
+      kernel_sizes: [5, 3]
+      dropout_rate: 0.05
+
+  - id: lc_small_med_s2026
+    extractor_type: lightweight_cnn
+    arch_size: small
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.05
+    seed: 2026
+    extractor_kwargs:
+      num_filters: [16, 8]
+      kernel_sizes: [5, 3]
+      dropout_rate: 0.05
+
+  - id: dyn_large_med_s123
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 123
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_large_med_s231
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 231
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_large_med_s1337
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 1337
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_default_s123
+    extractor_type: dynamics
+    arch_size: original
+    policy_arch_size: small
+    policy_arch: [64, 64]
+    dropout_rate: 0.0
+    seed: 123
+    extractor_kwargs: {}
+
+  - id: dyn_default_s231
+    extractor_type: dynamics
+    arch_size: original
+    policy_arch_size: small
+    policy_arch: [64, 64]
+    dropout_rate: 0.0
+    seed: 231
+    extractor_kwargs: {}
+
+  - id: dyn_default_s1337
+    extractor_type: dynamics
+    arch_size: original
+    policy_arch_size: small
+    policy_arch: [64, 64]
+    dropout_rate: 0.0
+    seed: 1337
+    extractor_kwargs: {}

@@ -588,6 +588,9 @@ def test_load_expert_training_config_supports_auto_stable_num_envs(tmp_path) -> 
 def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> None:
     """Auto env modes should resolve to throughput and stable host-aware counts."""
 
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.delenv("SLURM_JOB_CPUS_PER_NODE", raising=False)
     monkeypatch.setattr("scripts.training.train_ppo.os.cpu_count", lambda: 32)
     monkeypatch.setattr(
         "scripts.training.train_ppo._host_memory_gib",

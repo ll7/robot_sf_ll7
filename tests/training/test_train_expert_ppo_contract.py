@@ -35,6 +35,48 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
     assert "ignored" in calls[0]
 
 
+def test_prepare_seed_state_relaxes_determinism_for_lightweight_cnn(monkeypatch, tmp_path) -> None:
+    """lightweight_cnn should opt out of deterministic CUDA with an explicit warning."""
+    warnings: list[str] = []
+    seed_calls: list[tuple[int, bool]] = []
+
+    def _fake_warning(message: str, *args) -> None:
+        warnings.append(message.format(*args) if args else message)
+
+    def _fake_set_global_seed(seed: int, deterministic: bool = True):
+        seed_calls.append((seed, deterministic))
+        return object()
+
+    monkeypatch.setattr(train_ppo.logger, "warning", _fake_warning)
+    monkeypatch.setattr(train_ppo.common, "set_global_seed", _fake_set_global_seed)
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=32_000,
+        policy_id="ppo_lightweight_cnn_seed_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 16_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="lightweight_cnn",
+    )
+
+    train_ppo._prepare_seed_state(config)
+
+    assert seed_calls == [(123, False)]
+    assert len(warnings) == 1
+    assert "LIGHTWEIGHT_CNN DETerminism Override" in warnings[0]
+    assert "not bitwise reproducible" in warnings[0]
+
+
 def test_legacy_training_ppo_entrypoint_fails_with_migration_command() -> None:
     """Legacy PPO entrypoint should fail closed before users launch invalid runs."""
     result = subprocess.run(

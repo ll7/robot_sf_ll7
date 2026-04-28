@@ -1,0 +1,60 @@
+# Base config for the feature extractor Optuna sweep (issue #193).
+#
+# The Optuna study (scripts/training/optuna_feature_extractor.py) overrides
+# feature_extractor, feature_extractor_kwargs, policy_net_arch, and
+# total_timesteps per trial.  All other fields here are inherited as-is.
+#
+# Observation mode: classic ray/drive-state (DEFAULT_GYM).
+# This is intentional — all non-grid extractors (mlp, lstm, attention,
+# lightweight_cnn, dynamics) operate on this space.  Do NOT switch to
+# socnav_struct here; that mode is reserved for grid_socnav sweeps.
+#
+# Local quick-test:  --trial-timesteps 32000  (a few seconds per trial)
+# Full SLURM run:    --trial-timesteps 4000000
+
+policy_id: feat_extractor_sweep_base
+scenario_config: ../../scenarios/classic_interactions.yaml
+num_envs: auto
+worker_mode: auto
+seeds:
+  - 123
+total_timesteps: 32000  # overridden by the Optuna study per trial
+
+# Placeholder extractor — the study replaces this for every trial.
+feature_extractor: mlp
+feature_extractor_kwargs:
+  ray_hidden_dims: [64, 32]
+  drive_hidden_dims: [16, 8]
+  dropout_rate: 0.1
+
+policy_net_arch: [64, 64]  # also overridden per trial
+
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+
+evaluation:
+  frequency_episodes: 10
+  evaluation_episodes: 5
+  hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 16000
+
+env_factory_kwargs:
+  reward_name: route_completion_v2
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0
+
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: false

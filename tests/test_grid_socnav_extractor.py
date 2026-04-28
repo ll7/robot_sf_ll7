@@ -216,6 +216,23 @@ def test_grid_socnav_extractor_attention_fails_closed_without_slot_keys() -> Non
         raise AssertionError("Expected ValueError when slot keys are absent.")
 
 
+def test_grid_socnav_extractor_attention_rejects_one_dimensional_slot_keys() -> None:
+    """Slot observations need explicit per-pedestrian feature dimensions."""
+    obs_space = spaces.Dict(
+        {
+            "occupancy_grid": spaces.Box(low=0.0, high=1.0, shape=(3, 32, 32), dtype=np.float32),
+            "pedestrians_positions": spaces.Box(low=0.0, high=10.0, shape=(4,), dtype=np.float32),
+        }
+    )
+
+    try:
+        GridSocNavExtractor(obs_space, use_pedestrian_attention=True)
+    except ValueError as exc:
+        assert "must have shape (max_peds, feature_dim)" in str(exc)
+    else:
+        raise AssertionError("Expected GridSocNavExtractor to reject one-dimensional slot keys.")
+
+
 def test_grid_socnav_extractor_rejects_unknown_included_socnav_keys() -> None:
     """Misconfigured include lists should fail closed at construction time."""
     obs_space = spaces.Dict(

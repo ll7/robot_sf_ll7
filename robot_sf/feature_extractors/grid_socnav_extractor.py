@@ -201,12 +201,17 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
             if pedestrian_count_key in observation_space.spaces:
                 self._pedestrian_count_key = pedestrian_count_key
 
-            # Compute slot input dim: sum of per-slot feature dims (all but first axis)
+            for key in self._pedestrian_slot_keys:
+                slot_shape = observation_space.spaces[key].shape
+                if len(slot_shape) < 2:
+                    raise ValueError(
+                        f"Pedestrian slot '{key}' must have shape "
+                        f"(max_peds, feature_dim), got shape {slot_shape}"
+                    )
+
+            # Compute slot input dim: sum of per-pedestrian feature dims.
             slot_input_dim = int(
-                sum(
-                    int(np.prod(observation_space.spaces[k].shape[1:]))
-                    for k in self._pedestrian_slot_keys
-                )
+                sum(int(observation_space.spaces[k].shape[-1]) for k in self._pedestrian_slot_keys)
             )
             attn_out_dim = attn_output_dim
 

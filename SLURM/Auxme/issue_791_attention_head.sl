@@ -37,9 +37,13 @@ cleanup() {
   if [[ -n "${RUN_OUTPUT_DIR}" && -d "${RUN_OUTPUT_DIR}" ]]; then
     mkdir -p "${RESULTS_ROOT}"
     if command -v rsync >/dev/null 2>&1; then
-      rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/" || true
+      if ! rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/"; then
+        echo "[issue791] WARNING: rsync artifact sync failed (${RUN_OUTPUT_DIR} -> ${RESULTS_ROOT})." >&2
+      fi
     else
-      cp -r "${RUN_OUTPUT_DIR}/." "${RESULTS_ROOT}/" || true
+      if ! cp -r "${RUN_OUTPUT_DIR}/." "${RESULTS_ROOT}/"; then
+        echo "[issue791] WARNING: cp artifact sync failed (${RUN_OUTPUT_DIR} -> ${RESULTS_ROOT})." >&2
+      fi
     fi
   fi
 }
@@ -127,8 +131,13 @@ detect_wandb_enabled() {
       }
       if (in_wandb && line ~ /^[[:space:]]*enabled:[[:space:]]*/) {
         sub(/^[[:space:]]*enabled:[[:space:]]*/, "", line)
+        sub(/[[:space:]]*#.*/, "", line)
+        gsub(/["'\''"]/, "", line)
         gsub(/[[:space:]]+/, "", line)
-        print tolower(line)
+        line = tolower(line)
+        if (line ~ /^(1|true|yes|on)$/) print "true"
+        else if (line ~ /^(0|false|no|off)$/) print "false"
+        else print line
         exit
       }
     }

@@ -29,7 +29,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --partitions)
-      if [[ $# -lt 2 || "$2" == --* ]]; then
+      if [[ $# -lt 2 || "$2" == -* ]]; then
         echo "Missing value for --partitions" >&2
         usage >&2
         exit 2
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --user)
-      if [[ $# -lt 2 || "$2" == --* ]]; then
+      if [[ $# -lt 2 || "$2" == -* ]]; then
         echo "Missing value for --user" >&2
         usage >&2
         exit 2
@@ -77,7 +77,7 @@ parse_gpu_tres() {
     echo 0
     return
   fi
-  echo "${tres}" | tr ',' '\n' | awk -F= '$1=="gres/gpu" {sum+=$2} END {print sum+0}'
+  echo "${tres}" | tr ',' '\n' | awk -F= '$1 ~ /^gres\/gpu(:[^=]+)?$/ {sum+=$2} END {print sum+0}'
 }
 
 partition_has_node() {
@@ -91,6 +91,12 @@ collect_partition_row() {
   local qos="${partition}-gpu"
   local total_gpu=0
   local alloc_gpu=0
+  local node_lines
+
+  if ! node_lines="$(scontrol show node -o 2>/dev/null)"; then
+    echo "Failed to query node state via scontrol." >&2
+    return 2
+  fi
 
   while IFS= read -r line; do
     local part_field cfg_tres alloc_tres
@@ -102,7 +108,7 @@ collect_partition_row() {
     alloc_tres="$(echo "${line}" | sed -n 's/.* AllocTRES=\([^ ]*\).*/\1/p')"
     total_gpu=$((total_gpu + $(parse_gpu_tres "${cfg_tres}")))
     alloc_gpu=$((alloc_gpu + $(parse_gpu_tres "${alloc_tres}")))
-  done < <(scontrol show node -o 2>/dev/null || true)
+  done <<< "${node_lines}"
 
   local free_gpu running pending user_running slots_left score
   free_gpu=$((total_gpu - alloc_gpu))
@@ -132,7 +138,8 @@ collect_partition_row() {
 IFS=',' read -r -a PARTITIONS <<< "${PARTITIONS_CSV}"
 rows=()
 for partition in "${PARTITIONS[@]}"; do
-  rows+=("$(collect_partition_row "${partition}")")
+  row="$(collect_partition_row "${partition}")" || exit 2
+  rows+=("${row}")
 done
 
 if [[ "${SHOW_RECOMMEND}" == "0" ]]; then
@@ -146,7 +153,7 @@ if [[ "${SHOW_RECOMMEND}" == "0" ]]; then
 fi
 
 best_row="$(printf '%s\n' "${rows[@]}" | sort -t'|' -k10,10nr | head -n 1)"
-IFS='|' read -r best_partition best_qos _best_total _best_alloc best_free best_running best_pending best_user_running best_slots best_score <<< "${best_row}"
+IFS='|' read -r best_partition best_qos _best_total _best_alloc best_free _best_running best_pending _best_user_running best_slots best_score <<< "${best_row}"
 
 if [[ "${SHOW_RECOMMEND}" == "1" ]]; then
   if (( best_slots == 0 )); then

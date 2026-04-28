@@ -95,6 +95,9 @@ knowledge, not every transient iteration detail.
   4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
   `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
   required before promotion.
+- [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
+  follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
+  config-first safety-reward mitigation candidate.
 
 ## Planner Integration Notes
 

@@ -1,0 +1,93 @@
+# Issue #850 mitigation candidate for the issue-193 selected feature extractor.
+#
+# Hypothesis: the issue-193 hold-out failures are dominated by obstacle/wall collisions, so keep
+# the selected `dyn_large_med` architecture fixed and test a stricter safety reward before
+# considering another feature-extractor sweep.
+#
+# Evaluation command after training:
+# SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/policy_analysis_run.py \
+#   --training-config configs/training/ppo/feature_extractor_sweep_dyn_large_med_safety_v3.yaml \
+#   --policy ppo --model-path <checkpoint.zip> --seed-set eval --max-seeds 3 --all \
+#   --output output/benchmarks/issue850_policy_analysis_dyn_large_med_safety_v3 \
+#   --video-output output/recordings/issue850_policy_analysis_dyn_large_med_safety_v3
+
+policy_id: feat_extractor_dyn_large_med_safety_v3_issue850
+scenario_config: ../../scenarios/classic_interactions.yaml
+num_envs: auto
+worker_mode: auto
+seeds:
+  - 123
+  - 231
+  - 1337
+randomize_seeds: true
+total_timesteps: 12000000
+best_checkpoint_metric: success_rate
+
+feature_extractor: dynamics
+feature_extractor_kwargs:
+  num_filters: [128, 32, 32, 16]
+  dropout_rates: [0.0, 0.0, 0.0, 0.0]
+policy_net_arch: [128, 128]
+
+ppo_hyperparams:
+  learning_rate: 7.5e-5
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.008
+  clip_range: 0.1
+  target_kl: 0.02
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.4
+      living: -0.015
+      collision: -15.0
+      near_miss: -2.4
+      ttc_risk: -2.2
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -2.0
+      terminal_bonus: 20.0
+
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+  weights:
+    classic_bottleneck_high: 4.0
+    classic_merging_low: 4.0
+    classic_merging_medium: 4.0
+    classic_doorway_high: 3.0
+    classic_overtaking_medium: 2.5
+    classic_cross_trap_medium: 2.5
+    classic_realworld_double_bottleneck_high: 3.0
+
+convergence:
+  success_rate: 0.85
+  collision_rate: 0.08
+  plateau_window: 3000
+
+evaluation:
+  evaluation_episodes: 30
+  hold_out_scenarios: []
+  step_schedule:
+    - until_step: 3000000
+      every_steps: 250000
+    - until_step: 9000000
+      every_steps: 500000
+    - every_steps: 1000000
+
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-850-dyn-large-med-safety-v3
+    job_type: ppo-safety-mitigation
+    tags:
+      - issue-850
+      - issue-193-followup
+      - dyn-large-med
+      - safety-reward-v3

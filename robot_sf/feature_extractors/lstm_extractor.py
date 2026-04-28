@@ -122,7 +122,7 @@ class LSTMFeatureExtractor(BaseFeaturesExtractor):
         """
         rays = obs[OBS_RAYS]
         # Reshape to (B, seq_len, 1) for batch_first LSTM.
-        rays_seq = rays.view(rays.shape[0], self._ray_seq_len, 1)
+        rays_seq = rays.reshape(rays.shape[0], self._ray_seq_len, 1)
         # lstm_out: (B, seq_len, directions * hidden_size)
         # h_n: (num_layers * directions, B, hidden_size)
         _, (h_n, _) = self.ray_lstm(rays_seq)

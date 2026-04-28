@@ -173,6 +173,22 @@ class TestFeatureExtractors:
         assert features.shape == (2, extractor.features_dim)
         assert not th.isnan(features).any()
 
+    def test_lstm_extractor_forward_accepts_non_contiguous_rays(
+        self, observation_space, sample_observation
+    ):
+        """Test LSTM feature extraction for non-contiguous ray tensors."""
+        extractor = LSTMFeatureExtractor(observation_space)
+        non_contiguous_obs = {
+            **sample_observation,
+            OBS_RAYS: th.rand(2, 64, 5).transpose(1, 2),
+        }
+
+        assert not non_contiguous_obs[OBS_RAYS].is_contiguous()
+        features = extractor(non_contiguous_obs)
+
+        assert features.shape == (2, extractor.features_dim)
+        assert not th.isnan(features).any()
+
     def test_lstm_extractor_bidirectional_custom_params(
         self, observation_space, sample_observation
     ):

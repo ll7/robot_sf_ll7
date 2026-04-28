@@ -378,6 +378,8 @@ def _parse_shape(raw: str) -> tuple[int, ...]:
     shape = tuple(_positive_int(x.strip()) for x in raw.split(",") if x.strip())
     if not shape:
         raise argparse.ArgumentTypeError("shape must contain at least one dimension")
+    if len(shape) != 2:
+        raise argparse.ArgumentTypeError("shape must be two comma-separated integers (T,N)")
     return shape
 
 

@@ -709,14 +709,15 @@ def group_repulsive_force(member_pos: np.ndarray, threshold: float) -> np.ndarra
     """
     size = member_pos.shape[0]
     forces = np.zeros((size, 2))
+    threshold_sq = threshold * threshold
     for ped_idx in range(size):
         for other_idx in range(size):
             if ped_idx == other_idx:
                 continue
             diff_x = member_pos[ped_idx, 0] - member_pos[other_idx, 0]
             diff_y = member_pos[ped_idx, 1] - member_pos[other_idx, 1]
-            norm = (diff_x**2 + diff_y**2) ** 0.5
-            if norm <= threshold:
+            dist_sq = diff_x**2 + diff_y**2
+            if dist_sq <= threshold_sq:
                 forces[ped_idx, 0] += diff_x
                 forces[ped_idx, 1] += diff_y
     return forces

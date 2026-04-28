@@ -134,6 +134,28 @@ def test_circle_collides_any_lines_accepts_array_and_flat_segments() -> None:
     assert circle_collides_any_lines(circle, invalid_segments) is False
 
 
+def test_circle_line_intersection_rejects_distant_zero_length_segment() -> None:
+    """Degenerate (zero-length) segments outside the circle must not register a collision."""
+    circle = ((0.0, 0.0), 1.0)
+    distant_point_segment = ((5.0, 5.0), (5.0, 5.0))
+
+    assert is_circle_line_intersection(circle, distant_point_segment) is False
+
+    array_segments = np.array([[5.0, 5.0, 5.0, 5.0]])
+    assert circle_collides_any_lines(circle, array_segments) is False
+
+
+def test_circle_line_intersection_accepts_zero_length_segment_inside_circle() -> None:
+    """A degenerate segment whose point lies inside the circle still counts as a collision."""
+    circle = ((0.0, 0.0), 1.0)
+    inside_point_segment = ((0.25, 0.25), (0.25, 0.25))
+
+    assert is_circle_line_intersection(circle, inside_point_segment) is True
+
+    array_segments = np.array([[0.25, 0.25, 0.25, 0.25]])
+    assert circle_collides_any_lines(circle, array_segments) is True
+
+
 def test_circle_collides_any_lines_array_matches_nested_segments() -> None:
     """The optimized ndarray path must preserve the nested segment collision contract."""
     circle = ((1.0, 1.0), 0.5)

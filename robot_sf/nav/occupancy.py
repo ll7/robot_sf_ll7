@@ -27,6 +27,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Squared-length cutoff below which a segment is treated as degenerate (a point).
+# Reaching the quadratic step with a == 0 would make the discriminant check trivially
+# true (0 <= 0 <= 0), so degenerate segments must be rejected explicitly.
+_DEGENERATE_SEGMENT_EPS = 1e-12
+
 
 @numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
@@ -111,6 +116,9 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     s_x, s_y = p2_x - p1_x, p2_y - p1_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2
+    # Degenerate (zero-length) segment with endpoints already shown outside the circle.
+    if a < _DEGENERATE_SEGMENT_EPS:
+        return False
     b = 2 * (s_x * t_x + s_y * t_y)
     c = norm_p1 - r_sq
 
@@ -151,6 +159,9 @@ def _circle_collides_any_flat_segments(
         s_x = p2_x - p1_x
         s_y = p2_y - p1_y
         a = s_x**2 + s_y**2
+        # Degenerate (zero-length) segment with endpoints already shown outside the circle.
+        if a < _DEGENERATE_SEGMENT_EPS:
+            continue
         b = 2 * (s_x * p1_x + s_y * p1_y)
         c = norm_p1 - r_sq
 

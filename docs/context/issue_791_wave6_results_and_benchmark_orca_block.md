@@ -187,6 +187,71 @@ Also re-submitted the benchmark as job **11886** with
 so one failed planner (sacadrl TF missing / orca rvo2 missing) no longer halts the
 entire campaign.
 
+## Benchmark 11976: campaign passed, PPO result invalidated by fail-open CUDA fallback (2026-04-22)
+
+Job **11976** completed the full 7-planner camera-ready campaign:
+`output/benchmarks/issue_791/paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-publication-retry2_20260422_123942/`.
+The campaign-level status is `benchmark_success=true`, with 987 episodes and no failed planners.
+
+However, the PPO row is **not valid evidence for the issue-791 leader**. The PPO episode metadata
+records `fallback_reason: model_load_failed` and `status: fallback`; the SLURM log shows repeated
+SB3/PyTorch failures:
+
+```text
+Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method.
+```
+
+Root cause: `configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml` used
+`device: auto`, so the benchmark worker path attempted CUDA model loading after fork. Because the
+same config also had `fallback_to_goal: true`, the benchmark continued with goal fallback actions
+and produced a misleading PPO row (`success_mean=0.1206`, `collisions_mean=0.5674`). Do not cite
+that PPO result as leader-policy performance.
+
+First attempted correction:
+
+- Pin the issue-791 benchmark adapter to `device: cpu`.
+- Set `fallback_to_goal: false` so future benchmark runs fail closed if the policy cannot load.
+- Add a config contract test in `tests/benchmark/test_camera_ready_campaign.py`.
+
+Follow-up correction after job **12095**:
+
+- Job 12095 was cancelled after PPO ran for roughly one hour without writing its run directory.
+  CPU-pinning avoided the CUDA fork warning but made the PPO leg impractically slow or stuck.
+- The config was changed again to keep `device: auto`, set `fallback_to_goal: false`, and run only
+  the PPO planner with `workers: 1` in
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml`. This avoids
+  CUDA re-initialization by removing the forked PPO worker pool while preserving GPU inference.
+
+Follow-up correction after job **12119**:
+
+- Job 12119 verified that the PPO planner now starts with `workers=1` and no CUDA fork fallback.
+- It then failed closed before writing PPO episodes because the adapter omitted the predictive
+  foresight observation keys required by the Wave-5 leader:
+  `predictive_crossing_count`, `predictive_flow_alignment`, `predictive_gap_scores`,
+  `predictive_min_clearance`, `predictive_ttc_risk`, and `predictive_uncertainty`.
+- The adapter config now mirrors the leader training config by enabling predictive foresight with
+  `predictive_proxy_selected_v2_full`, CUDA device, 16 max agents, 8-step horizon, 0.2 rollout dt,
+  0.7 near distance, and 3.0 x 1.0 front-corridor geometry.
+
+Successful rerun **12122**:
+
+- Campaign:
+  `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-ppo-serial-foresight_20260428_101929/`
+- PPO ran as `native`, `available`, `benchmark_success=true`, `status=ok`, with 141/141 episode
+  rows and no `fallback_reason`, CUDA re-init, or missing-key errors in the PPO episode metadata
+  or SLURM log.
+- Publication bundle was emitted under
+  `/tmp/luttkule/12122/results/benchmarks/publication/paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-ppo-serial-foresight_20260428_101929_publication_bundle`.
+- PPO benchmark result: `success_mean=0.2553`, `collisions_mean=0.0851`, `snqi_mean=-0.2906`,
+  `time_to_goal_norm_mean=0.9274`.
+- Interpretation: the Wave-5 leader is validly benchmarked now, but the camera-ready matrix still
+  shows a large horizon/benchmark-distribution gap relative to its 0.929 in-distribution training
+  eval. It improves safety over most learned/experimental rows but does not become the strongest
+  success-rate row on this matrix.
+
+Next step: update the issue/PR narrative to cite job 12122 as the valid benchmark run and keep the
+promotion claim narrow. Do not cite 11976's PPO row.
+
 ## References
 
 - Wave-4/5 campaign log and artifact registry:

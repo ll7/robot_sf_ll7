@@ -103,6 +103,8 @@ planners:
     algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
+    # PPO loads a CUDA-backed SB3 policy; run serially to avoid CUDA re-init in forked workers.
+    workers: 1
 
   - key: socnav_sampling
     algo: socnav_sampling

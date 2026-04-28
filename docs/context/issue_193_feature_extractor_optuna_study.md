@@ -590,6 +590,247 @@ Monitor both arrays:
 squeue -j 11874,11907 --format='%i %j %T %P %Q %y %b %M %l %S %R'
 ```
 
+### 2026-04-22 A30 reroute
+
+On 2026-04-22, `a30` had an idle 2-GPU node (`auxme-imech254`) and a `1-12:00:00` partition
+limit.  The pending `l40s` retry array was cancelled before it started, and the same candidate
+indices were resubmitted to `a30`.
+
+Additional observations:
+
+- `11874_8` and `11874_9` completed on `pro6000` during the 2026-04-21 night window.
+- The Optuna DB then contained 10 trials: 8 `COMPLETE`, 2 original cancelled trials marked `FAIL`.
+- The A30 retry will add replacement trials for candidate indices `6` and `7`; keep the original
+  failed trial records as cancellation provenance.
+
+Reroute command:
+
+```bash
+scancel 11907
+
+sbatch \
+    --job-name=feat_12m_retry_a30 \
+    --array=6-7%2 \
+    --time=24:00:00 \
+    --cpus-per-task=8 \
+    --mem=32G \
+    --gres=gpu:1 \
+    --output=output/slurm/feat_12m_retry_a30_%A_%a.out \
+    --error=output/slurm/feat_12m_retry_a30_%A_%a.err \
+    --partition=a30 \
+    --account=mitarbeiter \
+    --qos=a30-gpu \
+    --nice=10000 \
+    --wrap 'uv run python scripts/training/fixed_feature_extractor_candidates.py --candidate-file configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml --candidate-index $SLURM_ARRAY_TASK_ID --study-name feat_extractor_12m_hardening_20260420 --storage sqlite:///output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db --log-level WARNING --disable-wandb'
+```
+
+Reroute job:
+
+| Job | Tasks | Partition | State at submission check |
+|-----|-------|-----------|---------------------------|
+| `11980` | `6-7%2` | `a30` | both tasks `RUNNING` on `auxme-imech254` from `2026-04-22T14:39:09`. |
+
+Monitor:
+
+```bash
+squeue -j 11980 --format='%i %j %T %P %Q %y %b %M %l %S %R'
+```
+
+---
+
+## 2026-04-28 Decision After 12M Hardening Batch
+
+The fixed 12M hardening batch now has enough completed evidence to choose the next action.
+
+Final SLURM status:
+
+- `11874`: original `pro6000` fixed array finished with tasks `0-5`, `8-9` completed and `6-7`
+  cancelled during the daytime partition transition.
+- `11907`: pending `l40s` retry was cancelled before start when `a30` became available.
+- `11980`: `a30` retry for candidate indices `6-7` completed successfully on 2026-04-22.
+
+### Final 12M study state
+
+**Study:** `feat_extractor_12m_hardening_20260420`  
+**DB:** `output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db`
+
+| State | Count | Meaning |
+|-------|------:|---------|
+| `COMPLETE` | 10 | Valid completed training runs. |
+| `FAIL` | 2 | Historical cancelled originals for indices `6` and `7`; keep as provenance only. |
+
+The completed replacement trials are:
+
+| Trial | Candidate | Metric | FPS |
+|------:|-----------|-------:|----:|
+| `10` | `dyn_large_med_s1337` | `49.698` | `672.9` |
+| `11` | `dyn_default_s123` | `22.918` | `679.5` |
+
+### Completed candidates
+
+| Candidate | Seed | Return | FPS |
+|-----------|-----:|-------:|----:|
+| `dyn_large_med_s123` | `123` | `54.117` | `823.8` |
+| `dyn_large_med_s231` | `231` | `52.371` | `808.5` |
+| `dyn_large_med_s1337` | `1337` | `49.698` | `672.9` |
+| `lc_small_med_s231` | `231` | `50.178` | `833.6` |
+| `lc_small_med_s1337` | `1337` | `49.548` | `827.5` |
+| `lc_small_med_s123` | `123` | `48.645` | `826.1` |
+| `dyn_default_s1337` | `1337` | `32.526` | `818.5` |
+| `lc_small_med_s2026` | `2026` | `32.234` | `835.0` |
+| `dyn_default_s123` | `123` | `22.918` | `679.5` |
+| `dyn_default_s231` | `231` | `21.413` | `814.5` |
+
+### Candidate-family summary
+
+| Family | Seeds completed | Mean return | Min return | Max return | Mean FPS |
+|--------|----------------:|------------:|-----------:|-----------:|---------:|
+| `dyn_large_med` | 3 | `52.062` | `49.698` | `54.117` | `768.4` |
+| `lc_small_med` | 4 | `45.151` | `32.234` | `50.178` | `830.6` |
+| `dyn_default` | 3 | `25.619` | `21.413` | `32.526` | `770.8` |
+
+### Interpretation
+
+This is strong enough to end the “which architecture should we harden next?” question.
+
+`dynamics / large / [128,128] / dropout=0.0` is the best-performing family in the 12M follow-up.
+It won all three completed seeds and stayed within a relatively tight band (`49.7` to `54.1`).
+Its mean FPS is lower than the early `pro6000` runs because the third seed was retried on `a30`,
+but it still remains well above the prior minimum throughput gate.
+
+`lightweight_cnn / small / [128,128] / dropout=0.05` is still competitive and fast, but its
+fourth seed (`2026`) dropped sharply to `32.234`, which weakens the promotion argument relative to
+the dynamics-large candidate.  This does not invalidate the extractor, but it means the current
+evidence favors `dyn_large_med` as the more robust next-step choice.
+
+The original/default dynamics shape underperformed badly at 12M in this comparison and should not
+be the candidate we invest in next, except as a compatibility baseline for evaluation.
+
+### Decision
+
+Do **not** launch another architecture-selection training batch now.
+
+Instead:
+
+1. Promote `dyn_large_med` to the next evaluation phase.
+2. Keep `lc_small_med` as the runner-up / fallback candidate.
+3. Treat `dyn_default` as the compatibility baseline only.
+
+### What to do next
+
+1. Run hold-out evaluation on the best `dyn_large_med` checkpoints and compare against:
+   - the best `lc_small_med` checkpoint,
+   - the current/default dynamics baseline.
+2. Use the promotion gate already defined in this note:
+   `success_rate >= 0.85`, `collision_rate <= 0.08`, no `snqi` or `path_efficiency` regression,
+   and acceptable throughput.
+3. If checkpoint-level evaluation confirms the 12M training signal, then and only then consider:
+   - changing the default training config for new runs to `dyn_large_med`, or
+   - opening a follow-up implementation issue to expose `dyn_large_med` as the preferred preset.
+4. Do not spend more cluster time on attention, LSTM, or another broad Optuna feature-extractor
+   sweep until the evaluation gate for `dyn_large_med` versus `lc_small_med` is complete.
+
+### 2026-04-28 hold-out policy-analysis result
+
+The requested hold-out evaluation was submitted as Slurm array `12106` on `a30` after two
+submission-wrapper retries:
+
+- `12096` failed immediately because Slurm used `/bin/sh` and `set -o pipefail` is unsupported
+  there.
+- `12101` exposed a copied-config path-resolution problem: configs under
+  `output/benchmarks/expert_policies/*.config.yaml` resolve `../../scenarios/...` under `output/`
+  instead of the repository root.
+- `12106` fixed both issues by invoking `/bin/bash -lc` explicitly and using the canonical repo
+  config `configs/training/ppo/feature_extractor_sweep_base.yaml`.
+
+Command shape:
+
+```bash
+SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/tools/policy_analysis_run.py \
+    --training-config configs/training/ppo/feature_extractor_sweep_base.yaml \
+    --policy ppo \
+    --model-path <candidate_best_checkpoint.zip> \
+    --seed-set eval \
+    --max-seeds 3 \
+    --output output/benchmarks/issue193_policy_analysis_<candidate> \
+    --video-output output/recordings/issue193_policy_analysis_<candidate> \
+    --all
+```
+
+All five `12106` tasks completed successfully (`0:0`) and produced `episodes.jsonl`,
+`summary.json`, and `report.json` artifacts:
+
+| Candidate | Episodes | Success | Collision | Ped collision | Obstacle collision | Path efficiency |
+|-----------|---------:|--------:|----------:|--------------:|-------------------:|----------------:|
+| `dyn_large_med_s231` | 66 | `0.727` | `0.273` | `0.091` | `0.182` | `0.913` |
+| `dyn_large_med_s1337` | 66 | `0.727` | `0.273` | `0.091` | `0.182` | `0.916` |
+| `dyn_large_med_s123` | 66 | `0.667` | `0.333` | `0.076` | `0.258` | `0.935` |
+| `dyn_default_s1337` | 66 | `0.424` | `0.576` | `0.364` | `0.212` | `0.985` |
+| `lc_small_med_s231` | 66 | `0.409` | `0.500` | `0.197` | `0.303` | `0.976` |
+
+Artifact roots:
+
+- `output/benchmarks/issue193_policy_analysis_dyn_large_med_s123/`
+- `output/benchmarks/issue193_policy_analysis_dyn_large_med_s231/`
+- `output/benchmarks/issue193_policy_analysis_dyn_large_med_s1337/`
+- `output/benchmarks/issue193_policy_analysis_lc_small_med_s231/`
+- `output/benchmarks/issue193_policy_analysis_dyn_default_s1337/`
+- Slurm logs: `output/slurm/i193_eval_12106_*.{out,err}`
+
+Interpretation:
+
+`dyn_large_med` remains the best architecture family from this branch, but the hold-out gate rejects
+promotion.  The best completed hold-out runs reached only `0.727` success and `0.273` collision,
+well short of the promotion gate (`success_rate >= 0.85`, `collision_rate <= 0.08`).  This means
+the feature-extractor selection question is largely answered, but the policy-quality question is
+not.
+
+Failure pattern:
+
+- `dyn_large_med_s231` and `dyn_large_med_s1337` both recorded 18 collision episodes out of 66.
+- Each had 12 obstacle/wall collisions and 6 pedestrian collisions.
+- Repeated obstacle-collision hotspots include:
+  - `classic_bottleneck_high` (`3/3` seeds for both `s231` and `s1337`),
+  - `classic_merging_low` (`3/3` seeds for both),
+  - `classic_merging_medium` (`3/3` seeds for both),
+  - additional obstacle collisions in doorway, overtaking, and corridor variants.
+- Repeated pedestrian-collision hotspots include doorway/cross-trap cases and
+  `classic_realworld_double_bottleneck_high` for `s1337`.
+
+Decision:
+
+Do **not** promote `dyn_large_med` as a default yet, and do not launch another broad
+feature-extractor sweep now.  The next work should target the collision behavior of the selected
+architecture, especially obstacle/wall collisions in bottleneck and merging scenarios.  Treat
+`dyn_large_med` as the preferred architecture candidate for that follow-up, with `lc_small_med` and
+`dyn_default` retained only as comparison baselines.  Follow-up issue:
+[#850](https://github.com/ll7/robot_sf_ll7/issues/850).
+
+### Validation commands
+
+```bash
+sacct -j 11874,11907,11980 \
+    --format=JobID,JobName%30,State,ExitCode,Partition,Elapsed,Start,End -P
+
+uv run python scripts/tools/inspect_optuna_db.py \
+    --db output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db \
+    --study-name feat_extractor_12m_hardening_20260420 \
+    --top-n 20 \
+    --show-params
+
+sacct -j 12106 \
+    --format=JobID,JobName%18,State,ExitCode,Partition,Elapsed,Start,End -P
+
+for f in output/benchmarks/issue193_policy_analysis_*/summary.json; do
+    name=${f#output/benchmarks/issue193_policy_analysis_}
+    name=${name%/summary.json}
+    jq -r --arg name "$name" \
+        '[$name, .summary.episodes, .summary.success_rate, .summary.collision_rate,
+          .summary.ped_collision_rate, .summary.obstacle_collision_rate,
+          .summary.metric_means.path_efficiency] | @tsv' "$f"
+done
+```
+
 ---
 
 ## Running the sweep

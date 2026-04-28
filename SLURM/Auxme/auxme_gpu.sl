@@ -10,8 +10,13 @@
 #SBATCH --time=1-12:00:00
 #SBATCH --gres=gpu:a30:1
 #SBATCH --output=output/slurm/%j-auxme-gpu.out
+# NOTE: output/slurm/ must exist at submit time (Slurm opens the log before the
+# body runs). scripts/dev/sbatch_use_max_time.sh creates it; the early mkdir
+# below additionally covers direct `bash` execution for local smoke tests.
 
 set -euo pipefail
+
+mkdir -p output/slurm
 
 PROJECT_ROOT=${SLURM_SUBMIT_DIR}
 LOCAL_OUTPUT_ROOT=${PROJECT_ROOT}/output/slurm

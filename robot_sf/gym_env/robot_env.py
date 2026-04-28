@@ -213,8 +213,8 @@ def _flatten_obs_from_space(space: spaces.Space, obs: Any) -> list[np.ndarray]:
 def _asymmetric_critic_state_spec(
     obs_space: spaces.Dict,
     *,
-    sim_time_limit: float,  # noqa: ARG001 — retained for caller compatibility
-    max_sim_steps: int,  # noqa: ARG001 — retained for caller compatibility
+    sim_time_limit: float,
+    max_sim_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return low/high bounds for the critic-only privileged state vector.
 

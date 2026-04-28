@@ -29,10 +29,20 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --partitions)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "Missing value for --partitions" >&2
+        usage >&2
+        exit 2
+      fi
       PARTITIONS_CSV="$2"
       shift 2
       ;;
     --user)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "Missing value for --user" >&2
+        usage >&2
+        exit 2
+      fi
       USER_NAME="$2"
       shift 2
       ;;
@@ -139,5 +149,9 @@ best_row="$(printf '%s\n' "${rows[@]}" | sort -t'|' -k10,10nr | head -n 1)"
 IFS='|' read -r best_partition best_qos _best_total _best_alloc best_free best_running best_pending best_user_running best_slots best_score <<< "${best_row}"
 
 if [[ "${SHOW_RECOMMEND}" == "1" ]]; then
+  if (( best_slots == 0 )); then
+    echo "No admissible partition: user slot limit reached on all candidates." >&2
+    exit 3
+  fi
   echo "partition=${best_partition} qos=${best_qos} free_gpu=${best_free} pending=${best_pending} slots_left=${best_slots} score=${best_score}"
 fi

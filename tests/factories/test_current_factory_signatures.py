@@ -13,19 +13,19 @@ from robot_sf.gym_env import environment_factory as ef
 
 
 def _param_names(fn) -> list[str]:
-    """TODO docstring. Document this function.
+    """Return parameter names for a callable signature in declaration order.
 
     Args:
-        fn: TODO docstring.
+        fn: Callable object whose signature should be inspected.
 
     Returns:
-        TODO docstring.
+        list[str]: Ordered parameter names from the callable signature.
     """
     return [p.name for p in inspect.signature(fn).parameters.values()]
 
 
 def test_make_robot_env_signature_snapshot():
-    """TODO docstring. Document this function."""
+    """make_robot_env keeps the reviewed public parameter order."""
     params = _param_names(ef.make_robot_env)
     # Adjust this list only when intentional API evolution occurs.
     expected_prefix = [
@@ -45,10 +45,11 @@ def test_make_robot_env_signature_snapshot():
         "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
+    assert params[-2] == "asymmetric_critic"
 
 
 def test_make_image_robot_env_signature_snapshot():
-    """TODO docstring. Document this function."""
+    """make_image_robot_env keeps the reviewed public parameter order."""
     params = _param_names(ef.make_image_robot_env)
     expected_prefix = [
         "config",
@@ -67,10 +68,11 @@ def test_make_image_robot_env_signature_snapshot():
         "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
+    assert params[-2] == "asymmetric_critic"
 
 
 def test_make_pedestrian_env_signature_snapshot():
-    """TODO docstring. Document this function."""
+    """make_pedestrian_env keeps the reviewed public parameter order."""
     params = _param_names(ef.make_pedestrian_env)
     # Note: pedestrian env may have an additional required robot_model param currently.
     expected_prefix = [

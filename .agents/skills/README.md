@@ -16,6 +16,7 @@ read the specific `SKILL.md` before applying a skill.
 - Create or refresh linked context notes: `context-note-maintainer`
 - Gather repository context before editing: `context-map`, `benchmark-overview`, or
   `experiment-context`
+- Submit Auxme issue-791 jobs reliably: `auxme-slurm-reliable-submit`
 
 ## Skill Routing
 
@@ -54,6 +55,7 @@ read the specific `SKILL.md` before applying a skill.
 | `analyze-camera-ready-benchmark` | Auditing a camera-ready benchmark campaign for consistency, runtime, fallback, and reproducibility signals. |
 | `analyze-latest-policy-sweep` | Comparing recent policy-analysis sweep outputs and optional video/frame artifacts. |
 | `auto-improvement` | Running a short measurement-aware refinement loop for prompts, docs, or small code changes. |
+| `auxme-slurm-reliable-submit` | Submitting Auxme issue-791 jobs with explicit config, live partition checks, and max-time-safe wrapper routing. |
 | `autoresearch` | Running an autonomous experiment loop with baseline, variants, and keep/discard decisions. |
 | `benchmark-overview` | Getting fast benchmark-faithful orientation for scenario splits, baselines, metrics, and artifacts. |
 | `clean-up` | Tidying the current branch with Ruff, tests, changed-file gates, and docstring TODO checks. |

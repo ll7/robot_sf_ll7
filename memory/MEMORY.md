@@ -38,18 +38,29 @@ as the startup index, then put details in linked topic files that agents read on
 - [Decision: Adopt A Repo-Local Markdown Memory Layer](decisions/2026-04-13_repo_local_memory_layer.md)
   Adopt a Markdown-first repo-local memory tree and keep retrieval/database infrastructure out of
   scope.
+- [Decision: Issue 791 narrow benchmark-set claim](decisions/2026-04-20_issue_791_narrow_benchmark_claim.md)
+  Paper framing is "strong policy on a broad scenario matrix", not OOD generalization; avoid
+  transfer/unseen language and skip the held-out suite.
 
 ### `experiments/`
 
 - [Experiment: Agent Memory Round-Trip Dry Run](experiments/2026-04-13_agent_memory_roundtrip_dry_run.md)
   Example session log showing how a new memory entry should be indexed and replayed in a new
   session.
+- [Issue 791: distribution alignment dominates PPO lift](experiments/2026-04-20_issue_791_distribution_alignment_dominates.md)
+  Wave-5/6 attribution: eval-aligned training explains ~97% of the 0.586→0.929 PPO lift;
+  curriculum/capacity/foresight add only a small foresight-gated residual.
 
 ### `failures/`
 
 - [Failure Patterns: Memory Misuse And Staleness](failures/2026-04-13_memory_misuse_and_staleness.md)
   Known failure modes for this memory layer: stale summaries, duplicated notes, and mixing issue
   logs into stable memory.
+- [Camera-ready benchmark halts on ORCA when rvo2 missing](failures/2026-04-20_benchmark_orca_rvo2_missing.md)
+  `uv sync --extra orca` is required before submitting the camera-ready benchmark; fallback
+  policy does not cover the rvo2 import check.
+- [WandB rejects runs when job_type exceeds 64 characters](failures/2026-04-20_wandb_job_type_64_char_limit.md)
+  Keep `tracking.wandb.job_type` ≤ 64 chars; long labels belong in tags instead.
 
 ### `benchmarks/`
 

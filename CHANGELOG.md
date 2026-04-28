@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Restored the asymmetric-critic robot training contract so `RobotEnv(..., asymmetric_critic=True)` and `make_robot_env(..., asymmetric_critic=True)` once again add the critic-only `critic_privileged_state` observation for SocNav structured runs. This keeps the public factory API stable for issue-791 training jobs and closes the regression that broke fresh SLURM submissions after the main-branch merge.
+
+* Corrected the issue-791 reward-curriculum `resume_best` overlay so it preserves the original `grid_socnav` / `MultiInputPolicy` checkpoint contract when warm-starting from 11566 best.zip. This avoids the observation-space mismatch that appeared when the retry was pointed at the wrong model family.
+
 * SVG obstacle-repair warnings now include the source `*.svg` filename, so invalid map repairs point directly to the offending asset; the regression test also checks the captured warning text.
 * Added issue-832 paper-matrix extended seed schedules (`paper_eval_s5`, `paper_eval_s10`,
   `paper_eval_s20`), S5/S10 paper-matrix sibling configs that preserve the frozen

@@ -222,6 +222,10 @@ if [[ $# -gt 0 ]]; then
   cmd+=("$@")
 fi
 
+# Ensure the conventional Slurm log directory exists before sbatch resolves
+# `#SBATCH --output=output/slurm/...` (Slurm opens the log before the job runs).
+mkdir -p output/slurm
+
 if [[ -n "$resolved_time" ]]; then
   echo "[slurm] partition=${partition:-unknown} partition_max=${partition_max:-unknown} qos=${qos:-none} qos_max=${qos_max:-none} effective_time=$resolved_time" >&2
 else

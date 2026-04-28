@@ -280,6 +280,33 @@ The scratch analysis artifacts live under:
 - `output/ai/autoresearch/snqi_issue822/v1`
 - `output/ai/autoresearch/snqi_issue822/v3`
 
+## Follow-up From Issue 838
+
+On 2026-04-16, [issue 838](./issue_838_snqi_calibration_analysis.md) added a reproducible
+calibration-robustness workflow for testing v3 against local weight perturbations and alternative
+normalization anchors.
+
+The issue-838 run available in this branch used the closest mounted frozen camera-ready campaign,
+because the exact issue-635 publication bundle path was not present in the checkout:
+
+- `output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_rel_0_0_2_full_rerun_20260414_081244`
+
+Observed signal on that slice:
+
+- v3 component alignment was healthy: `6 / 6` variable metrics aligned with expected direction
+- local +-15% weight perturbations stayed highly rank-stable at the planner level
+  (`min rho = 0.928571`)
+- normalization-anchor variants were materially more sensitive
+  (`anchor min planner rho = 0.607143`)
+- no tested variant justified a replacement v4 contract
+
+Conservative carry-forward:
+
+- keep the fixed v3 asset contract unchanged for already-frozen paper bundles,
+- treat SNQI more cautiously as a supporting synthesis aid unless the canonical publication bundle
+  rerun clears the same anchor-robustness check,
+- do not retrofit current paper-facing values from the issue-838 analysis alone.
+
 ## Conservative manuscript recommendation
 
 Methods wording that can now be tightened:
@@ -295,7 +322,9 @@ Methods wording that should remain cautious:
   identical to the corrected issue-580 rerun,
 - do not imply that the bundle payload manifest alone captures the full SNQI diagnostics contract,
 - do not state that all implemented planners are faithful literature-family representatives,
-- do not overclaim metric-method closure beyond the final v3 asset pinning and diagnostics evidence.
+- do not overclaim metric-method closure beyond the final v3 asset pinning and diagnostics evidence,
+- do not present SNQI v3 as anchor-robust or locally optimal without rerunning the issue-838
+  calibration workflow on the canonical publication bundle.
 
 ## Final recommendation
 

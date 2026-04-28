@@ -1,5 +1,7 @@
 # Minimal scenario matrix for telemetry performance smoke tests.
 # Keeps geometry simple and short to make perf checks quick and deterministic.
+map_search_paths:
+  - ../..
 scenarios:
   - name: perf_minimal
     map_file: "maps/svg_maps/debug_06.svg"

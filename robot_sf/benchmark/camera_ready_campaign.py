@@ -736,6 +736,25 @@ def _campaign_id(cfg: CampaignConfig, *, label: str | None = None) -> str:
     return f"{base}_{stamp}"
 
 
+def _resolve_campaign_id(
+    cfg: CampaignConfig,
+    *,
+    label: str | None = None,
+    campaign_id: str | None = None,
+) -> str:
+    """Resolve the output campaign identifier.
+
+    Returns:
+        Explicit sanitized campaign id when provided, otherwise a timestamped id.
+    """
+    if campaign_id is not None:
+        normalized = _sanitize_name(campaign_id)
+        if not normalized:
+            raise ValueError("campaign_id must contain at least one alphanumeric character")
+        return normalized
+    return _campaign_id(cfg, label=label)
+
+
 def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     """Resolve optional paths relative to ``base_dir``.
 
@@ -1803,6 +1822,7 @@ def prepare_campaign_preflight(
     *,
     output_root: Path | None = None,
     label: str | None = None,
+    campaign_id: str | None = None,
     invoked_command: str | None = None,
 ) -> dict[str, Any]:
     """Prepare campaign preflight artifacts and matrix-definition summary.
@@ -1812,7 +1832,7 @@ def prepare_campaign_preflight(
     """
     _validate_campaign_config(cfg)
     ensure_canonical_tree(categories=("benchmarks",))
-    campaign_id = _campaign_id(cfg, label=label)
+    campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (
         output_root.resolve()
         if output_root
@@ -2165,6 +2185,11 @@ def _planner_report_row(  # noqa: C901
                 continue
             if not math.isfinite(resolved_metrics[field_name]):
                 resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+    episode_count = (
+        len(records)
+        if records is not None
+        else int(summary.get("episodes_total", summary.get("written", 0)))
+    )
 
     row = {
         "planner_key": planner.key,
@@ -2172,7 +2197,7 @@ def _planner_report_row(  # noqa: C901
         "planner_group": planner.planner_group,
         "kinematics": kinematics,
         "status": status,
-        "episodes": int(summary.get("written", 0)),
+        "episodes": int(episode_count),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
         "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
         "runtime_sec": _safe_float(summary.get("runtime_sec")),
@@ -2606,6 +2631,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     *,
     output_root: Path | None = None,
     label: str | None = None,
+    campaign_id: str | None = None,
     skip_publication_bundle: bool = False,
     invoked_command: str | None = None,
 ) -> dict[str, Any]:
@@ -2624,6 +2650,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         cfg,
         output_root=output_root,
         label=label,
+        campaign_id=campaign_id,
         invoked_command=invoked_command,
     )
     campaign_id = str(prepared["campaign_id"])
@@ -2767,8 +2794,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             _write_json(planner_dir / "summary.json", summary)
 
             records: list[dict[str, Any]] = []
-            if status != "failed" and episodes_path.exists() and episodes_path.stat().st_size > 0:
+            if episodes_path.exists() and episodes_path.stat().st_size > 0:
                 records = read_jsonl(str(episodes_path))
+                summary["episodes_total"] = len(records)
                 if status == "ok":
                     for record in records:
                         annotated = dict(record)
@@ -3106,7 +3134,15 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
 
     campaign_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - start))
-    total_episodes = sum(int(entry.get("summary", {}).get("written", 0)) for entry in run_entries)
+    total_episodes = sum(
+        int(
+            entry.get("summary", {}).get(
+                "episodes_total",
+                entry.get("summary", {}).get("written", 0),
+            )
+        )
+        for entry in run_entries
+    )
     successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
     benchmark_success = len(run_entries) > 0 and successful_runs == len(run_entries)
     confidence_settings = {

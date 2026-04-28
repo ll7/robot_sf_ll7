@@ -749,10 +749,13 @@ class SvgMapConverter:
         """
         # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
         vertices = list(path.coordinates)
+        svg_name = Path(self.svg_file_str).name
 
         if not np.array_equal(vertices[0], vertices[-1]):
             logger.warning(
-                f"Closing polygon: first and last vertices of obstacle <{path.id}> differ",
+                "SVG file '{svg}' closing polygon: first and last vertices of obstacle <{pid}> differ",
+                svg=svg_name,
+                pid=path.id,
             )
             vertices.append(vertices[0])
 
@@ -760,7 +763,8 @@ class SvgMapConverter:
         poly = Polygon(vertices)
         if not poly.is_valid or poly.is_empty:
             logger.warning(
-                "Obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
+                "SVG file '{svg}' obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
+                svg=svg_name,
                 pid=path.id,
                 valid=poly.is_valid,
                 empty=poly.is_empty,
@@ -769,7 +773,8 @@ class SvgMapConverter:
             repaired = self._repair_invalid_obstacle_geometry(poly)
             if repaired is not None:
                 logger.info(
-                    "Repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}, polygons={count}).",
+                    "SVG file '{svg}' repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}, polygons={count}).",
+                    svg=svg_name,
                     pid=path.id,
                     area=repaired.area,
                     count=len(Obstacle.from_geometry(repaired).iter_polygons()),
@@ -777,7 +782,8 @@ class SvgMapConverter:
                 return Obstacle.from_geometry(repaired)
             else:
                 logger.warning(
-                    "Failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    "SVG file '{svg}' failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    svg=svg_name,
                     pid=path.id,
                 )
 

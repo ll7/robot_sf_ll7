@@ -41,7 +41,7 @@ dependencies = [
     "pytest>=8.3.3",
     "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
-    "ruff>=0.9.7",
+    "ruff==0.15.12",
     "pre-commit>=4.1.0",
     "setuptools>=70.0.0",
     "pysocialforce",
@@ -158,7 +158,7 @@ line-length = 100
 target-version = ["py310", "py311", "py312"]
 
 [tool.ruff]
-required-version = ">=0.9.7"
+required-version = "==0.15.12"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",

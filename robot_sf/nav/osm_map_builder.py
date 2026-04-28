@@ -24,7 +24,7 @@ Design decisions:
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import geopandas as gpd
+import geopandas
 import pandas as pd
 from loguru import logger
 from shapely.affinity import translate
@@ -104,7 +104,7 @@ class OSMTagFilters:
 # Core importer functions
 
 
-def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
+def load_pbf(pbf_file: str, bbox: tuple | None = None) -> geopandas.GeoDataFrame:
     """Load OSM PBF file and return GeoDataFrame.
 
     Args:
@@ -130,7 +130,7 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
 
         for layer in layers_to_load:
             try:
-                gdf_layer = gpd.read_file(pbf_file, layer=layer, bbox=bbox)
+                gdf_layer = geopandas.read_file(pbf_file, layer=layer, bbox=bbox)
                 if not gdf_layer.empty:
                     gdfs.append(gdf_layer)
                     logger.info(f"Loaded {len(gdf_layer)} features from layer '{layer}'")
@@ -153,9 +153,9 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
 
 
 def filter_driveable_ways(
-    gdf: gpd.GeoDataFrame,
+    gdf: geopandas.GeoDataFrame,
     tag_filters: OSMTagFilters | None = None,
-) -> gpd.GeoDataFrame:
+) -> geopandas.GeoDataFrame:
     """Filter GeoDataFrame for driveable highways.
 
     Args:
@@ -192,9 +192,9 @@ def filter_driveable_ways(
 
 
 def extract_obstacles(
-    gdf: gpd.GeoDataFrame,
+    gdf: geopandas.GeoDataFrame,
     tag_filters: OSMTagFilters | None = None,
-) -> gpd.GeoDataFrame:
+) -> geopandas.GeoDataFrame:
     """Extract obstacle features (buildings, water, cliffs).
 
     Args:
@@ -228,7 +228,9 @@ def extract_obstacles(
                     obstacles_list.append(gdf[mask])
 
     if obstacles_list:
-        result = gpd.GeoDataFrame(pd.concat(obstacles_list).drop_duplicates(subset=["geometry"]))
+        result = geopandas.GeoDataFrame(
+            pd.concat(obstacles_list).drop_duplicates(subset=["geometry"])
+        )
         logger.info(f"Extracted {len(result)} obstacle features")
         return result
     else:
@@ -236,7 +238,7 @@ def extract_obstacles(
         return gdf.iloc[0:0]  # Return empty GeoDataFrame
 
 
-def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
+def project_to_utm(gdf: geopandas.GeoDataFrame) -> tuple[geopandas.GeoDataFrame, int]:
     """Project GeoDataFrame to local UTM zone.
 
     Auto-detects the appropriate UTM zone based on the data centroid
@@ -280,7 +282,7 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
 
 
 def buffer_ways(
-    gdf: gpd.GeoDataFrame,
+    gdf: geopandas.GeoDataFrame,
     half_width_m: float = 1.5,
 ) -> list[Polygon]:
     """Buffer line ways to polygons.
@@ -446,7 +448,7 @@ def _polygons_from_geometry(geometry) -> list[Polygon]:
 
 
 def _collect_obstacle_polys(
-    obstacles_gdf: gpd.GeoDataFrame,
+    obstacles_gdf: geopandas.GeoDataFrame,
     line_buffer_m: float,
 ) -> list[Polygon]:
     """Project and buffer obstacle features into cleaned polygons.
@@ -466,7 +468,7 @@ def _collect_obstacle_polys(
 
 
 def _build_walkable_polys(
-    driveable_ways_utm: gpd.GeoDataFrame,
+    driveable_ways_utm: geopandas.GeoDataFrame,
     obstacle_polys: list[Polygon],
     line_buffer_m: float,
 ) -> list[Polygon]:

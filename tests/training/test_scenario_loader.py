@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from robot_sf.training import scenario_loader
-from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    resolve_map_definition,
+)
 
 
 def _write_yaml(path: Path, content: str) -> None:
@@ -370,3 +374,96 @@ scenarios:
     scenarios = load_scenarios(manifest, base_dir=manifest)
     scenario_loader._load_map_registry.cache_clear()
     assert scenarios[0]["map_file"] == "../maps/demo.svg"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for issue #830: empty map-pool crash in long-run PPO jobs
+# ---------------------------------------------------------------------------
+
+
+def test_build_robot_config_raises_early_on_missing_map_file(tmp_path: Path) -> None:
+    """build_robot_config_from_scenario must raise a clear ValueError when the
+    map_file in the scenario does not exist, rather than silently falling back
+    to the default map pool (which causes a confusing 'Map pool is empty!' error
+    much later during scenario reset — the original issue #830 failure mode).
+    """
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: missing_map_scenario
+    map_file: does_not_exist.svg
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+    assert len(scenarios) == 1
+
+    with pytest.raises(ValueError, match="does_not_exist.svg"):
+        build_robot_config_from_scenario(scenarios[0], scenario_path=manifest)
+
+
+def test_build_robot_config_raises_early_on_unresolvable_relative_map_file(
+    tmp_path: Path,
+) -> None:
+    """Relative map_file paths that cannot be resolved should also fail fast."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: unresolvable_scenario
+    map_file: subdir/nonexistent.svg
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+    with pytest.raises(ValueError, match="nonexistent.svg"):
+        build_robot_config_from_scenario(scenarios[0], scenario_path=manifest)
+
+
+def test_build_robot_config_with_no_map_file_does_not_raise(tmp_path: Path) -> None:
+    """Scenarios without any map_file should not raise; they rely on the default pool."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: no_map_scenario
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+    # Should not raise — no map_file means the caller uses the default map pool.
+    cfg = build_robot_config_from_scenario(scenarios[0], scenario_path=manifest)
+    assert cfg is not None
+
+
+def test_classic_interactions_francis2023_manifest_resolves_all_maps() -> None:
+    """All scenarios in the combined issue-791 manifest must resolve to real map files.
+
+    This is the direct regression guard for issue #830: if any map_file in the
+    classic_interactions_francis2023 scenario chain is broken, this test catches
+    it before a long SLURM allocation is consumed.
+    """
+    manifest = Path("configs/scenarios/classic_interactions_francis2023.yaml")
+    if not manifest.exists():
+        pytest.skip("Combined manifest not found; run from repo root.")
+
+    scenarios = load_scenarios(manifest)
+    assert scenarios, "Manifest loaded no scenarios"
+
+    missing: list[str] = []
+    for scenario in scenarios:
+        map_file = scenario.get("map_file")
+        if not map_file:
+            continue
+        result = resolve_map_definition(map_file, scenario_path=manifest)
+        if result is None:
+            missing.append(f"{scenario.get('name')}: {map_file}")
+
+    assert not missing, (
+        f"The following scenarios in classic_interactions_francis2023.yaml could not "
+        f"resolve their map_file from '{manifest}':\n" + "\n".join(missing)
+    )

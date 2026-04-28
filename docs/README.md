@@ -86,6 +86,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
+* **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
 * **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills
@@ -124,6 +125,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
+* **[Issue #832 Paper-Matrix Extended Seed Schedule](./context/issue_832_paper_matrix_extended_seed_schedule.md)** - Staged S5/S10/S20 seed extension policy, runtime estimates, tmux commands, and comparison artifact contract for the frozen paper matrix
+* **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
@@ -174,6 +177,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #641 gym-collision-avoidance Side-Environment Reproduction](./context/issue_641_gym_collision_avoidance_side_env.md)** - Isolated legacy-runtime reproduction showing GA3C-CADRL learned-policy initialization succeeds in a side environment while the canonical upstream example remains blocked on the macOS TkAgg visualization path
 * **[Issue #639 gym-collision-avoidance Source Harness Probe](./context/issue_639_gym_collision_avoidance_source_harness_probe.md)** - Fail-fast CADRL-family source-harness probe, extracted observation/action contract, and blocked verdict showing wrapper work is not yet justified in the main runtime
 * **[Issue #635 SNQI v3 Paper-Facing Contract Note](./context/issue_635_snqi_v3_paper_contract.md)** - Exact SNQI v3 asset contract, delta versus the corrected pre-v3 rerun, canonical field mapping, and paper regeneration guidance
+* **[Issue #838 SNQI Calibration Analysis](./context/issue_838_snqi_calibration_analysis.md)** - Follow-up sensitivity analysis comparing fixed v3 against weight perturbations and normalization-anchor variants
 * **[Issue #632 Python-RVO2 Prototype Note](./context/issue_632_python_rvo2_prototype.md)** - Upstream ORCA provenance, explicit velocity-to-unicycle projection contract, validation commands, and same-surface comparison showing documentation gain but no paper-matrix performance upgrade
 * **[Issue #605 gym-collision-avoidance Reference Note](./context/issue_605_gym_collision_avoidance_reference_note.md)** - CADRL-family reference assessment, source-harness recommendation, and explicit wrapper boundary for future reproduction
 * **[Issue #604 Pred2Nav Assessment Note](./context/issue_604_pred2nav_assessment.md)** - External predictive-MPC assessment showing Pred2Nav is useful as a concept source but blocked for direct reuse by unclear licensing, legacy runtime, and holonomic action semantics
@@ -552,4 +556,4 @@ When contributing to the project:
 
 ---
 
-_Last updated: February 2026 - Cold/warm performance regression suite added_
+_Last updated: April 2026 - Paper-matrix extended seed schedule context added_

@@ -1365,10 +1365,26 @@ def _apply_map_pool(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> None:
-    """Load a scenario map file into the config map pool."""
+    """Load a scenario map file into the config map pool.
+
+    Raises:
+        ValueError: When ``map_file`` is explicitly specified in the scenario but
+            the file cannot be resolved or loaded.  Failing early here prevents
+            the silent fallback to the default map pool — which would either use
+            an unrelated map (``uni_campus_big``) or raise a confusing
+            ``"Map pool is empty!"`` error much later during the first scenario
+            reset (the original issue #830 failure mode on long SLURM runs).
+    """
     map_file = scenario.get("map_file")
     map_def = resolve_map_definition(map_file, scenario_path=scenario_path)
     if map_def is None:
+        if map_file:
+            scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+            raise ValueError(
+                f"Scenario '{scenario_name}': map_file '{map_file}' could not be "
+                f"resolved or loaded from scenario_path='{scenario_path}'. "
+                "Check the map_file path or manifest map_search_paths."
+            )
         return
     map_id = scenario.get("map_id")
     map_name = str(map_id) if isinstance(map_id, str) and map_id.strip() else None

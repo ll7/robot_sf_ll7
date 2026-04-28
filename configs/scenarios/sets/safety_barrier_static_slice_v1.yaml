@@ -151,7 +151,8 @@ scenarios:
     simulation_config:
       max_episode_steps: 320
       ped_density: 0.0
-    robot_config: {}
+    robot_config:
+      radius: 0.3
     metadata:
       archetype: narrow_passage
       label: narrow passage

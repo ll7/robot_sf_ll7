@@ -17,7 +17,7 @@ and checks that matter most so the next step is low-risk and well-scoped.
 
 - `AGENTS.md`
 - `docs/dev_guide.md`
-- `code_review.md`
+- `docs/code_review.md`
 - `.specify/memory/constitution.md`
 - `.agent/PLANS.md` for larger work
 

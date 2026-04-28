@@ -10,7 +10,7 @@ their interpretation.
 
 ## Read First
 
-- `code_review.md`
+- `docs/code_review.md`
 - `docs/benchmark_spec.md`
 - `docs/dev/observation_contract.md`
 - `docs/benchmark_planner_family_coverage.md`

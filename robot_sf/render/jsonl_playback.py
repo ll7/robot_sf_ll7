@@ -32,6 +32,7 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.render.sim_view import VisualizableSimState
+from robot_sf.telemetry.history import load_telemetry_stream
 
 logger = loguru.logger
 
@@ -44,6 +45,7 @@ class PlaybackEpisode:
     states: list[VisualizableSimState]
     metadata: dict[str, Any] | None = None
     reset_points: list[int] | None = None  # Step indices where resets occurred
+    telemetry_samples: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -67,6 +69,7 @@ class JSONLPlaybackLoader:
     def __init__(self):
         """Initialize the playback loader."""
         self.schema_version = "1.0"
+        self._telemetry_cache: dict[str, list[dict[str, Any]]] = {}
 
     def _deserialize_state(
         self, state_dict: dict[str, Any], timestep: int = 0
@@ -337,6 +340,35 @@ class JSONLPlaybackLoader:
             logger.warning(f"Failed to load metadata from {metadata_file}: {err}")
             return None
 
+    def _load_episode_telemetry(
+        self, metadata: dict[str, Any] | None
+    ) -> list[dict[str, Any]] | None:
+        """Load telemetry samples linked from episode metadata when available.
+
+        Returns:
+            list[dict[str, Any]] | None: Filtered episode telemetry samples when linked.
+        """
+
+        if not isinstance(metadata, dict):
+            return None
+        telemetry_path = metadata.get("telemetry_path")
+        if not isinstance(telemetry_path, str) or not telemetry_path:
+            return None
+        try:
+            samples = self._telemetry_cache.get(telemetry_path)
+            if samples is None:
+                samples = load_telemetry_stream(telemetry_path)
+                self._telemetry_cache[telemetry_path] = samples
+        except (FileNotFoundError, OSError, json.JSONDecodeError) as err:
+            logger.warning(f"Failed to load telemetry from {telemetry_path}: {err}")
+            return None
+
+        episode_id = metadata.get("telemetry_episode_id")
+        if isinstance(episode_id, int):
+            filtered = [sample for sample in samples if sample.get("episode_id") == episode_id]
+            return filtered
+        return samples
+
     def load_single_episode(
         self, file_path: Union[str, Path]
     ) -> tuple[PlaybackEpisode, MapDefinition]:
@@ -404,6 +436,7 @@ class JSONLPlaybackLoader:
 
         # Load metadata
         metadata = self._load_episode_metadata(file_path)
+        telemetry_samples = self._load_episode_telemetry(metadata)
 
         # Create episode
         episode = PlaybackEpisode(
@@ -411,6 +444,7 @@ class JSONLPlaybackLoader:
             states=states,
             metadata=metadata,
             reset_points=reset_points,
+            telemetry_samples=telemetry_samples,
         )
 
         # Reconstruct MapDefinition from metadata or fallback to minimal dummy

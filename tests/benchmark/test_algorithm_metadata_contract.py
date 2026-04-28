@@ -233,6 +233,109 @@ def test_crowdnav_height_metadata_exposes_checkpoint_wrapper_contract() -> None:
     assert upstream["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
 
 
+def test_sonic_crowdnav_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """SoNIC metadata should expose model-only wrapper boundaries and projection policy."""
+    meta = enrich_algorithm_metadata(
+        algo="sonic_gst",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_sonic_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/SoNIC-Social-Nav"
+    assert upstream["default_model_name"] == "SoNIC_GST"
+
+
+def test_gensafenav_ours_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """GenSafeNav Ours_GST metadata should expose the upstream checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/GenSafeNav"
+    assert upstream["default_model_name"] == "Ours_GST"
+
+
+def test_gensafenav_gst_predictor_rand_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """GenSafeNav CrowdNav++-style metadata should expose the upstream checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="gst_predictor_rand",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/GenSafeNav"
+    assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
+def test_gensafenav_ours_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded Ours_GST metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "Ours_GST"
+
+
+def test_gensafenav_gst_predictor_rand_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded GST_predictor_rand metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="gst_predictor_rand_guarded",
+        metadata={"status": "ok"},
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
+def test_guarded_gensafenav_metadata_execution_mode_override_still_applies() -> None:
+    """Guarded wrappers should still honor an explicit execution-mode override."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
 def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
     """NMPC metadata should classify the planner as a native optimizer-style adapter."""
     meta = enrich_algorithm_metadata(

@@ -511,13 +511,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--scenario-config",
         type=Path,
-        default=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
+        default=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
         help="Scenario YAML used for benchmark config loading.",
     )
     parser.add_argument(
         "--scenario-name",
         type=str,
-        default="classic_crossing_low",
+        default="classic_cross_trap_low",
         help="Scenario name inside the scenario YAML.",
     )
     parser.add_argument(

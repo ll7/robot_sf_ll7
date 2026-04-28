@@ -26,7 +26,7 @@ DEFAULT_OUT_DIR = ROOT / "output/validation/grid_route_deep_dive/latest"
 DEFAULT_SET_NAMES = (
     "atomic_navigation_minimal_full_v1.yaml",
     "atomic_navigation_validation_fixtures_v1.yaml",
-    "classic_crossing_subset.yaml",
+    "classic_cross_trap_subset.yaml",
     "safety_barrier_static_slice_v1.yaml",
     "verified_simple_subset_v1.yaml",
 )

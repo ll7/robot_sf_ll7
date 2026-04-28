@@ -16,7 +16,7 @@ justified.
 ## Read First
 
 - `AGENTS.md`
-- `code_review.md`
+- `docs/code_review.md`
 - `docs/dev_guide.md`
 - `.specify/memory/constitution.md`
 

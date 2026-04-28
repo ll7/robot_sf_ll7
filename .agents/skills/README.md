@@ -1,6 +1,6 @@
 # Robot SF Skills
 
-This directory contains repo-local skills for Codex-style agents. Use this file as a quick index;
+This directory contains repo-local skills for Coding Agents. Use this file as a quick index;
 read the specific `SKILL.md` before applying a skill.
 
 ## Selection Guide
@@ -14,8 +14,10 @@ read the specific `SKILL.md` before applying a skill.
 - Run only the standard gate: `pr-ready-check`
 - Review benchmark-sensitive changes: `review-benchmark-change`
 - Update docs after code changes: `update-docs-on-code-change`
+- Create or refresh linked context notes: `context-note-maintainer`
 - Gather repository context before editing: `context-map`, `benchmark-overview`, or
   `experiment-context`
+- Submit Auxme issue-791 jobs reliably: `auxme-slurm-reliable-submit`
 
 ## Skill Routing
 
@@ -54,10 +56,12 @@ read the specific `SKILL.md` before applying a skill.
 | `analyze-camera-ready-benchmark` | Auditing a camera-ready benchmark campaign for consistency, runtime, fallback, and reproducibility signals. |
 | `analyze-latest-policy-sweep` | Comparing recent policy-analysis sweep outputs and optional video/frame artifacts. |
 | `auto-improvement` | Running a short measurement-aware refinement loop for prompts, docs, or small code changes. |
+| `auxme-slurm-reliable-submit` | Submitting Auxme issue-791 jobs with explicit config, live partition checks, and max-time-safe wrapper routing. |
 | `autoresearch` | Running an autonomous experiment loop with baseline, variants, and keep/discard decisions. |
 | `benchmark-overview` | Getting fast benchmark-faithful orientation for scenario splits, baselines, metrics, and artifacts. |
 | `clean-up` | Tidying the current branch with Ruff, tests, changed-file gates, and docstring TODO checks. |
 | `context-map` | Building a focused map of relevant files, docs, commands, and risks before multi-file work. |
+| `context-note-maintainer` | Creating or refreshing linked `docs/context/` notes so reusable agent knowledge stays discoverable and current. |
 | `experiment-context` | Finding canonical config-first training/evaluation paths, artifact lineage, and validation gates. |
 | `gh-issue-autopilot` | Selecting or executing an issue through implementation, validation, push, and draft PR. |
 | `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |

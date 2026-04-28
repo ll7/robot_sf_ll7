@@ -1,5 +1,5 @@
 scenarios:
-  - name: classic_crossing_low
+  - name: classic_cross_trap_low
     map_file: ../../../maps/svg_maps/classic_crossing.svg
     simulation_config:
       max_episode_steps: 600

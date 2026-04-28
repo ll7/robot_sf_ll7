@@ -143,7 +143,7 @@ Interpretation:
 
 ### Classic crossing subset
 
-Manifest: `configs/scenarios/sets/classic_crossing_subset.yaml`
+Manifest: `configs/scenarios/sets/classic_cross_trap_subset.yaml`
 
 - scenarios: `3`
 - episodes: `9`
@@ -183,7 +183,7 @@ Required next acceptance gate:
 - improve `narrow_passage` without regressing the current atomic-suite strengths.
 
 Dynamic/crowd limitation:
-- treat `classic_crossing_subset`, `head_on_interaction`, and `overtaking_interaction` as evidence
+- treat `classic_cross_trap_subset`, `head_on_interaction`, and `overtaking_interaction` as evidence
   that the current planner is not a social-navigation planner.
 
 ## Validation

@@ -114,6 +114,7 @@ skills use the same commands:
 ```bash
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
+scripts/dev/run_ci_local.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 scripts/dev/gh_comment.sh pr --current <<'EOF'
@@ -122,6 +123,13 @@ Summary line
 - bullet 2
 EOF
 ```
+
+`scripts/dev/run_ci_local.sh` is the local CI-equivalent entrypoint for the shared
+validation phases. It runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
+then delegates to `scripts/dev/ci_driver.sh` so local runs and `.github/workflows/ci.yml`
+share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
+`artifact-policy`). Pass explicit phases to scope a run, for example
+`scripts/dev/run_ci_local.sh lint test`.
 
 Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
 either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
@@ -135,6 +143,37 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
 - Keep `gh` for scripted batch operations, derived score sync, auth debugging, and one-off deterministic fallback commands.
 - Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
 - Cache project and field IDs once per shell session instead of rediscovering them for every issue.
+
+### Context note workflow
+
+For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+handoff context in Markdown instead of leaving them trapped in chat or PR history.
+
+- Use `docs/context/README.md` as the canonical workflow and naming guide.
+- Prefer updating an existing canonical note before creating a new one.
+- If a touched note is outdated or superseded, update it, remove it, or mark it clearly with a
+  pointer to the current source.
+- Link notes to the related issue/PR, canonical docs, validation commands, and replacement notes.
+- Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
+  refreshing context notes.
+
+### Agent memory conventions
+
+The repository now keeps a repo-local Markdown memory layer under `memory/` for stable cross-session
+agent context.
+
+- Start with `memory/MEMORY.md`, which acts as the concise index.
+- Store reusable memory in typed subdirectories such as `memory/architecture/`,
+  `memory/decisions/`, `memory/experiments/`, `memory/failures/`, and `memory/benchmarks/`.
+- Use the experiment naming pattern `memory/experiments/YYYY-MM-DD_<topic>.md`.
+- Keep `memory/MEMORY.md` short and push detail into linked topic files so it stays compatible with
+  Claude-style startup loading.
+- Use `docs/context/` for issue execution history and validation detail; use `memory/` only for
+  knowledge worth reusing across future sessions.
+- If Claude Code is in use, `CLAUDE.md` imports both `AGENTS.md` and `memory/MEMORY.md` so the
+  shared instructions and memory index load together.
+- Optional MCP integration should expose the Markdown files directly; do not add a retrieval
+  database or vector store unless the repository's retrieval-deferral policy changes.
 
 On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
@@ -311,12 +350,23 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
-  - Canonical skills live in `.agents/skills/` and are mirrored at `.codex/skills/` for Codex
-    compatibility.
+  - Canonical AI assistant content lives in `.agents/`:
+    - Canonical skills live in `.agents/skills/`.
+    - `.agents/skills/` is mirrored at `.codex/skills/`, `.opencode/skills/`, and
+      `.claude/skills/`.
+    - `.agents/prompts/codex/` is mirrored at `.codex/prompts/`.
+    - `.agents/prompts/github/` is mirrored at `.github/prompts/`.
+    - `.agents/agents/github/` is mirrored at `.github/agents/`.
+    - `.agents/commands/gemini/` is mirrored at `.gemini/commands/`.
+  - Validate or repair supported mirrors with
+    `uv run python scripts/tools/sync_ai_config.py --check` or
+    `uv run python scripts/tools/sync_ai_config.py --fix`.
   - LLM Constitution and guides can be found here:
     - `.specify/memory/constitution.md`
-    - `.github/copilot-instructions.md`
     - `AGENTS.md`
+  - For the repository's cross-agent compatibility stance and the retrieval → planning → execution
+    → verification discipline mapped to repo-local skills, see
+    `docs/context/issue_728_coding_agents_compatibility.md`.
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.
@@ -795,7 +845,7 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - Lint job → Task “Ruff: Format and Fix” → `uv run ruff check . && uv run ruff format --check .`
-- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uv run pylint robot_sf --errors-only`
+- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uvx ty check . --exit-zero`
 - Type check job → Task "Type Check" → `uvx ty check . --exit-zero`
 - Test job → Task “Run Tests” → `uv run pytest tests`
 
@@ -1160,7 +1210,7 @@ Use the following templates for specific tasks.
 uv sync && source .venv/bin/activate
 
 # Validate changes
-uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
+uv run ruff check . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest tests
 
 # Functional smoke (headless)
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \

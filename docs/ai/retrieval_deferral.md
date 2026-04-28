@@ -1,6 +1,7 @@
 # Retrieval And MCP Deferral Note
 
 Date: 2026-03-19
+Updated: 2026-04-13
 
 ## Decision
 
@@ -12,6 +13,11 @@ Specifically deferred:
 - `Qdrant MCP`
 - `Chroma MCP`
 - any persistent semantic-memory or vector-database layer
+
+Allowed:
+
+- repo-local Markdown memory under `memory/`
+- optional MCP exposure of those Markdown files without adding a separate database
 
 ## Rationale
 
@@ -37,9 +43,10 @@ Revisit retrieval only if a real boundary appears, such as:
 Until then, prefer:
 
 1. repo-local instructions,
-2. focused docs under `docs/ai/`,
-3. `.agents/skills/` context packs,
-4. manual or scripted context bundles via the chosen packer.
+2. `memory/MEMORY.md` plus linked topic files,
+3. focused docs under `docs/ai/`,
+4. `.agents/skills/` context packs,
+5. manual or scripted context bundles via the chosen packer.
 
 ## What This Prevents
 

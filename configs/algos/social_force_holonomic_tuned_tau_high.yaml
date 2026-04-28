@@ -1,0 +1,19 @@
+# Issue #697 parameter sweep variant: high relaxation time.
+# Hypothesis: the jerk spike after switching to direct holonomic world-velocity
+# (tau=0.5 -> jerk 1.7103, baseline jerk 0.4338) may be caused by the default
+# tau being too short for holonomic mode.  A higher tau smooths the desired-force
+# transient, potentially recovering goal-reaching at the cost of slower reaction.
+#
+# Changed from default SocNavPlannerConfig:
+#   social_force_tau: 0.5 -> 2.0
+
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+angular_gain: 1.0
+goal_tolerance: 0.25
+
+social_force_tau: 2.0
+social_force_desired_speed: 1.0
+social_force_repulsion_weight: 0.8
+social_force_factor: 5.1
+social_force_obstacle_factor: 10.0

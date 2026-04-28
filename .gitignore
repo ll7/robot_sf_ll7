@@ -48,6 +48,9 @@ dist/
 !.env.example
 .vscode/mcp.json
 
+# Local machine context for agents (template in docs/templates)
+/local.machine*.md
+
 .gemini/
 gha-creds-*.json
 
@@ -56,6 +59,9 @@ third_party/socnavbench/wayptnav_data/
 third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
 third_party/socnavbench/surreal/code/human_meshes/
 third_party/socnavbench/surreal/code/human_textures/
+
+# External MPC repos cloned for planner-zoo research (full git repos, not vendored)
+third_party/external_mpc_repos/
 
 # Cmake
 third_party/python-rvo2/.*

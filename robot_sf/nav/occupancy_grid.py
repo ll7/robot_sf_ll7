@@ -74,6 +74,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import MultiPolygon as _ShapelyMultiPolygon
 from shapely.geometry import Point as _ShapelyPoint
 from shapely.geometry import Polygon as _ShapelyPolygon
 from shapely.prepared import PreparedGeometry, prep
@@ -380,7 +381,7 @@ class OccupancyGrid:
         self._grid_origin: tuple[float, float] | None = None
         self._last_use_ego_frame: bool = False
         self._prepared_obstacles: list[PreparedGeometry] | None = None
-        self._obstacle_polygons: list[list[tuple[float, float]]] = []
+        self._obstacle_polygons: list[Any] = []
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -407,7 +408,7 @@ class OccupancyGrid:
         pedestrians: list[Circle2D],
         robot_pose: RobotPose,
         ego_frame: bool = False,
-        obstacle_polygons: list[list[tuple[float, float]]] | None = None,
+        obstacle_polygons: list[Any] | None = None,
     ) -> np.ndarray:
         """Generate occupancy grid from obstacles and pedestrians.
 
@@ -484,11 +485,32 @@ class OccupancyGrid:
             transformed_obstacles: list[Line2D] = [
                 (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
             ]
-            transformed_polygons: list[list[tuple[float, float]]] | None = None
+            transformed_polygons: list[Any] | None = None
+
+            def _to_ego_polygon(polygon: Any) -> Any:
+                if isinstance(polygon, _ShapelyMultiPolygon):
+                    return _ShapelyMultiPolygon(
+                        [_to_ego_polygon(poly) for poly in polygon.geoms if not poly.is_empty]
+                    )
+                if isinstance(polygon, _ShapelyPolygon):
+                    shape = polygon if polygon.is_valid else polygon.buffer(0)
+                    if shape.is_empty:
+                        return shape
+                    # buffer(0) can return a MultiPolygon for self-intersecting inputs
+                    if isinstance(shape, _ShapelyMultiPolygon):
+                        return _ShapelyMultiPolygon(
+                            [_to_ego_polygon(poly) for poly in shape.geoms if not poly.is_empty]
+                        )
+                    exterior = [_to_ego_point(vertex) for vertex in shape.exterior.coords[:-1]]
+                    interiors = [
+                        [_to_ego_point(vertex) for vertex in ring.coords[:-1]]
+                        for ring in shape.interiors
+                    ]
+                    return _ShapelyPolygon(exterior, interiors)
+                return _ShapelyPolygon([_to_ego_point(vertex) for vertex in polygon])
+
             if obstacle_polygons is not None:
-                transformed_polygons = [
-                    [_to_ego_point(vertex) for vertex in polygon] for polygon in obstacle_polygons
-                ]
+                transformed_polygons = [_to_ego_polygon(polygon) for polygon in obstacle_polygons]
             transformed_pedestrians: list[Circle2D] = [
                 (_to_ego_point(center), radius) for center, radius in pedestrians
             ]
@@ -744,13 +766,23 @@ class OccupancyGrid:
             channel_results=channel_results,
         )
 
-    def _prepare_obstacles(
-        self, polygons: list[list[tuple[float, float]]]
-    ) -> list[PreparedGeometry] | None:
+    def _prepare_obstacles(self, polygons: list[Any]) -> list[PreparedGeometry] | None:
         if not polygons:
             return None
-        shapely_polygons = [_ShapelyPolygon(poly) for poly in polygons]
-        return [prep(poly) for poly in shapely_polygons if not poly.is_empty]
+        prepared: list[PreparedGeometry] = []
+        for poly in polygons:
+            if isinstance(poly, PreparedGeometry):
+                prepared.append(poly)
+                continue
+            elif isinstance(poly, _ShapelyMultiPolygon):
+                shape = poly if poly.is_valid else poly.buffer(0)
+            elif isinstance(poly, _ShapelyPolygon):
+                shape = poly if poly.is_valid else poly.buffer(0)
+            else:
+                shape = _ShapelyPolygon(poly)
+            if not shape.is_empty:
+                prepared.append(prep(shape))
+        return prepared
 
     def _ensure_prepared_obstacles(self) -> None:
         if self._prepared_obstacles is None and self._obstacle_polygons:

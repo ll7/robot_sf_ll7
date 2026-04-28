@@ -54,10 +54,10 @@ Current promoted all-planners baseline run:
 * root:
   + `output/benchmarks/camera_ready/camera_ready_all_planners_prediction_first_prediction_first_stop_verify_20260220_201848`
 * status:
-  + `8/8 planners ok`,  `1080 episodes`, runtime `386.54s`
+  + `8/8 planners ok`,   `1080 episodes`, runtime `386.54s`
 * predictive planner:
-  + `status=ok`,  `episodes=135`,  `failed_jobs=0`
-  + `success_mean=0.9778`,  `collisions_mean=0.0000`,  `near_misses_mean=0.0296`
+  + `status=ok`,   `episodes=135`,   `failed_jobs=0`
+  + `success_mean=0.9778`,   `collisions_mean=0.0000`,   `near_misses_mean=0.0296`
 
 ## Config Presets
 
@@ -69,6 +69,11 @@ Current promoted all-planners baseline run:
   + baseline + experimental planners on full scenario suite
   + prediction planner runs first for early fail-fast signal
   + `stop_on_failure: true` (aborts on `failed` and `partial-failure`)
+* `configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml`
+  + all-planners paper-facing contract for release rehearsal and analysis
+  + `stop_on_failure: false` so campaign execution continues and failed planners are surfaced
+    explicitly with reason fields in artifacts
+
 * `configs/benchmarks/camera_ready_all_planners_holonomic.yaml`
   + co-existing holonomic sibling profile for issue 690 feasibility work
   + keeps the same scenario matrix, seed policy, publication bundle, and report layout
@@ -82,6 +87,14 @@ Current promoted all-planners baseline run:
   + `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
+* `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
+  + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
+  + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,
+    and publication/export contract; only the named seed set changes
+* `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml`
+  + escalation target using `paper_eval_s10=[111..120]`
+  + use when the S5 comparison still shows material interval width, ranking, or scenario-winner
+    instability
 
 * `configs/algos/prediction_planner_camera_ready.yaml`
   + explicit `prediction_planner` camera-ready profile used by all-planners presets
@@ -98,8 +111,10 @@ SNQI calibration assets used by camera-ready presets:
 
 * `configs/benchmarks/snqi_weights_camera_ready_v1.json`
 * `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
-* `configs/benchmarks/snqi_weights_camera_ready_v2.json` (paper-facing default)
-* `configs/benchmarks/snqi_baseline_camera_ready_v2.json` (degeneracy-hardened)
+* `configs/benchmarks/snqi_weights_camera_ready_v2.json`
+* `configs/benchmarks/snqi_baseline_camera_ready_v2.json`
+* `configs/benchmarks/snqi_weights_camera_ready_v3.json` (current paper-facing default)
+* `configs/benchmarks/snqi_baseline_camera_ready_v3.json` (current paper-facing default)
 
 ## Produced Artifacts
 
@@ -132,6 +147,8 @@ Expected tree:
     seed_variability_by_scenario.csv
     seed_episode_rows.csv
     statistical_sufficiency.json
+    seed_schedule_comparison.json       # optional comparison-script output
+    seed_schedule_comparison.md         # optional comparison-script output
     snqi_diagnostics.json
     snqi_diagnostics.md
     snqi_sensitivity.csv
@@ -221,7 +238,9 @@ Benchmark mode is fail-closed:
 * planner-aware per-episode seed rows (`reports/seed_episode_rows.csv`)
 * statistical sufficiency summary for seed variability (`reports/statistical_sufficiency.json`)
 * SNQI contract diagnostics (`reports/snqi_diagnostics.{json,md}` + `reports/snqi_sensitivity.csv`)
+  + includes contract health, planner ordering, component correlations, and ablation-based weight sensitivity
 * warning list
+* explicit per-planner failure reason field (`most_likely_failure_reason`) in planner rows/tables
 * publication bundle paths (if export enabled)
 * interpretation profile metadata (`paper_interpretation_profile`)
 
@@ -232,11 +251,11 @@ Each campaign now stores the exact invocation and timing provenance.
 Captured fields include:
 
 * exact command used to launch the campaign (`invoked_command`)
-* campaign wallclock start/end (`started_at_utc`,  `finished_at_utc`)
-* campaign runtime and throughput (`runtime_sec`,  `episodes_per_second`)
+* campaign wallclock start/end (`started_at_utc`,   `finished_at_utc`)
+* campaign runtime and throughput (`runtime_sec`,   `episodes_per_second`)
 * per-planner start/end/runtime/throughput in run entries and planner summaries
 * seed-policy provenance (`mode`, configured seeds, resolved seed list)
-* preflight artifact paths (`validate_config`,  `preview_scenarios`)
+* preflight artifact paths (`validate_config`,   `preview_scenarios`)
 
 Primary locations:
 
@@ -297,6 +316,55 @@ bootstrap_confidence: 0.95
 bootstrap_seed: 123
 ```
 
+For full paper-matrix seed-count extensions, use the named seed sets in
+`configs/benchmarks/seed_sets_v1.yaml`:
+
+* `eval` / S3: `[111,112,113]`, the frozen paper-facing baseline.
+* `paper_eval_s5` / S5: `[111,112,113,114,115]`, the first staged full-matrix extension.
+* `paper_eval_s10` / S10: `[111..120]`, the escalation target when S5 is still unstable.
+* `paper_eval_s20` / S20: `[111..130]`, a high-cost reference schedule for later variance
+  power checks.
+
+Interpret extended-seed comparisons with the following default decision criteria:
+
+* CI-width reduction target: at least 20% relative reduction in mean CI width per metric, while
+  accepting unchanged zero-width intervals as already tight.
+* Aggregate mean drift: flag planner/metric rows whose absolute drift exceeds
+  `max(0.02, 5% of the S3 mean)`.
+* Ranking stability: flag if Kendall tau on planner-level `snqi_mean` falls below `0.8`.
+* Scenario-winner stability: flag if more than 10% of comparable scenarios change winner under
+  scenario-level `snqi`.
+
+Staged stopping rule:
+
+* Run S5 first under the same matrix, planner, kinematics, SNQI, bootstrap, and export settings as
+  S3.
+* Stop at S5 when planner ranking is stable, scenario-winner changes are within threshold, and no
+  aggregate drift trigger changes the interpretation. CI-width target misses are reported as
+  precision caveats, not automatic headline changes.
+* Escalate to S10 when S5 crosses the ranking, scenario-winner, or aggregate-drift thresholds.
+* Reserve S20 for a dedicated high-cost reference run when S10 still leaves manuscript-relevant
+  uncertainty.
+
+Canonical S5 preflight:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml \
+  --mode preflight \
+  --label issue832_s5_preflight
+```
+
+Canonical resumable S5 run in tmux:
+
+```bash
+tmux new -d -s issue832_s5 -- \
+  zsh -lc 'cd /path/to/robot_sf_ll7 && source .venv/bin/activate && caffeinate -dimsu uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml --campaign-id issue832_s5_stage 2>&1 | tee output/benchmarks/camera_ready/issue832_s5_stage.log'
+```
+
+Re-run the same command to resume an interrupted root; `--campaign-id` keeps the output directory
+stable and `resume: true` skips completed episode ids.
+
 Grouping semantics:
 
 * raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
@@ -336,7 +404,7 @@ Recommended pilot for downstream manuscript issue `amv_benchmark_paper#74` :
 
 * benchmark config: `configs/benchmarks/paper_seed_variability_pilot_v1.yaml`
 * scenarios:
-  + `classic_crossing_low`
+  + `classic_cross_trap_low`
   + `classic_head_on_corridor_low`
   + `classic_overtaking_low`
   + `classic_t_intersection_low`
@@ -375,10 +443,12 @@ This emits:
 SNQI contract analyzer helper:
 
 ```bash
+# For v3 paper-facing campaigns only.  For other campaigns, replace --weights and
+# --baseline with the asset paths recorded in that campaign's manifest.json.
 uv run python scripts/tools/analyze_snqi_contract.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
-  --weights configs/benchmarks/snqi_weights_camera_ready_v2.json \
-  --baseline configs/benchmarks/snqi_baseline_camera_ready_v2.json
+  --weights configs/benchmarks/snqi_weights_camera_ready_v3.json \
+  --baseline configs/benchmarks/snqi_baseline_camera_ready_v3.json
 ```
 
 This emits:
@@ -386,6 +456,13 @@ This emits:
 * `reports/snqi_diagnostics.json`
 * `reports/snqi_diagnostics.md`
 * `reports/snqi_sensitivity.csv`
+
+The diagnostics now include:
+
+* a positioning recommendation for SNQI under the current contract
+* planner ordering by mean SNQI
+* per-component Spearman correlations against episode-level SNQI
+* per-weight ablation sensitivity rows in `snqi_sensitivity.csv`
 
 The analyzer now also emits runtime hotspot diagnostics:
 
@@ -405,6 +482,20 @@ uv run python scripts/tools/compare_camera_ready_campaigns.py \
 
 Use this to validate quality changes (for example predictive planner success/collision deltas)
 after compatibility or config fixes.
+
+Seed-schedule comparison helper:
+
+```bash
+uv run python scripts/tools/compare_seed_schedule_campaigns.py \
+  --base-campaign-root output/benchmarks/camera_ready/<s3_campaign_id> \
+  --candidate-campaign-root output/benchmarks/camera_ready/<s5_or_s10_campaign_id> \
+  --output-json output/benchmarks/camera_ready/<s5_or_s10_campaign_id>/reports/seed_schedule_comparison.json \
+  --output-md output/benchmarks/camera_ready/<s5_or_s10_campaign_id>/reports/seed_schedule_comparison.md
+```
+
+Use the seed-schedule comparison for issue-832-style stability checks. It consumes the versioned
+campaign outputs and reports CI-width changes, aggregate mean drift, planner ranking correlation,
+scenario-level winner changes, and a conservative `stable` / `review` interpretation.
 
 Analyzer findings now also include portability checks, including detection of
 absolute `scenario_params.map_file` paths in episodes (these should be
@@ -428,23 +519,23 @@ repository-relative for publication-grade portability).
 Core vs experimental partitions:
 
 * paper-facing profile (`paper_profile_version=paper-matrix-v1`):
-  partitioning follows explicit planner tags from config (`planner_group=core|experimental`)
+  partitioning follows explicit planner tags from config ( `planner_group=core|experimental` )
   as part of the frozen execution contract.
 * non-paper runs:
   partitioning remains readiness-tier based. When the scenario-difficulty analyzer
   cannot find an eligible core benchmark-success set, the report falls back to the
   full scenario breakdown and says so explicitly instead of implying a core consensus.
 * `campaign_table_core.{csv,md}`:
-  core partition rows (`planner_group=core` for paper-facing runs;
+  core partition rows ( `planner_group=core` for paper-facing runs; 
 `readiness_tier=baseline-ready` for non-paper runs).
 * `campaign_table_experimental.{csv,md}`:
-  non-core rows (`planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
+  non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
 
 Portability guarantee:
 
 * Episode `scenario_params.map_file` is normalized to repository-relative paths
   when the map resides in the repository tree (for example
-`maps/svg_maps/classic_crossing.svg`).
+`maps/svg_maps/classic_crossing.svg` ).
 
 Additional diagnostics generated per campaign:
 
@@ -479,27 +570,27 @@ Validated on branch `codex/benchmark-camera-ready-pipeline` :
 
 * baseline-safe calibration campaign (multi-seed `eval` set):
   + `camera_ready_baseline_safe_snqi_calib_base_20260217_122711`
-  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + `total_runs=3`,   `successful_runs=3`,   `total_episodes=405`
   + output used to derive:
     - `configs/benchmarks/snqi_baseline_camera_ready_v1.json`
 * baseline-safe verification with SNQI enabled:
   + `camera_ready_baseline_safe_snqi_verify_20260217_123159`
-  + `total_runs=3`,  `successful_runs=3`,  `total_episodes=405`
+  + `total_runs=3`,   `successful_runs=3`,   `total_episodes=405`
   + `snqi_mean` is numeric in campaign table (no `nan`)
 * smoke all-planners with SNQI calibration enabled:
   + `camera_ready_smoke_all_planners_snqi_check_20260217_123000`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=7`
   + `snqi_mean` is numeric in campaign table (no `nan`)
 * full all-planners with multi-seed + SNQI enabled:
   + `camera_ready_all_planners_snqi_multiseed_verify_20260217_123437`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=945`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=945`
   + `snqi_mean` is numeric for all planners in campaign table
 * smoke all-planners:
   + `camera_ready_smoke_all_planners_smoke3_20260217_112307`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=7`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=7`
 * full all-planners:
   + `camera_ready_all_planners_full2_20260217_112600`
-  + `total_runs=7`,  `successful_runs=7`,  `total_episodes=315`
+  + `total_runs=7`,   `successful_runs=7`,   `total_episodes=315`
   + campaign runtime: `130.03s`
   + publication bundle created
 

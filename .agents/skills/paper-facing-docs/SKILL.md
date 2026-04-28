@@ -10,7 +10,7 @@ artifact/provenance claims.
 
 ## Read First
 
-- `code_review.md`
+- `docs/code_review.md`
 - `docs/benchmark_camera_ready.md`
 - `docs/benchmark_artifact_publication.md`
 - relevant issue execution notes under `docs/context/`

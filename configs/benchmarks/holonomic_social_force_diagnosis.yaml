@@ -1,0 +1,58 @@
+name: holonomic_social_force_diagnosis
+paper_facing: false
+# Small representative scenario set for issue #697 holonomic social-force
+# tuning and failure-mode diagnosis.  Keep the scenario matrix small and
+# the seed count low so runs complete quickly without ORCA-level compute.
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+workers: 1
+horizon: 150
+stop_on_failure: false
+resume: true
+record_forces: true
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - holonomic
+holonomic_command_mode: vx_vy
+
+planners:
+  # Local social-force baseline (default parameters, holonomic world-velocity path)
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
+
+  # Upstream social_navigation_pyenvs_socialforce (world-velocity passthrough)
+  # Requires: uv run --with socialforce==0.2.3 and Social-Navigation-PyEnvs checkout
+  - key: social_navigation_pyenvs_socialforce
+    algo: social_navigation_pyenvs_socialforce
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+    algo_config: configs/algos/social_navigation_pyenvs_socialforce_holonomic_probe.yaml
+
+  # Local social-force parameter sweep variants (issue #697)
+  - key: social_force_tau_high
+    algo: social_force
+    planner_group: &sweep_group experimental
+    benchmark_profile: &sweep_profile experimental
+    socnav_missing_prereq_policy: &sweep_prereq fail-fast
+    algo_config: configs/algos/social_force_holonomic_tuned_tau_high.yaml
+
+  - key: social_force_tau_low
+    algo: social_force
+    planner_group: *sweep_group
+    benchmark_profile: *sweep_profile
+    socnav_missing_prereq_policy: *sweep_prereq
+    algo_config: configs/algos/social_force_holonomic_tuned_tau_low.yaml
+
+  - key: social_force_repulsion_low
+    algo: social_force
+    planner_group: *sweep_group
+    benchmark_profile: *sweep_profile
+    socnav_missing_prereq_policy: *sweep_prereq
+    algo_config: configs/algos/social_force_holonomic_tuned_repulsion_low.yaml

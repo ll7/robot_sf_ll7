@@ -15,7 +15,7 @@ small pilot slice, not a full benchmark matrix rerun and not evidence for
 field-wide generalization.
 
 Pilot slice:
-- Scenarios: `classic_crossing_low`, `classic_head_on_corridor_low`,
+- Scenarios: `classic_cross_trap_low`, `classic_head_on_corridor_low`,
   `classic_overtaking_low`, `classic_t_intersection_low`
 - Planners: `orca`, `ppo`
 - Kinematics: `differential_drive`
@@ -85,8 +85,8 @@ and `ppo`.
 
 | Scenario | Planner | Seeds | Episodes | Success mean | Collision mean | Near-miss mean | Near-miss 95% CI | TTG norm mean | SNQI mean |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `classic_crossing_low` | `orca` | 8 | 8 | 0 | 0 | 2.5 | [0.375, 5] | 1 | n/a |
-| `classic_crossing_low` | `ppo` | 8 | 8 | 0 | 0 | 2.12 | [0.375, 4.38] | 1 | n/a |
+| `classic_cross_trap_low` | `orca` | 8 | 8 | 0 | 0 | 2.5 | [0.375, 5] | 1 | n/a |
+| `classic_cross_trap_low` | `ppo` | 8 | 8 | 0 | 0 | 2.12 | [0.375, 4.38] | 1 | n/a |
 | `classic_head_on_corridor_low` | `orca` | 8 | 8 | 0 | 0 | 3.25 | [1, 6] | 1 | n/a |
 | `classic_head_on_corridor_low` | `ppo` | 8 | 8 | 0 | 0 | 1.25 | [0, 3] | 1 | n/a |
 | `classic_overtaking_low` | `orca` | 8 | 8 | 0 | 0 | 0 | [0, 0] | 1 | n/a |
@@ -96,7 +96,7 @@ and `ppo`.
 
 Interpretation:
 - The pilot demonstrates seed-dependent variation in near-miss counts for
-  `classic_crossing_low`, `classic_head_on_corridor_low`, and the `ppo`
+  `classic_cross_trap_low`, `classic_head_on_corridor_low`, and the `ppo`
   `classic_t_intersection_low` row.
 - Success, collision, and normalized time-to-goal were flat in this low-density
   pilot; do not use this run to claim broad success or safety variation.

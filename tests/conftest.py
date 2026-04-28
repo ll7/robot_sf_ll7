@@ -159,6 +159,33 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
         os.environ.pop("ROBOT_SF_ARTIFACT_ROOT", None)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def writable_headless_caches(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[None, None, None]:
+    """Provide writable cache directories for matplotlib/fontconfig-backed imports."""
+    cache_root = tmp_path_factory.mktemp("robot_sf_test_cache")
+    mpl_dir = cache_root / "mplconfig"
+    xdg_dir = cache_root / "xdg_cache"
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    xdg_dir.mkdir(parents=True, exist_ok=True)
+
+    originals: dict[str, str | None] = {
+        "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR"),
+        "XDG_CACHE_HOME": os.environ.get("XDG_CACHE_HOME"),
+    }
+    os.environ["MPLCONFIGDIR"] = str(mpl_dir)
+    os.environ["XDG_CACHE_HOME"] = str(xdg_dir)
+    try:
+        yield
+    finally:
+        for key, value in originals.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 @pytest.fixture(autouse=True)
 def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
     """Ensure torch deterministic algorithms aren't forced across the suite."""

@@ -365,7 +365,7 @@ finetune_model = PPO("MultiInputPolicy", env, policy_kwargs=finetune_config.get_
 # Submit complete comparison
 sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
 
-# Submit parallel jobs for faster execution
+# Submit the extractor comparison as a Slurm job array
 ./SLURM/feature_extractor_comparison/submit_parallel.sh
 
 # Check job status

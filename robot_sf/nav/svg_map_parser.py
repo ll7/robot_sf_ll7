@@ -41,6 +41,7 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+from shapely.ops import unary_union
 from shapely.validation import explain_validity, make_valid
 
 from robot_sf.common.errors import raise_fatal_with_remedy
@@ -748,10 +749,13 @@ class SvgMapConverter:
         """
         # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
         vertices = list(path.coordinates)
+        svg_name = Path(self.svg_file_str).name
 
         if not np.array_equal(vertices[0], vertices[-1]):
             logger.warning(
-                f"Closing polygon: first and last vertices of obstacle <{path.id}> differ",
+                "SVG file '{svg}' closing polygon: first and last vertices of obstacle <{pid}> differ",
+                svg=svg_name,
+                pid=path.id,
             )
             vertices.append(vertices[0])
 
@@ -759,62 +763,77 @@ class SvgMapConverter:
         poly = Polygon(vertices)
         if not poly.is_valid or poly.is_empty:
             logger.warning(
-                "Obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
+                "SVG file '{svg}' obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
+                svg=svg_name,
                 pid=path.id,
                 valid=poly.is_valid,
                 empty=poly.is_empty,
                 reason=explain_validity(poly),
             )
-            repaired = self._repair_invalid_obstacle_polygon(poly)
+            repaired = self._repair_invalid_obstacle_geometry(poly)
             if repaired is not None:
-                vertices = list(repaired.exterior.coords)
                 logger.info(
-                    "Repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}).",
+                    "SVG file '{svg}' repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}, polygons={count}).",
+                    svg=svg_name,
                     pid=path.id,
                     area=repaired.area,
+                    count=len(Obstacle.from_geometry(repaired).iter_polygons()),
                 )
+                return Obstacle.from_geometry(repaired)
             else:
                 logger.warning(
-                    "Failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    "SVG file '{svg}' failed to repair invalid obstacle path id={pid}; using raw vertices.",
+                    svg=svg_name,
                     pid=path.id,
                 )
 
         return Obstacle(vertices)
 
     @staticmethod
-    def _repair_invalid_obstacle_polygon(polygon: Polygon) -> Polygon | None:
-        """Repair an invalid obstacle polygon and return the largest usable polygon.
+    def _repair_invalid_obstacle_geometry(
+        polygon: Polygon,
+    ) -> Polygon | MultiPolygon | None:
+        """Repair an invalid obstacle polygon and preserve all usable polygon members.
 
         Args:
             polygon: Raw polygon built from SVG obstacle vertices.
 
         Returns:
-            Polygon | None: Largest valid polygon candidate or ``None`` when no
+            Polygon | MultiPolygon | None: Valid obstacle geometry or ``None`` when no
                 polygon geometry can be recovered.
         """
-        candidate = SvgMapConverter._largest_usable_polygon(make_valid(polygon))
+        candidate = SvgMapConverter._merged_polygon_geometry(make_valid(polygon))
         if candidate is None:
             return None
         if candidate.is_valid:
             return candidate
 
-        buffered_candidate = SvgMapConverter._largest_usable_polygon(candidate.buffer(0))
+        buffered_candidate = SvgMapConverter._merged_polygon_geometry(candidate.buffer(0))
         return buffered_candidate if buffered_candidate and buffered_candidate.is_valid else None
 
     @staticmethod
-    def _largest_usable_polygon(geometry) -> Polygon | None:
-        """Extract the largest non-empty polygon candidate from a geometry tree.
+    def _merged_polygon_geometry(geometry) -> Polygon | MultiPolygon | None:
+        """Extract a stable polygon geometry from a geometry tree.
 
         Returns:
-            Polygon | None: Largest polygon with positive area, otherwise ``None``.
+            Polygon | MultiPolygon | None: Polygonal geometry preserving detached members
+                and holes when possible.
         """
         candidates = SvgMapConverter._polygon_members(geometry)
         if not candidates:
             return None
-        candidate = max(candidates, key=lambda part: part.area)
+        candidate = unary_union(candidates)
         if candidate.is_empty or candidate.area <= 0.0:
             return None
-        return candidate
+        if isinstance(candidate, (Polygon, MultiPolygon)):
+            return candidate
+        merged_candidates = SvgMapConverter._polygon_members(candidate)
+        if not merged_candidates:
+            return None
+        candidate = unary_union(merged_candidates)
+        if isinstance(candidate, (Polygon, MultiPolygon)) and not candidate.is_empty:
+            return candidate
+        return None
 
     @staticmethod
     def _polygon_members(geometry) -> list[Polygon]:

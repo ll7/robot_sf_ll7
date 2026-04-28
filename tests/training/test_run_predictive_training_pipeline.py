@@ -37,7 +37,7 @@ def test_build_random_seed_manifest_generates_all_scenarios(monkeypatch, tmp_pat
         pipeline,
         "load_scenarios",
         lambda _path: [
-            {"name": "classic_crossing_low"},
+            {"name": "classic_cross_trap_low"},
             {"name": "classic_doorway_high"},
         ],
     )
@@ -52,7 +52,7 @@ def test_build_random_seed_manifest_generates_all_scenarios(monkeypatch, tmp_pat
 
     assert manifest_path == out_path
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
-    assert payload["classic_crossing_low"] == [100, 101, 102]
+    assert payload["classic_cross_trap_low"] == [100, 101, 102]
     assert payload["classic_doorway_high"] == [100100, 100101, 100102]
 
 

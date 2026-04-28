@@ -30,10 +30,10 @@ def test_resolve_includes_rejects_directories(tmp_path: Path) -> None:
 
 def test_map_search_paths_skip_missing_entries(tmp_path: Path) -> None:
     """Ignore missing map_search_paths entries instead of crashing."""
-    root = tmp_path / "manifest.yaml"
+    source = tmp_path / "manifest.yaml"
     paths = scenario_loader._resolve_map_search_paths(
         {"map_search_paths": ["missing"]},
-        root=root,
+        source=source,
     )
     assert paths == []
 
@@ -78,8 +78,8 @@ def test_rebase_scenario_paths_keeps_unresolved(tmp_path: Path) -> None:
 
 
 def test_load_map_definition_unsupported_extension(tmp_path: Path) -> None:
-    """Skip unsupported map formats gracefully."""
-    bad_map = tmp_path / "map.txt"
+    """Skip unsupported map formats gracefully, including legacy map paths."""
+    bad_map = tmp_path / "map.json"
     bad_map.write_text("not a map", encoding="utf-8")
     scenario_loader._load_map_definition.cache_clear()
     assert scenario_loader._load_map_definition(str(bad_map)) is None

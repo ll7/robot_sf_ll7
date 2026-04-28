@@ -66,18 +66,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         from loguru import logger
 
         logger.disable("robot_sf")
-        from robot_sf.benchmark.paper_results_handoff import export_paper_results_handoff
+        try:
+            from robot_sf.benchmark.paper_results_handoff import export_paper_results_handoff
 
-        result = export_paper_results_handoff(
-            args.source,
-            output_dir=args.out_dir,
-            confidence_settings={
-                "method": "bootstrap_mean_over_seed_means",
-                "confidence": float(args.confidence),
-                "bootstrap_samples": int(args.bootstrap_samples),
-                "bootstrap_seed": int(args.bootstrap_seed),
-            },
-        )
+            result = export_paper_results_handoff(
+                args.source,
+                output_dir=args.out_dir,
+                confidence_settings={
+                    "method": "bootstrap_mean_over_seed_means",
+                    "confidence": float(args.confidence),
+                    "bootstrap_samples": int(args.bootstrap_samples),
+                    "bootstrap_seed": int(args.bootstrap_seed),
+                },
+            )
+        finally:
+            logger.enable("robot_sf")
     except Exception as exc:
         print(f"paper Results handoff export failed: {exc}", file=sys.stderr)
         return 2

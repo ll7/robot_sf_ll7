@@ -10,6 +10,7 @@ waypoint_reached_distance: 0.3
 obstacle_threshold: 0.5
 obstacle_inflation_cells: 1
 clearance_search_cells: 5
+clearance_penalty_weight: 0.5
 stop_distance: 0.25
 progress_weight: 1.0
 heading_weight: 1.0

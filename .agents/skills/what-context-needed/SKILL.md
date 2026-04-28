@@ -17,7 +17,7 @@ minimal and action-oriented.
 
 - `AGENTS.md`
 - `docs/dev_guide.md`
-- `code_review.md`
+- `docs/code_review.md`
 - `.specify/memory/constitution.md`
 
 ## Workflow

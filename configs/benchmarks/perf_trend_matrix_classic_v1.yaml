@@ -1,8 +1,8 @@
 schema_version: benchmark-perf-trend-matrix.v1
 suite_name: classic-interactions-overall-trend-v1
 scenarios:
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
-    scenario_name: classic_crossing_low
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+    scenario_name: classic_cross_trap_low
     episode_steps: 96
     cold_runs: 1
     warm_runs: 2
@@ -14,8 +14,8 @@ scenarios:
     min_throughput_delta: 0.75
     enforce_regression_gate: true
 
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
-    scenario_name: classic_crossing_medium
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+    scenario_name: classic_cross_trap_medium
     episode_steps: 96
     cold_runs: 1
     warm_runs: 2
@@ -27,8 +27,8 @@ scenarios:
     min_throughput_delta: 0.75
     enforce_regression_gate: true
 
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
-    scenario_name: classic_crossing_high
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+    scenario_name: classic_cross_trap_high
     episode_steps: 96
     cold_runs: 1
     warm_runs: 2

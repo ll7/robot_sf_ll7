@@ -1,5 +1,7 @@
 # robot-sf
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19563812.svg)](https://doi.org/10.5281/zenodo.19563812)
+
 > 2025-09-16 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
 
 <!-- This document is the first touchpoint for users and developers of the robot-sf project. Keep it very concise and focused on essential information. -->
@@ -21,7 +23,16 @@ map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
 
+## Release Artifact
+
+The current Zenodo-backed release DOI for the public benchmark artifact is:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19563812.svg)](https://doi.org/10.5281/zenodo.19563812)
+
+- https://doi.org/10.5281/zenodo.19563812
+
 - [About](#about)
+- [Release Artifact](#release-artifact)
 - [Attribution and Upstream Work](#attribution-and-upstream-work)
 - [Development and Intallation](#development-and-intallation)
   - [Prerequisites](#prerequisites)
@@ -225,8 +236,8 @@ uv run ruff check --fix . && uv run ruff format .
 # Run all tests (unified suite)
 uv run pytest
 
-# Legacy linter (for comparison)
-pylint robot_sf
+# Ruff linter
+uv run ruff check .
 ```
 
 #### GUI Tests

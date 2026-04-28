@@ -10,7 +10,6 @@ from random import sample
 
 import numpy as np
 from loguru import logger
-from shapely.geometry import Polygon
 from shapely.prepared import PreparedGeometry, prep
 
 from robot_sf.common.types import Vec2D
@@ -507,7 +506,10 @@ def get_prepared_obstacles(map_def: MapDefinition) -> list[PreparedGeometry]:
     if prepared is not None:
         return prepared
     polygons = [
-        Polygon(obstacle.vertices) for obstacle in map_def.obstacles if len(obstacle.vertices) >= 3
+        polygon
+        for obstacle in map_def.obstacles
+        for polygon in obstacle.iter_polygons()
+        if len(polygon.exterior.coords) >= 4
     ]
     prepared = [prep(poly) for poly in polygons if not poly.is_empty]
     map_def._prepared_obstacles = prepared

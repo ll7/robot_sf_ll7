@@ -7,11 +7,13 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
 from scripts.training import train_ppo
 
 if TYPE_CHECKING:
@@ -33,6 +35,48 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
 
     assert len(calls) == 1
     assert "ignored" in calls[0]
+
+
+def test_prepare_seed_state_relaxes_determinism_for_lightweight_cnn(monkeypatch, tmp_path) -> None:
+    """lightweight_cnn should opt out of deterministic CUDA with an explicit warning."""
+    warnings: list[str] = []
+    seed_calls: list[tuple[int, bool]] = []
+
+    def _fake_warning(message: str, *args) -> None:
+        warnings.append(message.format(*args) if args else message)
+
+    def _fake_set_global_seed(seed: int, deterministic: bool = True):
+        seed_calls.append((seed, deterministic))
+        return object()
+
+    monkeypatch.setattr(train_ppo.logger, "warning", _fake_warning)
+    monkeypatch.setattr(train_ppo.common, "set_global_seed", _fake_set_global_seed)
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=32_000,
+        policy_id="ppo_lightweight_cnn_seed_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 16_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="lightweight_cnn",
+    )
+
+    train_ppo._prepare_seed_state(config)
+
+    assert seed_calls == [(123, False)]
+    assert len(warnings) == 1
+    assert "LIGHTWEIGHT_CNN DETerminism Override" in warnings[0]
+    assert "not bitwise reproducible" in warnings[0]
 
 
 def test_legacy_training_ppo_entrypoint_fails_with_migration_command() -> None:
@@ -81,7 +125,20 @@ def _capture_startup_summary(monkeypatch, tmp_path: Path) -> str:
             step_schedule=((None, 60_000),),
             randomize_seeds=False,
         ),
-        env_factory_kwargs={"reward_name": "route_completion_v3"},
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "reward_curriculum": {
+                "stages": [
+                    {
+                        "until_episodes": 1,
+                        "reward_kwargs": {"weights": {"terminal_bonus": 1.0}},
+                    },
+                    {
+                        "reward_kwargs": {"weights": {"terminal_bonus": 5.0}},
+                    },
+                ]
+            },
+        },
         scenario_sampling={"strategy": "random"},
         num_envs="auto_stable",
         worker_mode="subproc",
@@ -112,7 +169,7 @@ def test_log_startup_summary_reports_training_settings(monkeypatch, tmp_path: Pa
     """Startup summary should report resolved reward, worker, and resume settings."""
     summary = _capture_startup_summary(monkeypatch, tmp_path)
 
-    assert "reward_profile=route_completion_v3" in summary
+    assert "reward_profile=curriculum[2 stages]: route_completion_v3" in summary
     assert "requested_num_envs=auto_stable" in summary
     assert "num_envs=3" in summary
     assert "worker_mode=subproc" in summary
@@ -125,6 +182,127 @@ def test_log_startup_summary_reports_num_envs_resolution(monkeypatch, tmp_path: 
 
     assert "num_envs resolution" in summary
     assert "mode=auto_stable" in summary
+
+
+def test_resolve_policy_selection_uses_asymmetric_grid_socnav_policy(tmp_path: Path) -> None:
+    """Asymmetric critic config should select the dedicated policy class."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_asymmetric_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "asymmetric_critic": True,
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    policy_cls, policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert policy_cls is AsymmetricGridSocNavPolicy
+    assert policy_kwargs["features_extractor_class"] is GridSocNavExtractor
+    assert critic_profile == "asymmetric_grid_socnav"
+
+
+def test_resolve_policy_selection_attention_head_sets_profile(tmp_path: Path) -> None:
+    """Attention head config should set the attention_grid_socnav critic profile."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_attention_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        feature_extractor_kwargs={"use_pedestrian_attention": True},
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    _policy_cls, policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert critic_profile == "attention_grid_socnav"
+    assert policy_kwargs["features_extractor_kwargs"].get("use_pedestrian_attention") is True
+
+
+def test_resolve_policy_selection_attention_plus_asymmetric_sets_combined_profile(
+    tmp_path: Path,
+) -> None:
+    """Attention + asymmetric critic together should set the combined profile."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_attention_asymmetric_policy_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+        feature_extractor="grid_socnav",
+        feature_extractor_kwargs={"use_pedestrian_attention": True},
+        env_overrides={
+            "observation_mode": "socnav_struct",
+            "use_occupancy_grid": True,
+            "include_grid_in_observation": True,
+        },
+        env_factory_kwargs={
+            "reward_name": "route_completion_v3",
+            "asymmetric_critic": True,
+        },
+        scenario_sampling={"strategy": "random"},
+        num_envs="auto_stable",
+        worker_mode="subproc",
+    )
+
+    policy_cls, _policy_kwargs, critic_profile = train_ppo._resolve_policy_selection(config)
+
+    assert policy_cls is AsymmetricGridSocNavPolicy
+    assert critic_profile == "asymmetric_attention_grid_socnav"
 
 
 def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) -> None:

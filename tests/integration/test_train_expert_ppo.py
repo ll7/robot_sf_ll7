@@ -124,7 +124,7 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
                     "profile_strategy": "cycle",
                     "weights": {
                         "classic_doorway_low": 3.0,
-                        "classic_crossing_medium": 2.0,
+                        "classic_cross_trap_medium": 2.0,
                     },
                     "exclude_scenarios": ["francis2023_robot_crowding"],
                 },
@@ -160,9 +160,61 @@ def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_p
     assert config.scenario_sampling["profile_strategy"] == "cycle"
     assert config.scenario_sampling["weights"] == {
         "classic_doorway_low": 3.0,
-        "classic_crossing_medium": 2.0,
+        "classic_cross_trap_medium": 2.0,
     }
     assert config.scenario_sampling["exclude_scenarios"] == ["francis2023_robot_crowding"]
+
+
+def test_load_expert_training_config_preserves_reward_curriculum(tmp_path) -> None:
+    """Loader should preserve staged reward curriculum config for factory wiring."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "reward_curriculum.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "ppo_reward_curriculum_test",
+                "scenario_config": str(scenario_config),
+                "seeds": [123],
+                "total_timesteps": 123456,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 1000,
+                },
+                "evaluation": {
+                    "frequency_episodes": 10,
+                    "evaluation_episodes": 4,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"every_steps": 20000}],
+                },
+                "env_factory_kwargs": {
+                    "reward_name": "route_completion_v3",
+                    "reward_curriculum": {
+                        "stages": [
+                            {
+                                "until_episodes": 4,
+                                "reward_kwargs": {
+                                    "weights": {"terminal_bonus": 1.0},
+                                },
+                            },
+                            {
+                                "reward_kwargs": {
+                                    "weights": {"terminal_bonus": 5.0},
+                                },
+                            },
+                        ]
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(config_path)
+
+    curriculum = config.env_factory_kwargs["reward_curriculum"]
+    assert curriculum["stages"][0]["until_episodes"] == 4
+    assert curriculum["stages"][1]["reward_kwargs"]["weights"]["terminal_bonus"] == 5.0
 
 
 def test_load_expert_training_config_defaults_randomize_seeds_to_false(tmp_path) -> None:
@@ -536,6 +588,9 @@ def test_load_expert_training_config_supports_auto_stable_num_envs(tmp_path) -> 
 def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> None:
     """Auto env modes should resolve to throughput and stable host-aware counts."""
 
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.delenv("SLURM_JOB_CPUS_PER_NODE", raising=False)
     monkeypatch.setattr("scripts.training.train_ppo.os.cpu_count", lambda: 32)
     monkeypatch.setattr(
         "scripts.training.train_ppo._host_memory_gib",

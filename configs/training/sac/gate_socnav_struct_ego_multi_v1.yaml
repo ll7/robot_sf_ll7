@@ -1,0 +1,53 @@
+# SAC gate training configuration with ego-frame observations and
+# multi-scenario episode switching across the classic_interactions manifest.
+#
+# This supersedes the earlier single-scenario SAC trainer behavior, which was
+# unintentionally locking training to the first scenario entry.
+
+policy_id: sac_gate_socnav_struct_ego_multi_v1
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 50000
+seed: 42
+action_semantics: delta
+obs_transform: ego
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 3.0e-4
+  buffer_size: 50000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 1000
+
+env_overrides:
+  observation_mode: socnav_struct
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0
+
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_gate_socnav_struct_ego_multi_v1
+  tags:
+    - sac
+    - gate
+    - socnav-struct
+    - ego-frame
+    - multi-scenario
+    - issue-790

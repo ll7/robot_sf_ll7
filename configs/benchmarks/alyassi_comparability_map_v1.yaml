@@ -5,6 +5,7 @@ scenario_family_mapping:
   classic_bottleneck: bottleneck
   classic_doorway: doorway
   classic_t_intersection: intersection
+  classic_cross_trap: intersection
   classic_crossing: intersection
   classic_urban_crossing: intersection
   classic_merging: merge
@@ -58,5 +59,7 @@ planner_key_mapping:
   social_navigation_pyenvs_hsfm_new_guo: social-navigation-pyenvs-hsfm-new-guo
   social_navigation_pyenvs_orca: social-navigation-pyenvs-orca
   social_navigation_pyenvs_socialforce: social-navigation-pyenvs-socialforce
+  socnav_bench: socnav-bench
   socnav_sampling: socnav-sampling
   stream_gap: stream-gap
+  teb: teb-corridor-commitment

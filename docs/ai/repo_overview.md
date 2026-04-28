@@ -1,6 +1,6 @@
 # AI Repo Overview
 
-This document is the shortest reliable orientation for Codex-style agents working in
+This document is the shortest reliable orientation for Coding Agents working in
 `robot_sf_ll7`.
 
 ## Mission
@@ -21,17 +21,21 @@ delivery rather than generic robotics breadth.
 Start here before expanding:
 
 1. `AGENTS.md`
-2. `.specify/memory/constitution.md`
-3. `docs/dev_guide.md`
-4. `code_review.md`
-5. `.agent/PLANS.md` for non-trivial work
+2. `CLAUDE.md` when the agent runtime supports it
+3. `memory/MEMORY.md` for stable repo-local memory
+4. `.specify/memory/constitution.md`
+5. `docs/dev_guide.md`
+6. `docs/code_review.md`
+7. `.agent/PLANS.md` for non-trivial work
 
 Then branch by task type:
 
 - benchmark semantics: `docs/benchmark_spec.md`, `docs/benchmark.md`
 - planner family support: `docs/benchmark_planner_family_coverage.md`
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
-- issue execution history: `docs/context/`
+- end-to-end AI workflow: `docs/ai/ai-workflow.md`
+- issue execution history and handoff knowledge base: `docs/context/`
+- context note workflow: `docs/context/README.md`
 
 ## Key Repository Areas
 
@@ -48,7 +52,8 @@ Then branch by task type:
 - `configs/`: canonical YAML configs for training, benchmarks, scenarios, and baselines
 - `scripts/`: runnable entrypoints and validation helpers
 - `output/`: git-ignored canonical artifact root
-- `docs/context/`: execution notes and issue-specific evidence logs
+- `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
+- `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 
 ### Existing agent workflow surfaces
 
@@ -58,6 +63,12 @@ Then branch by task type:
   measurable improvement loops and smaller refinement passes
 - `.agents/skills/context-map/` and `.agents/skills/what-context-needed/`: context-gathering skills
   for locating the right files or requesting the minimum missing context
+- `.agents/skills/context-note-maintainer/`: note-creation and stale-note-maintenance workflow for
+  durable Markdown handoff context
+- `docs/ai/ai-workflow.md`: end-to-end issue-to-PR workflow, validation gates, review loop, and
+  traceability conventions
+- `CLAUDE.md` + `memory/MEMORY.md`: startup-oriented memory/index pair for agent runtimes that
+  support imported project instructions
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,
   `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
   and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and

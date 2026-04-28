@@ -23,7 +23,6 @@ Typical invocation:
 - Repository: `ll7/robot_sf_ll7`
 - Project: `ll7` Project `#5`
 - Base branch: `main`
-- Branch prefix: `codex/`
 - Validation gate: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - Batch-first workflow note: `docs/context/issue_713_batch_first_issue_workflow.md`
 
@@ -86,9 +85,9 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
 
 6. Create and checkout issue branch
    - Preferred:
-     - `gh issue develop <n> --base main --checkout --name "codex/<n>-<slug>"`
+     - `gh issue develop <n> --base main --checkout --name "<n>-<slug>"`
    - Fallback:
-     - `git switch -c codex/<n>-<slug>`
+     - `git switch -c <n>-<slug>`
 
 7. Implement
    - Keep scope tight to issue acceptance criteria.

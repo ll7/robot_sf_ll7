@@ -782,7 +782,6 @@ def main():  # noqa: C901,PLR0912,PLR0915
     bc_policy_id = f"bc_{expert_policy_id}"
     finetuned_policy_id = f"finetuned_{expert_policy_id}"
     pretrained_run_id_hint = f"ppo_finetune_{finetuned_policy_id}"
-    pretrained_run_id: str | None = None
 
     logger.info(f"Expert policy ID: {expert_policy_id}")
     logger.info(f"Dataset ID: {dataset_id}")

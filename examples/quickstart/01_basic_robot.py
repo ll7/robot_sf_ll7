@@ -20,6 +20,7 @@ References:
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from robot_sf.common.seed import set_global_seed
@@ -27,6 +28,19 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 
 STEP_COUNT = 10
 SEED = 87234
+
+
+def _step_budget(default: int) -> int:
+    """Return a smaller rollout budget when the example runs in smoke mode."""
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
+    if os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1":
+        return min(default, 3)
+    return default
 
 
 def run_demo() -> None:
@@ -42,7 +56,7 @@ def run_demo() -> None:
 
         total_reward = 0.0
         print("\nRolling out random actions:")
-        for step in range(1, STEP_COUNT + 1):
+        for step in range(1, _step_budget(STEP_COUNT) + 1):
             action = env.action_space.sample()
             result = env.step(action)
             observation, reward, done = _normalize_step(result)

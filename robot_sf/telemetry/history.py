@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -222,6 +223,15 @@ class TelemetryReplay:
             raise ValueError("No telemetry samples loaded")
         return self.samples[self.current_index]
 
+    def current_snapshot(self) -> TelemetryReplaySnapshot:
+        """Return the current telemetry sample as a structured snapshot.
+
+        Returns:
+            TelemetryReplaySnapshot: Normalized analyzer payload for the current sample.
+        """
+
+        return _snapshot_from_sample(self.current())
+
     def scrub_to_frame(self, target_frame: int, *, tolerance: int = 1) -> dict[str, Any]:
         """Seek to the sample closest to target_frame within tolerance; else raise.
 
@@ -248,6 +258,17 @@ class TelemetryReplay:
         self.current_index = best_idx
         return self.samples[self.current_index]
 
+    def scrub_snapshot_to_frame(
+        self, target_frame: int, *, tolerance: int = 1
+    ) -> TelemetryReplaySnapshot:
+        """Return a structured snapshot for the telemetry sample nearest ``target_frame``.
+
+        Returns:
+            TelemetryReplaySnapshot: Nearest telemetry sample normalized for analyzer use.
+        """
+
+        return _snapshot_from_sample(self.scrub_to_frame(target_frame, tolerance=tolerance))
+
 
 def replay_episode(telemetry_path: str | Path) -> TelemetryReplay:
     """Convenience constructor for TelemetryReplay.
@@ -258,6 +279,77 @@ def replay_episode(telemetry_path: str | Path) -> TelemetryReplay:
 
     samples = load_telemetry_stream(telemetry_path)
     return TelemetryReplay(samples=samples)
+
+
+@dataclass(slots=True)
+class TelemetryReplaySnapshot:
+    """Structured view of a replay-aligned telemetry sample."""
+
+    frame_idx: int
+    status: str | None = None
+    episode_id: int | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
+    reward_terms: dict[str, float] = field(default_factory=dict)
+    step_metrics: dict[str, float] = field(default_factory=dict)
+    reward_total: float | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+def _coerce_float(value: Any) -> float | None:
+    """Return ``value`` as a finite float when possible."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
+def _coerce_float_mapping(values: Any) -> dict[str, float]:
+    """Keep only finite scalar members from a mapping-like payload.
+
+    Returns:
+        dict[str, float]: Mapping containing only finite numeric entries.
+    """
+
+    if not isinstance(values, dict):
+        return {}
+    coerced: dict[str, float] = {}
+    for key, value in values.items():
+        if not isinstance(key, str):
+            continue
+        numeric = _coerce_float(value)
+        if numeric is not None:
+            coerced[key] = numeric
+    return coerced
+
+
+def _snapshot_from_sample(sample: dict[str, Any]) -> TelemetryReplaySnapshot:
+    """Normalize a raw telemetry sample into a structured replay snapshot.
+
+    Returns:
+        TelemetryReplaySnapshot: Structured analyzer snapshot derived from ``sample``.
+    """
+
+    frame_idx = sample.get("frame_idx")
+    if not isinstance(frame_idx, int):
+        frame_idx = 0
+    episode_id = sample.get("episode_id")
+    if not isinstance(episode_id, int):
+        episode_id = None
+    reward_total = _coerce_float(sample.get("reward_total"))
+    return TelemetryReplaySnapshot(
+        frame_idx=frame_idx,
+        status=sample.get("status") if isinstance(sample.get("status"), str) else None,
+        episode_id=episode_id,
+        metrics=_coerce_float_mapping(sample.get("metrics")),
+        reward_terms=_coerce_float_mapping(sample.get("reward_terms")),
+        step_metrics=_coerce_float_mapping(sample.get("step_metrics")),
+        reward_total=reward_total,
+        raw=dict(sample),
+    )
 
 
 def _build_entry(

@@ -1055,7 +1055,7 @@ def validate_and_write(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 __all__ = [
@@ -1117,7 +1117,7 @@ def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[st
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(rec) + "\n")
+        f.write(json.dumps(rec, sort_keys=True) + "\n")
 
 
 def _run_batch_sequential(
@@ -1165,7 +1165,7 @@ def _run_batch_sequential(
     return wrote, failures
 
 
-def _run_batch_parallel(
+def _run_batch_parallel(  # noqa: C901
     jobs: list[tuple[dict[str, Any], int]],
     *,
     out_path: Path,
@@ -1183,6 +1183,7 @@ def _run_batch_parallel(
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
+    results_by_idx: dict[int, dict[str, Any]] = {}
     # Submit all jobs
     with ProcessPoolExecutor(max_workers=int(workers)) as ex:
         future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
@@ -1192,9 +1193,7 @@ def _run_batch_parallel(
         for fut in as_completed(future_to_job):
             idx, sc, seed = future_to_job[fut]
             try:
-                rec = fut.result()
-                _write_validated_record(out_path, schema, rec)
-                wrote += 1
+                results_by_idx[idx] = fut.result()
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, True, None)
@@ -1214,10 +1213,23 @@ def _run_batch_parallel(
                     except Exception:  # pragma: no cover
                         pass
                 if fail_fast:
-                    # Cancel remaining futures and re-raise
                     for f in future_to_job:
                         f.cancel()
                     raise
+    for idx in sorted(results_by_idx):
+        try:
+            _write_validated_record(out_path, schema, results_by_idx[idx])
+            wrote += 1
+        except Exception as e:  # pragma: no cover - write/validate path
+            failures.append(
+                {
+                    "scenario_id": results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
+                    "seed": results_by_idx[idx].get("seed", -1),
+                    "error": repr(e),
+                },
+            )
+            if fail_fast:
+                raise
     return wrote, failures
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -13,10 +14,14 @@ from typing import Any
 
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
+    build_positioning_recommendation,
     calibrate_weights,
     collect_episodes_from_campaign_runs,
     compute_baseline_stats_from_episodes,
+    compute_component_correlations,
     compute_component_dominance,
+    compute_planner_snqi_ordering,
+    compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
@@ -77,6 +82,9 @@ def _payload_hash(payload: dict[str, Any]) -> str:
 
 def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
     dominance = payload.get("component_dominance", {})
+    positioning = payload.get("positioning") if isinstance(payload, dict) else {}
+    correlations = payload.get("component_correlations") if isinstance(payload, dict) else {}
+    ordering = payload.get("planner_ordering") if isinstance(payload, dict) else []
     lines = [
         "# SNQI Diagnostics",
         "",
@@ -96,28 +104,121 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
         f"- Baseline version: `{payload.get('baseline_version', 'unknown')}`",
         f"- Baseline SHA-256: `{payload.get('baseline_sha256', 'unknown')}`",
         "",
-        "## Component Dominance",
+        "## Positioning",
         "",
-        "| Component | Mean |",
-        "|---|---:|",
+        f"- Recommendation: `{positioning.get('recommendation', 'unknown')}`",
+        f"- Claim scope: `{positioning.get('claim_scope', 'unknown')}`",
+        f"- Aligned variable metrics: `{positioning.get('aligned_metric_count', 0)}` / `{positioning.get('variable_metric_count', 0)}`",
+        "",
+        "## Planner Ordering",
+        "",
+        "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
+        "|---:|---|---|---:|---:|",
     ]
+    if isinstance(ordering, list):
+        for row in ordering:
+            lines.append(
+                "| {rank} | {planner_key} | {kinematics} | {mean_snqi:.6f} | {episode_count} |".format(
+                    rank=int(row.get("rank", 0) or 0),
+                    planner_key=str(row.get("planner_key", "unknown")),
+                    kinematics=str(row.get("kinematics", "unknown")),
+                    mean_snqi=float(row.get("mean_snqi", 0.0) or 0.0),
+                    episode_count=int(row.get("episode_count", 0) or 0),
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Correlations",
+            "",
+            "| Metric | Direction | Spearman | Variable | Aligned |",
+            "|---|---|---:|---|---|",
+        ]
+    )
+    if isinstance(correlations, dict):
+        for metric_name, row in sorted(correlations.items()):
+            spearman = row.get("spearman")
+            spearman_text = "n/a" if spearman is None else f"{float(spearman):.6f}"
+            aligned = row.get("aligned_with_expected_direction")
+            aligned_text = "n/a" if aligned is None else ("yes" if aligned else "no")
+            lines.append(
+                "| {metric} | {direction} | {spearman} | {variable} | {aligned} |".format(
+                    metric=str(metric_name),
+                    direction=str(row.get("direction", "unknown")),
+                    spearman=spearman_text,
+                    variable="yes" if bool(row.get("variable")) else "no",
+                    aligned=aligned_text,
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Component Dominance",
+            "",
+            "| Component | Mean |",
+            "|---|---:|",
+        ]
+    )
     if isinstance(dominance, dict):
         for key, value in sorted(dominance.items()):
             lines.append(f"| {key} | {float(value):.6f} |")
+    caveats = positioning.get("caveats") if isinstance(positioning, dict) else None
+    if isinstance(caveats, list) and caveats:
+        lines.extend(["", "## Caveats", ""])
+        for caveat in caveats:
+            lines.append(f"- {caveat}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_csv(path: Path, payload: dict[str, Any]) -> None:
-    headers = ("component", "configured_weight", "calibrated_weight", "delta")
+    headers = (
+        "component",
+        "metric_name",
+        "configured_weight",
+        "configured_weight_share",
+        "calibrated_weight",
+        "delta",
+        "mean_abs_contribution",
+        "mean_abs_score_delta_if_ablated",
+        "episode_rank_correlation_if_ablated",
+        "planner_rank_correlation_if_ablated",
+        "planner_order_changed_if_ablated",
+        "sensitivity_rank",
+    )
     configured = payload.get("configured_weights") if isinstance(payload, dict) else {}
     calibrated = payload.get("calibrated_weights") if isinstance(payload, dict) else {}
-    rows = [",".join(headers)]
-    for component in sorted((configured or {}).keys()):
-        configured_value = float((configured or {}).get(component, 0.0))
-        calibrated_value = float((calibrated or {}).get(component, configured_value))
-        delta = calibrated_value - configured_value
-        rows.append(f"{component},{configured_value:.10f},{calibrated_value:.10f},{delta:.10f}")
-    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    sensitivity_rows = payload.get("weight_sensitivity") if isinstance(payload, dict) else []
+    sensitivity_by_component = {
+        str(row.get("weight_name")): row for row in sensitivity_rows if isinstance(row, dict)
+    }
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        for component in sorted((configured or {}).keys()):
+            configured_value = float((configured or {}).get(component, 0.0))
+            calibrated_value = float((calibrated or {}).get(component, configured_value))
+            delta = calibrated_value - configured_value
+            sensitivity = sensitivity_by_component.get(component, {})
+            writer.writerow(
+                {
+                    "component": component,
+                    "metric_name": str(sensitivity.get("metric_name", "")),
+                    "configured_weight": f"{configured_value:.10f}",
+                    "configured_weight_share": f"{float(sensitivity.get('configured_weight_share', 0.0)):.10f}",
+                    "calibrated_weight": f"{calibrated_value:.10f}",
+                    "delta": f"{delta:.10f}",
+                    "mean_abs_contribution": f"{float(sensitivity.get('mean_abs_contribution', 0.0)):.10f}",
+                    "mean_abs_score_delta_if_ablated": f"{float(sensitivity.get('mean_abs_score_delta_if_ablated', 0.0)):.10f}",
+                    "episode_rank_correlation_if_ablated": f"{float(sensitivity.get('episode_rank_correlation_if_ablated', 1.0)):.10f}",
+                    "planner_rank_correlation_if_ablated": f"{float(sensitivity.get('planner_rank_correlation_if_ablated', 1.0)):.10f}",
+                    "planner_order_changed_if_ablated": (
+                        "true"
+                        if bool(sensitivity.get("planner_order_changed_if_ablated"))
+                        else "false"
+                    ),
+                    "sensitivity_rank": str(int(sensitivity.get("sensitivity_rank", 0) or 0)),
+                }
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -179,6 +280,26 @@ def main(argv: list[str] | None = None) -> int:
         weights=configured_weights,
         baseline=baseline,
     )
+    component_correlations = compute_component_correlations(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline,
+    )
+    planner_ordering = compute_planner_snqi_ordering(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline,
+    )
+    weight_sensitivity = compute_weight_sensitivity(
+        episodes,
+        weights=configured_weights,
+        baseline=baseline,
+    )
+    positioning = build_positioning_recommendation(
+        component_correlations,
+        planner_ordering,
+        weight_sensitivity,
+    )
     weights_path = str(args.weights.resolve()) if args.weights is not None else "derived"
     baseline_path = str(args.baseline.resolve()) if args.baseline is not None else "derived"
     weights_sha256 = (
@@ -224,6 +345,10 @@ def main(argv: list[str] | None = None) -> int:
         "calibrated_weights": calibration.get("weights", {}),
         "calibration": calibration,
         "component_dominance": dominance,
+        "component_correlations": component_correlations,
+        "planner_ordering": planner_ordering,
+        "weight_sensitivity": weight_sensitivity,
+        "positioning": positioning,
     }
 
     reports_dir = campaign_root / "reports"

@@ -18,7 +18,7 @@ other generated artifacts that benefit from a small evaluation loop.
 - `AGENTS.md`
 - `docs/dev_guide.md`
 - `docs/ai/awesome_copilot_adaptation.md`
-- `code_review.md`
+- `docs/code_review.md`
 
 ## Workflow
 

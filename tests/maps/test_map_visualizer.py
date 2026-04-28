@@ -8,6 +8,11 @@ matplotlib.use("Agg")
 
 from typing import TYPE_CHECKING
 
+from matplotlib import pyplot as plt
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path as MplPath
+from shapely.geometry import Polygon as ShapelyPolygon
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -73,3 +78,38 @@ def test_visualize_map_definition_writes_file(tmp_path: Path) -> None:
     out_path = tmp_path / "map.png"
     map_visualizer.visualize_map_definition(_map_def(), out_path, title="map")
     assert out_path.exists()
+
+
+def test_render_map_definition_draws_polygon_holes_as_compound_path() -> None:
+    """Obstacle with a hole should be rendered as a single compound PathPatch.
+
+    The compound path has two MOVETO codes — one for the exterior ring and one
+    for the interior ring — so holes are cut out without overdrawing the canvas.
+    """
+    obstacle = Obstacle.from_geometry(
+        ShapelyPolygon(
+            [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0), (1.0, 3.0)],
+            holes=[[(2.0, 1.5), (4.0, 1.5), (4.0, 2.5), (2.0, 2.5)]],
+        )
+    )
+    map_def = _map_def()
+    map_def.obstacles = [obstacle]
+
+    fig, ax = plt.subplots()
+
+    map_visualizer.render_map_definition(
+        map_def,
+        ax,
+        show_routes=False,
+        show_pois=False,
+        show_zone_labels=False,
+    )
+
+    path_patches = [p for p in ax.patches if isinstance(p, PathPatch)]
+    assert len(path_patches) >= 1, "Expected at least one PathPatch for the obstacle"
+    compound_path = path_patches[0].get_path()
+    moveto_count = sum(1 for code in compound_path.codes if code == MplPath.MOVETO)
+    assert moveto_count == 2, (
+        f"Expected compound path with 2 MOVETO codes (exterior + interior), got {moveto_count}"
+    )
+    plt.close(fig)

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added issue-848 benchmark rerun surfaces for the issue-791 Wave-5 PPO leader: a W&B-backed PPO baseline config (`configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml`), a paper-matrix sibling compare config (`configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml`), a dedicated Auxme benchmark wrapper (`SLURM/Auxme/issue_791_benchmark.sl`), and a matching model-registry entry so the checkpoint can resolve by `model_id` instead of relying on a machine-local path.
+
 * SVG obstacle-repair warnings now include the source `*.svg` filename, so invalid map repairs point directly to the offending asset; the regression test also checks the captured warning text.
 * Added issue-832 paper-matrix extended seed schedules (`paper_eval_s5`, `paper_eval_s10`,
   `paper_eval_s20`), S5/S10 paper-matrix sibling configs that preserve the frozen

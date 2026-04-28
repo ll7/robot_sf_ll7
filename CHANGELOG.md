@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Promoted the issue-791 Wave-5 leader (job 11724, WandB `ll7/robot_sf/ibo3aqus`,
+  best success 0.929 / collision 0.071 / SNQI 0.353 on
+  `ppo_full_maintained_eval_v1`) into the canonical PPO baseline at
+  [configs/baselines/ppo_15m_grid_socnav.yaml](configs/baselines/ppo_15m_grid_socnav.yaml).
+  All ~17 benchmark configs that reference this file (camera-ready, paper
+  matrix, planner sanity, seed variability) now resolve PPO to the eval-aligned
+  large-capacity grid_socnav policy with predictive foresight enabled and
+  `fallback_to_goal: false` per the fail-closed benchmark policy. The previous
+  BR-06 v3 15M artifact remains on disk for reproducibility but is no longer the
+  default. Reported performance is benchmark-set (in-distribution), not OOD.
+
 * Restored the asymmetric-critic robot training contract so `RobotEnv(..., asymmetric_critic=True)` and `make_robot_env(..., asymmetric_critic=True)` once again add the critic-only `critic_privileged_state` observation for SocNav structured runs. This keeps the public factory API stable for issue-791 training jobs and closes the regression that broke fresh SLURM submissions after the main-branch merge.
 
 * Corrected the issue-791 reward-curriculum `resume_best` overlay so it preserves the original `grid_socnav` / `MultiInputPolicy` checkpoint contract when warm-starting from 11566 best.zip. This avoids the observation-space mismatch that appeared when the retry was pointed at the wrong model family.

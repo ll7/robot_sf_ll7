@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.models.registry import load_registry
+
 CANONICAL_PPO_MODEL_ID = (
     "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
 )
@@ -24,25 +26,39 @@ def repo_root() -> Path:
 
 
 @pytest.fixture(scope="module")
-def registry(repo_root: Path) -> dict:
-    """Load model registry used as source-of-truth for promoted artifacts."""
+def raw_registry(repo_root: Path) -> dict:
+    """Load raw model registry YAML used as source-of-truth for promoted artifacts."""
     return _load_yaml(repo_root / "model" / "registry.yaml")
 
 
 @pytest.fixture(scope="module")
-def canonical_entry(registry: dict) -> dict:
+def canonical_entry(raw_registry: dict) -> dict:
     """Return the canonical PPO registry entry referenced by configs/baselines/ppo_15m_grid_socnav.yaml."""
-    return next(
-        entry for entry in registry["models"] if entry["model_id"] == CANONICAL_PPO_MODEL_ID
-    )
+    matching_entries = [
+        entry for entry in raw_registry["models"] if entry["model_id"] == CANONICAL_PPO_MODEL_ID
+    ]
+
+    assert len(matching_entries) == 1
+    return matching_entries[0]
 
 
 @pytest.fixture(scope="module")
-def issue_576_entry(registry: dict) -> dict:
+def issue_576_entry(raw_registry: dict) -> dict:
     """Return the issue-576 closeout PPO registry entry."""
-    return next(
-        entry for entry in registry["models"] if entry["model_id"] == ISSUE_576_PPO_MODEL_ID
-    )
+    matching_entries = [
+        entry for entry in raw_registry["models"] if entry["model_id"] == ISSUE_576_PPO_MODEL_ID
+    ]
+
+    assert len(matching_entries) == 1
+    return matching_entries[0]
+
+
+def test_model_registry_loads_without_duplicate_model_ids(repo_root: Path) -> None:
+    """Registry loader should accept the promoted PPO registry without duplicate model IDs."""
+    registry = load_registry(repo_root / "model" / "registry.yaml")
+
+    assert CANONICAL_PPO_MODEL_ID in registry
+    assert ISSUE_576_PPO_MODEL_ID in registry
 
 
 def test_canonical_ppo_baseline_points_at_promoted_artifact_path(

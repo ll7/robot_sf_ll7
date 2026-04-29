@@ -1,0 +1,60 @@
+allow_testing_algorithms: true
+allow_fallback: true
+
+max_linear_speed: 1.1
+max_angular_speed: 1.2
+
+orca_neighbor_dist: 10.0
+orca_max_neighbors: 10
+orca_time_horizon: 6.0
+orca_time_horizon_obst: 3.0
+orca_obstacle_margin: 0.16
+orca_symmetry_bias: 0.24
+orca_head_on_bias: 0.34
+orca_stall_speed_threshold: 0.12
+orca_stall_progress_epsilon: 0.03
+orca_stall_cycles_before_commit: 3
+orca_commit_persistence_steps: 10
+orca_commit_distance: 1.6
+orca_commit_lateral_gain: 0.48
+orca_forward_probe_distance: 1.1
+orca_side_probe_offset: 0.45
+
+hybrid_guard:
+  rollout_dt: 0.2
+  rollout_steps: 6
+  goal_tolerance: 0.25
+  progress_margin: 0.05
+  near_field_distance: 2.2
+  hard_ped_clearance: 0.58
+  first_step_ped_clearance: 0.72
+  hard_obstacle_clearance: 0.30
+  min_ttc: 0.70
+  obstacle_threshold: 0.5
+  obstacle_search_cells: 12
+
+mppi_social:
+  random_seed: 42
+  max_linear_speed: 1.1
+  max_angular_speed: 1.2
+  horizon_steps: 8
+  rollout_dt: 0.2
+  sample_count: 40
+  iterations: 2
+  elite_fraction: 0.2
+  goal_progress_weight: 5.4
+  heading_weight: 1.2
+  clearance_weight: 2.0
+  obstacle_weight: 1.5
+  smoothness_weight: 0.18
+  ttc_weight: 0.32
+  near_field_distance: 2.2
+  near_field_speed_cap: 0.70
+  near_distance: 0.7
+  obstacle_threshold: 0.5
+  obstacle_search_cells: 12
+  prediction_backend: constant_velocity
+  progress_escape_enabled: true
+  progress_escape_distance: 1.0
+  progress_escape_speed: 0.55
+  progress_escape_heading_gain: 1.6

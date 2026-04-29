@@ -93,19 +93,28 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_socialforce",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"),
+        aliases=(
+            "social_navigation_pyenvs_socialforce",
+            "social_nav_pyenvs_socialforce",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable SocialForce wrapper.",
     ),
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_sfm_helbing",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"),
+        aliases=(
+            "social_navigation_pyenvs_sfm_helbing",
+            "social_nav_pyenvs_sfm_helbing",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
     ),
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_hsfm_new_guo",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_hsfm_new_guo", "social_nav_pyenvs_hsfm_new_guo"),
+        aliases=(
+            "social_navigation_pyenvs_hsfm_new_guo",
+            "social_nav_pyenvs_hsfm_new_guo",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
     ),
     AlgorithmReadiness(
@@ -250,6 +259,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("hybrid_portfolio",),
         note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="hybrid_orca_sampler",
+        tier="experimental",
+        aliases=("hybrid_orca_sampler",),
+        note="ORCA primary planner with short-horizon MPPI repair for stalled or unsafe scenes.",
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(

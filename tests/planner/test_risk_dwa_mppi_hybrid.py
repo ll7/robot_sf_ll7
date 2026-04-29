@@ -5,6 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from robot_sf.planner.hybrid_orca_sampler import (
+    HybridORCASamplerAdapter,
+    HybridORCASamplerConfig,
+    build_hybrid_orca_sampler_build_config,
+)
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     HybridPortfolioConfig,
@@ -21,7 +26,12 @@ from robot_sf.planner.risk_dwa import (
 
 
 def _obs(
-    *, robot=(0.0, 0.0), heading=0.0, goal=(2.0, 0.0), ped_positions=None, ped_velocities=None
+    *,
+    robot=(0.0, 0.0),
+    heading=0.0,
+    goal=(2.0, 0.0),
+    ped_positions=None,
+    ped_velocities=None,
 ):
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
@@ -386,3 +396,81 @@ def test_hybrid_reset_clears_hysteresis_and_resets_child_heads() -> None:
     assert orca.reset_calls == 1
     assert pred.reset_calls == 1
     assert mppi.reset_calls == 1
+
+
+def test_hybrid_orca_sampler_prefers_sampler_when_orca_progress_is_low(
+    monkeypatch,
+) -> None:
+    """Hybrid ORCA sampler should choose MPPI when ORCA is safe but stalls."""
+
+    class _PrimaryHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.1, 0.0
+
+    class _SamplerHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.6, 0.0
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(sampler_progress_margin=0.05, near_field_distance=2.0),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+
+    def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        if command[0] < 0.2:
+            return {"safe": True, "progress": 0.01, "min_ped_clear": 1.0}
+        return {"safe": True, "progress": 0.25, "min_ped_clear": 1.0}
+
+    monkeypatch.setattr(planner, "_evaluate_command", _eval)
+    cmd = planner.plan(_obs(ped_positions=[(0.8, 0.0)], ped_velocities=[(0.0, 0.0)]))
+    assert cmd == (0.6, 0.0)
+
+
+def test_hybrid_orca_sampler_keeps_orca_when_scene_is_clear(monkeypatch) -> None:
+    """Hybrid ORCA sampler should keep ORCA in open scenes with safe progress."""
+
+    class _PrimaryHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.4, 0.1
+
+    class _SamplerHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.7, 0.0
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(sampler_progress_margin=0.05, near_field_distance=1.0),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_evaluate_command",
+        lambda _observation, _command: {
+            "safe": True,
+            "progress": 0.2,
+            "min_ped_clear": 2.0,
+        },
+    )
+    assert planner.plan(_obs()) == (0.4, 0.1)
+
+
+def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
+    """Hybrid ORCA sampler builder should parse guard, ORCA, and MPPI knobs."""
+    build = build_hybrid_orca_sampler_build_config(
+        {
+            "max_linear_speed": 1.05,
+            "orca_obstacle_margin": 0.18,
+            "hybrid_guard": {"progress_margin": 0.08, "hard_ped_clearance": 0.61},
+            "mppi_social": {"sample_count": 12, "goal_progress_weight": 6.0},
+        }
+    )
+    assert build.guard.sampler_progress_margin == pytest.approx(0.08)
+    assert build.guard.hard_ped_clearance == pytest.approx(0.61)
+    assert build.socnav.orca_obstacle_margin == pytest.approx(0.18)
+    assert build.mppi.sample_count == 12
+    assert build.mppi.max_linear_speed == pytest.approx(1.05)

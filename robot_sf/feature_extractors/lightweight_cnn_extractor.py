@@ -35,6 +35,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         num_filters: List of filter counts for each conv layer
         kernel_sizes: List of kernel sizes for each conv layer
         dropout_rate: Dropout rate for regularization
+        record_feature_stats: Whether to retain forward-pass feature scale diagnostics
     """
 
     def __init__(
@@ -46,15 +47,16 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: list[int] | None = None,
         record_feature_stats: bool = False,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the extractor architecture and optional feature telemetry.
 
         Args:
-            observation_space: TODO docstring.
-            num_filters: TODO docstring.
-            kernel_sizes: TODO docstring.
-            dropout_rate: TODO docstring.
-            drive_hidden_dims: TODO docstring.
-            record_feature_stats: TODO docstring.
+            observation_space: Dict observation space with ray and drive-state entries.
+            num_filters: Conv1d output channel counts for the ray pathway.
+            kernel_sizes: Conv1d kernel sizes paired with ``num_filters``.
+            dropout_rate: Dropout probability used in ray and drive-state pathways.
+            drive_hidden_dims: Hidden layer sizes for the drive-state MLP.
+            record_feature_stats: Capture lightweight activation statistics after each forward
+                pass for training diagnostics. Disabled by default to avoid host synchronization.
         """
         if num_filters is None:
             num_filters = [32, 16]

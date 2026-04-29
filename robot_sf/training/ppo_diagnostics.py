@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch as th
 from stable_baselines3 import PPO
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 
 def _grad_l2_norm(parameters: Iterable[th.nn.Parameter]) -> float:
-    """Compute the L2 norm across all currently populated gradients."""
+    """Compute the L2 norm across all currently populated gradients.
+
+    Returns:
+        L2 norm over parameters with non-empty gradients.
+    """
     squared_norm = 0.0
     has_grad = False
     for parameter in parameters:
@@ -29,14 +35,22 @@ def _grad_l2_norm(parameters: Iterable[th.nn.Parameter]) -> float:
 
 
 def _module_grad_norm(module: Any) -> float:
-    """Compute the gradient norm for a module when present."""
+    """Compute the gradient norm for a module when present.
+
+    Returns:
+        Module parameter gradient norm, or zero when the module is absent.
+    """
     if module is None:
         return 0.0
     return _grad_l2_norm(module.parameters())
 
 
 def _summarize_samples(samples: list[dict[str, float]]) -> dict[str, float]:
-    """Aggregate per-mini-batch diagnostics into one PPO-update summary."""
+    """Aggregate per-mini-batch diagnostics into one PPO-update summary.
+
+    Returns:
+        Summary metrics with per-key mean and max values.
+    """
     if not samples:
         return {}
 
@@ -45,8 +59,6 @@ def _summarize_samples(samples: list[dict[str, float]]) -> dict[str, float]:
 
     for metric_name in metric_names:
         values = [sample[metric_name] for sample in samples if metric_name in sample]
-        if not values:
-            continue
         summary[f"{metric_name}_mean"] = float(sum(values) / len(values))
         summary[f"{metric_name}_max"] = float(max(values))
 
@@ -63,6 +75,14 @@ class DiagnosticPPO(PPO):
         diagnostics_start_timestep: int = 0,
         **kwargs,
     ) -> None:
+        """Initialize the PPO wrapper.
+
+        Args:
+            *args: Positional arguments forwarded to ``stable_baselines3.PPO``.
+            diagnostics_path: Optional JSONL path for per-update diagnostics.
+            diagnostics_start_timestep: First timestep at which diagnostics are persisted.
+            **kwargs: Keyword arguments forwarded to ``stable_baselines3.PPO``.
+        """
         self._diagnostics_path = Path(diagnostics_path) if diagnostics_path is not None else None
         self._diagnostics_start_timestep = int(diagnostics_start_timestep)
         self.last_training_diagnostics: dict[str, float] = {}

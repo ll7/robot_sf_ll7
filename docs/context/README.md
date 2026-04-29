@@ -95,9 +95,6 @@ knowledge, not every transient iteration detail.
   4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
   `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
   required before promotion.
-- [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
-  follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
-  config-first safety-reward mitigation candidate.
 
 ## Planner Integration Notes
 
@@ -115,3 +112,12 @@ why a change was made rather than a full issue execution transcript.
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+
+## DreamerV3 Notes
+
+- [DreamerV3 Program Full Handoff (2026-04-28)](dreamerv3_program_full_handoff_2026_04_28.md)
+  Consolidated execution plan for issues #578, #608, #609, #782, and #789.
+- [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
+  Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
+- [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
+  Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.

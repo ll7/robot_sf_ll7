@@ -1991,6 +1991,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
 
         _attach_planner_reset(_policy, adapter)
+        _policy._planner_adapter = adapter
         if planner_bind_env is not None:
             _policy._planner_bind_env = planner_bind_env
         return _policy, meta
@@ -2004,6 +2005,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):

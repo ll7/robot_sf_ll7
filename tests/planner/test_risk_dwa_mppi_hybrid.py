@@ -490,6 +490,55 @@ def test_hybrid_orca_sampler_uses_sampler_in_clear_scene_when_orca_stalls(
     assert planner.plan(_obs()) == (0.7, 0.0)
 
 
+def test_hybrid_orca_sampler_records_diagnostics_and_reset(monkeypatch) -> None:
+    """Hybrid ORCA sampler should expose last-step diagnostics and clear them on reset."""
+
+    class _PrimaryHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.1, 0.0
+
+        def reset(self) -> None:
+            return None
+
+    class _SamplerHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.7, 0.0
+
+        def reset(self) -> None:
+            return None
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(sampler_progress_margin=0.05, near_field_distance=1.0),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+
+    def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        if command[0] < 0.2:
+            return {"safe": True, "progress": 0.01, "min_ped_clear": 3.0}
+        return {"safe": True, "progress": 0.25, "min_ped_clear": 3.0}
+
+    monkeypatch.setattr(planner, "_evaluate_command", _eval)
+
+    assert planner.plan(_obs()) == (0.7, 0.0)
+    diagnostics = planner.diagnostics()
+
+    assert diagnostics["decision_counts"]["sampler_progress_repair"] == 1
+    assert diagnostics["selected_head_counts"]["sampler"] == 1
+    assert diagnostics["last_decision"]["decision"] == "sampler_progress_repair"
+    assert diagnostics["last_decision"]["primary_eval"]["progress"] == pytest.approx(0.01)
+    assert planner.last_decision()["selected_head"] == "sampler"
+
+    planner.reset()
+
+    cleared = planner.diagnostics()
+    assert cleared["decision_counts"] == {}
+    assert cleared["selected_head_counts"] == {"orca": 0, "sampler": 0, "stop": 0}
+    assert cleared["last_decision"] is None
+
+
 def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     """Hybrid ORCA sampler builder should parse guard, ORCA, and MPPI knobs."""
     build = build_hybrid_orca_sampler_build_config(

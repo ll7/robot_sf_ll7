@@ -13,6 +13,8 @@ Current scope note:
 - BR-08 prep is reproducible and benchmark-reset-v2 aligned.
 - The launcher now exposes scenario-matrix training and periodic evaluation surfaces
   for the SocNav+grid challenger profiles.
+- The eval-side parity follow-up now includes targeted runtime coverage for evaluation-matrix
+  selection and the unwrapped BR-08 base-env contract.
 - Treat DreamerV3 here as a challenger training track with a clean launch/eval contract,
   not yet as evidence that Dreamer is competitive with the promoted PPO policy.
 
@@ -132,6 +134,13 @@ tmux attach -t dreamer
 
 ### 5.2 Batch job
 
+Prefer the checked-in launchers over inline batch blocks:
+
+```bash
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_gate.sl
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_full.sl
+```
+
 ```bash
 sbatch <<'EOF'
 #!/bin/bash
@@ -168,6 +177,8 @@ Current limitation:
 - World-model encoder/decoder pretraining from policy rollouts is not implemented here.
   That would require a separate design issue because it changes the model-data path below
   the current RLlib launcher contract.
+- Multimodal Dict observations are currently fail-closed on Ray 2.53.0 DreamerV3;
+  see `docs/context/issue_789_dreamer_multimodal_encoder.md`.
 
 ## 6) Monitoring Checklist
 

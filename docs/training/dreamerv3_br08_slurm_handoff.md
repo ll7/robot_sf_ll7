@@ -15,6 +15,20 @@ unless the gate run starts producing usable training/evaluation signals.
 This branch adds DreamerV3 scenario-matrix training/evaluation parity. It does not claim a
 successful Dreamer checkpoint.
 
+Checked-in batch launchers now exist and should be preferred over ad-hoc inline `sbatch` blocks:
+
+```bash
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_gate.sl
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_full.sl
+```
+
+Override the config path only when intentionally probing a different committed sibling config:
+
+```bash
+DREAMER_BR08_CONFIG=configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_gate.sl
+```
+
 ## Machine Setup
 
 ```bash
@@ -47,6 +61,12 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 Use the gate config first. It is CPU-only, offline W&B, and short enough to catch construction,
 Ray, observation, and reward-contract failures before spending GPU time.
+
+Canonical submission:
+
+```bash
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_gate.sl
+```
 
 ```bash
 srun -p <partition> --cpus-per-task=8 --mem=32G --time=06:00:00 --pty bash
@@ -84,6 +104,12 @@ Gate interpretation:
 
 Use the full profile only after the gate is healthy. The full profile uses online W&B and `auto`
 resource resolution from Slurm/CUDA environment variables.
+
+Canonical submission:
+
+```bash
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/dreamer_br08_full.sl
+```
 
 ```bash
 sbatch <<'EOF'

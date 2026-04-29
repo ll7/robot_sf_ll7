@@ -2,20 +2,67 @@
 
 from __future__ import annotations
 
+import copy
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pytest
 
 import scripts.training.train_dreamerv3_rllib as dreamer
+from robot_sf.training.scenario_sampling import (
+    _spaces_compatible,
+    scenario_id_from_definition,
+)
 
 
 def _write_yaml(path: Path, content: str) -> Path:
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _make_periodic_eval_config(
+    run_config: dreamer.DreamerRunConfig,
+) -> dreamer.DreamerRunConfig:
+    """Mirror the periodic-evaluation env selection logic for parity tests."""
+    matrix = run_config.evaluation.scenario_matrix or run_config.env.scenario_matrix
+    eval_env_settings = copy.deepcopy(run_config.env)
+    if matrix is not None:
+        eval_env_settings.scenario_matrix = copy.deepcopy(matrix)
+        eval_env_settings.scenario_matrix.strategy = "cycle"
+        eval_env_settings.scenario_matrix.switch_per_reset = True
+    return dreamer.DreamerRunConfig(
+        config_path=run_config.config_path,
+        experiment=run_config.experiment,
+        ray=run_config.ray,
+        env=eval_env_settings,
+        algorithm=run_config.algorithm,
+        tracking=run_config.tracking,
+        evaluation=run_config.evaluation,
+    )
+
+
+def _unwrap_scenario_switching_env(env):
+    """Return the ScenarioSwitchingEnv underneath Gymnasium wrappers."""
+    current = env
+    while hasattr(current, "env"):
+        current = current.env
+    return current
+
+
+def _unwrap_base_env(env):
+    """Return the active RobotEnv underneath the scenario-switching wrapper."""
+    scenario_env = _unwrap_scenario_switching_env(env)
+    return getattr(scenario_env, "_current_env", scenario_env)
+
+
+def _dreamer_callable(name: str) -> Callable[..., Any]:
+    """Access helper for launcher internals used by runtime-path tests."""
+    return cast("Callable[..., Any]", getattr(dreamer, name))
 
 
 class _FakeRay:
@@ -192,7 +239,7 @@ def test_apply_config_method_warns_when_payload_dropped(monkeypatch: pytest.Monk
     )
 
     cfg = object()
-    result = dreamer._apply_config_method(cfg, "resources", {"num_gpus": 1})
+    result = _dreamer_callable("_apply_config_method")(cfg, "resources", {"num_gpus": 1})
 
     assert result is cfg
     assert warnings
@@ -211,7 +258,7 @@ def test_apply_env_runner_settings_warns_when_payload_dropped(
     )
 
     cfg = object()
-    result = dreamer._apply_env_runner_settings(cfg, {"num_env_runners": 4})
+    result = _dreamer_callable("_apply_env_runner_settings")(cfg, {"num_env_runners": 4})
 
     assert result is cfg
     assert warnings
@@ -337,7 +384,7 @@ algorithm:
     fake_env = _FakeEvalEnv()
     monkeypatch.setattr(dreamer, "_make_env_creator", lambda _config: lambda _payload: fake_env)
 
-    summary = dreamer._run_periodic_evaluation(
+    summary = _dreamer_callable("_run_periodic_evaluation")(
         _FakeEvalAlgo(),
         run_config,
         iteration=3,
@@ -379,7 +426,7 @@ algorithm:
     fake_env = _FakeEvalEnv()
     monkeypatch.setattr(dreamer, "_make_env_creator", lambda _config: lambda _payload: fake_env)
 
-    summary = dreamer._run_periodic_evaluation(
+    summary = _dreamer_callable("_run_periodic_evaluation")(
         _FakeEvalAlgo(),
         run_config,
         iteration=3,
@@ -388,6 +435,90 @@ algorithm:
 
     assert summary["scenario_matrix"] is None
     assert summary["success_rate"] == 1.0
+
+
+def test_periodic_eval_prefers_evaluation_scenario_matrix_selection() -> None:
+    """Evaluation should honor the eval matrix over the training matrix."""
+    config_path = Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
+    run_config = dreamer.load_run_config(config_path)
+    assert run_config.env.scenario_matrix is not None
+    assert run_config.evaluation.scenario_matrix is not None
+
+    scenarios = dreamer.load_scenarios(run_config.env.scenario_matrix.path)
+    assert len(scenarios) >= 2
+    training_id = scenario_id_from_definition(scenarios[0], index=0)
+    evaluation_id = scenario_id_from_definition(scenarios[1], index=1)
+
+    run_config.env.scenario_matrix.include_scenarios = (training_id,)
+    run_config.evaluation.scenario_matrix.include_scenarios = (evaluation_id,)
+
+    eval_config = _make_periodic_eval_config(run_config)
+    make_env_creator = _dreamer_callable("_make_env_creator")
+    env = make_env_creator(eval_config)({"worker_index": 0})
+    try:
+        env.reset(seed=run_config.experiment.seed)
+        scenario_env = _unwrap_scenario_switching_env(env)
+        assert scenario_env.scenario_id == evaluation_id
+    finally:
+        env.close()
+
+
+def test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract() -> None:
+    """Dreamer eval should preserve the BR-08 base env contract."""
+    config_path = Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
+    run_config = dreamer.load_run_config(config_path)
+    eval_config = _make_periodic_eval_config(run_config)
+    matrix = eval_config.env.scenario_matrix
+    assert matrix is not None
+
+    make_env_creator = _dreamer_callable("_make_env_creator")
+    apply_nested_overrides = _dreamer_callable("_apply_nested_overrides")
+    wrapped_env = make_env_creator(eval_config)({"worker_index": 0})
+    expected_env = None
+    try:
+        wrapped_env.reset(seed=run_config.experiment.seed)
+        scenario_env = _unwrap_scenario_switching_env(wrapped_env)
+        base_env = _unwrap_base_env(wrapped_env)
+        scenario_id = scenario_env.scenario_id
+        assert scenario_id is not None
+
+        scenarios = dreamer.load_scenarios(matrix.path)
+        scenario = next(
+            definition
+            for index, definition in enumerate(scenarios)
+            if scenario_id_from_definition(definition, index=index) == scenario_id
+        )
+
+        expected_config = dreamer.build_robot_config_from_scenario(
+            scenario,
+            scenario_path=matrix.path,
+        )
+        apply_nested_overrides(
+            expected_config,
+            copy.deepcopy(run_config.env.config_overrides),
+            context_name="env.config",
+        )
+        expected_config.use_image_obs = False
+        expected_env = dreamer.make_robot_env(
+            config=expected_config,
+            debug=False,
+            recording_enabled=False,
+        )
+
+        assert _spaces_compatible(
+            base_env.observation_space,
+            expected_env.observation_space,
+            allow_box_bounds_mismatch=False,
+        )
+        assert _spaces_compatible(
+            base_env.action_space,
+            expected_env.action_space,
+            allow_box_bounds_mismatch=False,
+        )
+    finally:
+        wrapped_env.close()
+        if expected_env is not None:
+            expected_env.close()
 
 
 def test_run_training_records_nonfinite_reward_diagnostics(

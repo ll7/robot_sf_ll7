@@ -10,6 +10,11 @@ in one coherent pass. It is intentionally explicit about what is already done, w
 remains, and what SLURM jobs to submit. Treat it as the single entry point until each
 issue closes.
 
+> Update 2026-04-28: this repo now includes the checked-in BR-08 SLURM launchers,
+> a targeted eval-parity regression test slice, the #782 pretraining design note,
+> and a fail-closed #789 stop note. The multimodal Dreamer path did not proceed on
+> this branch because Ray 2.53.0 DreamerV3 still lacks mixed-observation support.
+
 ## TL;DR sequencing
 
 | Order | Issue | Type | Blocker | Action |
@@ -59,7 +64,9 @@ Existing parity note `docs/context/issue_578_608_609_dreamerv3_parity.md` record
 ### #608 — Scenario-matrix parity (evaluation side)
 **Status:** infrastructure mostly in place via the same branch's "periodic cycle-order
 evaluation" surface (gate config: eval block defined but disabled by default; full
-config: `evaluation.enabled: true` every 100 training iterations).
+config: `evaluation.enabled: true` every 100 training iterations). A targeted runtime
+parity test slice now exists in `tests/training/test_train_dreamerv3_rllib_runtime.py`,
+but still needs fresh execution on CI/compute.
 
 **Remaining work:**
 1. Confirm the eval surface uses the same scenario-matrix sampler as PPO's benchmark
@@ -76,7 +83,8 @@ config: `evaluation.enabled: true` every 100 training iterations).
 the full config.
 
 ### #782 — World-model pretraining design note
-**Status:** not started. Issue is design-only (Effort: 4h, no code).
+**Status:** authored in `docs/context/issue_782_dreamerv3_pretraining_design.md`.
+Issue remains design-only (Effort: 4h, no code).
 
 **Remaining work:**
 1. Author `docs/context/issue_782_dreamerv3_pretraining_design.md` with:
@@ -100,36 +108,17 @@ the full config.
 **SLURM jobs:** none.
 
 ### #789 — Multi-modal encoder for DreamerV3
-**Status:** not started. Branch needed: `codex/789-dreamer-multimodal-encoder` cut from
-the parity PR head once #609/#608 merge.
+**Status:** investigation completed; stop condition met on the current dependency stack.
+See `docs/context/issue_789_dreamer_multimodal_encoder.md`.
 
 **Remaining work:**
-1. **Local investigation first** — read RLlib DreamerV3 docs and source for dict-obs
-   support:
-   - https://docs.ray.io/en/master/rllib/rllib-algorithms.html#dreamerv3
-   - In-tree: `.venv/lib/python*/site-packages/ray/rllib/algorithms/dreamerv3/`
-   Determine whether `(3, 32, 32)` image + structured-vector dict observations route
-   into a CNN+MLP encoder pair without a fork (Option A in the issue).
-2. **Encoder forward-pass unit test** in `tests/training/test_rllib_env_wrappers.py`:
-   instantiate the encoder with a Dict observation space `{ "image": Box(0,1,(3,32,32))
-   "state": Box(...) }` and assert the output tensor shape matches the expected RSSM
-   input width.
-3. **Wrapper change** in `robot_sf/training/rllib_env_wrappers.py`: stop flattening the
-   occupancy grid; expose it as a Dict observation with `image` (CHW float32) and
-   `state` (flattened socnav_struct + drive_state). Keep the old flatten path behind a
-   config flag so the BR-08 baseline remains reproducible.
-4. **New configs** under `configs/training/rllib_dreamerv3/`:
-   - `benchmark_socnav_grid_br08_gate_multimodal.yaml`
-   - `benchmark_socnav_grid_br08_full_multimodal.yaml`
-   Each sibling of the existing flat-vector configs, with `observation_mode:
-   socnav_struct_dict` (or whatever flag the wrapper exposes) and the encoder hook.
-5. **Stop condition** (from the issue): if Option A requires a substantive RLlib fork
-   or launcher rewrite before a local encoder forward pass and gate dry-run can be
-   demonstrated, **stop**, document in the issue, and convert this work into a
-   follow-up design issue. Do not slide into Option B/C inside #789.
+1. If maintainers still want multimodal DreamerV3, open a separate follow-up issue for
+   either an upstream RLlib contribution or a repo-local Dreamer catalog/module fork.
+2. Do not add multimodal wrapper/config work to #578/#608/#609 while the current Ray
+   catalog still expects a single `Box` observation space.
 
-**SLURM jobs:** 1× gate (CPU-only, short) on the multi-modal config to confirm Ray /
-EnvRunner / encoder wiring before any GPU spend. See [SLURM section](#slurm-jobs-to-submit).
+**SLURM jobs:** none on this branch for the multimodal path; the stop condition was met
+before a dedicated gate run was justified.
 
 ### #578 — BR-08 retraining v2 (umbrella)
 **Status:** infra ready on the 578 branch. The previous probe (Slurm 11433) ran
@@ -172,15 +161,14 @@ scripts/dev/auxme_partition_status.sh --recommend
 Reference: [`SLURM/Auxme/README.md`](../../SLURM/Auxme/README.md),
 [`docs/training/dreamerv3_br08_slurm_handoff.md`](../training/dreamerv3_br08_slurm_handoff.md).
 
-The job templates below need to be created as `SLURM/Auxme/dreamer_br08_gate.sl` and
-`SLURM/Auxme/dreamer_br08_full.sl` (no Dreamer-specific .sl files exist yet — only
-`issue_791_*.sl` and `auxme_gpu.sl`). Pattern after `SLURM/Auxme/issue_791_attention_head.sl`.
+The job templates now exist as `SLURM/Auxme/dreamer_br08_gate.sl` and
+`SLURM/Auxme/dreamer_br08_full.sl`. Pattern reference remains
+`SLURM/Auxme/issue_791_attention_head.sl` for future Dreamer-adjacent launchers.
 
 ### Job 1 — `dreamer_br08_gate.sl` (#578 / #789 gate)
 
 Purpose: catch construction, Ray, observation, and reward-contract failures before any
-GPU spend. CPU-only, offline W&B, ~6h cap. Use this **once** for the flat-vector path
-(#578 on its own) and **once** for the multi-modal path (#789).
+GPU spend. CPU-only, offline W&B, ~6h cap. Use this for the flat-vector BR-08 path.
 
 ```bash
 #!/usr/bin/env bash
@@ -207,7 +195,8 @@ export SDL_VIDEODRIVER=dummy
 export PYGAME_HIDE_SUPPORT_PROMPT=1
 export PYTHONWARNINGS=ignore
 
-# Switch the --config path to the multi-modal sibling for the #789 gate.
+# Override DREAMER_BR08_CONFIG only when intentionally probing a different committed
+# Dreamer config sibling.
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_gate.yaml \
   --log-level WARNING

@@ -1,0 +1,86 @@
+version: 1
+updated_at: 2026-04-29
+funnel_config: configs/policy_search/funnel.yaml
+promotion_gates: configs/policy_search/promotion_gates.yaml
+
+candidates:
+  hybrid_orca_sampler_v1:
+    status: implemented
+    family: hybrid_model_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_orca_sampler_v1.yaml
+    hypothesis: >
+      Keep ORCA-like safety behavior while allowing a short-horizon sampler to
+      recover progress in constrained geometry.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+      - full_matrix_if_promising
+
+  mpc_clearance_sampler_v1:
+    status: implemented
+    family: model_predictive_control
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/mpc_clearance_sampler_v1.yaml
+    hypothesis: >
+      A deterministic NMPC-style rollout scorer should improve
+      constrained-geometry progress without giving up clearance control.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  risk_guarded_ppo_v1:
+    status: implemented
+    family: guarded_learning_policy
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    hypothesis: >
+      The existing PPO success signal can be preserved if unsafe short-horizon
+      actions are vetoed and replaced with safer local controls.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  scenario_adaptive_orca_v1:
+    status: implemented
+    family: adaptive_classical
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+    hypothesis: >
+      Family-specific ORCA parameterization should reduce classic bottleneck
+      risk without slowing Francis-style flowing interactions too aggressively.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  planner_selector_v1:
+    status: implemented
+    family: adaptive_ensemble
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/planner_selector_v1.yaml
+    hypothesis: >
+      Existing non-learning and predictive heads can be combined into a stronger
+      selector without introducing any new training dependency.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  learned_risk_model_v1:
+    status: slurm_handoff_required
+    family: learned_auxiliary_cost
+    training_required: true
+    promotion_gate: tier_b
+    slurm_handoff: docs/context/policy_search/SLURM/001_learned_risk_model_v1.md
+    hypothesis: >
+      A lightweight learned risk estimator should improve candidate ranking only
+      when attached to a hard safety guard.

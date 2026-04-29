@@ -1,0 +1,15 @@
+name: scenario_adaptive_orca_v1
+algo: orca
+base_config_path: configs/algos/issue707_orca_tuned.yaml
+family_overrides:
+  classic:
+    max_linear_speed: 0.92
+    orca_time_horizon: 6.5
+    orca_obstacle_margin: 0.22
+    orca_commit_lateral_gain: 0.60
+  francis2023:
+    max_linear_speed: 1.15
+    orca_time_horizon: 5.0
+    orca_obstacle_margin: 0.14
+    orca_symmetry_bias: 0.22
+    orca_head_on_bias: 0.30

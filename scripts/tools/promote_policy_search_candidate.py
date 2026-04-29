@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Evaluate a candidate summary against the configured promotion gates."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("summary_json", type=Path)
+    parser.add_argument(
+        "--candidate-registry",
+        type=Path,
+        default=Path("docs/context/policy_search/candidate_registry.yaml"),
+    )
+    parser.add_argument(
+        "--promotion-gates",
+        type=Path,
+        default=Path("configs/policy_search/promotion_gates.yaml"),
+    )
+    parser.add_argument("--output", type=Path, default=Path("output/policy_search/promotion"))
+    return parser.parse_args()
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError(f"Expected JSON object: {path}")
+    return payload
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise TypeError(f"Expected YAML mapping: {path}")
+    return payload
+
+
+def main() -> int:
+    args = parse_args()
+    payload = _load_json(args.summary_json)
+    registry = _load_yaml(args.candidate_registry)
+    gates = _load_yaml(args.promotion_gates)
+
+    candidate_name = str(payload.get("candidate", "unknown"))
+    candidates = registry.get("candidates") if isinstance(registry.get("candidates"), dict) else {}
+    candidate_meta = candidates.get(candidate_name, {}) if isinstance(candidates, dict) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    family = (
+        summary.get("scenario_family") if isinstance(summary.get("scenario_family"), dict) else {}
+    )
+    classic = family.get("classic", {}) if isinstance(family.get("classic"), dict) else {}
+    francis = family.get("francis2023", {}) if isinstance(family.get("francis2023"), dict) else {}
+
+    gate_name = str(candidate_meta.get("promotion_gate", "tier_b"))
+    gate_cfg = (
+        gates.get("gates", {}).get(gate_name, {}) if isinstance(gates.get("gates"), dict) else {}
+    )
+    stratified = (
+        gates.get("gates", {}).get("scenario_stratified", {})
+        if isinstance(gates.get("gates"), dict)
+        else {}
+    )
+
+    checks = {
+        "success_rate": float(summary.get("success_rate", 0.0))
+        >= float(gate_cfg.get("min_success_rate", 0.0)),
+        "collision_rate": float(summary.get("collision_rate", 1.0))
+        <= float(gate_cfg.get("max_collision_rate", 1.0)),
+        "classic_collision_rate": float(classic.get("collision_rate", 1.0))
+        <= float(stratified.get("classic_collision_rate_max", 1.0)),
+        "francis_collision_rate": float(francis.get("collision_rate", 1.0))
+        <= float(stratified.get("francis_collision_rate_max", 1.0)),
+    }
+    decision = "promote" if all(checks.values()) else "revise"
+
+    output_dir = args.output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / f"{candidate_name}_{payload.get('stage', 'unknown')}_promotion.json"
+    json_path.write_text(
+        json.dumps(
+            {
+                "candidate": candidate_name,
+                "stage": payload.get("stage"),
+                "gate": gate_name,
+                "checks": checks,
+                "decision": decision,
+                "summary_json": str(args.summary_json),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    lines = [
+        f"# Promotion Decision: {candidate_name}",
+        "",
+        f"- Stage: `{payload.get('stage', 'unknown')}`",
+        f"- Gate: `{gate_name}`",
+        f"- Decision: `{decision}`",
+        "",
+        "| Check | Passed |",
+        "|---|---|",
+    ]
+    for key, value in checks.items():
+        lines.append(f"| {key} | {'yes' if value else 'no'} |")
+    md_path = output_dir / f"{candidate_name}_{payload.get('stage', 'unknown')}_promotion.md"
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(json.dumps({"json": str(json_path), "markdown": str(md_path)}, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

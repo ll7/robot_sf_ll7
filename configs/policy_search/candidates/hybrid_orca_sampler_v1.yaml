@@ -1,0 +1,20 @@
+name: hybrid_orca_sampler_v1
+algo: hybrid_orca_sampler
+base_config_path: configs/algos/hybrid_orca_sampler_base.yaml
+params:
+  hybrid_guard:
+    progress_margin: 0.04
+    near_field_distance: 2.1
+    hard_ped_clearance: 0.60
+    first_step_ped_clearance: 0.74
+    min_ttc: 0.75
+  mppi_social:
+    sample_count: 48
+    iterations: 2
+    horizon_steps: 8
+    goal_progress_weight: 5.8
+    heading_weight: 1.3
+    clearance_weight: 2.1
+    obstacle_weight: 1.6
+    ttc_weight: 0.34
+    near_field_speed_cap: 0.72

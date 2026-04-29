@@ -1,0 +1,120 @@
+"""Tests for the policy-search candidate runner helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import yaml
+
+from scripts.validation.run_policy_search_candidate import (
+    _deep_merge,
+    _prepare_scenarios_for_inline_run,
+    decide_stage_status,
+    load_candidate_definition,
+    split_scenarios_by_family,
+)
+
+
+def test_deep_merge_recurses_without_mutating_inputs() -> None:
+    base = {"a": {"b": 1, "c": 2}, "d": 3}
+    overrides = {"a": {"c": 9}, "e": 4}
+
+    merged = _deep_merge(base, overrides)
+
+    assert merged == {"a": {"b": 1, "c": 9}, "d": 3, "e": 4}
+    assert base == {"a": {"b": 1, "c": 2}, "d": 3}
+
+
+def test_load_candidate_definition_merges_base_config_and_params(
+    tmp_path: Path,
+) -> None:
+    base_cfg = tmp_path / "base.yaml"
+    candidate_cfg = tmp_path / "candidate.yaml"
+    registry = tmp_path / "registry.yaml"
+
+    base_cfg.write_text(yaml.safe_dump({"foo": {"a": 1}, "bar": 2}), encoding="utf-8")
+    candidate_cfg.write_text(
+        yaml.safe_dump(
+            {
+                "algo": "orca",
+                "base_config_path": "base.yaml",
+                "params": {"foo": {"a": 7, "b": 8}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "candidates": {
+                    "cand": {
+                        "candidate_config_path": "candidate.yaml",
+                        "promotion_gate": "tier_b",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    entry, payload, merged, config_path = load_candidate_definition(registry, "cand")
+
+    assert entry["promotion_gate"] == "tier_b"
+    assert payload["algo"] == "orca"
+    assert merged == {"foo": {"a": 7, "b": 8}, "bar": 2}
+    assert config_path == candidate_cfg.resolve()
+
+
+def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
+    grouped = split_scenarios_by_family(
+        [
+            {"name": "classic_bottleneck_medium"},
+            {"name": "francis2023_blind_corner"},
+            {"name": "planner_sanity_simple"},
+        ]
+    )
+
+    assert sorted(grouped) == ["classic", "francis2023", "nominal"]
+
+
+def test_prepare_scenarios_for_inline_run_resolves_relative_paths(
+    tmp_path: Path,
+) -> None:
+    scenario_root = tmp_path / "configs" / "scenarios"
+    scenario_root.mkdir(parents=True)
+    map_path = tmp_path / "maps" / "planner_sanity_open.svg"
+    map_path.parent.mkdir(parents=True)
+    map_path.write_text("<svg />", encoding="utf-8")
+
+    prepared = _prepare_scenarios_for_inline_run(
+        [
+            {
+                "name": "planner_sanity_simple",
+                "map_file": "../../maps/planner_sanity_open.svg",
+            }
+        ],
+        scenario_root=scenario_root,
+    )
+
+    assert Path(prepared[0]["map_file"]) == map_path.resolve()
+
+
+def test_decide_stage_status_enforces_nominal_gate() -> None:
+    stage_cfg = {"gate": {"min_success_rate": 0.8, "max_collision_rate": 0.02}}
+
+    assert (
+        decide_stage_status(
+            "nominal_sanity",
+            stage_cfg,
+            {"success_rate": 0.85, "collision_rate": 0.01},
+        )
+        == "pass"
+    )
+    assert (
+        decide_stage_status(
+            "nominal_sanity",
+            stage_cfg,
+            {"success_rate": 0.60, "collision_rate": 0.01},
+        )
+        == "revise"
+    )

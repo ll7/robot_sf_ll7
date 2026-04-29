@@ -145,14 +145,25 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
 
         if self._record_feature_stats:
             with th.no_grad():
+                stats_values = th.stack(
+                    [
+                        ray_features.abs().mean(),
+                        ray_features.std(unbiased=False),
+                        drive_features.abs().mean(),
+                        drive_features.std(unbiased=False),
+                        combined_features.abs().mean(),
+                        combined_features.std(unbiased=False),
+                        combined_features.abs().max(),
+                    ]
+                ).tolist()
                 self._latest_feature_stats = {
-                    "ray_mean_abs": float(ray_features.abs().mean().item()),
-                    "ray_std": float(ray_features.std(unbiased=False).item()),
-                    "drive_mean_abs": float(drive_features.abs().mean().item()),
-                    "drive_std": float(drive_features.std(unbiased=False).item()),
-                    "combined_mean_abs": float(combined_features.abs().mean().item()),
-                    "combined_std": float(combined_features.std(unbiased=False).item()),
-                    "combined_max_abs": float(combined_features.abs().max().item()),
+                    "ray_mean_abs": float(stats_values[0]),
+                    "ray_std": float(stats_values[1]),
+                    "drive_mean_abs": float(stats_values[2]),
+                    "drive_std": float(stats_values[3]),
+                    "combined_mean_abs": float(stats_values[4]),
+                    "combined_std": float(stats_values[5]),
+                    "combined_max_abs": float(stats_values[6]),
                 }
 
         return combined_features

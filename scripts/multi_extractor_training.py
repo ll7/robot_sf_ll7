@@ -79,13 +79,13 @@ class RunSettings:
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> RunSettings:
-        """TODO docstring. Document this function.
+        """Build run settings from the YAML configuration payload.
 
         Args:
-            payload: TODO docstring.
+            payload: Parsed scenario configuration mapping.
 
         Returns:
-            TODO docstring.
+            Normalized run settings with validation applied to user-provided overrides.
         """
         options = payload.get("run", {})
         settings = cls()

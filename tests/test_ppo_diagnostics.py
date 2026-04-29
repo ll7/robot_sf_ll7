@@ -17,6 +17,7 @@ from robot_sf.training.ppo_diagnostics import (
     DiagnosticPPO,
     _grad_l2_norm,
     _module_grad_norm,
+    _patched_clip_grad_norm,
     _summarize_samples,
 )
 
@@ -104,6 +105,22 @@ def test_diagnostic_helpers_cover_empty_and_populated_gradients(tmp_path):
     model._diagnostics_path = tmp_path / "diagnostics.jsonl"
     model._append_training_diagnostics({"step": 1.0})
     assert json.loads(model._diagnostics_path.read_text(encoding="utf-8")) == {"step": 1.0}
+
+
+def test_patched_clip_grad_norm_restores_original_function():
+    """The clip-grad patch should be scoped to the context manager lifetime."""
+    original = th.nn.utils.clip_grad_norm_
+    seen: list[int] = []
+    parameter = th.nn.Parameter(th.tensor([1.0], requires_grad=True))
+    parameter.grad = th.tensor([2.0])
+
+    with _patched_clip_grad_norm(lambda params: seen.append(len(params))):
+        patched = th.nn.utils.clip_grad_norm_
+        assert patched is not original
+        _ = patched([parameter], 1.0)
+
+    assert seen == [1]
+    assert th.nn.utils.clip_grad_norm_ is original
 
 
 def test_diagnostic_collect_batch_includes_feature_stats():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,18 +21,14 @@ def _grad_l2_norm(parameters: Iterable[th.nn.Parameter]) -> float:
     Returns:
         L2 norm over parameters with non-empty gradients.
     """
-    squared_norm = 0.0
-    has_grad = False
-    for parameter in parameters:
-        gradient = parameter.grad
-        if gradient is None:
-            continue
-        has_grad = True
-        grad_norm = float(gradient.detach().norm(2).item())
-        squared_norm += grad_norm * grad_norm
-    if not has_grad:
+    squared_sums = [
+        th.sum(parameter.grad.detach() ** 2)
+        for parameter in parameters
+        if parameter.grad is not None
+    ]
+    if not squared_sums:
         return 0.0
-    return math.sqrt(squared_norm)
+    return math.sqrt(float(th.sum(th.stack(squared_sums)).item()))
 
 
 def _module_grad_norm(module: Any) -> float:
@@ -63,6 +60,30 @@ def _summarize_samples(samples: list[dict[str, float]]) -> dict[str, float]:
         summary[f"{metric_name}_max"] = float(max(values))
 
     return summary
+
+
+@contextmanager
+def _patched_clip_grad_norm(
+    callback: Any,
+):
+    """Patch ``clip_grad_norm_`` for the lifetime of the context only."""
+    original_clip_grad_norm = th.nn.utils.clip_grad_norm_
+
+    def _patched(
+        parameters: Iterable[th.nn.Parameter],
+        max_norm: float,
+        *args: Any,
+        **kwargs: Any,
+    ) -> th.Tensor:
+        parameter_list = list(parameters)
+        callback(parameter_list)
+        return original_clip_grad_norm(parameter_list, max_norm, *args, **kwargs)
+
+    th.nn.utils.clip_grad_norm_ = _patched
+    try:
+        yield
+    finally:
+        th.nn.utils.clip_grad_norm_ = original_clip_grad_norm
 
 
 class DiagnosticPPO(PPO):
@@ -124,23 +145,12 @@ class DiagnosticPPO(PPO):
     def train(self) -> None:
         """Run one PPO update while capturing gradient and feature statistics."""
         collected_samples: list[dict[str, float]] = []
-        original_clip_grad_norm = th.nn.utils.clip_grad_norm_
-
-        def _patched_clip_grad_norm_(
-            parameters: Iterable[th.nn.Parameter],
-            max_norm: float,
-            *args: Any,
-            **kwargs: Any,
-        ) -> th.Tensor:
-            parameter_list = list(parameters)
-            collected_samples.append(self._collect_batch_diagnostics(parameter_list))
-            return original_clip_grad_norm(parameter_list, max_norm, *args, **kwargs)
-
-        th.nn.utils.clip_grad_norm_ = _patched_clip_grad_norm_
-        try:
+        with _patched_clip_grad_norm(
+            lambda parameter_list: collected_samples.append(
+                self._collect_batch_diagnostics(parameter_list)
+            )
+        ):
             super().train()
-        finally:
-            th.nn.utils.clip_grad_norm_ = original_clip_grad_norm
 
         summary = _summarize_samples(collected_samples)
         summary["num_timesteps"] = float(self.num_timesteps)

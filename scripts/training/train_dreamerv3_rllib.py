@@ -896,42 +896,34 @@ def _build_nonfinite_diagnostics(
 ) -> dict[str, object]:
     """Build a compact, JSON-safe diagnostic payload for non-finite training metrics."""
     interesting_paths = {
-        "env_episode_return_mean": _extract_metric(result, "episode_return_mean", "episode_reward_mean"),
+        "env_episode_return_mean": _extract_metric(
+            result, "episode_return_mean", "episode_reward_mean"
+        ),
         "env_episode_len_mean": _extract_metric(result, "episode_len_mean", "episode_len_mean"),
         "num_env_steps_sampled_lifetime": _extract_metric(result, "num_env_steps_sampled_lifetime"),
         "num_env_steps_trained_lifetime": _extract_metric(result, "num_env_steps_trained_lifetime"),
         "learner_total_loss": (
-            result.get("learners", {})
-            .get("__all_modules__", {})
-            .get("total_loss")
+            result.get("learners", {}).get("__all_modules__", {}).get("total_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_policy_total_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("total_loss")
+            result.get("learners", {}).get("default_policy", {}).get("total_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_world_model_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("world_model_loss")
+            result.get("learners", {}).get("default_policy", {}).get("world_model_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_actor_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("actor_loss")
+            result.get("learners", {}).get("default_policy", {}).get("actor_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_critic_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("critic_loss")
+            result.get("learners", {}).get("default_policy", {}).get("critic_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),

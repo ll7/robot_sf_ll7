@@ -1,3 +1,16 @@
+# Issue-791 promotion benchmark: PPO Wave-5 leader vs reference baselines.
+#
+# Provenance:
+# - Wave-5 leader: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+#   (job 11724, WandB ll7/robot_sf/ibo3aqus, in-distribution eval success=0.929).
+# - Reference baseline retained as `ppo_v3` to preserve prior promotion comparison.
+# - Promotion campaign log: docs/context/issue_791_promotion_campaign_128k_256k.md.
+#
+# CAVEAT: the Wave-5 leader was trained on the eval superset
+# (configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml).
+# This benchmark therefore measures in-distribution scenario performance, not OOD
+# generalization. A held-out scenario family is still required for an OOD claim.
+
 name: paper_experiment_matrix_v1
 paper_facing: true
 paper_profile_version: paper-matrix-v1
@@ -9,10 +22,10 @@ amv_profile:
   contract_version: "1"
   coverage_enforcement: warn
   required_dimensions:
-    use_case: [ delivery_robot, shared_space_micromobility ]
-    context: [ sidewalk, shared_space ]
-    speed_regime: [ walking_speed, scooter_speed ]
-    maneuver_type: [ overtake, crossing, bottleneck ]
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
 
 seed_policy:
   mode: seed-set
@@ -38,7 +51,12 @@ horizon: 100
 dt: 0.1
 record_forces: true
 resume: true
-stop_on_failure: true
+# Continue past per-planner prereq/environmental failures; 11798 (orca/rvo2) and
+# 11871 (sacadrl/tensorflow) both halted the entire campaign on one dependency
+# miss. The downstream per-planner status columns already surface
+# partial-failure clearly, so tolerance here keeps the leader and all ready
+# baselines scored in a single submission.
+stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123
@@ -77,12 +95,16 @@ planners:
     benchmark_profile: baseline-safe
     socnav_missing_prereq_policy: fallback
 
+  # Swap-in: PPO key now points at the issue-791 Wave-5 leader so the existing
+  # comparability mapping continues to apply. This mirrors the v10 carry-forward pattern.
   - key: ppo
     algo: ppo
     planner_group: experimental
     algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
+    # PPO loads a CUDA-backed SB3 policy; run serially to avoid CUDA re-init in forked workers.
+    workers: 1
 
   - key: socnav_sampling
     algo: socnav_sampling

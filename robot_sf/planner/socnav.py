@@ -3665,6 +3665,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             )
         checkpoint_path = self._resolve_checkpoint_path()
         model, _payload = load_predictive_checkpoint(checkpoint_path, map_location=self._device)
+        model.to(self._device)
         model.eval()
         return model
 

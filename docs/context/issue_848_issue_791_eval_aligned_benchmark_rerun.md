@@ -5,7 +5,7 @@
 Add the missing execution surfaces for issue `#848` so the paper-facing matrix can be rerun with
 the issue-791 Wave-5 PPO leader on the canonical camera-ready benchmark path.
 
-## Problem Observed On This Branch
+## Problem Observed On The Original Issue Branch
 
 Issue `#848` referenced these repository surfaces as if they already existed:
 
@@ -16,7 +16,7 @@ Issue `#848` referenced these repository surfaces as if they already existed:
 They were absent from this checkout, even though the benchmark runner and the existing compare
 config pattern already supported the issue.
 
-## Decision
+## Original Branch Decision
 
 Use the existing `model_id`-based PPO baseline pattern rather than hard-coding a local-only
 `model_path`.
@@ -34,6 +34,23 @@ Why this matters:
 - `SLURM/Auxme/issue_791_benchmark.sl`
 - `model/registry.yaml` entry:
   `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`
+
+## Current Mainline State After Sync
+
+After merging `origin/main` on 2026-04-29, the issue-791 leader promotion work is already present
+in mainline with a stricter, newer configuration:
+
+- `configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml` now pins the promoted
+  `model_path` directly and carries the predictive-foresight settings used by the promoted PPO
+  baseline.
+- `configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml` keeps the
+  issue-791 PPO leader under the `ppo` planner key, adds `workers: 1` for PPO CUDA loading, and
+  uses `stop_on_failure: false` so dependency misses for other planners do not halt the whole
+  publication rerun.
+- `SLURM/Auxme/issue_791_benchmark.sl` remains the canonical cluster wrapper for the issue-791
+  publication rerun.
+- `model/registry.yaml` contains the promoted leader provenance, but the active benchmark baseline
+  no longer depends on registry resolution for this PPO config.
 
 ## Validation Boundary
 
@@ -57,6 +74,23 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
   --label issue848_preflight_local
 ```
 
+Validation run after syncing with `origin/main` on 2026-04-29:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+  --mode preflight \
+  --label issue848_preflight_after_main_sync
+```
+
+Result:
+
+- preflight campaign:
+  `output/benchmarks/camera_ready/paper_experiment_matrix_v1_issue848_preflight_after_main_sync_20260429_161356`
+- matrix summary generated for 47 scenarios, 7 planners, differential-drive kinematics, and eval
+  seeds `[111, 112, 113]`.
+- AMV coverage remains `warn` under the existing `amv-paper-v1` warn-only contract.
+
 Cluster execution wrapper:
 
 ```bash
@@ -67,7 +101,7 @@ sbatch SLURM/Auxme/issue_791_benchmark.sl
 
 ## Remaining Risks
 
-- The W&B-backed model download path still needs to be exercised on the execution machine.
 - The issue body's held-out OOD requirement remains open; this note only restores the benchmark
   rerun surface.
 - External write-ups must keep the benchmark-set / in-distribution caveat explicit.
+- The full publication rerun still needs to execute on the cluster and produce the new bundle.

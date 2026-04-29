@@ -190,6 +190,7 @@ class EnvironmentFactory:
         telemetry_refresh_hz: float = 1.0,
         telemetry_pane_layout: str = "vertical_split",
         telemetry_decimation: int = 1,
+        asymmetric_critic: bool = False,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
 
@@ -219,6 +220,8 @@ class EnvironmentFactory:
             telemetry_refresh_hz: Target refresh rate for telemetry (Hz).
             telemetry_pane_layout: Pane docking layout (vertical_split or horizontal_split).
             telemetry_decimation: Decimation factor for telemetry persistence (>=1).
+            asymmetric_critic: When True, add a critic-only privileged state vector to the
+                observation space for asymmetric actor-critic training.
 
         Returns:
             SingleAgentEnv: Fully initialized robot environment instance.
@@ -267,6 +270,7 @@ class EnvironmentFactory:
             scenario_name=scenario_name,
             algorithm_name=algorithm_name,
             recording_seed=recording_seed,
+            asymmetric_critic=asymmetric_critic,
         )  # type: ignore[return-value]
 
     @staticmethod
@@ -507,6 +511,7 @@ def make_robot_env(  # noqa: PLR0913
     telemetry_refresh_hz: float = 1.0,
     telemetry_pane_layout: str = "vertical_split",
     telemetry_decimation: int = 1,
+    asymmetric_critic: bool = False,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with lidar-based observations (non-image).
@@ -559,6 +564,8 @@ def make_robot_env(  # noqa: PLR0913
             horizontal_split).
         telemetry_decimation: Decimation factor applied when persisting/visualizing telemetry
             (>=1).
+        asymmetric_critic: When True, add a critic-only privileged state vector to the
+            observation space for asymmetric actor-critic training.
         **legacy_kwargs: Deprecated legacy surface (mapped via apply_legacy_kwargs). Unknown
             params rejected unless ROBOT_SF_FACTORY_LEGACY env var is truthy (permissive mode).
 
@@ -637,6 +644,7 @@ def make_robot_env(  # noqa: PLR0913
         telemetry_refresh_hz=telemetry_refresh_hz,
         telemetry_pane_layout=telemetry_pane_layout,
         telemetry_decimation=telemetry_decimation,
+        asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed
     return env
@@ -664,6 +672,7 @@ def make_image_robot_env(  # noqa: PLR0913
     scenario_name: str = "default",
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
+    asymmetric_critic: bool = False,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
@@ -730,6 +739,7 @@ def make_image_robot_env(  # noqa: PLR0913
         scenario_name=scenario_name,
         algorithm_name=algorithm_name,
         recording_seed=recording_seed,
+        asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed
     return env

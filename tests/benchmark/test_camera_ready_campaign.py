@@ -240,6 +240,25 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
     assert ppo_cfg["fallback_to_goal"] is False
 
 
+def test_issue_791_eval_aligned_ppo_config_is_serial_and_fail_closed() -> None:
+    """Issue-791 benchmark candidate should not silently fallback or fork CUDA workers."""
+    cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml")
+    )
+
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert (
+        planners["ppo"].algo_config_path
+        == Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml").resolve()
+    )
+    assert planners["ppo"].workers_override == 1
+
+    ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert ppo_cfg["fallback_to_goal"] is False
+    assert ppo_cfg["predictive_foresight_enabled"] is True
+    assert ppo_cfg["predictive_foresight_model_id"] == "predictive_proxy_selected_v2_full"
+
+
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
     """Extended seed configs should change only the named seed schedule."""
     base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))

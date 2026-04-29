@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a file-based policy-search workflow under `docs/context/policy_search/` with a canonical candidate registry, stage-gated runner (`scripts/validation/run_policy_search_candidate.py`), comparison/failure/promotion tools, and SLURM handoff notes for training-heavy follow-up work. The first non-training candidate, `hybrid_orca_sampler_v1`, now runs end to end in the benchmark stack and emits markdown/json validation artifacts locally.
+
 * Restored the asymmetric-critic robot training contract so `RobotEnv(..., asymmetric_critic=True)` and `make_robot_env(..., asymmetric_critic=True)` once again add the critic-only `critic_privileged_state` observation for SocNav structured runs. This keeps the public factory API stable for issue-791 training jobs and closes the regression that broke fresh SLURM submissions after the main-branch merge.
 
 * Corrected the issue-791 reward-curriculum `resume_best` overlay so it preserves the original `grid_socnav` / `MultiInputPolicy` checkpoint contract when warm-starting from 11566 best.zip. This avoids the observation-space mismatch that appeared when the retry was pointed at the wrong model family.

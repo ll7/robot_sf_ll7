@@ -144,6 +144,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics

@@ -104,6 +104,7 @@ knowledge, not every transient iteration detail.
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+- [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
 
 ## Reasoning Notes
 

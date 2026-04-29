@@ -459,6 +459,37 @@ def test_hybrid_orca_sampler_keeps_orca_when_scene_is_clear(monkeypatch) -> None
     assert planner.plan(_obs()) == (0.4, 0.1)
 
 
+def test_hybrid_orca_sampler_uses_sampler_in_clear_scene_when_orca_stalls(
+    monkeypatch,
+) -> None:
+    """Hybrid ORCA sampler should still repair low-progress ORCA in open scenes."""
+
+    class _PrimaryHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.1, 0.0
+
+    class _SamplerHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.7, 0.0
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(sampler_progress_margin=0.05, near_field_distance=1.0),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+
+    def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        if command[0] < 0.2:
+            return {"safe": True, "progress": 0.01, "min_ped_clear": 3.0}
+        return {"safe": True, "progress": 0.25, "min_ped_clear": 3.0}
+
+    monkeypatch.setattr(planner, "_evaluate_command", _eval)
+
+    assert planner.plan(_obs()) == (0.7, 0.0)
+
+
 def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     """Hybrid ORCA sampler builder should parse guard, ORCA, and MPPI knobs."""
     build = build_hybrid_orca_sampler_build_config(

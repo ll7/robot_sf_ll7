@@ -16,7 +16,7 @@ Keep ORCA-like safety behavior while allowing a short-horizon sampler to recover
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/hybrid_orca_sampler_v1/smoke/latest/summary.json`
-- Git commit: `69cfe6461a5cf90c8555d53bfda0a56b050d381d`
+- Git commit: `8c04f1023f7a201e539fc9529cfbcfa97a362ebf`
 
 ## Aggregate Results
 

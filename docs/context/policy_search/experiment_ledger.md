@@ -10,3 +10,5 @@
 | 2026-04-29 | scenario_adaptive_orca_v1 | smoke | 1.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Family-override execution path now works locally and clears all three smoke seeds. |
 | 2026-04-29 | planner_selector_v1 | smoke | 0.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Runs end to end, but all three smoke seeds timed out with low progress. |
 | 2026-04-29 | mpc_clearance_sampler_v1 | smoke | 0.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Runs end to end, but all three smoke seeds timed out with low progress. |
+| 2026-04-29 | risk_guarded_ppo_v1 | nominal_sanity | 0.1667 | 0.2778 | 0.0556 | 0.4167 | 0.0000 | revise | Fails the nominal gate; classic scenarios dominate both collisions and low-progress timeouts. |
+| 2026-04-29 | scenario_adaptive_orca_v1 | nominal_sanity | 0.2222 | 0.0000 | 0.1111 | 0.0000 | 0.0000 | revise | Safer than guarded PPO, but still too low-success across classic and Francis subsets to promote. |

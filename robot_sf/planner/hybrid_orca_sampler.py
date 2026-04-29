@@ -77,8 +77,11 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
             if ped_pos.size > 0
             else float("inf")
         )
-        if current_min_dist > float(self.hybrid_config.near_field_distance) and bool(
-            primary_eval["safe"]
+        clear_scene = current_min_dist > float(self.hybrid_config.near_field_distance)
+        if (
+            clear_scene
+            and bool(primary_eval["safe"])
+            and float(primary_eval["progress"]) > float(self.hybrid_config.sampler_progress_margin)
         ):
             return tuple(float(value) for value in primary_command)
 

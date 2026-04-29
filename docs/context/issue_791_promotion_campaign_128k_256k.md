@@ -675,3 +675,62 @@ squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" \
 - [Issue 791 Attention Head Gate](issue_791_attention_head_gate.md)
 - [Issue 791 Reward Curriculum Gate](issue_791_reward_curriculum_gate.md)
 - [Issue 791 Asymmetric Critic Gate](issue_791_asymmetric_critic_gate.md)
+
+## Issue 852 Corrections Pass
+
+Issue #852 keeps the CodeRabbit PR #851 corrections out of the historical issue-791 YAMLs.
+Those original configs remain as-run artifacts. New sibling configs capture the portable
+baseline, clean fixed-seed single-factor ablations, the 32k reward-curriculum warmup v2,
+and true fixed-seed 10M replicas.
+
+### Submitted on 2026-04-29
+
+The first wave follows the issue ordering: run one 1M fixed-seed smoke per single-factor arm,
+then inspect results before submitting the 10M single-factor promotion siblings. The two true
+fixed-seed 10M leader replicas were submitted immediately because they are the explicit B4
+correction.
+
+| Purpose | Config | Wrapper | Job | Partition | Initial state | W&B group / tags |
+|---------|--------|---------|-----|-----------|---------------|------------------|
+| Attention-only 1M smoke, seed 123 | [attention_only_1m_env22_seed123.yaml](../../configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed123.yaml) | `issue_791_attention_head.sl` | **12173** | a30 | PENDING (QOSMaxJobsPerUserLimit) | `issue-852-single-factor` / `single-factor-attention`, `fixed-seed`, `seed-123` |
+| Asymmetric-critic-only 1M smoke, seed 123 | [asymmetric_critic_only_1m_env22_seed123.yaml](../../configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed123.yaml) | `issue_791_asymmetric_critic.sl` | **12174** | a30 | PENDING (QOSMaxJobsPerUserLimit) | `issue-852-single-factor` / `single-factor-asymmetric-critic`, `fixed-seed`, `seed-123` |
+| Reward-curriculum-only 1M smoke, seed 123 | [reward_curriculum_only_1m_env22_seed123.yaml](../../configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed123.yaml) | `issue_791_reward_curriculum.sl` | **12175** | a30 | PENDING (QOSMaxJobsPerUserLimit) | `issue-852-single-factor` / `single-factor-reward-curriculum`, `fixed-seed`, `seed-123` |
+| True fixed-seed leader replica, seed 1337 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml) | `issue_791_reward_curriculum.sl` | **12176** | a30 | PENDING (QOSMaxJobsPerUserLimit) | `issue-852-seed-fixed-replicas` / `seed-1337`, `fixed-seed`, `seed-replica` |
+| True fixed-seed leader replica, seed 231 | [expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml](../../configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml) | `issue_791_reward_curriculum.sl` | **12177** | a30 | PENDING (QOSMaxJobsPerUserLimit) | `issue-852-seed-fixed-replicas` / `seed-231`, `fixed-seed`, `seed-replica` |
+
+Not submitted yet:
+
+- The 10M single-factor promotion configs under
+  `configs/training/ppo/ablations/single_factor/` are intentionally gated on the 1M smoke results.
+- The seed-231 and seed-1337 1M smoke configs are staged for seed-variance follow-up after the
+  seed-123 smoke confirms each arm runs correctly.
+- `expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml` is staged but not submitted,
+  because the 32k probe is optional and the 10M v2 warmup results are the stronger paper-facing
+  evidence path.
+
+Verification on 2026-04-29:
+
+```bash
+uv run python scripts/training/train_ppo.py \
+  --config configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed123.yaml \
+  --dry-run --log-level WARNING
+
+uv run python - <<'PY'
+from pathlib import Path
+from scripts.training.train_ppo import load_expert_training_config
+
+paths = sorted(Path("configs/training/ppo/ablations/single_factor").glob("*.yaml")) + [
+    Path("configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml"),
+    Path("configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml"),
+    Path("configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml"),
+]
+for path in paths:
+    cfg = load_expert_training_config(path)
+    assert cfg.scenario_config.exists(), (path, cfg.scenario_config)
+    assert cfg.evaluation.scenario_config and cfg.evaluation.scenario_config.exists(), path
+    print(f"OK {path}")
+PY
+
+squeue -u "$USER" -o "%.18i %.9P %.45j %.10T %.10M %.10l %R" \
+  | rg '12173|12174|12175|12176|12177'
+```

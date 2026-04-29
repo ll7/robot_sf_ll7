@@ -27,6 +27,18 @@ _ALLOWED_SQLITE_ROOT = Path("output").resolve()
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 
 
+def _matrix_metadata(matrix: dict[str, Any]) -> tuple[str, list[str]]:
+    """Resolve metadata labels for fixed candidate runs.
+
+    Returns:
+        tuple[str, list[str]]: ``(job_type, tags)`` derived from the matrix metadata.
+    """
+    raw_tags = matrix.get("wandb_tags")
+    tags = [str(tag) for tag in raw_tags] if isinstance(raw_tags, list) else []
+    job_type = str(matrix.get("wandb_job_type", "feat-extractor-fixed"))
+    return job_type, tags
+
+
 @dataclass(slots=True)
 class FixedCandidate:
     """One fixed validation job from the candidate matrix."""
@@ -146,22 +158,28 @@ def _configure_candidate(
         randomize_seeds=False,
         scenario_config=config.evaluation.scenario_config,
     )
+    matrix_env_factory_kwargs = matrix.get("env_factory_kwargs")
+    if isinstance(matrix_env_factory_kwargs, dict):
+        merged_env_factory_kwargs = dict(config.env_factory_kwargs or {})
+        merged_env_factory_kwargs.update(copy.deepcopy(matrix_env_factory_kwargs))
+        config.env_factory_kwargs = merged_env_factory_kwargs
 
     tracking = dict(config.tracking or {})
     wandb_cfg = dict(tracking.get("wandb") or {})
+    job_type, matrix_tags = _matrix_metadata(matrix)
     if disable_wandb:
         wandb_cfg["enabled"] = False
     else:
         wandb_cfg.setdefault("enabled", True)
         wandb_cfg.setdefault("project", "robot_sf")
         wandb_cfg.setdefault("group", study_name)
-        wandb_cfg.setdefault("job_type", "feat-extractor-fixed-12m")
+        wandb_cfg.setdefault("job_type", job_type)
         wandb_cfg.setdefault("name", config.policy_id)
         wandb_cfg.setdefault(
             "tags",
-            [
+            matrix_tags
+            + [
                 "fixed-candidate",
-                "issue-193",
                 f"extractor:{candidate.extractor_type}",
                 f"arch:{candidate.arch_size}",
                 f"seed:{candidate.seed}",

@@ -89,7 +89,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
-* **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills
+* **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,    `auto-improvement`, context-discovery, quality, and doc-sync skills
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
 * **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
@@ -108,6 +108,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Canonical issue-708 PPO retrain config, SLURM submission path, deterministic eval surface, and promotion checklist.
 * **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Early reward/observation screening matrix and conservative next-step recommendation for PPO issue-708 follow-up work.
+* **[Issue 850 PPO Collision Failures](./context/issue_850_ppo_collision_failures.md)** - Canonical issue-850 note covering the dyn-large collision blocker, the safety-reward mitigation config, and the fixed-candidate reward-v3 comparison matrix.
 * **[Predictive Planner Complete Tutorial](./training/predictive_planner_complete_tutorial.md)** - Full concept-to-code tutorial (model, scoring, risk-adaptive search, diagnostics, and reproducibility)
 * **[DreamerV3 RLlib Runbook (`drive_state` + `rays`)](./training/dreamerv3_rllib_drive_state_rays.md)** - Config-first training flow for RLlib DreamerV3 without image observations.
 * **[Global Planner Quickstart (WIP)](../specs/342-svg-global-planner/quickstart.md)** - Placeholder for the upcoming SVG-based global planner documentation and examples.
@@ -118,7 +119,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,     `watch`,     `list`,     `summary`,     `export`,     `perf-tests`,     `enable-tensorboard`)
 
 ### Benchmarking & Metrics
 
@@ -425,7 +426,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 * Report: Top 10 slowest tests printed with guidance at session end
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
+* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,     `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 

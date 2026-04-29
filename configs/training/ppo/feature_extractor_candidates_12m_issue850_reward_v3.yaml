@@ -1,0 +1,93 @@
+# Issue #850 mitigation matrix: keep the issue-193 fixed candidate surface,
+# but swap the training reward to the stronger route_completion_v3 profile.
+#
+# Hypothesis:
+#   The issue-193 dyn_large_med checkpoints are blocked mainly by obstacle/wall
+#   collisions because the original route_completion_v2 reward only penalizes
+#   realized collisions, not timeout/stagnation risk, and uses much weaker
+#   near-miss / TTC shaping than the later PPO safety profiles.
+#
+# Scope:
+#   This is intentionally reward-only. It does not change the feature extractor,
+#   policy architecture, observation surface, or scenario family.
+
+base_config: configs/training/ppo/feature_extractor_sweep_base.yaml
+total_timesteps: 12000000
+metric: eval_episode_return
+eval_every: 48000
+eval_episodes: 5
+wandb_job_type: feat-extractor-fixed-issue850
+wandb_tags:
+  - issue-850
+  - reward-mitigation
+  - route-completion-v3
+  - dynamics-extractor
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.1
+      living: -0.015
+      collision: -15.0
+      near_miss: -3.0
+      ttc_risk: -2.8
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -2.0
+      terminal_bonus: 20.0
+
+candidates:
+  - id: dyn_large_med_s123_rcv3
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 123
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_large_med_s231_rcv3
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 231
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_large_med_s1337_rcv3
+    extractor_type: dynamics
+    arch_size: large
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.0
+    seed: 1337
+    extractor_kwargs:
+      num_filters: [128, 32, 32, 16]
+      dropout_rates: [0.0, 0.0, 0.0, 0.0]
+
+  - id: dyn_default_s1337_rcv3
+    extractor_type: dynamics
+    arch_size: original
+    policy_arch_size: small
+    policy_arch: [64, 64]
+    dropout_rate: 0.0
+    seed: 1337
+    extractor_kwargs: {}
+
+  - id: lc_small_med_s231_rcv3
+    extractor_type: lightweight_cnn
+    arch_size: small
+    policy_arch_size: medium
+    policy_arch: [128, 128]
+    dropout_rate: 0.05
+    seed: 231
+    extractor_kwargs:
+      num_filters: [16, 8]
+      kernel_sizes: [5, 3]
+      dropout_rate: 0.05

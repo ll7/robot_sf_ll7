@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
+  support in `robot_sf/training/scenario_loader.py`, the new
+  `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,
+  the seed-123 retrain clone
+  `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml`,
+  the diagnostic benchmark probe
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`, and focused
+  regression coverage for the new horizon-matched workflow.
+
 * Added DreamerV3 BR-08 follow-up surfaces from the 2026-04-28 handoff: checked-in Auxme launchers (`SLURM/Auxme/dreamer_br08_gate.sl`, `SLURM/Auxme/dreamer_br08_full.sl`), eval-parity regression coverage for the BR-08 full config, a #782 pretraining design note, and a fail-closed #789 note documenting that Ray 2.53.0 DreamerV3 still lacks mixed-observation support without a larger catalog/module fork.
 
 * Restored the asymmetric-critic robot training contract so `RobotEnv(..., asymmetric_critic=True)` and `make_robot_env(..., asymmetric_critic=True)` once again add the critic-only `critic_privileged_state` observation for SocNav structured runs. This keeps the public factory API stable for issue-791 training jobs and closes the regression that broke fresh SLURM submissions after the main-branch merge.
@@ -132,6 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
+
+* Fixed scenario-driven timeout semantics so `max_episode_steps` now expires on the configured
+  discrete step count instead of one step late from a floating elapsed-time comparison.
 
 * Legacy `scripts/training_ppo.py` invocations now fail closed and point to the canonical PPO
   training workflow docs.

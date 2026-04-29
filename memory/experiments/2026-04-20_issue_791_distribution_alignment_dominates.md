@@ -34,3 +34,18 @@ Leader artifact (candidate, not yet promoted into
 `output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip`
 
 Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md`.
+
+2026-04-29 follow-up setup for issue 857:
+
+- Added a horizon-matched scenario surface at
+  `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` using a new
+  manifest-level `scenario_overrides` hook in `robot_sf/training/scenario_loader.py`.
+- Added the seed-123 retrain clone
+  `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml`.
+- Added the diagnostic benchmark probe
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
+- Corrected `RobotState` timeout semantics so `max_episode_steps` now expires on the configured
+  discrete step budget instead of one step late.
+- Jobs `12178` (horizon-100 retrain) and `12179` (horizon-400 probe) were submitted on 2026-04-29;
+  outcome is pending and should be recorded in a follow-up context note before any horizon
+  contribution claim is made.

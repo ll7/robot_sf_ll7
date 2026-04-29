@@ -539,18 +539,66 @@ def test_hybrid_orca_sampler_records_diagnostics_and_reset(monkeypatch) -> None:
     assert cleared["last_decision"] is None
 
 
+def test_hybrid_orca_sampler_uses_sampler_after_route_goal_regression(
+    monkeypatch,
+) -> None:
+    """Route-goal regression should disable the clear-scene ORCA fast path."""
+
+    class _PrimaryHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.4, 0.0
+
+    class _SamplerHead:
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            return 0.7, 0.0
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(
+            goal_tolerance=0.1,
+            sampler_progress_margin=0.05,
+            near_field_distance=1.0,
+            route_stall_cycles_before_sampler=1,
+            route_goal_regression_tolerance=0.5,
+        ),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+
+    def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        if command[0] < 0.5:
+            return {"safe": True, "progress": 0.2, "min_ped_clear": 3.0}
+        return {"safe": True, "progress": 0.35, "min_ped_clear": 3.0}
+
+    monkeypatch.setattr(planner, "_evaluate_command", _eval)
+
+    assert planner.plan(_obs(goal=(0.4, 0.0))) == (0.4, 0.0)
+    assert planner.plan(_obs(goal=(3.0, 0.0))) == (0.7, 0.0)
+
+    last_decision = planner.last_decision()
+    assert last_decision is not None
+    assert last_decision["decision"] == "sampler_progress_repair"
+    assert last_decision["route_state"]["route_regressed"] is True
+
+
 def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     """Hybrid ORCA sampler builder should parse guard, ORCA, and MPPI knobs."""
     build = build_hybrid_orca_sampler_build_config(
         {
             "max_linear_speed": 1.05,
             "orca_obstacle_margin": 0.18,
-            "hybrid_guard": {"progress_margin": 0.08, "hard_ped_clearance": 0.61},
+            "hybrid_guard": {
+                "progress_margin": 0.08,
+                "hard_ped_clearance": 0.61,
+                "route_goal_regression_tolerance": 0.8,
+            },
             "mppi_social": {"sample_count": 12, "goal_progress_weight": 6.0},
         }
     )
     assert build.guard.sampler_progress_margin == pytest.approx(0.08)
     assert build.guard.hard_ped_clearance == pytest.approx(0.61)
+    assert build.guard.route_goal_regression_tolerance == pytest.approx(0.8)
     assert build.socnav.orca_obstacle_margin == pytest.approx(0.18)
     assert build.mppi.sample_count == 12
     assert build.mppi.max_linear_speed == pytest.approx(1.05)

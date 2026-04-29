@@ -22,6 +22,9 @@ class HybridORCASamplerConfig(GuardedPPOConfig):
     """Configuration for ORCA with sampled fallback/repair."""
 
     sampler_progress_margin: float = 0.05
+    route_progress_epsilon: float = 0.05
+    route_stall_cycles_before_sampler: int = 3
+    route_goal_regression_tolerance: float = 0.5
 
 
 @dataclass
@@ -83,6 +86,9 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         }
         self._recent_decisions: deque[dict[str, Any]] = deque(maxlen=self._TRACE_LIMIT)
         self._last_decision: dict[str, Any] | None = None
+        self._last_goal_distance: float | None = None
+        self._best_goal_distance: float | None = None
+        self._route_stall_cycles: int = 0
 
     @staticmethod
     def _finite_float(value: Any) -> float | None:
@@ -109,6 +115,48 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
                 cleaned[key] = self._finite_float(value)
         return cleaned
 
+    def _update_route_progress(self, goal_distance: float) -> dict[str, Any]:
+        """Track route-level goal progress so clear-scene ORCA does not mask regressions.
+
+        Returns:
+            dict[str, Any]: Route-progress state used by the handoff logic and diagnostics.
+        """
+        epsilon = float(self.hybrid_config.route_progress_epsilon)
+        regression_tolerance = float(self.hybrid_config.route_goal_regression_tolerance)
+        stall_limit = max(int(self.hybrid_config.route_stall_cycles_before_sampler), 1)
+
+        observed_progress = 0.0
+        if self._last_goal_distance is not None:
+            observed_progress = self._last_goal_distance - goal_distance
+
+        best_goal_distance = self._best_goal_distance
+        improved = best_goal_distance is None or goal_distance < best_goal_distance - epsilon
+        regressed = (
+            best_goal_distance is not None
+            and goal_distance > best_goal_distance + regression_tolerance
+        )
+
+        if improved:
+            self._best_goal_distance = goal_distance
+            self._route_stall_cycles = 0
+        elif observed_progress <= epsilon:
+            self._route_stall_cycles += 1
+        else:
+            self._route_stall_cycles = 0
+
+        if regressed:
+            self._route_stall_cycles = max(self._route_stall_cycles, stall_limit)
+
+        self._last_goal_distance = goal_distance
+        return {
+            "goal_distance": goal_distance,
+            "best_goal_distance": self._best_goal_distance,
+            "observed_progress": observed_progress,
+            "route_stall_cycles": self._route_stall_cycles,
+            "route_stalled": self._route_stall_cycles >= stall_limit,
+            "route_regressed": regressed,
+        }
+
     @staticmethod
     def _selected_head_from_guard_label(label: str) -> str:
         """Map inherited guard labels to the selected planner head.
@@ -132,6 +180,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         current_min_dist: float,
         primary_eval: dict[str, Any] | None = None,
         sampler_eval: dict[str, Any] | None = None,
+        route_state: dict[str, Any] | None = None,
         note: str | None = None,
     ) -> tuple[float, float]:
         """Persist one planning decision for later diagnostics retrieval.
@@ -147,6 +196,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
             "current_min_dist": self._finite_float(current_min_dist),
             "primary_eval": self._sanitize_eval(primary_eval),
             "sampler_eval": self._sanitize_eval(sampler_eval),
+            "route_state": self._sanitize_eval(route_state),
         }
         if note:
             record["note"] = note
@@ -174,13 +224,16 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return ORCA action unless MPPI is needed for safety or progress repair."""
         robot_pos, _heading, goal, ped_pos, _ped_vel = self._extract_state(observation)
-        if float(np.linalg.norm(goal - robot_pos)) <= float(self.hybrid_config.goal_tolerance):
+        goal_distance = float(np.linalg.norm(goal - robot_pos))
+        route_state = self._update_route_progress(goal_distance)
+        if goal_distance <= float(self.hybrid_config.goal_tolerance):
             return self._record_decision(
                 decision="goal_reached",
                 selected_head="stop",
                 chosen_command=(0.0, 0.0),
                 clear_scene=None,
                 current_min_dist=float("inf"),
+                route_state=route_state,
             )
 
         try:
@@ -195,6 +248,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
                 chosen_command=sampler_command,
                 clear_scene=None,
                 current_min_dist=float("inf"),
+                route_state=route_state,
                 note=type(exc).__name__,
             )
 
@@ -207,6 +261,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         clear_scene = current_min_dist > float(self.hybrid_config.near_field_distance)
         if (
             clear_scene
+            and not bool(route_state["route_stalled"])
             and bool(primary_eval["safe"])
             and float(primary_eval["progress"]) > float(self.hybrid_config.sampler_progress_margin)
         ):
@@ -217,6 +272,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
                 clear_scene=clear_scene,
                 current_min_dist=current_min_dist,
                 primary_eval=primary_eval,
+                route_state=route_state,
             )
 
         try:
@@ -230,6 +286,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
                 clear_scene=clear_scene,
                 current_min_dist=current_min_dist,
                 primary_eval=primary_eval,
+                route_state=route_state,
             )
 
         sampler_eval = self._evaluate_command(observation, sampler_command)
@@ -246,6 +303,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
                 current_min_dist=current_min_dist,
                 primary_eval=primary_eval,
                 sampler_eval=sampler_eval,
+                route_state=route_state,
             )
 
         chosen, guard_label = self.choose_command(observation, primary_command)
@@ -257,6 +315,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
             current_min_dist=current_min_dist,
             primary_eval=primary_eval,
             sampler_eval=sampler_eval,
+            route_state=route_state,
         )
 
 
@@ -290,6 +349,13 @@ def build_hybrid_orca_sampler_build_config(
         obstacle_search_cells=int(guard_raw.get("obstacle_search_cells", 12)),
         sampler_progress_margin=float(
             guard_raw.get("sampler_progress_margin", guard_raw.get("progress_margin", 0.05))
+        ),
+        route_progress_epsilon=float(guard_raw.get("route_progress_epsilon", 0.05)),
+        route_stall_cycles_before_sampler=int(
+            guard_raw.get("route_stall_cycles_before_sampler", 3)
+        ),
+        route_goal_regression_tolerance=float(
+            guard_raw.get("route_goal_regression_tolerance", 0.5)
         ),
     )
 

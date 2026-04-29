@@ -46,6 +46,7 @@ from robot_sf.training.multi_extractor_analysis import (
     load_eval_history,
     sample_efficiency_ratio,
 )
+from robot_sf.training.ppo_diagnostics import DiagnosticPPO
 
 if TYPE_CHECKING:
     from robot_sf.feature_extractors.config import FeatureExtractorConfig
@@ -495,7 +496,6 @@ def _run_sb3_training(
         TODO docstring.
     """
     try:
-        from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import (
             CallbackList,
             CheckpointCallback,
@@ -541,10 +541,13 @@ def _run_sb3_training(
             vec_env_cls=DummyVecEnv,
         )
 
-        model = PPO(
+        diagnostics_path = extractor_dir / "training_diagnostics.jsonl"
+
+        model = DiagnosticPPO(
             "MultiInputPolicy",
             train_env,
             tensorboard_log=str(extractor_dir / "tensorboard"),
+            diagnostics_path=diagnostics_path,
             policy_kwargs=config.get_policy_kwargs(),
             verbose=0,
             device=context.settings.device,
@@ -581,6 +584,9 @@ def _run_sb3_training(
         checkpoints_dir = extractor_dir / "checkpoints"
         if checkpoints_dir.exists() and any(checkpoints_dir.iterdir()):
             artifacts["checkpoints"] = str(checkpoints_dir.relative_to(context.run_dir))
+
+        if diagnostics_path.exists():
+            artifacts["training_diagnostics"] = str(diagnostics_path.relative_to(context.run_dir))
 
         total_parameters = sum(p.numel() for p in model.policy.parameters())
         trainable_parameters = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)

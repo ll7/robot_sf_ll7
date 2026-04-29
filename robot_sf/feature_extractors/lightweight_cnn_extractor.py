@@ -44,6 +44,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         kernel_sizes: list[int] | None = None,
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
+        record_feature_stats: bool = False,
     ):
         """TODO docstring. Document this function.
 
@@ -53,6 +54,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
             kernel_sizes: TODO docstring.
             dropout_rate: TODO docstring.
             drive_hidden_dims: TODO docstring.
+            record_feature_stats: TODO docstring.
         """
         if num_filters is None:
             num_filters = [32, 16]
@@ -107,6 +109,8 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         )
 
         self.ray_extractor = nn.Sequential(*ray_layers)
+        self._record_feature_stats = bool(record_feature_stats)
+        self._latest_feature_stats: dict[str, float] = {}
 
         # Build drive state processing MLP
         drive_layers = []
@@ -118,6 +122,10 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
             )
 
         self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
+
+    def latest_feature_stats(self) -> dict[str, float]:
+        """Return a copy of the most recent forward-pass feature statistics."""
+        return self._latest_feature_stats.copy()
 
     def forward(self, obs: dict) -> th.Tensor:
         """
@@ -131,4 +139,18 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         """
         ray_features = self.ray_extractor(obs[OBS_RAYS])
         drive_features = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
-        return th.cat([ray_features, drive_features], dim=1)
+        combined_features = th.cat([ray_features, drive_features], dim=1)
+
+        if self._record_feature_stats:
+            with th.no_grad():
+                self._latest_feature_stats = {
+                    "ray_mean_abs": float(ray_features.abs().mean().item()),
+                    "ray_std": float(ray_features.std(unbiased=False).item()),
+                    "drive_mean_abs": float(drive_features.abs().mean().item()),
+                    "drive_std": float(drive_features.std(unbiased=False).item()),
+                    "combined_mean_abs": float(combined_features.abs().mean().item()),
+                    "combined_std": float(combined_features.std(unbiased=False).item()),
+                    "combined_max_abs": float(combined_features.abs().max().item()),
+                }
+
+        return combined_features

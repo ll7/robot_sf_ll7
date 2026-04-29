@@ -1,0 +1,28 @@
+# Focused LightweightCNNExtractor reproduction config for issue #835.
+#
+# Reproduces the issue-193 32 K PPO run with the same seed and hardware class,
+# but isolates the lightweight_cnn path and enables training diagnostics.
+
+run:
+  run_id: "issue_835_lightweight_cnn_repro"
+  worker_mode: "single-thread"
+  num_envs: 1
+  total_timesteps: 32000
+  eval_freq: 4000
+  save_freq: 16000
+  n_eval_episodes: 5
+  device: "cuda"
+  seed: 42
+  baseline_extractor: "lightweight_cnn"
+  convergence_fraction: 0.9
+  notes:
+    - "Issue 835: reproduce lightweight_cnn divergence from issue 193"
+    - "Diagnostics enabled: gradient norms and feature statistics"
+
+extractors:
+  - name: "lightweight_cnn"
+    preset: "lightweight_cnn"
+    description: "Issue 835 reproduction path with training diagnostics enabled"
+    expected_resources: "gpu"
+    parameters:
+      record_feature_stats: true

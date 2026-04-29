@@ -1,0 +1,27 @@
+# Local Mac override of the issue-791 leader adapter.
+# Identical to ppo_issue_791_eval_aligned_large_capacity.yaml except device: cpu and
+# predictive_foresight_device: cpu, since this machine has no CUDA. Not for cluster use.
+# Temporary local-verification artifact; do not commit.
+
+model_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+
+device: cpu
+deterministic: true
+
+obs_mode: dict
+
+predictive_foresight_enabled: true
+predictive_foresight_model_id: predictive_proxy_selected_v2_full
+predictive_foresight_device: cpu
+predictive_foresight_max_agents: 16
+predictive_foresight_horizon_steps: 8
+predictive_foresight_rollout_dt: 0.2
+predictive_foresight_near_distance: 0.7
+predictive_foresight_front_corridor_length: 3.0
+predictive_foresight_front_corridor_half_width: 1.0
+
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+
+fallback_to_goal: false

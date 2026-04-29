@@ -9,6 +9,6 @@
 | 2026-04-29 | risk_guarded_ppo_v1 | smoke | 1.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Completes `planner_sanity_simple` across all three smoke seeds. |
 | 2026-04-29 | scenario_adaptive_orca_v1 | smoke | 1.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Family-override execution path now works locally and clears all three smoke seeds. |
 | 2026-04-29 | planner_selector_v1 | smoke | 0.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Runs end to end, but all three smoke seeds timed out with low progress. |
-| 2026-04-29 | mpc_clearance_sampler_v1 | smoke | 0.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Runs end to end, but all three smoke seeds timed out with low progress. |
+| 2026-04-29 | mpc_clearance_sampler_v1 | smoke | 1.0000 | 0.0000 | 0.0000 | n/a | n/a | pass | Increased the candidate open-space speed cap to 1.8 m/s; all three `planner_sanity_simple` smoke seeds now complete without collision or near misses. |
 | 2026-04-29 | risk_guarded_ppo_v1 | nominal_sanity | 0.1667 | 0.2778 | 0.0556 | 0.4167 | 0.0000 | revise | Fails the nominal gate; classic scenarios dominate both collisions and low-progress timeouts. |
 | 2026-04-29 | scenario_adaptive_orca_v1 | nominal_sanity | 0.1667 | 0.0000 | 0.1111 | 0.0000 | 0.0000 | revise | Collision-free but still stalled across classic and Francis subsets; the aggressive retune only increased intrusive near misses and was reverted. |

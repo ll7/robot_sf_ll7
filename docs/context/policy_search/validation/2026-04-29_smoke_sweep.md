@@ -21,7 +21,8 @@ source .venv/bin/activate && uv run python scripts/tools/compare_policy_search_c
 - `scenario_adaptive_orca_v1`: `3/3` smoke successes, `0/3` collisions.
 - `hybrid_orca_sampler_v1`: `0/3` smoke successes, `0/3` collisions, all failures classified as `timeout_low_progress`.
 - `planner_selector_v1`: `0/3` smoke successes, `0/3` collisions, all failures classified as `timeout_low_progress`.
-- `mpc_clearance_sampler_v1`: `0/3` smoke successes, `0/3` collisions, all failures classified as `timeout_low_progress`.
+- `mpc_clearance_sampler_v1`: `0/3` smoke successes in the original sweep, superseded by
+  `2026-04-29_mpc_clearance_sampler_v1_speed_cap_retune.md`.
 
 ## Sweep Artifact
 
@@ -35,7 +36,7 @@ source .venv/bin/activate && uv run python scripts/tools/compare_policy_search_c
 
 Smoke is only an execution gate. It tells us whether a candidate can run cheaply and whether it obviously stalls or collides on the simplest planner-sanity slice.
 
-The current smoke leader set is `risk_guarded_ppo_v1` and `scenario_adaptive_orca_v1`. The other three candidates are structurally integrated but not yet competitive even on the sanity slice because they stall before reaching the goal.
+The current smoke leader set in this sweep was `risk_guarded_ppo_v1` and `scenario_adaptive_orca_v1`. The mpc candidate was later retuned and should be read from the follow-up note rather than this original sweep snapshot.
 
 ## Next Local Priority
 

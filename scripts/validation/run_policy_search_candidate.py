@@ -288,6 +288,16 @@ def _display_path(path: Path | None) -> str:
         return path.as_posix()
 
 
+def _format_optional_float(value: Any) -> str:
+    """Format optional numeric report fields without coupling unrelated columns."""
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
 def _write_markdown_report(
     *,
     docs_root: Path,
@@ -344,12 +354,7 @@ def _write_markdown_report(
     lines.append(
         f"| {summary.get('episodes', 0)} | {float(summary.get('success_rate', 0.0)):.4f} | "
         f"{float(summary.get('collision_rate', 0.0)):.4f} | {float(summary.get('near_miss_rate', 0.0)):.4f} | "
-        f"{float(mean_min_distance):.4f} | {float(mean_avg_speed):.4f} |"
-        if mean_min_distance is not None and mean_avg_speed is not None
-        else (
-            f"| {summary.get('episodes', 0)} | {float(summary.get('success_rate', 0.0)):.4f} | "
-            f"{float(summary.get('collision_rate', 0.0)):.4f} | {float(summary.get('near_miss_rate', 0.0)):.4f} | n/a | n/a |"
-        )
+        f"{_format_optional_float(mean_min_distance)} | {_format_optional_float(mean_avg_speed)} |"
     )
     lines.extend(
         [

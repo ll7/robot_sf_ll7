@@ -8,6 +8,7 @@ import yaml
 
 from scripts.validation.run_policy_search_candidate import (
     _deep_merge,
+    _format_optional_float,
     _prepare_scenarios_for_inline_run,
     decide_stage_status,
     load_candidate_definition,
@@ -118,3 +119,10 @@ def test_decide_stage_status_enforces_nominal_gate() -> None:
         )
         == "revise"
     )
+
+
+def test_format_optional_float_keeps_present_values() -> None:
+    """Optional report fields should not hide valid values when a sibling field is missing."""
+    assert _format_optional_float(None) == "n/a"
+    assert _format_optional_float("bad") == "n/a"
+    assert _format_optional_float(1.23456) == "1.2346"

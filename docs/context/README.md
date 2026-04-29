@@ -98,6 +98,9 @@ knowledge, not every transient iteration detail.
 * [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
   follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
   config-first safety-reward mitigation candidate.
+* [Issue #850 SLURM Rerun Handoff](./issue_850_slurm_rerun_handoff.md)
+  Queue-ready cluster handoff for reconstructing the deleted issue-193 artifacts and launching the
+  issue-850 reward-v3 follow-up runs.
 
 ## Planner Integration Notes
 

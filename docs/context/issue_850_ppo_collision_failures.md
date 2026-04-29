@@ -66,7 +66,7 @@ configs/training/ppo/feature_extractor_candidates_12m_issue850_reward_v3.yaml
 That matrix keeps the issue-193 fixed-candidate comparison surface and applies the same
 `route_completion_v3` reward family to:
 
-* `dyn_large_med` seeds `123`,   `231`,   `1337`, 
+* `dyn_large_med` seeds `123`,    `231`,    `1337`, 
 * `dyn_default_s1337`, 
 * `lc_small_med_s231`.
 
@@ -116,6 +116,9 @@ That means recovering the original issue-193 checkpoints now requires one of:
 * restoring the missing `output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db`
   and any neighboring training artifact directories from backup, 
 * or re-running the fixed candidate matrix from the committed config surface.
+
+For the current cluster rerun path, see
+`docs/context/issue_850_slurm_rerun_handoff.md` .
 
 ## Validation
 

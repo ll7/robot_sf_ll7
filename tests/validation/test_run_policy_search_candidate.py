@@ -9,6 +9,7 @@ import yaml
 from scripts.validation.run_policy_search_candidate import (
     _deep_merge,
     _format_optional_float,
+    _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
     decide_stage_status,
     load_candidate_definition,
@@ -17,6 +18,7 @@ from scripts.validation.run_policy_search_candidate import (
 
 
 def test_deep_merge_recurses_without_mutating_inputs() -> None:
+    """Nested config overrides should merge without mutating the base mapping."""
     base = {"a": {"b": 1, "c": 2}, "d": 3}
     overrides = {"a": {"c": 9}, "e": 4}
 
@@ -29,6 +31,7 @@ def test_deep_merge_recurses_without_mutating_inputs() -> None:
 def test_load_candidate_definition_merges_base_config_and_params(
     tmp_path: Path,
 ) -> None:
+    """Candidate definitions should inherit base config and apply params."""
     base_cfg = tmp_path / "base.yaml"
     candidate_cfg = tmp_path / "candidate.yaml"
     registry = tmp_path / "registry.yaml"
@@ -67,6 +70,7 @@ def test_load_candidate_definition_merges_base_config_and_params(
 
 
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
+    """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(
         [
             {"name": "classic_bottleneck_medium"},
@@ -81,6 +85,7 @@ def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> No
 def test_prepare_scenarios_for_inline_run_resolves_relative_paths(
     tmp_path: Path,
 ) -> None:
+    """Inline scenario execution should resolve paths relative to the matrix."""
     scenario_root = tmp_path / "configs" / "scenarios"
     scenario_root.mkdir(parents=True)
     map_path = tmp_path / "maps" / "planner_sanity_open.svg"
@@ -100,7 +105,44 @@ def test_prepare_scenarios_for_inline_run_resolves_relative_paths(
     assert Path(prepared[0]["map_file"]) == map_path.resolve()
 
 
+def test_load_stage_scenarios_applies_inline_seed_list(tmp_path: Path) -> None:
+    """Stage-level seed_list should override scenario defaults for inline runs."""
+    matrix = tmp_path / "matrix.yaml"
+    map_path = tmp_path / "maps" / "open.svg"
+    map_path.parent.mkdir()
+    map_path.write_text("<svg />", encoding="utf-8")
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "planner_sanity_simple",
+                        "map_file": "maps/open.svg",
+                        "seeds": [101, 102, 103],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scenarios = _load_stage_scenarios(matrix, seed_manifest=None, seed_list=[111])
+
+    assert isinstance(scenarios, list)
+    assert scenarios[0]["seeds"] == [111]
+    assert Path(scenarios[0]["map_file"]) == map_path.resolve()
+
+
+def test_load_stage_scenarios_preserves_path_without_seed_override(tmp_path: Path) -> None:
+    """Stages without inline seed overrides can keep the matrix path fast path."""
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text("scenarios: []\n", encoding="utf-8")
+
+    assert _load_stage_scenarios(matrix, seed_manifest=None, seed_list=None) == matrix
+
+
 def test_decide_stage_status_enforces_nominal_gate() -> None:
+    """Nominal stages should enforce configured success and collision gates."""
     stage_cfg = {"gate": {"min_success_rate": 0.8, "max_collision_rate": 0.02}}
 
     assert (

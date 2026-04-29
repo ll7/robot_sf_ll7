@@ -7,11 +7,10 @@ import argparse
 import json
 import subprocess
 import time
-from collections.abc import Mapping
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -33,8 +32,12 @@ _DEFAULT_FUNNEL = Path("configs/policy_search/funnel.yaml")
 _DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
 _DEFAULT_DOCS_ROOT = Path("docs/context/policy_search")
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for one candidate-stage run."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", required=True)
     parser.add_argument(
@@ -99,6 +102,7 @@ def load_candidate_definition(
     registry_path: Path,
     candidate_name: str,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], Path]:
+    """Load one registered candidate and return its merged runtime config."""
     registry = _load_yaml(registry_path)
     candidates = registry.get("candidates")
     if not isinstance(candidates, dict) or candidate_name not in candidates:
@@ -128,6 +132,7 @@ def load_candidate_definition(
 def split_scenarios_by_family(
     scenarios: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
+    """Group loaded scenario mappings by inferred policy-search family."""
     grouped: dict[str, list[dict[str, Any]]] = {}
     for scenario in scenarios:
         family = infer_scenario_family(scenario)
@@ -158,6 +163,7 @@ def _prepare_scenarios_for_inline_run(
 
 
 def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dict[str, Any]) -> str:
+    """Convert a stage summary into the registry/report decision label."""
     if stage_name == "smoke":
         return "pass" if int(summary.get("episodes", 0)) > 0 else "revise"
     gate = stage_cfg.get("gate")
@@ -188,9 +194,19 @@ def _git_hash() -> str | None:
 
 
 def _load_stage_scenarios(
-    stage_matrix: Path, seed_manifest: Path | None
+    stage_matrix: Path,
+    seed_manifest: Path | None,
+    seed_list: list[int] | None = None,
 ) -> Path | list[dict[str, Any]]:
+    """Resolve the scenario surface for a stage, including explicit seed overrides."""
     if seed_manifest is None:
+        if seed_list:
+            scenarios = load_scenarios(stage_matrix)
+            base_dir = stage_matrix.parent.resolve()
+            prepared = _prepare_scenarios_for_inline_run(scenarios, scenario_root=base_dir)
+            for scenario in prepared:
+                scenario["seeds"] = list(seed_list)
+            return prepared
         return stage_matrix
     manifest = load_seed_manifest(seed_manifest)
     return make_subset_scenarios(stage_matrix, manifest)
@@ -214,7 +230,7 @@ def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:
     )
 
 
-def _run_stage_eval(
+def _run_stage_eval(  # noqa: PLR0913
     *,
     scenarios_or_path: Path | list[dict[str, Any]],
     algo: str,
@@ -298,7 +314,7 @@ def _format_optional_float(value: Any) -> str:
         return "n/a"
 
 
-def _write_markdown_report(
+def _write_markdown_report(  # noqa: PLR0913
     *,
     docs_root: Path,
     candidate_name: str,
@@ -405,6 +421,7 @@ def _write_markdown_report(
 
 
 def main() -> int:
+    """Run the requested candidate stage and emit JSON plus Markdown artifacts."""
     args = parse_args()
     funnel = _load_yaml(args.funnel_config)
     stages = funnel.get("stages")
@@ -432,6 +449,12 @@ def main() -> int:
     if stage_matrix is None:
         raise ValueError(f"Stage '{args.stage}' is missing scenario_matrix")
     seed_manifest = _resolve_path(args.funnel_config.parent, stage_cfg.get("seed_manifest"))
+    seed_list_raw = stage_cfg.get("seed_list")
+    seed_list = (
+        [int(seed) for seed in seed_list_raw]
+        if isinstance(seed_list_raw, list) and seed_list_raw
+        else None
+    )
     horizon = int(args.horizon if args.horizon is not None else stage_cfg.get("horizon", 120))
     dt = float(args.dt if args.dt is not None else stage_cfg.get("dt", 0.1))
     workers = int(args.workers if args.workers is not None else stage_cfg.get("workers", 1))
@@ -441,7 +464,7 @@ def main() -> int:
         args.output_dir or Path("output/policy_search") / args.candidate / args.stage / "latest"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    scenarios_or_path = _load_stage_scenarios(stage_matrix, seed_manifest)
+    scenarios_or_path = _load_stage_scenarios(stage_matrix, seed_manifest, seed_list)
 
     family_overrides = candidate_payload.get("family_overrides")
     family_runs: dict[str, Any] = {}

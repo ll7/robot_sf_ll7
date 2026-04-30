@@ -72,6 +72,21 @@ def test_hybrid_rule_v0_speed_cap_near_humans() -> None:
     assert last["nearest_pedestrian_distance"] < planner.config.slow_distance_human
 
 
+def test_hybrid_rule_structured_pedestrian_velocities_convert_to_world_frame() -> None:
+    """Structured SocNav pedestrian velocities are ego-frame and must be rotated."""
+    planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
+
+    state = planner._extract_state(
+        _obs(
+            heading=np.pi / 2.0,
+            ped_positions=[(2.0, 2.0)],
+            ped_velocities=[(1.0, 0.0)],
+        )
+    )
+
+    assert np.allclose(state["ped_vel"][0], np.array([0.0, 1.0]), atol=1e-9)
+
+
 def test_hybrid_rule_v0_emergency_stop_when_all_candidates_rejected() -> None:
     """Hard dynamic collision filtering should fail closed to an emergency stop."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
@@ -83,6 +98,112 @@ def test_hybrid_rule_v0_emergency_stop_when_all_candidates_rejected() -> None:
     assert diagnostics["fallback_count"] == 1
     assert diagnostics["last_decision"]["planner_mode"] == "EMERGENCY_STOP"
     assert diagnostics["rejection_counts"]["dynamic_collision"] > 0
+
+
+def test_hybrid_rule_v0_rejects_static_footprint_clearance(monkeypatch) -> None:
+    """Static filtering should account for robot radius, not just occupied center cells."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    state = planner._extract_state(_obs(speed=0.2))
+    candidate = planner._generate_candidates(state, speed_cap=cfg.max_linear_speed)[0]
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.2)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=_obs(speed=0.2),
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation == {"accepted": False, "reason": "static_clearance"}
+
+
+def test_hybrid_rule_route_guide_adds_candidate_source(monkeypatch) -> None:
+    """Route guidance should contribute an explicit candidate when enabled."""
+    cfg = HybridRuleLocalPlannerConfig(route_guide_enabled=True)
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    monkeypatch.setattr(planner._route_guide, "plan", lambda observation: (0.4, 0.2))
+    state = planner._extract_state(_obs())
+
+    candidates = planner._generate_candidates(state, speed_cap=cfg.max_linear_speed)
+
+    assert any(candidate.source == "route_guide" for candidate in candidates)
+
+
+def test_hybrid_rule_static_recovery_reorients_when_safe() -> None:
+    """Recovery mode should rotate instead of freezing when static rejection dominates."""
+    cfg = HybridRuleLocalPlannerConfig(recovery_enabled=True, recovery_reorient_angular_speed=0.5)
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    allowed = planner._static_recovery_allowed(
+        {"static_clearance": 5, "dynamic_collision": 1},
+        nearest_ped=float("inf"),
+    )
+
+    assert allowed is True
+
+
+def test_hybrid_rule_deadlock_escape_bonus_prefers_rotation_when_stalled() -> None:
+    """Recovery scoring should favor rotation over full stop after stalled progress."""
+    cfg = HybridRuleLocalPlannerConfig(
+        recovery_enabled=True,
+        deadlock_escape_weight=1.0,
+        linear_samples=2,
+        angular_samples=3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    state = planner._extract_state(_obs(goal=(4.0, 0.0)))
+    candidates = planner._generate_candidates(state, speed_cap=cfg.max_linear_speed)
+    stop_eval = planner._evaluate_candidate(
+        candidate=next(
+            candidate
+            for candidate in candidates
+            if candidate.linear == 0.0 and candidate.angular == 0.0
+        ),
+        observation=_obs(goal=(4.0, 0.0)),
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+    rotate_eval = planner._evaluate_candidate(
+        candidate=next(
+            candidate
+            for candidate in candidates
+            if candidate.source == "rotate_left"
+        ),
+        observation=_obs(goal=(4.0, 0.0)),
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert stop_eval["terms"]["deadlock_escape"] == 0.0
+    assert rotate_eval["terms"]["deadlock_escape"] == 1.0
+    assert rotate_eval["score"] > stop_eval["score"]
+
+
+def test_hybrid_rule_static_recovery_blocks_near_pedestrian() -> None:
+    """Recovery should not rotate aggressively when a pedestrian is very close."""
+    cfg = HybridRuleLocalPlannerConfig(recovery_enabled=True)
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    allowed = planner._static_recovery_allowed(
+        {"static_clearance": 5, "dynamic_collision": 0},
+        nearest_ped=0.7,
+    )
+
+    assert allowed is False
 
 
 def test_hybrid_rule_config_builder_and_variant_guard() -> None:
@@ -97,6 +218,12 @@ def test_hybrid_rule_config_builder_and_variant_guard() -> None:
     assert cfg.max_linear_speed == pytest.approx(1.4)
     assert cfg.linear_samples == 5
     assert cfg.lookahead_distances == (0.4, 0.8)
+
+    v3_cfg = build_hybrid_rule_local_planner_config(
+        {"planner_variant": "hybrid_rule_v3_teb_like_rollout"}
+    )
+    assert v3_cfg.planner_variant == "hybrid_rule_v3_teb_like_rollout"
+    HybridRuleLocalPlannerAdapter(v3_cfg)
 
     with pytest.raises(ValueError, match="Unsupported hybrid rule planner variant"):
         HybridRuleLocalPlannerAdapter(

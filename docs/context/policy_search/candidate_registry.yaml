@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-04-29
+updated_at: 2026-04-30
 funnel_config: configs/policy_search/funnel.yaml
 promotion_gates: configs/policy_search/promotion_gates.yaml
 
@@ -15,6 +15,67 @@ candidates:
       safety filtering and score diagnostics should provide a transparent
       non-learning baseline for later social, ORCA, recovery, and ensemble
       mechanisms.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v3_teb_like_rollout:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_teb_like_rollout.yaml
+    hypothesis: >
+      Adding an occupancy-grid route-guide candidate to the safety-filtered DWA
+      scorer should recover progress in static/corridor local minima without
+      giving back the collision improvement from the static footprint filter.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v4_recovery_aware:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v4_recovery_aware.yaml
+    hypothesis: >
+      Adding a narrow static-deadlock recovery mode to the route-guided hybrid
+      planner should convert some safe low-progress stalls into goal progress
+      without weakening dynamic-agent fail-closed behavior.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v3_fast_progress:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml
+    hypothesis: >
+      Raising the manually specified speed envelope to the 3.0 m/s robot limit
+      used elsewhere in the repository should reduce low-progress timeouts on
+      long route slices while preserving the v3 static and dynamic safety
+      filters.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v3_dynamic_relaxed:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_dynamic_relaxed.yaml
+    hypothesis: >
+      Shortening only the hard dynamic collision horizon should reduce freezing
+      in doorway and crossing scenes while retaining hard radius-based dynamic
+      collision rejection, static footprint clearance, and route-guided progress.
     required_stages:
       - smoke
       - nominal_sanity

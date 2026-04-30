@@ -1,4 +1,4 @@
-# Candidate Report: hybrid_rule_v0_minimal (smoke)
+# Candidate Report: hybrid_rule_v3_teb_like_rollout (smoke)
 
 ## Decision
 
@@ -6,7 +6,7 @@ pass
 
 ## Hypothesis
 
-A clean deterministic DWA-style hybrid-rule control variant with explicit safety filtering and score diagnostics should provide a transparent non-learning baseline for later social, ORCA, recovery, and ensemble mechanisms.
+Adding an occupancy-grid route-guide candidate to the safety-filtered DWA scorer should recover progress in static/corridor local minima without giving back the collision improvement from the static footprint filter.
 
 
 ## Evaluation Scope
@@ -15,7 +15,7 @@ A clean deterministic DWA-style hybrid-rule control variant with explicit safety
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v0_minimal_a1_static_smoke/summary.json`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_teb_like_rollout_smoke_final/summary.json`
 - Git commit: `93edf63efb9a5d91095387f157bc11ae072dbd74`
 
 ## Aggregate Results

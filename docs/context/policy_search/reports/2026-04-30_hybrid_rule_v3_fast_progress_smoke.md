@@ -1,4 +1,4 @@
-# Candidate Report: hybrid_rule_v0_minimal (smoke)
+# Candidate Report: hybrid_rule_v3_fast_progress (smoke)
 
 ## Decision
 
@@ -6,7 +6,7 @@ pass
 
 ## Hypothesis
 
-A clean deterministic DWA-style hybrid-rule control variant with explicit safety filtering and score diagnostics should provide a transparent non-learning baseline for later social, ORCA, recovery, and ensemble mechanisms.
+Raising the manually specified speed envelope to the 3.0 m/s robot limit used elsewhere in the repository should reduce low-progress timeouts on long route slices while preserving the v3 static and dynamic safety filters.
 
 
 ## Evaluation Scope
@@ -15,14 +15,14 @@ A clean deterministic DWA-style hybrid-rule control variant with explicit safety
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v0_minimal_a1_static_smoke/summary.json`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_fast_progress_smoke/summary.json`
 - Git commit: `93edf63efb9a5d91095387f157bc11ae072dbd74`
 
 ## Aggregate Results
 
 | Episodes | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.9082 |
+| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.8604 |
 
 ## Scenario-Family Split
 

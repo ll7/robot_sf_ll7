@@ -15,9 +15,17 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
-_SUPPORTED_VARIANTS = {"hybrid_rule_v0_minimal"}
+_SUPPORTED_VARIANTS = {
+    "hybrid_rule_v0_minimal",
+    "hybrid_rule_v1_dwa_social",
+    "hybrid_rule_v2_orca_guided",
+    "hybrid_rule_v3_teb_like_rollout",
+    "hybrid_rule_v4_recovery_aware",
+    "hybrid_rule_v5_ensemble_selector",
+}
 _EPS = 1e-9
 
 
@@ -46,6 +54,26 @@ def _finite_or_none(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if np.isfinite(number) else None
+
+
+def _ego_velocity_to_world(velocity: np.ndarray, heading: float) -> np.ndarray:
+    """Convert robot-ego-frame planar velocities to world-frame velocities.
+
+    SocNav structured observations report pedestrian velocities in the robot ego
+    frame while positions are world-frame. Dynamic collision prediction requires
+    both quantities in the same frame.
+
+    Returns:
+        np.ndarray: World-frame velocity array with shape ``(N, 2)``.
+    """
+    if velocity.size == 0:
+        return velocity
+    cos_h = float(np.cos(heading))
+    sin_h = float(np.sin(heading))
+    world = np.empty_like(velocity, dtype=float)
+    world[:, 0] = cos_h * velocity[:, 0] - sin_h * velocity[:, 1]
+    world[:, 1] = sin_h * velocity[:, 0] + cos_h * velocity[:, 1]
+    return world
 
 
 @dataclass(frozen=True)
@@ -110,6 +138,7 @@ class HybridRuleLocalPlannerConfig:
     heading_smoothness_weight: float = 0.4
     velocity_smoothness_weight: float = 0.3
     control_effort_weight: float = 0.2
+    deadlock_escape_weight: float = 0.0
     freezing_weight: float = 0.8
     oscillation_weight: float = 0.5
 
@@ -117,6 +146,14 @@ class HybridRuleLocalPlannerConfig:
     goal_far_distance: float = 0.8
     oscillation_window: int = 6
     top_k_diagnostics: int = 5
+    deadlock_progress_threshold: float = 0.05
+    deadlock_rotation_threshold: float = 0.15
+    route_guide_enabled: bool = False
+    route_guide_obstacle_inflation_cells: int = 3
+    route_guide_waypoint_lookahead_cells: int = 5
+    route_guide_clearance_penalty_weight: float = 0.5
+    recovery_enabled: bool = False
+    recovery_reorient_angular_speed: float = 0.6
 
 
 class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -131,6 +168,24 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 f"Unsupported hybrid rule planner variant "
                 f"'{self.config.planner_variant}'. Supported variants: {supported}."
             )
+        self._route_guide = (
+            GridRoutePlannerAdapter(
+                GridRoutePlannerConfig(
+                    max_linear_speed=float(self.config.max_linear_speed),
+                    max_angular_speed=float(self.config.max_angular_speed),
+                    goal_tolerance=float(self.config.goal_tolerance),
+                    waypoint_lookahead_cells=int(
+                        self.config.route_guide_waypoint_lookahead_cells
+                    ),
+                    obstacle_inflation_cells=int(self.config.route_guide_obstacle_inflation_cells),
+                    clearance_penalty_weight=float(
+                        self.config.route_guide_clearance_penalty_weight
+                    ),
+                )
+            )
+            if bool(self.config.route_guide_enabled)
+            else None
+        )
         self.reset()
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -207,6 +262,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     constant_values=0.0,
                 )
             ped_vel = ped_vel[:ped_count]
+        if "robot" in observation:
+            ped_vel = _ego_velocity_to_world(ped_vel, heading)
         ped_radius = float(
             self._as_1d_float(
                 ped_state.get("radius", [self.config.pedestrian_radius_default]),
@@ -230,6 +287,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "robot_radius": robot_radius,
             "ped_radius": ped_radius,
             "dt": dt,
+            "observation": observation,
         }
 
     def _nearest_ped_distance(self, robot_pos: np.ndarray, ped_pos: np.ndarray) -> float:
@@ -318,6 +376,25 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                         f"path_follow_{lookahead:.1f}m",
                     )
                 )
+
+        if self._route_guide is not None:
+            try:
+                route_linear, route_angular = self._route_guide.plan(state["observation"])
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+                route_linear, route_angular = 0.0, 0.0
+            candidates.append(
+                HybridRuleCandidate(
+                    float(np.clip(route_linear, 0.0, speed_cap)),
+                    float(
+                        np.clip(
+                            route_angular,
+                            -float(self.config.max_angular_speed),
+                            float(self.config.max_angular_speed),
+                        )
+                    ),
+                    "route_guide",
+                )
+            )
 
         candidates.extend(
             [
@@ -453,6 +530,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         state: dict[str, Any],
         speed_cap: float,
         nearest_ped: float,
+        progress_windows: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         """Filter and score one candidate command.
 
@@ -504,6 +582,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
+            hard_static_clearance = float(state["robot_radius"]) + float(
+                self.config.hard_safety_margin
+            )
+            if (
+                t <= float(self.config.hard_collision_horizon)
+                and min_static_clearance <= hard_static_clearance
+            ):
+                return {"accepted": False, "reason": "static_clearance"}
 
             if ped_pos.size > 0:
                 ped_future = ped_pos + ped_vel * t
@@ -553,6 +639,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         velocity_delta = abs(candidate.linear - float(state["current_speed"]))
         angular_delta = abs(candidate.angular - float(self._last_command[1]))
+        progress_windows = progress_windows or {}
+        stalled_progress = float(progress_windows.get("3s", 0.0)) <= float(
+            self.config.deadlock_progress_threshold
+        )
+        deadlock_escape = (
+            1.0
+            if bool(self.config.recovery_enabled)
+            and stalled_progress
+            and start_dist > float(self.config.goal_far_distance)
+            and nearest_ped >= float(self.config.slow_distance_human)
+            and candidate.linear <= float(self.config.freezing_speed_threshold)
+            and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
+            else 0.0
+        )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
             "path_alignment": float(np.cos(heading_error)),
@@ -577,6 +677,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and start_dist > float(self.config.goal_far_distance)
             else 0.0,
             "oscillation_penalty": self._oscillation_penalty(candidate.angular),
+            "deadlock_escape": deadlock_escape,
         }
         score = (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
@@ -588,6 +689,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.heading_smoothness_weight) * terms["heading_smoothness"]
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
+            + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
@@ -652,6 +754,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 state=state,
                 speed_cap=speed_cap,
                 nearest_ped=nearest_ped,
+                progress_windows=progress_windows,
             )
             if bool(evaluation.get("accepted")):
                 accepted.append(evaluation)
@@ -677,9 +780,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         else:
             self._fallback_count += 1
-            command = (0.0, 0.0)
             mode = "EMERGENCY_STOP"
             source = "all_candidates_rejected"
+            command = (0.0, 0.0)
+            if self._static_recovery_allowed(rejection_counts, nearest_ped):
+                goal_vec = goal - robot_pos
+                goal_heading = float(np.arctan2(goal_vec[1], goal_vec[0]))
+                heading_error = _wrap_angle(goal_heading - float(state["heading"]))
+                turn_sign = 1.0 if heading_error >= 0.0 else -1.0
+                command = (
+                    0.0,
+                    float(turn_sign * abs(float(self.config.recovery_reorient_angular_speed))),
+                )
+                mode = "REORIENT"
+                source = "static_reorient"
             score = 0.0
             terms = {"freezing_penalty": 1.0}
             nearest_static = self._min_obstacle_clearance(robot_pos, observation)
@@ -706,6 +820,24 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
         )
         return command
+
+    def _static_recovery_allowed(
+        self, rejection_counts: Counter[str], nearest_ped: float
+    ) -> bool:
+        """Return whether a rotate-in-place static recovery is safe enough to try.
+
+        Returns:
+            bool: True when static-clearance rejection dominates and no pedestrian is too close.
+        """
+        if not bool(self.config.recovery_enabled):
+            return False
+        if nearest_ped < float(self.config.slow_distance_human):
+            return False
+        static_rejections = int(rejection_counts.get("static_clearance", 0)) + int(
+            rejection_counts.get("static_collision", 0)
+        )
+        dynamic_rejections = int(rejection_counts.get("dynamic_collision", 0))
+        return static_rejections > 0 and static_rejections >= dynamic_rejections
 
     def _record_decision(  # noqa: PLR0913
         self,

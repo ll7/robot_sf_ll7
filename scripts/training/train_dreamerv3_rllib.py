@@ -853,6 +853,15 @@ def _json_safe_scalar(value: Any) -> Any:
     return value
 
 
+def _json_safe_value(value: Any) -> Any:
+    """Recursively convert nested values into strict-JSON-safe primitives."""
+    if isinstance(value, dict):
+        return {key: _json_safe_value(nested) for key, nested in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe_value(nested) for nested in value]
+    return _json_safe_scalar(value)
+
+
 def _is_finite_scalar(value: Any) -> bool:
     """Return True when value is an int/float and finite."""
     return isinstance(value, int | float) and math.isfinite(float(value))
@@ -1212,7 +1221,7 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     """Write JSON payload with stable formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+        json.dump(_json_safe_value(payload), handle, allow_nan=False, indent=2, sort_keys=True)
         handle.write("\n")
 
 

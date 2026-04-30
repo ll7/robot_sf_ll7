@@ -4,6 +4,22 @@ funnel_config: configs/policy_search/funnel.yaml
 promotion_gates: configs/policy_search/promotion_gates.yaml
 
 candidates:
+  hybrid_rule_v0_minimal:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v0_minimal.yaml
+    hypothesis: >
+      A clean deterministic DWA-style hybrid-rule control variant with explicit
+      safety filtering and score diagnostics should provide a transparent
+      non-learning baseline for later social, ORCA, recovery, and ensemble
+      mechanisms.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
   hybrid_orca_sampler_v1:
     status: implemented
     family: hybrid_model_based

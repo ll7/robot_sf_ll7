@@ -80,6 +80,10 @@ from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleLocalPlannerAdapter,
+    build_hybrid_rule_local_planner_config,
+)
 from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
@@ -363,6 +367,12 @@ def _build_adapter_policy(
     _attach_planner_reset(_policy, adapter)
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
 
     return _policy, meta
 
@@ -1123,6 +1133,20 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
             adapter=adapter,
             adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+        adapter = HybridRuleLocalPlannerAdapter(
+            config=build_hybrid_rule_local_planner_config(algo_config)
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
         )

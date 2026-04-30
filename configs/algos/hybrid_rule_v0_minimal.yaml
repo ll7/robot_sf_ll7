@@ -1,0 +1,69 @@
+# Hybrid rule local planner, v0 minimal DWA-style variant.
+#
+# Constants are manually specified. Units:
+# - linear speed: m/s
+# - angular speed: rad/s
+# - acceleration: m/s^2 or rad/s^2
+# - distances: m
+# - horizons and dt: s
+allow_testing_algorithms: true
+planner_variant: hybrid_rule_v0_minimal
+
+# Differential-drive-friendly open-space cap. The 2.0 m/s value keeps the
+# minimal planner from failing the open sanity route solely because the smoke
+# horizon is short; benchmark kinematics projection still bounds execution when
+# a scenario-specific robot has lower limits.
+max_linear_speed: 2.0
+max_angular_speed: 1.2
+max_linear_accel: 2.0
+max_linear_decel: 2.5
+max_angular_accel: 4.0
+control_period: 0.6
+
+# Short horizon keeps v0 reactive and cheap; later variants may add longer skeleton rollouts.
+rollout_dt: 0.2
+rollout_horizon: 1.6
+hard_collision_horizon: 1.2
+soft_prediction_horizon: 3.0
+goal_tolerance: 0.25
+
+linear_samples: 7
+angular_samples: 9
+lookahead_distances: [0.5, 1.0, 1.5, 2.0]
+
+robot_radius_default: 0.3
+pedestrian_radius_default: 0.3
+hard_safety_margin: 0.05
+desired_static_clearance: 0.7
+desired_dynamic_clearance: 0.9
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+
+# Manual social speed caps: stop/creep within 0.5m, very slow within 1m,
+# moderate speed within 2m, otherwise full speed.
+stop_distance_human: 0.5
+slow_distance_human: 1.0
+moderate_distance_human: 2.0
+very_slow_speed: 0.15
+moderate_speed: 0.6
+near_human_angular_limit_distance: 0.8
+near_human_max_angular_speed: 0.7
+
+# Normalized scoring weights. Positive clearance and progress terms are separated
+# from hard collision rejection.
+goal_progress_weight: 4.0
+path_alignment_weight: 0.8
+speed_preference_weight: 0.6
+static_clearance_weight: 1.5
+dynamic_clearance_weight: 1.8
+ttc_weight: 0.8
+heading_smoothness_weight: 0.4
+velocity_smoothness_weight: 0.3
+control_effort_weight: 0.2
+freezing_weight: 0.8
+oscillation_weight: 0.5
+
+freezing_speed_threshold: 0.05
+goal_far_distance: 0.8
+oscillation_window: 6
+top_k_diagnostics: 5

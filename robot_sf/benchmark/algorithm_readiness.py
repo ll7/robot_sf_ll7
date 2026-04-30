@@ -234,6 +234,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="hybrid_rule_local_planner",
+        tier="experimental",
+        aliases=("hybrid_rule_local_planner", "hybrid_rule_v0_minimal"),
+        note="Deterministic hybrid-rule local planner family; v0 is minimal DWA-style.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="safety_barrier",
         tier="experimental",
         aliases=("safety_barrier",),

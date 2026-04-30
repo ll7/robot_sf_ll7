@@ -27,6 +27,41 @@ uv run pre-commit install
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
 
+### Fresh linked-worktree bootstrap
+
+When creating a new linked worktree, bootstrap the local machine context before using Python tools.
+You can detect a linked worktree because `.git` is a file that points into
+`<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to
+the main checkout's `.git` directory instead of the worktree-local Git dir.
+
+Treat the worktree as fresh only if both `local.machine.md` and `.venv` are absent. If either
+already exists, assume the worktree has already been bootstrapped and reuse the existing setup.
+
+A cheap fresh-worktree check is:
+
+```bash
+[ "$(git rev-parse --git-common-dir)" != "$(git rev-parse --git-dir)" ] \
+  && [ ! -e local.machine.md ] \
+  && [ ! -d .venv ]
+```
+
+Use this order for a fresh worktree:
+
+```bash
+MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+ln -s ../../robot_sf_ll7/local.machine.md .
+uv sync --all-extras
+source .venv/bin/activate
+```
+
+Notes:
+
+- The `ln -s ../../robot_sf_ll7/local.machine.md .` example assumes the common layout used in this
+  repository, where linked worktrees live next to the main checkout under a sibling directory.
+- If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
+- Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
+  sync across worktrees.
+
 ### Critical dependencies and setup: Fast-pysf integration
 
 The `fast-pysf/` directory contains the optimized SocialForce physics engine and is now integrated as a **git subtree** (previously a submodule). After cloning the repository, the fast-pysf code is automatically available—no additional initialization steps required.

@@ -39,6 +39,26 @@ Execution rules:
 - If no local machine context exists, use conservative defaults and repository-safe commands.
 - Never store secrets in local machine context files.
 
+## Fresh Worktree Bootstrap
+
+When working in a linked Git worktree, detect bootstrap state before running expensive commands.
+
+- Treat the checkout as a linked worktree when `.git` is a file pointing into `.git/worktrees/...`,
+  or when `git rev-parse --git-common-dir` resolves to a different path than
+  `git rev-parse --git-dir`.
+- Treat the worktree as fresh only when that linked-worktree signal is present and the root is
+  missing both `local.machine.md` and `.venv` (plus any other team-specific initialized marker).
+  If either already exists, assume bootstrap has already happened and reuse the existing setup.
+- In a fresh worktree, find the main repository root from the common Git dir before bootstrapping:
+  `MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"`.
+- If `local.machine.md` is absent in the worktree and present in the main repository root, create a
+  symlink instead of copying the file. Typical sibling-worktree example:
+  `ln -s ../../robot_sf_ll7/local.machine.md .`
+- After the machine-context symlink is in place, run `uv sync --all-extras`, then
+  `source .venv/bin/activate` before using Python tooling.
+- Do not create divergent per-worktree machine context files unless the worktree really needs
+  machine-specific behavior that should not be inherited from the main checkout.
+
 ## Knowledge Capture & Context Notes
 
 Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump

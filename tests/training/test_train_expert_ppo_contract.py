@@ -332,8 +332,8 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
     assert payload["eval_sec_per_checkpoint"] == 3.0
 
 
-def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path) -> None:
-    """Evaluation should emit sparse phase markers so long reset-heavy runs remain readable."""
+def _capture_evaluate_policy_info_logs(monkeypatch, tmp_path: Path, *, episodes: int) -> list[str]:
+    """Run a fake PPO evaluation and capture info logs."""
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
@@ -371,7 +371,7 @@ def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path
         ),
         evaluation=EvaluationSchedule(
             frequency_episodes=0,
-            evaluation_episodes=12,
+            evaluation_episodes=episodes,
             step_schedule=((None, 60_000),),
             randomize_seeds=False,
         ),
@@ -397,9 +397,29 @@ def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path
         eval_step=60_000,
     )
 
+    return messages
+
+
+def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path) -> None:
+    """Evaluation should emit sparse phase markers so long reset-heavy runs remain readable."""
+    messages = _capture_evaluate_policy_info_logs(monkeypatch, tmp_path, episodes=12)
+
     progress_messages = [message for message in messages if "PPO evaluation progress" in message]
     assert any("PPO evaluation phase start step=60000 episodes=12" in msg for msg in messages)
     assert any("PPO evaluation phase complete step=60000 episodes=12" in msg for msg in messages)
     assert len(progress_messages) == 2
     assert progress_messages[0].startswith("PPO evaluation progress step=60000 episode=10/12")
     assert progress_messages[-1].startswith("PPO evaluation progress step=60000 episode=12/12")
+
+
+def test_evaluate_policy_logs_single_progress_marker_for_ten_episodes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Exactly 10 evaluation episodes should log only the episode-10 final marker."""
+    messages = _capture_evaluate_policy_info_logs(monkeypatch, tmp_path, episodes=10)
+
+    progress_messages = [message for message in messages if "PPO evaluation progress" in message]
+    assert progress_messages == [
+        "PPO evaluation progress step=60000 episode=10/10 scenario=scenario_a steps=1 success=0.000"
+    ]

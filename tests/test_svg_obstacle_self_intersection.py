@@ -99,6 +99,38 @@ def test_self_intersecting_obstacle_repair_logs_once_per_path() -> None:
     assert len(repair_infos) == 1
 
 
+def test_obstacle_log_dedupe_distinguishes_same_filename_in_different_dirs(
+    tmp_path: Path,
+) -> None:
+    """Obstacle log dedupe should key by full path while keeping filename-only output."""
+    svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+    first_svg = tmp_path / "first" / "same.svg"
+    second_svg = tmp_path / "second" / "same.svg"
+    first_svg.parent.mkdir()
+    second_svg.parent.mkdir()
+    messages: list[str] = []
+    sink_id = logger.add(
+        lambda message: messages.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        for svg_path in (first_svg, second_svg, first_svg):
+            svg_map_parser._log_obstacle_path_event_once(
+                "invalid_polygon",
+                svg_path,
+                "obstacle_13",
+                "warning",
+                "SVG file '{svg}' obstacle path id={pid} produced invalid polygon",
+            )
+    finally:
+        logger.remove(sink_id)
+        svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+
+    assert messages == [
+        "SVG file 'same.svg' obstacle path id=obstacle_13 produced invalid polygon",
+        "SVG file 'same.svg' obstacle path id=obstacle_13 produced invalid polygon",
+    ]
+
+
 def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> None:
     """Compound SVG obstacle paths should keep all detached polygon members."""
     svg_file = tmp_path / "compound_obstacles.svg"

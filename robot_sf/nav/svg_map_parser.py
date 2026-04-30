@@ -56,18 +56,21 @@ _LOGGED_OBSTACLE_PATH_EVENTS: set[tuple[str, str, str]] = set()
 
 def _log_obstacle_path_event_once(
     event: str,
-    svg_name: str,
+    svg_path: str | Path | None,
     path_id: str,
     level: str,
     message: str,
     **kwargs,
 ) -> None:
     """Emit noisy obstacle repair diagnostics once per process, SVG, path, and event."""
-    key = (event, svg_name, path_id)
+    if not svg_path:
+        return
+    path_obj = Path(svg_path)
+    key = (event, str(path_obj.resolve()), path_id)
     if key in _LOGGED_OBSTACLE_PATH_EVENTS:
         return
     _LOGGED_OBSTACLE_PATH_EVENTS.add(key)
-    getattr(logger, level)(message, svg=svg_name, pid=path_id, **kwargs)
+    getattr(logger, level)(message, svg=path_obj.name, pid=path_id, **kwargs)
 
 
 class SvgMapConverter:
@@ -767,12 +770,11 @@ class SvgMapConverter:
         """
         # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
         vertices = list(path.coordinates)
-        svg_name = Path(self.svg_file_str).name
 
         if not np.array_equal(vertices[0], vertices[-1]):
             _log_obstacle_path_event_once(
                 "close_polygon",
-                svg_name,
+                self.svg_file_str,
                 str(path.id),
                 "warning",
                 "SVG file '{svg}' closing polygon: first and last vertices of obstacle <{pid}> differ",
@@ -784,7 +786,7 @@ class SvgMapConverter:
         if not poly.is_valid or poly.is_empty:
             _log_obstacle_path_event_once(
                 "invalid_polygon",
-                svg_name,
+                self.svg_file_str,
                 str(path.id),
                 "warning",
                 "SVG file '{svg}' obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
@@ -796,7 +798,7 @@ class SvgMapConverter:
             if repaired is not None:
                 _log_obstacle_path_event_once(
                     "repaired_polygon",
-                    svg_name,
+                    self.svg_file_str,
                     str(path.id),
                     "info",
                     "SVG file '{svg}' repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}, polygons={count}).",
@@ -807,7 +809,7 @@ class SvgMapConverter:
             else:
                 _log_obstacle_path_event_once(
                     "repair_failed",
-                    svg_name,
+                    self.svg_file_str,
                     str(path.id),
                     "warning",
                     "SVG file '{svg}' failed to repair invalid obstacle path id={pid}; using raw vertices.",

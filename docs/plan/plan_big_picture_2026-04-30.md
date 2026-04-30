@@ -212,13 +212,18 @@ Use these proof gates:
 
 ### Paper-critical or paper-risk issues
 
-1. Audit issue-791 claim language against the narrow benchmark-set decision.
+1. Audit issue-791 claim language against the narrow benchmark-set decision
+   (`memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md` and
+   `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`).
 2. Verify camera-ready PPO provenance, benchmark command, seed/bootstrap evidence, and SNQI
-   diagnostics.
-3. Audit baseline planner dependencies and native/adapter/fallback modes for the paper matrix.
-4. Verify durable artifact references for model, benchmark, SNQI, and release inputs.
-5. Resolve or caveat route handoff, invalid geometry, metric drift, and fallback/degraded execution
-   before using affected failures as policy evidence.
+   diagnostics (`docs/benchmark_camera_ready.md` and release reproducibility docs).
+3. Audit baseline planner dependencies and native/adapter/fallback modes for the paper matrix using
+   `docs/benchmark_planner_family_coverage.md` and
+   `docs/context/issue_691_benchmark_fallback_policy.md`.
+4. Verify durable artifact references for model, benchmark, SNQI, and release inputs, following the
+   artifact durability rules in `AGENTS.md`.
+5. Resolve or caveat route handoff (`#730`), invalid SVG geometry (`#837`), SNQI semantics (`#455`),
+   metric drift, and fallback/degraded execution before using affected failures as policy evidence.
 
 ### Research follow-up issues
 

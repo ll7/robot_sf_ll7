@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status:** Implemented in commit `80a8ad7a` (`docs: refine big-picture plan into two horizons`).
+> This file is retained as the execution record and reference plan; unchecked boxes reflect the
+> original implementation checklist, not active unexecuted work.
+
 **Goal:** Revise `docs/plan/plan_big_picture_2026-04-30.md` into a two-horizon strategy that supports near-term paper delivery and long-term research roadmap quality.
 
 **Architecture:** This is a documentation-only change. The revised plan should keep useful strategic content, but reorganize it around Horizon A for camera-ready paper delivery, Horizon B for post-paper research, and a shared evidence/proof spine that prevents speculative roadmap work from becoming paper-facing claims.
@@ -101,7 +105,7 @@ Expected: only this implementation plan may be uncommitted if the plan has not y
 
 Edit the beginning of `docs/plan/plan_big_picture_2026-04-30.md` so it starts with this structure:
 
-```markdown
+````markdown
 # Robot-SF two-horizon improvement strategy - 2026-04-30
 
 ## Core recommendation
@@ -131,7 +135,7 @@ scenario generator
   -> training / planner update
   -> frozen holdout evaluation
 ```
-```
+````
 
 Expected: the document no longer opens by implying that policy-stack construction is the immediate first priority.
 
@@ -321,7 +325,7 @@ Expected: learned adversaries are not framed as immediate paper work.
 
 Include this subsection:
 
-```markdown
+````markdown
 ### B3. Layered policy portfolio
 
 The long-term local policy should be a portfolio stack rather than a monolithic policy:
@@ -340,7 +344,7 @@ Start with a non-learning stack using route rebasing, obstacle-aware subgoals, O
 proposal generation, TTC/distance/progress scoring, braking-distance checks, and a unicycle or
 e-scooter controller. Add learning in this order: prediction, risk scoring, proposal policy, then
 end-to-end policy as an ablation.
-```
+````
 
 Expected: the policy stack remains in the roadmap but is no longer the first near-term priority.
 

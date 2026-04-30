@@ -42,7 +42,7 @@ Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md
   manifest-level `scenario_overrides` hook in `robot_sf/training/scenario_loader.py`.
 - Added the seed-123 retrain clone
   `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml`.
-- Added the diagnostic benchmark probe
+- Added the horizon-400 benchmark reference
   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
 - Corrected `RobotState` timeout semantics so `max_episode_steps` now expires on the configured
   discrete step budget instead of one step late.
@@ -56,7 +56,9 @@ Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md
   camera-ready drop is benchmark-horizon-bound, while horizon-100 retraining produced a degenerate
   conservative policy.
 - Practical implication: keep 11724 as the canonical PPO leader for now, avoid claiming a
-  horizon-100 PPO fix, and use a cheap leader-only horizon sweep if a finer success-vs-budget curve
-  is needed.
+  horizon-100 PPO fix, and compare against horizon 400 as the paper-facing reference.
+- Horizon influence sweep jobs were submitted on 2026-04-30 after preflight:
+  `12212` for horizon 200, `12213` for horizon 300, and `12214` for horizon 600. Once complete,
+  compare PPO success/collision/SNQI/time-to-goal across 100/200/300/400/600.
 
 Full issue-857 write-up: `docs/context/issue_857_horizon_alignment_setup.md`.

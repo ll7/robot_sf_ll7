@@ -1,7 +1,8 @@
-# Issue-857 horizon-sweep reference: re-run the issue-791 leader under the
-# paper-facing horizon=400 budget.
-name: paper_experiment_matrix_v1_issue_791_horizon400_probe
-paper_facing: true
+# Issue-857 horizon-sweep diagnostic: re-run the issue-791 leader under
+# horizon=200 to measure the success-vs-budget curve below the paper-facing
+# horizon=400 reference.
+name: paper_experiment_matrix_v1_issue_791_horizon200_probe
+paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
@@ -36,7 +37,7 @@ snqi_contract:
   calibration_trials: 6000
 
 workers: 2
-horizon: 400
+horizon: 200
 dt: 0.1
 record_forces: true
 resume: true

@@ -8,7 +8,7 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
 ## Status
 
 - Phase A complete: the repo now has a horizon-100 scenario surface, a matching training config,
-  and a horizon-400 benchmark probe config.
+  and a horizon-400 benchmark reference config.
 - Phase B **complete**: Slurm job `12178` (`robot-sf-issue857-horizon100`) finished
   `2026-04-30T02:17` after 8h23m on `l40s` (auxme-imech093). Best in-distribution eval
   (70 episodes, horizon-100 manifest) at step 7,864,320 / 10M:
@@ -40,6 +40,12 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
   binary collision share=0.000), `snqi_mean=-0.1781`, `path_efficiency_mean=0.9675`,
   `time_to_goal_norm_mean=0.4391`. Per-episode rows: 117/141 success (83.0%),
   0/141 binary collision (0.0%), 24/141 neither success nor collision (17.0%).
+- Phase F **submitted**: horizon influence sweep jobs for the issue-791 Wave-5 leader:
+  `12212` (`horizon=200`, label `issue857-horizon200-leader-11724`),
+  `12213` (`horizon=300`, label `issue857-horizon300-leader-11724`), and
+  `12214` (`horizon=600`, label `issue857-horizon600-leader-11724`). All three were
+  submitted `2026-04-30T12:41` and were initially pending on `l40s` with
+  `QOSMaxJobsPerUserLimit`.
 
 Local preflight (`scripts/tools/run_camera_ready_benchmark.py --mode preflight`) on the
 Phase C config validated 47 scenarios × 7 planners × 3 seeds (eval seed-set
@@ -96,8 +102,8 @@ Decisions:
   attribution work can still cite the artifact.
 - Treat Phase E as a positive attribution probe, not a promotion result: horizon
   400 shows that the 11724 leader can solve much of the camera-ready matrix when
-  allowed the longer budget it was trained under, but this does not satisfy the
-  paper-facing horizon-100 contract.
+  allowed the paper-facing budget, but this does not rescue the failed horizon-100
+  retraining path.
 
 Phase B in-distribution `success_rate=0.6429` clears the threshold at training-eval
 distribution but does NOT decide Phase D. The 11724 leader's training-eval was 0.929
@@ -122,13 +128,12 @@ findings:
 
 Recommended next steps:
 
-- Do not increase the paper-facing benchmark horizon unless the benchmark contract itself is
-  intentionally revised; horizon 400 answers a different, more permissive question.
-- If attribution precision is needed, run a cheap leader-only horizon sweep at 150/200/300/400
-  (and optionally 600) rather than launching more GPU training. This would locate the knee of the
-  success-vs-budget curve.
-- If the goal remains horizon-100 performance, investigate reachability and reward/time-pressure
-  shaping under the 100-step contract before any further retraining. The current evidence says
+- Treat horizon 400 as the paper-facing reference for the issue-791 leader row.
+- Run a horizon influence sweep at 200/300/600 against the same planner matrix and seed set, then
+  compare against the completed horizon-100 and horizon-400 rows. This should locate whether the
+  success-vs-budget curve saturates near 400 or keeps improving beyond the paper-facing budget.
+- If the goal remains improving shorter-budget behavior, investigate reachability and
+  reward/time-pressure shaping before any further horizon-100 retraining. The current evidence says
   "more time fixes the old leader," not "horizon-100 retraining is solved."
 
 ## Implemented surfaces
@@ -141,9 +146,11 @@ Recommended next steps:
   - Seed-123, 10M-step, env22 clone of the issue-791 large-capacity leader.
   - Training and evaluation both point at the new horizon-100 manifest.
 - `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`
-  - Optional diagnostic probe for the existing issue-791 leader with `horizon: 400`.
-  - Marked `paper_facing: false` and `export_publication_bundle: false` because it is a
-    diagnostic attribution run, not a release artifact.
+  - Paper-facing horizon reference for the existing issue-791 leader with `horizon: 400`.
+  - Keeps `export_publication_bundle: false` on this branch because the run is used for issue-857
+    attribution rather than release packaging.
+- `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon{200,300,600}_probe.yaml`
+  - Horizon influence sweep configs matching the horizon-400 planner matrix and seed set.
 
 ## Runtime fix discovered during Phase A validation
 
@@ -182,6 +189,20 @@ python -c 'import rvo2; print(rvo2.__file__)'
 Result: `rvo2` import succeeded on this workstation, so the optional benchmark probe is not blocked
 by the known ORCA prerequisite failure mode.
 
+Phase F horizon-sweep preflight:
+
+```bash
+.venv/bin/python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon{200,300,600}_probe.yaml \
+  --output-root output/benchmarks/issue_791 \
+  --mode preflight \
+  --label issue857-preflight-horizon{200,300,600} \
+  --log-level INFO
+```
+
+Result on 2026-04-30: all three preflights passed, each resolving the same 47-scenario,
+7-planner, 3-seed matrix used by the completed horizon-400 reference.
+
 ## Related surfaces
 
 - Issue body: GitHub issue `#857`
@@ -201,6 +222,14 @@ by the known ORCA prerequisite failure mode.
 - Phase E campaign artifacts:
   `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue_791_horizon400_probe_issue857-phase-e-horizon400-probe-leader-11724_20260430_110334/`
   (campaign_table.md, seed_episode_rows.csv, snqi_diagnostics.md).
+- Phase F configs:
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon200_probe.yaml`,
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon300_probe.yaml`,
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon600_probe.yaml`.
+- Phase F submitted logs once jobs start:
+  `output/slurm/12212-issue791-benchmark.out`,
+  `output/slurm/12213-issue791-benchmark.out`,
+  `output/slurm/12214-issue791-benchmark.out`.
 
 ## Open boundary
 
@@ -212,10 +241,13 @@ Phases covered as of 2026-04-30:
 - Phase D (decision): recorded above — fall back to leader 11724, no replicas.
 - Phase E (horizon=400 probe of leader 11724): complete; leader-side horizon
   attribution recorded above.
+- Phase F (horizon influence sweep at 200/300/600): submitted and pending.
 
 Still to do:
 
-- append the horizon-attribution outcome to
-  `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`.
+- harvest Phase F results once jobs `12212`, `12213`, and `12214` finish,
+- compare PPO success/collision/SNQI/time-to-goal across horizons 100/200/300/400/600,
+- append the horizon-sweep outcome to
+  `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`,
 - update GitHub issue `#857` with the Phase B/C/E outcome and close or leave open
   only if a horizon-sweep follow-up is explicitly desired.

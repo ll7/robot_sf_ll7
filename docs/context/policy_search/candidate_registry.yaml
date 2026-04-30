@@ -81,6 +81,20 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_fast_dynamic_relaxed:
+    status: experimental
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_dynamic_relaxed.yaml
+    hypothesis: >
+      Combining the 3.0 m/s progress envelope with shorter dynamic stop
+      horizons may convert emergency-stop crossing timeouts into successes,
+      with collision rate treated as the deciding constraint.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   hybrid_rule_v3_progress_2p4:
     status: implemented
     family: hybrid_rule_based

@@ -10,6 +10,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.rllib_env_wrappers import (
     DEFAULT_FLATTEN_KEYS,
     DriveStateRaysFlattenWrapper,
+    FlattenDictObservationWrapper,
     SymmetricActionRescaleWrapper,
     wrap_for_dreamerv3,
 )
@@ -58,6 +59,38 @@ def test_drive_state_rays_flatten_wrapper_respects_key_order():
     assert wrapped.observation_space.shape == (5,)
     assert obs.shape == (5,)
     np.testing.assert_allclose(obs, np.array([0.1, 0.2, 0.3, 0.25, -0.5], dtype=np.float32))
+
+
+def test_flatten_dict_observation_wrapper_handles_nested_dicts():
+    """Benchmark-style SocNav/grid observations should flatten recursively."""
+    env = _DummyDictEnv()
+    env.observation_space = spaces.Dict(
+        {
+            "socnav": spaces.Dict(
+                {
+                    "robot": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+                    "goal": spaces.Box(low=-2.0, high=2.0, shape=(1,), dtype=np.float32),
+                }
+            ),
+            "occupancy_grid": spaces.Box(low=0.0, high=1.0, shape=(2, 2), dtype=np.float32),
+        }
+    )
+    env._obs = {
+        "socnav": {
+            "robot": np.array([0.25, -0.5], dtype=np.float32),
+            "goal": np.array([1.0], dtype=np.float32),
+        },
+        "occupancy_grid": np.array([[0.0, 0.5], [0.75, 1.0]], dtype=np.float32),
+    }
+
+    wrapped = FlattenDictObservationWrapper(env, keys=None)
+    obs, _ = wrapped.reset()
+
+    assert wrapped.observation_space.shape == (7,)
+    np.testing.assert_allclose(
+        obs,
+        np.array([0.0, 0.5, 0.75, 1.0, 1.0, 0.25, -0.5], dtype=np.float32),
+    )
 
 
 def test_symmetric_action_rescale_wrapper_maps_minus1_plus1_to_env_bounds():

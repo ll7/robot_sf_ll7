@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added DreamerV3 BR-08 close-out documentation (2026-04-30), including the program-level stop decision, updated full-run outcome note for Slurm 12159, and linked follow-up surfaces from the 2026-04-28 handoff: checked-in Auxme launchers (`SLURM/Auxme/dreamer_br08_gate.sl`, `SLURM/Auxme/dreamer_br08_full.sl`), eval-parity regression coverage for the BR-08 full config, a `#782` pretraining design note, and a fail-closed `#789` note documenting that Ray 2.53.0 DreamerV3 still lacks mixed-observation support without a larger catalog/module fork.
 * Documented durable artifact, linked-worktree bootstrap, branch-sync, and
   worktree-output handling rules in `AGENTS.md` and `docs/dev_guide.md`,
   clarifying that `output/` is temporary/local by default; fresh linked

@@ -121,3 +121,16 @@ why a change was made rather than a full issue execution transcript.
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+
+## DreamerV3 Notes
+
+- [DreamerV3 Program Full Handoff (2026-04-28)](dreamerv3_program_full_handoff_2026_04_28.md)
+  Consolidated execution plan for issues #578, #608, #609, #782, and #789.
+- [DreamerV3 BR-08 Full Progress (2026-04-29)](dreamerv3_br08_full_progress_2026_04_29.md)
+  Run-level outcome and diagnostics summary for Slurm 12159.
+- [DreamerV3 Program Close-Out (2026-04-30)](dreamerv3_program_close_out_2026_04_30.md)
+  Program-level stop decision and closure rationale after the probe/gate/full sequence.
+- [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
+  Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
+- [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
+  Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.

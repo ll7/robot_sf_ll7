@@ -17,25 +17,32 @@ from robot_sf.training.scenario_sampling import (
 
 
 class _DummyEnv(Env):
+    """Minimal env with configurable observation bounds."""
+
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space) -> None:
+        """Initialize deterministic spaces for wrapper assertions."""
         super().__init__()
         self.observation_space = observation_space
         self.action_space = action_space
         self.closed = False
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
+        """Return one zero observation."""
+        super().reset(seed=seed)
         return np.zeros(self.observation_space.shape, dtype=np.float32), {}
 
     def step(self, action):
+        """Return one terminal transition."""
         return (
             np.zeros(self.observation_space.shape, dtype=np.float32),
             0.0,
             True,
             False,
-            {},
+            {"action_seen": np.asarray(action)},
         )
 
     def close(self) -> None:
+        """Mark the env closed."""
         self.closed = True
 
 
@@ -63,11 +70,13 @@ def test_spaces_compatible_allows_bounds_mismatch() -> None:
 
 def test_scenario_sampler_cycles_and_filters() -> None:
     """Sampler should honor include filters and cycle strategy."""
-    scenarios = [{"name": "A"}, {"name": "B"}]
-    sampler = ScenarioSampler(scenarios, include_scenarios=("A", "B"), strategy="cycle")
-    first = sampler.sample()[1]
-    second = sampler.sample()[1]
-    assert first != second
+    sampler = ScenarioSampler(
+        [{"name": "A"}, {"name": "B"}],
+        include_scenarios=("A", "B"),
+        strategy="cycle",
+    )
+    assert sampler.sample()[1] == "A"
+    assert sampler.sample()[1] == "B"
 
 
 def test_scenario_sampler_rejects_bad_weights() -> None:
@@ -84,6 +93,8 @@ def test_scenario_sampler_invalid_filters_raise() -> None:
     scenarios = [{"name": "A"}]
     with pytest.raises(ValueError):
         ScenarioSampler(scenarios, include_scenarios=("missing",))
+    with pytest.raises(ValueError):
+        ScenarioSampler(scenarios, exclude_scenarios=("missing",))
 
 
 def test_scenario_switching_env_handles_bounds_mismatch() -> None:
@@ -92,12 +103,11 @@ def test_scenario_switching_env_handles_bounds_mismatch() -> None:
         {"name": "A", "low": [0.0, 0.0], "high": [1.0, 1.0]},
         {"name": "B", "low": [-1.0, -1.0], "high": [1.0, 1.0]},
     ]
-    sampler = ScenarioSampler(scenarios, strategy="cycle")
     env = ScenarioSwitchingEnv(
-        scenario_sampler=sampler,
+        scenario_sampler=ScenarioSampler(scenarios, strategy="cycle"),
         scenario_path="dummy",
         env_factory=_env_factory,
-        config_builder=lambda scenario: scenario,
+        config_builder=dict,
         switch_per_reset=True,
     )
     env.reset()
@@ -108,12 +118,11 @@ def test_scenario_switching_env_handles_bounds_mismatch() -> None:
         {"name": "C", "low": [0.0, 0.0], "high": [1.0, 1.0]},
         {"name": "D", "low": [0.0, 0.0, 0.0], "high": [1.0, 1.0, 1.0]},
     ]
-    bad_sampler = ScenarioSampler(bad_scenarios, strategy="cycle")
     bad_env = ScenarioSwitchingEnv(
-        scenario_sampler=bad_sampler,
+        scenario_sampler=ScenarioSampler(bad_scenarios, strategy="cycle"),
         scenario_path="dummy",
         env_factory=_env_factory,
-        config_builder=lambda scenario: scenario,
+        config_builder=dict,
         switch_per_reset=True,
     )
     bad_env.reset()
@@ -123,13 +132,14 @@ def test_scenario_switching_env_handles_bounds_mismatch() -> None:
 
 def test_scenario_switching_env_step_requires_active_env() -> None:
     """Step should raise when the active environment is missing."""
-    scenarios = [{"name": "A", "low": [0.0, 0.0], "high": [1.0, 1.0]}]
-    sampler = ScenarioSampler(scenarios, strategy="cycle")
     env = ScenarioSwitchingEnv(
-        scenario_sampler=sampler,
+        scenario_sampler=ScenarioSampler(
+            [{"name": "A", "low": [0.0, 0.0], "high": [1.0, 1.0]}],
+            strategy="cycle",
+        ),
         scenario_path="dummy",
         env_factory=_env_factory,
-        config_builder=lambda scenario: scenario,
+        config_builder=dict,
         switch_per_reset=False,
     )
     env.close()

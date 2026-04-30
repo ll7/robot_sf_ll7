@@ -52,6 +52,7 @@ def main() -> int:
 
     candidate_name = str(payload.get("candidate", "unknown"))
     candidates = registry.get("candidates") if isinstance(registry.get("candidates"), dict) else {}
+    candidate_registered = candidate_name in candidates if isinstance(candidates, dict) else False
     candidate_meta = candidates.get(candidate_name, {}) if isinstance(candidates, dict) else {}
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     family = (
@@ -61,14 +62,10 @@ def main() -> int:
     francis = family.get("francis2023", {}) if isinstance(family.get("francis2023"), dict) else {}
 
     gate_name = str(candidate_meta.get("promotion_gate", "tier_b"))
-    gate_cfg = (
-        gates.get("gates", {}).get(gate_name, {}) if isinstance(gates.get("gates"), dict) else {}
-    )
-    stratified = (
-        gates.get("gates", {}).get("scenario_stratified", {})
-        if isinstance(gates.get("gates"), dict)
-        else {}
-    )
+    gate_map = gates.get("gates") if isinstance(gates.get("gates"), dict) else {}
+    gate_cfg = gate_map.get(gate_name, {}) if isinstance(gate_map, dict) else {}
+    gate_configured = bool(gate_cfg)
+    stratified = gate_map.get("scenario_stratified", {}) if isinstance(gate_map, dict) else {}
 
     stage = str(payload.get("stage", "unknown"))
     runner_decision = str(payload.get("decision", "")).strip().lower()
@@ -76,6 +73,8 @@ def main() -> int:
     stage_decision_passed = promotion_scale_stage or runner_decision == "pass"
 
     checks = {
+        "candidate_registered": candidate_registered,
+        "gate_configured": gate_configured,
         "stage_decision_passed": stage_decision_passed,
         "success_rate": float(summary.get("success_rate", 0.0))
         >= float(gate_cfg.get("min_success_rate", 0.0)),

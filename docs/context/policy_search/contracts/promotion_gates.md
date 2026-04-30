@@ -38,3 +38,8 @@ stage summaries unless the stage runner recorded `decision: pass`. Promotion-
 scale stages (`full_matrix` and `robustness_extension`) are evaluated directly
 against the configured promotion gates because their pass/fail decision is the
 promotion report itself.
+
+The promotion decision also fails closed when the summary candidate is not
+registered in `docs/context/policy_search/candidate_registry.yaml`, or when the
+candidate's named promotion gate is absent from
+`configs/policy_search/promotion_gates.yaml`.

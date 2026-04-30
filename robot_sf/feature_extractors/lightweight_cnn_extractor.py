@@ -35,6 +35,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         num_filters: List of filter counts for each conv layer
         kernel_sizes: List of kernel sizes for each conv layer
         dropout_rate: Dropout rate for regularization
+        record_feature_stats: Whether to retain forward-pass feature scale diagnostics
     """
 
     def __init__(
@@ -44,15 +45,18 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         kernel_sizes: list[int] | None = None,
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
+        record_feature_stats: bool = False,
     ):
-        """TODO docstring. Document this function.
+        """Initialize the extractor architecture and optional feature telemetry.
 
         Args:
-            observation_space: TODO docstring.
-            num_filters: TODO docstring.
-            kernel_sizes: TODO docstring.
-            dropout_rate: TODO docstring.
-            drive_hidden_dims: TODO docstring.
+            observation_space: Dict observation space with ray and drive-state entries.
+            num_filters: Conv1d output channel counts for the ray pathway.
+            kernel_sizes: Conv1d kernel sizes paired with ``num_filters``.
+            dropout_rate: Dropout probability used in ray and drive-state pathways.
+            drive_hidden_dims: Hidden layer sizes for the drive-state MLP.
+            record_feature_stats: Capture lightweight activation statistics after each forward
+                pass for training diagnostics. Disabled by default to avoid host synchronization.
         """
         if num_filters is None:
             num_filters = [32, 16]
@@ -107,6 +111,8 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         )
 
         self.ray_extractor = nn.Sequential(*ray_layers)
+        self._record_feature_stats = bool(record_feature_stats)
+        self._latest_feature_stats: dict[str, float] = {}
 
         # Build drive state processing MLP
         drive_layers = []
@@ -118,6 +124,10 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
             )
 
         self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
+
+    def latest_feature_stats(self) -> dict[str, float]:
+        """Return a copy of the most recent forward-pass feature statistics."""
+        return self._latest_feature_stats.copy()
 
     def forward(self, obs: dict) -> th.Tensor:
         """
@@ -131,4 +141,29 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         """
         ray_features = self.ray_extractor(obs[OBS_RAYS])
         drive_features = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
-        return th.cat([ray_features, drive_features], dim=1)
+        combined_features = th.cat([ray_features, drive_features], dim=1)
+
+        if self._record_feature_stats:
+            with th.no_grad():
+                stats_values = th.stack(
+                    [
+                        ray_features.abs().mean(),
+                        ray_features.std(unbiased=False),
+                        drive_features.abs().mean(),
+                        drive_features.std(unbiased=False),
+                        combined_features.abs().mean(),
+                        combined_features.std(unbiased=False),
+                        combined_features.abs().max(),
+                    ]
+                ).tolist()
+                self._latest_feature_stats = {
+                    "ray_mean_abs": float(stats_values[0]),
+                    "ray_std": float(stats_values[1]),
+                    "drive_mean_abs": float(stats_values[2]),
+                    "drive_std": float(stats_values[3]),
+                    "combined_mean_abs": float(stats_values[4]),
+                    "combined_std": float(stats_values[5]),
+                    "combined_max_abs": float(stats_values[6]),
+                }
+
+        return combined_features

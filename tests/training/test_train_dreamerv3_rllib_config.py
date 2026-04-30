@@ -493,6 +493,13 @@ algorithm:
             "online",
             True,
         ),
+        (
+            "configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full_32x32.yaml",
+            "dreamerv3_br08_benchmark_socnav_grid_full_32x32",
+            "br08-benchmark-socnav-grid-full-32x32",
+            "online",
+            True,
+        ),
     ],
 )
 def test_repo_br08_configs_load_with_expected_reward_contract(
@@ -542,3 +549,18 @@ def test_repo_benchmark_socnav_grid_full_enables_periodic_eval() -> None:
     assert run_config.algorithm.training["batch_size_B"] == 16
     assert run_config.algorithm.training["batch_length_T"] == 32
     assert run_config.algorithm.training["horizon_H"] == 10
+
+
+def test_repo_benchmark_socnav_grid_full_32x32_uses_corrected_grid_extent() -> None:
+    """The rerun sibling should produce 32x32 cells at the retained 0.2 m resolution."""
+    run_config = load_run_config(
+        Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full_32x32.yaml")
+    )
+
+    grid_config = run_config.env.config_overrides["grid_config"]
+    assert isinstance(grid_config, dict)
+    assert grid_config["resolution"] == 0.2
+    assert grid_config["width"] == 6.4
+    assert grid_config["height"] == 6.4
+    assert int(grid_config["width"] / grid_config["resolution"]) == 32
+    assert int(grid_config["height"] / grid_config["resolution"]) == 32

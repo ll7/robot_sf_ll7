@@ -35,7 +35,10 @@ This directory contains config-first launcher files for RLlib DreamerV3 training
   env surface and write reproducible artifacts.
 - `benchmark_socnav_grid_br08_full.yaml`: Longer Slurm/Auxme-oriented profile using
   `auto` CPU/GPU resolution, online W&B tracking, scenario switching per reset, and
-  periodic cycle-order evaluation on the same scenario matrix.
+  periodic cycle-order evaluation on the same scenario matrix. This is the historical
+  Slurm 12159 profile and keeps its 160x160 occupancy-grid contract unchanged.
+- `benchmark_socnav_grid_br08_full_32x32.yaml`: Corrected sibling profile for reruns that
+  keeps `resolution: 0.2` and uses a 6.4 m x 6.4 m grid extent to produce 32x32 cells.
 - These profiles are challenger-training infrastructure, not evidence that DreamerV3
   is benchmark-competitive. Promotion still requires a full checkpoint evaluation
   against the current PPO reference.
@@ -66,6 +69,13 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml
+```
+
+## Canonical command (BR-08 SocNav+grid full 32x32 rerun)
+
+```bash
+uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
+  --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full_32x32.yaml
 ```
 
 ## Recommended command (starter profile)

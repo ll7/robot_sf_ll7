@@ -630,7 +630,8 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
             if key not in _IGNORED_ENV_CONTEXT_KEYS
         }
         worker_index = int(worker_payload.get("worker_index", 0) or 0)
-        worker_seed = int(config.experiment.seed + worker_index)
+        vector_index = int(worker_payload.get("vector_index", 0) or 0)
+        worker_seed = int(config.experiment.seed + (worker_index * 10_000) + vector_index)
         if scenario_matrix is None:
             worker_config = copy.deepcopy(template)
             _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
@@ -843,12 +844,21 @@ def _extract_finite_metric(result: dict[str, Any], *keys: str) -> float | int | 
     return value if _is_finite_scalar(value) else None
 
 
+def _json_safe_scalar(value: Any) -> Any:
+    """Convert non-finite scalar values into strict-JSON-safe sentinels."""
+    if _is_finite_scalar(value):
+        return value
+    if isinstance(value, int | float):
+        return str(value)
+    return value
+
+
 def _is_finite_scalar(value: Any) -> bool:
     """Return True when value is an int/float and finite."""
     return isinstance(value, int | float) and math.isfinite(float(value))
 
 
-def _find_nonfinite_scalars(
+def _find_nonfinite_scalars(  # noqa: C901
     value: Any,
     *,
     prefix: str = "",
@@ -896,42 +906,34 @@ def _build_nonfinite_diagnostics(
 ) -> dict[str, object]:
     """Build a compact, JSON-safe diagnostic payload for non-finite training metrics."""
     interesting_paths = {
-        "env_episode_return_mean": _extract_metric(result, "episode_return_mean", "episode_reward_mean"),
+        "env_episode_return_mean": _extract_metric(
+            result, "episode_return_mean", "episode_reward_mean"
+        ),
         "env_episode_len_mean": _extract_metric(result, "episode_len_mean", "episode_len_mean"),
         "num_env_steps_sampled_lifetime": _extract_metric(result, "num_env_steps_sampled_lifetime"),
         "num_env_steps_trained_lifetime": _extract_metric(result, "num_env_steps_trained_lifetime"),
         "learner_total_loss": (
-            result.get("learners", {})
-            .get("__all_modules__", {})
-            .get("total_loss")
+            result.get("learners", {}).get("__all_modules__", {}).get("total_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_policy_total_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("total_loss")
+            result.get("learners", {}).get("default_policy", {}).get("total_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_world_model_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("world_model_loss")
+            result.get("learners", {}).get("default_policy", {}).get("world_model_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_actor_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("actor_loss")
+            result.get("learners", {}).get("default_policy", {}).get("actor_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
         "learner_critic_loss": (
-            result.get("learners", {})
-            .get("default_policy", {})
-            .get("critic_loss")
+            result.get("learners", {}).get("default_policy", {}).get("critic_loss")
             if isinstance(result.get("learners"), dict)
             else None
         ),
@@ -1338,7 +1340,7 @@ def _build_algorithm_instance(algo_config: object) -> Any:
     return algo_config.build()
 
 
-def _run_training_iterations(
+def _run_training_iterations(  # noqa: C901
     algo: Any,
     run_config: DreamerRunConfig,
     *,
@@ -1356,7 +1358,8 @@ def _run_training_iterations(
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
         reward_mean_raw = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
-        reward_mean = reward_mean_raw if _is_finite_scalar(reward_mean_raw) else None
+        reward_mean = _extract_finite_metric(result, "episode_return_mean", "episode_reward_mean")
+        reward_mean_raw_json = _json_safe_scalar(reward_mean_raw)
         timesteps_total = _extract_metric(
             result,
             "num_env_steps_sampled_lifetime",
@@ -1381,7 +1384,7 @@ def _run_training_iterations(
             {
                 "iteration": iteration,
                 "reward_mean": reward_mean,
-                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_raw": reward_mean_raw_json,
                 "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             }
@@ -1392,7 +1395,7 @@ def _run_training_iterations(
                 "ts_utc": datetime.now(UTC).isoformat(),
                 "iteration": iteration,
                 "reward_mean": reward_mean,
-                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_raw": reward_mean_raw_json,
                 "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             },

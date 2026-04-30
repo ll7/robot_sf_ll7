@@ -27,6 +27,49 @@ uv run pre-commit install
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
 
+### Fresh linked-worktree bootstrap
+
+When creating a new linked worktree, bootstrap the local machine context before using Python tools.
+You can detect a linked worktree because `.git` is a file that points into
+`<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to
+the main checkout's `.git` directory instead of the worktree-local Git dir.
+
+Treat the worktree as fresh only if both `local.machine.md` and `.venv` are absent. If either
+already exists, assume the worktree has already been bootstrapped and reuse the existing setup.
+
+A cheap fresh-worktree check is:
+
+```bash
+[ "$(git rev-parse --git-common-dir)" != "$(git rev-parse --git-dir)" ] \
+  && [ ! -e local.machine.md ] \
+  && [ ! -d .venv ]
+```
+
+Use this order for a fresh worktree:
+
+```bash
+MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+ln -s "$MAIN_REPO_ROOT/local.machine.md" .
+uv sync --all-extras
+source .venv/bin/activate
+```
+
+Notes:
+
+- The symlink target should point at the main checkout's local machine context, not a copied
+  per-worktree file.
+- If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
+- Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
+  sync across worktrees.
+- If you are starting work on a feature branch, merge the latest `origin/main` into the current
+  branch early so you inherit repository-wide fixes and workflow improvements before your local
+  changes diverge. Typical command sequence:
+
+```bash
+git fetch origin main
+git merge origin/main
+```
+
 ### Critical dependencies and setup: Fast-pysf integration
 
 The `fast-pysf/` directory contains the optimized SocialForce physics engine and is now integrated as a **git subtree** (previously a submodule). After cloning the repository, the fast-pysf code is automatically available—no additional initialization steps required.
@@ -135,6 +178,9 @@ Before opening a PR, fetch the latest `origin/main`, integrate it into the featu
 either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
 The `BASE_REF` value tells the readiness gate what to compare against; it does not update the
 feature branch by itself, so validation from before the latest-main sync is stale for PR creation.
+Do not wait until PR creation to pick up `main` branch improvements on long-lived feature branches;
+merge latest `origin/main` into the current branch when active work starts, then sync again before
+opening the PR.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

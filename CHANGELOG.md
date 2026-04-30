@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added DreamerV3 BR-08 follow-up surfaces from the 2026-04-28 handoff: checked-in Auxme launchers (`SLURM/Auxme/dreamer_br08_gate.sl`, `SLURM/Auxme/dreamer_br08_full.sl`), eval-parity regression coverage for the BR-08 full config, a #782 pretraining design note, and a fail-closed #789 note documenting that Ray 2.53.0 DreamerV3 still lacks mixed-observation support without a larger catalog/module fork.
+* Added DreamerV3 BR-08 close-out documentation (2026-04-30), including the program-level stop decision, updated full-run outcome note for Slurm 12159, and linked follow-up surfaces from the 2026-04-28 handoff: checked-in Auxme launchers (`SLURM/Auxme/dreamer_br08_gate.sl`, `SLURM/Auxme/dreamer_br08_full.sl`), eval-parity regression coverage for the BR-08 full config, a `#782` pretraining design note, and a fail-closed `#789` note documenting that Ray 2.53.0 DreamerV3 still lacks mixed-observation support without a larger catalog/module fork.
+* Documented durable artifact, linked-worktree bootstrap, branch-sync, and
+  worktree-output handling rules in `AGENTS.md` and `docs/dev_guide.md`,
+  clarifying that `output/` is temporary/local by default; fresh linked
+  worktrees should detect the shared main checkout before symlinking
+  `local.machine.md`; a worktree counts as fresh only when both
+  `local.machine.md` and `.venv` are absent; active feature branches should
+  merge latest `origin/main` early and again before PR creation; and PR
+  preparation now includes reviewing ignored `output/*` files before handoff.
+
 * Promoted the issue-791 Wave-5 leader (job 11724, WandB `ll7/robot_sf/ibo3aqus`,
   best success 0.929 / collision 0.071 / SNQI 0.353 on
   `ppo_full_maintained_eval_v1`) into the canonical PPO baseline at

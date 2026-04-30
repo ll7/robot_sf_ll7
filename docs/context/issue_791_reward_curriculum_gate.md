@@ -42,3 +42,27 @@ All three targeted suites passed.
 - Keep issue 791 scoped to the first reward-curriculum gate unless the next slice is explicitly
   approved.
 - Treat attention-head and asymmetric-critic work as separate issues.
+
+## Promotion Result (2026-04-30)
+
+Job **12189** completed a 10M-step reward-curriculum promotion run from this worktree:
+
+- SLURM log: `output/slurm/12189-issue791-reward-curriculum.out`
+- Run summary:
+  `output/slurm/issue791-reward-curriculum-job-12189/benchmarks/ppo_imitation/runs/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_20260429T195426.json`
+- Expert manifest:
+  `output/slurm/issue791-reward-curriculum-job-12189/benchmarks/expert_policies/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22.json`
+- W&B run: `ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_20260429T195426`
+
+Result:
+
+- `success_rate.mean=0.3871428571428571`
+- `collision_rate.mean=0.5021428571428571`
+- `snqi.mean=-1.2549230908819666`
+- Best checkpoint selected by success: `success_rate=0.5000` at `5,767,168` steps with
+  `meets_convergence=False`
+
+Interpretation: this is valid completed 10M evidence, but it is weak promotion evidence. The result
+does not beat the earlier eval-aligned large-capacity issue-791 leader and should be treated as a
+negative/underwhelming reward-curriculum-only promotion result. Use it to justify continuing with
+the eval-aligned asymmetric-critic or attention-head follow-ups rather than promoting this policy.

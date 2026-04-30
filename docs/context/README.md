@@ -99,6 +99,16 @@ knowledge, not every transient iteration detail.
   follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
   config-first safety-reward mitigation candidate.
 
+## Issue 791 PPO Notes
+
+- [Issue #791 Wave-6 Results And Benchmark Follow-Up](./issue_791_wave6_results_and_benchmark_orca_block.md)
+  promotion-campaign interpretation, benchmark validity traps, and the latest 2026-04-30
+  worktree status.
+- [Issue #791 Reward Curriculum Gate](./issue_791_reward_curriculum_gate.md)
+  reward-curriculum implementation gate and completed 10M promotion result from job 12189.
+- [Issue #791 Asymmetric Critic Gate](./issue_791_asymmetric_critic_gate.md)
+  asymmetric-critic implementation gate and retry guidance after cancelled job 12190.
+
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)

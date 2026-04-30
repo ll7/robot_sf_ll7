@@ -252,6 +252,22 @@ Successful rerun **12122**:
 Next step: update the issue/PR narrative to cite job 12122 as the valid benchmark run and keep the
 promotion claim narrow. Do not cite 11976's PPO row.
 
+## 2026-04-30 Worktree Status: Reward-Curriculum Weak, Asymmetric Critic Incomplete
+
+This worktree produced one completed new result and one incomplete retry:
+
+- Reward curriculum job **12189** completed 10M steps but reached only `success_rate.mean=0.3871`,
+  `collision_rate.mean=0.5021`, and `snqi.mean=-1.2549`; the best checkpoint reached
+  `success_rate=0.5000` at 5.77M steps and did not meet convergence.
+- Asymmetric critic job **12190** ran about 12h38m on `pro6000` and was cancelled before syncing a
+  completed benchmark/checkpoint manifest.
+
+Decision: do not promote the 12189 reward-curriculum-only policy, and do not cite 12190 as
+completed evidence. The next useful action is an eval-aligned asymmetric-critic 10M retry through
+`scripts/dev/sbatch_auxme_issue791.sh` when `a30` or `l40s` has a per-user slot available. The
+current 2026-04-30 queue snapshot had `slots_left=0` on both partitions, so submission was deferred
+rather than adding another blocked pending job.
+
 ## References
 
 - Wave-4/5 campaign log and artifact registry:

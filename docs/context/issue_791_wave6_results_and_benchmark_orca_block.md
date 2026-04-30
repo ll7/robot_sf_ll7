@@ -264,9 +264,11 @@ This worktree produced one completed new result and one incomplete retry:
 
 Decision: do not promote the 12189 reward-curriculum-only policy, and do not cite 12190 as
 completed evidence. The next useful action is an eval-aligned asymmetric-critic 10M retry through
-`scripts/dev/sbatch_auxme_issue791.sh` when `a30` or `l40s` has a per-user slot available. The
-current 2026-04-30 queue snapshot had `slots_left=0` on both partitions, so submission was deferred
-rather than adding another blocked pending job.
+`scripts/dev/sbatch_auxme_issue791.sh`.
+
+Submission update: pending jobs are normal SLURM flow, so the retry was queued after checking
+partition balance. `a30` had lower pending pressure than `l40s`, so job **12219** was submitted
+explicitly to `a30` and is pending on `QOSMaxJobsPerUserLimit` until a user slot opens.
 
 ## References
 

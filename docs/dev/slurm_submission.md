@@ -102,6 +102,12 @@ scripts/dev/sbatch_auxme_issue791.sh \
 This helper adds pre-submit partition availability checks and recommendation logic based on
 current cluster pressure, then submits through `sbatch_use_max_time.sh`.
 
+Pending jobs are a normal and useful part of the Auxme workflow. Use the status table to check
+partition balance and avoid duplicate submissions, but do not treat a `QOSMaxJobsPerUserLimit`
+pending reason as a reason to skip the next valid experiment. When deliberately queueing a job even
+though no immediate slot is available, pass an explicit `--partition` and `--qos` so the routing
+decision is visible in the command.
+
 Raw status table only:
 
 ```bash

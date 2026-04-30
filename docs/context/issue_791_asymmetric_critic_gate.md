@@ -68,7 +68,14 @@ scripts/dev/sbatch_auxme_issue791.sh \
   SLURM/Auxme/issue_791_asymmetric_critic.sl
 ```
 
-Current queue boundary on 2026-04-30: `scripts/dev/auxme_partition_status.sh` reported
-`slots_left=0` for both `a30` and `l40s`, and the reliable helper refused to submit with
-`No admissible partition: user slot limit reached on all candidates.` Re-run the status helper
-before submitting; do not add another pending issue-791 job while both QoS profiles are saturated.
+2026-04-30 submission update: pending jobs are acceptable SLURM flow when the job is the next useful
+experiment. After checking balance, `a30` had lower pending pressure than `l40s`, so the retry was
+queued explicitly on `a30`:
+
+```text
+Submitted batch job 12219
+12219 robot-sf-issue791-asymcrit PENDING a30 ... (QOSMaxJobsPerUserLimit)
+```
+
+Monitor startup once it leaves pending and verify the stdout reports the exact eval-aligned config
+above before treating the run as valid.

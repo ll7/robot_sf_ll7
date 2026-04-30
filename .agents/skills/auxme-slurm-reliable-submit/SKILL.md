@@ -16,7 +16,8 @@ Use this skill for Auxme cluster submissions where reliability matters more than
 ## Goals
 
 - avoid accidental stage1 fallback caused by missing config overrides,
-- choose partition/QoS using live availability and per-user slot headroom,
+- choose partition/QoS using live availability, pending depth, per-user slot headroom, and
+  duplicate-job checks,
 - keep wall-time aligned with current partition policy.
 
 ## Workflow
@@ -28,10 +29,14 @@ Use this skill for Auxme cluster submissions where reliability matters more than
 2. Snapshot partition pressure
    - Run `scripts/dev/auxme_partition_status.sh`.
    - Use free GPUs, pending depth, and per-user running slots as the primary signals.
+   - Pending jobs are normal SLURM behavior; `QOSMaxJobsPerUserLimit` means the job will wait, not
+     that submission is invalid.
 
 3. Submit through the reliable helper
    - Run `scripts/dev/sbatch_auxme_issue791.sh` with explicit `--config`.
-   - Let it auto-select partition/QoS unless there is a deliberate override.
+   - Let it auto-select partition/QoS when immediate slot availability is the goal.
+   - Use a deliberate `--partition`/`--qos` override when queueing the next useful job for later is
+     appropriate or when balancing across partitions is more important than immediate start.
 
 4. Verify startup provenance
    - Check job stdout startup summary for the exact config path and policy ID.
@@ -63,4 +68,6 @@ scripts/dev/sbatch_auxme_issue791.sh \
 
 - Do not submit issue-791 wrappers without explicit `ISSUE791_TRAIN_CONFIG`.
 - Do not assume partition health from stale snapshots; always refresh right before submit.
+- Do not treat `slots_left=0` as a categorical stop; first check for duplicate jobs and partition
+  balance, then submit intentionally if the job should wait in the queue.
 - Do not classify allocation-handshake failures as model regressions.

@@ -97,5 +97,11 @@ scripts/dev/sbatch_auxme_issue791.sh \
 ### Partition guidance
 
 - Prefer spreading long jobs across `a30` and `l40s` to respect `QOSMaxJobsPerUserLimit=2` and maximize concurrency.
-- If one partition is saturated (low `free_gpu`, high `pending`, or `slots_left=0`), submit the next job to the other partition.
+- Pending jobs are acceptable and expected on SLURM. Use the status table to avoid duplicate
+  submissions and to balance pressure across partitions; do not treat `slots_left=0` as a hard
+  stop when the job is the correct next experiment.
+- If one partition is saturated (low `free_gpu`, high `pending`, or `slots_left=0`), prefer the
+  other partition when that keeps the queue balanced. If both are saturated, choose the partition
+  with lower pending depth or the one that best matches the job's wall-time/hardware needs, then
+  submit explicitly with `--partition` and `--qos`.
 - Treat `srun: Unable to confirm allocation ... Zero Bytes were transmitted or received` as transient infrastructure noise; resubmit once with identical config.

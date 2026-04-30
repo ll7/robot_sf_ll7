@@ -20,19 +20,18 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
   was missing because each git worktree owns its own gitignored cache. Resolved by
   creating a relative symlink to the artifact already cached in the parent repo
   (`/home/luttkule/git/robot_sf_ll7/output/model_cache/...`).
-- Phase C **submitted on 2026-04-30**: Slurm job `12205`
-  (`robot-sf-issue791-benchmark`, label `issue857-phase-c-horizon100-12178`) running
-  `configs/benchmarks/paper_experiment_matrix_v1_issue_857_horizon100.yaml` with the
-  PPO row pointing at `configs/baselines/ppo_issue_791_horizon100_12178.yaml`
-  (the job-12178 candidate).
-- Phase E **resubmitted on 2026-04-30**: Slurm job `12206`
-  (label `issue857-phase-e-horizon400-probe-leader-11724`) running
-  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
-
-Queue state captured immediately after the 2026-04-30 submissions:
-
-- `12205`: `PENDING (QOSMaxJobsPerUserLimit)` on `l40s`
-- `12206`: `PENDING (QOSMaxJobsPerUserLimit)` on `l40s`
+- Phase C **complete**: Slurm job `12205` finished
+  `2026-04-30T10:07` after 30m22s on `l40s` (label
+  `issue857-phase-c-horizon100-12178`, 7 planners × 47 scenarios × 3 seeds = 987
+  episodes). Campaign:
+  `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue857-phase-c-horizon100-12178_20260430_093726/`.
+  PPO row (horizon-matched candidate, 141 episodes):
+  `success_mean=0.1489`, `collisions_mean=0.0993` (per-step normalization;
+  binary collision share=0.000), `snqi_mean=-0.2867`, `path_efficiency_mean=0.9526`,
+  `time_to_goal_norm_mean=1.7163`. Termination histogram from per-episode rows:
+  21/141 success (14.9%), 0/141 binary collision (0.0%), 120/141 timeouts (85.1%).
+- Phase E **still pending** at the time of Phase C readout: Slurm job `12206`
+  on `l40s` waiting for the QOS slot.
 
 Local preflight (`scripts/tools/run_camera_ready_benchmark.py --mode preflight`) on the
 Phase C config validated 47 scenarios × 7 planners × 3 seeds (eval seed-set
@@ -47,10 +46,50 @@ Promotion gate is on the camera-ready matrix, not on training-eval:
 - `success_mean ∈ [0.30, 0.50)` → mixed; investigate per-scenario before more GPU.
 - `success_mean < 0.30` → negative result; fall back to 11724 leader.
 
+### Phase D verdict (2026-04-30): NEGATIVE RESULT, no-go
+
+| Metric | Phase B in-dist (job 12178 horizon-100 manifest) | Phase C camera-ready (job 12205) | 11724 leader on the same camera-ready matrix |
+|---|---:|---:|---:|
+| success_mean | 0.6429 | **0.1489** | 0.2553 |
+| binary collision share | 0.0429 | 0.000 | ~0.085 |
+| max_steps share | (training horizon=100) | **0.851** | ~0.65 |
+| snqi_mean | -0.330 | -0.287 | (per leader compare) |
+
+Conclusions:
+
+1. **Horizon hypothesis is rejected.** Forcing training-time `max_episode_steps: 100`
+   did not lift the camera-ready PPO row. It actually fell from 0.255 (leader 11724)
+   to 0.149 — about 0.106 absolute and ~42% relative degradation, well outside
+   bootstrap noise on a 141-episode row.
+2. **Conservative-policy collapse.** Binary collision share dropped to 0.000 while
+   timeouts climbed to 0.851. The horizon-matched policy effectively learned to never
+   commit to motion that could collide and instead time out — a degenerate solution
+   to the shorter episode budget.
+3. **Distribution gap persists across the in-dist / camera-ready boundary even at
+   matched horizon.** The candidate scored 0.643 on the horizon-100 in-distribution
+   manifold but 0.149 on the camera-ready matrix — a 0.494-absolute collapse at
+   identical nominal step budget. This rules out the "training horizon vs benchmark
+   horizon" attribution as the dominant cause of the 0.929 → 0.255 leader gap;
+   the gap is dominated by something else (per-scenario reachability at 10s,
+   training-vs-benchmark scenario mix, or interaction with the camera-ready
+   pedestrian-density / kinematics contract).
+
+Decisions:
+
+- **Do not** queue seed replicas at 231 / 1337 — the gate is failed at seed 123.
+- **Do not** repoint `configs/baselines/ppo_15m_grid_socnav.yaml` — the canonical
+  PPO baseline remains the issue-791 Wave-5 leader (artifact 11724).
+- **Do not** mark `configs/baselines/ppo_issue_791_horizon100_12178.yaml` as a
+  promotion candidate; keep it as an archived ablation so Phase E and any later
+  attribution work can still cite the artifact.
+- Keep Phase E in flight regardless (job 12206) — even with Phase C as a no-go,
+  the horizon=400 probe of the Wave-5 leader is the cleanest attribution evidence
+  for whether the camera-ready matrix is benchmark-horizon-bound at all.
+
 Phase B in-distribution `success_rate=0.6429` clears the threshold at training-eval
 distribution but does NOT decide Phase D. The 11724 leader's training-eval was 0.929
 yet collapsed to 0.255 on the camera-ready matrix; the horizon-matched candidate's
-camera-ready row is the actual go/no-go signal.
+camera-ready row is the actual go/no-go signal — and it failed the gate.
 
 ## Implemented surfaces
 
@@ -114,19 +153,29 @@ by the known ORCA prerequisite failure mode.
 - Phase B best summary: `output/slurm/issue791-reward-curriculum-job-12178/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100_best.summary.json`
 - Phase C adapter: `configs/baselines/ppo_issue_791_horizon100_12178.yaml`
 - Phase C benchmark config: `configs/benchmarks/paper_experiment_matrix_v1_issue_857_horizon100.yaml`
-- Phase C job log (once opened): `output/slurm/12205-issue791-benchmark.out`
+- Phase C job log: `output/slurm/12205-issue791-benchmark.out`
+- Phase C campaign artifacts: `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue857-phase-c-horizon100-12178_20260430_093726/`
+  (campaign_table.md, seed_episode_rows.csv, snqi_diagnostics.md, publication bundle).
 - Phase E (failed) log: `output/slurm/12179-issue791-benchmark.out`
 - Phase E (resubmitted) log (once opened): `output/slurm/12206-issue791-benchmark.out`
 
 ## Open boundary
 
-This note now covers Phase A (complete), Phase B (complete with results), and the
-launch of Phase C (job 12205) and Phase E (job 12206). It does **not** claim any
-camera-ready benchmark outcome yet. Update this note after jobs `12205` and `12206`
-finish with:
+Phases covered as of 2026-04-30:
 
-- horizon-matched candidate camera-ready metrics (success_mean, collision, snqi,
-  termination histogram),
-- horizon-400 probe result for the Wave-5 leader (attribution: horizon vs policy),
-- Phase D decision (replicas vs mixed vs no-go) per the gate above,
-- registry / canonical-baseline pointer changes if the candidate is promoted.
+- Phase A: complete.
+- Phase B (training): complete; in-distribution metrics recorded above.
+- Phase C (camera-ready benchmark): complete; **negative result**, Phase D no-go.
+- Phase D (decision): recorded above — fall back to leader 11724, no replicas.
+- Phase E (horizon=400 probe of leader 11724): job 12206 still pending; will be
+  appended once it finishes. The Phase D verdict is independent of Phase E and
+  does not block on it.
+
+Still to do once Phase E lands:
+
+- record horizon-400 probe metrics (success_mean, collision, max_steps_share),
+- decide whether the horizon mismatch contributes anything detectable on the
+  leader side, or whether the 0.929 → 0.255 leader gap is entirely
+  distribution / scenario-mix driven,
+- append the horizon-attribution outcome to
+  `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`.

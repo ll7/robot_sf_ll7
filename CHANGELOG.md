@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Documented durable artifact and worktree-output handling rules in `AGENTS.md`, clarifying that `output/` is temporary/local by default, durable dependencies must be promoted to a persistent store or tracked registry entry, and PR preparation now includes reviewing ignored `output/*` files before handoff.
+
 * Promoted the issue-791 Wave-5 leader (job 11724, WandB `ll7/robot_sf/ibo3aqus`,
   best success 0.929 / collision 0.071 / SNQI 0.353 on
   `ppo_full_maintained_eval_v1`) into the canonical PPO baseline at

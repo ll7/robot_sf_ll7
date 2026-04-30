@@ -57,6 +57,8 @@ Example for a new script:
 |----------------------|--------------------------------------------|
 | `auxme_gpu.sl`       | Generic GPU job template for Auxme         |
 | `auxme_uv_setup.sl`  | Environment bootstrap using uv             |
+| `dreamer_br08_gate.sl` | DreamerV3 BR-08 gate launcher (CPU-only) |
+| `dreamer_br08_full.sl` | DreamerV3 BR-08 full launcher (1x A30)   |
 | `interactive.sh`     | Launch an interactive session on a30/l40s  |
 | `issue_791_*.sl`     | Issue-791 training campaign scripts        |
 

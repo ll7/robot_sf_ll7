@@ -141,6 +141,7 @@ class HybridRuleLocalPlannerConfig:
     velocity_smoothness_weight: float = 0.3
     control_effort_weight: float = 0.2
     deadlock_escape_weight: float = 0.0
+    route_guide_commitment_weight: float = 0.0
     freezing_weight: float = 0.8
     oscillation_weight: float = 0.5
 
@@ -156,6 +157,11 @@ class HybridRuleLocalPlannerConfig:
     route_guide_clearance_penalty_weight: float = 0.5
     recovery_enabled: bool = False
     recovery_reorient_angular_speed: float = 0.6
+    static_clearance_escape_enabled: bool = False
+    static_clearance_escape_tolerance: float = 0.05
+    static_clearance_escape_max_speed: float = 0.6
+    static_clearance_escape_min_clearance: float = 0.5
+    route_guide_commitment_progress_threshold: float = 0.5
 
 
 class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -522,6 +528,34 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         return windows
 
+    def _static_clearance_escape_allowed(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        initial_clearance: float,
+        current_min_clearance: float,
+        hard_static_clearance: float,
+    ) -> bool:
+        """Allow slow escape from an already conservative static-clearance violation.
+
+        Returns:
+            bool: True when the candidate is a bounded, non-worsening escape command.
+        """
+        if not bool(self.config.static_clearance_escape_enabled):
+            return False
+        if not np.isfinite(initial_clearance) or initial_clearance <= 0.0:
+            return False
+        if initial_clearance > hard_static_clearance:
+            return False
+        if initial_clearance < float(self.config.static_clearance_escape_min_clearance):
+            return False
+        if candidate.linear <= float(self.config.freezing_speed_threshold):
+            return False
+        if candidate.linear > float(self.config.static_clearance_escape_max_speed):
+            return False
+        tolerance = max(float(self.config.static_clearance_escape_tolerance), 0.0)
+        return bool(current_min_clearance + tolerance >= initial_clearance)
+
     def _evaluate_candidate(
         self,
         *,
@@ -560,8 +594,16 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
 
         start_dist = float(np.linalg.norm(goal - robot_pos))
+        static_margin = (
+            float(self.config.static_hard_safety_margin)
+            if float(self.config.static_hard_safety_margin) >= 0.0
+            else float(self.config.hard_safety_margin)
+        )
+        hard_static_clearance = float(state["robot_radius"]) + static_margin
+        initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
+        static_clearance_escape_used = False
 
         for step_idx in range(steps):
             t = (step_idx + 1) * dt
@@ -592,13 +634,29 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
-            static_margin = (
-                float(self.config.static_hard_safety_margin)
-                if float(self.config.static_hard_safety_margin) >= 0.0
-                else float(self.config.hard_safety_margin)
-            )
-            hard_static_clearance = float(state["robot_radius"]) + static_margin
             if min_static_clearance <= hard_static_clearance:
+                if self._static_clearance_escape_allowed(
+                    candidate=candidate,
+                    initial_clearance=initial_static_clearance,
+                    current_min_clearance=min_static_clearance,
+                    hard_static_clearance=hard_static_clearance,
+                ):
+                    static_clearance_escape_used = True
+                else:
+                    return {
+                        "accepted": False,
+                        "reason": "static_clearance",
+                        "candidate": candidate,
+                        "min_static_clearance": float(min_static_clearance),
+                        "hard_static_clearance": float(hard_static_clearance),
+                        "time": float(t),
+                    }
+
+            if (
+                static_clearance_escape_used
+                and min_static_clearance + float(self.config.static_clearance_escape_tolerance)
+                < initial_static_clearance
+            ):
                 return {
                     "accepted": False,
                     "reason": "static_clearance",
@@ -677,6 +735,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
             else 0.0
         )
+        route_guide_commitment = (
+            1.0
+            if candidate.source == "route_guide"
+            and float(progress_windows.get("3s", 0.0))
+            <= float(self.config.route_guide_commitment_progress_threshold)
+            and start_dist > float(self.config.goal_far_distance)
+            else 0.0
+        )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
             "path_alignment": float(np.cos(heading_error)),
@@ -702,6 +768,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0,
             "oscillation_penalty": self._oscillation_penalty(candidate.angular),
             "deadlock_escape": deadlock_escape,
+            "static_clearance_escape": 1.0 if static_clearance_escape_used else 0.0,
+            "route_guide_commitment": route_guide_commitment,
         }
         score = (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
@@ -714,6 +782,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
             + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
+            + float(self.config.route_guide_commitment_weight)
+            * terms["route_guide_commitment"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )

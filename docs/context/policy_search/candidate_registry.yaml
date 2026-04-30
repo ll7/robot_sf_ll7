@@ -126,6 +126,49 @@ candidates:
       - smoke
       - nominal_sanity
 
+  hybrid_rule_v3_waypoint2_static_escape:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_static_escape.yaml
+    hypothesis: >
+      Allowing only slow, non-worsening commands when the robot is already
+      inside the conservative occupancy-grid static clearance band may reduce
+      static deadlock timeouts without weakening occupied-cell collision
+      rejection.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_speed2p2:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_speed2p2.yaml
+    hypothesis: >
+      A mild 2.2 m/s speed envelope on top of the selected waypoint2 policy may
+      recover long-route timeout cases without the safety regressions seen in
+      the more aggressive 2.4 m/s progress-weight retune.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_commit:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_commit.yaml
+    hypothesis: >
+      Giving the route-guide candidate a small deterministic bonus only after
+      weak 3 s progress may reduce local route stalls while leaving normal DWA
+      behavior unchanged in progressing scenes.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   hybrid_rule_v3_static_margin0_waypoint3:
     status: implemented
     family: hybrid_rule_based
@@ -178,6 +221,102 @@ candidates:
       Stronger manual progress and speed preference on top of waypoint2 may
       convert low-progress timeouts while preserving the same hard safety
       filters.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead8:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8.yaml
+    hypothesis: >
+      Looking farther along the route-guide grid path may reduce long-route
+      stalls in crossing, corridor, and Francis-style scenarios without changing
+      safety margins or social comfort terms.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead6:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead6.yaml
+    hypothesis: >
+      A smaller route-guide lookahead increase may retain the nominal success
+      gain suggested by 8 cells while avoiding its static-collision regression.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead8_inflation4:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8_inflation4.yaml
+    hypothesis: >
+      The 8-cell route lookahead improved nominal success but caused one static
+      collision; increasing only route-guide obstacle inflation may preserve the
+      progress gain while steering away from the static hazard.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead8_static05:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8_static05.yaml
+    hypothesis: >
+      The 8-cell route lookahead may become acceptable if paired with a 5 cm
+      static hard margin, trading some doorway progress for collision-free
+      behavior.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead8_static02:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8_static02.yaml
+    hypothesis: >
+      A smaller 2 cm static hard margin may remove the 8-cell route-lookahead
+      collision while retaining more of its success gain than the 5 cm margin.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_route_lookahead8_clearance1:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8_clearance1.yaml
+    hypothesis: >
+      Stronger route-guide clearance penalty may keep the 8-cell lookahead
+      progress gain while avoiding the static collision without globally
+      tightening the hard static margin.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_dynamic_clearance:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_dynamic_clearance.yaml
+    hypothesis: >
+      Slightly stronger dynamic-clearance scoring may reduce intrusive near
+      misses without the static-collision regression caused by speed-cap comfort
+      variants.
     required_stages:
       - smoke
       - nominal_sanity

@@ -11,6 +11,17 @@ success count, keeps zero collision terminations, and improves over v0. On the 2
 `stress_slice`, it improves over the previous margin-0 candidate on success and near misses while
 preserving zero collisions. It still times out in most dynamic-agent scenarios.
 
+A follow-up route-lookahead branch found one nominal-success gain at 8 cells, but every attempt to
+make that branch safety-acceptable either retained static collisions or regressed success/stress
+behavior. The selected policy therefore remains the simpler waypoint2 configuration.
+
+Additional static-escape and mild-speed experiments also failed the safety gate. Static escape
+reduced nominal near misses but introduced one static collision; 2.2 m/s speed looked safe on
+nominal sanity but regressed on stress with two static collisions.
+
+A route-guide commitment bonus for stalled progress was also rejected: it increased route-guide
+selection, but over-committed in doorway cases and introduced two nominal static collisions.
+
 ## Final Selected Policy
 
 `hybrid_rule_v3_static_margin0_waypoint2`:
@@ -35,10 +46,20 @@ preserving zero collisions. It still times out in most dynamic-agent scenarios.
 | `hybrid_rule_v3_teb_like_rollout` full static margin | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 3.8366 | 1.6616 | reject |
 | `hybrid_rule_v3_static_margin0` | nominal_sanity | 0.2778 | 0.0000 | 0.2222 | 3.8323 | 1.6868 | reference |
 | `hybrid_rule_v3_static_margin0_waypoint2` | nominal_sanity | 0.2778 | 0.0000 | 0.2222 | 3.8495 | 1.7052 | best current |
+| `hybrid_rule_v3_waypoint2_static_escape` | nominal_sanity | 0.2778 | 0.0556 | 0.0556 | 4.0204 | 1.7688 | reject |
+| `hybrid_rule_v3_waypoint2_speed2p2` | nominal_sanity | 0.2778 | 0.0000 | 0.1667 | 3.8313 | 1.6764 | stress-tested |
+| `hybrid_rule_v3_waypoint2_route_commit` | nominal_sanity | 0.1667 | 0.1111 | 0.1667 | 3.7788 | 1.6813 | reject |
 | `hybrid_rule_v3_static_margin0_waypoint3` | nominal_sanity | 0.2778 | 0.0556 | 0.1111 | 3.6750 | 1.7100 | reject |
 | `hybrid_rule_v3_static_margin0_comfort` | nominal_sanity | 0.2222 | 0.0556 | 0.1111 | 4.0558 | 1.5927 | reject |
 | `hybrid_rule_v3_waypoint2_mild_comfort` | nominal_sanity | 0.2778 | 0.0556 | 0.0556 | 3.9394 | 1.7285 | reject |
 | `hybrid_rule_v3_waypoint2_progress` | nominal_sanity | 0.2778 | 0.0556 | 0.1111 | 3.8532 | 1.7492 | reject |
+| `hybrid_rule_v3_waypoint2_dynamic_clearance` | nominal_sanity | 0.1667 | 0.1111 | 0.2222 | 3.8351 | 1.6665 | reject |
+| `hybrid_rule_v3_waypoint2_route_lookahead8` | nominal_sanity | 0.3333 | 0.0556 | 0.1667 | 3.9712 | 1.7855 | reject |
+| `hybrid_rule_v3_waypoint2_route_lookahead6` | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 3.7507 | 1.6964 | reject |
+| `hybrid_rule_v3_waypoint2_route_lookahead8_inflation4` | nominal_sanity | 0.2778 | 0.1111 | 0.1111 | 3.9232 | 1.7714 | reject |
+| `hybrid_rule_v3_waypoint2_route_lookahead8_static05` | nominal_sanity | 0.2778 | 0.0000 | 0.1667 | 3.8066 | 1.6924 | stress-tested |
+| `hybrid_rule_v3_waypoint2_route_lookahead8_static02` | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 3.8299 | 1.6479 | reject |
+| `hybrid_rule_v3_waypoint2_route_lookahead8_clearance1` | nominal_sanity | 0.1667 | 0.1111 | 0.1111 | 3.9191 | 1.6786 | reject |
 | `hybrid_rule_v4_recovery_aware` | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 3.8880 | 1.6510 | reject |
 | `hybrid_rule_v3_fast_progress` | nominal_sanity | 0.1667 | 0.0000 | 0.2222 | 3.7599 | 1.5624 | reject |
 | `hybrid_rule_v3_dynamic_relaxed` | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 3.7283 | 1.6644 | reject |
@@ -60,6 +81,8 @@ Stress-slice result for the selected policy:
 |---|---|---:|---:|---:|---:|---:|---:|
 | `hybrid_rule_v3_static_margin0` | stress_slice | 24 | 0.2917 | 0.0000 | 0.2500 | 4.7441 | 1.6522 |
 | `hybrid_rule_v3_static_margin0_waypoint2` | stress_slice | 24 | 0.3333 | 0.0000 | 0.2083 | 4.7580 | 1.6936 |
+| `hybrid_rule_v3_waypoint2_route_lookahead8_static05` | stress_slice | 24 | 0.2917 | 0.0000 | 0.2917 | 4.7495 | 1.6285 |
+| `hybrid_rule_v3_waypoint2_speed2p2` | stress_slice | 24 | 0.2500 | 0.0833 | 0.2917 | 4.7483 | 1.5932 |
 
 ## Safety Analysis
 
@@ -91,6 +114,23 @@ overtaking, and Francis-style scenarios.
 - `hybrid_rule_v3_static_margin0_comfort`, `hybrid_rule_v3_waypoint2_mild_comfort`, and
   `hybrid_rule_v3_waypoint2_progress`: improved comfort/speed secondary metrics but introduced a
   static collision, so rejected.
+- `hybrid_rule_v3_waypoint2_static_escape`: allowing slow, non-worsening motion inside the
+  conservative static-clearance band reduced nominal near misses but introduced a static collision.
+- `hybrid_rule_v3_waypoint2_speed2p2`: tied waypoint2 on nominal success and reduced nominal near
+  misses, but stress-slice success fell to 0.2500 and collision rose to 0.0833.
+- `hybrid_rule_v3_waypoint2_route_commit`: boosting route-guide candidates after weak 3 s progress
+  over-selected route commands, lost doorway successes, and introduced two static collisions.
+- `hybrid_rule_v3_waypoint2_dynamic_clearance`: stronger dynamic-clearance scoring worsened nominal
+  success and introduced two static collisions.
+- `hybrid_rule_v3_waypoint2_route_lookahead8`: improved nominal success to 0.3333, but introduced a
+  static collision, so it cannot be selected under the safety-first rule.
+- `hybrid_rule_v3_waypoint2_route_lookahead6`, `hybrid_rule_v3_waypoint2_route_lookahead8_static02`,
+  and `hybrid_rule_v3_waypoint2_route_lookahead8_clearance1`: attempted to keep the lookahead
+  progress signal, but either lost success or retained static collisions.
+- `hybrid_rule_v3_waypoint2_route_lookahead8_static05`: made the lookahead8 branch collision-free
+  on nominal sanity, but stress-slice success and near misses regressed versus waypoint2.
+- `hybrid_rule_v3_waypoint2_route_lookahead8_inflation4`: route inflation did not address the
+  unsafe branch and increased nominal static collisions.
 - `hybrid_rule_v4_recovery_aware`: recovery rotations and stall-rotation scoring lost doorway
   successes.
 - `hybrid_rule_v3_fast_progress`: higher speed envelope increased intrusive near misses and reduced
@@ -112,6 +152,14 @@ best current hybrid-rule variant remains experimental, timeout-limited, and comf
 - `uv run pytest tests/planner/test_hybrid_rule_local_planner.py -q`
 - `uv run ruff check robot_sf/planner/hybrid_rule_local_planner.py robot_sf/benchmark/map_runner.py tests/planner/test_hybrid_rule_local_planner.py`
 - `uv run pytest tests/planner/test_hybrid_rule_local_planner.py tests/benchmark/test_algorithm_metadata_contract.py tests/benchmark/test_map_runner_preflight_profiles.py -q`
+- `uv run pytest tests/validation/test_policy_search_common.py tests/validation/test_run_policy_search_candidate.py -q`
 - `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_static_margin0_waypoint2 --stage smoke --workers 1 --output-dir output/policy_search/hybrid_rule_v3_static_margin0_waypoint2_smoke`
 - `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_static_margin0_waypoint2 --stage nominal_sanity --workers 1 --output-dir output/policy_search/hybrid_rule_v3_static_margin0_waypoint2_nominal`
 - `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_static_margin0_waypoint2 --stage stress_slice --workers 2 --output-dir output/policy_search/hybrid_rule_v3_static_margin0_waypoint2_stress`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_static_escape --stage smoke --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_static_escape_smoke`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_static_escape --stage nominal_sanity --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_static_escape_nominal`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_speed2p2 --stage smoke --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_speed2p2_smoke`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_speed2p2 --stage nominal_sanity --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_speed2p2_nominal`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_speed2p2 --stage stress_slice --workers 2 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_speed2p2_stress`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_route_commit --stage smoke --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_route_commit_smoke`
+- `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_waypoint2_route_commit --stage nominal_sanity --workers 1 --output-dir output/policy_search/hybrid_rule_v3_waypoint2_route_commit_nominal`

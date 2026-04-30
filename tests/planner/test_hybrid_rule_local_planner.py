@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleCandidate,
     HybridRuleLocalPlannerAdapter,
     HybridRuleLocalPlannerConfig,
     build_hybrid_rule_local_planner_config,
@@ -172,6 +173,114 @@ def test_hybrid_rule_v0_rejects_static_footprint_clearance(monkeypatch) -> None:
     assert evaluation["candidate"] == candidate
     assert evaluation["min_static_clearance"] == pytest.approx(0.2)
     assert evaluation["hard_static_clearance"] == pytest.approx(0.35)
+
+
+def test_hybrid_rule_static_clearance_escape_allows_slow_nonworsening_motion(
+    monkeypatch,
+) -> None:
+    """Static escape should allow only slow commands that do not reduce clearance."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2)
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_escape")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.3)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["terms"]["static_clearance_escape"] == 1.0
+
+
+def test_hybrid_rule_static_clearance_escape_rejects_worsening_motion(monkeypatch) -> None:
+    """Static escape must still reject candidates that move deeper into the clearance band."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+        static_clearance_escape_tolerance=0.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2)
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_escape")
+    clearances = iter([0.3, 0.25])
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: next(clearances),
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+
+
+def test_hybrid_rule_route_guide_commitment_bonus_only_when_stalled(monkeypatch) -> None:
+    """Route-guide commitment should only boost route candidates under stalled progress."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        route_guide_commitment_weight=1.0,
+        route_guide_commitment_progress_threshold=0.5,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    route_candidate = HybridRuleCandidate(0.4, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+
+    stalled_eval = planner._evaluate_candidate(
+        candidate=route_candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.2},
+    )
+    moving_eval = planner._evaluate_candidate(
+        candidate=route_candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 2.0},
+    )
+
+    assert stalled_eval["terms"]["route_guide_commitment"] == 1.0
+    assert moving_eval["terms"]["route_guide_commitment"] == 0.0
+    assert stalled_eval["score"] > moving_eval["score"]
 
 
 def test_hybrid_rule_route_guide_adds_candidate_source(monkeypatch) -> None:

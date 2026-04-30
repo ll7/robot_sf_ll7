@@ -949,10 +949,10 @@ def _build_nonfinite_diagnostics(
     }
     return {
         "iteration": iteration,
-        "reward_mean": reward_mean,
-        "timesteps_total": timesteps_total,
+        "reward_mean": _json_safe_scalar(reward_mean),
+        "timesteps_total": _json_safe_scalar(timesteps_total),
         "top_level_keys": sorted(result.keys()),
-        "interesting_metrics": interesting_paths,
+        "interesting_metrics": _json_safe_value(interesting_paths),
         "nonfinite_scalars": _find_nonfinite_scalars(result),
     }
 

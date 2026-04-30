@@ -70,7 +70,13 @@ def main() -> int:
         else {}
     )
 
+    stage = str(payload.get("stage", "unknown"))
+    runner_decision = str(payload.get("decision", "")).strip().lower()
+    promotion_scale_stage = stage in {"full_matrix", "robustness_extension"}
+    stage_decision_passed = promotion_scale_stage or runner_decision == "pass"
+
     checks = {
+        "stage_decision_passed": stage_decision_passed,
         "success_rate": float(summary.get("success_rate", 0.0))
         >= float(gate_cfg.get("min_success_rate", 0.0)),
         "collision_rate": float(summary.get("collision_rate", 1.0))
@@ -89,7 +95,8 @@ def main() -> int:
         json.dumps(
             {
                 "candidate": candidate_name,
-                "stage": payload.get("stage"),
+                "stage": stage,
+                "runner_decision": runner_decision or None,
                 "gate": gate_name,
                 "checks": checks,
                 "decision": decision,
@@ -103,7 +110,8 @@ def main() -> int:
     lines = [
         f"# Promotion Decision: {candidate_name}",
         "",
-        f"- Stage: `{payload.get('stage', 'unknown')}`",
+        f"- Stage: `{stage}`",
+        f"- Runner decision: `{runner_decision or 'n/a'}`",
         f"- Gate: `{gate_name}`",
         f"- Decision: `{decision}`",
         "",

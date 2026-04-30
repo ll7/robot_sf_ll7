@@ -30,3 +30,11 @@ Structured source of truth: `configs/policy_search/promotion_gates.yaml`.
 Classic and Francis success-rate floor values remain `null` in the machine-
 readable gate file until the frozen baseline split is refreshed from a primary
 artifact rather than approximated from the notes.
+
+## Promotion CLI Guard
+
+`scripts/tools/promote_policy_search_candidate.py` fails closed for local
+stage summaries unless the stage runner recorded `decision: pass`. Promotion-
+scale stages (`full_matrix` and `robustness_extension`) are evaluated directly
+against the configured promotion gates because their pass/fail decision is the
+promotion report itself.

@@ -102,6 +102,8 @@ knowledge, not every transient iteration detail.
 - [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
   follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
   config-first safety-reward mitigation candidate.
+- [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
+  log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
 ## Planner Integration Notes
 

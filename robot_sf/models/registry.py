@@ -16,6 +16,7 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+_LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
 
 
 def _local_only_resolution_error(
@@ -275,7 +276,10 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
 
     cached_path = cache_root / file_name
     if cached_path.exists():
-        logger.info("Using cached model artifact: {}", cached_path)
+        resolved_cached_path = cached_path.resolve()
+        if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
+            _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
+            logger.info("Using cached model artifact: {}", cached_path)
         return cached_path
 
     logger.info("Downloading model artifact {} from {}", file_name, run_path)

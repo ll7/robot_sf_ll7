@@ -51,6 +51,27 @@ from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import SvgCircle, SvgPath, SvgRectangle
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 
+_LOGGED_OBSTACLE_PATH_EVENTS: set[tuple[str, str, str]] = set()
+
+
+def _log_obstacle_path_event_once(
+    event: str,
+    svg_path: str | Path | None,
+    path_id: str,
+    level: str,
+    message: str,
+    **kwargs,
+) -> None:
+    """Emit noisy obstacle repair diagnostics once per process, SVG, path, and event."""
+    if not svg_path:
+        return
+    path_obj = Path(svg_path)
+    key = (event, str(path_obj.resolve()), path_id)
+    if key in _LOGGED_OBSTACLE_PATH_EVENTS:
+        return
+    _LOGGED_OBSTACLE_PATH_EVENTS.add(key)
+    getattr(logger, level)(message, svg=path_obj.name, pid=path_id, **kwargs)
+
 
 class SvgMapConverter:
     """Manages conversion of labeled SVG maps to MapDefinition objects.
@@ -749,42 +770,49 @@ class SvgMapConverter:
         """
         # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
         vertices = list(path.coordinates)
-        svg_name = Path(self.svg_file_str).name
 
         if not np.array_equal(vertices[0], vertices[-1]):
-            logger.warning(
+            _log_obstacle_path_event_once(
+                "close_polygon",
+                self.svg_file_str,
+                str(path.id),
+                "warning",
                 "SVG file '{svg}' closing polygon: first and last vertices of obstacle <{pid}> differ",
-                svg=svg_name,
-                pid=path.id,
             )
             vertices.append(vertices[0])
 
         # Validate obstacle geometry to flag self-intersections or degenerate shapes early.
         poly = Polygon(vertices)
         if not poly.is_valid or poly.is_empty:
-            logger.warning(
+            _log_obstacle_path_event_once(
+                "invalid_polygon",
+                self.svg_file_str,
+                str(path.id),
+                "warning",
                 "SVG file '{svg}' obstacle path id={pid} produced invalid polygon (valid={valid}, empty={empty}): {reason}",
-                svg=svg_name,
-                pid=path.id,
                 valid=poly.is_valid,
                 empty=poly.is_empty,
                 reason=explain_validity(poly),
             )
             repaired = self._repair_invalid_obstacle_geometry(poly)
             if repaired is not None:
-                logger.info(
+                _log_obstacle_path_event_once(
+                    "repaired_polygon",
+                    self.svg_file_str,
+                    str(path.id),
+                    "info",
                     "SVG file '{svg}' repaired invalid obstacle path id={pid} via make_valid (area={area:.3f}, polygons={count}).",
-                    svg=svg_name,
-                    pid=path.id,
                     area=repaired.area,
                     count=len(Obstacle.from_geometry(repaired).iter_polygons()),
                 )
                 return Obstacle.from_geometry(repaired)
             else:
-                logger.warning(
+                _log_obstacle_path_event_once(
+                    "repair_failed",
+                    self.svg_file_str,
+                    str(path.id),
+                    "warning",
                     "SVG file '{svg}' failed to repair invalid obstacle path id={pid}; using raw vertices.",
-                    svg=svg_name,
-                    pid=path.id,
                 )
 
         return Obstacle(vertices)

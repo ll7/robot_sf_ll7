@@ -1,4 +1,4 @@
-# Candidate Report: hybrid_rule_v3_teb_like_rollout (smoke)
+# Candidate Report: hybrid_rule_v3_static_margin0 (smoke)
 
 ## Decision
 
@@ -6,7 +6,7 @@ pass
 
 ## Hypothesis
 
-Adding an occupancy-grid route-guide candidate to the safety-filtered DWA scorer should recover progress in static/corridor local minima without giving back the collision improvement from the static footprint filter.
+Enforcing static hard clearance over the full rollout while using no extra static margin beyond the reported robot radius should preserve static safety without the doorway freezing caused by a 5 cm buffer in tight passages.
 
 
 ## Evaluation Scope
@@ -15,7 +15,7 @@ Adding an occupancy-grid route-guide candidate to the safety-filtered DWA scorer
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_teb_like_rollout_smoke_static_full_rollout/summary.json`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_static_margin0_smoke/summary.json`
 - Git commit: `309a143d4052de3f1bd8cc0b11ffa155f786a017`
 
 ## Aggregate Results

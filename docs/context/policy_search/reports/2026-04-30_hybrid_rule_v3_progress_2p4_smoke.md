@@ -1,4 +1,4 @@
-# Candidate Report: hybrid_rule_v3_teb_like_rollout (smoke)
+# Candidate Report: hybrid_rule_v3_progress_2p4 (smoke)
 
 ## Decision
 
@@ -6,7 +6,7 @@ pass
 
 ## Hypothesis
 
-Adding an occupancy-grid route-guide candidate to the safety-filtered DWA scorer should recover progress in static/corridor local minima without giving back the collision improvement from the static footprint filter.
+A moderate 2.4 m/s speed envelope with stronger progress pressure should recover long-route nominal-sanity timeouts without the near-miss and doorway regressions observed at 3.0 m/s.
 
 
 ## Evaluation Scope
@@ -15,14 +15,14 @@ Adding an occupancy-grid route-guide candidate to the safety-filtered DWA scorer
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_teb_like_rollout_smoke_static_full_rollout/summary.json`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_progress_2p4_smoke/summary.json`
 - Git commit: `309a143d4052de3f1bd8cc0b11ffa155f786a017`
 
 ## Aggregate Results
 
 | Episodes | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.9082 |
+| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.9064 |
 
 ## Scenario-Family Split
 

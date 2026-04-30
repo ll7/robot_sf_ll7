@@ -19,6 +19,7 @@ rollout_horizon: 1.6
 hard_collision_horizon: 1.2
 soft_prediction_horizon: 3.0
 goal_tolerance: 0.25
+waypoint_switch_distance: 0.9
 
 linear_samples: 7
 angular_samples: 9

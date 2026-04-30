@@ -365,6 +365,7 @@ def _build_adapter_policy(
         )
 
     _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
     if hasattr(adapter, "diagnostics"):

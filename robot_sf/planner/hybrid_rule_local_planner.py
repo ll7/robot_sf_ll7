@@ -108,6 +108,7 @@ class HybridRuleLocalPlannerConfig:
     hard_collision_horizon: float = 1.2
     soft_prediction_horizon: float = 3.0
     goal_tolerance: float = 0.25
+    waypoint_switch_distance: float = 0.9
 
     linear_samples: int = 7
     angular_samples: int = 9
@@ -116,6 +117,7 @@ class HybridRuleLocalPlannerConfig:
     robot_radius_default: float = 0.3
     pedestrian_radius_default: float = 0.3
     hard_safety_margin: float = 0.05
+    static_hard_safety_margin: float = -1.0
     desired_static_clearance: float = 0.7
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
@@ -228,9 +230,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_next = self._as_1d_float(goal_state.get("next", goal_current), pad=2)[:2]
         current_dist = float(np.linalg.norm(goal_current - robot_pos))
         next_dist = float(np.linalg.norm(goal_next - robot_pos))
-        if next_dist > 1e-6 and (
-            current_dist <= float(self.config.goal_tolerance) or next_dist < current_dist
-        ):
+        if next_dist > 1e-6 and current_dist <= float(self.config.waypoint_switch_distance):
             goal = goal_next
         else:
             goal = goal_current
@@ -540,7 +540,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if nearest_ped < float(self.config.near_human_angular_limit_distance) and abs(
             candidate.angular
         ) > float(self.config.near_human_max_angular_speed):
-            return {"accepted": False, "reason": "excessive_angular_near_human"}
+            return {
+                "accepted": False,
+                "reason": "excessive_angular_near_human",
+                "candidate": candidate,
+            }
 
         dt = max(float(self.config.rollout_dt), 1e-3)
         steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
@@ -577,19 +581,32 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 grid, meta, channel, _resolution = payload
                 obstacle_value = self._grid_value(robot_pos, grid, meta, channel)
             if obstacle_value >= float(self.config.obstacle_threshold):
-                return {"accepted": False, "reason": "static_collision"}
+                return {
+                    "accepted": False,
+                    "reason": "static_collision",
+                    "candidate": candidate,
+                    "obstacle_value": float(obstacle_value),
+                    "time": float(t),
+                }
             min_static_clearance = min(
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
-            hard_static_clearance = float(state["robot_radius"]) + float(
-                self.config.hard_safety_margin
+            static_margin = (
+                float(self.config.static_hard_safety_margin)
+                if float(self.config.static_hard_safety_margin) >= 0.0
+                else float(self.config.hard_safety_margin)
             )
-            if (
-                t <= float(self.config.hard_collision_horizon)
-                and min_static_clearance <= hard_static_clearance
-            ):
-                return {"accepted": False, "reason": "static_clearance"}
+            hard_static_clearance = float(state["robot_radius"]) + static_margin
+            if min_static_clearance <= hard_static_clearance:
+                return {
+                    "accepted": False,
+                    "reason": "static_clearance",
+                    "candidate": candidate,
+                    "min_static_clearance": float(min_static_clearance),
+                    "hard_static_clearance": float(hard_static_clearance),
+                    "time": float(t),
+                }
 
             if ped_pos.size > 0:
                 ped_future = ped_pos + ped_vel * t
@@ -599,7 +616,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     t <= float(self.config.hard_collision_horizon)
                     and min_dynamic_clearance <= collision_radius
                 ):
-                    return {"accepted": False, "reason": "dynamic_collision"}
+                    return {
+                        "accepted": False,
+                        "reason": "dynamic_collision",
+                        "candidate": candidate,
+                        "min_dynamic_clearance": float(min_dynamic_clearance),
+                        "collision_radius": float(collision_radius),
+                        "time": float(t),
+                    }
 
         end_dist = float(np.linalg.norm(goal - robot_pos))
         progress = start_dist - end_dist
@@ -716,6 +740,28 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "predicted_ttc": _finite_or_none(evaluation.get("predicted_ttc")),
         }
 
+    def _rejection_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
+        """Return a compact JSON-safe rejected-candidate diagnostic row."""
+        candidate = evaluation.get("candidate")
+        row: dict[str, Any] = {
+            "reason": str(evaluation.get("reason", "unknown")),
+        }
+        if isinstance(candidate, HybridRuleCandidate):
+            row["command"] = [float(candidate.linear), float(candidate.angular)]
+            row["source"] = candidate.source
+        for key in (
+            "min_static_clearance",
+            "hard_static_clearance",
+            "min_dynamic_clearance",
+            "collision_radius",
+            "obstacle_value",
+            "time",
+        ):
+            value = evaluation.get(key)
+            if isinstance(value, int | float | np.integer | np.floating):
+                row[key] = float(value)
+        return row
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the selected ``(linear, angular)`` command."""
         state = self._extract_state(observation)
@@ -747,6 +793,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         candidates = self._generate_candidates(state, speed_cap)
         accepted: list[dict[str, Any]] = []
         rejection_counts: Counter[str] = Counter()
+        rejected_examples: list[dict[str, Any]] = []
         for candidate in candidates:
             evaluation = self._evaluate_candidate(
                 candidate=candidate,
@@ -761,6 +808,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else:
                 reason = str(evaluation.get("reason", "unknown"))
                 rejection_counts[reason] += 1
+                if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
+                    rejected_examples.append(self._rejection_diagnostic(evaluation))
 
         self._rejection_counts.update(rejection_counts)
         if accepted:
@@ -818,6 +867,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             nearest_static=nearest_static,
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
+            rejected_examples=rejected_examples,
         )
         return command
 
@@ -853,6 +903,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         nearest_static: float,
         predicted_ttc: float,
         progress_windows: dict[str, float],
+        rejected_examples: list[dict[str, Any]] | None = None,
     ) -> None:
         """Persist selected-command diagnostics and update state."""
         self._last_command = (float(command[0]), float(command[1]))
@@ -872,6 +923,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             },
             "top_k": top_k,
             "rejection_counts": dict(sorted(rejection_counts.items())),
+            "rejected_examples": rejected_examples or [],
             "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
             "nearest_static_obstacle_distance": _finite_or_none(nearest_static),
             "predicted_ttc": _finite_or_none(predicted_ttc),
@@ -888,6 +940,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "fallback_count": int(self._fallback_count),
             "last_decision": dict(self._last_decision) if self._last_decision else None,
         }
+
+    def last_decision(self) -> dict[str, Any] | None:
+        """Return the latest selected-command diagnostics for step-level tooling."""
+        return dict(self._last_decision) if self._last_decision else None
 
 
 def build_hybrid_rule_local_planner_config(

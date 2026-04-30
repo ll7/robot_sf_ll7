@@ -61,6 +61,19 @@ def test_hybrid_rule_v0_returns_diagnostics_for_open_space() -> None:
     assert diagnostics["selected_source_counts"]
 
 
+def test_hybrid_rule_last_decision_returns_copy() -> None:
+    """Step-level diagnostics should not expose mutable planner internals."""
+    planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
+    planner.plan(_obs())
+
+    last = planner.last_decision()
+
+    assert last is not None
+    assert last["planner_variant"] == "hybrid_rule_v0_minimal"
+    last["planner_variant"] = "mutated"
+    assert planner.last_decision()["planner_variant"] == "hybrid_rule_v0_minimal"
+
+
 def test_hybrid_rule_v0_speed_cap_near_humans() -> None:
     """The documented near-human speed cap should limit selected commands."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
@@ -87,6 +100,32 @@ def test_hybrid_rule_structured_pedestrian_velocities_convert_to_world_frame() -
     assert np.allclose(state["ped_vel"][0], np.array([0.0, 1.0]), atol=1e-9)
 
 
+def test_hybrid_rule_commits_to_current_waypoint_until_switch_distance() -> None:
+    """Planner should not skip the active route waypoint just because next is closer."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(waypoint_switch_distance=0.9)
+    )
+    obs = _obs(robot=(0.0, 0.0), goal=(2.0, 0.0))
+    obs["goal"]["next"] = np.asarray((1.5, 0.0), dtype=float)
+
+    state = planner._extract_state(obs)
+
+    assert np.allclose(state["goal"], np.asarray((2.0, 0.0), dtype=float))
+
+
+def test_hybrid_rule_switches_to_next_waypoint_near_current() -> None:
+    """Planner should hand off to the next waypoint after reaching the active one."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(waypoint_switch_distance=0.9)
+    )
+    obs = _obs(robot=(0.0, 0.0), goal=(0.5, 0.0))
+    obs["goal"]["next"] = np.asarray((2.0, 0.0), dtype=float)
+
+    state = planner._extract_state(obs)
+
+    assert np.allclose(state["goal"], np.asarray((2.0, 0.0), dtype=float))
+
+
 def test_hybrid_rule_v0_emergency_stop_when_all_candidates_rejected() -> None:
     """Hard dynamic collision filtering should fail closed to an emergency stop."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
@@ -110,7 +149,11 @@ def test_hybrid_rule_v0_rejects_static_footprint_clearance(monkeypatch) -> None:
     )
     planner = HybridRuleLocalPlannerAdapter(cfg)
     state = planner._extract_state(_obs(speed=0.2))
-    candidate = planner._generate_candidates(state, speed_cap=cfg.max_linear_speed)[0]
+    candidate = next(
+        candidate
+        for candidate in planner._generate_candidates(state, speed_cap=cfg.max_linear_speed)
+        if candidate.linear > planner.config.freezing_speed_threshold
+    )
 
     monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
     monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.2)
@@ -124,7 +167,11 @@ def test_hybrid_rule_v0_rejects_static_footprint_clearance(monkeypatch) -> None:
         progress_windows={"3s": 1.0},
     )
 
-    assert evaluation == {"accepted": False, "reason": "static_clearance"}
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+    assert evaluation["candidate"] == candidate
+    assert evaluation["min_static_clearance"] == pytest.approx(0.2)
+    assert evaluation["hard_static_clearance"] == pytest.approx(0.35)
 
 
 def test_hybrid_rule_route_guide_adds_candidate_source(monkeypatch) -> None:
@@ -213,11 +260,13 @@ def test_hybrid_rule_config_builder_and_variant_guard() -> None:
             "max_linear_speed": "1.4",
             "linear_samples": "5",
             "lookahead_distances": [0.4, 0.8],
+            "static_hard_safety_margin": "0.0",
         }
     )
     assert cfg.max_linear_speed == pytest.approx(1.4)
     assert cfg.linear_samples == 5
     assert cfg.lookahead_distances == (0.4, 0.8)
+    assert cfg.static_hard_safety_margin == pytest.approx(0.0)
 
     v3_cfg = build_hybrid_rule_local_planner_config(
         {"planner_variant": "hybrid_rule_v3_teb_like_rollout"}

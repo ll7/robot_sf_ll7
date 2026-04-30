@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
+from robot_sf.adversarial import search
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D, SearchConfig
-from robot_sf.adversarial.search import run_adversarial_search
 
 
 def _write_template(path: Path) -> None:
@@ -135,7 +136,7 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
             bundle_path=candidate_dir,
         )
 
-    result = run_adversarial_search(
+    result = search.run_adversarial_search(
         config,
         evaluator=evaluator,
         certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
@@ -168,7 +169,7 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     def evaluator(*_args: object, **_kwargs: object) -> CandidateEvaluation:
         raise AssertionError("strict certification should reject before evaluation")
 
-    result = run_adversarial_search(
+    result = search.run_adversarial_search(
         config,
         evaluator=evaluator,
         sampler=_SequenceSampler([_candidate(1)]),
@@ -179,3 +180,23 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["certification_status"]["status"] == "not_available"
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
+
+
+def test_default_evaluator_treats_failures_as_failed_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Benchmark failure summaries must fail closed before objective scoring."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"failures": [{"scenario_id": "candidate", "error": "boom"}]}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    with pytest.raises(RuntimeError, match="candidate evaluation failed"):
+        search._default_evaluator(
+            config,
+            _candidate(1),
+            tmp_path / "scenario.yaml",
+            tmp_path / "candidate",
+        )

@@ -2,28 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.adversarial.io import read_first_jsonl_record
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
 
 ObjectiveFn = Callable[["CandidateEvaluation"], float | None]
-
-
-def _read_first_episode(path: Path | None) -> dict[str, Any] | None:
-    """Read the first JSONL episode record from an evaluation artifact."""
-    if path is None or not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped:
-            payload = json.loads(stripped)
-            return payload if isinstance(payload, dict) else None
-    return None
 
 
 def _metric(metrics: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -45,7 +33,7 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
     fallback failure score keeps the runner usable without pretending the value
     is camera-ready SNQI evidence.
     """
-    record = _read_first_episode(evaluation.episode_record_path)
+    record = read_first_jsonl_record(evaluation.episode_record_path)
     if record is None:
         return None
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}

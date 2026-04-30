@@ -854,12 +854,30 @@ def _json_safe_scalar(value: Any) -> Any:
 
 
 def _json_safe_value(value: Any) -> Any:
-    """Recursively convert nested values into strict-JSON-safe primitives."""
-    if isinstance(value, dict):
-        return {key: _json_safe_value(nested) for key, nested in value.items()}
-    if isinstance(value, list | tuple):
-        return [_json_safe_value(nested) for nested in value]
-    return _json_safe_scalar(value)
+    """Iteratively convert nested payloads into strict-JSON-safe values."""
+    root = [value]
+    stack: list[tuple[dict[Any, Any] | list[Any], Any]] = [(root, 0)]
+    while stack:
+        parent, key = stack.pop()
+        item = parent[key]
+        if isinstance(item, dict):
+            converted = {str(nested_key): nested_value for nested_key, nested_value in item.items()}
+            parent[key] = converted
+            stack.extend((converted, nested_key) for nested_key in converted)
+        elif isinstance(item, list | tuple):
+            converted = list(item)
+            parent[key] = converted
+            stack.extend((converted, index) for index in range(len(converted)))
+        elif isinstance(item, np.ndarray):
+            parent[key] = item.tolist()
+            stack.append((parent, key))
+        elif isinstance(item, np.generic):
+            parent[key] = _json_safe_scalar(item.item())
+        elif isinstance(item, Path):
+            parent[key] = str(item)
+        else:
+            parent[key] = _json_safe_scalar(item)
+    return root[0]
 
 
 def _is_finite_scalar(value: Any) -> bool:

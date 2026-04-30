@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -30,6 +29,7 @@ from robot_sf.adversarial.config import (
     SearchConfig,
     SearchRunResult,
 )
+from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, RandomCandidateSampler
 from robot_sf.benchmark.runner import run_batch
@@ -37,19 +37,9 @@ from robot_sf.benchmark.runner import run_batch
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
 CandidateCertifier = Callable[[CandidateSpec, Path, bool], CertificationStatus]
 
-DEFAULT_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
-
-
-def _read_first_episode(path: Path) -> dict | None:
-    """Read the first JSONL record from a benchmark output."""
-    if not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped:
-            payload = json.loads(stripped)
-            return payload if isinstance(payload, dict) else None
-    return None
+DEFAULT_SCHEMA_PATH = (
+    Path(__file__).parent.parent / "benchmark" / "schemas" / "episode.schema.v1.json"
+)
 
 
 def _default_evaluator(
@@ -77,9 +67,9 @@ def _default_evaluator(
         workers=config.workers,
         resume=False,
     )
-    if int(summary.get("failed_jobs", 0)) > 0:
+    if len(summary.get("failures", [])) > 0:
         raise RuntimeError(f"candidate evaluation failed: {summary.get('failures')}")
-    record = _read_first_episode(episode_path)
+    record = read_first_jsonl_record(episode_path)
     trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
     attribution = attribution_from_episode_record(record or {})
     write_json(candidate_dir / "failure_attribution.json", attribution.to_json())

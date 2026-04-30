@@ -205,9 +205,18 @@ echo "[issue791] Log level: ${LOG_LEVEL}"
 # Reusable intent: stage gates can opt out of WandB, but follow-up/promotion runs should be tracked.
 # Override with ISSUE791_WANDB_POLICY=require|allow-off or ISSUE791_REQUIRE_WANDB=true|false.
 
-srun --cpu_bind=cores --gpus-per-node=1 \
+if command -v srun >/dev/null 2>&1; then
+  echo "[issue791] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
+  srun --cpu_bind=cores --gpus-per-node=1 \
+    "${PYTHON_BIN}" scripts/training/train_ppo.py \
+    --config "${TRAIN_CONFIG_PATH}" \
+    --log-level "${LOG_LEVEL}"
+else
+  echo "[issue791] srun unavailable on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}; PATH=${PATH}" >&2
+  echo "[issue791] Running training directly in the batch allocation." >&2
   "${PYTHON_BIN}" scripts/training/train_ppo.py \
-  --config "${TRAIN_CONFIG_PATH}" \
-  --log-level "${LOG_LEVEL}"
+    --config "${TRAIN_CONFIG_PATH}" \
+    --log-level "${LOG_LEVEL}"
+fi
 
 echo "[issue791] Training completed. Artifacts will be synced to ${RESULTS_ROOT}"

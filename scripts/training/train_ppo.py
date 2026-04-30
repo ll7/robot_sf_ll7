@@ -2406,6 +2406,14 @@ def _evaluate_policy(
             strategy=sampler_strategy,
         )
     scenario_cycle_length = max(1, len(sampler.scenario_ids))
+    progress_interval = 10 if episodes > 10 else 1
+    logger.info(
+        "PPO evaluation phase start step={} episodes={} scenarios={} seed_mode={}",
+        eval_step if eval_step is not None else "final",
+        episodes,
+        len(sampler.scenario_ids),
+        "random" if use_random else "deterministic",
+    )
 
     for episode_idx in range(episodes):
         seed = (
@@ -2464,7 +2472,22 @@ def _evaluate_policy(
                 "metrics": metric_row,
             },
         )
+        if (episode_idx + 1) % progress_interval == 0 or episode_idx + 1 == episodes:
+            logger.info(
+                "PPO evaluation progress step={} episode={}/{} scenario={} steps={} success={:.3f}",
+                eval_step if eval_step is not None else "final",
+                episode_idx + 1,
+                episodes,
+                scenario_name,
+                steps,
+                metric_row["success_rate"],
+            )
 
+    logger.info(
+        "PPO evaluation phase complete step={} episodes={}",
+        eval_step if eval_step is not None else "final",
+        episodes,
+    )
     return metrics, episode_records
 
 

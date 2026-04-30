@@ -14,6 +14,7 @@ from robot_sf.training.imitation_config import (
     ExpertTrainingConfig,
 )
 from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
+from robot_sf.training.snqi_utils import default_training_snqi_context
 from scripts.training import train_ppo
 
 if TYPE_CHECKING:
@@ -329,3 +330,76 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
     assert payload["total_wall_clock_sec"] == 12.0
     assert payload["train_env_steps_per_sec_mean"] == 100.0
     assert payload["eval_sec_per_checkpoint"] == 3.0
+
+
+def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path) -> None:
+    """Evaluation should emit sparse phase markers so long reset-heavy runs remain readable."""
+    messages: list[str] = []
+
+    def _fake_info(message: str, *args) -> None:
+        messages.append(message.format(*args) if args else message)
+
+    class _FakeState:
+        max_sim_steps = 2
+
+    class _FakeEnv:
+        state = _FakeState()
+
+        def reset(self):
+            return [0.0], {}
+
+        def step(self, _action):
+            return [0.0], 1.0, True, False, {"success": True}
+
+        def close(self) -> None:
+            return None
+
+    class _FakeModel:
+        def predict(self, obs, deterministic: bool):
+            assert deterministic is True
+            return 0, None
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_eval_progress_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=12,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+    )
+
+    monkeypatch.setattr(train_ppo.logger, "info", _fake_info)
+    monkeypatch.setattr(
+        train_ppo,
+        "build_robot_config_from_scenario",
+        lambda scenario, *, scenario_path: object(),
+    )
+    monkeypatch.setattr(train_ppo, "_apply_env_overrides", lambda env_config, overrides: None)
+    monkeypatch.setattr(train_ppo, "make_robot_env", lambda **kwargs: _FakeEnv())
+
+    train_ppo._evaluate_policy(
+        _FakeModel(),
+        config,
+        scenario_definitions=({"id": "scenario_a", "name": "scenario_a"},),
+        scenario_path=tmp_path / "scenarios.yaml",
+        scenario_id=None,
+        hold_out_scenarios=(),
+        snqi_context=default_training_snqi_context(),
+        eval_step=60_000,
+    )
+
+    progress_messages = [message for message in messages if "PPO evaluation progress" in message]
+    assert any("PPO evaluation phase start step=60000 episodes=12" in msg for msg in messages)
+    assert any("PPO evaluation phase complete step=60000 episodes=12" in msg for msg in messages)
+    assert len(progress_messages) == 2
+    assert progress_messages[0].startswith("PPO evaluation progress step=60000 episode=10/12")
+    assert progress_messages[-1].startswith("PPO evaluation progress step=60000 episode=12/12")

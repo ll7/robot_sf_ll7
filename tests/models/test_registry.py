@@ -260,6 +260,7 @@ def test_resolve_model_path_rejects_missing_local_only_entry_with_migration_guid
 
 def test_download_from_wandb_uses_cached_path(monkeypatch, tmp_path: Path) -> None:
     """Cached W&B downloads should be reused without hitting the API."""
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
     cache_dir = tmp_path / "cache"
     cached = cache_dir / "demo" / "model.zip"
     cached.parent.mkdir(parents=True)
@@ -279,6 +280,43 @@ def test_download_from_wandb_uses_cached_path(monkeypatch, tmp_path: Path) -> No
     )
     assert resolved == cached
     assert api_called["value"] is False
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
+
+
+def test_download_from_wandb_logs_cached_path_once(monkeypatch, tmp_path: Path) -> None:
+    """Repeated cache hits for the same artifact should emit only one info log."""
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
+    cache_dir = tmp_path / "cache"
+    cached = cache_dir / "demo" / "model.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_text("checkpoint", encoding="utf-8")
+    messages: list[str] = []
+
+    def _fake_info(message: str, *args) -> None:
+        messages.append(message.format(*args) if args else message)
+
+    class _Api:
+        def run(self, path: str):
+            raise AssertionError(path)
+
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=_Api))
+    monkeypatch.setattr(registry.logger, "info", _fake_info)
+
+    for _ in range(3):
+        assert (
+            registry._download_from_wandb(
+                {
+                    "model_id": "demo",
+                    "wandb_run_path": "ll7/robot_sf/demo",
+                    "wandb_file": "model.zip",
+                },
+                cache_dir=cache_dir,
+            )
+            == cached
+        )
+
+    assert messages == [f"Using cached model artifact: {cached}"]
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
 
 
 def test_download_from_wandb_builds_run_path_from_split_fields(monkeypatch, tmp_path: Path) -> None:

@@ -16,6 +16,7 @@ from scripts.validation.policy_search_common import (
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jsonl", type=Path)
     parser.add_argument("--summary-json", type=Path)
@@ -35,6 +36,7 @@ def _read_records(jsonl_path: Path) -> list[dict[str, Any]]:
 
 
 def main() -> int:
+    """Build JSON and Markdown failure reports."""
     args = parse_args()
     if args.jsonl is None and args.summary_json is None:
         raise SystemExit("Provide --jsonl or --summary-json")

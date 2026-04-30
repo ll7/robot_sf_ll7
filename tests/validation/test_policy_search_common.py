@@ -10,18 +10,21 @@ from scripts.validation.policy_search_common import (
 
 
 def test_infer_scenario_family_prefers_explicit_fields() -> None:
+    """Explicit family metadata should win over inferred identifiers."""
     row = {"scenario_family": "Classic"}
 
     assert infer_scenario_family(row) == "classic"
 
 
 def test_infer_scenario_family_falls_back_to_scenario_id_prefix() -> None:
+    """Scenario ID prefixes should map to stable family names."""
     assert infer_scenario_family({"scenario_id": "classic_bottleneck_medium"}) == "classic"
     assert infer_scenario_family({"scenario_id": "francis2023_blind_corner"}) == "francis2023"
     assert infer_scenario_family({"scenario_id": "planner_sanity_simple"}) == "nominal"
 
 
 def test_classify_failure_mode_distinguishes_collision_types() -> None:
+    """Collision classification should distinguish static from pedestrian cases."""
     static_row = {
         "scenario_id": "corner_90_turn",
         "termination_reason": "collision",
@@ -40,6 +43,7 @@ def test_classify_failure_mode_distinguishes_collision_types() -> None:
 
 
 def test_classify_failure_mode_uses_near_miss_and_low_speed_heuristics() -> None:
+    """Near-miss and low-speed timeout heuristics should produce readable labels."""
     near_miss_row = {
         "scenario_id": "francis2023_parallel_traffic",
         "termination_reason": "max_steps",
@@ -62,6 +66,7 @@ def test_classify_failure_mode_uses_near_miss_and_low_speed_heuristics() -> None
 
 
 def test_summarize_policy_search_records_builds_family_and_failure_counts() -> None:
+    """Summary aggregation should include rates, failure counts, and family splits."""
     records = [
         {
             "scenario_id": "classic_bottleneck_medium",

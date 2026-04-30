@@ -157,10 +157,17 @@ class HybridRuleLocalPlannerConfig:
     route_guide_clearance_penalty_weight: float = 0.5
     recovery_enabled: bool = False
     recovery_reorient_angular_speed: float = 0.6
+
+    # Ablation-only static-clearance escape knobs kept so the rejected
+    # 2026-04-30 policy-search candidates can be reproduced. They default off
+    # and are not part of the selected waypoint2 policy.
     static_clearance_escape_enabled: bool = False
     static_clearance_escape_tolerance: float = 0.05
     static_clearance_escape_max_speed: float = 0.6
     static_clearance_escape_min_clearance: float = 0.5
+
+    # Ablation-only route-commitment bonus. It remains configurable for
+    # diagnostics, but benchmark evidence rejected it due static collisions.
     route_guide_commitment_progress_threshold: float = 0.5
 
 
@@ -182,9 +189,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     max_linear_speed=float(self.config.max_linear_speed),
                     max_angular_speed=float(self.config.max_angular_speed),
                     goal_tolerance=float(self.config.goal_tolerance),
-                    waypoint_lookahead_cells=int(
-                        self.config.route_guide_waypoint_lookahead_cells
-                    ),
+                    waypoint_lookahead_cells=int(self.config.route_guide_waypoint_lookahead_cells),
                     obstacle_inflation_cells=int(self.config.route_guide_obstacle_inflation_cells),
                     clearance_penalty_weight=float(
                         self.config.route_guide_clearance_penalty_weight
@@ -782,8 +787,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
             + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
-            + float(self.config.route_guide_commitment_weight)
-            * terms["route_guide_commitment"]
+            + float(self.config.route_guide_commitment_weight) * terms["route_guide_commitment"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
@@ -941,9 +945,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return command
 
-    def _static_recovery_allowed(
-        self, rejection_counts: Counter[str], nearest_ped: float
-    ) -> bool:
+    def _static_recovery_allowed(self, rejection_counts: Counter[str], nearest_ped: float) -> bool:
         """Return whether a rotate-in-place static recovery is safe enough to try.
 
         Returns:

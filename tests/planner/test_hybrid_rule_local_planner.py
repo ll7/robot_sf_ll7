@@ -332,11 +332,7 @@ def test_hybrid_rule_deadlock_escape_bonus_prefers_rotation_when_stalled() -> No
         progress_windows={"3s": 0.0},
     )
     rotate_eval = planner._evaluate_candidate(
-        candidate=next(
-            candidate
-            for candidate in candidates
-            if candidate.source == "rotate_left"
-        ),
+        candidate=next(candidate for candidate in candidates if candidate.source == "rotate_left"),
         observation=_obs(goal=(4.0, 0.0)),
         state=state,
         speed_cap=cfg.max_linear_speed,

@@ -16,6 +16,7 @@ import yaml
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("summary_json", nargs="+", type=Path)
     parser.add_argument(
@@ -37,6 +38,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Render a success-versus-collision Pareto plot."""
     args = parse_args()
     output_path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)

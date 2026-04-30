@@ -37,6 +37,10 @@ selection, but over-committed in doorway cases and introduced two nominal static
 - route-guide candidate from the occupancy-grid route planner,
 - explicit selected-candidate, top-k, rejection-reason, and rejected-example diagnostics.
 
+Rejected static-clearance escape and route-commitment knobs remain available only as default-off
+ablation controls so the candidate reports can be reproduced. They are not part of the selected
+policy.
+
 ## Quantitative Results
 
 | Candidate | Stage | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed | Decision |

@@ -170,7 +170,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
             return "stop"
         return "orca"
 
-    def _record_decision(
+    def _record_decision(  # noqa: PLR0913
         self,
         *,
         decision: str,

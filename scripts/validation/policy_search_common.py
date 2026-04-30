@@ -76,7 +76,7 @@ def infer_scenario_family(row: Mapping[str, Any]) -> str:
     return "unknown"
 
 
-def classify_failure_mode(
+def classify_failure_mode(  # noqa: C901
     row: Mapping[str, Any],
     *,
     low_speed_threshold: float = 0.15,
@@ -127,7 +127,7 @@ def classify_failure_mode(
     return "timeout_low_progress"
 
 
-def summarize_policy_search_records(
+def summarize_policy_search_records(  # noqa: C901
     records: list[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Aggregate policy-search metrics, family splits, and failure counts."""

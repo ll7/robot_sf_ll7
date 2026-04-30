@@ -12,6 +12,7 @@ import yaml
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("summary_json", nargs="+", type=Path)
     parser.add_argument(
@@ -38,6 +39,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Compare candidate summaries against each other and baseline gates."""
     args = parse_args()
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)

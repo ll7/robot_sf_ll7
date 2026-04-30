@@ -61,6 +61,14 @@ Notes:
 - If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
 - Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
   sync across worktrees.
+- If you are starting work on a feature branch, merge the latest `origin/main` into the current
+  branch early so you inherit repository-wide fixes and workflow improvements before your local
+  changes diverge. Typical command sequence:
+
+```bash
+git fetch origin main
+git merge origin/main
+```
 
 ### Critical dependencies and setup: Fast-pysf integration
 
@@ -170,6 +178,9 @@ Before opening a PR, fetch the latest `origin/main`, integrate it into the featu
 either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
 The `BASE_REF` value tells the readiness gate what to compare against; it does not update the
 feature branch by itself, so validation from before the latest-main sync is stale for PR creation.
+Do not wait until PR creation to pick up `main` branch improvements on long-lived feature branches;
+merge latest `origin/main` into the current branch when active work starts, then sync again before
+opening the PR.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

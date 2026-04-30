@@ -56,6 +56,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   `ln -s ../../robot_sf_ll7/local.machine.md .`
 - After the machine-context symlink is in place, run `uv sync --all-extras`, then
   `source .venv/bin/activate` before using Python tooling.
+- If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
+  branch early in the work cycle so the branch benefits from repository-wide fixes and workflow
+  improvements before local changes diverge. Typical command sequence:
+  `git fetch origin main && git merge origin/main`.
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 
@@ -171,6 +175,9 @@ screenshots or short GIFs when UI or playback output changes, and note any new a
 the feature branch, and then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; readiness
 proof from before that sync is stale and must not be used for PR creation. Ensure CI stays green by
 resolving lint or test failures locally before requesting review.
+- Do not wait until PR creation to pick up `main` branch improvements on long-lived branches.
+  Merge the latest `origin/main` into the current branch at the start of active work, and repeat
+  that sync before PR creation so validation covers the newest shared baseline.
 - Before creating a PR, inspect newly created `output/*` files, including ignored paths via
   `git status --ignored --short output`. Decide whether each output is disposable, should remain
   ignored, should be represented by a tracked manifest or registry entry, or must be uploaded to a

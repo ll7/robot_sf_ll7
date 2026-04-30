@@ -112,6 +112,76 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_static_margin0_waypoint2:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    hypothesis: >
+      Switching from the active route waypoint at 2.0 m instead of 0.9 m may
+      reduce route-local stalls in crossing and corridor scenes while keeping
+      the selected v3 static safety settings.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_static_margin0_waypoint3:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint3.yaml
+    hypothesis: >
+      A 3.0 m waypoint handoff distance may further reduce route-local stalls
+      in long crossing/corridor scenes, but may be brittle around doorway
+      waypoints.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_static_margin0_comfort:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_comfort.yaml
+    hypothesis: >
+      Increasing dynamic clearance pressure and applying a lower speed cap out
+      to 2.5 m should reduce doorway and crowd intrusive near misses without
+      altering static safety.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_mild_comfort:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_mild_comfort.yaml
+    hypothesis: >
+      A mild dynamic-clearance increase on top of the waypoint2 candidate may
+      reduce intrusive near misses without the static collision regression seen
+      in the stronger comfort variant.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_v3_waypoint2_progress:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_progress.yaml
+    hypothesis: >
+      Stronger manual progress and speed preference on top of waypoint2 may
+      convert low-progress timeouts while preserving the same hard safety
+      filters.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   hybrid_orca_sampler_v1:
     status: implemented
     family: hybrid_model_based

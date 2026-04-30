@@ -1,0 +1,10 @@
+name: hybrid_rule_v3_static_margin0_comfort
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  static_hard_safety_margin: 0.0
+  desired_dynamic_clearance: 1.2
+  dynamic_clearance_weight: 2.4
+  ttc_weight: 1.2
+  moderate_distance_human: 2.5
+  moderate_speed: 0.5

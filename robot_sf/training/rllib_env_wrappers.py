@@ -109,14 +109,14 @@ class FlattenDictObservationWrapper(ObservationWrapper):
         Returns:
             Flattened float32 observation vector.
         """
-        parts: list[np.ndarray] = []
-        for key in self._keys:
-            parts.extend(
-                _flatten_observation_leaves(
-                    self.env.observation_space.spaces[key],
-                    observation[key],
-                )
+        parts: list[np.ndarray] = [
+            leaf
+            for key in self._keys
+            for leaf in _flatten_observation_leaves(
+                self.env.observation_space.spaces[key],
+                observation[key],
             )
+        ]
         return np.concatenate(parts).astype(np.float32, copy=False)
 
 

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -18,6 +17,9 @@ from robot_sf.training.scenario_sampling import (
     _spaces_compatible,
     scenario_id_from_definition,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _write_yaml(path: Path, content: str) -> Path:
@@ -561,7 +563,12 @@ algorithm:
     second = summary["history"][1]
     assert second["reward_mean"] is None
     assert second["reward_mean_status"] == "nonfinite"
-    assert second["reward_mean_raw"] != second["reward_mean_raw"]  # NaN
+    assert second["reward_mean_raw"] == "nan"
+    result_text = (run_dir / "result.jsonl").read_text(encoding="utf-8")
+    result_lines = result_text.splitlines()
+    assert json.loads(result_lines[1])["reward_mean_raw"] == "nan"
+    assert "NaN" not in result_text
+    assert "NaN" not in (run_dir / "run_summary.json").read_text(encoding="utf-8")
     diagnostics_path = Path(second["nonfinite_diagnostics_path"])
     assert diagnostics_path.exists()
     diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))

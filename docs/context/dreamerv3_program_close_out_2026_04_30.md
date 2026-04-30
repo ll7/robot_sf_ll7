@@ -128,4 +128,3 @@ In rough yield-per-hour order:
 - Parity proof (kept): [issue_578_608_609_dreamerv3_parity.md](issue_578_608_609_dreamerv3_parity.md)
 - Multi-modal encoder note (closed): [issue_789_dreamer_multimodal_encoder.md](issue_789_dreamer_multimodal_encoder.md)
 - Pretraining design note (closed): [issue_782_dreamerv3_pretraining_design.md](issue_782_dreamerv3_pretraining_design.md)
-- Consolidated plan that this note supersedes: [issue_578_608_609_dreamerv3_parity.md](issue_578_608_609_dreamerv3_parity.md)

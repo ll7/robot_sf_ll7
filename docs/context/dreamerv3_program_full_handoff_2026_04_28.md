@@ -25,10 +25,10 @@ issue closes.
 | 4a | #789 | impl + research | independent of #608/#578 | Wire RLlib DreamerV3 multi-modal encoder; gate run only after local unit-test green. |
 | 4b | #578 | umbrella + run | #609 + #608 merged; #789 either landed or explicitly deferred | Run BR-08 gate, then BR-08 full, write verdict. |
 
-#789 (4a) and #578 (4b) can run in parallel once #609/#608 merge: 4a is a code change
+Issue `#789` (4a) and issue `#578` (4b) can run in parallel once `#609`/`#608` merge: 4a is a code change
 (local + 1× short SLURM gate); 4b is an evaluation campaign (1× long SLURM full job). If
-#789 lands during the #578 gate, switch the #578 full run to the multi-modal config; if
-#789 fails closed (RLlib too rigid), document it and run #578 on the flat-vector path one
+`#789` lands during the `#578` gate, switch the `#578` full run to the multi-modal config; if
+`#789` fails closed (RLlib too rigid), document it and run `#578` on the flat-vector path one
 last time as a baseline before deciding whether to spend more compute on Dreamer.
 
 ## Current state per issue
@@ -86,24 +86,13 @@ the full config.
 **Status:** authored in `docs/context/issue_782_dreamerv3_pretraining_design.md`.
 Issue remains design-only (Effort: 4h, no code).
 
-**Remaining work:**
-1. Author `docs/context/issue_782_dreamerv3_pretraining_design.md` with:
-   - Inventory of reusable rollout sources in this repo: PPO checkpoints under
-     `output/model_cache/ppo_*`, ORCA rollouts (if any are checked in), scripted
-     planners under `robot_sf/nav/`. For each, list observation/action/reward
-     fields and storage format.
-   - Compare Options A (RLlib offline-rollout ingestion), B (world-model
-     weight export/import adapter), C (external representation model) against
-     the proof-first/fail-closed constraints in `AGENTS.md`.
-   - Recommend Option B with the caveat from the issue: stop and convert to a
-     follow-up if RLlib does not expose a clean checkpoint/import boundary.
-   - Define one minimal gate experiment (e.g. import a Dreamer checkpoint from a
-     successful run, fine-tune for 100k steps on the BR-08 gate scenario, compare
-     against from-scratch gate) and one explicit stop condition (no measurable
-     improvement in `eval/success_rate` after the fine-tune budget → no-action
-     decision).
-2. End the note with one of: a follow-up implementation issue or a clear no-action
-   recommendation. Link from the parity note and from #782.
+**Recorded scope:**
+1. Inventory reusable rollout sources in this repo and the observation/action/reward fields that
+   would matter for pretraining handoff.
+2. Compare Options A (RLlib offline-rollout ingestion), B (world-model weight export/import
+   adapter), and C (external representation model) against the proof-first/fail-closed constraints
+   in `AGENTS.md`.
+3. Recommend the proof-first path and stop conditions for any future implementation follow-up.
 
 **SLURM jobs:** none.
 

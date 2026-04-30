@@ -9,17 +9,48 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
 
 - Phase A complete: the repo now has a horizon-100 scenario surface, a matching training config,
   and a horizon-400 benchmark probe config.
-- Phase B submitted: Slurm job `12178` (`robot-sf-issue857-horizon100`) via
-  `scripts/dev/sbatch_auxme_issue791.sh`.
-- Phase E submitted: Slurm job `12179` (`robot-sf-issue791-benchmark`) via
-  `scripts/dev/sbatch_use_max_time.sh` with
-  `ISSUE791_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
-- Phase C/D remain pending until those jobs finish.
+- Phase B **complete**: Slurm job `12178` (`robot-sf-issue857-horizon100`) finished
+  `2026-04-30T02:17` after 8h23m on `l40s` (auxme-imech093). Best in-distribution eval
+  (70 episodes, horizon-100 manifest) at step 7,864,320 / 10M:
+  `success_rate=0.6429`, `collision_rate=0.0429`, `comfort_exposure=0.0190`,
+  `path_efficiency=0.3264`, `snqi=-0.3298`.
+  WandB: `ll7/robot_sf/h746lfsd`.
+- Phase E (initial submission) **failed at 0s** (Slurm job `12179`): the worktree's
+  `output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip`
+  was missing because each git worktree owns its own gitignored cache. Resolved by
+  creating a relative symlink to the artifact already cached in the parent repo
+  (`/home/luttkule/git/robot_sf_ll7/output/model_cache/...`).
+- Phase C **submitted on 2026-04-30**: Slurm job `12205`
+  (`robot-sf-issue791-benchmark`, label `issue857-phase-c-horizon100-12178`) running
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_857_horizon100.yaml` with the
+  PPO row pointing at `configs/baselines/ppo_issue_791_horizon100_12178.yaml`
+  (the job-12178 candidate).
+- Phase E **resubmitted on 2026-04-30**: Slurm job `12206`
+  (label `issue857-phase-e-horizon400-probe-leader-11724`) running
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
 
-Initial queue state captured immediately after submit:
+Queue state captured immediately after the 2026-04-30 submissions:
 
-- `12178`: `PENDING (Resources)` on `l40s`
-- `12179`: `PENDING (Priority)` on `l40s`
+- `12205`: `PENDING (QOSMaxJobsPerUserLimit)` on `l40s`
+- `12206`: `PENDING (QOSMaxJobsPerUserLimit)` on `l40s`
+
+Local preflight (`scripts/tools/run_camera_ready_benchmark.py --mode preflight`) on the
+Phase C config validated 47 scenarios × 7 planners × 3 seeds (eval seed-set
+`[111, 112, 113]`) at horizon 100 before submission.
+
+## Phase D gate (issue #857)
+
+Promotion gate is on the camera-ready matrix, not on training-eval:
+
+- `success_mean ≥ 0.50` AND `max_steps_share ≤ 0.30` → seed replicas at 231/1337,
+  promote candidate as canonical PPO baseline.
+- `success_mean ∈ [0.30, 0.50)` → mixed; investigate per-scenario before more GPU.
+- `success_mean < 0.30` → negative result; fall back to 11724 leader.
+
+Phase B in-distribution `success_rate=0.6429` clears the threshold at training-eval
+distribution but does NOT decide Phase D. The 11724 leader's training-eval was 0.929
+yet collapsed to 0.255 on the camera-ready matrix; the horizon-matched candidate's
+camera-ready row is the actual go/no-go signal.
 
 ## Implemented surfaces
 
@@ -79,15 +110,23 @@ by the known ORCA prerequisite failure mode.
 - Prior benchmark gap note: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md`
 - Reusable experiment memory: `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`
 - Fallback policy: `docs/context/issue_691_benchmark_fallback_policy.md`
-- Submitted logs (once Slurm opens them): `output/slurm/12178-issue791-reward-curriculum.out`,
-  `output/slurm/12179-issue791-benchmark.out`
+- Phase B training log: `output/slurm/12178-issue791-reward-curriculum.out`
+- Phase B best summary: `output/slurm/issue791-reward-curriculum-job-12178/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100_best.summary.json`
+- Phase C adapter: `configs/baselines/ppo_issue_791_horizon100_12178.yaml`
+- Phase C benchmark config: `configs/benchmarks/paper_experiment_matrix_v1_issue_857_horizon100.yaml`
+- Phase C job log (once opened): `output/slurm/12205-issue791-benchmark.out`
+- Phase E (failed) log: `output/slurm/12179-issue791-benchmark.out`
+- Phase E (resubmitted) log (once opened): `output/slurm/12206-issue791-benchmark.out`
 
 ## Open boundary
 
-This note only captures setup and launch. It does **not** claim any benchmark or training outcome yet.
-Update this note after jobs `12178` and `12179` finish with:
+This note now covers Phase A (complete), Phase B (complete with results), and the
+launch of Phase C (job 12205) and Phase E (job 12206). It does **not** claim any
+camera-ready benchmark outcome yet. Update this note after jobs `12205` and `12206`
+finish with:
 
-- seed-123 in-distribution eval metrics,
-- horizon-400 probe result for job 11724,
-- benchmark termination breakdown,
-- Phase D decision (replicas vs mixed vs no-go).
+- horizon-matched candidate camera-ready metrics (success_mean, collision, snqi,
+  termination histogram),
+- horizon-400 probe result for the Wave-5 leader (attribution: horizon vs policy),
+- Phase D decision (replicas vs mixed vs no-go) per the gate above,
+- registry / canonical-baseline pointer changes if the candidate is promoted.

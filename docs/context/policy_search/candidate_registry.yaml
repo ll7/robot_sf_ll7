@@ -126,20 +126,6 @@ candidates:
       - smoke
       - nominal_sanity
 
-  hybrid_rule_v3_waypoint2_fast_progress:
-    status: experimental
-    family: hybrid_rule_based
-    training_required: false
-    promotion_gate: tier_b
-    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_fast_progress.yaml
-    hypothesis: >
-      Combining the 2.0 m waypoint switch with the 3.0 m/s progress envelope
-      may reduce route-local stalls without the over-aggressive behavior seen
-      in the 3.5 m/s speed-only experiment.
-    required_stages:
-      - smoke
-      - nominal_sanity
-
   hybrid_rule_v3_waypoint2_static_escape:
     status: implemented
     family: hybrid_rule_based

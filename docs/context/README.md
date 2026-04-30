@@ -121,6 +121,8 @@ why a change was made rather than a full issue execution transcript.
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+- [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
+  scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
 
 ## DreamerV3 Notes
 

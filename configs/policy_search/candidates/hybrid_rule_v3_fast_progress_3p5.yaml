@@ -1,8 +1,0 @@
-name: hybrid_rule_v3_fast_progress_3p5
-algo: hybrid_rule_local_planner
-base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
-params:
-  max_linear_speed: 3.5
-  max_linear_accel: 3.5
-  goal_progress_weight: 5.0
-  speed_preference_weight: 1.0

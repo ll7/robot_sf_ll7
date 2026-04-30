@@ -35,7 +35,7 @@ Leader artifact (candidate, not yet promoted into
 
 Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md`.
 
-2026-04-29 follow-up setup for issue 857:
+2026-04-29/30 follow-up outcome for issue 857:
 
 - Added a horizon-matched scenario surface at
   `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` using a new
@@ -46,6 +46,17 @@ Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md
   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
 - Corrected `RobotState` timeout semantics so `max_episode_steps` now expires on the configured
   discrete step budget instead of one step late.
-- Jobs `12178` (horizon-100 retrain) and `12179` (horizon-400 probe) were submitted on 2026-04-29;
-  outcome is pending and should be recorded in a follow-up context note before any horizon
-  contribution claim is made.
+- Job `12178` trained the horizon-100 candidate. Its in-distribution eval reached
+  `success_rate=0.6429`, but its camera-ready horizon-100 row in job `12205` fell to
+  `success_mean=0.1489` with 120/141 timeouts and 0/141 binary collisions. Do not promote this
+  retrain or queue seed replicas.
+- Job `12206` reran the issue-791 Wave-5 leader (11724) on the same camera-ready matrix at horizon
+  400. The leader recovered to `success_mean=0.8298` across 141 PPO episodes, with 117/141
+  successes and 0/141 binary collisions. This is strong evidence that the 11724 leader's
+  camera-ready drop is benchmark-horizon-bound, while horizon-100 retraining produced a degenerate
+  conservative policy.
+- Practical implication: keep 11724 as the canonical PPO leader for now, avoid claiming a
+  horizon-100 PPO fix, and use a cheap leader-only horizon sweep if a finer success-vs-budget curve
+  is needed.
+
+Full issue-857 write-up: `docs/context/issue_857_horizon_alignment_setup.md`.

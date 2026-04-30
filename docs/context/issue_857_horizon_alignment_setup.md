@@ -30,8 +30,16 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
   binary collision share=0.000), `snqi_mean=-0.2867`, `path_efficiency_mean=0.9526`,
   `time_to_goal_norm_mean=1.7163`. Termination histogram from per-episode rows:
   21/141 success (14.9%), 0/141 binary collision (0.0%), 120/141 timeouts (85.1%).
-- Phase E **still pending** at the time of Phase C readout: Slurm job `12206`
-  on `l40s` waiting for the QOS slot.
+- Phase E **complete**: Slurm job `12206` finished
+  `2026-04-30T11:56` after 52m52s on `l40s` (label
+  `issue857-phase-e-horizon400-probe-leader-11724`, 7 planners × 47 scenarios ×
+  3 seeds = 987 episodes). Campaign:
+  `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue_791_horizon400_probe_issue857-phase-e-horizon400-probe-leader-11724_20260430_110334/`.
+  PPO row (issue-791 Wave-5 leader 11724, 141 episodes):
+  `success_mean=0.8298`, `collisions_mean=0.1489` (per-step normalization;
+  binary collision share=0.000), `snqi_mean=-0.1781`, `path_efficiency_mean=0.9675`,
+  `time_to_goal_norm_mean=0.4391`. Per-episode rows: 117/141 success (83.0%),
+  0/141 binary collision (0.0%), 24/141 neither success nor collision (17.0%).
 
 Local preflight (`scripts/tools/run_camera_ready_benchmark.py --mode preflight`) on the
 Phase C config validated 47 scenarios × 7 planners × 3 seeds (eval seed-set
@@ -57,22 +65,26 @@ Promotion gate is on the camera-ready matrix, not on training-eval:
 
 Conclusions:
 
-1. **Horizon hypothesis is rejected.** Forcing training-time `max_episode_steps: 100`
-   did not lift the camera-ready PPO row. It actually fell from 0.255 (leader 11724)
-   to 0.149 — about 0.106 absolute and ~42% relative degradation, well outside
-   bootstrap noise on a 141-episode row.
+1. **Horizon-matched retraining is rejected as a promotion path.** Forcing
+   training-time `max_episode_steps: 100` did not lift the horizon-100
+   camera-ready PPO row. It actually fell from 0.255 (leader 11724) to 0.149 —
+   about 0.106 absolute and ~42% relative degradation, well outside bootstrap
+   noise on a 141-episode row.
 2. **Conservative-policy collapse.** Binary collision share dropped to 0.000 while
    timeouts climbed to 0.851. The horizon-matched policy effectively learned to never
    commit to motion that could collide and instead time out — a degenerate solution
    to the shorter episode budget.
-3. **Distribution gap persists across the in-dist / camera-ready boundary even at
-   matched horizon.** The candidate scored 0.643 on the horizon-100 in-distribution
-   manifold but 0.149 on the camera-ready matrix — a 0.494-absolute collapse at
-   identical nominal step budget. This rules out the "training horizon vs benchmark
-   horizon" attribution as the dominant cause of the 0.929 → 0.255 leader gap;
-   the gap is dominated by something else (per-scenario reachability at 10s,
-   training-vs-benchmark scenario mix, or interaction with the camera-ready
-   pedestrian-density / kinematics contract).
+3. **The strict 100-step benchmark is horizon-bound for the old leader.** The
+   Phase E probe lifted the 11724 leader from the horizon-100 camera-ready row
+   (`success_mean=0.2553`) to `success_mean=0.8298` at horizon 400. This means
+   the 0.929 → 0.255 leader gap is strongly benchmark-horizon-bound on the
+   leader side, even though retraining at horizon 100 produced a worse,
+   conservative policy.
+4. **Distribution still matters for the retrained candidate.** The horizon-100
+   candidate scored 0.643 on the horizon-100 in-distribution manifold but 0.149
+   on the camera-ready matrix — a 0.494-absolute collapse at identical nominal
+   step budget. The shorter benchmark budget and the camera-ready scenario mix
+   interact; simply matching training horizon is not enough.
 
 Decisions:
 
@@ -82,14 +94,42 @@ Decisions:
 - **Do not** mark `configs/baselines/ppo_issue_791_horizon100_12178.yaml` as a
   promotion candidate; keep it as an archived ablation so Phase E and any later
   attribution work can still cite the artifact.
-- Keep Phase E in flight regardless (job 12206) — even with Phase C as a no-go,
-  the horizon=400 probe of the Wave-5 leader is the cleanest attribution evidence
-  for whether the camera-ready matrix is benchmark-horizon-bound at all.
+- Treat Phase E as a positive attribution probe, not a promotion result: horizon
+  400 shows that the 11724 leader can solve much of the camera-ready matrix when
+  allowed the longer budget it was trained under, but this does not satisfy the
+  paper-facing horizon-100 contract.
 
 Phase B in-distribution `success_rate=0.6429` clears the threshold at training-eval
 distribution but does NOT decide Phase D. The 11724 leader's training-eval was 0.929
-yet collapsed to 0.255 on the camera-ready matrix; the horizon-matched candidate's
-camera-ready row is the actual go/no-go signal — and it failed the gate.
+and recovers to 0.830 on the same camera-ready matrix at horizon 400, but the
+horizon-matched candidate's horizon-100 camera-ready row is the actual go/no-go
+signal for this issue — and it failed the gate.
+
+## Phase E verdict (2026-04-30): horizon attribution is real, promotion remains no-go
+
+The completed horizon-400 probe changes the interpretation from "horizon mismatch
+probably matters" to "horizon mismatch is a major benchmark-side constraint for the
+11724 leader." Raising the benchmark horizon from 100 to 400 lifted the leader PPO
+row from `success_mean=0.2553` to `success_mean=0.8298` on the same 47-scenario ×
+3-seed camera-ready matrix.
+
+This does **not** rescue the horizon-100 retrain. The experiment now has two separate
+findings:
+
+1. The leader policy is much stronger when evaluated under a 400-step budget.
+2. A new policy trained directly under the 100-step budget collapsed into timeout-heavy
+   conservative behavior on the camera-ready matrix.
+
+Recommended next steps:
+
+- Do not increase the paper-facing benchmark horizon unless the benchmark contract itself is
+  intentionally revised; horizon 400 answers a different, more permissive question.
+- If attribution precision is needed, run a cheap leader-only horizon sweep at 150/200/300/400
+  (and optionally 600) rather than launching more GPU training. This would locate the knee of the
+  success-vs-budget curve.
+- If the goal remains horizon-100 performance, investigate reachability and reward/time-pressure
+  shaping under the 100-step contract before any further retraining. The current evidence says
+  "more time fixes the old leader," not "horizon-100 retraining is solved."
 
 ## Implemented surfaces
 
@@ -157,7 +197,10 @@ by the known ORCA prerequisite failure mode.
 - Phase C campaign artifacts: `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue857-phase-c-horizon100-12178_20260430_093726/`
   (campaign_table.md, seed_episode_rows.csv, snqi_diagnostics.md, publication bundle).
 - Phase E (failed) log: `output/slurm/12179-issue791-benchmark.out`
-- Phase E (resubmitted) log (once opened): `output/slurm/12206-issue791-benchmark.out`
+- Phase E (resubmitted) log: `output/slurm/12206-issue791-benchmark.out`
+- Phase E campaign artifacts:
+  `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue_791_horizon400_probe_issue857-phase-e-horizon400-probe-leader-11724_20260430_110334/`
+  (campaign_table.md, seed_episode_rows.csv, snqi_diagnostics.md).
 
 ## Open boundary
 
@@ -167,15 +210,12 @@ Phases covered as of 2026-04-30:
 - Phase B (training): complete; in-distribution metrics recorded above.
 - Phase C (camera-ready benchmark): complete; **negative result**, Phase D no-go.
 - Phase D (decision): recorded above — fall back to leader 11724, no replicas.
-- Phase E (horizon=400 probe of leader 11724): job 12206 still pending; will be
-  appended once it finishes. The Phase D verdict is independent of Phase E and
-  does not block on it.
+- Phase E (horizon=400 probe of leader 11724): complete; leader-side horizon
+  attribution recorded above.
 
-Still to do once Phase E lands:
+Still to do:
 
-- record horizon-400 probe metrics (success_mean, collision, max_steps_share),
-- decide whether the horizon mismatch contributes anything detectable on the
-  leader side, or whether the 0.929 → 0.255 leader gap is entirely
-  distribution / scenario-mix driven,
 - append the horizon-attribution outcome to
   `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`.
+- update GitHub issue `#857` with the Phase B/C/E outcome and close or leave open
+  only if a horizon-sweep follow-up is explicitly desired.

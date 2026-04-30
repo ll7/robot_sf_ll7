@@ -1,7 +1,42 @@
 version: 1
 models:
+  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+    display_name: PPO issue-791 leader, eval-aligned large-capacity grid_socnav
+      (2026-04-17, promoted)
+    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+    commit: null
+    wandb_run_id: ibo3aqus
+    wandb_run_path: ll7/robot_sf/ibo3aqus
+    wandb_entity: ll7
+    wandb_project: robot_sf
+    wandb_file: model.zip
+    tags:
+      - ppo
+      - issue-791
+      - eval-aligned
+      - large-capacity
+      - grid-socnav
+      - reward-curriculum
+      - predictive-foresight
+      - promoted
+      - canonical-baseline
+    notes:
+      - Promoted on 2026-04-28 as the canonical PPO benchmark baseline; replaces
+        BR-06 v3 as the default for configs/baselines/ppo_15m_grid_socnav.yaml.
+      - Best eval (70 episodes, ppo_full_maintained_eval_v1) success_rate=0.929,
+        collision_rate=0.071, SNQI=0.353 at step 9,961,472 / 10,000,000.
+      - Source SLURM job 11724 (auxme-imech093, l40s, 8h04m).
+      - Caveat policy is in-distribution on the eval superset; reported as
+        benchmark-set performance, not OOD generalization.
+      - Promotion verdict
+        docs/context/issue_791_best_policy_verdict_2026_04_21.md
+      - Narrow paper claim
+        memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md
+      - Best summary
+        output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
   - model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
-    display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, promoted)
+    display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, issue-576 closeout)
     local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
     config_path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     commit: 9fb131b6d7ff062887caab33ca8713ae05167ebe
@@ -14,13 +49,20 @@ models:
       - ppo
       - br06
       - v3-semantics
-      - promoted
+      - issue-576-closeout
       - all-maps
       - randomized-seeds
     notes:
+      - Issue-576 closeout artifact; remains the historical pin for
+        configs/baselines/ppo_issue_576_br06_v2_15m.yaml.
+      - Replaced as the canonical PPO benchmark baseline by
+        ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+        on 2026-04-28.
       - Full 15M run finished under route-complete success semantics.
-      - Full policy sweep: output/benchmarks/20260304_184717_policy_analysis_ppo/report.md
-      - Analysis: model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md
+      - Full policy sweep
+        output/benchmarks/20260304_184717_policy_analysis_ppo/report.md
+      - Analysis
+        model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md
   - model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
     display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
     local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip
@@ -40,7 +82,8 @@ models:
       - diffdrive
       - grid-obs
     notes:
-      - Deprecated and replaced by ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200.
+      - Deprecated and replaced by
+        ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200.
       - Run ended at ~7.1M steps (W&B state=killed), not full 15M budget.
       - Training analysis: model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md
   - model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433
@@ -61,9 +104,8 @@ models:
       - all-maps
     notes:
       - Full 15M run finished.
-      - Not promoted:
-          high collision on classic scenarios and one integrity-contradiction
-          error episode.
+      - Not promoted: high collision on classic scenarios and one
+          integrity-contradiction error episode.
       - Analysis: model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md
   - model_id: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311
     display_name: PPO BR-06 v8 num_envs=8 benchmark best checkpoint (2026-03-11 candidate)
@@ -87,7 +129,8 @@ models:
       - Best intermediate checkpoint from the imech156-u num_envs benchmark run.
       - W&B best-checkpoint summary: output/model_cache/ppo_num_envs_benchmark_candidates/08/best_checkpoint_summary.json
       - Full policy sweep: output/benchmarks/20260311_policy_analysis_ppo_v8_numenv08_best/report.md
-      - Full 141-episode sweep slightly outperformed the promoted PPO v3 baseline on success and collision rate.
+      - Full 141-episode sweep slightly outperformed the promoted PPO v3
+        baseline on success and collision rate.
   - model_id: ppo_expert_br06_v10_best_27dbe5xu_20260317
     display_name: PPO BR-06 v10 best-success checkpoint (2026-03-17 carry-forward candidate)
     local_path: output/model_cache/wandb_artifacts/27dbe5xu_best_success/model.zip
@@ -106,36 +149,15 @@ models:
       - best-success
       - carry-forward
     notes:
-      - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the classic_interactions gate.
+      - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the
+        classic_interactions gate.
       - Best-success artifact from W&B run 27dbe5xu.
       - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
-      - Not promoted; full 141-episode benchmark is still too weak in absolute terms because max_steps remains high.
-  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-    display_name: PPO issue-791 Wave-5 leader (eval-aligned + reward curriculum + large capacity, 2026-04-17)
-    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
-    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
-    commit: null
-    wandb_run_id: ibo3aqus
-    wandb_run_path: ll7/robot_sf/ibo3aqus
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - issue-791
-      - eval-aligned
-      - large-capacity
-      - reward-curriculum
-      - promotion-candidate
-      - wave-5
-    notes:
-      - SLURM job 11724 on auxme-imech093 (l40s), 8h04m wall.
-      - Best eval (70 episodes) success_rate=0.9286, collision_rate=0.0714, SNQI=0.3531 at step 9,961,472.
-      - Trained on configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml (eval superset). Report as in-distribution benchmark performance, not OOD generalization.
-      - Promotion campaign log - docs/context/issue_791_promotion_campaign_128k_256k.md.
-      - Best summary - output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
+      - Not promoted; full 141-episode benchmark is still too weak in absolute
+        terms because max_steps remains high.
   - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417
-    display_name: PPO issue-791 Wave-5 runner-up (eval-aligned + reward curriculum + n_steps=4096, 2026-04-17)
+    display_name: PPO issue-791 Wave-5 runner-up (eval-aligned + reward curriculum +
+      n_steps=4096, 2026-04-17)
     local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_20260417/model.zip
     config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml
     commit: null
@@ -154,10 +176,12 @@ models:
       - wave-5
     notes:
       - SLURM job 11723 on l40s, 7h33m wall.
-      - Best eval (70 episodes) success_rate=0.9143, collision_rate=0.0857 at step 7,340,032.
+      - Best eval (70 episodes) success_rate=0.9143, collision_rate=0.0857 at
+        step 7,340,032.
       - Same caveat - trained on eval superset; not OOD-validated.
   - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417
-    display_name: PPO issue-791 Wave-4 baseline (eval-aligned + reward curriculum, default capacity, 2026-04-17)
+    display_name: PPO issue-791 Wave-4 baseline (eval-aligned + reward curriculum,
+      default capacity, 2026-04-17)
     local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_20260417/model.zip
     config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml
     commit: null
@@ -175,8 +199,10 @@ models:
       - wave-4
     notes:
       - SLURM job 11660 on a30, 15h10m wall.
-      - Best eval (70 episodes) success_rate=0.9000, collision_rate=0.1000 at step 9,437,184.
-      - Default-capacity sibling of the Wave-5 leader; the +0.029 success delta to 11724 isolates the capacity effect.
+      - Best eval (70 episodes) success_rate=0.9000, collision_rate=0.1000 at
+        step 9,437,184.
+      - Default-capacity sibling of the Wave-5 leader; the +0.029 success delta
+        to 11724 isolates the capacity effect.
   - model_id: ga3c_cadrl_iros18
     display_name: GA3C-CADRL (IROS18) checkpoint
     local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
@@ -194,7 +220,8 @@ models:
       - baseline
     notes:
       - "Checkpoint prefix: network_01900000 (see model/ga3c_cadrl/README.md)."
-      - "Source: gym-collision-avoidance (MIT ACL), GA3C_CADRL/checkpoints/IROS18."
+      - "Source: gym-collision-avoidance (MIT ACL),
+        GA3C_CADRL/checkpoints/IROS18."
   - model_id: predictive_rgl_v1
     display_name: Predictive planner model (predictive_rgl_v1)
     local_path: output/tmp/predictive_planner/training/predictive_rgl_v1_20260219/predictive_model.pt
@@ -211,7 +238,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_v1.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/datasets/predictive_rollouts_v1.npz"
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_rgl_full_v1
     display_name: Predictive planner model (predictive_rgl_full_v1)
@@ -229,7 +257,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_rgl_sweep_h256_mp4_s42
     display_name: Predictive planner model (predictive_rgl_sweep_h256_mp4_s42)
@@ -247,7 +276,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_rgl_sweep_h192_mp3_s7_wd5e5
     display_name: Predictive planner model (predictive_rgl_sweep_h192_mp3_s7_wd5e5)
@@ -265,7 +295,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_proxy_selected_v1
     display_name: Predictive planner model (predictive_proxy_selected_v1)
@@ -283,7 +314,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz"
       - Generated by scripts/training/train_predictive_planner.py
       - "W&B run URL: https://wandb.ai/ll7/robot_sf/runs/geedo1po"
   - model_id: predictive_proxy_sanity_local
@@ -302,7 +334,8 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: /Users/lennart/git/robot_sf_ll7/output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/datasets/predictive_rollouts_mixed.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/datasets/predictive_rollouts_mixed.npz"
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_proxy_selected_v2_full
     display_name: Predictive planner model (predictive_proxy_selected_v2_full)
@@ -322,9 +355,13 @@ models:
       - planner
       - trajectory
     notes:
-      - "Dataset: /Users/lennart/git/robot_sf_ll7/output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/datasets/predictive_rollouts_mixed.npz"
-      - "Training summary: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/training/training_summary.json"
-      - Portable W&B provenance repaired via model-file-upload run ll7/robot_sf/u40parjb.
+      - "Dataset:
+        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/datasets/predictive_rollouts_mixed.npz"
+      - "Training summary:
+        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomi\
+        zed_full_20260305T123116Z/training/training_summary.json"
+      - Portable W&B provenance repaired via model-file-upload run
+        ll7/robot_sf/u40parjb.
       - Generated by scripts/training/train_predictive_planner.py
   - model_id: predictive_proxy_selected_v2_xl_ego
     display_name: Predictive planner model (predictive_proxy_selected_v2_xl_ego)
@@ -345,6 +382,8 @@ models:
       - ego-conditioned
       - promoted
     notes:
-      - "Dataset: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_xl_ego_20260309T141432Z/datasets/predictive_rollouts_mixed.npz"
+      - "Dataset:
+        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomi\
+        zed_xl_ego_20260309T141432Z/datasets/predictive_rollouts_mixed.npz"
       - "Training summary uploaded to W&B run file: training_summary.json"
       - Generated by scripts/training/train_predictive_planner.py

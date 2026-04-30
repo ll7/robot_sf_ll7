@@ -95,9 +95,15 @@ knowledge, not every transient iteration detail.
   4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
   `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
   required before promotion.
+- [Issue #835 Lightweight CNN Divergence Triage](./issue_835_lightweight_cnn_divergence.md)
+  bounded 32 K rerun with PPO gradient and feature diagnostics; the issue-193 catastrophic
+  `lightweight_cnn` final drop did not reproduce, so the extractor remains experimental without an
+  immediate architecture change.
 - [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
   follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
   config-first safety-reward mitigation candidate.
+- [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
+  log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
 ## Planner Integration Notes
 

@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Added a file-based policy-search workflow under `docs/context/policy_search/` with a canonical candidate registry, stage-gated runner (`scripts/validation/run_policy_search_candidate.py`), comparison/failure/promotion tools, and SLURM handoff notes for training-heavy follow-up work. The first non-training candidate, `hybrid_orca_sampler_v1`, now runs end to end in the benchmark stack and emits markdown/json validation artifacts locally.
+* Documented durable artifact, linked-worktree bootstrap, branch-sync, and
+  worktree-output handling rules in `AGENTS.md` and `docs/dev_guide.md`,
+  clarifying that `output/` is temporary/local by default; fresh linked
+  worktrees should detect the shared main checkout before symlinking
+  `local.machine.md`; a worktree counts as fresh only when both
+  `local.machine.md` and `.venv` are absent; active feature branches should
+  merge latest `origin/main` early and again before PR creation; and PR
+  preparation now includes reviewing ignored `output/*` files before handoff.
+
+* Promoted the issue-791 Wave-5 leader (job 11724, WandB `ll7/robot_sf/ibo3aqus`,
+  best success 0.929 / collision 0.071 / SNQI 0.353 on
+  `ppo_full_maintained_eval_v1`) into the canonical PPO baseline at
+  [configs/baselines/ppo_15m_grid_socnav.yaml](configs/baselines/ppo_15m_grid_socnav.yaml).
+  All ~17 benchmark configs that reference this file (camera-ready, paper
+  matrix, planner sanity, seed variability) now resolve PPO to the eval-aligned
+  large-capacity grid_socnav policy with predictive foresight enabled and
+  `fallback_to_goal: false` per the fail-closed benchmark policy. The previous
+  BR-06 v3 15M artifact remains on disk for reproducibility but is no longer the
+  default. Reported performance is benchmark-set (in-distribution), not OOD.
 
 * Restored the asymmetric-critic robot training contract so `RobotEnv(..., asymmetric_critic=True)` and `make_robot_env(..., asymmetric_critic=True)` once again add the critic-only `critic_privileged_state` observation for SocNav structured runs. This keeps the public factory API stable for issue-791 training jobs and closes the regression that broke fresh SLURM submissions after the main-branch merge.
 

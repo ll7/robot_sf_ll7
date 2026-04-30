@@ -853,6 +853,17 @@ def _json_safe_scalar(value: Any) -> Any:
     return value
 
 
+def _json_safe_value(value: Any) -> Any:
+    """Recursively convert nested payloads into strict-JSON-safe values."""
+    if isinstance(value, dict):
+        return {key: _json_safe_value(nested) for key, nested in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_value(nested) for nested in value]
+    if isinstance(value, tuple):
+        return [_json_safe_value(nested) for nested in value]
+    return _json_safe_scalar(value)
+
+
 def _is_finite_scalar(value: Any) -> bool:
     """Return True when value is an int/float and finite."""
     return isinstance(value, int | float) and math.isfinite(float(value))
@@ -940,10 +951,10 @@ def _build_nonfinite_diagnostics(
     }
     return {
         "iteration": iteration,
-        "reward_mean": reward_mean,
-        "timesteps_total": timesteps_total,
+        "reward_mean": _json_safe_scalar(reward_mean),
+        "timesteps_total": _json_safe_scalar(timesteps_total),
         "top_level_keys": sorted(result.keys()),
-        "interesting_metrics": interesting_paths,
+        "interesting_metrics": _json_safe_value(interesting_paths),
         "nonfinite_scalars": _find_nonfinite_scalars(result),
     }
 

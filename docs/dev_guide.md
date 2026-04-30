@@ -49,15 +49,15 @@ Use this order for a fresh worktree:
 
 ```bash
 MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-ln -s ../../robot_sf_ll7/local.machine.md .
+ln -s "$MAIN_REPO_ROOT/local.machine.md" .
 uv sync --all-extras
 source .venv/bin/activate
 ```
 
 Notes:
 
-- The `ln -s ../../robot_sf_ll7/local.machine.md .` example assumes the common layout used in this
-  repository, where linked worktrees live next to the main checkout under a sibling directory.
+- The symlink target should point at the main checkout's local machine context, not a copied
+  per-worktree file.
 - If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
 - Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
   sync across worktrees.

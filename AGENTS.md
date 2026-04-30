@@ -52,8 +52,8 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 - In a fresh worktree, find the main repository root from the common Git dir before bootstrapping:
   `MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"`.
 - If `local.machine.md` is absent in the worktree and present in the main repository root, create a
-  symlink instead of copying the file. Typical sibling-worktree example:
-  `ln -s ../../robot_sf_ll7/local.machine.md .`
+  symlink instead of copying the file. Example:
+  `ln -s "$MAIN_REPO_ROOT/local.machine.md" .`
 - After the machine-context symlink is in place, run `uv sync --all-extras`, then
   `source .venv/bin/activate` before using Python tooling.
 - If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
@@ -179,7 +179,7 @@ resolving lint or test failures locally before requesting review.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
 - Before creating a PR, inspect newly created `output/*` files, including ignored paths via
-  `git status --ignored --short output`. Decide whether each output is disposable, should remain
+  `git status --ignored --short -uall output`. Decide whether each output is disposable, should remain
   ignored, should be represented by a tracked manifest or registry entry, or must be uploaded to a
   durable artifact store before the branch is handed off.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,

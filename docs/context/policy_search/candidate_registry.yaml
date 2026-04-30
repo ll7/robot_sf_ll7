@@ -66,6 +66,20 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_fast_progress_3p5:
+    status: experimental
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_3p5.yaml
+    hypothesis: >
+      A 3.5 m/s route-guided progress variant may convert remaining nominal
+      sanity timeouts into successes when the limiting factor is the local
+      stage horizon rather than collision avoidance.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   hybrid_rule_v3_dynamic_relaxed:
     status: implemented
     family: hybrid_rule_based

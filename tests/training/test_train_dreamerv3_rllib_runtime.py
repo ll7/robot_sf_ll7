@@ -611,6 +611,17 @@ def test_json_safe_value_handles_numpy_paths_and_deep_payloads() -> None:
     assert cursor["value"] == "-inf"
 
 
+def test_write_json_does_not_mutate_payload(tmp_path: Path) -> None:
+    """Strict JSON writing should not alter objects the caller may reuse."""
+    write_json = _dreamer_callable("_write_json")
+    payload = {"nested": {"value": np.float64(np.nan)}, "path": Path("output/run")}
+
+    write_json(tmp_path / "payload.json", payload)
+
+    assert isinstance(payload["nested"]["value"], np.float64)
+    assert isinstance(payload["path"], Path)
+
+
 def test_run_training_cleans_up_ray_and_algo_on_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

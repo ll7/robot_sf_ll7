@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import sys
 import types
@@ -13,7 +14,14 @@ from robot_sf.adversarial import certification, objectives, search
 from robot_sf.adversarial.attribution import attribution_from_episode_record, attribution_from_error
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import failed_status, passed_status
-from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D, SearchConfig
+from robot_sf.adversarial.config import (
+    CandidateEvaluation,
+    CandidateSpec,
+    Pose2D,
+    SearchConfig,
+    SearchSpaceConfig,
+)
+from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.samplers import RandomCandidateSampler
 
 
@@ -105,6 +113,41 @@ def test_search_config_from_files_validates_candidate(tmp_path: Path) -> None:
     assert candidate.scenario_seed == 7
 
 
+def test_search_space_validates_all_configured_candidate_ranges(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+
+    errors = config.search_space.validate_candidate(
+        CandidateSpec(
+            start=Pose2D(1.0, 2.0),
+            goal=Pose2D(5.0, 2.0),
+            spawn_time_s=1.0,
+            pedestrian_speed_mps=2.0,
+            pedestrian_delay_s=1.0,
+            scenario_seed=8,
+        )
+    )
+
+    assert "spawn_time_s outside search space" in errors
+    assert "pedestrian_speed_mps outside search space" in errors
+    assert "pedestrian_delay_s outside search space" in errors
+    assert "scenario_seed outside search space" in errors
+
+
+def test_search_space_rejects_invalid_min_start_goal_distance() -> None:
+    payload = {
+        "variables": {
+            "start_x": {"min": 0, "max": 1},
+            "start_y": {"min": 0, "max": 1},
+            "goal_x": {"min": 2, "max": 3},
+            "goal_y": {"min": 2, "max": 3},
+        },
+        "constraints": {"min_start_goal_distance_m": -1.0},
+    }
+
+    with pytest.raises(ValueError, match="min_start_goal_distance_m"):
+        SearchSpaceConfig.from_mapping(payload)
+
+
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:
     config = _config(tmp_path)
     scores = [0.8, 0.2]
@@ -143,7 +186,7 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         config,
         evaluator=evaluator,
         certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
-        sampler=_SequenceSampler([_candidate(1), _candidate(2)]),
+        sampler=_SequenceSampler([_candidate(7), _candidate(7)]),
     )
 
     assert result.num_candidates == 2
@@ -175,7 +218,7 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     result = search.run_adversarial_search(
         config,
         evaluator=evaluator,
-        sampler=_SequenceSampler([_candidate(1)]),
+        sampler=_SequenceSampler([_candidate(7)]),
     )
 
     assert result.best_candidate is None
@@ -210,8 +253,11 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
     collision = attribution_from_episode_record(
         {"status": "done", "outcome": {"collision": True, "route_complete": False}}
     )
+    legacy_collision = attribution_from_episode_record(
+        {"status": "done", "outcome": {"collision_event": True, "route_complete": False}}
+    )
     timeout = attribution_from_episode_record(
-        {"status": "done", "outcome": {"timeout": True, "route_complete": False}}
+        {"status": "done", "outcome": {"timeout_event": True, "route_complete": False}}
     )
     incomplete = attribution_from_episode_record(
         {"status": "done", "outcome": {"route_complete": False}}
@@ -219,9 +265,37 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
     error = attribution_from_error("boom")
 
     assert collision.primary_failure == "collision"
+    assert legacy_collision.primary_failure == "collision"
     assert timeout.primary_failure == "timeout"
     assert incomplete.primary_failure == "incomplete"
     assert error.to_json()["status"] == "evaluation_failed"
+
+
+def test_read_first_jsonl_record_skips_malformed_lines(tmp_path: Path) -> None:
+    """JSONL helper should fail soft for malformed records and keep scanning."""
+    path = tmp_path / "episode.jsonl"
+    path.write_text("{bad json}\n\n" + json.dumps({"episode_id": "ok"}) + "\n", encoding="utf-8")
+
+    assert read_first_jsonl_record(path) == {"episode_id": "ok"}
+
+
+def test_write_trajectory_csv_escapes_fields(tmp_path: Path) -> None:
+    """Trajectory index rows should remain valid CSV when fields contain punctuation."""
+    path = write_trajectory_csv(
+        tmp_path / "trajectory.csv",
+        {
+            "episode_id": "episode,1",
+            "seed": 7,
+            "status": "done",
+            "steps": 3,
+            "termination_reason": 'quote "and" comma, here',
+        },
+    )
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+
+    assert rows[1] == ["episode,1", "7", "done", "3", 'quote "and" comma, here']
 
 
 def test_certification_adapter_handles_missing_and_mocked_backends(

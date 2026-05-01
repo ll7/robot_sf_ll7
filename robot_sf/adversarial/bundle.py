@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -143,10 +144,10 @@ def write_trajectory_csv(path: Path, record: dict[str, Any] | None) -> Path:
         str(record.get("steps", "")),
         str(record.get("termination_reason", "")),
     ]
-    path.write_text(
-        "episode_id,seed,status,steps,termination_reason\n" + ",".join(row) + "\n",
-        encoding="utf-8",
-    )
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["episode_id", "seed", "status", "steps", "termination_reason"])
+        writer.writerow(row)
     return path
 
 

@@ -184,7 +184,7 @@ class SearchSpaceConfig:
         if pedestrian_id is not None:
             pedestrian_id = str(pedestrian_id).strip() or None
 
-        return cls(
+        config = cls(
             start_x=_range("start_x"),
             start_y=_range("start_y"),
             goal_x=_range("goal_x"),
@@ -196,6 +196,12 @@ class SearchSpaceConfig:
             min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
             pedestrian_id=pedestrian_id,
         )
+        if (
+            not math.isfinite(config.min_start_goal_distance_m)
+            or config.min_start_goal_distance_m < 0.0
+        ):
+            raise ValueError("search-space min_start_goal_distance_m must be finite and >= 0")
+        return config
 
     def sample_candidate(self, rng: Random) -> CandidateSpec:
         """Sample a candidate deterministically from the provided RNG."""
@@ -231,6 +237,14 @@ class SearchSpaceConfig:
             errors.append("goal.x outside search space")
         if not self.goal_y.contains(candidate.goal.y):
             errors.append("goal.y outside search space")
+        if not self.spawn_time_s.contains(candidate.spawn_time_s):
+            errors.append("spawn_time_s outside search space")
+        if not self.pedestrian_speed_mps.contains(candidate.pedestrian_speed_mps):
+            errors.append("pedestrian_speed_mps outside search space")
+        if not self.pedestrian_delay_s.contains(candidate.pedestrian_delay_s):
+            errors.append("pedestrian_delay_s outside search space")
+        if not self.scenario_seed.contains(float(candidate.scenario_seed)):
+            errors.append("scenario_seed outside search space")
         if candidate.spawn_time_s < 0.0:
             errors.append("spawn_time_s must be non-negative")
         if candidate.pedestrian_speed_mps <= 0.0:

@@ -40,8 +40,8 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
     if "snqi" in metrics:
         return -_metric(metrics, "snqi")
     outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
-    collision = 1.0 if bool(outcome.get("collision")) else 0.0
-    timeout = 1.0 if bool(outcome.get("timeout")) else 0.0
+    collision = 1.0 if bool(outcome.get("collision") or outcome.get("collision_event")) else 0.0
+    timeout = 1.0 if bool(outcome.get("timeout") or outcome.get("timeout_event")) else 0.0
     success = _metric(metrics, "success", 1.0 if bool(outcome.get("route_complete")) else 0.0)
     near = _metric(metrics, "near_misses", 0.0)
     return float(collision * 10.0 + timeout * 3.0 + near - success)

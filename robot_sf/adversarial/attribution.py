@@ -31,10 +31,12 @@ def attribution_from_episode_record(record: dict[str, Any]) -> FailureAttributio
     termination = str(record.get("termination_reason", record.get("status", "unknown")))
     reasons: list[str] = []
     primary: str | None = None
-    if bool(outcome.get("collision")):
+    collision = bool(outcome.get("collision")) or bool(outcome.get("collision_event"))
+    timeout = bool(outcome.get("timeout")) or bool(outcome.get("timeout_event"))
+    if collision:
         primary = "collision"
         reasons.append("episode outcome reports a collision")
-    elif bool(outcome.get("timeout")):
+    elif timeout:
         primary = "timeout"
         reasons.append("episode timed out before route completion")
     elif not bool(outcome.get("route_complete")):

@@ -15,6 +15,9 @@ def read_first_jsonl_record(path: Path | None) -> dict[str, Any] | None:
         for line in handle:
             stripped = line.strip()
             if stripped:
-                payload = json.loads(stripped)
+                try:
+                    payload = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
                 return payload if isinstance(payload, dict) else None
     return None

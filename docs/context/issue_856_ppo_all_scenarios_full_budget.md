@@ -71,7 +71,7 @@ Gate for proceeding with replicas:
 
 ## Validation Path After Job 12172 Lands
 
-1. Record the best-checkpoint in-distribution evaluation result on
+1. Run the best-checkpoint in-distribution evaluation with
    `configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml`.
 2. Add a benchmark adapter config under `configs/baselines/` for the trained artifact.
 3. Rerun

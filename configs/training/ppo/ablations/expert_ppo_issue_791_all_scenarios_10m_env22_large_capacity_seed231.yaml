@@ -100,7 +100,6 @@ env_factory_kwargs:
           timeout: -6.5
           stagnation: -0.8
           terminal_bonus: 20.0
-  peds_have_obstacle_forces: true
 scenario_sampling:
   strategy: random
   profile_strategy: cycle

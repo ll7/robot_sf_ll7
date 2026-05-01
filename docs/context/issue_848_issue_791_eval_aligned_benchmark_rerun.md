@@ -99,9 +99,45 @@ ISSUE791_BENCHMARK_LABEL=issue791-eval-aligned-leader-11724-publication \
 sbatch SLURM/Auxme/issue_791_benchmark.sl
 ```
 
+## Cluster Follow-up Completion
+
+The follow-up jobs that blocked the draft PR on 2026-04-30 have completed:
+
+- SLURM job `12208` (`robot-sf-issue791-benchmark`) completed successfully on `l40s` at
+  2026-04-30 19:12:35 CEST with exit code `0:0`.
+- SLURM job `12209` (`robot-sf-policy-attention-head`) completed successfully on `l40s` at
+  2026-05-01 04:09:14 CEST with exit code `0:0`.
+
+Publication rerun evidence from job `12208`:
+
+- campaign id:
+  `paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-publication_20260430_183907`
+- log: `output/slurm/12208-issue791-benchmark.out`
+- synced output:
+  `output/slurm/issue791-benchmark-job-12208/benchmarks/publication/paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-publication_20260430_183907_publication_bundle.tar.gz`
+- report root:
+  `output/benchmarks/issue_791/paper_experiment_matrix_v1_issue791-eval-aligned-leader-11724-publication_20260430_183907`
+- result: `7` successful runs out of `7`, `987` total episodes, `benchmark_success=true`,
+  `snqi_contract_status=pass`, and `amv_coverage_status=warn`.
+- PPO leader row: `141` episodes, `success_mean=0.2482`, `collisions_mean=0.0922`,
+  `snqi_mean=-0.2948`, `execution_mode=native`, `readiness_tier=experimental`.
+
+Attention-head follow-up evidence from job `12209`:
+
+- log:
+  `../origin-2026-04-28-policy_search/output/slurm/12209-issue791-attention-head.out`
+- synced output:
+  `../origin-2026-04-28-policy_search/output/slurm/issue791-attention-head-job-12209`
+- W&B run: `https://wandb.ai/ll7/robot_sf/runs/1pcgywvr`
+- best checkpoint summary:
+  `success_rate=0.4857`, `collision_rate=0.5143`, `snqi=-0.9963`, selected at
+  `eval_step=5242880`, with `meets_convergence=false`.
+
 ## Remaining Risks
 
 - The issue body's held-out OOD requirement remains open; this note only restores the benchmark
   rerun surface.
 - External write-ups must keep the benchmark-set / in-distribution caveat explicit.
-- The full publication rerun still needs to execute on the cluster and produce the new bundle.
+- The publication bundle from job `12208` is still an ignored, worktree-local artifact until it is
+  uploaded to a durable release/artifact store.
+- The attention-head follow-up completed but did not produce a promotion-strength result.

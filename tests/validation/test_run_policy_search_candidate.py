@@ -8,6 +8,8 @@ import yaml
 
 from scripts.validation.run_policy_search_candidate import (
     _deep_merge,
+    _effective_candidate_config_for_scenario,
+    _effective_candidate_runtime_for_scenario,
     _format_optional_float,
     _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
@@ -80,6 +82,62 @@ def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> No
     )
 
     assert sorted(grouped) == ["classic", "francis2023", "nominal"]
+
+
+def test_effective_candidate_config_applies_scenario_override_after_family() -> None:
+    """Scenario-specific overrides should be narrower than family overrides."""
+    candidate_payload = {
+        "family_overrides": {
+            "francis2023": {
+                "very_slow_speed": 0.6,
+                "static_clearance_escape_max_speed": 0.6,
+            }
+        },
+        "scenario_overrides": {
+            "francis2023_perpendicular_traffic": {
+                "very_slow_speed": 0.7,
+            }
+        },
+    }
+    base_config = {
+        "very_slow_speed": 0.15,
+        "static_clearance_escape_max_speed": 0.3,
+    }
+    scenario = {"name": "francis2023_perpendicular_traffic"}
+
+    effective = _effective_candidate_config_for_scenario(candidate_payload, base_config, scenario)
+
+    assert effective["very_slow_speed"] == 0.7
+    assert effective["static_clearance_escape_max_speed"] == 0.6
+    assert base_config["very_slow_speed"] == 0.15
+
+
+def test_effective_candidate_runtime_applies_scenario_algo_override(tmp_path: Path) -> None:
+    """Scenario-specific algo overrides should replace default algo and config."""
+    base_cfg = tmp_path / "orca.yaml"
+    base_cfg.write_text(yaml.safe_dump({"max_linear_speed": 0.8, "foo": 1}), encoding="utf-8")
+    candidate_payload = {
+        "scenario_algo_overrides": {
+            "francis2023_leave_group": {
+                "algo": "orca",
+                "base_config_path": "orca.yaml",
+                "params": {"max_linear_speed": 1.15},
+            }
+        }
+    }
+    base_config = {"max_linear_speed": 3.0}
+
+    algo, effective = _effective_candidate_runtime_for_scenario(
+        candidate_payload,
+        base_config,
+        {"name": "francis2023_leave_group"},
+        default_algo="hybrid_rule_local_planner",
+        config_anchor=tmp_path,
+    )
+
+    assert algo == "orca"
+    assert effective == {"max_linear_speed": 1.15, "foo": 1}
+    assert base_config == {"max_linear_speed": 3.0}
 
 
 def test_prepare_scenarios_for_inline_run_resolves_relative_paths(

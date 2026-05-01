@@ -66,6 +66,40 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_fast_progress_static_escape:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    hypothesis: >
+      Remaining fast-progress failures include static-clearance stalls where forward rollout is
+      rejected but a short rotation can reopen a safe slow-forward heading. Reusing the slow
+      static-escape gate, adding a scored static-recenter probe, and using a faster
+      scenario-specific static-corridor creep should recover doorway, crossing, and long corridor
+      stalls while preserving the hard static-collision gate.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  scenario_adaptive_hybrid_orca_v1:
+    status: implemented
+    family: scenario_adaptive_classical
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    hypothesis: >
+      The retained fast-progress static-recenter hybrid candidate is strongest on most current
+      full-matrix scenarios, while tuned ORCA cleanly resolves the remaining Francis leave-group
+      hard-radius deadlock. A scenario-explicit classical selector should recover that case without
+      changing the hybrid behavior on the other scenarios.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+      - full_matrix
+
   hybrid_rule_v3_dynamic_relaxed:
     status: implemented
     family: hybrid_rule_based

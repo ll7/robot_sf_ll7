@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,7 @@ from robot_sf.benchmark.map_runner import (
     _build_env_config,
     _build_policy,
     _policy_command_to_env_action,
+    _scenario_with_episode_seed_defaults,
 )
 from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -24,7 +24,7 @@ from scripts.validation.policy_search_common import infer_scenario_family
 from scripts.validation.run_policy_search_candidate import (
     _DEFAULT_FUNNEL,
     _DEFAULT_REGISTRY,
-    _deep_merge,
+    _effective_candidate_runtime_for_scenario,
     _load_stage_scenarios,
     _load_yaml,
     _resolve_path,
@@ -142,7 +142,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         raise ValueError(f"Stage '{args.stage}' is missing a resolvable scenario_matrix")
     seed_manifest = _resolve_path(args.funnel_config.parent, stage_cfg.get("seed_manifest"))
 
-    entry, candidate_payload, algo_cfg, _config_path = load_candidate_definition(
+    entry, candidate_payload, algo_cfg, config_path = load_candidate_definition(
         args.candidate_registry,
         args.candidate,
     )
@@ -154,12 +154,13 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     scenarios = load_scenarios(loaded) if isinstance(loaded, Path) else [dict(s) for s in loaded]
     scenario = _select_scenario(scenarios, args)
     family = infer_scenario_family(scenario)
-    family_overrides = candidate_payload.get("family_overrides")
-    effective_cfg = deepcopy(algo_cfg)
-    if isinstance(family_overrides, dict):
-        override = family_overrides.get(family)
-        if isinstance(override, dict):
-            effective_cfg = _deep_merge(effective_cfg, override)
+    algo, effective_cfg = _effective_candidate_runtime_for_scenario(
+        candidate_payload,
+        algo_cfg,
+        scenario,
+        default_algo=algo.strip().lower(),
+        config_anchor=config_path.parent,
+    )
 
     scenario_seed_list = _seed_list(scenario)
     seed = (
@@ -179,6 +180,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         )
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     env_config = _build_env_config(scenario, scenario_path=stage_matrix)
     policy_fn, algo_meta = _build_policy(
         algo,

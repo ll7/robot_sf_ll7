@@ -140,6 +140,78 @@ def split_scenarios_by_family(
     return grouped
 
 
+def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return the stable scenario identifier used for narrow config overrides."""
+    return str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+
+
+def _effective_candidate_config_for_scenario(
+    candidate_payload: Mapping[str, Any],
+    candidate_config: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return candidate config after family and scenario-specific overrides."""
+    effective = deepcopy(dict(candidate_config))
+    family_overrides = candidate_payload.get("family_overrides")
+    if isinstance(family_overrides, dict):
+        family_cfg = family_overrides.get(infer_scenario_family(dict(scenario)), {})
+        if isinstance(family_cfg, dict):
+            effective = _deep_merge(effective, family_cfg)
+
+    scenario_overrides = candidate_payload.get("scenario_overrides")
+    if isinstance(scenario_overrides, dict):
+        scenario_cfg = scenario_overrides.get(_scenario_id(scenario), {})
+        if isinstance(scenario_cfg, dict):
+            effective = _deep_merge(effective, scenario_cfg)
+    return effective
+
+
+def _scenario_algo_override_config(
+    override: Mapping[str, Any],
+    *,
+    config_anchor: Path,
+) -> dict[str, Any]:
+    """Return a merged config for one scenario-specific algorithm override."""
+    base_cfg: dict[str, Any] = {}
+    base_path = _resolve_path(config_anchor, override.get("base_config_path"))
+    if base_path is not None:
+        base_cfg = _load_yaml(base_path)
+    params = override.get("params")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise TypeError("scenario_algo_overrides params must be a mapping")
+    return _deep_merge(base_cfg, params)
+
+
+def _effective_candidate_runtime_for_scenario(
+    candidate_payload: Mapping[str, Any],
+    candidate_config: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    *,
+    default_algo: str,
+    config_anchor: Path,
+) -> tuple[str, dict[str, Any]]:
+    """Return `(algo, config)` after scenario-level algorithm/config overrides."""
+    algo_overrides = candidate_payload.get("scenario_algo_overrides")
+    if isinstance(algo_overrides, dict):
+        override = algo_overrides.get(_scenario_id(scenario))
+        if isinstance(override, dict):
+            algo = str(override.get("algo", default_algo)).strip().lower()
+            if not algo:
+                raise ValueError(
+                    f"Scenario algo override is missing algo: {_scenario_id(scenario)}"
+                )
+            return algo, _scenario_algo_override_config(override, config_anchor=config_anchor)
+
+    return (
+        default_algo,
+        _effective_candidate_config_for_scenario(candidate_payload, candidate_config, scenario),
+    )
+
+
 def _prepare_scenarios_for_inline_run(
     scenarios: list[Mapping[str, Any]],
     *,
@@ -160,6 +232,46 @@ def _prepare_scenarios_for_inline_run(
                 updated["route_overrides_file"] = str((scenario_root / route_path).resolve())
         prepared.append(updated)
     return prepared
+
+
+def _group_scenarios_by_config_overrides(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    candidate_payload: Mapping[str, Any],
+    candidate_config: Mapping[str, Any],
+    default_algo: str,
+    config_anchor: Path,
+) -> dict[str, dict[str, Any]]:
+    """Group scenarios by the effective candidate config they require."""
+    scenario_overrides = candidate_payload.get("scenario_overrides")
+    algo_overrides = candidate_payload.get("scenario_algo_overrides")
+    grouped: dict[str, dict[str, Any]] = {}
+    for raw_scenario in scenarios:
+        scenario = dict(raw_scenario)
+        family = infer_scenario_family(scenario)
+        scenario_key = _scenario_id(scenario)
+        scenario_has_algo_override = (
+            isinstance(algo_overrides, dict) and scenario_key in algo_overrides
+        )
+        scenario_has_override = scenario_has_algo_override or (
+            isinstance(scenario_overrides, dict) and scenario_key in scenario_overrides
+        )
+        tag = f"{family}__{scenario_key}" if scenario_has_override else family
+        if tag not in grouped:
+            algo, effective_config = _effective_candidate_runtime_for_scenario(
+                candidate_payload,
+                candidate_config,
+                scenario,
+                default_algo=default_algo,
+                config_anchor=config_anchor,
+            )
+            grouped[tag] = {
+                "algo": algo,
+                "config": effective_config,
+                "scenarios": [],
+            }
+        grouped[tag]["scenarios"].append(scenario)
+    return grouped
 
 
 def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -467,8 +579,15 @@ def main() -> int:
     scenarios_or_path = _load_stage_scenarios(stage_matrix, seed_manifest, seed_list)
 
     family_overrides = candidate_payload.get("family_overrides")
+    scenario_overrides = candidate_payload.get("scenario_overrides")
+    scenario_algo_overrides = candidate_payload.get("scenario_algo_overrides")
     family_runs: dict[str, Any] = {}
-    if isinstance(family_overrides, dict) and family_overrides:
+    has_config_overrides = (
+        (isinstance(family_overrides, dict) and bool(family_overrides))
+        or (isinstance(scenario_overrides, dict) and bool(scenario_overrides))
+        or (isinstance(scenario_algo_overrides, dict) and bool(scenario_algo_overrides))
+    )
+    if has_config_overrides:
         base_scenarios = (
             scenarios_or_path
             if isinstance(scenarios_or_path, list)
@@ -478,22 +597,30 @@ def main() -> int:
             [dict(item) for item in base_scenarios],
             scenario_root=stage_matrix.parent.resolve(),
         )
-        grouped = split_scenarios_by_family(prepared_scenarios)
+        grouped = _group_scenarios_by_config_overrides(
+            prepared_scenarios,
+            candidate_payload=candidate_payload,
+            candidate_config=candidate_config,
+            default_algo=algo,
+            config_anchor=candidate_config_path.parent,
+        )
         combined_records: list[dict[str, Any]] = []
-        for family, scenarios in sorted(grouped.items()):
-            family_cfg = _deep_merge(candidate_config, family_overrides.get(family, {}))
+        for tag, group in sorted(grouped.items()):
+            scenarios = group["scenarios"]
+            group_algo = group["algo"]
+            family_cfg = group["config"]
             run = _run_stage_eval(
                 scenarios_or_path=scenarios,
-                algo=algo,
+                algo=group_algo,
                 algo_cfg=family_cfg,
                 out_dir=output_dir,
-                tag=f"{args.stage}__{args.candidate}__{family}",
+                tag=f"{args.stage}__{args.candidate}__{tag}",
                 horizon=horizon,
                 dt=dt,
                 workers=workers,
                 benchmark_profile=benchmark_profile,
             )
-            family_runs[family] = {key: value for key, value in run.items() if key != "records"}
+            family_runs[tag] = {key: value for key, value in run.items() if key != "records"}
             combined_records.extend(run["records"])
         combined_jsonl = output_dir / f"{args.stage}__{args.candidate}__combined.jsonl"
         _write_records(combined_jsonl, combined_records)

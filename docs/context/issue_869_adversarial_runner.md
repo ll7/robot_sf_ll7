@@ -72,6 +72,19 @@ PR handoff should still run:
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
+Observed on 2026-05-01 after syncing with `origin/main`:
+
+- `uv run pytest tests/adversarial/test_adversarial_search.py` passed (`8 passed`).
+- The smoke search above produced
+  `output/adversarial/issue_869_smoke/goal_crossing/candidate_0000` with
+  `num_failed_evaluations=0` and `num_invalid_candidates=0`.
+- A direct replay of the emitted `candidate_0000/scenario.yaml` through `run_batch(...)` wrote one
+  episode to `episode_records_replay.jsonl` with zero failures.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` passed after the coverage-focused tests were
+  added (`2998 passed, 19 skipped, 3 warnings`). Changed-file coverage was above the hard 80%
+  floor; `bundle.py`, `config.py`, `io.py`, and `search.py` remained below the aspirational 100%
+  goal as warning-only items.
+
 Observed on 2026-04-30: the focused tests and smoke path passed. The full readiness script passed
 Ruff, then failed in the broad parallel pytest phase due unrelated performance/worker issues
 (`tests/examples/test_examples_run.py` timeouts, `tests/test_ci_performance.py` runtime budget,

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from robot_sf.adversarial import search
-from robot_sf.adversarial.attribution import attribution_from_episode_record
+from robot_sf.adversarial import certification, objectives, search
+from robot_sf.adversarial.attribution import attribution_from_episode_record, attribution_from_error
 from robot_sf.adversarial.bundle import write_trajectory_csv
-from robot_sf.adversarial.certification import passed_status
+from robot_sf.adversarial.certification import failed_status, passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D, SearchConfig
+from robot_sf.adversarial.samplers import RandomCandidateSampler
 
 
 def _write_template(path: Path) -> None:
@@ -200,3 +203,135 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
             tmp_path / "scenario.yaml",
             tmp_path / "candidate",
         )
+
+
+def test_failure_attribution_covers_primary_outcomes() -> None:
+    """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
+    collision = attribution_from_episode_record(
+        {"status": "done", "outcome": {"collision": True, "route_complete": False}}
+    )
+    timeout = attribution_from_episode_record(
+        {"status": "done", "outcome": {"timeout": True, "route_complete": False}}
+    )
+    incomplete = attribution_from_episode_record(
+        {"status": "done", "outcome": {"route_complete": False}}
+    )
+    error = attribution_from_error("boom")
+
+    assert collision.primary_failure == "collision"
+    assert timeout.primary_failure == "timeout"
+    assert incomplete.primary_failure == "incomplete"
+    assert error.to_json()["status"] == "evaluation_failed"
+
+
+def test_certification_adapter_handles_missing_and_mocked_backends(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Certification must fail closed when required and normalize adapter payloads."""
+    monkeypatch.delitem(sys.modules, "robot_sf.scenario_certification", raising=False)
+
+    advisory = certification.certify_candidate(
+        _candidate(1), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=False
+    )
+    assert advisory.passed
+    assert failed_status("bad", details={"why": "test"}).to_json()["details"] == {"why": "test"}
+
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+    responses: list[object] = [
+        {"status": "valid", "reason": "ok", "details": ["raw"]},
+        {"status": "unavailable", "reason": "backend absent"},
+        "not a mapping",
+        {"status": "invalid", "reason": "outside map", "details": {"field": "start"}},
+    ]
+
+    def fake_certify_scenario(*_args: object, **_kwargs: object) -> object:
+        return responses.pop(0)
+
+    fake_module.certify_scenario = fake_certify_scenario
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    passed = certification.certify_candidate(
+        _candidate(2), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    unavailable = certification.certify_candidate(
+        _candidate(3), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    non_mapping = certification.certify_candidate(
+        _candidate(4), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    failed = certification.certify_candidate(
+        _candidate(5), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert passed.passed
+    assert passed.details == {"raw_details": ["raw"]}
+    assert unavailable.status == "not_available"
+    assert non_mapping.status == "failed"
+    assert failed.reason == "outside map"
+
+
+def test_objective_registry_and_fallback_scoring(tmp_path: Path) -> None:
+    """Objectives should score SNQI records, fallback failures, and registry errors."""
+    episode_path = tmp_path / "episode.jsonl"
+    episode_path.write_text(
+        json.dumps({"metrics": {"snqi": "nan"}, "outcome": {"route_complete": True}}) + "\n",
+        encoding="utf-8",
+    )
+    empty_eval = CandidateEvaluation(
+        candidate=_candidate(1),
+        certification_status=passed_status(),
+        objective_value=None,
+        failure_attribution=None,
+        episode_record_path=None,
+        trajectory_csv_path=None,
+        scenario_yaml_path=None,
+    )
+    scored_eval = CandidateEvaluation(
+        candidate=_candidate(2),
+        certification_status=passed_status(),
+        objective_value=None,
+        failure_attribution=None,
+        episode_record_path=episode_path,
+        trajectory_csv_path=None,
+        scenario_yaml_path=None,
+    )
+
+    assert objectives.worst_case_snqi(empty_eval) is None
+    assert objectives.worst_case_snqi(scored_eval) == -0.0
+
+    episode_path.write_text(
+        json.dumps(
+            {
+                "metrics": {"success": "bad", "near_misses": 2},
+                "outcome": {"collision": True, "timeout": True, "route_complete": False},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert objectives.worst_case_snqi(scored_eval) == 15.0
+
+    objectives.register_objective("unit_test_constant", lambda _evaluation: 42.0)
+    assert objectives.get_objective("unit_test_constant")(scored_eval) == 42.0
+    assert "unit_test_constant" in objectives.list_objectives()
+    with pytest.raises(ValueError, match="objective name"):
+        objectives.register_objective("", lambda _evaluation: 0.0)
+    with pytest.raises(ValueError, match="Unknown adversarial objective"):
+        objectives.get_objective("missing")
+
+
+def test_random_sampler_is_deterministic(tmp_path: Path) -> None:
+    """Random search must be repeatable for the same seed and search space."""
+    space_path = tmp_path / "space.yaml"
+    _write_space(space_path)
+    space = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=tmp_path / "template.yaml",
+        search_space=space_path,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+    ).search_space
+    left = RandomCandidateSampler(space, seed=7).sample()
+    right = RandomCandidateSampler(space, seed=7).sample()
+
+    assert left == right

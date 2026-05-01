@@ -15,17 +15,20 @@ DEFAULT_FLATTEN_KEYS: tuple[str, ...] = (OBS_DRIVE_STATE, OBS_RAYS)
 
 def _iter_leaf_spaces(space: spaces.Space[Any]) -> list[spaces.Box]:
     """Return leaf Box spaces in deterministic traversal order."""
-    if isinstance(space, spaces.Box):
-        return [space]
-    if isinstance(space, spaces.Dict):
-        leaves: list[spaces.Box] = []
-        for subspace in space.spaces.values():
-            leaves.extend(_iter_leaf_spaces(subspace))
-        return leaves
-    raise TypeError(
-        "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
-        f"Received {type(space).__name__}."
-    )
+    leaves: list[spaces.Box] = []
+    stack: list[spaces.Space[Any]] = [space]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, spaces.Box):
+            leaves.append(current)
+        elif isinstance(current, spaces.Dict):
+            stack.extend(reversed(tuple(current.spaces.values())))
+        else:
+            raise TypeError(
+                "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
+                f"Received {type(current).__name__}."
+            )
+    return leaves
 
 
 def _flatten_observation_leaves(space: spaces.Space[Any], observation: Any) -> list[np.ndarray]:
@@ -34,21 +37,25 @@ def _flatten_observation_leaves(space: spaces.Space[Any], observation: Any) -> l
     Returns:
         Flattened leaf arrays for the requested observation subtree.
     """
-    if isinstance(space, spaces.Box):
-        return [np.asarray(observation, dtype=np.float32).reshape(-1)]
-    if isinstance(space, spaces.Dict):
-        if not isinstance(observation, Mapping):
-            raise TypeError("FlattenDictObservationWrapper requires mapping observations.")
-        parts: list[np.ndarray] = []
-        for key, subspace in space.spaces.items():
-            if key not in observation:
-                raise KeyError(f"Missing observation key for flattening: {key}")
-            parts.extend(_flatten_observation_leaves(subspace, observation[key]))
-        return parts
-    raise TypeError(
-        "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
-        f"Received {type(space).__name__}."
-    )
+    parts: list[np.ndarray] = []
+    stack: list[tuple[spaces.Space[Any], Any]] = [(space, observation)]
+    while stack:
+        current_space, current_observation = stack.pop()
+        if isinstance(current_space, spaces.Box):
+            parts.append(np.asarray(current_observation, dtype=np.float32).reshape(-1))
+        elif isinstance(current_space, spaces.Dict):
+            if not isinstance(current_observation, Mapping):
+                raise TypeError("FlattenDictObservationWrapper requires mapping observations.")
+            for key, subspace in reversed(tuple(current_space.spaces.items())):
+                if key not in current_observation:
+                    raise KeyError(f"Missing observation key for flattening: {key}")
+                stack.append((subspace, current_observation[key]))
+        else:
+            raise TypeError(
+                "FlattenDictObservationWrapper only supports Dict observations with Box leaves. "
+                f"Received {type(current_space).__name__}."
+            )
+    return parts
 
 
 class FlattenDictObservationWrapper(ObservationWrapper):

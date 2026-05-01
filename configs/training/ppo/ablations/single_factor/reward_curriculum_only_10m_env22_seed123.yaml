@@ -127,7 +127,7 @@ tracking:
   wandb:
     enabled: true
     project: robot_sf
-    group: issue-852-single-factor
+    group: issue-852-single-factor-reward-curriculum
     job_type: expert-ppo-10m-single-factor-reward-curriculum-seed123
     tags:
     - issue-852

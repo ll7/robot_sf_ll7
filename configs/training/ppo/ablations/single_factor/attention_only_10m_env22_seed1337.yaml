@@ -110,7 +110,7 @@ tracking:
   wandb:
     enabled: true
     project: robot_sf
-    group: issue-852-single-factor
+    group: issue-852-single-factor-attention
     job_type: expert-ppo-10m-single-factor-attention-seed1337
     tags:
     - issue-852

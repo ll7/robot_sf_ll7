@@ -708,6 +708,37 @@ Not submitted yet:
   because the 32k probe is optional and the 10M v2 warmup results are the stronger paper-facing
   evidence path.
 
+### Results harvested on 2026-05-01
+
+All five first-wave jobs completed successfully:
+
+| Job | Arm | Best success | Best collision | Best step | Decision |
+|----:|-----|-------------:|---------------:|----------:|----------|
+| 12173 | attention-only 1M, seed 123 | 0.6286 | 0.3714 | 1.0M | no 10M promotion sibling |
+| 12174 | asymmetric-critic-only 1M, seed 123 | 0.5429 | 0.4286 | 1.0M | no 10M promotion sibling |
+| 12175 | reward-curriculum-only 1M, seed 123 | 0.5143 | 0.4857 | 0.79M | no 10M promotion sibling |
+| 12176 | fixed-seed leader replica, seed 1337 | 0.9000 | 0.1000 | 7.86M | valid lower-bound replica |
+| 12177 | fixed-seed leader replica, seed 231 | 0.9143 | 0.0857 | 10.0M | valid near-leader replica |
+
+The single-factor 1M smokes are far below the leader-family results and do not justify launching
+the staged 10M single-factor variants. The fixed-seed replicas support the original Wave-5 leader
+as a robust recipe, but the seed-fixed band remains below the single-run `0.929` point estimate.
+
+### Bounded queue-fill revisit on 2026-05-01
+
+The earlier scientific verdict still stands: the 1M single-factor smokes did not justify a broad
+10M single-factor campaign. Under the explicit queue-fill request on 2026-05-01, two bounded 10M
+single-factor runs were submitted behind the saturated `a30` user limit to test whether the two
+least implausible single-factor arms recover with horizon:
+
+| Job | Arm | Config | Partition | Initial state |
+|----:|-----|--------|-----------|---------------|
+| 12233 | attention-only 10M, seed 123 | `configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed123.yaml` | `a30` | PENDING on `QOSMaxJobsPerUserLimit` |
+| 12234 | reward-curriculum-only 10M, seed 123 | `configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed123.yaml` | `a30` | PENDING on `QOSMaxJobsPerUserLimit` |
+
+Both configs passed `train_ppo.py --dry-run` before submission. Do not expand this to the full
+single-factor 10M grid unless one of these two runs crosses the leader-relevant band.
+
 Verification on 2026-04-29:
 
 ```bash

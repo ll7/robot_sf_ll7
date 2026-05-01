@@ -114,3 +114,9 @@ Wave-5 leader recipe otherwise unchanged. SLURM jobs **12176** (seed 1337) and *
 
 Do not update the final seed-variance band until those jobs finish and their best-checkpoint eval
 metrics are recorded in `docs/context/issue_791_promotion_campaign_128k_256k.md`.
+
+2026-05-01 result: both fixed-seed correction jobs completed. Seed 1337 reached
+`success_rate=0.9000`, `collision_rate=0.1000`; seed 231 reached `success_rate=0.9143`,
+`collision_rate=0.0857`. These are close enough to validate the leader recipe, but below the
+single-run 11724 point estimate (`0.929 / 0.071`), so keep the paper claim as a single promoted
+leader plus seed-replica context rather than a tight seed-variance guarantee.

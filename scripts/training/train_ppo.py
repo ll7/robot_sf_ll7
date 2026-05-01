@@ -28,6 +28,7 @@ import shutil
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -264,6 +265,24 @@ def _preconfigure_loguru_level_from_argv() -> None:
 
 
 _preconfigure_loguru_level_from_argv()
+
+
+@contextmanager
+def _subproc_worker_log_environment(worker_mode: str):
+    """Temporarily quiet import-time info logs inherited by PPO subprocess workers."""
+    if worker_mode != "subproc":
+        yield
+        return
+
+    previous_level = os.environ.get("LOGURU_LEVEL")
+    os.environ["LOGURU_LEVEL"] = "WARNING"
+    try:
+        yield
+    finally:
+        if previous_level is None:
+            os.environ.pop("LOGURU_LEVEL", None)
+        else:
+            os.environ["LOGURU_LEVEL"] = previous_level
 
 
 class _TeeStream:
@@ -2241,7 +2260,8 @@ def _init_training_model(
         for seed in env_seeds
     ]
     if worker_mode == "subproc":
-        vec_env = SubprocVecEnv(env_fns)
+        with _subproc_worker_log_environment(worker_mode):
+            vec_env = SubprocVecEnv(env_fns)
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)

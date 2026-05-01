@@ -1,6 +1,0 @@
-name: sac_autoresearch_nominal_sanity_v1
-algo: sac
-base_config_path: configs/baselines/sac_gate_socnav_struct_ego.yaml
-params:
-  model_path: output/ai/autoresearch/trained_high_success/models/sac_autoresearch_nominal_sanity_high_success_v1.zip
-  fallback_to_goal: false

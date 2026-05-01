@@ -630,7 +630,8 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
             if key not in _IGNORED_ENV_CONTEXT_KEYS
         }
         worker_index = int(worker_payload.get("worker_index", 0) or 0)
-        worker_seed = int(config.experiment.seed + worker_index)
+        vector_index = int(worker_payload.get("vector_index", 0) or 0)
+        worker_seed = int(config.experiment.seed + (worker_index * 10_000) + vector_index)
         if scenario_matrix is None:
             worker_config = copy.deepcopy(template)
             _apply_nested_overrides(worker_config, worker_overrides, context_name="worker.config")
@@ -843,12 +844,48 @@ def _extract_finite_metric(result: dict[str, Any], *keys: str) -> float | int | 
     return value if _is_finite_scalar(value) else None
 
 
+def _json_safe_scalar(value: Any) -> Any:
+    """Convert non-finite scalar values into strict-JSON-safe sentinels."""
+    if _is_finite_scalar(value):
+        return value
+    if isinstance(value, int | float):
+        return str(value)
+    return value
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Iteratively convert nested payloads into strict-JSON-safe values."""
+    root = [value]
+    stack: list[tuple[dict[Any, Any] | list[Any], Any]] = [(root, 0)]
+    while stack:
+        parent, key = stack.pop()
+        item = parent[key]
+        if isinstance(item, dict):
+            converted = {str(nested_key): nested_value for nested_key, nested_value in item.items()}
+            parent[key] = converted
+            stack.extend((converted, nested_key) for nested_key in converted)
+        elif isinstance(item, list | tuple):
+            converted = list(item)
+            parent[key] = converted
+            stack.extend((converted, index) for index in range(len(converted)))
+        elif isinstance(item, np.ndarray):
+            parent[key] = item.tolist()
+            stack.append((parent, key))
+        elif isinstance(item, np.generic):
+            parent[key] = _json_safe_scalar(item.item())
+        elif isinstance(item, Path):
+            parent[key] = str(item)
+        else:
+            parent[key] = _json_safe_scalar(item)
+    return root[0]
+
+
 def _is_finite_scalar(value: Any) -> bool:
     """Return True when value is an int/float and finite."""
     return isinstance(value, int | float) and math.isfinite(float(value))
 
 
-def _find_nonfinite_scalars(
+def _find_nonfinite_scalars(  # noqa: C901
     value: Any,
     *,
     prefix: str = "",
@@ -930,10 +967,10 @@ def _build_nonfinite_diagnostics(
     }
     return {
         "iteration": iteration,
-        "reward_mean": reward_mean,
-        "timesteps_total": timesteps_total,
+        "reward_mean": _json_safe_scalar(reward_mean),
+        "timesteps_total": _json_safe_scalar(timesteps_total),
         "top_level_keys": sorted(result.keys()),
-        "interesting_metrics": interesting_paths,
+        "interesting_metrics": _json_safe_value(interesting_paths),
         "nonfinite_scalars": _find_nonfinite_scalars(result),
     }
 
@@ -1202,7 +1239,13 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     """Write JSON payload with stable formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+        json.dump(
+            _json_safe_value(copy.deepcopy(payload)),
+            handle,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+        )
         handle.write("\n")
 
 
@@ -1330,7 +1373,7 @@ def _build_algorithm_instance(algo_config: object) -> Any:
     return algo_config.build()
 
 
-def _run_training_iterations(
+def _run_training_iterations(  # noqa: C901
     algo: Any,
     run_config: DreamerRunConfig,
     *,
@@ -1348,7 +1391,8 @@ def _run_training_iterations(
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
         reward_mean_raw = _extract_metric(result, "episode_return_mean", "episode_reward_mean")
-        reward_mean = reward_mean_raw if _is_finite_scalar(reward_mean_raw) else None
+        reward_mean = _extract_finite_metric(result, "episode_return_mean", "episode_reward_mean")
+        reward_mean_raw_json = _json_safe_scalar(reward_mean_raw)
         timesteps_total = _extract_metric(
             result,
             "num_env_steps_sampled_lifetime",
@@ -1373,7 +1417,7 @@ def _run_training_iterations(
             {
                 "iteration": iteration,
                 "reward_mean": reward_mean,
-                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_raw": reward_mean_raw_json,
                 "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             }
@@ -1384,7 +1428,7 @@ def _run_training_iterations(
                 "ts_utc": datetime.now(UTC).isoformat(),
                 "iteration": iteration,
                 "reward_mean": reward_mean,
-                "reward_mean_raw": reward_mean_raw,
+                "reward_mean_raw": reward_mean_raw_json,
                 "reward_mean_status": reward_mean_status,
                 "timesteps_total": timesteps_total,
             },

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -18,6 +17,9 @@ from robot_sf.training.scenario_sampling import (
     _spaces_compatible,
     scenario_id_from_definition,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _write_yaml(path: Path, content: str) -> Path:
@@ -561,12 +563,63 @@ algorithm:
     second = summary["history"][1]
     assert second["reward_mean"] is None
     assert second["reward_mean_status"] == "nonfinite"
-    assert second["reward_mean_raw"] != second["reward_mean_raw"]  # NaN
+    assert second["reward_mean_raw"] == "nan"
+    result_text = (run_dir / "result.jsonl").read_text(encoding="utf-8")
+    result_lines = result_text.splitlines()
+    assert json.loads(result_lines[1])["reward_mean_raw"] == "nan"
+    assert "NaN" not in result_text
+    assert "NaN" not in (run_dir / "run_summary.json").read_text(encoding="utf-8")
     diagnostics_path = Path(second["nonfinite_diagnostics_path"])
     assert diagnostics_path.exists()
     diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
     assert diagnostics["iteration"] == 2
     assert diagnostics["nonfinite_scalars"]
+
+
+def test_json_safe_value_handles_numpy_paths_and_deep_payloads() -> None:
+    """JSON sanitization should avoid recursion and handle common RLlib payload leaves."""
+    json_safe_value = _dreamer_callable("_json_safe_value")
+    payload = {
+        "array": np.array([1.0, np.nan], dtype=np.float32),
+        "scalar": np.float64(np.inf),
+        "tuple": (np.int64(2),),
+        Path("artifact_path"): Path("output/dreamerv3"),
+    }
+
+    safe_payload = json_safe_value(payload)
+
+    assert safe_payload["array"] == [1.0, "nan"]
+    assert safe_payload["scalar"] == "inf"
+    assert safe_payload["tuple"] == [2]
+    assert safe_payload["artifact_path"] == "output/dreamerv3"
+    json.dumps(safe_payload, allow_nan=False)
+
+    deep_payload: dict[str, Any] = {}
+    cursor = deep_payload
+    depth = 1_500
+    for _ in range(depth):
+        nested: dict[str, Any] = {}
+        cursor["next"] = nested
+        cursor = nested
+    cursor["value"] = float("-inf")
+
+    safe_deep_payload = json_safe_value(deep_payload)
+
+    cursor = safe_deep_payload
+    for _ in range(depth):
+        cursor = cursor["next"]
+    assert cursor["value"] == "-inf"
+
+
+def test_write_json_does_not_mutate_payload(tmp_path: Path) -> None:
+    """Strict JSON writing should not alter objects the caller may reuse."""
+    write_json = _dreamer_callable("_write_json")
+    payload = {"nested": {"value": np.float64(np.nan)}, "path": Path("output/run")}
+
+    write_json(tmp_path / "payload.json", payload)
+
+    assert isinstance(payload["nested"]["value"], np.float64)
+    assert isinstance(payload["path"], Path)
 
 
 def test_run_training_cleans_up_ray_and_algo_on_failure(

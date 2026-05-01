@@ -1,0 +1,32 @@
+{
+  "jsonl_path": "output/policy_search/hybrid_orca_sampler_v1/smoke/latest/smoke__hybrid_orca_sampler_v1.jsonl",
+  "summary": {
+    "episodes": 3,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "termination_reason_counts": {
+      "max_steps": 3
+    },
+    "failure_mode_counts": {
+      "timeout_low_progress": 3
+    },
+    "scenario_family": {
+      "nominal": {
+        "episodes": 3,
+        "success_rate": 0.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0
+      }
+    },
+    "mean_min_distance": null,
+    "mean_avg_speed": 1.0997115515843527
+  },
+  "scenario_failure_counts": [
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "planner_sanity_simple",
+      "count": 3
+    }
+  ]
+}

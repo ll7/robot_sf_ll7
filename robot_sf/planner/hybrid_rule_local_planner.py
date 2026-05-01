@@ -14,6 +14,7 @@ from itertools import pairwise
 from typing import Any
 
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
@@ -83,6 +84,18 @@ class HybridRuleCandidate:
     linear: float
     angular: float
     source: str
+
+
+@dataclass(frozen=True)
+class _ObstacleClearanceContext:
+    """Per-plan static-obstacle clearance lookup."""
+
+    observation_id: int
+    grid: np.ndarray
+    meta: dict[str, Any]
+    channel: int
+    resolution: float
+    clearance_cells: np.ndarray | None
 
 
 @dataclass
@@ -221,6 +234,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._rejection_counts: Counter[str] = Counter()
         self._fallback_count = 0
         self._last_decision: dict[str, Any] | None = None
+        self._clearance_context: _ObstacleClearanceContext | None = None
 
     def _extract_state(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Extract the structured planner state from map-runner observations.
@@ -392,10 +406,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
 
         if self._route_guide is not None:
-            try:
-                route_linear, route_angular = self._route_guide.plan(state["observation"])
-            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
-                route_linear, route_angular = 0.0, 0.0
+            route_linear, route_angular = self._route_guide.plan(state["observation"])
             candidates.append(
                 HybridRuleCandidate(
                     float(np.clip(route_linear, 0.0, speed_cap)),
@@ -437,35 +448,62 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             unique.setdefault(self._candidate_key(clipped), clipped)
         return list(unique.values())
 
+    def _build_clearance_context(
+        self, observation: dict[str, Any]
+    ) -> _ObstacleClearanceContext | None:
+        """Build a per-plan obstacle clearance lookup from the occupancy grid.
+
+        Returns:
+            _ObstacleClearanceContext | None: Lookup context, or ``None`` when
+            the observation has no usable static-obstacle grid.
+        """
+        payload = self._obstacle_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta, channel, resolution = payload
+        channel_grid = np.asarray(grid[channel], dtype=float)
+        blocked = channel_grid >= float(self.config.obstacle_threshold)
+        clearance_cells = None if not np.any(blocked) else distance_transform_edt(~blocked)
+        return _ObstacleClearanceContext(
+            observation_id=id(observation),
+            grid=grid,
+            meta=meta,
+            channel=channel,
+            resolution=resolution,
+            clearance_cells=clearance_cells,
+        )
+
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
         """Approximate static-obstacle clearance from occupancy-grid observations.
 
         Returns:
             float: Clearance in metres, or infinity when no obstacle grid is available.
         """
-        payload = self._obstacle_grid_payload(observation)
-        if payload is None:
+        context = (
+            self._clearance_context
+            if self._clearance_context is not None
+            and self._clearance_context.observation_id == id(observation)
+            else self._build_clearance_context(observation)
+        )
+        if context is None:
             return float("inf")
-        grid, meta, channel, resolution = payload
-        indices = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
+        indices = self._world_to_grid(
+            point,
+            context.meta,
+            grid_shape=(context.grid.shape[1], context.grid.shape[2]),
+        )
         if indices is None:
             return 0.0
         row, col = indices
-        channel_grid = np.asarray(grid[channel], dtype=float)
-        if channel_grid[row, col] >= float(self.config.obstacle_threshold):
-            return 0.0
-
-        radius = max(int(self.config.obstacle_search_cells), 1)
-        r0 = max(0, row - radius)
-        r1 = min(channel_grid.shape[0], row + radius + 1)
-        c0 = max(0, col - radius)
-        c1 = min(channel_grid.shape[1], col + radius + 1)
-        obstacle_cells = np.argwhere(channel_grid[r0:r1, c0:c1] >= self.config.obstacle_threshold)
-        if obstacle_cells.size == 0:
+        if context.clearance_cells is None:
             return float("inf")
-        dr = obstacle_cells[:, 0] + r0 - row
-        dc = obstacle_cells[:, 1] + c0 - col
-        return float(np.min(np.hypot(dr, dc)) * max(float(resolution), 1e-6))
+        clearance_cells = float(context.clearance_cells[row, col])
+        if clearance_cells <= 0.0:
+            return 0.0
+        radius = max(int(self.config.obstacle_search_cells), 1)
+        if clearance_cells > float(radius):
+            return float("inf")
+        return float(clearance_cells * max(float(context.resolution), 1e-6))
 
     def _ttc_proxy(
         self,
@@ -934,6 +972,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
         speed_cap = self._human_speed_cap(nearest_ped)
+        self._clearance_context = self._build_clearance_context(observation)
         candidates = self._generate_candidates(state, speed_cap)
         accepted: list[dict[str, Any]] = []
         rejection_counts: Counter[str] = Counter()
@@ -1112,7 +1151,7 @@ def build_hybrid_rule_local_planner_config(
             continue
         default = field_map[key]
         if isinstance(default, bool):
-            kwargs[key] = bool(value)
+            kwargs[key] = _coerce_config_bool(key, value)
         elif isinstance(default, int):
             kwargs[key] = int(value)
         elif isinstance(default, float):
@@ -1122,6 +1161,25 @@ def build_hybrid_rule_local_planner_config(
         else:
             kwargs[key] = value
     return HybridRuleLocalPlannerConfig(**kwargs)
+
+
+def _coerce_config_bool(key: str, value: Any) -> bool:
+    """Parse booleans from YAML/CLI-style config values without Python truthiness traps.
+
+    Returns:
+        bool: Parsed boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    raise ValueError(f"Expected boolean-compatible value for hybrid rule config '{key}'.")
 
 
 __all__ = [

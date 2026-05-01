@@ -1243,6 +1243,74 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
         handle.write("\n")
 
 
+def _json_safe_value(value: Any) -> Any:
+    """Convert common non-JSON primitives into stable JSON-safe values."""
+    root: list[Any] = [None]
+    stack: list[tuple[Any, Any, str | int]] = [(value, root, 0)]
+
+    while stack:
+        item, parent, key = stack.pop()
+        handled, converted_item = _json_safe_leaf(item)
+        if handled:
+            parent[key] = converted_item
+        elif isinstance(item, np.ndarray):
+            stack.append((item.tolist(), parent, key))
+        elif is_dataclass(item):
+            converted: dict[str, Any] = {}
+            parent[key] = converted
+            for field in reversed(fields(item)):
+                stack.append((getattr(item, field.name), converted, field.name))
+        elif isinstance(item, dict):
+            converted = {}
+            parent[key] = converted
+            for raw_key, raw_value in reversed(tuple(item.items())):
+                stack.append((raw_value, converted, str(raw_key)))
+        elif isinstance(item, list | tuple | set):
+            converted = [None] * len(item)
+            parent[key] = converted
+            for idx, raw_value in reversed(tuple(enumerate(item))):
+                stack.append((raw_value, converted, idx))
+        else:
+            parent[key] = str(item)
+
+    return root[0]
+
+
+def _json_safe_leaf(value: Any) -> tuple[bool, Any]:
+    """Convert scalar-like JSON values.
+
+    Returns:
+        tuple[bool, Any]: Whether ``value`` was handled and the converted value.
+    """
+    if isinstance(value, Path):
+        return True, str(value)
+    if isinstance(value, Enum):
+        return True, value.value
+    if isinstance(value, np.generic):
+        scalar = value.item()
+        if isinstance(scalar, float):
+            return True, _json_safe_float(scalar)
+        return True, scalar
+    if isinstance(value, float):
+        return True, _json_safe_float(value)
+    if isinstance(value, int | str | bool) or value is None:
+        return True, value
+    return False, value
+
+
+def _json_safe_float(value: float) -> float | str:
+    """Convert non-finite floats to JSON-safe tokens.
+
+    Returns:
+        float | str: Original finite value, or ``nan``/``inf`` string tokens.
+    """
+    if math.isfinite(value):
+        return value
+    if math.isnan(value):
+        return "nan"
+    return "inf" if value > 0.0 else "-inf"
+
+
 def _serialize_for_wandb(value: Any) -> Any:
     """Recursively convert dataclass/path values into wandb-friendly primitives."""
     if isinstance(value, Path):

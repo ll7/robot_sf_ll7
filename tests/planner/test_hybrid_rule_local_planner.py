@@ -474,12 +474,14 @@ def test_hybrid_rule_config_builder_and_variant_guard() -> None:
             "linear_samples": "5",
             "lookahead_distances": [0.4, 0.8],
             "static_hard_safety_margin": "0.0",
+            "route_guide_enabled": "false",
         }
     )
     assert cfg.max_linear_speed == pytest.approx(1.4)
     assert cfg.linear_samples == 5
     assert cfg.lookahead_distances == (0.4, 0.8)
     assert cfg.static_hard_safety_margin == pytest.approx(0.0)
+    assert cfg.route_guide_enabled is False
 
     v3_cfg = build_hybrid_rule_local_planner_config(
         {"planner_variant": "hybrid_rule_v3_teb_like_rollout"}
@@ -491,6 +493,9 @@ def test_hybrid_rule_config_builder_and_variant_guard() -> None:
         HybridRuleLocalPlannerAdapter(
             HybridRuleLocalPlannerConfig(planner_variant="hybrid_rule_v9_unknown")
         )
+
+    with pytest.raises(ValueError, match="route_guide_enabled"):
+        build_hybrid_rule_local_planner_config({"route_guide_enabled": "sometimes"})
 
 
 def test_hybrid_rule_reset_clears_episode_diagnostics() -> None:

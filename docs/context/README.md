@@ -121,6 +121,8 @@ why a change was made rather than a full issue execution transcript.
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+- [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
+  scope, public surfaces, validation path, and known limits.
 
 ## DreamerV3 Notes
 

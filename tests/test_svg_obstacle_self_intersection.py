@@ -29,7 +29,7 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
     )
     converter = SvgMapConverter(str(svg_fixture))
 
-    for path_id in ("path3", "path1948", "path1951"):
+    for path_id in ("path1948", "path1951"):
         svg_path = _get_path_by_id(converter, path_id)
         assert svg_path.label == "obstacle"
 
@@ -39,6 +39,24 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
             f"Obstacle {path_id} should be repaired to valid geometry"
         )
         assert obstacle.geometry.area > 0.0
+
+
+def test_campus_lake_obstacle_is_authored_as_valid_polygon() -> None:
+    """The campus lake asset should not rely on runtime repair for its main shape."""
+    repo_root = Path(__file__).resolve().parents[1]
+    svg_fixture = (
+        repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
+    )
+    converter = SvgMapConverter(str(svg_fixture))
+    lake_path = _get_path_by_id(converter, "path3")
+    vertices = list(lake_path.coordinates)
+    if vertices[0] != vertices[-1]:
+        vertices.append(vertices[0])
+
+    polygon = Polygon(vertices)
+
+    assert polygon.is_valid
+    assert polygon.area > 0.0
 
 
 def test_self_intersecting_obstacle_warnings_include_svg_filename() -> None:
@@ -70,7 +88,7 @@ def test_self_intersecting_obstacle_repair_logs_once_per_path() -> None:
         repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
     )
     converter = SvgMapConverter(str(svg_fixture))
-    svg_path = _get_path_by_id(converter, "path3")
+    svg_path = _get_path_by_id(converter, "path1948")
     svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
 
     messages: list[tuple[str, str]] = []

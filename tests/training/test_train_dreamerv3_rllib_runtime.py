@@ -576,6 +576,41 @@ algorithm:
     assert diagnostics["nonfinite_scalars"]
 
 
+def test_json_safe_value_handles_numpy_paths_and_deep_payloads() -> None:
+    """JSON sanitization should avoid recursion and handle common RLlib payload leaves."""
+    json_safe_value = _dreamer_callable("_json_safe_value")
+    payload = {
+        "array": np.array([1.0, np.nan], dtype=np.float32),
+        "scalar": np.float64(np.inf),
+        "tuple": (np.int64(2),),
+        Path("artifact_path"): Path("output/dreamerv3"),
+    }
+
+    safe_payload = json_safe_value(payload)
+
+    assert safe_payload["array"] == [1.0, "nan"]
+    assert safe_payload["scalar"] == "inf"
+    assert safe_payload["tuple"] == [2]
+    assert safe_payload["artifact_path"] == "output/dreamerv3"
+    json.dumps(safe_payload, allow_nan=False)
+
+    deep_payload: dict[str, Any] = {}
+    cursor = deep_payload
+    depth = 1_500
+    for _ in range(depth):
+        nested: dict[str, Any] = {}
+        cursor["next"] = nested
+        cursor = nested
+    cursor["value"] = float("-inf")
+
+    safe_deep_payload = json_safe_value(deep_payload)
+
+    cursor = safe_deep_payload
+    for _ in range(depth):
+        cursor = cursor["next"]
+    assert cursor["value"] == "-inf"
+
+
 def test_run_training_cleans_up_ray_and_algo_on_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

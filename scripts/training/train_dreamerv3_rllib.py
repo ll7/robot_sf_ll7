@@ -854,12 +854,30 @@ def _json_safe_scalar(value: Any) -> Any:
 
 
 def _json_safe_value(value: Any) -> Any:
-    """Recursively convert non-finite numeric values into strict-JSON-safe sentinels."""
-    if isinstance(value, dict):
-        return {str(key): _json_safe_value(nested) for key, nested in value.items()}
-    if isinstance(value, list | tuple):
-        return [_json_safe_value(nested) for nested in value]
-    return _json_safe_scalar(value)
+    """Iteratively convert nested payloads into strict-JSON-safe values."""
+    root = [value]
+    stack: list[tuple[dict[Any, Any] | list[Any], Any]] = [(root, 0)]
+    while stack:
+        parent, key = stack.pop()
+        item = parent[key]
+        if isinstance(item, dict):
+            converted = {str(nested_key): nested_value for nested_key, nested_value in item.items()}
+            parent[key] = converted
+            stack.extend((converted, nested_key) for nested_key in converted)
+        elif isinstance(item, list | tuple):
+            converted = list(item)
+            parent[key] = converted
+            stack.extend((converted, index) for index in range(len(converted)))
+        elif isinstance(item, np.ndarray):
+            parent[key] = item.tolist()
+            stack.append((parent, key))
+        elif isinstance(item, np.generic):
+            parent[key] = _json_safe_scalar(item.item())
+        elif isinstance(item, Path):
+            parent[key] = str(item)
+        else:
+            parent[key] = _json_safe_scalar(item)
+    return root[0]
 
 
 def _is_finite_scalar(value: Any) -> bool:
@@ -949,10 +967,10 @@ def _build_nonfinite_diagnostics(
     }
     return {
         "iteration": iteration,
-        "reward_mean": reward_mean,
-        "timesteps_total": timesteps_total,
+        "reward_mean": _json_safe_scalar(reward_mean),
+        "timesteps_total": _json_safe_scalar(timesteps_total),
         "top_level_keys": sorted(result.keys()),
-        "interesting_metrics": interesting_paths,
+        "interesting_metrics": _json_safe_value(interesting_paths),
         "nonfinite_scalars": _find_nonfinite_scalars(result),
     }
 

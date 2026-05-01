@@ -60,6 +60,11 @@ def register_objective(name: str, objective: ObjectiveFn) -> None:
     _OBJECTIVES[key] = objective
 
 
+def unregister_objective(name: str) -> None:
+    """Remove a registered objective function if present."""
+    _OBJECTIVES.pop(name.strip(), None)
+
+
 def get_objective(name: str) -> ObjectiveFn:
     """Return a registered objective function."""
     try:

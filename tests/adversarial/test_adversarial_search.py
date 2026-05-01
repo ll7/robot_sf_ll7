@@ -389,8 +389,11 @@ def test_objective_registry_and_fallback_scoring(
     assert objectives.worst_case_snqi(scored_eval) == 15.0
 
     objectives.register_objective("unit_test_constant", lambda _evaluation: 42.0)
-    assert objectives.get_objective("unit_test_constant")(scored_eval) == 42.0
-    assert "unit_test_constant" in objectives.list_objectives()
+    try:
+        assert objectives.get_objective("unit_test_constant")(scored_eval) == 42.0
+        assert "unit_test_constant" in objectives.list_objectives()
+    finally:
+        objectives.unregister_objective("unit_test_constant")
     with pytest.raises(ValueError, match="objective name"):
         objectives.register_objective("", lambda _evaluation: 0.0)
     with pytest.raises(ValueError, match="Unknown adversarial objective"):

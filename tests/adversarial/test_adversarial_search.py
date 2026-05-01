@@ -344,8 +344,11 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
     assert failed.reason == "outside map"
 
 
-def test_objective_registry_and_fallback_scoring(tmp_path: Path) -> None:
+def test_objective_registry_and_fallback_scoring(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Objectives should score SNQI records, fallback failures, and registry errors."""
+    monkeypatch.setattr(objectives, "_OBJECTIVES", dict(objectives._OBJECTIVES))
     episode_path = tmp_path / "episode.jsonl"
     episode_path.write_text(
         json.dumps({"metrics": {"snqi": "nan"}, "outcome": {"route_complete": True}}) + "\n",
@@ -396,11 +399,13 @@ def test_objective_registry_and_fallback_scoring(tmp_path: Path) -> None:
 
 def test_random_sampler_is_deterministic(tmp_path: Path) -> None:
     """Random search must be repeatable for the same seed and search space."""
+    template_path = tmp_path / "template.yaml"
     space_path = tmp_path / "space.yaml"
+    _write_template(template_path)
     _write_space(space_path)
     space = SearchConfig.from_files(
         policy="goal",
-        scenario_template=tmp_path / "template.yaml",
+        scenario_template=template_path,
         search_space=space_path,
         objective="worst_case_snqi",
         output_dir=tmp_path / "out",

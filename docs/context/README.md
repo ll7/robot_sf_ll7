@@ -123,6 +123,8 @@ why a change was made rather than a full issue execution transcript.
   virtualenv boundaries.
 - [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+- [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
+  scope, public surfaces, validation path, and known limits.
 
 ## DreamerV3 Notes
 

@@ -247,6 +247,105 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
 
 
+def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:
+    """Strict adversarial search should exclude invalid candidates and evaluate certified ones."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    search_space.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 1.0, "max": 2.0},
+                    "start_y": {"min": 2.0, "max": 2.0},
+                    "goal_x": {"min": 4.0, "max": 5.0},
+                    "goal_y": {"min": 2.0, "max": 2.0},
+                    "spawn_time_s": {"min": 0.0, "max": 0.0},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": {"min": 0.0, "max": 0.0},
+                    "scenario_seed": {"min": 7, "max": 7},
+                },
+                "constraints": {"min_start_goal_distance_m": 0.5},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        budget=2,
+        seed=123,
+        require_certification=True,
+    )
+    invalid_candidate = _candidate(7)
+    valid_candidate = CandidateSpec(
+        start=Pose2D(2.0, 2.0),
+        goal=Pose2D(4.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=1.0,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+    )
+    evaluated: list[CandidateSpec] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        evaluated.append(candidate)
+        record: dict[str, Any] = {
+            "episode_id": "strict-cert-valid",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 3,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"snqi": 0.5, "success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status(),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=trajectory_path,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        sampler=_SequenceSampler([invalid_candidate, valid_candidate]),
+    )
+
+    assert evaluated == [valid_candidate]
+    assert result.num_candidates == 2
+    assert result.num_invalid_candidates == 1
+    assert result.num_valid_candidates == 1
+    assert result.best_bundle_path == config.output_dir / "candidate_0001"
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    invalid_status = manifest["candidates"][0]["certification_status"]
+    valid_status = manifest["candidates"][1]["certification_status"]
+    assert invalid_status["status"] == "failed"
+    assert "start_inside_static_obstacle" in invalid_status["reason"]
+    assert manifest["candidates"][0]["error"] == "start_inside_static_obstacle"
+    assert valid_status["status"] == "passed"
+    assert valid_status["details"]["certificates"][0]["benchmark_eligibility"] != "excluded"
+    assert manifest["candidates"][1]["trajectory_csv_path"].endswith(
+        "candidate_0001/trajectory.csv"
+    )
+
+
 def test_default_evaluator_treats_failures_as_failed_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

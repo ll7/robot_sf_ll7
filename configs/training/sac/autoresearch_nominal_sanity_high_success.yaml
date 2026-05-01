@@ -1,0 +1,69 @@
+# Autoresearch SAC training profile for the policy-search nominal_sanity surface.
+#
+# Purpose: train a benchmark-compatible SAC policy directly on the local
+# nominal_sanity scenario mix to test whether learning can beat the best
+# deterministic hybrid-rule policy found by the 2026-04-30 local search.
+
+policy_id: sac_autoresearch_nominal_sanity_high_success_v1
+scenario_config: ../../policy_search/nominal_sanity_matrix.yaml
+total_timesteps: 300000
+seed: 7901
+num_envs: 8
+device: auto
+action_semantics: delta
+relative_obs: true
+obs_transform: ego
+
+output_dir: ../../../output/ai/autoresearch/trained_high_success/models
+
+sac_hyperparams:
+  learning_rate: 1.0e-4
+  buffer_size: 300000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.995
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 10000
+
+env_overrides:
+  observation_mode: socnav_struct
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 3.0
+      living: -0.005
+      collision: -10.0
+      near_miss: -1.0
+      ttc_risk: -0.8
+      comfort: -0.3
+      smoothness: -0.1
+      terminal_bonus: 8.0
+
+scenario_sampling:
+  strategy: cycle
+
+evaluation:
+  enabled: true
+  frequency_steps: 50000
+  scenario_matrix: ../../policy_search/nominal_sanity_matrix.yaml
+  algo_config: ../../../configs/baselines/sac_gate_socnav_struct_ego.yaml
+  output_dir: ../../../output/ai/autoresearch/trained_high_success/periodic_eval
+  tag_prefix: sac_autoresearch_nominal
+  horizon: 120
+  dt: 0.1
+  workers: 2
+  min_success_rate: 0.3334
+
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_autoresearch_nominal_sanity_high_success_v1
+  tags:
+    - sac
+    - autoresearch
+    - nominal-sanity
+    - high-success

@@ -196,6 +196,8 @@ class SearchSpaceConfig:
             min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
             pedestrian_id=pedestrian_id,
         )
+        if not config.scenario_seed.min.is_integer() or not config.scenario_seed.max.is_integer():
+            raise ValueError("search-space scenario_seed bounds must be integers")
         if (
             not math.isfinite(config.min_start_goal_distance_m)
             or config.min_start_goal_distance_m < 0.0
@@ -211,7 +213,7 @@ class SearchSpaceConfig:
             spawn_time_s=self.spawn_time_s.sample(rng),
             pedestrian_speed_mps=self.pedestrian_speed_mps.sample(rng),
             pedestrian_delay_s=self.pedestrian_delay_s.sample(rng),
-            scenario_seed=round(self.scenario_seed.sample(rng)),
+            scenario_seed=rng.randint(int(self.scenario_seed.min), int(self.scenario_seed.max)),
         )
 
     def validate_candidate(self, candidate: CandidateSpec) -> list[str]:

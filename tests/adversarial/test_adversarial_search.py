@@ -148,6 +148,22 @@ def test_search_space_rejects_invalid_min_start_goal_distance() -> None:
         SearchSpaceConfig.from_mapping(payload)
 
 
+def test_search_space_rejects_non_integral_seed_bounds() -> None:
+    """Scenario seed ranges must describe a discrete integer sampling space."""
+    payload = {
+        "variables": {
+            "start_x": {"min": 0, "max": 1},
+            "start_y": {"min": 0, "max": 1},
+            "goal_x": {"min": 2, "max": 3},
+            "goal_y": {"min": 2, "max": 3},
+            "scenario_seed": {"min": 1.5, "max": 2.5},
+        }
+    }
+
+    with pytest.raises(ValueError, match="scenario_seed bounds must be integers"):
+        SearchSpaceConfig.from_mapping(payload)
+
+
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:
     config = _config(tmp_path)
     scores = [0.8, 0.2]
@@ -406,6 +422,9 @@ def test_random_sampler_is_deterministic(tmp_path: Path) -> None:
     space_path = tmp_path / "space.yaml"
     _write_template(template_path)
     _write_space(space_path)
+    payload = yaml.safe_load(space_path.read_text(encoding="utf-8"))
+    payload["variables"]["scenario_seed"] = {"min": 7, "max": 9}
+    space_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     space = SearchConfig.from_files(
         policy="goal",
         scenario_template=template_path,
@@ -417,3 +436,5 @@ def test_random_sampler_is_deterministic(tmp_path: Path) -> None:
     right = RandomCandidateSampler(space, seed=7).sample()
 
     assert left == right
+    assert isinstance(left.scenario_seed, int)
+    assert 7 <= left.scenario_seed <= 9

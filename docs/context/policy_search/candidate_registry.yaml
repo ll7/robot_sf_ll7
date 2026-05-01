@@ -401,3 +401,18 @@ candidates:
     hypothesis: >
       A lightweight learned risk estimator should improve candidate ranking only
       when attached to a hard safety guard.
+
+  sac_autoresearch_nominal_sanity_v1:
+    status: training
+    family: learned_sac
+    training_required: true
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/sac_autoresearch_nominal_sanity_v1.yaml
+    hypothesis: >
+      A SAC policy trained directly on the nominal_sanity scenario surface with
+      ego-frame SocNav observations may beat the best deterministic local
+      policy-search success rate while preserving fail-closed SAC evaluation.
+    required_stages:
+      - training
+      - nominal_sanity
+      - stress_slice

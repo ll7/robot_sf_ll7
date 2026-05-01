@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/scenario_cert.v1.json",
+  "title": "RobotSF Scenario Certificate (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "source",
+    "classification",
+    "benchmark_eligibility",
+    "reasons",
+    "checks",
+    "route_certificates",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_cert.v1"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string"
+    },
+    "classification": {
+      "$ref": "#/$defs/classification"
+    },
+    "benchmark_eligibility": {
+      "$ref": "#/$defs/eligibility"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "checks": {
+      "type": "object"
+    },
+    "route_certificates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/route_certificate"
+      }
+    },
+    "evidence": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "classification": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "invalid",
+        "geometrically_infeasible",
+        "kinodynamically_infeasible",
+        "dynamically_overconstrained",
+        "knife_edge",
+        "hard_but_solvable"
+      ]
+    },
+    "eligibility": {
+      "type": "string",
+      "enum": [
+        "eligible",
+        "stress_only",
+        "excluded"
+      ]
+    },
+    "route_certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route_id",
+        "spawn_id",
+        "goal_id",
+        "classification",
+        "benchmark_eligibility",
+        "reasons",
+        "checks",
+        "evidence"
+      ],
+      "properties": {
+        "route_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spawn_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "goal_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classification": {
+          "$ref": "#/$defs/classification"
+        },
+        "benchmark_eligibility": {
+          "$ref": "#/$defs/eligibility"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "object"
+        },
+        "evidence": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

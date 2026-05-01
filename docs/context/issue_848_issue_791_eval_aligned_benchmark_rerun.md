@@ -40,9 +40,10 @@ Why this matters:
 After merging `origin/main` on 2026-04-29, the issue-791 leader promotion work is already present
 in mainline with a stricter, newer configuration:
 
-- `configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml` now pins the promoted
-  `model_path` directly and carries the predictive-foresight settings used by the promoted PPO
-  baseline.
+- `configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml` now resolves the promoted
+  policy by `model_id` through `model/registry.yaml`, which points at the durable W&B
+  `best-success:v9` artifact and carries the predictive-foresight settings used by the promoted
+  PPO baseline.
 - `configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml` keeps the
   issue-791 PPO leader under the `ppo` planner key, adds `workers: 1` for PPO CUDA loading, and
   uses `stop_on_failure: false` so dependency misses for other planners do not halt the whole

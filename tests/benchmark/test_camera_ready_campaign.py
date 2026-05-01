@@ -254,6 +254,11 @@ def test_issue_791_eval_aligned_ppo_config_is_serial_and_fail_closed() -> None:
     assert planners["ppo"].workers_override == 1
 
     ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert (
+        ppo_cfg["model_id"]
+        == "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert "model_path" not in ppo_cfg
     assert ppo_cfg["fallback_to_goal"] is False
     assert ppo_cfg["predictive_foresight_enabled"] is True
     assert ppo_cfg["predictive_foresight_model_id"] == "predictive_proxy_selected_v2_full"

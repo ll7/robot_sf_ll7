@@ -57,6 +57,16 @@ Accepted job:
 - Expected stdout log:
   `output/slurm/12172-issue791-reward-curriculum.out`
 
+Follow-up pro6000 rerun:
+
+- Slurm job ID: `12223`
+- Finished 2026-05-01 after 6h09m on `pro6000`.
+- Best in-distribution eval at step `9,961,472 / 10,000,000`:
+  `success_rate=0.900`, `collision_rate=0.100`, `snqi=0.226`.
+- WandB: `ll7/robot_sf/ateif3c8`.
+- Best checkpoint:
+  `output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip`.
+
 ## Replica Gate
 
 Do not queue the seed-231 and seed-1337 configs until job 12172 completes and the best checkpoint
@@ -69,14 +79,68 @@ Gate for proceeding with replicas:
 - Otherwise submit the two replica configs above and compare their camera-ready benchmark band
   against the 11724/12122 references.
 
+Gate status after job `12223`: **stop at one seed for now**. The broad-training rerun landed
+`0.029` below the eval-aligned leader on success but `0.029` worse on collision rate. This is close
+enough to justify one camera-ready comparison row, but not strong enough to spend two more full
+10M training runs before benchmark evidence exists.
+
+Queue-fill update on 2026-05-01: after the camera-ready benchmark completed successfully and l40s
+was idle, the two staged 10M replica configs were dry-run validated and submitted to l40s for
+long-running seed-band evidence. Two first submissions (`12255`, `12256`) accidentally inherited
+the wrapper's `a30` partition and were canceled before starting. Corrected l40s jobs:
+
+| Job | Config | Partition | Initial state |
+|----:|--------|-----------|---------------|
+| 12257 | `configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml` | `l40s` | RUNNING on `auxme-imech091` |
+| 12258 | `configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml` | `l40s` | RUNNING on `auxme-imech093` |
+
+Both use the l40s maximum wall time of `3-00:00:00` and write logs to
+`output/slurm/i856_allscen_10m_s{231,1337}_<jobid>.out`.
+
+## Camera-ready Benchmark Result
+
+Job `12226` completed successfully on `pro6000`:
+
+- campaign:
+  `output/benchmarks/issue_856/paper_experiment_matrix_v1_issue_856_all_scenarios_compare_issue856-all-scenarios-12223-camera-ready_20260501_074754`
+- runs: `7 / 7` successful
+- episodes: `987`
+- `benchmark_success=true`
+- warnings: none
+- runtime: about `1555s`
+
+Queued three lightweight post-benchmark jobs on `pro6000` for provenance and publication handling:
+
+| Job | Purpose | Output |
+|----:|---------|--------|
+| 12235 | campaign consistency/diagnostic analysis | `output/analysis/issue856/campaign_analysis_12226.{json,md}` |
+| 12236 | benchmark artifact size report | `output/analysis/issue856/artifact_size_report_12226.json` |
+| 12237 | no-video publication bundle export | `output/benchmarks/issue_856/publication/issue856_all_scenarios_12223_12226_publication_bundle*` |
+
+All three completed on 2026-05-01. The publication bundle is local and intentionally untracked:
+`output/benchmarks/issue_856/publication/issue856_all_scenarios_12223_12226_publication_bundle.tar.gz`
+(`532K`, no videos, 48 files). Do not rely on this worktree-local `output/` path as a durable
+source until it is uploaded to a release, Zenodo, W&B artifact, or another persistent store.
+
+Artifact preservation decision:
+
+- Keep the committed configs and this context note as the durable review surface.
+- Leave generated `output/` files ignored in the worktree.
+- Preserve the 12223 PPO checkpoint provenance through WandB run `ll7/robot_sf/ateif3c8` and the
+  local adapter config `configs/baselines/ppo_issue_856_all_scenarios_12223.yaml`; the checkpoint
+  itself remains at a local ignored path until explicitly promoted.
+- Treat `output/benchmarks/expert_policies/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_seed{231,1337}.zip`
+  as disposable dry-run placeholders (`31B` each), not trained replica artifacts.
+
 ## Validation Path After Job 12172 Lands
 
-1. Record the best-checkpoint in-distribution evaluation result on
+1. Run the best-checkpoint in-distribution evaluation with
    `configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml`.
 2. Add a benchmark adapter config under `configs/baselines/` for the trained artifact.
-3. Rerun
-   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml`
-   with the PPO row swapped to the broad-training artifact.
+   Done: `configs/baselines/ppo_issue_856_all_scenarios_12223.yaml`.
+3. Rerun the dedicated broad-training matrix
+   `configs/benchmarks/paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml`.
+   Done as job `12226`; benchmark completed successfully.
 4. Compare the PPO row against job 12122 and decide whether the broad-training arm is publication
    grade, parity-only, or clearly worse.
 5. Update

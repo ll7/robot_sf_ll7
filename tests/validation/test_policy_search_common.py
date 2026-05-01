@@ -5,6 +5,7 @@ from __future__ import annotations
 from scripts.validation.policy_search_common import (
     classify_failure_mode,
     infer_scenario_family,
+    normalize_scenario_exclusion,
     summarize_policy_search_records,
 )
 
@@ -95,3 +96,80 @@ def test_summarize_policy_search_records_builds_family_and_failure_counts() -> N
     assert summary["failure_mode_counts"]["near_miss_intrusive"] == 1
     assert summary["scenario_family"]["classic"]["episodes"] == 1
     assert summary["scenario_family"]["francis2023"]["episodes"] == 2
+
+
+def test_policy_search_exclusions_require_explicit_evidence() -> None:
+    """Invalid/impossible scenarios should only be excluded with explicit evidence."""
+    excluded = {
+        "scenario_id": "francis2023_narrow_doorway",
+        "seed": 111,
+        "termination_reason": "collision",
+        "metrics": {"min_distance": 0.0},
+        "scenario_exclusion": {
+            "status": "impossible",
+            "reason": "geometry_footprint_infeasible",
+            "evidence": [
+                "doorway gap is exactly 2.0 m",
+                "robot radius is 1.0 m; any positive clearance margin is infeasible",
+            ],
+        },
+    }
+    unsupported = {
+        "scenario_id": "classic_cross_trap_high",
+        "seed": 112,
+        "termination_reason": "collision",
+        "scenario_exclusion": {
+            "status": "impossible",
+            "reason": "missing evidence should not be accepted",
+        },
+    }
+
+    assert normalize_scenario_exclusion(excluded) == {
+        "scenario_id": "francis2023_narrow_doorway",
+        "seed": 111,
+        "status": "impossible",
+        "reason": "geometry_footprint_infeasible",
+        "evidence": [
+            "doorway gap is exactly 2.0 m",
+            "robot radius is 1.0 m; any positive clearance margin is infeasible",
+        ],
+    }
+    assert normalize_scenario_exclusion(unsupported) is None
+
+
+def test_summarize_policy_search_records_reports_raw_and_adjusted_exclusions() -> None:
+    """Raw rates stay visible while evidence-adjusted rates exclude proven scenario defects."""
+    records = [
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 112,
+            "termination_reason": "collision",
+            "scenario_params": {"humans": [{"id": "p1"}]},
+            "scenario_exclusion": {
+                "status": "invalid",
+                "reason": "zero_action_first_step_collision",
+                "evidence": ["zero-action first step terminates before policy control matters"],
+            },
+        },
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 113,
+            "termination_reason": "success",
+        },
+    ]
+
+    summary = summarize_policy_search_records(records)
+
+    assert summary["episodes"] == 2
+    assert summary["success_rate"] == 0.5
+    assert summary["collision_rate"] == 0.5
+    assert summary["failure_mode_counts"] == {}
+    assert summary["scenario_exclusions"]["count"] == 1
+    assert summary["scenario_exclusions"]["by_reason"] == {"zero_action_first_step_collision": 1}
+    assert summary["evidence_adjusted"] == {
+        "episodes": 1,
+        "excluded_episodes": 1,
+        "success_rate": 1.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0,
+    }

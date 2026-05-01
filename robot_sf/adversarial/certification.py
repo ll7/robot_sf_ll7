@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -79,6 +80,16 @@ def certify_candidate(
     try:
         from robot_sf.scenario_certification import certify_scenario  # type: ignore
     except ImportError:
+        if require_certification:
+            return not_available_status("scenario_cert.v1 adapter is not available")
+        return passed_status("scenario_cert.v1 adapter not available; advisory mode")
+
+    signature = inspect.signature(certify_scenario)
+    supports_candidate = (
+        "candidate" in signature.parameters
+        or any(param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
+    )
+    if not supports_candidate:
         if require_certification:
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")

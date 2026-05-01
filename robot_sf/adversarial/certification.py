@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -77,14 +78,18 @@ def certify_candidate(
     available, this function fails closed with a ``not_available`` status.
     """
     try:
-        from robot_sf.scenario_certification import certify_scenario  # type: ignore
+        scenario_certification = import_module("robot_sf.scenario_certification")
     except ImportError:
         if require_certification:
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")
 
     try:
-        payload = certify_scenario(scenario_yaml_path, candidate=candidate)
+        payload = _run_scenario_certification_adapter(
+            scenario_certification,
+            candidate=candidate,
+            scenario_yaml_path=scenario_yaml_path,
+        )
     except Exception as exc:  # pragma: no cover - defensive against future adapter errors
         return failed_status(
             "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
@@ -102,6 +107,45 @@ def certify_candidate(
     if status in {"not_available", "unavailable"}:
         return CertificationStatus("scenario_cert.v1", "not_available", reason, details)
     return CertificationStatus("scenario_cert.v1", "failed", reason, details)
+
+
+def _run_scenario_certification_adapter(
+    scenario_certification: Any,
+    *,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+) -> dict[str, Any]:
+    """Run the available scenario certification API and normalize its payload."""
+    certify_scenario_file = getattr(scenario_certification, "certify_scenario_file", None)
+    certificate_to_dict = getattr(scenario_certification, "certificate_to_dict", None)
+    if callable(certify_scenario_file) and callable(certificate_to_dict):
+        certificates = certify_scenario_file(scenario_yaml_path)
+        payloads = [certificate_to_dict(certificate) for certificate in certificates]
+        if not payloads:
+            return {"status": "failed", "reason": "scenario_cert.v1 returned no certificates"}
+        worst = max(
+            payloads,
+            key=lambda payload: (
+                1 if str(payload.get("benchmark_eligibility", "")).lower() == "excluded" else 0
+            ),
+        )
+        status = (
+            "failed"
+            if str(worst.get("benchmark_eligibility", "")).lower() == "excluded"
+            else "passed"
+        )
+        reasons = worst.get("reasons", [])
+        reason = "; ".join(str(reason) for reason in reasons) if isinstance(reasons, list) else ""
+        return {
+            "status": status,
+            "reason": reason or str(worst.get("classification", status)),
+            "details": {"certificates": payloads},
+        }
+
+    certify_scenario = getattr(scenario_certification, "certify_scenario", None)
+    if callable(certify_scenario):
+        return certify_scenario(scenario_yaml_path, candidate=candidate)
+    return {"status": "not_available", "reason": "scenario_cert.v1 adapter is not available"}
 
 
 def candidate_allowed(status: CertificationStatus, *, require_certification: bool) -> bool:

@@ -13,7 +13,7 @@ import yaml
 from robot_sf.adversarial import certification, objectives, search
 from robot_sf.adversarial.attribution import attribution_from_episode_record, attribution_from_error
 from robot_sf.adversarial.bundle import write_trajectory_csv
-from robot_sf.adversarial.certification import failed_status, passed_status
+from robot_sf.adversarial.certification import failed_status, not_available_status, passed_status
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -234,6 +234,9 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     result = search.run_adversarial_search(
         config,
         evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: not_available_status(
+            "scenario_cert.v1 adapter is not available"
+        ),
         sampler=_SequenceSampler([_candidate(7)]),
     )
 
@@ -318,7 +321,7 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Certification must fail closed when required and normalize adapter payloads."""
-    monkeypatch.delitem(sys.modules, "robot_sf.scenario_certification", raising=False)
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", None)
 
     advisory = certification.certify_candidate(
         _candidate(1), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=False
@@ -358,6 +361,35 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
     assert unavailable.status == "not_available"
     assert non_mapping.status == "failed"
     assert failed.reason == "outside map"
+
+
+def test_certification_adapter_uses_current_scenario_certification_file_api(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Adversarial certification should call the in-repo scenario-cert file API."""
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+
+    def fake_certify_scenario_file(*_args: object, **_kwargs: object) -> list[object]:
+        return [object()]
+
+    def fake_certificate_to_dict(_certificate: object) -> dict[str, object]:
+        return {
+            "classification": "valid",
+            "benchmark_eligibility": "eligible",
+            "reasons": ["ok"],
+        }
+
+    fake_module.certify_scenario_file = fake_certify_scenario_file
+    fake_module.certificate_to_dict = fake_certificate_to_dict
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    status = certification.certify_candidate(
+        _candidate(6), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert status.passed
+    assert status.reason == "ok"
+    assert status.details["certificates"][0]["classification"] == "valid"
 
 
 def test_objective_registry_and_fallback_scoring(

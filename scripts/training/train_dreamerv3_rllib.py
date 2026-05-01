@@ -1239,7 +1239,13 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     """Write JSON payload with stable formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+        json.dump(
+            _json_safe_value(copy.deepcopy(payload)),
+            handle,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+        )
         handle.write("\n")
 
 

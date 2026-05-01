@@ -29,7 +29,8 @@ Each valid candidate gets a bundle directory under the configured `output_dir`:
 - `scenario.yaml` for replay through the normal scenario loader,
 - `route_overrides.yaml` with generated robot route waypoints,
 - `episode_records.jsonl` from the benchmark runner when evaluation runs,
-- `trajectory.csv` as a replay index until the benchmark runner exposes dense per-step export,
+- `trajectory.csv` with dense per-step rows when the episode record contains `trajectory_data`;
+  otherwise a replay-identifying fallback row for older records,
 - `failure_attribution.json`,
 - top-level `manifest.json` summarizing all candidates and the best scored bundle.
 
@@ -98,7 +99,7 @@ Ruff, then failed in the broad parallel pytest phase due unrelated performance/w
 
 - Keep strict-certification smoke coverage in `tests/adversarial/test_adversarial_search.py` as the
   `scenario_cert.v1` contract evolves.
-- Replace the `trajectory.csv` replay index with dense per-step trajectory export when the
-  benchmark runner exposes robot/pedestrian trajectories.
+- Keep `trajectory.csv` dense-row extraction aligned with any future benchmark-runner trajectory
+  schema changes.
 - Add optimizer adapters such as CMA-ES or Bayesian optimization only after the scenario semantics
   and bundle contract are stable.

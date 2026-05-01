@@ -2375,6 +2375,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
 ) -> dict[str, Any]:
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
+    scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -2628,6 +2629,24 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     }
     ensure_metric_parameters(record)
     return record
+
+
+def _scenario_with_episode_seed_defaults(
+    scenario: dict[str, Any],
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    """Return a scenario copy with seed-derived defaults for stochastic subcomponents.
+
+    Some scenario-level generators use their own NumPy ``default_rng`` instances.  When those
+    fields are left unset they bypass the episode seed and make benchmark rows depend on process
+    history.  Fill only missing values here so explicit scenario provenance remains unchanged.
+    """
+    updated = deepcopy(scenario)
+    sim_config = updated.setdefault("simulation_config", {})
+    if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
+        sim_config["route_spawn_seed"] = int(seed)
+    return updated
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:

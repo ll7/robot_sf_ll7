@@ -165,6 +165,9 @@ class HybridRuleLocalPlannerConfig:
     static_clearance_escape_tolerance: float = 0.05
     static_clearance_escape_max_speed: float = 0.6
     static_clearance_escape_min_clearance: float = 0.5
+    static_recenter_enabled: bool = False
+    static_recenter_weight: float = 0.0
+    static_recenter_probe_speed: float = 0.3
 
     # Ablation-only route-commitment bonus. It remains configurable for
     # diagnostics, but benchmark evidence rejected it due static collisions.
@@ -550,16 +553,68 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return False
         if not np.isfinite(initial_clearance) or initial_clearance <= 0.0:
             return False
-        if initial_clearance > hard_static_clearance:
+        min_escape_clearance = float(self.config.static_clearance_escape_min_clearance)
+        if initial_clearance < min_escape_clearance:
             return False
-        if initial_clearance < float(self.config.static_clearance_escape_min_clearance):
+        if current_min_clearance < min_escape_clearance:
             return False
         if candidate.linear <= float(self.config.freezing_speed_threshold):
             return False
         if candidate.linear > float(self.config.static_clearance_escape_max_speed):
             return False
         tolerance = max(float(self.config.static_clearance_escape_tolerance), 0.0)
+        if initial_clearance > hard_static_clearance:
+            return False
         return bool(current_min_clearance + tolerance >= initial_clearance)
+
+    def _static_recenter_probe_score(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        hard_static_clearance: float,
+    ) -> float:
+        """Score rotate-in-place candidates by the next safe forward heading.
+
+        Returns:
+            float: ``1.0`` when the rotation creates a forward rollout that stays
+            outside the hard static-clearance band, otherwise ``0.0``.
+        """
+        if not bool(self.config.static_recenter_enabled):
+            return 0.0
+        if candidate.linear > float(self.config.freezing_speed_threshold):
+            return 0.0
+        if abs(candidate.angular) < float(self.config.deadlock_rotation_threshold):
+            return 0.0
+
+        dt = max(float(self.config.rollout_dt), 1e-3)
+        steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
+        probe_speed = min(
+            max(float(self.config.static_recenter_probe_speed), 0.0),
+            max(float(self.config.static_clearance_escape_max_speed), 0.0),
+            max(float(self.config.max_linear_speed), 0.0),
+        )
+        if probe_speed <= float(self.config.freezing_speed_threshold):
+            return 0.0
+
+        robot_pos = np.array(state["robot_pos"], dtype=float)
+        heading = _wrap_angle(float(state["heading"]) + float(candidate.angular) * dt * steps)
+        for _step_idx in range(steps):
+            robot_pos = (
+                robot_pos
+                + np.array([probe_speed * np.cos(heading), probe_speed * np.sin(heading)]) * dt
+            )
+            payload = self._obstacle_grid_payload(observation)
+            if payload is not None:
+                grid, meta, channel, _resolution = payload
+                if self._grid_value(robot_pos, grid, meta, channel) >= float(
+                    self.config.obstacle_threshold
+                ):
+                    return 0.0
+            if self._min_obstacle_clearance(robot_pos, observation) <= hard_static_clearance:
+                return 0.0
+        return 1.0
 
     def _evaluate_candidate(
         self,
@@ -659,6 +714,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
             if (
                 static_clearance_escape_used
+                and initial_static_clearance <= hard_static_clearance
                 and min_static_clearance + float(self.config.static_clearance_escape_tolerance)
                 < initial_static_clearance
             ):
@@ -740,6 +796,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
             else 0.0
         )
+        static_recenter = (
+            self._static_recenter_probe_score(
+                candidate=candidate,
+                observation=observation,
+                state=state,
+                hard_static_clearance=hard_static_clearance,
+            )
+            if stalled_progress
+            and start_dist > float(self.config.goal_far_distance)
+            and nearest_ped >= float(self.config.slow_distance_human)
+            else 0.0
+        )
         route_guide_commitment = (
             1.0
             if candidate.source == "route_guide"
@@ -773,6 +841,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0,
             "oscillation_penalty": self._oscillation_penalty(candidate.angular),
             "deadlock_escape": deadlock_escape,
+            "static_recenter": static_recenter,
             "static_clearance_escape": 1.0 if static_clearance_escape_used else 0.0,
             "route_guide_commitment": route_guide_commitment,
         }
@@ -787,6 +856,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
             + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
+            + float(self.config.static_recenter_weight) * terms["static_recenter"]
             + float(self.config.route_guide_commitment_weight) * terms["route_guide_commitment"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]

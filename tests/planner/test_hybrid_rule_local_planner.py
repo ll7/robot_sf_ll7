@@ -247,6 +247,84 @@ def test_hybrid_rule_static_clearance_escape_rejects_worsening_motion(monkeypatc
     assert evaluation["reason"] == "static_clearance"
 
 
+def test_hybrid_rule_static_clearance_escape_rejects_below_minimum(monkeypatch) -> None:
+    """Tolerance must not allow escape commands below the configured minimum clearance."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+        static_clearance_escape_tolerance=0.05,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2)
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_escape")
+    clearances = iter([0.12, 0.09])
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: next(clearances),
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+
+
+def test_hybrid_rule_static_clearance_escape_rejects_bounded_corridor_transit(
+    monkeypatch,
+) -> None:
+    """Static escape should not enter the hard band from a currently safe pose."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.25,
+        static_clearance_escape_max_speed=0.3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2)
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_corridor_transit")
+    clearances = iter([0.42, 0.32])
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: next(clearances),
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+
+
 def test_hybrid_rule_route_guide_commitment_bonus_only_when_stalled(monkeypatch) -> None:
     """Route-guide commitment should only boost route candidates under stalled progress."""
     cfg = HybridRuleLocalPlannerConfig(
@@ -343,6 +421,36 @@ def test_hybrid_rule_deadlock_escape_bonus_prefers_rotation_when_stalled() -> No
     assert stop_eval["terms"]["deadlock_escape"] == 0.0
     assert rotate_eval["terms"]["deadlock_escape"] == 1.0
     assert rotate_eval["score"] > stop_eval["score"]
+
+
+def test_hybrid_rule_static_recenter_probe_prefers_safe_rotation(monkeypatch) -> None:
+    """Static recentering should prefer rotations that make the next forward rollout safe."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=5,
+        max_linear_speed=0.0,
+        static_recenter_enabled=True,
+        static_recenter_weight=2.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    planner._progress_history.extend([(0.0, 4.0), (1.0, 4.0), (2.0, 4.0)])
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 2.0)
+    monkeypatch.setattr(
+        planner,
+        "_static_recenter_probe_score",
+        lambda *, candidate, observation, state, hard_static_clearance: (
+            1.0 if candidate.angular <= -0.6 else 0.0
+        ),
+    )
+
+    command = planner.plan(_obs(goal=(4.0, 0.0)))
+
+    assert command[0] == pytest.approx(0.0)
+    assert command[1] <= -0.6
+    last = planner.last_decision()
+    assert last is not None
+    assert last["selected_terms"]["static_recenter"] == pytest.approx(1.0)
 
 
 def test_hybrid_rule_static_recovery_blocks_near_pedestrian() -> None:

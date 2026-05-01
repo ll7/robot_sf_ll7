@@ -662,9 +662,9 @@ def _minimum_route_turn_radius(points: list[Vec2D]) -> float | None:
 
 
 def _circumradius(p0: Vec2D, p1: Vec2D, p2: Vec2D) -> float | None:
-    a = Point(p1).distance(Point(p2))
-    b = Point(p0).distance(Point(p2))
-    c = Point(p0).distance(Point(p1))
+    a = math.dist(p1, p2)
+    b = math.dist(p0, p2)
+    c = math.dist(p0, p1)
     area2 = abs((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
     if a <= 1e-9 or b <= 1e-9 or c <= 1e-9 or area2 <= 1e-9:
         return None
@@ -685,12 +685,12 @@ def _dynamic_checks(
     }
     if planned_line is None or not pedestrians:
         return [], checks
-    corridor = planned_line.buffer(robot_radius + ped_radius)
+    blocking_threshold = robot_radius + ped_radius
     blocking: list[str] = []
     dynamic_count = 0
     for ped in pedestrians:
         if _pedestrian_is_static(ped):
-            if corridor.covers(Point(ped.start)):
+            if planned_line.distance(Point(ped.start)) <= blocking_threshold:
                 blocking.append(str(ped.id))
         else:
             dynamic_count += 1
@@ -760,7 +760,7 @@ def _solvable_reasons(
 def _polyline_length(points: list[Vec2D]) -> float:
     if len(points) < 2:
         return 0.0
-    return float(sum(Point(a).distance(Point(b)) for a, b in pairwise(points)))
+    return float(sum(math.dist(a, b) for a, b in pairwise(points)))
 
 
 def _turn_count(points: list[Vec2D]) -> int:

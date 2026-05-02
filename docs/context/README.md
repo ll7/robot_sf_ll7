@@ -121,6 +121,9 @@ knowledge, not every transient iteration detail.
   resolves the prior SSH-submodule blocker via HTTPS in an isolated side environment and proves a
   minimal upstream `SocialNav` reset plus `SARL` policy step, without claiming Robot SF benchmark
   integration.
+- [Issue #905 Social-Jym Wrapper Spike](./issue_905_social_jym_wrapper_spike.md)
+  proves a one-step Robot SF smoke loop through a thin random-action upstream `SARL` wrapper and
+  records the remaining parity/provenance boundary.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.

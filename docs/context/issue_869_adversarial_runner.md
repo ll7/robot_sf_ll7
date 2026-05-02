@@ -38,6 +38,19 @@ Search-space validation still runs before certification or policy evaluation for
 candidate, including optimizer proposals. Invalid proposals are recorded in the manifest as invalid
 candidates and are reported back to feedback-capable samplers with no objective value.
 
+## Concurrency Model
+
+`run_adversarial_search(...)` evaluates candidates sequentially in sampler order. Candidate
+sampling, certification, bundle paths such as `candidate_0000`, objective scoring, and manifest
+rows all follow that deterministic order. This is the intended v1 behavior because optimizer
+adapters and replay bundles depend on stable candidate ordering.
+
+`SearchConfig.workers` is still honored, but only inside each single-candidate benchmark
+evaluation: the value is forwarded to `run_batch(..., workers=config.workers)` for the candidate
+currently being evaluated. It does not launch multiple adversarial candidates concurrently. Any
+future candidate-level parallelism must preserve deterministic manifest ordering or explicitly
+document the ordering change before it can be used as benchmark evidence.
+
 ## Artifact Contract
 
 Each valid candidate gets a bundle directory under the configured `output_dir`:

@@ -134,6 +134,11 @@ def run_adversarial_search(
 ) -> SearchRunResult:
     """Run a bounded adversarial scenario search.
 
+    Candidate sampling, certification, evaluation, and manifest ordering are intentionally
+    sequential so a fixed sampler seed produces stable candidate directories and replayable
+    manifests. ``SearchConfig.workers`` is forwarded to the benchmark runner for each individual
+    candidate evaluation; it is not candidate-level parallelism.
+
     Args:
         config: Search configuration and contracts.
         evaluator: Optional injected evaluator for tests or experiment harnesses.

@@ -13,7 +13,7 @@ import yaml
 from robot_sf.adversarial import certification, objectives, search
 from robot_sf.adversarial.attribution import attribution_from_episode_record, attribution_from_error
 from robot_sf.adversarial.bundle import write_trajectory_csv
-from robot_sf.adversarial.certification import failed_status, passed_status
+from robot_sf.adversarial.certification import failed_status, not_available_status, passed_status
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -215,7 +215,9 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert (config.output_dir / "candidate_0001" / "route_overrides.yaml").exists()
 
 
-def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path) -> None:
+def test_required_certification_fails_closed_when_adapter_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     config = _config(tmp_path, require_certification=True)
     config = SearchConfig.from_files(
         policy=config.policy,
@@ -230,6 +232,12 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
 
     def evaluator(*_args: object, **_kwargs: object) -> CandidateEvaluation:
         raise AssertionError("strict certification should reject before evaluation")
+
+    monkeypatch.setattr(
+        search,
+        "certify_candidate",
+        lambda *_args, **_kwargs: not_available_status("scenario_cert.v1 adapter is not available"),
+    )
 
     result = search.run_adversarial_search(
         config,
@@ -319,11 +327,6 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
 ) -> None:
     """Certification must fail closed when required and normalize adapter payloads."""
     monkeypatch.delitem(sys.modules, "robot_sf.scenario_certification", raising=False)
-
-    advisory = certification.certify_candidate(
-        _candidate(1), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=False
-    )
-    assert advisory.passed
     assert failed_status("bad", details={"why": "test"}).to_json()["details"] == {"why": "test"}
 
     fake_module = types.ModuleType("robot_sf.scenario_certification")
@@ -358,6 +361,50 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
     assert unavailable.status == "not_available"
     assert non_mapping.status == "failed"
     assert failed.reason == "outside map"
+
+
+def test_certification_file_adapter_normalizes_current_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The in-repo file-level certificate API should map to adversarial statuses."""
+
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+    responses: list[object] = [
+        [{"classification": "valid", "benchmark_eligibility": "eligible"}],
+        [{"classification": "invalid", "benchmark_eligibility": "excluded"}],
+        [],
+        {"not": "a list"},
+    ]
+
+    def fake_certify_scenario_file(*_args: object, **_kwargs: object) -> object:
+        return responses.pop(0)
+
+    def fake_certificate_to_dict(certificate: object) -> dict[str, object]:
+        return dict(certificate) if isinstance(certificate, dict) else {"raw": certificate}
+
+    fake_module.certify_scenario_file = fake_certify_scenario_file
+    fake_module.certificate_to_dict = fake_certificate_to_dict
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    passed = certification.certify_candidate(
+        _candidate(1), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    excluded = certification.certify_candidate(
+        _candidate(2), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    empty = certification.certify_candidate(
+        _candidate(3), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+    non_list = certification.certify_candidate(
+        _candidate(4), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert passed.passed
+    assert passed.details["certificates"][0]["classification"] == "valid"
+    assert excluded.status == "failed"
+    assert excluded.reason == "scenario_cert.v1 excluded generated scenario"
+    assert empty.reason == "scenario_cert.v1 returned no certificates"
+    assert non_list.reason == "scenario_cert.v1 returned a non-list certificate payload"
 
 
 def test_objective_registry_and_fallback_scoring(

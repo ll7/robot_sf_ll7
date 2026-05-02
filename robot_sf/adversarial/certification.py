@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -77,11 +79,19 @@ def certify_candidate(
     available, this function fails closed with a ``not_available`` status.
     """
     try:
-        from robot_sf.scenario_certification import certify_scenario  # type: ignore
+        scenario_certification = importlib.import_module("robot_sf.scenario_certification")
     except ImportError:
         if require_certification:
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")
+
+    certify_file = getattr(scenario_certification, "certify_scenario_file", None)
+    if callable(certify_file):
+        return _certify_with_file_adapter(certify_file, scenario_yaml_path)
+
+    certify_scenario = getattr(scenario_certification, "certify_scenario", None)
+    if not callable(certify_scenario):
+        return failed_status("scenario_cert.v1 adapter has no callable certification entrypoint")
 
     try:
         payload = certify_scenario(scenario_yaml_path, candidate=candidate)
@@ -89,7 +99,58 @@ def certify_candidate(
         return failed_status(
             "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
         )
+    return _status_from_mapping_payload(payload)
 
+
+def _certify_with_file_adapter(
+    certify_file: Callable[..., Any],
+    scenario_yaml_path: Path,
+) -> CertificationStatus:
+    """Adapt the in-repo scenario-certification file API to adversarial status."""
+    try:
+        certificates = certify_file(scenario_yaml_path)
+    except Exception as exc:  # pragma: no cover - defensive against adapter errors
+        return failed_status(
+            "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
+        )
+
+    if not isinstance(certificates, list):
+        return failed_status("scenario_cert.v1 returned a non-list certificate payload")
+    if not certificates:
+        return failed_status("scenario_cert.v1 returned no certificates")
+
+    certificate_payloads = [_certificate_payload(certificate) for certificate in certificates]
+    excluded = [
+        payload
+        for payload in certificate_payloads
+        if str(payload.get("benchmark_eligibility", "")).strip().lower() == "excluded"
+    ]
+    details = {"certificates": certificate_payloads}
+    if excluded:
+        return failed_status("scenario_cert.v1 excluded generated scenario", details=details)
+    return CertificationStatus(
+        schema_version="scenario_cert.v1",
+        status="passed",
+        reason="scenario_cert.v1 accepted generated scenario",
+        details=details,
+    )
+
+
+def _certificate_payload(certificate: Any) -> dict[str, Any]:
+    """Return a JSON-compatible certificate mapping."""
+    try:
+        from robot_sf.scenario_certification import certificate_to_dict  # type: ignore
+
+        payload = certificate_to_dict(certificate)
+    except Exception:  # pragma: no cover - fallback for future adapter payloads
+        payload = certificate if isinstance(certificate, dict) else {"raw_certificate": certificate}
+    if not isinstance(payload, dict):
+        payload = {"raw_certificate": payload}
+    return payload
+
+
+def _status_from_mapping_payload(payload: Any) -> CertificationStatus:
+    """Normalize legacy mapping-style adapter output."""
     if not isinstance(payload, dict):
         return failed_status("scenario_cert.v1 returned a non-mapping payload")
     status = str(payload.get("status", "")).strip().lower()

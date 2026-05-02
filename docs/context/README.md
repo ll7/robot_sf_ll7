@@ -107,6 +107,9 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+- [Issue #867 PPO Evaluation Reload Profile](./issue_867_ppo_eval_reload_profile.md)
+  measurement-only issue-791 evaluation probe showing cached predictive-model reloads are small
+  compared with shared cold startup and first-step overhead.
 - [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
   cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
   cold startup and lazy first-step initialization, not warm steady-state stepping.

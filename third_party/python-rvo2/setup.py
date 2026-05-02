@@ -60,6 +60,7 @@ class BuildRvo2Ext(_build_ext):
         build_dir = os.path.abspath('build/RVO2')
         if not os.path.exists(build_dir):
             os.makedirs(build_dir)
+        if not os.path.exists(os.path.join(build_dir, 'CMakeCache.txt')):
             subprocess.check_call(['cmake', '../..', '-DCMAKE_CXX_FLAGS=-fPIC'],
                                   cwd=build_dir)
         subprocess.check_call(['cmake', '--build', '.'], cwd=build_dir)

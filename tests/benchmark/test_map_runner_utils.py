@@ -32,6 +32,7 @@ from robot_sf.benchmark.map_runner import (
     _robot_max_speed,
     _run_map_episode,
     _scenario_robot_kinematics_label,
+    _scenario_with_episode_seed_defaults,
     _select_seeds,
     _stack_ped_positions,
     _suite_key,
@@ -88,6 +89,36 @@ def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
     list_path.write_text("- item\n", encoding="utf-8")
     with pytest.raises(TypeError):
         _parse_algo_config(str(list_path))
+
+
+def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:
+    """Episode seed should drive route-spawn RNGs when scenarios leave that seed unset."""
+    scenario = {
+        "name": "spread_case",
+        "simulation_config": {
+            "route_spawn_distribution": "spread",
+            "route_spawn_seed": None,
+        },
+    }
+
+    updated = _scenario_with_episode_seed_defaults(scenario, seed=123)
+
+    assert updated["simulation_config"]["route_spawn_seed"] == 123
+    assert scenario["simulation_config"]["route_spawn_seed"] is None
+
+
+def test_scenario_with_episode_seed_defaults_preserves_explicit_route_spawn_seed() -> None:
+    """Explicit scenario route-spawn seeds are provenance and must not be overwritten."""
+    scenario = {
+        "name": "fixed_case",
+        "simulation_config": {
+            "route_spawn_seed": 999,
+        },
+    }
+
+    updated = _scenario_with_episode_seed_defaults(scenario, seed=123)
+
+    assert updated["simulation_config"]["route_spawn_seed"] == 999
 
 
 def test_goal_policy_and_build_policy() -> None:

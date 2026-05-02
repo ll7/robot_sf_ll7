@@ -95,15 +95,31 @@ knowledge, not every transient iteration detail.
   4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
   `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
   required before promotion.
+- [Issue #835 Lightweight CNN Divergence Triage](./issue_835_lightweight_cnn_divergence.md)
+  bounded 32 K rerun with PPO gradient and feature diagnostics; the issue-193 catastrophic
+  `lightweight_cnn` final drop did not reproduce, so the extractor remains experimental without an
+  immediate architecture change.
 - [Issue #850 PPO Collision Failures](./issue_850_ppo_collision_failures.md)
   follow-up diagnostics for the issue-193 `dyn_large_med` hold-out collision failures and the
   config-first safety-reward mitigation candidate.
+- [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
+  log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
+
+## Performance Notes
+
+- [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
+  cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
+  cold startup and lazy first-step initialization, not warm steady-state stepping.
 
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
+- [Issue #562 SocNavBench Re-Entry Gate](./issue_562_socnav_bench_reentry.md)
+  defines the fail-fast focused probe and concrete keep-out/re-entry criteria for `socnav_bench`
+  before it can be reconsidered for paper-facing benchmarks.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+- [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
 
 ## Reasoning Notes
 
@@ -115,3 +131,20 @@ why a change was made rather than a full issue execution transcript.
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+- [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
+  scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+- [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
+  scope, public surfaces, validation path, and known limits.
+
+## DreamerV3 Notes
+
+- [DreamerV3 Program Full Handoff (2026-04-28)](dreamerv3_program_full_handoff_2026_04_28.md)
+  Consolidated execution plan for issues #578, #608, #609, #782, and #789.
+- [DreamerV3 BR-08 Full Progress (2026-04-29)](dreamerv3_br08_full_progress_2026_04_29.md)
+  Run-level outcome and diagnostics summary for Slurm 12159.
+- [DreamerV3 Program Close-Out (2026-04-30)](dreamerv3_program_close_out_2026_04_30.md)
+  Program-level stop decision and closure rationale after the probe/gate/full sequence.
+- [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
+  Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
+- [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
+  Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.

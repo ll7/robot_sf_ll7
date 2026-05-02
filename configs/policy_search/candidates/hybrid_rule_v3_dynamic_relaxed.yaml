@@ -1,0 +1,5 @@
+name: hybrid_rule_v3_dynamic_relaxed
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  hard_collision_horizon: 0.8

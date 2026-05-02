@@ -1,0 +1,18 @@
+baselines:
+  orca:
+    success_rate: 0.1844
+    collision_rate: 0.0355
+    near_miss_rate: 4.3330
+    ttg_norm: 0.9630
+    classic_collision_rate: 0.0300
+    francis_collision_rate: 0.0400
+  ppo:
+    success_rate: 0.2482
+    collision_rate: 0.0993
+    near_miss_rate: 3.5250
+    ttg_norm: 0.9270
+    classic_collision_rate: 0.1500
+    francis_collision_rate: 0.0500
+  goal:
+    success_rate: 0.0142
+    collision_rate: 0.2411

@@ -14,6 +14,7 @@ from robot_sf.training.imitation_config import (
     ExpertTrainingConfig,
 )
 from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
+from robot_sf.training.snqi_utils import default_training_snqi_context
 from scripts.training import train_ppo
 
 if TYPE_CHECKING:
@@ -184,6 +185,93 @@ def test_log_startup_summary_reports_num_envs_resolution(monkeypatch, tmp_path: 
     assert "mode=auto_stable" in summary
 
 
+def test_subproc_worker_log_environment_is_warning_only_during_spawn(monkeypatch) -> None:
+    """PPO subproc workers should inherit a quiet startup log level without muting parent logs."""
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+
+    with train_ppo._subproc_worker_log_environment("subproc"):
+        assert train_ppo.os.environ["LOGURU_LEVEL"] == "WARNING"
+
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
+def test_dummy_worker_log_environment_leaves_log_level_unchanged(monkeypatch) -> None:
+    """Non-subproc PPO runs should not alter log-level inheritance."""
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+
+    with train_ppo._subproc_worker_log_environment("dummy"):
+        assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
+def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Subproc worker creation should inherit WARNING while parent logging is restored."""
+    observed_levels: list[str | None] = []
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+    monkeypatch.setattr(train_ppo, "_resolve_num_envs", lambda _config: 2)
+    monkeypatch.setattr(train_ppo, "_resolve_worker_mode", lambda _config, _num_envs: "subproc")
+
+    def _fake_make_training_env(*args, **kwargs):
+        return object
+
+    monkeypatch.setattr(train_ppo, "_make_training_env", _fake_make_training_env)
+    monkeypatch.setattr(
+        train_ppo,
+        "_resolve_policy_selection",
+        lambda _config: ("MlpPolicy", {}, "mlp"),
+    )
+    monkeypatch.setattr(train_ppo, "_resolve_resume_checkpoint", lambda **kwargs: None)
+    monkeypatch.setattr(train_ppo, "_resolve_ppo_hyperparams", lambda _config: {})
+
+    class _FakeSubprocVecEnv:
+        def __init__(self, env_fns):
+            observed_levels.append(train_ppo.os.environ.get("LOGURU_LEVEL"))
+            self.env_fns = env_fns
+
+    class _FakePPO:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(train_ppo, "SubprocVecEnv", _FakeSubprocVecEnv)
+    monkeypatch.setattr(train_ppo, "PPO", _FakePPO)
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=32_000,
+        policy_id="ppo_subproc_log_level_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 16_000),),
+            randomize_seeds=False,
+        ),
+        worker_mode="subproc",
+    )
+
+    train_ppo._init_training_model(
+        config=config,
+        scenario=None,
+        scenario_definitions=({"id": "scenario_a"},),
+        exclude_scenarios=(),
+        run_id="run",
+        tensorboard_log=None,
+        resume_from=None,
+    )
+
+    assert observed_levels == ["WARNING"]
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
 def test_resolve_policy_selection_uses_asymmetric_grid_socnav_policy(tmp_path: Path) -> None:
     """Asymmetric critic config should select the dedicated policy class."""
     config = ExpertTrainingConfig.from_raw(
@@ -329,3 +417,96 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
     assert payload["total_wall_clock_sec"] == 12.0
     assert payload["train_env_steps_per_sec_mean"] == 100.0
     assert payload["eval_sec_per_checkpoint"] == 3.0
+
+
+def _capture_evaluate_policy_info_logs(monkeypatch, tmp_path: Path, *, episodes: int) -> list[str]:
+    """Run a fake PPO evaluation and capture info logs."""
+    messages: list[str] = []
+
+    def _fake_info(message: str, *args) -> None:
+        messages.append(message.format(*args) if args else message)
+
+    class _FakeState:
+        max_sim_steps = 2
+
+    class _FakeEnv:
+        state = _FakeState()
+
+        def reset(self):
+            return [0.0], {}
+
+        def step(self, _action):
+            return [0.0], 1.0, True, False, {"success": True}
+
+        def close(self) -> None:
+            return None
+
+    class _FakeModel:
+        def predict(self, obs, deterministic: bool):
+            assert deterministic is True
+            return 0, None
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=120_000,
+        policy_id="ppo_eval_progress_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=episodes,
+            step_schedule=((None, 60_000),),
+            randomize_seeds=False,
+        ),
+    )
+
+    monkeypatch.setattr(train_ppo.logger, "info", _fake_info)
+    monkeypatch.setattr(
+        train_ppo,
+        "build_robot_config_from_scenario",
+        lambda scenario, *, scenario_path: object(),
+    )
+    monkeypatch.setattr(train_ppo, "_apply_env_overrides", lambda env_config, overrides: None)
+    monkeypatch.setattr(train_ppo, "make_robot_env", lambda **kwargs: _FakeEnv())
+
+    train_ppo._evaluate_policy(
+        _FakeModel(),
+        config,
+        scenario_definitions=({"id": "scenario_a", "name": "scenario_a"},),
+        scenario_path=tmp_path / "scenarios.yaml",
+        scenario_id=None,
+        hold_out_scenarios=(),
+        snqi_context=default_training_snqi_context(),
+        eval_step=60_000,
+    )
+
+    return messages
+
+
+def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path) -> None:
+    """Evaluation should emit sparse phase markers so long reset-heavy runs remain readable."""
+    messages = _capture_evaluate_policy_info_logs(monkeypatch, tmp_path, episodes=12)
+
+    progress_messages = [message for message in messages if "PPO evaluation progress" in message]
+    assert any("PPO evaluation phase start step=60000 episodes=12" in msg for msg in messages)
+    assert any("PPO evaluation phase complete step=60000 episodes=12" in msg for msg in messages)
+    assert len(progress_messages) == 2
+    assert progress_messages[0].startswith("PPO evaluation progress step=60000 episode=10/12")
+    assert progress_messages[-1].startswith("PPO evaluation progress step=60000 episode=12/12")
+
+
+def test_evaluate_policy_logs_single_progress_marker_for_ten_episodes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Exactly 10 evaluation episodes should log only the episode-10 final marker."""
+    messages = _capture_evaluate_policy_info_logs(monkeypatch, tmp_path, episodes=10)
+
+    progress_messages = [message for message in messages if "PPO evaluation progress" in message]
+    assert progress_messages == [
+        "PPO evaluation progress step=60000 episode=10/10 scenario=scenario_a steps=1 success=0.000"
+    ]

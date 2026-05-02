@@ -491,6 +491,48 @@ def test_certification_adapter_uses_current_scenario_certification_file_api(
     assert status.details["certificates"][0]["classification"] == "valid"
 
 
+def test_certification_adapter_preserves_worst_file_api_eligibility(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """File-API normalization should keep stress-only/excluded evidence visible."""
+    fake_module = types.ModuleType("robot_sf.scenario_certification")
+
+    def fake_certify_scenario_file(*_args: object, **_kwargs: object) -> list[object]:
+        return [object(), object(), object()]
+
+    payloads: list[dict[str, object]] = [
+        {
+            "classification": "valid",
+            "benchmark_eligibility": None,
+            "reasons": ["valid fallback"],
+        },
+        {
+            "classification": "knife_edge",
+            "benchmark_eligibility": "stress_only",
+            "reasons": ["knife-edge clearance"],
+        },
+        {
+            "classification": "valid",
+            "benchmark_eligibility": "eligible",
+            "reasons": ["eligible route"],
+        },
+    ]
+
+    def fake_certificate_to_dict(_certificate: object) -> dict[str, object]:
+        return payloads.pop(0)
+
+    fake_module.certify_scenario_file = fake_certify_scenario_file
+    fake_module.certificate_to_dict = fake_certificate_to_dict
+    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
+
+    status = certification.certify_candidate(
+        _candidate(7), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
+    )
+
+    assert status.passed
+    assert status.reason == "knife-edge clearance"
+
+
 def test_objective_registry_and_fallback_scoring(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

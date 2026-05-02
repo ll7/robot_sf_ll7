@@ -1,0 +1,11 @@
+includes:
+  - ../scenarios/archetypes/classic_bottleneck.yaml
+  - ../scenarios/archetypes/classic_doorway.yaml
+  - ../scenarios/archetypes/classic_group_crossing.yaml
+  - ../scenarios/archetypes/classic_t_intersection.yaml
+  - ../scenarios/single/francis2023_blind_corner.yaml
+  - ../scenarios/single/francis2023_intersection_wait.yaml
+  - ../scenarios/single/francis2023_parallel_traffic.yaml
+  - ../scenarios/single/francis2023_crowd_navigation.yaml
+map_search_paths:
+  - ../maps/svg_maps

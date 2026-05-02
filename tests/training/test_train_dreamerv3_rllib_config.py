@@ -15,6 +15,7 @@ from scripts.training.train_dreamerv3_rllib import (
     _apply_nested_overrides,
     _build_ray_init_kwargs,
     _resolve_auto_overrides,
+    _write_json,
     load_run_config,
 )
 
@@ -211,6 +212,35 @@ algorithm:
     run_config = load_run_config(config_path)
 
     assert run_config.env.flatten_keys is None
+
+
+def test_write_json_converts_numpy_and_paths(tmp_path: Path) -> None:
+    """JSON summaries should accept NumPy and Path values without runtime failures."""
+    import json
+
+    import numpy as np
+
+    output_path = tmp_path / "summary.json"
+
+    _write_json(
+        output_path,
+        {
+            "array": np.asarray([1, 2], dtype=np.int64),
+            "scalar": np.float64(1.5),
+            "missing": np.inf,
+            "array_missing": np.asarray([np.nan], dtype=np.float32),
+            Path("non_string_key"): tmp_path,
+        },
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload == {
+        "array": [1, 2],
+        "scalar": 1.5,
+        "missing": "inf",
+        "array_missing": ["nan"],
+        "non_string_key": str(tmp_path),
+    }
 
 
 def test_apply_cli_overrides_preserves_config_path(tmp_path: Path) -> None:

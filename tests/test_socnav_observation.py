@@ -10,11 +10,7 @@ import pytest
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
-from robot_sf.sensor.socnav_observation import (
-    SOCNAV_POSITION_CAP_M,
-    SocNavObservationFusion,
-    socnav_observation_space,
-)
+from robot_sf.sensor.socnav_observation import SocNavObservationFusion, socnav_observation_space
 
 
 def _build_map_def(width: float, height: float) -> MapDefinition:
@@ -49,8 +45,8 @@ def _build_map_def(width: float, height: float) -> MapDefinition:
     )
 
 
-def test_socnav_observation_space_uses_global_cap() -> None:
-    """SocNav observation space should be capped for mixed-map training."""
+def test_socnav_observation_space_uses_map_aware_cap() -> None:
+    """SocNav observation space should preserve coordinates on maps larger than 50 m."""
     map_def = _build_map_def(120.0, 80.0)
     env_config = RobotSimulationConfig()
     space = socnav_observation_space(map_def, env_config, max_pedestrians=4)
@@ -58,14 +54,14 @@ def test_socnav_observation_space_uses_global_cap() -> None:
     robot_pos_high = space["robot"]["position"].high
     map_size_high = space["map"]["size"].high
 
-    assert robot_pos_high[0] == pytest.approx(SOCNAV_POSITION_CAP_M)
-    assert robot_pos_high[1] == pytest.approx(SOCNAV_POSITION_CAP_M)
-    assert map_size_high[0] == pytest.approx(SOCNAV_POSITION_CAP_M)
-    assert map_size_high[1] == pytest.approx(SOCNAV_POSITION_CAP_M)
+    assert robot_pos_high[0] == pytest.approx(120.0)
+    assert robot_pos_high[1] == pytest.approx(80.0)
+    assert map_size_high[0] == pytest.approx(120.0)
+    assert map_size_high[1] == pytest.approx(80.0)
 
 
-def test_socnav_observation_clips_positions() -> None:
-    """SocNav observations should clip positions to the global cap."""
+def test_socnav_observation_clips_positions_to_map_aware_cap() -> None:
+    """SocNav observations should not clip valid large-map coordinates at 50 m."""
     env_config = RobotSimulationConfig()
     simulator = SimpleNamespace(
         ped_pos=np.array([[100.0, 100.0]], dtype=np.float32),
@@ -86,8 +82,8 @@ def test_socnav_observation_clips_positions() -> None:
     fusion = SocNavObservationFusion(simulator=simulator, env_config=env_config, max_pedestrians=4)
     obs = fusion.next_obs()
 
-    assert np.all(obs["robot"]["position"] <= SOCNAV_POSITION_CAP_M)
-    assert np.all(obs["goal"]["current"] <= SOCNAV_POSITION_CAP_M)
-    assert np.all(obs["goal"]["next"] <= SOCNAV_POSITION_CAP_M)
-    assert np.all(obs["pedestrians"]["positions"] <= SOCNAV_POSITION_CAP_M)
-    assert np.all(obs["map"]["size"] <= SOCNAV_POSITION_CAP_M)
+    assert obs["robot"]["position"].tolist() == pytest.approx([100.0, 80.0])
+    assert obs["goal"]["current"].tolist() == pytest.approx([120.0, 80.0])
+    assert obs["goal"]["next"].tolist() == pytest.approx([70.0, 70.0])
+    assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([100.0, 80.0])
+    assert obs["map"]["size"].tolist() == pytest.approx([120.0, 80.0])

@@ -136,6 +136,19 @@ scenarios:
         perf_trend.load_matrix(matrix)
 
 
+def test_classic_matrix_keeps_high_density_gate_advisory() -> None:
+    """High-density crossing should stay non-blocking until history is stable."""
+    _suite, scenarios = perf_trend.load_matrix(
+        Path("configs/benchmarks/perf_trend_matrix_classic_v1.yaml")
+    )
+    by_name = {scenario.scenario_name: scenario for scenario in scenarios}
+
+    assert by_name["classic_cross_trap_low"].enforce_regression_gate is True
+    assert by_name["classic_cross_trap_medium"].enforce_regression_gate is True
+    assert by_name["classic_cross_trap_high"].require_baseline is False
+    assert by_name["classic_cross_trap_high"].enforce_regression_gate is False
+
+
 def test_parse_args_accepts_overrides() -> None:
     """Argument parser should accept explicit matrix and threshold overrides."""
     parsed = perf_trend.parse_args(

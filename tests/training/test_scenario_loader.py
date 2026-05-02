@@ -219,6 +219,92 @@ scenarios:
         load_scenarios(scenario_file)
 
 
+def test_load_scenarios_preserves_platform_semantics_regions(tmp_path: Path) -> None:
+    """Platform semantics should be explicit YAML metadata, not implicit map geometry."""
+    scenario_file = tmp_path / "platform_semantics.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: platform_semantics_ok
+    map_file: maps/platform.svg
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: platform_edge
+          kind: hazard
+          shape: polygon
+          points:
+            - [0.0, 0.0]
+            - [2.0, 0.0]
+            - [2.0, 0.5]
+        - id: train_door_keep_clear
+          kind: keep_clear
+          shape: bbox
+          bounds: [4.0, 1.0, 6.0, 2.0]
+""",
+    )
+
+    scenarios = load_scenarios(scenario_file)
+
+    semantics = scenarios[0]["platform_semantics"]
+    assert semantics["status"] == "metadata_only"
+    assert [region["kind"] for region in semantics["regions"]] == ["hazard", "keep_clear"]
+
+
+def test_load_scenarios_rejects_invalid_platform_semantics(tmp_path: Path) -> None:
+    """Invalid platform semantics should fail closed instead of being silently ignored."""
+    scenario_file = tmp_path / "bad_platform_semantics.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: platform_semantics_bad
+    map_file: maps/platform.svg
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: platform_edge
+          kind: escalator
+          shape: polygon
+          points:
+            - [0.0, 0.0]
+            - [2.0, 0.0]
+            - [2.0, 0.5]
+""",
+    )
+
+    with pytest.raises(ValueError, match="platform_semantics.regions\\[0\\].kind"):
+        load_scenarios(scenario_file)
+
+
+def test_build_robot_config_rejects_required_platform_semantic_consumers(tmp_path: Path) -> None:
+    """Scenarios requiring platform semantic consumers should fail before benchmark use."""
+    scenario_file = tmp_path / "required_platform_semantics.yaml"
+    _write_yaml(
+        scenario_file,
+        """
+scenarios:
+  - name: platform_semantics_requires_consumers
+    map_file: maps/platform.svg
+    platform_semantics:
+      status: require_consumers
+      regions:
+        - id: platform_edge
+          kind: hazard
+          shape: polygon
+          points:
+            - [0.0, 0.0]
+            - [2.0, 0.0]
+            - [2.0, 0.5]
+""",
+    )
+    scenario = load_scenarios(scenario_file)[0]
+
+    with pytest.raises(NotImplementedError, match="platform_semantics consumers"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_file)
+
+
 def test_map_search_paths_rebases_map_paths(tmp_path: Path) -> None:
     """map_search_paths should resolve map_file and rebase to the manifest root."""
     maps_dir = tmp_path / "maps"

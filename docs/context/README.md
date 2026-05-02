@@ -143,6 +143,8 @@ knowledge, not every transient iteration detail.
 
 ## Map Coverage Notes
 
+- [Issue #435 Map Coverage Flow](./issue_435_map_coverage_flow.md)
+  parent flow state for real-world maps, SocNavBench import, and map-quality repair issues.
 - [Issue #328 Real-World Map Parent Tracker](./issue_328_real_world_map_parent.md)
   parent/child split, current child issue state, and shared validation contract for real-world
   benchmark maps.

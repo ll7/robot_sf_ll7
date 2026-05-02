@@ -465,6 +465,96 @@ def test_write_trajectory_csv_escapes_fields(tmp_path: Path) -> None:
     assert rows[1] == ["episode,1", "7", "done", "3", 'quote "and" comma, here']
 
 
+def test_write_trajectory_csv_exports_dense_trajectory_data(tmp_path: Path) -> None:
+    """Trajectory data in episode records should become per-entity CSV rows."""
+    path = write_trajectory_csv(
+        tmp_path / "trajectory.csv",
+        {
+            "episode_id": "episode-1",
+            "seed": 7,
+            "trajectory_data": [
+                {
+                    "step": 0,
+                    "time_s": 0.0,
+                    "robot": {"x": 1.0, "y": 2.0, "theta": 0.1},
+                    "pedestrians": {"ped-1": [3.0, 4.0, 0.2]},
+                },
+                {
+                    "step": 1,
+                    "time_s": 0.1,
+                    "robot_position": [1.5, 2.5, 0.15],
+                    "pedestrian_positions": [[3.5, 4.5, 0.25]],
+                },
+            ],
+        },
+    )
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows == [
+        {
+            "episode_id": "episode-1",
+            "seed": "7",
+            "step": "0",
+            "entity_type": "robot",
+            "entity_id": "robot",
+            "time_s": "0.0",
+            "x": "1.0",
+            "y": "2.0",
+            "theta": "0.1",
+        },
+        {
+            "episode_id": "episode-1",
+            "seed": "7",
+            "step": "0",
+            "entity_type": "pedestrian",
+            "entity_id": "ped-1",
+            "time_s": "0.0",
+            "x": "3.0",
+            "y": "4.0",
+            "theta": "0.2",
+        },
+        {
+            "episode_id": "episode-1",
+            "seed": "7",
+            "step": "1",
+            "entity_type": "robot",
+            "entity_id": "robot",
+            "time_s": "0.1",
+            "x": "1.5",
+            "y": "2.5",
+            "theta": "0.15",
+        },
+        {
+            "episode_id": "episode-1",
+            "seed": "7",
+            "step": "1",
+            "entity_type": "pedestrian",
+            "entity_id": "0",
+            "time_s": "0.1",
+            "x": "3.5",
+            "y": "4.5",
+            "theta": "0.25",
+        },
+    ]
+
+
+def test_write_trajectory_csv_supports_legacy_coordinate_lists(tmp_path: Path) -> None:
+    """Existing visualization-style coordinate lists should produce dense robot rows."""
+    path = write_trajectory_csv(
+        tmp_path / "trajectory.csv",
+        {"episode_id": "episode-2", "seed": 11, "trajectory_data": [[0.0, 1.0], [0.5, 1.5]]},
+    )
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert [row["step"] for row in rows] == ["0", "1"]
+    assert [row["entity_type"] for row in rows] == ["robot", "robot"]
+    assert [(row["x"], row["y"]) for row in rows] == [("0.0", "1.0"), ("0.5", "1.5")]
+
+
 def test_certification_adapter_handles_missing_and_mocked_backends(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

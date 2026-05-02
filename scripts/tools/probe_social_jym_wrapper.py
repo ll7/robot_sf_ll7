@@ -44,6 +44,23 @@ class SocialJymWrapperReport:
     failure_reason: str | None = None
 
 
+@dataclass
+class SocialJymParityReport:
+    """Structured result from the controlled social-jym wrapper parity probe."""
+
+    issue: int
+    verdict: str
+    source_policy: str
+    controlled_state: str
+    observation_max_abs_error: float
+    robot_goal_max_abs_error: float
+    time_abs_error: float
+    vnet_input_max_abs_error: float | None
+    projection_cases: list[dict[str, float | list[float]]]
+    benchmark_boundary: str
+    failure_reason: str | None = None
+
+
 def _as_float_array(value: Any, *, name: str, min_size: int) -> np.ndarray:
     """Return ``value`` as a flat float array with at least ``min_size`` entries."""
     arr = np.asarray(value, dtype=float).reshape(-1)
@@ -145,6 +162,41 @@ def build_social_jym_policy_inputs(
     return social_obs, social_info, keys
 
 
+def _controlled_robot_sf_observation() -> dict[str, Any]:
+    """Return a simple Robot SF SocNav observation with one human in absolute coordinates."""
+    return {
+        "robot": {
+            "position": np.asarray([0.0, 0.0], dtype=np.float32),
+            "heading": np.asarray([0.0], dtype=np.float32),
+            "speed": np.asarray([0.2, 0.0], dtype=np.float32),
+            "radius": np.asarray([0.3], dtype=np.float32),
+        },
+        "goal": {"current": np.asarray([2.0, 0.0], dtype=np.float32)},
+        "pedestrians": {
+            "positions": np.asarray([[1.0, 0.5]], dtype=np.float32),
+            "velocities": np.asarray([[0.0, -0.1]], dtype=np.float32),
+            "count": np.asarray([1], dtype=np.int32),
+            "radius": np.asarray([0.3], dtype=np.float32),
+        },
+    }
+
+
+def _controlled_source_inputs() -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Return the matched source-shaped SARL observation and info for the controlled state."""
+    source_obs = np.asarray(
+        [
+            [1.0, 0.5, 0.0, -0.1, 0.3, 0.0],
+            [0.0, 0.0, 0.2, 0.0, 0.3, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    source_info = {
+        "robot_goal": np.asarray([2.0, 0.0], dtype=np.float32),
+        "time": np.asarray(0.0, dtype=np.float32),
+    }
+    return source_obs, source_info
+
+
 def project_holonomic_action_to_unicycle(
     action_xy: np.ndarray,
     *,
@@ -234,6 +286,92 @@ class SocialJymSARLWrapper:
             "upstream_policy": "socialjym.policies.sarl.SARL",
             "source_action_xy": [float(x) for x in action_np[:2]],
         }
+
+
+def run_parity_probe(*, repo_root: Path | None = None) -> SocialJymParityReport:
+    """Compare wrapper-built SARL inputs against a matched source-shaped control input."""
+    source_obs, source_info = _controlled_source_inputs()
+    wrapper_obs, wrapper_info, _keys = build_social_jym_policy_inputs(
+        _controlled_robot_sf_observation(),
+        max_humans=1,
+    )
+    observation_error = float(np.max(np.abs(wrapper_obs - source_obs)))
+    goal_error = float(np.max(np.abs(wrapper_info["robot_goal"] - source_info["robot_goal"])))
+    time_error = float(abs(float(wrapper_info["time"]) - float(source_info["time"])))
+
+    vnet_error: float | None = None
+    failure_reason: str | None = None
+    try:
+        wrapper = SocialJymSARLWrapper(repo_root=repo_root, max_humans=1, seed=0)
+        source_vnet = wrapper.policy.batch_compute_vnet_input(
+            wrapper.jnp.asarray(source_obs[-1]),
+            wrapper.jnp.asarray(source_obs[0:1]),
+            {
+                "robot_goal": wrapper.jnp.asarray(source_info["robot_goal"]),
+                "time": wrapper.jnp.asarray(source_info["time"]),
+            },
+        )
+        wrapper_vnet = wrapper.policy.batch_compute_vnet_input(
+            wrapper.jnp.asarray(wrapper_obs[-1]),
+            wrapper.jnp.asarray(wrapper_obs[0:1]),
+            {
+                "robot_goal": wrapper.jnp.asarray(wrapper_info["robot_goal"]),
+                "time": wrapper.jnp.asarray(wrapper_info["time"]),
+            },
+        )
+        vnet_error = float(np.max(np.abs(np.asarray(wrapper_vnet) - np.asarray(source_vnet))))
+    except Exception as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+
+    projection_cases: list[dict[str, float | list[float]]] = []
+    for action in (
+        np.asarray([1.0, 0.0], dtype=np.float32),
+        np.asarray([0.0, 1.0], dtype=np.float32),
+        np.asarray([-1.0, 0.0], dtype=np.float32),
+        np.asarray([1.0, 1.0], dtype=np.float32),
+    ):
+        linear, angular, heading_error = project_holonomic_action_to_unicycle(
+            action,
+            robot_heading=0.0,
+            dt=0.25,
+        )
+        source_speed = float(np.linalg.norm(action))
+        projection_cases.append(
+            {
+                "source_action_xy": [float(action[0]), float(action[1])],
+                "source_speed": source_speed,
+                "projected_linear": float(linear),
+                "projected_angular": float(angular),
+                "heading_error_rad": float(heading_error),
+                "instant_linear_speed_loss": float(source_speed - linear),
+            }
+        )
+
+    parity_pass = (
+        observation_error <= 1e-6
+        and goal_error <= 1e-6
+        and time_error <= 1e-6
+        and vnet_error is not None
+        and vnet_error <= 1e-6
+    )
+    return SocialJymParityReport(
+        issue=907,
+        verdict="controlled input parity passed"
+        if parity_pass
+        else "controlled input parity blocked",
+        source_policy="socialjym.policies.sarl.SARL",
+        controlled_state="one_robot_one_human_holonomic_socialnav",
+        observation_max_abs_error=observation_error,
+        robot_goal_max_abs_error=goal_error,
+        time_abs_error=time_error,
+        vnet_input_max_abs_error=vnet_error,
+        projection_cases=projection_cases,
+        benchmark_boundary=(
+            "Controlled SARL input parity is not trained-policy provenance or benchmark support; "
+            "holonomic-to-unicycle projection still loses lateral/reverse semantics."
+        ),
+        failure_reason=failure_reason,
+    )
 
 
 def run_probe(
@@ -353,9 +491,44 @@ def _render_markdown(report: SocialJymWrapperReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_parity_markdown(report: SocialJymParityReport) -> str:
+    """Render a compact Markdown report for the controlled parity probe."""
+    lines = [
+        "# Social-Jym SARL Wrapper Parity Probe",
+        "",
+        f"- Issue: #{report.issue}",
+        f"- Verdict: `{report.verdict}`",
+        f"- Source policy: `{report.source_policy}`",
+        f"- Controlled state: `{report.controlled_state}`",
+        f"- Observation max abs error: `{report.observation_max_abs_error}`",
+        f"- Robot goal max abs error: `{report.robot_goal_max_abs_error}`",
+        f"- Time abs error: `{report.time_abs_error}`",
+        f"- VNet input max abs error: `{report.vnet_input_max_abs_error}`",
+        "",
+        "## Projection Cases",
+        "",
+    ]
+    for case in report.projection_cases:
+        lines.append(f"- `{case}`")
+    lines.extend(
+        [
+            "",
+            "## Boundary",
+            "",
+            f"- {report.benchmark_boundary}",
+            "- This result must remain non-benchmark evidence until trained-policy provenance and "
+            "benchmark readiness are proven separately.",
+        ]
+    )
+    if report.failure_reason:
+        lines.extend(["", "## Failure", "", f"- `{report.failure_reason}`"])
+    return "\n".join(lines) + "\n"
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("wrapper", "parity"), default="wrapper")
     parser.add_argument("--repo-root", type=Path, default=Path("output/repos/social-jym"))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=1)
@@ -375,6 +548,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """Run the wrapper probe and write JSON/Markdown reports."""
     args = parse_args()
+    if args.mode == "parity":
+        parity_report = run_parity_probe(repo_root=args.repo_root)
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_json.write_text(
+            json.dumps(asdict(parity_report), indent=2, sort_keys=True), encoding="utf-8"
+        )
+        args.output_markdown.write_text(_render_parity_markdown(parity_report), encoding="utf-8")
+        print(json.dumps(asdict(parity_report), indent=2, sort_keys=True))
+        return 0 if parity_report.verdict == "controlled input parity passed" else 1
+
     report = run_probe(repo_root=args.repo_root, seed=args.seed, max_steps=args.max_steps)
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(

@@ -75,6 +75,94 @@ def test_project_holonomic_action_to_unicycle_heading_safe() -> None:
     assert heading_error == pytest.approx(np.pi / 2)
 
 
+def test_controlled_wrapper_inputs_match_source_inputs() -> None:
+    """The deterministic controlled fixture should match the source-shaped SARL input."""
+    source_obs, source_info = probe._controlled_source_inputs()
+    wrapper_obs, wrapper_info, _keys = probe.build_social_jym_policy_inputs(
+        probe._controlled_robot_sf_observation(),
+        max_humans=1,
+    )
+
+    np.testing.assert_allclose(wrapper_obs, source_obs)
+    assert wrapper_info["robot_goal"].tolist() == pytest.approx(source_info["robot_goal"].tolist())
+    assert float(wrapper_info["time"]) == pytest.approx(float(source_info["time"]))
+
+
+class _FakeJnp:
+    @staticmethod
+    def asarray(value: object) -> np.ndarray:
+        return np.asarray(value, dtype=float)
+
+    @staticmethod
+    def zeros(shape: tuple[int, ...]) -> np.ndarray:
+        return np.zeros(shape, dtype=float)
+
+
+class _FakeRandom:
+    @staticmethod
+    def PRNGKey(seed: int) -> int:
+        return int(seed)
+
+
+class _FakePolicy:
+    vnet_input_size = 13
+
+    class _Model:
+        @staticmethod
+        def init(key: int, zeros: np.ndarray) -> dict[str, object]:
+            return {"key": key, "shape": tuple(zeros.shape)}
+
+    model = _Model()
+
+    @staticmethod
+    def batch_compute_vnet_input(
+        robot_obs: np.ndarray,
+        humans_obs: np.ndarray,
+        info: dict[str, np.ndarray],
+    ) -> np.ndarray:
+        return np.concatenate([robot_obs.reshape(-1), humans_obs.reshape(-1), info["robot_goal"]])
+
+    @staticmethod
+    def act(
+        key: int,
+        _obs: np.ndarray,
+        _info: dict[str, np.ndarray],
+        _params: dict[str, object],
+        _epsilon: float,
+    ) -> tuple[np.ndarray, int, np.ndarray, np.ndarray]:
+        return np.asarray([1.0, 0.0]), key, np.asarray([]), np.asarray([])
+
+
+class _FakeParityWrapper:
+    def __init__(
+        self, *, repo_root: object | None = None, max_humans: int = 1, seed: int = 0
+    ) -> None:
+        self.repo_root = repo_root
+        self.max_humans = max_humans
+        self.seed = seed
+        self.jnp = _FakeJnp()
+        self.random = _FakeRandom()
+        self.policy = _FakePolicy()
+
+
+def test_run_parity_probe_reports_controlled_input_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parity probe should compare source-shaped and wrapper-built SARL inputs."""
+    monkeypatch.setattr(probe, "SocialJymSARLWrapper", _FakeParityWrapper)
+
+    report = probe.run_parity_probe(repo_root=None)
+
+    assert report.verdict == "controlled input parity passed"
+    assert report.observation_max_abs_error == pytest.approx(0.0)
+    assert report.robot_goal_max_abs_error == pytest.approx(0.0)
+    assert report.time_abs_error == pytest.approx(0.0)
+    assert report.vnet_input_max_abs_error == pytest.approx(0.0)
+    reverse_case = report.projection_cases[2]
+    assert reverse_case["source_action_xy"] == [-1.0, 0.0]
+    assert reverse_case["instant_linear_speed_loss"] == pytest.approx(1.0)
+
+
 class _FakeRobot:
     pass
 

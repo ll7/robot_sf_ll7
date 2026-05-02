@@ -117,6 +117,10 @@ knowledge, not every transient iteration detail.
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
+- [Issue #792 Social-Jym Source-Harness Reproduction](./issue_792_social_jym_source_harness.md)
+  resolves the prior SSH-submodule blocker via HTTPS in an isolated side environment and proves a
+  minimal upstream `SocialNav` reset plus `SARL` policy step, without claiming Robot SF benchmark
+  integration.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.

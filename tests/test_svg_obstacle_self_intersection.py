@@ -6,7 +6,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from loguru import logger
-from shapely.geometry import GeometryCollection, Polygon
+from shapely.geometry import GeometryCollection, Point, Polygon
 
 from robot_sf.nav import svg_map_parser
 from robot_sf.nav.obstacle import Obstacle
@@ -57,6 +57,7 @@ def test_campus_lake_obstacle_is_authored_as_valid_polygon() -> None:
 
     assert polygon.is_valid
     assert polygon.area > 0.0
+    assert not polygon.contains(Point(260.0, 353.0))
 
 
 def test_self_intersecting_obstacle_warnings_include_svg_filename() -> None:

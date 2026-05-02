@@ -105,6 +105,12 @@ knowledge, not every transient iteration detail.
 - [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
   log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
+## Performance Notes
+
+- [Issue #867 PPO Evaluation Reload Profile](./issue_867_ppo_eval_reload_profile.md)
+  measurement-only issue-791 evaluation probe showing cached predictive-model reloads are small
+  compared with shared cold startup and first-step overhead.
+
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)

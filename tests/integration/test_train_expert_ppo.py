@@ -358,12 +358,12 @@ def test_load_expert_training_config_inherits_eval_seed_randomness_by_default(
     ("episode_idx", "expected_seed"),
     [
         (0, 11),
-        (69, 11),
-        (70, 17),
-        (139, 17),
-        (140, 29),
-        (209, 29),
-        (210, 11),
+        (70, 11),
+        (71, 17),
+        (141, 17),
+        (142, 29),
+        (212, 29),
+        (213, 11),
     ],
 )
 def test_deterministic_eval_seed_schedule_advances_per_full_scenario_cycle(
@@ -393,7 +393,7 @@ def test_deterministic_eval_seed_schedule_advances_per_full_scenario_cycle(
         _deterministic_eval_seed_for_episode(
             config,
             episode_idx=episode_idx,
-            scenario_cycle_length=70,
+            scenario_cycle_length=71,
         )
         == expected_seed
     )
@@ -406,8 +406,8 @@ def test_full_maintained_eval_manifest_loads_unique_scenarios() -> None:
         str(scenario.get("name") or scenario.get("scenario_id")) for scenario in scenarios
     ]
 
-    assert len(scenarios) == 70
-    assert len(set(scenario_ids)) == 70
+    assert len(scenarios) == 71
+    assert len(set(scenario_ids)) == 71
 
 
 def test_issue_708_predictive_foresight_override_enables_predictive_observation() -> None:

@@ -166,18 +166,18 @@ def run_adversarial_search(
         validation_errors = config.search_space.validate_candidate(candidate)
         if validation_errors:
             num_invalid += 1
-            evaluations.append(
-                _invalid_evaluation(
-                    candidate=candidate,
-                    certification_status=failed_status(
-                        "search-space validation failed",
-                        details={"errors": validation_errors},
-                    ),
-                    scenario_yaml_path=None,
-                    bundle_path=None,
-                    reason="; ".join(validation_errors),
-                )
+            evaluation = _invalid_evaluation(
+                candidate=candidate,
+                certification_status=failed_status(
+                    "search-space validation failed",
+                    details={"errors": validation_errors},
+                ),
+                scenario_yaml_path=None,
+                bundle_path=None,
+                reason="; ".join(validation_errors),
             )
+            evaluations.append(evaluation)
+            _observe_candidate(active_sampler, evaluation)
             continue
 
         scenario_yaml_path, _route_path = write_candidate_inputs(
@@ -207,6 +207,7 @@ def run_adversarial_search(
                 candidate_dir / "failure_attribution.json", evaluation.failure_attribution.to_json()
             )
             evaluations.append(evaluation)
+            _observe_candidate(active_sampler, evaluation)
             continue
 
         try:
@@ -231,6 +232,7 @@ def run_adversarial_search(
                 error=error,
             )
         evaluations.append(evaluation)
+        _observe_candidate(active_sampler, evaluation)
         if evaluation.objective_value is not None and (
             best is None
             or best.objective_value is None
@@ -255,3 +257,10 @@ def run_adversarial_search(
         num_invalid_candidates=num_invalid,
         num_failed_evaluations=num_failed,
     )
+
+
+def _observe_candidate(sampler: CandidateSampler, evaluation: CandidateEvaluation) -> None:
+    """Notify feedback-capable samplers about one completed candidate."""
+    observe = getattr(sampler, "observe", None)
+    if callable(observe):
+        observe(evaluation)

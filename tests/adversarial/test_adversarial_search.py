@@ -22,7 +22,7 @@ from robot_sf.adversarial.config import (
     SearchSpaceConfig,
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
-from robot_sf.adversarial.samplers import RandomCandidateSampler
+from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
 
 
 def _write_template(path: Path) -> None:
@@ -219,6 +219,156 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert manifest["summary"]["best_bundle_path"].endswith("candidate_0001")
     assert (config.output_dir / "candidate_0001" / "scenario.yaml").exists()
     assert (config.output_dir / "candidate_0001" / "route_overrides.yaml").exists()
+
+
+def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Path) -> None:
+    """Feedback-capable optimizer samplers should run through the existing search API."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    search_space.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 0.0, "max": 2.0},
+                    "start_y": {"min": 2.0, "max": 2.0},
+                    "goal_x": {"min": 5.0, "max": 5.0},
+                    "goal_y": {"min": 2.0, "max": 2.0},
+                    "spawn_time_s": {"min": 0.0, "max": 0.0},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": {"min": 0.0, "max": 0.0},
+                    "scenario_seed": {"min": 7, "max": 7},
+                },
+                "constraints": {"min_start_goal_distance_m": 0.5},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        budget=3,
+        seed=123,
+    )
+    sampler = CoordinateRefinementSampler(config.search_space, seed=123)
+    sampled: list[CandidateSpec] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        sampled.append(candidate)
+        record: dict[str, Any] = {
+            "episode_id": f"candidate-{len(sampled)}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 3,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"snqi": 2.0 - candidate.start.x, "success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status(),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=trajectory_path,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
+        sampler=sampler,
+    )
+
+    assert [candidate.start.x for candidate in sampled[:2]] == [1.0, 2.0]
+    assert result.best_bundle_path == config.output_dir / "candidate_0001"
+    assert result.best_objective_value == pytest.approx(-0.0)
+
+
+def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:
+    """Search-space validation must fail closed before benchmark evaluation."""
+    config = _config(tmp_path)
+
+    class InvalidThenValidSampler:
+        def __init__(self) -> None:
+            self._candidates = [
+                CandidateSpec(
+                    start=Pose2D(-10.0, 2.0),
+                    goal=Pose2D(5.0, 2.0),
+                    spawn_time_s=0.0,
+                    pedestrian_speed_mps=1.0,
+                    pedestrian_delay_s=0.0,
+                    scenario_seed=7,
+                ),
+                _candidate(7),
+            ]
+            self.observed: list[CandidateEvaluation] = []
+
+        def sample(self) -> CandidateSpec:
+            return self._candidates.pop(0)
+
+        def observe(self, evaluation: CandidateEvaluation) -> None:
+            self.observed.append(evaluation)
+
+    sampler = InvalidThenValidSampler()
+    evaluated: list[CandidateSpec] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        evaluated.append(candidate)
+        record: dict[str, Any] = {
+            "episode_id": "valid",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 3,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"snqi": 0.5, "success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status(),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
+        sampler=sampler,
+    )
+
+    assert evaluated == [_candidate(7)]
+    assert result.num_invalid_candidates == 1
+    assert len(sampler.observed) == 2
+    assert sampler.observed[0].objective_value is None
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["candidates"][0]["error"] == "start.x outside search space"
 
 
 def test_default_search_keeps_candidate_evaluation_sequential(

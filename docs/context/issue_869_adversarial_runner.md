@@ -21,6 +21,22 @@ programs, tests, notebooks, and future optimizer adapters can call the same core
 - The default evaluator delegates to the existing benchmark `run_batch` path.
 - Tests can inject evaluator, certifier, and sampler callables to cover orchestration without
   spawning a subprocess.
+- Feedback-capable samplers may implement `observe(evaluation)` and can be injected through the
+  existing `sampler=` argument. `CoordinateRefinementSampler` is the dependency-light v1 optimizer
+  adapter; it is deterministic for a fixed seed but intentionally simpler than CMA-ES or Bayesian
+  optimization.
+
+## Optimizer Sampler Boundary
+
+`CoordinateRefinementSampler` starts from the search-space midpoint and proposes bounded
+coordinate perturbations around the best scored candidate observed so far. It is intended for small
+synthetic or development stress-search pilots where avoiding optional optimizer dependencies matters.
+Random search remains preferable for broad exploratory sweeps, and stronger optimizers should stay
+behind explicit optional-dependency boundaries if they are added later.
+
+Search-space validation still runs before certification or policy evaluation for every sampled
+candidate, including optimizer proposals. Invalid proposals are recorded in the manifest as invalid
+candidates and are reported back to feedback-capable samplers with no objective value.
 
 ## Concurrency Model
 

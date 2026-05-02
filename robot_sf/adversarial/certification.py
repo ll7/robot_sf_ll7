@@ -101,12 +101,7 @@ def certify_candidate(
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")
 
-    signature = inspect.signature(certify_scenario)
-    supports_candidate = (
-        "candidate" in signature.parameters
-        or any(param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
-    )
-    if not supports_candidate:
+    if not _adapter_supports_candidate(scenario_certification):
         if require_certification:
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")
@@ -134,6 +129,23 @@ def certify_candidate(
     if status in {"not_available", "unavailable"}:
         return CertificationStatus("scenario_cert.v1", "not_available", reason, details)
     return CertificationStatus("scenario_cert.v1", "failed", reason, details)
+
+
+def _adapter_supports_candidate(scenario_certification: Any) -> bool:
+    """Return whether the available adapter can certify a generated candidate."""
+    certify_scenario_file = getattr(scenario_certification, "certify_scenario_file", None)
+    certificate_to_dict = getattr(scenario_certification, "certificate_to_dict", None)
+    if callable(certify_scenario_file) and callable(certificate_to_dict):
+        return True
+
+    certify_scenario = getattr(scenario_certification, "certify_scenario", None)
+    if not callable(certify_scenario):
+        return True
+
+    signature = inspect.signature(certify_scenario)
+    return "candidate" in signature.parameters or any(
+        param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+    )
 
 
 def _run_scenario_certification_adapter(

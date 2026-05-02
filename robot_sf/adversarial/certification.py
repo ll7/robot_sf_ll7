@@ -11,6 +11,22 @@ if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateSpec
 
 
+_CLASSIFICATION_TO_ELIGIBILITY = {
+    "invalid": "excluded",
+    "geometrically_infeasible": "excluded",
+    "kinodynamically_infeasible": "excluded",
+    "dynamically_overconstrained": "excluded",
+    "knife_edge": "stress_only",
+    "hard_but_solvable": "eligible",
+    "valid": "eligible",
+}
+_ELIGIBILITY_SEVERITY = {
+    "eligible": 0,
+    "stress_only": 1,
+    "excluded": 2,
+}
+
+
 @dataclass(frozen=True)
 class CertificationStatus:
     """Certification outcome for a generated candidate."""
@@ -123,17 +139,9 @@ def _run_scenario_certification_adapter(
         payloads = [certificate_to_dict(certificate) for certificate in certificates]
         if not payloads:
             return {"status": "failed", "reason": "scenario_cert.v1 returned no certificates"}
-        worst = max(
-            payloads,
-            key=lambda payload: (
-                1 if str(payload.get("benchmark_eligibility", "")).lower() == "excluded" else 0
-            ),
-        )
-        status = (
-            "failed"
-            if str(worst.get("benchmark_eligibility", "")).lower() == "excluded"
-            else "passed"
-        )
+        worst = max(payloads, key=_certificate_payload_severity)
+        eligibility = _certificate_payload_eligibility(worst)
+        status = "failed" if eligibility in {"", "excluded"} else "passed"
         reasons = worst.get("reasons", [])
         reason = "; ".join(str(reason) for reason in reasons) if isinstance(reasons, list) else ""
         return {
@@ -146,6 +154,28 @@ def _run_scenario_certification_adapter(
     if callable(certify_scenario):
         return certify_scenario(scenario_yaml_path, candidate=candidate)
     return {"status": "not_available", "reason": "scenario_cert.v1 adapter is not available"}
+
+
+def _normalize_certificate_text(value: Any) -> str:
+    """Normalize optional certificate enum fields without stringifying null values."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower()
+
+
+def _certificate_payload_eligibility(payload: dict[str, Any]) -> str:
+    """Return benchmark eligibility, inferring it from classification when omitted."""
+    eligibility = _normalize_certificate_text(payload.get("benchmark_eligibility"))
+    if eligibility in _ELIGIBILITY_SEVERITY:
+        return eligibility
+    classification = _normalize_certificate_text(payload.get("classification"))
+    return _CLASSIFICATION_TO_ELIGIBILITY.get(classification, "")
+
+
+def _certificate_payload_severity(payload: dict[str, Any]) -> tuple[int, str]:
+    """Sort certificates by benchmark eligibility severity, failing closed on unknown values."""
+    eligibility = _certificate_payload_eligibility(payload)
+    return (_ELIGIBILITY_SEVERITY.get(eligibility, 3), eligibility)
 
 
 def candidate_allowed(status: CertificationStatus, *, require_certification: bool) -> bool:

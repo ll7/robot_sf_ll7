@@ -42,3 +42,4 @@
 | 2026-04-30 | hybrid_rule_v3_waypoint2_route_lookahead8_static02 | nominal_sanity | 0.2222 | 0.0000 | 0.1667 | 0.0000 | 0.0000 | reject | A 2 cm static margin stayed safe but lost nominal success. |
 | 2026-04-30 | hybrid_rule_v3_waypoint2_route_lookahead8_clearance1 | nominal_sanity | 0.1667 | 0.1111 | 0.1111 | 0.1667 | 0.0000 | reject | Stronger route clearance penalty failed to remove static collisions and cut success sharply. |
 | 2026-04-30 | mpc_clearance_sampler_v1 | nominal_sanity | 0.1667 | 0.2778 | 0.2222 | 0.4167 | 0.0000 | reject | Existing deterministic MPC-clearance candidate is unsafe on the nominal slice due static collisions. |
+| 2026-05-02 | scenario_adaptive_hybrid_orca_v1 | full_matrix | 0.9291 | 0.0213 | 0.4113 | 0.0303 | 0.0133 | tracked | New best raw full-matrix result at `131/141`: scenario-specific ORCA resolves `francis2023_leave_group` seed 113 without changing classic failures or collision rate. |

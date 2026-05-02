@@ -141,6 +141,12 @@ knowledge, not every transient iteration detail.
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
 
+## Map Coverage Notes
+
+- [Issue #328 Real-World Map Parent Tracker](./issue_328_real_world_map_parent.md)
+  parent/child split, current child issue state, and shared validation contract for real-world
+  benchmark maps.
+
 ## Reasoning Notes
 
 Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve

@@ -133,6 +133,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
+* **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
 * **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers

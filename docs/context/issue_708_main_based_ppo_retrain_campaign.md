@@ -1,6 +1,22 @@
 # Issue 708 Main-Based PPO Retrain Campaign
 
-## Goal
+## Current Outcome
+
+Do not promote or extend the issue-708 PPO campaign family without a new hypothesis.
+
+The strongest available downstream candidate, the `#747` W&B `best-success` artifact, was rejected
+on the full maintained policy-analysis surface: `0.8298` success and `0.1702` collision over `141`
+episodes. That is weaker than the promoted PPO reference recorded in
+`docs/training/ppo_num_envs_benchmark_imech156u.md` (`0.8511` success, `0.1489` collision).
+
+The original `#708` from-scratch run and the `#748` `num_envs=14` run were weaker. No concrete
+`#749` W&B run URL was found by issue tag, group, or run name, so treat that branch as not executed
+or not synced until a maintainer provides the missing run link.
+
+This note remains as the parent campaign provenance record and runbook. It should not be used by
+itself to justify another expensive PPO training run.
+
+## Original Goal
 
 Prepare a `main`-based branch that is ready to submit one canonical, from-scratch PPO retraining job
 on SLURM and then evaluate the resulting checkpoint against the current promoted PPO baseline.

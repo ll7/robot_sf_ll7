@@ -15,6 +15,9 @@ programs, tests, notebooks, and future optimizer adapters can call the same core
 - Candidate generation is deterministic for a fixed seed.
 - Search-space validation rejects malformed candidates before policy evaluation.
 - `require_certification=True` fails closed when `scenario_cert.v1` is not available.
+- When the in-repo `robot_sf.scenario_certification` API is available, strict certification uses
+  `certify_scenario_file(...)` and excludes candidates whose certificate has
+  `benchmark_eligibility: excluded`.
 - The default evaluator delegates to the existing benchmark `run_batch` path.
 - Tests can inject evaluator, certifier, and sampler callables to cover orchestration without
   spawning a subprocess.
@@ -106,7 +109,8 @@ Ruff, then failed in the broad parallel pytest phase due unrelated performance/w
 
 ## Deferred Follow-Ups
 
-- Add a real `scenario_cert.v1` adapter once the certification package lands.
+- Keep strict-certification smoke coverage in `tests/adversarial/test_adversarial_search.py` as the
+  `scenario_cert.v1` contract evolves.
 - Replace the `trajectory.csv` replay index with dense per-step trajectory export when the
   benchmark runner exposes robot/pedestrian trajectories.
 - Add optimizer adapters such as CMA-ES or Bayesian optimization only after the scenario semantics

@@ -185,6 +185,93 @@ def test_log_startup_summary_reports_num_envs_resolution(monkeypatch, tmp_path: 
     assert "mode=auto_stable" in summary
 
 
+def test_subproc_worker_log_environment_is_warning_only_during_spawn(monkeypatch) -> None:
+    """PPO subproc workers should inherit a quiet startup log level without muting parent logs."""
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+
+    with train_ppo._subproc_worker_log_environment("subproc"):
+        assert train_ppo.os.environ["LOGURU_LEVEL"] == "WARNING"
+
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
+def test_dummy_worker_log_environment_leaves_log_level_unchanged(monkeypatch) -> None:
+    """Non-subproc PPO runs should not alter log-level inheritance."""
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+
+    with train_ppo._subproc_worker_log_environment("dummy"):
+        assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
+def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Subproc worker creation should inherit WARNING while parent logging is restored."""
+    observed_levels: list[str | None] = []
+    monkeypatch.setenv("LOGURU_LEVEL", "INFO")
+    monkeypatch.setattr(train_ppo, "_resolve_num_envs", lambda _config: 2)
+    monkeypatch.setattr(train_ppo, "_resolve_worker_mode", lambda _config, _num_envs: "subproc")
+
+    def _fake_make_training_env(*args, **kwargs):
+        return object
+
+    monkeypatch.setattr(train_ppo, "_make_training_env", _fake_make_training_env)
+    monkeypatch.setattr(
+        train_ppo,
+        "_resolve_policy_selection",
+        lambda _config: ("MlpPolicy", {}, "mlp"),
+    )
+    monkeypatch.setattr(train_ppo, "_resolve_resume_checkpoint", lambda **kwargs: None)
+    monkeypatch.setattr(train_ppo, "_resolve_ppo_hyperparams", lambda _config: {})
+
+    class _FakeSubprocVecEnv:
+        def __init__(self, env_fns):
+            observed_levels.append(train_ppo.os.environ.get("LOGURU_LEVEL"))
+            self.env_fns = env_fns
+
+    class _FakePPO:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(train_ppo, "SubprocVecEnv", _FakeSubprocVecEnv)
+    monkeypatch.setattr(train_ppo, "PPO", _FakePPO)
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=32_000,
+        policy_id="ppo_subproc_log_level_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 16_000),),
+            randomize_seeds=False,
+        ),
+        worker_mode="subproc",
+    )
+
+    train_ppo._init_training_model(
+        config=config,
+        scenario=None,
+        scenario_definitions=({"id": "scenario_a"},),
+        exclude_scenarios=(),
+        run_id="run",
+        tensorboard_log=None,
+        resume_from=None,
+    )
+
+    assert observed_levels == ["WARNING"]
+    assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
+
+
 def test_resolve_policy_selection_uses_asymmetric_grid_socnav_policy(tmp_path: Path) -> None:
     """Asymmetric critic config should select the dedicated policy class."""
     config = ExpertTrainingConfig.from_raw(

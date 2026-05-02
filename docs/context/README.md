@@ -120,6 +120,9 @@ knowledge, not every transient iteration detail.
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
+- [Issue #562 SocNavBench Re-Entry Gate](./issue_562_socnav_bench_reentry.md)
+  defines the fail-fast focused probe and concrete keep-out/re-entry criteria for `socnav_bench`
+  before it can be reconsidered for paper-facing benchmarks.
 - [Issue #792 Social-Jym Source-Harness Reproduction](./issue_792_social_jym_source_harness.md)
   resolves the prior SSH-submodule blocker via HTTPS in an isolated side environment and proves a
   minimal upstream `SocialNav` reset plus `SARL` policy step, without claiming Robot SF benchmark

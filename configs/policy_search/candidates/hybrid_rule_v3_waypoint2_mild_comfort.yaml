@@ -1,0 +1,11 @@
+name: hybrid_rule_v3_waypoint2_mild_comfort
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  static_hard_safety_margin: 0.0
+  waypoint_switch_distance: 2.0
+  desired_dynamic_clearance: 1.05
+  dynamic_clearance_weight: 2.0
+  ttc_weight: 1.0
+  moderate_distance_human: 2.2
+  moderate_speed: 0.55

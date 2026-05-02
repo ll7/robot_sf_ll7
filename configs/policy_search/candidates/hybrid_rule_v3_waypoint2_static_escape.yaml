@@ -1,0 +1,8 @@
+name: hybrid_rule_v3_waypoint2_static_escape
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+params:
+  static_clearance_escape_enabled: true
+  static_clearance_escape_tolerance: 0.05
+  static_clearance_escape_max_speed: 0.6
+  static_clearance_escape_min_clearance: 0.5

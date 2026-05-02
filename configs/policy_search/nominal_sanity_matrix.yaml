@@ -1,0 +1,9 @@
+includes:
+  - ../scenarios/single/planner_sanity_simple.yaml
+  - ../scenarios/archetypes/classic_head_on_corridor.yaml
+  - ../scenarios/archetypes/classic_crossing.yaml
+  - ../scenarios/archetypes/classic_doorway.yaml
+  - ../scenarios/archetypes/classic_overtaking.yaml
+  - ../scenarios/single/francis2023_following_human.yaml
+map_search_paths:
+  - ../maps/svg_maps

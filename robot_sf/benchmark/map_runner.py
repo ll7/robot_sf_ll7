@@ -25,9 +25,16 @@ from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
 )
-from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
+from robot_sf.benchmark.algorithm_readiness import (
+    BenchmarkProfile,
+    require_algorithm_allowed,
+)
 from robot_sf.benchmark.fallback_policy import availability_payload
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
+from robot_sf.benchmark.metrics import (
+    EpisodeData,
+    compute_all_metrics,
+    post_process_metrics,
+)
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -51,21 +58,44 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
-from robot_sf.planner.crowdnav_height import CrowdNavHeightAdapter, build_crowdnav_height_config
-from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
+from robot_sf.planner.crowdnav_height import (
+    CrowdNavHeightAdapter,
+    build_crowdnav_height_config,
+)
+from robot_sf.planner.gap_prediction import (
+    GapAwarePredictionAdapter,
+    build_gap_prediction_config,
+)
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
 )
+from robot_sf.planner.hybrid_orca_sampler import (
+    HybridORCASamplerAdapter,
+    build_hybrid_orca_sampler_build_config,
+)
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
-from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
-from robot_sf.planner.mppi_social import MPPISocialPlannerAdapter, build_mppi_social_config
-from robot_sf.planner.nmpc_social import NMPCSocialPlannerAdapter, build_nmpc_social_config
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleLocalPlannerAdapter,
+    build_hybrid_rule_local_planner_config,
+)
+from robot_sf.planner.kinematics_model import (
+    KinematicsModel,
+    resolve_benchmark_kinematics_model,
+)
+from robot_sf.planner.mppi_social import (
+    MPPISocialPlannerAdapter,
+    build_mppi_social_config,
+)
+from robot_sf.planner.nmpc_social import (
+    NMPCSocialPlannerAdapter,
+    build_nmpc_social_config,
+)
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
@@ -97,11 +127,20 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
-from robot_sf.planner.sonic_crowdnav import SonicCrowdNavAdapter, build_sonic_crowdnav_config
+from robot_sf.planner.sonic_crowdnav import (
+    SonicCrowdNavAdapter,
+    build_sonic_crowdnav_config,
+)
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
-from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
+from robot_sf.planner.teb_commitment import (
+    TEBCommitmentPlannerAdapter,
+    build_teb_commitment_config,
+)
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -119,6 +158,7 @@ _SOCNAV_ALGO_KEYS = {
     "sa_cadrl",
     "socnav_bench",
     "hybrid_portfolio",
+    "hybrid_orca_sampler",
     "social_navigation_pyenvs_orca",
     "social_nav_pyenvs_orca",
     "social_navigation_pyenvs_socialforce",
@@ -287,7 +327,13 @@ def _build_adapter_policy(
         tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
             Projected policy callable and populated benchmark metadata.
     """
-    meta.update({"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)})
+    meta.update(
+        {
+            "status": "ok",
+            "config": algo_config,
+            "config_hash": _config_hash(algo_config),
+        }
+    )
     meta = enrich_algorithm_metadata(
         algo=algo_key,
         metadata=meta,
@@ -319,8 +365,15 @@ def _build_adapter_policy(
         )
 
     _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
 
     return _policy, meta
 
@@ -440,7 +493,9 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     return data
 
 
-def _prediction_planner_metadata_overrides(algo_config: dict[str, Any]) -> dict[str, Any]:
+def _prediction_planner_metadata_overrides(
+    algo_config: dict[str, Any],
+) -> dict[str, Any]:
     """Expose predictive-planner search and uncertainty modes as first-class metadata.
 
     Returns:
@@ -494,7 +549,10 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
         min_success_f = float(min_success)
         measured_success_f = float(measured_success)
     except (TypeError, ValueError):
-        return False, "quality gate requires numeric min_success_rate and measured_success_rate"
+        return (
+            False,
+            "quality gate requires numeric min_success_rate and measured_success_rate",
+        )
     if not math.isfinite(min_success_f) or not math.isfinite(measured_success_f):
         return False, "quality gate success-rate values must be finite"
     if measured_success_f < min_success_f:
@@ -668,7 +726,10 @@ def _preflight_policy(  # noqa: C901, PLR0915
 
     try:
         _build_and_close(algo_config)
-        return dict(algo_config), {"status": "ok", "learned_policy_contract": learned_contract}
+        return dict(algo_config), {
+            "status": "ok",
+            "learned_policy_contract": learned_contract,
+        }
     except Exception as exc:
         if not _is_socnav_algorithm(algo):
             raise
@@ -792,7 +853,9 @@ def _normalize_xy_rows(values: Any) -> np.ndarray:
     return np.zeros((0, 2), dtype=float)
 
 
-def _extract_ppo_pedestrians(pedestrians: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, float]:
+def _extract_ppo_pedestrians(
+    pedestrians: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Extract count-aware pedestrian positions, velocities, and shared radius.
 
     Returns:
@@ -1032,7 +1095,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
         )
         meta = enrich_algorithm_metadata(
             algo=algo_key,
@@ -1067,6 +1134,20 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
             adapter=adapter,
             adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+        adapter = HybridRuleLocalPlannerAdapter(
+            config=build_hybrid_rule_local_planner_config(algo_config)
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
@@ -1144,7 +1225,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             allow_fallback=allow_fallback,
         )
         meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
         )
         meta = enrich_algorithm_metadata(
             algo=algo_key,
@@ -1590,7 +1675,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             ),
         )
         meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
         )
         meta = enrich_algorithm_metadata(
             algo=algo_key,
@@ -1685,14 +1774,20 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         adapter = SocialNavigationPyEnvsORCAAdapter(
             config=build_social_navigation_pyenvs_orca_config(algo_config)
         )
-    elif algo_key in {"social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"}:
+    elif algo_key in {
+        "social_navigation_pyenvs_socialforce",
+        "social_nav_pyenvs_socialforce",
+    }:
         adapter = SocialNavigationPyEnvsForceModelAdapter(
             config=build_social_navigation_pyenvs_force_model_config(
                 algo_config,
                 default_policy_name="socialforce",
             )
         )
-    elif algo_key in {"social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"}:
+    elif algo_key in {
+        "social_navigation_pyenvs_sfm_helbing",
+        "social_nav_pyenvs_sfm_helbing",
+    }:
         adapter = SocialNavigationPyEnvsForceModelAdapter(
             config=build_social_navigation_pyenvs_force_model_config(
                 algo_config,
@@ -1757,6 +1852,17 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             prediction=PredictionPlannerAdapter(
                 config=hybrid_cfg.socnav, allow_fallback=allow_fallback
             ),
+        )
+    elif algo_key == "hybrid_orca_sampler":
+        allow_fallback = bool(algo_config.get("allow_fallback", True))
+        hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
+        adapter = HybridORCASamplerAdapter(
+            config=hybrid_cfg.guard,
+            orca_adapter=ORCAPlannerAdapter(
+                config=hybrid_cfg.socnav,
+                allow_fallback=allow_fallback,
+            ),
+            sampler_adapter=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
         )
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
@@ -1910,6 +2016,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
 
         _attach_planner_reset(_policy, adapter)
+        _policy._planner_adapter = adapter
         if planner_bind_env is not None:
             _policy._planner_bind_env = planner_bind_env
         return _policy, meta
@@ -1923,6 +2030,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
     if hasattr(adapter, "diagnostics"):
@@ -2267,6 +2375,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
 ) -> dict[str, Any]:
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
+    scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -2410,7 +2519,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         shortest_path = float("nan")
 
     if robot_pos_arr.size == 0:
-        metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
+        metrics_raw = {
+            "success": 0.0,
+            "time_to_goal_norm": float("nan"),
+            "collisions": 0.0,
+        }
     else:
         robot_config = getattr(config, "robot_config", None)
         ep = EpisodeData(
@@ -2518,6 +2631,24 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     return record
 
 
+def _scenario_with_episode_seed_defaults(
+    scenario: dict[str, Any],
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    """Return a scenario copy with seed-derived defaults for stochastic subcomponents.
+
+    Some scenario-level generators use their own NumPy ``default_rng`` instances.  When those
+    fields are left unset they bypass the episode seed and make benchmark rows depend on process
+    history.  Fill only missing values here so explicit scenario provenance remains unchanged.
+    """
+    updated = deepcopy(scenario)
+    sim_config = updated.setdefault("simulation_config", {})
+    if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
+        sim_config["route_spawn_seed"] = int(seed)
+    return updated
+
+
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
     violations = validate_episode_success_integrity(record)
     if violations:
@@ -2527,7 +2658,9 @@ def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, A
         handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+def _run_map_job_worker(
+    job: tuple[dict[str, Any], int, dict[str, Any]],
+) -> dict[str, Any]:
     scenario, seed, params = job
     return _run_map_episode(
         scenario,

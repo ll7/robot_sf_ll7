@@ -1,0 +1,6 @@
+name: hybrid_rule_v3_waypoint2_dynamic_clearance
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+params:
+  desired_dynamic_clearance: 1.05
+  dynamic_clearance_weight: 2.1

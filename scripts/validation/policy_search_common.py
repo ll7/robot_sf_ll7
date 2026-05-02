@@ -29,6 +29,38 @@ def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return metrics if isinstance(metrics, Mapping) else {}
 
 
+def normalize_scenario_exclusion(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return a validated invalid/impossible-scenario exclusion, if explicitly present.
+
+    The policy-search reporting contract intentionally does not infer exclusions from scenario IDs
+    or termination reasons. A record must carry explicit exclusion metadata with a status, reason,
+    and non-empty evidence list before reporting treats it separately from policy failure.
+    """
+    raw = row.get("scenario_exclusion")
+    if not isinstance(raw, Mapping):
+        return None
+    status = str(raw.get("status", "")).strip().lower()
+    if status not in {"invalid", "impossible", "excluded"}:
+        return None
+    reason = str(raw.get("reason", "")).strip()
+    evidence_raw = raw.get("evidence")
+    if isinstance(evidence_raw, str):
+        evidence = [evidence_raw.strip()] if evidence_raw.strip() else []
+    elif isinstance(evidence_raw, list):
+        evidence = [str(item).strip() for item in evidence_raw if str(item).strip()]
+    else:
+        evidence = []
+    if not reason or not evidence:
+        return None
+    return {
+        "scenario_id": str(row.get("scenario_id", "unknown")),
+        "seed": row.get("seed"),
+        "status": status,
+        "reason": reason,
+        "evidence": evidence,
+    }
+
+
 def _count_configured_pedestrians(row: Mapping[str, Any]) -> int:
     scenario_params = row.get("scenario_params")
     if not isinstance(scenario_params, Mapping):
@@ -88,6 +120,9 @@ def classify_failure_mode(  # noqa: C901
     JSONL outputs and new campaign runs alike.
     """
 
+    if normalize_scenario_exclusion(row) is not None:
+        return None
+
     reason = str(row.get("termination_reason", "")).strip().lower()
     metrics = _metrics(row)
     scenario_id = str(row.get("scenario_id", "")).strip().lower()
@@ -141,12 +176,17 @@ def summarize_policy_search_records(  # noqa: C901
     near_miss_count = 0
     min_distance_values: list[float] = []
     avg_speed_values: list[float] = []
+    exclusions: list[dict[str, Any]] = []
 
     for row in records:
         family_groups[infer_scenario_family(row)].append(row)
-        failure_mode = classify_failure_mode(row)
-        if failure_mode is not None:
-            failure_counts[failure_mode] += 1
+        exclusion = normalize_scenario_exclusion(row)
+        if exclusion is not None:
+            exclusions.append(exclusion)
+        else:
+            failure_mode = classify_failure_mode(row)
+            if failure_mode is not None:
+                failure_counts[failure_mode] += 1
 
         metrics = _metrics(row)
         near_misses = _as_float(metrics.get("near_misses")) or 0.0
@@ -195,6 +235,8 @@ def summarize_policy_search_records(  # noqa: C901
     }
 
     denom = float(total) if total > 0 else 1.0
+    adjusted_rows = [row for row in records if normalize_scenario_exclusion(row) is None]
+    adjusted_summary = _suite_summary(adjusted_rows)
     return {
         "episodes": total,
         "success_rate": termination_counts.get("success", 0) / denom if total > 0 else 0.0,
@@ -202,6 +244,19 @@ def summarize_policy_search_records(  # noqa: C901
         "near_miss_rate": near_miss_count / denom if total > 0 else 0.0,
         "termination_reason_counts": dict(termination_counts),
         "failure_mode_counts": dict(failure_counts),
+        "scenario_exclusions": {
+            "count": len(exclusions),
+            "by_status": dict(Counter(str(item["status"]) for item in exclusions)),
+            "by_reason": dict(Counter(str(item["reason"]) for item in exclusions)),
+            "records": exclusions,
+        },
+        "evidence_adjusted": {
+            "episodes": adjusted_summary["episodes"],
+            "excluded_episodes": len(exclusions),
+            "success_rate": adjusted_summary["success_rate"],
+            "collision_rate": adjusted_summary["collision_rate"],
+            "near_miss_rate": adjusted_summary["near_miss_rate"],
+        },
         "scenario_family": family_summary,
         "mean_min_distance": (
             sum(min_distance_values) / len(min_distance_values) if min_distance_values else None
@@ -215,5 +270,6 @@ def summarize_policy_search_records(  # noqa: C901
 __all__ = [
     "classify_failure_mode",
     "infer_scenario_family",
+    "normalize_scenario_exclusion",
     "summarize_policy_search_records",
 ]

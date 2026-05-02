@@ -43,6 +43,8 @@ Result on 2026-04-30: `32 passed`.
 ## Remaining Risk
 
 The issue evidence suggests repeated environment construction may also affect throughput. This
-change only addresses log volume and phase observability. Any optimization to cache parsed maps or
-reuse evaluation environments should be handled separately because it can affect reset isolation and
-benchmark reproducibility.
+change only addresses log volume and phase observability. Issue #867 measured the follow-up in
+`docs/context/issue_867_ppo_eval_reload_profile.md`: cached predictive-model reloads were small
+compared with shared cold startup and first-step overhead. Any optimization to cache parsed maps or
+reuse evaluation environments should still be handled separately because it can affect reset
+isolation and benchmark reproducibility.

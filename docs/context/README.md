@@ -126,6 +126,9 @@ knowledge, not every transient iteration detail.
 Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve
 why a change was made rather than a full issue execution transcript.
 
+- [Issue #592 Hybrid Obstacle-Context Predictor Design](./issue_592_hybrid_obstacle_predictor_design.md)
+  scopes the obstacle-conditioned predictive-model idea into a feature-baseline-first experiment
+  path with proof gates before any grid/CNN or obstacle-node graph prototype.
 - [Issue #589 Public Leaderboard MVP Boundary](./issue_589_public_leaderboard_mvp.md)
   records the no-implementation-now decision, future PR-based MVP boundary, and prerequisites for
   any public planner leaderboard work.

@@ -190,9 +190,14 @@ class PedestrianGroupings:
     def group_centroid(self, group_id: int) -> Vec2D:
         """Return the centroid position of a group."""
         group = self.groups[group_id]
-        positions = self.states.pos_of_many(group)
-        c_x, c_y = np.mean(positions, axis=0)
-        return (c_x, c_y)
+        states = self.states.pysf_states()
+        sum_x = 0.0
+        sum_y = 0.0
+        for ped_id in group:
+            sum_x += float(states[ped_id, 0])
+            sum_y += float(states[ped_id, 1])
+        count = len(group)
+        return (sum_x / count, sum_y / count)
 
     def group_size(self, group_id: int) -> int:
         """Return the number of pedestrians in a group."""

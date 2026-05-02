@@ -4,7 +4,8 @@ Quick pointers for agents and automation working in the Robot SF repo. This inde
 entry points, contracts, and where to change behavior.
 
 ## Training Entry Points
-- `scripts/training/train_ppo.py` - primary structured PPO training (expert + evaluation).
+- `scripts/training/train_ppo.py` - supported config-driven PPO expert training entrypoint.
+- `scripts/training_ppo.py` - removed legacy PPO entry point; fails closed with a migration command.
 - `scripts/training/collect_expert_trajectories.py` - dataset collection for imitation pipelines.
 - `scripts/training/pretrain_from_expert.py` - behavioral cloning pretrain from expert data.
 - `scripts/training/train_ppo_with_pretrained_policy.py` - PPO fine-tuning from pretrain.
@@ -17,6 +18,14 @@ entry points, contracts, and where to change behavior.
 - `scripts/classic_benchmark_full.py` - full classic interactions benchmark run.
 - `scripts/benchmark_planner.py` - planner benchmarking.
 - `robot_sf/benchmark/full_classic/orchestrator.py` - programmatic full-classic runner.
+- `scripts/tools/run_camera_ready_benchmark.py` - config-driven camera-ready campaign runner; canonical path for paper-facing runs.
+- `scripts/tools/policy_analysis_run.py` - policy sweep with per-scenario seed-holdout support.
+
+## Benchmark Analysis & Export
+- `scripts/tools/analyze_camera_ready_campaign.py` - post-run campaign diagnostics and summary.
+- `scripts/tools/paper_results_handoff.py` - export interval-inclusive paper Results rows with bootstrap CIs from a frozen campaign bundle.
+- `robot_sf/benchmark/seed_variance.py` - per-scenario/per-planner seed-variability analysis module (used by paper issue #74 pilot).
+- `scripts/tools/benchmark_publication_bundle.py` - package a campaign into a DOI-ready publication bundle.
 
 ## Observation Modes
 - `ObservationMode.DEFAULT_GYM` - stacked `drive_state` + `rays` observation dict.

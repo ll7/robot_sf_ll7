@@ -25,8 +25,8 @@ def test_load_matrix_parses_valid_payload(tmp_path: Path) -> None:
 schema_version: benchmark-perf-trend-matrix.v1
 suite_name: suite-v1
 scenarios:
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
-    scenario_name: classic_crossing_low
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+    scenario_name: classic_cross_trap_low
     episode_steps: 96
     cold_runs: 1
     warm_runs: 2
@@ -38,7 +38,7 @@ scenarios:
     suite, scenarios = perf_trend.load_matrix(matrix)
     assert suite == "suite-v1"
     assert len(scenarios) == 1
-    assert scenarios[0].scenario_name == "classic_crossing_low"
+    assert scenarios[0].scenario_name == "classic_cross_trap_low"
     assert scenarios[0].episode_steps == 96
     assert scenarios[0].require_baseline is True
 
@@ -52,8 +52,8 @@ def test_load_matrix_applies_defaults_with_entry_precedence(tmp_path: Path) -> N
 schema_version: benchmark-perf-trend-matrix.v1
 suite_name: suite-v1
 scenarios:
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
-    scenario_name: classic_crossing_low
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+    scenario_name: classic_cross_trap_low
     warm_runs: 5
 """.strip()
         + "\n",
@@ -125,9 +125,9 @@ def test_load_matrix_rejects_duplicate_scenario_slugs(tmp_path: Path) -> None:
 schema_version: benchmark-perf-trend-matrix.v1
 suite_name: suite-v1
 scenarios:
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
     scenario_name: classic/crossing
-  - scenario_config: configs/scenarios/archetypes/classic_crossing.yaml
+  - scenario_config: configs/scenarios/archetypes/classic_cross_trap.yaml
     scenario_name: classic_crossing
 """.strip()
         + "\n",
@@ -182,7 +182,7 @@ def test_compare_with_history_flags_startup_regression() -> None:
     """Time-metric slowdown should produce startup-focused diagnostics."""
     current = [
         {
-            "scenario_name": "classic_crossing_low",
+            "scenario_name": "classic_cross_trap_low",
             "cold_median": {
                 "env_create_sec": 3.0,
                 "first_step_sec": 0.40,
@@ -202,7 +202,7 @@ def test_compare_with_history_flags_startup_regression() -> None:
             "schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION,
             "scenario_results": [
                 {
-                    "scenario_name": "classic_crossing_low",
+                    "scenario_name": "classic_cross_trap_low",
                     "cold_median": {
                         "env_create_sec": 1.0,
                         "first_step_sec": 0.10,
@@ -238,7 +238,7 @@ def test_compare_with_history_passes_when_within_thresholds() -> None:
     """Small metric drift should not be marked as historical regression."""
     current = [
         {
-            "scenario_name": "classic_crossing_low",
+            "scenario_name": "classic_cross_trap_low",
             "cold_median": {
                 "env_create_sec": 1.2,
                 "first_step_sec": 0.12,
@@ -258,7 +258,7 @@ def test_compare_with_history_passes_when_within_thresholds() -> None:
             "schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION,
             "scenario_results": [
                 {
-                    "scenario_name": "classic_crossing_low",
+                    "scenario_name": "classic_cross_trap_low",
                     "cold_median": {
                         "env_create_sec": 1.1,
                         "first_step_sec": 0.10,
@@ -337,8 +337,8 @@ def test_run_scenario_builds_perf_cold_warm_args(
 
     monkeypatch.setattr(perf_trend.perf_cold_warm, "main", _fake_main)
     spec = perf_trend.ScenarioSpec(
-        scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-        scenario_name="classic_crossing_low",
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="classic_cross_trap_low",
         episode_steps=96,
         cold_runs=1,
         warm_runs=2,
@@ -357,7 +357,7 @@ def test_run_scenario_builds_perf_cold_warm_args(
         fail_on_regression=True,
     )
     argv = captured["argv"]
-    assert "--scenario-name" in argv and "classic_crossing_low" in argv
+    assert "--scenario-name" in argv and "classic_cross_trap_low" in argv
     assert "--require-baseline" in argv
     assert "--fail-on-regression" in argv
     assert result["comparison_status"] == "pass"
@@ -378,8 +378,8 @@ def test_run_scenario_uses_sanitized_slug_for_output_paths(
 
     monkeypatch.setattr(perf_trend.perf_cold_warm, "main", _fake_main)
     spec = perf_trend.ScenarioSpec(
-        scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-        scenario_name="Classic/Crossing (Low)",
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="Classic Cross Trap (Low)",
         episode_steps=96,
         cold_runs=1,
         warm_runs=2,
@@ -401,7 +401,7 @@ def test_run_scenario_uses_sanitized_slug_for_output_paths(
 
     argv = captured["argv"]
     out_json = Path(argv[argv.index("--output-json") + 1])
-    assert out_json.name == "classic_crossing_low.json"
+    assert out_json.name == "classic_cross_trap_low.json"
 
 
 def test_main_writes_report_and_returns_zero(

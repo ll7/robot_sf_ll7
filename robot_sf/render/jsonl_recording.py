@@ -47,6 +47,8 @@ class EpisodeMetadata:
     start_time: float | None = None
     end_time: float | None = None
     total_steps: int | None = None
+    telemetry_path: str | None = None
+    telemetry_episode_id: int | None = None
 
 
 @dataclass
@@ -298,11 +300,19 @@ class JSONLRecorder:
             self.current_file.flush()
             self._records_since_flush = 0
 
-    def start_episode(self, config_hash: str = "unknown") -> None:
+    def start_episode(
+        self,
+        config_hash: str = "unknown",
+        *,
+        telemetry_path: str | None = None,
+        telemetry_episode_id: int | None = None,
+    ) -> None:
         """Start recording a new episode.
 
         Args:
             config_hash: Hash of environment configuration
+            telemetry_path: Optional telemetry JSONL file for analyzer replay.
+            telemetry_episode_id: Optional episode identifier used to filter telemetry samples.
         """
         # Close previous episode if open
         if self.current_file is not None:
@@ -319,6 +329,8 @@ class JSONLRecorder:
             config_hash=config_hash,
             schema_version=self.schema_version,
             start_time=time.time(),
+            telemetry_path=telemetry_path,
+            telemetry_episode_id=telemetry_episode_id,
         )
 
         # Open new episode file

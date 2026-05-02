@@ -2,10 +2,8 @@
     "recommendations": [
         "ms-python.python",
         "github.vscode-pull-request-github",
-        "ms-toolsai.tensorboard",
-        "njpwerner.autodocstring",
-        "ms-python.black-formatter",
         "charliermarsh.ruff",
-        "zaaack.markdown-editor"
+        "zaaack.markdown-editor",
+        "astral-sh.ty"
     ]
 }

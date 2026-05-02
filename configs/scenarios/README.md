@@ -39,17 +39,26 @@ Manifest files use `includes` (or `include` / `scenario_files`) to combine
 per-scenario and per-archetype YAMLs into a single scenario list.
 
 ```yaml
-# configs/scenarios/sets/classic_crossing_subset.yaml
+# configs/scenarios/sets/classic_cross_trap_subset.yaml
 includes:
-  - ../archetypes/classic_crossing.yaml
+  - ../archetypes/classic_cross_trap.yaml
+select_scenarios:
+  - classic_cross_trap_low
+  - classic_cross_trap_high
 map_search_paths:
   - ../../../maps/svg_maps
 ```
 
-The loader expands includes relative to the manifest file and preserves order.
+The loader expands includes relative to the manifest file and then applies
+`select_scenarios` as an explicit, case-insensitive subset filter. Selector
+order controls the final scenario order. Duplicate names in the expanded pool
+raise an error so subset manifests fail closed when the source data is
+ambiguous.
+
 If `map_file` paths in included scenarios are not resolvable, you can set
-`map_search_paths` to help locate map files. The loader logs a warning with
-the attempted paths and suggestion.
+`map_search_paths` to help locate map files. Each manifest resolves its own
+`map_search_paths` entries relative to that manifest file, and the loader logs
+a warning with the attempted paths and suggestion.
 
 ## Map references
 
@@ -59,8 +68,8 @@ rebased relative to the manifest root so scenarios stay portable.
 
 ```yaml
 scenarios:
-  - name: crossing_demo
-    map_id: classic_crossing
+  - name: cross_trap_demo
+    map_id: classic_cross_trap
 ```
 
 If both `map_id` and `map_file` are provided, `map_id` takes precedence (with a
@@ -72,14 +81,14 @@ regenerate the registry with `scripts/tools/generate_map_registry.py`.
 Point training/analysis configs at a manifest (or a legacy combined file):
 
 ```yaml
-scenario_config: ../scenarios/sets/classic_crossing_subset.yaml
+scenario_config: ../scenarios/sets/classic_cross_trap_subset.yaml
 ```
 
 Example:
 
 ```bash
 uv run python scripts/tools/policy_analysis_run.py \
-  --training-config configs/training/benchmark_orca_classic_crossing_subset.yaml \
+  --training-config configs/training/benchmark_orca_classic_cross_trap_subset.yaml \
   --policy socnav_orca
 ```
 

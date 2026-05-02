@@ -15,7 +15,7 @@ Implement continuous cold/warm performance regression checks for classic interac
   - conservative PR profile with widened relative/absolute thresholds.
 - Added nightly scheduled workflow (`.github/workflows/perf-nightly.yml`):
   - broader run budget (2 cold + 4 warm),
-  - two scenario densities (`classic_crossing_low`, `classic_crossing_medium`),
+  - two scenario densities (`classic_cross_trap_low`, `classic_cross_trap_medium`),
   - artifact upload for trend inspection.
 - Added unit tests for median aggregation, baseline loading, comparison logic,
   diagnostics classification, and markdown report generation.

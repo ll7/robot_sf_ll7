@@ -5,15 +5,13 @@ This module defines the reward function for the robot environment.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.gym_env.reward_alyassi import alyassi_reward
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
 
 _DEFAULT_SNQI_REWARD_WEIGHTS: dict[str, float] = {
     "w_success": 1.0,
@@ -31,6 +29,76 @@ _DEFAULT_SNQI_REWARD_BASELINE: dict[str, dict[str, float]] = {
     "jerk_mean": {"med": 0.0, "p95": 1.0},
 }
 _SNQI_COMPUTE_FN = None
+
+
+@dataclass(frozen=True, slots=True)
+class RewardCurriculumStage:
+    """One stage in a staged reward curriculum."""
+
+    until_episodes: int | None = None
+    reward_name: str | None = None
+    reward_kwargs: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class RewardCurriculumReward:
+    """Stateful reward wrapper that advances across curriculum stages per episode."""
+
+    stage_callables: tuple[Callable[[dict], float], ...]
+    stage_boundaries: tuple[int | None, ...]
+    stage_labels: tuple[str, ...]
+    episodes_completed: int = field(init=False, default=0)
+    _terminal_latched: bool = field(init=False, default=False)
+
+    def __post_init__(self) -> None:
+        """Validate that curriculum metadata is internally consistent."""
+        if not self.stage_callables:
+            raise ValueError("reward_curriculum requires at least one stage")
+        if len(self.stage_callables) != len(self.stage_boundaries):
+            raise ValueError("reward_curriculum stage metadata is inconsistent")
+        if len(self.stage_callables) != len(self.stage_labels):
+            raise ValueError("reward_curriculum stage labels are inconsistent")
+
+    def __call__(self, meta: dict) -> float:
+        """Score a step with the active curriculum stage and advance on terminals.
+
+        Returns:
+            float: Reward from the currently active curriculum stage.
+        """
+        stage_idx = self.current_stage_index
+        reward = float(self.stage_callables[stage_idx](meta))
+        if self._is_terminal(meta):
+            if not self._terminal_latched:
+                self.episodes_completed += 1
+                self._terminal_latched = True
+        else:
+            step_of_episode = int(meta.get("step_of_episode", 0) or 0)
+            if step_of_episode <= 1:
+                self._terminal_latched = False
+        return reward
+
+    @property
+    def current_stage_index(self) -> int:
+        """Return the currently active curriculum stage index."""
+        for idx, until_episodes in enumerate(self.stage_boundaries):
+            if until_episodes is None or self.episodes_completed < until_episodes:
+                return idx
+        return len(self.stage_boundaries) - 1
+
+    @property
+    def current_stage_label(self) -> str:
+        """Return the current stage label for logging and diagnostics."""
+        return self.stage_labels[self.current_stage_index]
+
+    @staticmethod
+    def _is_terminal(meta: Mapping[str, object]) -> bool:
+        return bool(
+            meta.get("is_route_complete")
+            or meta.get("is_timesteps_exceeded")
+            or meta.get("is_pedestrian_collision")
+            or meta.get("is_robot_collision")
+            or meta.get("is_obstacle_collision")
+        )
 
 
 def _compute_snqi_reward_score(
@@ -131,6 +199,69 @@ def simple_ped_reward(
         reward += robot_coll_reward
 
     # If the robot completed the route, apply penalty.
+    if meta.get("is_route_complete"):
+        reward += robot_route_complete_penalty
+
+    return float(reward)
+
+
+def stationary_collision_ped_reward(  # noqa: PLR0913
+    meta: dict,
+    max_episode_step_discount: float = -0.1,
+    ped_coll_penalty: float = -5,
+    obst_coll_penalty: float = -5,
+    stationary_collision_reward: float = 10,
+    slow_coll_reward: float = 8,
+    robot_coll_reward: float = 5,
+    robot_route_complete_penalty: float = -2,
+    stationary_speed_epsilon: float = 0.1,
+    slow_speed: float = 1.0,
+) -> float:
+    """Pedestrian reward that grants bonus for collisions while ego pedestrian is stationary.
+
+    Args:
+        meta: Metadata dictionary describing collisions, goal status, and optional speed/action.
+        max_episode_step_discount: Per-step discount divided by ``max_sim_steps``.
+        ped_coll_penalty: Penalty applied when colliding with pedestrians while moving.
+        obst_coll_penalty: Penalty applied when colliding with obstacles.
+        stationary_collision_reward: Bonus granted when pedestrian collision occurs at zero speed.
+        slow_coll_reward: Bonus granted when pedestrian collision occurs at low speed.
+        robot_coll_reward: Reward granted when colliding with the robot.
+        robot_route_complete_penalty: Penalty applied if the robot completes its route.
+        stationary_speed_epsilon: Speed threshold to consider the ego pedestrian stationary.
+        slow_speed: Speed threshold to consider the ego pedestrian moving slowly.
+
+    Returns:
+        float: Scalar reward for the timestep.
+    """
+
+    reward = max_episode_step_discount / meta["max_sim_steps"]
+
+    distance = meta["distance_to_robot"]
+    reward += distance * -0.001
+
+    ego_speed = meta["ego_ped_speed"]
+
+    is_stationary = ego_speed <= max(0.0, float(stationary_speed_epsilon))
+    is_slow = ego_speed <= float(slow_speed)
+    is_robot_collision = meta["is_robot_collision"]
+
+    if is_robot_collision and is_stationary:
+        # logger.warning(
+        #     f"Stationary collision detected at speed {ego_speed:.4f} m/s, granting reward."
+        # )
+        reward += stationary_collision_reward
+    elif is_robot_collision and is_slow:
+        reward += slow_coll_reward
+    elif is_robot_collision:
+        reward += robot_coll_reward
+
+    if meta["is_pedestrian_collision"]:
+        reward += ped_coll_penalty
+
+    if meta["is_obstacle_collision"]:
+        reward += obst_coll_penalty
+
     if meta.get("is_route_complete"):
         reward += robot_route_complete_penalty
 
@@ -499,6 +630,12 @@ def build_reward_function(
         return partial(route_completion_v3_reward, **kwargs)
     if normalized in {"social_quality_v1", "social_quality"}:
         return partial(social_quality_v1_reward, **kwargs)
+    if normalized in {
+        "stationary_collision_ped",
+        "stationary_collision_ped_reward",
+        "ped_stationary_collision",
+    }:
+        return partial(stationary_collision_ped_reward, **kwargs)
     supported = (
         "simple",
         "punish_action",
@@ -510,5 +647,60 @@ def build_reward_function(
         "route_completion_v3",
         "social_quality_v1",
         "social_quality",
+        "stationary_collision_ped",
+        "ped_stationary_collision",
     )
     raise ValueError(f"Unknown reward_name '{reward_name}'. Supported: {supported}")
+
+
+def build_reward_curriculum_function(
+    curriculum: Mapping[str, object],
+    *,
+    default_reward_name: str,
+    default_reward_kwargs: Mapping[str, object] | None = None,
+) -> RewardCurriculumReward:
+    """Build a staged reward callable from a curriculum config.
+
+    Returns:
+        RewardCurriculumReward: Stateful wrapper that switches stages after terminal episodes.
+    """
+
+    raw_stages = curriculum.get("stages")
+    if not isinstance(raw_stages, Sequence) or not raw_stages:
+        raise ValueError("reward_curriculum.stages must be a non-empty sequence")
+
+    stage_callables: list[Callable[[dict], float]] = []
+    stage_boundaries: list[int | None] = []
+    stage_labels: list[str] = []
+    previous_boundary = -1
+    for index, raw_stage in enumerate(raw_stages):
+        if not isinstance(raw_stage, Mapping):
+            raise ValueError("reward_curriculum.stages entries must be mappings")
+        until_episodes_raw = raw_stage.get("until_episodes")
+        until_episodes = int(until_episodes_raw) if until_episodes_raw is not None else None
+        if until_episodes is None and index != len(raw_stages) - 1:
+            raise ValueError("Only the final reward curriculum stage may omit until_episodes")
+        if until_episodes is not None:
+            if until_episodes <= previous_boundary:
+                raise ValueError(
+                    "reward_curriculum.stages must use strictly increasing until_episodes"
+                )
+            previous_boundary = until_episodes
+        reward_name = str(raw_stage.get("reward_name", default_reward_name))
+        reward_kwargs = dict(default_reward_kwargs or {})
+        stage_kwargs = raw_stage.get("reward_kwargs")
+        if stage_kwargs is not None:
+            if not isinstance(stage_kwargs, Mapping):
+                raise ValueError("reward_curriculum stage reward_kwargs must be a mapping")
+            reward_kwargs.update(stage_kwargs)
+        stage_callables.append(build_reward_function(reward_name, reward_kwargs=reward_kwargs))
+        stage_boundaries.append(until_episodes)
+        stage_labels.append(
+            f"{reward_name}:{until_episodes if until_episodes is not None else 'final'}"
+        )
+
+    return RewardCurriculumReward(
+        stage_callables=tuple(stage_callables),
+        stage_boundaries=tuple(stage_boundaries),
+        stage_labels=tuple(stage_labels),
+    )

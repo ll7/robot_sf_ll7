@@ -44,6 +44,36 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["adapted_steps"] == 0
 
 
+def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
+    """Safety-barrier metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="safety_barrier",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "native_barrier_style_safety_filter"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "SafetyBarrierPlannerAdapter"
+
+
+def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
+    """Grid-route metadata should expose the testing-only adapter contract."""
+    meta = enrich_algorithm_metadata(
+        algo="grid_route",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "occupancy_grid_route_tracking"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "GridRoutePlannerAdapter"
+
+
 def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
     """ORCA metadata should make the upstream source and projection policy explicit."""
     meta = enrich_algorithm_metadata(
@@ -59,6 +89,62 @@ def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> N
     assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
     assert upstream["repo_url"] == "https://github.com/mit-acl/Python-RVO2"
     assert upstream["vendored_path"] == "third_party/python-rvo2"
+
+
+def test_hrvo_metadata_exposes_local_provenance_boundary() -> None:
+    """HRVO metadata should describe the local implementation and its references honestly."""
+    meta = enrich_algorithm_metadata(
+        algo="hrvo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "hybrid_reciprocal_velocity_obstacle"
+    assert planner["upstream_command_space"] == "velocity_vector_xy"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/snape/HRVO"
+    assert upstream["provenance_note"] == (
+        "Local implementation informed by upstream references; not a wrapped upstream runtime."
+    )
+
+
+def test_socnav_orca_variant_metadata_is_registered_and_experimental() -> None:
+    """SocNav ORCA variants should expose classical benchmark semantics and explicit opt-in readiness."""
+    for algo in (
+        "socnav_orca_nonholonomic",
+        "socnav_orca_dd",
+        "socnav_orca_relaxed",
+        "socnav_hrvo",
+    ):
+        meta = enrich_algorithm_metadata(
+            algo=algo,
+            metadata={"status": "ok"},
+            execution_mode="adapter",
+            robot_kinematics="differential_drive",
+        )
+        assert meta["baseline_category"] == "classical"
+        assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
+        assert meta["planner_kinematics"]["supports_adapter_commands"] is True
+
+
+def test_drl_vo_metadata_exposes_reference_contract() -> None:
+    """DRL-VO metadata should expose hybrid planner reference contract."""
+    meta = enrich_algorithm_metadata(
+        algo="drl_vo",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "hybrid_deep_reinforcement_velocity_obstacle"
+    assert meta["planner_kinematics"]["upstream_command_space"] == "velocity_vector_xy"
+    assert meta["planner_kinematics"]["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    upstream = meta["upstream_reference"]
+    assert upstream["repo_url"] == "https://github.com/TempleRAIL/drl_vo_nav"
+    assert upstream["commit"] == "6d734b6e0df77fd4c4faa4649ca0fcb3e69cf835"
 
 
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
@@ -126,6 +212,143 @@ def test_social_navigation_pyenvs_hsfm_metadata_exposes_headed_wrapper_contract(
     assert planner["upstream_command_space"] == "body_velocity_xy_plus_omega"
     assert planner["projection_policy"] == "body_velocity_heading_safe_to_unicycle_vw"
     assert upstream["upstream_policy"] == "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo"
+
+
+def test_crowdnav_height_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """CrowdNav_HEIGHT metadata should expose the upstream repo and checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="crowdnav_height",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_crowdnav_height_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "discrete_delta_v_and_delta_theta"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "upstream_discrete_delta_vw_to_unicycle_vw_stateful"
+    assert upstream["repo_url"] == "https://github.com/Shuijing725/CrowdNav_HEIGHT"
+    assert upstream["default_checkpoint"] == "HEIGHT/checkpoints/237800.pt"
+
+
+def test_sonic_crowdnav_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """SoNIC metadata should expose model-only wrapper boundaries and projection policy."""
+    meta = enrich_algorithm_metadata(
+        algo="sonic_gst",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_sonic_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/SoNIC-Social-Nav"
+    assert upstream["default_model_name"] == "SoNIC_GST"
+
+
+def test_gensafenav_ours_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """GenSafeNav Ours_GST metadata should expose the upstream checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/GenSafeNav"
+    assert upstream["default_model_name"] == "Ours_GST"
+
+
+def test_gensafenav_gst_predictor_rand_metadata_exposes_checkpoint_wrapper_contract() -> None:
+    """GenSafeNav CrowdNav++-style metadata should expose the upstream checkpoint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="gst_predictor_rand",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "upstream_gensafenav_checkpoint_wrapper"
+    assert planner["upstream_command_space"] == "holonomic_velocity_xy"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert upstream["repo_url"] == "https://github.com/tasl-lab/GenSafeNav"
+    assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
+def test_gensafenav_ours_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded Ours_GST metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "Ours_GST"
+
+
+def test_gensafenav_gst_predictor_rand_guarded_metadata_exposes_mixed_guarded_contract() -> None:
+    """Guarded GST_predictor_rand metadata should expose mixed execution and fallback boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="gst_predictor_rand_guarded",
+        metadata={"status": "ok"},
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    upstream = meta["upstream_reference"]
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "guarded_upstream_gensafenav_checkpoint_wrapper"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is True
+    assert planner["execution_mode"] == "mixed"
+    assert upstream["default_model_name"] == "GST_predictor_rand"
+
+
+def test_guarded_gensafenav_metadata_execution_mode_override_still_applies() -> None:
+    """Guarded wrappers should still honor an explicit execution-mode override."""
+    meta = enrich_algorithm_metadata(
+        algo="ours_gst_guarded",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
+    """NMPC metadata should classify the planner as a native optimizer-style adapter."""
+    meta = enrich_algorithm_metadata(
+        algo="nmpc_social",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "NMPCSocialPlannerAdapter"
 
 
 def test_infer_execution_mode_from_counts() -> None:

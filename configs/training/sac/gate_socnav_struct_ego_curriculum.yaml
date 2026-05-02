@@ -1,0 +1,78 @@
+# SAC gate training configuration with ego-frame observations, reward tuning,
+# and scenario sampling weighted toward hard verification cases.
+#
+# Purpose: Improve SAC benchmark transfer by aligning the training observation
+# contract with the benchmark adapter and focusing training on corner-case
+# scenarios in the verified simple subset.
+
+policy_id: sac_gate_socnav_struct_ego_curriculum_v1
+scenario_config: ../../scenarios/sets/verified_simple_subset_v1.yaml
+total_timesteps: 100000
+seed: 42
+action_semantics: delta
+relative_obs: true
+obs_transform: ego
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 3.0e-4
+  buffer_size: 150000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 5000
+
+env_overrides:
+  observation_mode: socnav_struct
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 3.0
+      living: -0.01
+      collision: -8.0
+      near_miss: -1.0
+      ttc_risk: -1.0
+      comfort: -0.4
+      smoothness: -0.1
+      terminal_bonus: 5.0
+
+scenario_sampling:
+  strategy: random
+  weights:
+    head_on_interaction: 4.0
+    overtaking_interaction: 3.0
+    narrow_passage: 3.0
+    line_wall_detour: 2.5
+    single_ped_crossing_orthogonal: 2.0
+    single_obstacle_circle: 2.0
+    goal_behind_robot: 1.0
+    empty_map_8_directions_east: 0.5
+    empty_map_8_directions_north: 0.5
+    empty_map_8_directions_west: 0.5
+
+evaluation:
+  enabled: true
+  frequency_steps: 20000
+  scenario_matrix: ../../scenarios/sets/verified_simple_subset_v1.yaml
+  algo_config: ../../../configs/baselines/sac_gate_socnav_struct_ego.yaml
+  output_dir: output/tmp/sac_eval
+  tag_prefix: sac_eval_cur
+  horizon: 250
+  dt: 0.1
+  workers: 1
+  min_success_rate: 0.3
+
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_gate_socnav_struct_ego_curriculum_v1
+  tags:
+    - sac
+    - ego
+    - curriculum

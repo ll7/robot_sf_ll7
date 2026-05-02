@@ -199,6 +199,18 @@ examples:
     ci_reason: "Requires external PPO checkpoint and long recording playback."
     doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, recording]
+  - path: advanced/32_demo_adversarial_pedestrian.py
+    name: "32 Demo Adversarial Pedestrian"
+    summary: "Run a modernized debug rollout for pedestrian PPO policies with factory-based setup."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/masterthesis/intersection.svg
+      - model/run_043
+      - model_ped/ppo_intersection.zip
+    ci_enabled: false
+    ci_reason: "Interactive pygame debug demo with offline checkpoints."
+    doc_reference: docs/dev_guide.md#advanced-feature-demos
+    tags: [pedestrian, policy, debug, ppo]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."

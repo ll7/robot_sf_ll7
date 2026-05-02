@@ -1,0 +1,16 @@
+seed_schedules:
+  smoke:
+    seeds: [ 111 ]
+    policy: explicit_single_seed
+  nominal_sanity:
+    seeds: [ 111, 112, 113 ]
+    manifest: nominal_sanity_seeds.yaml
+  stress_slice:
+    seeds: [ 111, 112, 113 ]
+    manifest: stress_slice_seeds.yaml
+  full_matrix:
+    seeds: [ 111, 112, 113 ]
+    manifest: configs/benchmarks/seed_list_v1.yaml
+  robustness_extension:
+    seeds: [ 114, 115 ]
+    manifest: robustness_extension_seeds.yaml

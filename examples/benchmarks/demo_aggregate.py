@@ -21,6 +21,7 @@ Limitations:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
@@ -54,12 +55,14 @@ def _write_demo_matrix(path: Path) -> None:
 
 
 def main() -> None:
+    """Run the synthetic aggregate demo and write the summary artifacts."""
+
     # Use helper catalog to ensure output directory exists
-    """TODO docstring. Document this function."""
     out_dir = ensure_output_dir(Path("output/results/demo_aggregate"))
 
     matrix_path = out_dir / "matrix.yaml"
     episodes_path = out_dir / "episodes.jsonl"
+    fast_demo = os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1"
 
     _write_demo_matrix(matrix_path)
 
@@ -71,7 +74,7 @@ def main() -> None:
         schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
         base_seed=0,
         repeats_override=None,
-        horizon=8,
+        horizon=4 if fast_demo else 8,
         dt=0.1,
         record_forces=False,
         append=False,
@@ -88,11 +91,12 @@ def main() -> None:
     # Read episodes and compute aggregates with CIs
     print("Computing grouped aggregates with bootstrap CIs ...")
     records = read_jsonl(episodes_path)
+    bootstrap_samples = 10 if fast_demo else 500
     summary = compute_aggregates_with_ci(
         records,
         group_by="scenario_params.algo",
         fallback_group_by="scenario_id",
-        bootstrap_samples=500,
+        bootstrap_samples=bootstrap_samples,
         bootstrap_confidence=0.95,
         bootstrap_seed=123,
     )

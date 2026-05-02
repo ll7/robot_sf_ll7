@@ -30,10 +30,10 @@ def test_resolve_includes_rejects_directories(tmp_path: Path) -> None:
 
 def test_map_search_paths_skip_missing_entries(tmp_path: Path) -> None:
     """Ignore missing map_search_paths entries instead of crashing."""
-    root = tmp_path / "manifest.yaml"
+    source = tmp_path / "manifest.yaml"
     paths = scenario_loader._resolve_map_search_paths(
         {"map_search_paths": ["missing"]},
-        root=root,
+        source=source,
     )
     assert paths == []
 
@@ -78,8 +78,8 @@ def test_rebase_scenario_paths_keeps_unresolved(tmp_path: Path) -> None:
 
 
 def test_load_map_definition_unsupported_extension(tmp_path: Path) -> None:
-    """Skip unsupported map formats gracefully."""
-    bad_map = tmp_path / "map.txt"
+    """Skip unsupported map formats gracefully, including legacy map paths."""
+    bad_map = tmp_path / "map.json"
     bad_map.write_text("not a map", encoding="utf-8")
     scenario_loader._load_map_definition.cache_clear()
     assert scenario_loader._load_map_definition(str(bad_map)) is None
@@ -115,6 +115,28 @@ def test_iter_map_registry_entries_rejects_invalid_format(tmp_path: Path) -> Non
                 registry_path=tmp_path / "registry.yaml",
             )
         )
+
+
+@pytest.mark.parametrize("scenarios_value", ["", None, "{}"])
+def test_load_scenarios_rejects_non_list_scenarios_key(
+    tmp_path: Path,
+    scenarios_value: object,
+) -> None:
+    """The manifest parser should fail fast when scenarios is not a list."""
+    manifest = tmp_path / "manifest.yaml"
+    if scenarios_value == "{}":
+        scenarios_yaml = "scenarios: {}\n"
+    elif scenarios_value is None:
+        scenarios_yaml = "scenarios: null\n"
+    else:
+        scenarios_yaml = 'scenarios: ""\n'
+    _write_yaml(
+        manifest,
+        scenarios_yaml,
+    )
+
+    with pytest.raises(ValueError, match="Scenario config 'scenarios' must be a list"):
+        scenario_loader.load_scenarios(manifest)
 
 
 def test_register_map_entry_resolves_relative_paths_and_duplicates(tmp_path: Path) -> None:

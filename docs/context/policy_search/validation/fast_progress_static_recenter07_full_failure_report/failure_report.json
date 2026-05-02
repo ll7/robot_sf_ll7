@@ -1,0 +1,88 @@
+{
+  "jsonl_path": "output/ai/autoresearch/best_policy_next/fast_progress_static_recenter07_full_h500_w2/full_matrix__hybrid_rule_v3_fast_progress_static_escape.jsonl",
+  "summary": {
+    "episodes": 141,
+    "success_rate": 0.8936170212765957,
+    "collision_rate": 0.02127659574468085,
+    "near_miss_rate": 0.41134751773049644,
+    "termination_reason_counts": {
+      "success": 126,
+      "max_steps": 7,
+      "collision": 3,
+      "terminated": 5
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 5,
+      "static_collision": 3,
+      "timeout_low_progress": 7
+    },
+    "scenario_family": {
+      "classic": {
+        "episodes": 66,
+        "success_rate": 0.8636363636363636,
+        "collision_rate": 0.030303030303030304,
+        "near_miss_rate": 0.48484848484848486
+      },
+      "francis2023": {
+        "episodes": 75,
+        "success_rate": 0.92,
+        "collision_rate": 0.013333333333333334,
+        "near_miss_rate": 0.3466666666666667
+      }
+    },
+    "mean_min_distance": 2.8736094979767723,
+    "mean_avg_speed": 1.4136453221255911
+  },
+  "scenario_failure_counts": [
+    {
+      "failure_mode": "near_miss_intrusive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "count": 3
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "francis2023_narrow_doorway",
+      "count": 3
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "classic_merging_medium",
+      "count": 2
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "classic_cross_trap_high",
+      "count": 1
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "classic_merging_low",
+      "count": 1
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "classic_merging_low",
+      "count": 1
+    },
+    {
+      "failure_mode": "near_miss_intrusive",
+      "scenario_id": "classic_merging_medium",
+      "count": 1
+    },
+    {
+      "failure_mode": "near_miss_intrusive",
+      "scenario_id": "francis2023_leave_group",
+      "count": 1
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "count": 1
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "francis2023_circular_crossing",
+      "count": 1
+    }
+  ]
+}

@@ -35,6 +35,7 @@ from python_motion_planning.common import TYPES, Grid, Visualizer
 from python_motion_planning.path_planner import AStar, ThetaStar
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
+from shapely.ops import unary_union
 from shapely.validation import explain_validity
 
 from robot_sf.common import ensure_interactive_backend
@@ -241,7 +242,14 @@ def map_definition_to_motion_planning_grid(
         grid.fill_boundary_with_obstacles()
 
     for idx, obstacle in enumerate(map_def.obstacles):
-        poly = Polygon(obstacle.vertices)
+        polygons = obstacle.iter_polygons()
+        if not polygons:
+            logger.warning(
+                "Skipping degenerate obstacle during grid rasterization "
+                f"(index={idx}, no polygon members)",
+            )
+            continue
+        poly = unary_union(polygons)
         if not poly.is_valid:
             logger.warning(
                 "Skipping invalid obstacle during grid rasterization "

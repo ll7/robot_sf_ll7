@@ -1,0 +1,66 @@
+{
+  "schema_version": "tracked-publication-snapshot.v1",
+  "snapshot_date": "2026-04-09",
+  "release": {
+    "tag": "camera-ready-v0.0.1a",
+    "url": "https://github.com/ll7/robot_sf_ll7/releases/tag/camera-ready-v0.0.1a",
+    "doi_url": "https://doi.org/10.5281/zenodo.19482026",
+    "prerelease": true,
+    "target_commit": "a60119aa10ed677a55a8b6b69264d4aeabfdb811"
+  },
+  "assets": {
+    "bundle_archive": {
+      "name": "paper_experiment_matrix_v1_release_rehearsal_latest_20260409_20260409_120154_publication_bundle.tar.gz",
+      "url": "https://github.com/ll7/robot_sf_ll7/releases/download/camera-ready-v0.0.1a/paper_experiment_matrix_v1_release_rehearsal_latest_20260409_20260409_120154_publication_bundle.tar.gz",
+      "sha256": "0b4d01c2f47c06cb1ec33e7a28cf544a55d27375f5bf7aa145867e3cf628e140",
+      "size_bytes": 541735
+    },
+    "manifest": {
+      "name": "publication_manifest.json",
+      "url": "https://github.com/ll7/robot_sf_ll7/releases/download/camera-ready-v0.0.1a/publication_manifest.json",
+      "sha256": "14a1da25d016e71866fd98acd21686617c90e57785d9514039fde6adc93ce07a",
+      "size_bytes": 13007
+    },
+    "checksums": {
+      "name": "checksums.sha256",
+      "url": "https://github.com/ll7/robot_sf_ll7/releases/download/camera-ready-v0.0.1a/checksums.sha256",
+      "sha256": "ad273ec4cbc0571422d98ebe4058e510e6ec3f8f180694558c8560068eaddacf",
+      "size_bytes": 4939
+    }
+  },
+  "campaign": {
+    "campaign_id": "paper_experiment_matrix_v1_release_rehearsal_latest_20260409_20260409_120154",
+    "name": "paper_experiment_matrix_v1",
+    "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "scenario_matrix_hash": "6bfb216f1c48",
+    "git_hash": "a60119aa10ed677a55a8b6b69264d4aeabfdb811",
+    "total_episodes": 987,
+    "successful_runs": 7,
+    "total_runs": 7,
+    "runtime_sec": 728.7301911249997,
+    "episodes_per_second": 1.354410743537726,
+    "paper_profile_version": "paper-matrix-v1",
+    "paper_interpretation_profile": "baseline-ready-core",
+    "amv_coverage_status": "warn",
+    "snqi_contract_status": "warn",
+    "snqi_contract_rank_alignment_spearman": 0.35714285714285715,
+    "snqi_contract_outcome_separation": 0.20258691450018332,
+    "snqi_contract_dominant_component": "time_penalty"
+  },
+  "seed_policy": {
+    "mode": "seed-set",
+    "seed_set": "eval",
+    "resolved_seeds": [
+      111,
+      112,
+      113
+    ],
+    "repeat_count_per_planner_seed": 47
+  },
+  "publication_bundle": {
+    "bundle_name": "paper_experiment_matrix_v1_release_rehearsal_latest_20260409_20260409_120154_publication_bundle",
+    "file_count": 48,
+    "total_bytes": 7465335,
+    "policy_profile": "public-paper-v1"
+  }
+}

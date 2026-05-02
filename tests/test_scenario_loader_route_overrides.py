@@ -122,9 +122,9 @@ def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() 
 def test_build_robot_config_applies_bicycle_robot_overrides() -> None:
     """Scenario robot_config should instantiate bicycle settings and selected fields."""
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    # No map_file: these tests target robot_config overrides, not map loading.
     scenario = {
         "name": "demo",
-        "map_file": "maps/svg_maps/classic_overtaking.svg",
         "robot_config": {
             "type": "bicycle_drive",
             "max_velocity": 1.2,
@@ -142,7 +142,6 @@ def test_build_robot_config_applies_holonomic_overrides() -> None:
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
     scenario = {
         "name": "demo",
-        "map_file": "maps/svg_maps/classic_overtaking.svg",
         "robot_config": {
             "type": "holonomic",
             "max_speed": 1.5,
@@ -160,7 +159,6 @@ def test_build_robot_config_rejects_unknown_robot_type() -> None:
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
     scenario = {
         "name": "demo",
-        "map_file": "maps/svg_maps/classic_overtaking.svg",
         "robot_config": {"type": "unknown_type"},
     }
     with pytest.raises(ValueError, match="robot_config.type"):
@@ -172,7 +170,6 @@ def test_build_robot_config_parses_allow_backwards_string_booleans() -> None:
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
     scenario = {
         "name": "demo",
-        "map_file": "maps/svg_maps/classic_overtaking.svg",
         "robot_config": {
             "type": "differential_drive",
             "allow_backwards": "false",
@@ -187,7 +184,6 @@ def test_build_robot_config_rejects_invalid_allow_backwards_string() -> None:
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
     scenario = {
         "name": "demo",
-        "map_file": "maps/svg_maps/classic_overtaking.svg",
         "robot_config": {
             "type": "bicycle_drive",
             "allow_backwards": "maybe",

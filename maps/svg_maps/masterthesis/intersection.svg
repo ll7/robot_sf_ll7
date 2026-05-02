@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="64"
+   height="28.974001"
+   viewBox="0 0 64 28.974011"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.3 (fcd0343856, 2026-01-01)"
+   sodipodi:docname="intersection.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="12.993087"
+     inkscape:cx="36.096118"
+     inkscape:cy="32.555774"
+     inkscape:window-width="1877"
+     inkscape:window-height="1214"
+     inkscape:window-x="387"
+     inkscape:window-y="124"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer3" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Ped"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#107400;fill-opacity:1;stroke:#107400;stroke-width:0.0618705;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect6"
+       width="3.9381294"
+       height="3.9381294"
+       x="28.434994"
+       y="20.146517"
+       ry="0.083189718"
+       inkscape:label="ped_goal_zone" />
+    <rect
+       style="fill:#23ff00;fill-opacity:1;stroke:#23ff00;stroke-width:0.0606029;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5"
+       width="3.9393971"
+       height="3.9393971"
+       x="28.935183"
+       y="5.3185854"
+       ry="0.075839706"
+       inkscape:label="ped_spawn_zone" />
+    <path
+       style="fill:none;stroke:#b40305;stroke-width:0.2912;stroke-linejoin:bevel;stroke-opacity:1"
+       d="M 30.789029,10.010278 30.551282,19.466936"
+       id="path2"
+       inkscape:label="ped_route_0_0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Obstacles">
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.284696;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect10"
+       width="23.176216"
+       height="2.5092461"
+       x="3.5423572"
+       y="9.9980907"
+       ry="0.011052718"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.270969;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect10-1"
+       width="20.881021"
+       height="2.5229723"
+       x="35.523499"
+       y="10.051072"
+       ry="0.01111318"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.140294;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect11"
+       width="1.8443469"
+       height="8.9990625"
+       x="24.905687"
+       y="3.4963789"
+       ry="0.039833244"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.142004;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect11-3"
+       width="1.8426375"
+       height="9.2282448"
+       x="35.302429"
+       y="3.5317202"
+       ry="0.040847693"
+       inkscape:label="obstacle" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Robot">
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#ff6c00;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4-1"
+       width="2"
+       height="2"
+       x="54.060478"
+       y="13.744748"
+       ry="0.056305632"
+       inkscape:label="robot_goal_zone" />
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3"
+       width="2"
+       height="2"
+       x="5.2944279"
+       y="13.923526"
+       ry="0.041662347"
+       inkscape:label="robot_spawn_zone" />
+    <path
+       style="fill:none;stroke:#3544ff;stroke-width:0.5;stroke-linejoin:bevel;stroke-opacity:1"
+       d="M 8.2351484,15.161909 22.627417,15.238873 39.02075,15.161909 52.797307,15.007981"
+       id="path3"
+       inkscape:label="robot_route_0_0" />
+  </g>
+</svg>

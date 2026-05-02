@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from math import dist
 from pathlib import Path
 
 import pytest
 
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -135,29 +137,45 @@ def test_verified_simple_subset_scenarios_include_metadata_contract() -> None:
 
 def test_atomic_issue_596_maps_pass_repo_verifier(tmp_path: Path) -> None:
     """The new atomic SVG maps should be accepted by the repository map verifier."""
-    import subprocess
-    import sys
+    from robot_sf.maps.verification.runner import verify_maps
 
     for map_name in ATOMIC_MAP_FILENAMES:
         output_path = tmp_path / f"{map_name}.json"
-        result = subprocess.run(
-            [
-                sys.executable,
-                "scripts/validation/verify_maps.py",
-                "--scope",
-                map_name,
-                "--mode",
-                "ci",
-                "--output",
-                str(output_path),
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+        summary = verify_maps(
+            scope=map_name,
+            mode="ci",
+            output_path=output_path,
         )
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert summary.total_maps == 1, (
+            f"Verifier scope matched {summary.total_maps} maps for {map_name}; expected 1"
+        )
+        assert summary.failed == 0, f"Map verifier failed for {map_name}: {summary.results}"
         assert output_path.exists(), f"Verifier did not emit a manifest for {map_name}"
+
+
+@pytest.mark.parametrize(
+    "scenario_name",
+    ["line_wall_detour", "narrow_passage", "symmetry_ambiguous_choice"],
+)
+def test_atomic_topology_scenarios_rebase_initial_handoff_target(scenario_name: str) -> None:
+    """Topology-heavy scenarios should not start with an immediately satisfiable handoff target."""
+    scenarios = {scenario["name"]: scenario for scenario in _load(FULL_MANIFEST)}
+    scenario = scenarios[scenario_name]
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=FULL_MANIFEST)
+    map_def = next(iter(config.map_pool.map_defs.values()))
+    env = make_robot_env(config=config, seed=0, debug=False)
+    try:
+        env.reset(seed=0)
+        nav = env.simulator.robot_navs[0]
+        robot_pos = env.simulator.robots[0].pose[0]
+        original_first_waypoint = map_def.robot_routes[0].waypoints[0]
+
+        assert dist(original_first_waypoint, robot_pos) <= nav.proximity_threshold
+        assert dist(nav.current_waypoint, robot_pos) > nav.proximity_threshold
+        assert not nav.reached_waypoint
+    finally:
+        env.close()
 
 
 def test_zero_density_scenarios_set_density_advisory() -> None:

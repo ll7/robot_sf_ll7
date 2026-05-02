@@ -1,0 +1,31 @@
+baselines:
+  orca:
+    success_rate: 0.1844
+    collision_rate: 0.0355
+    classic_collision_rate: 0.0300
+    francis_collision_rate: 0.0400
+  ppo:
+    success_rate: 0.2482
+    collision_rate: 0.0993
+  goal:
+    success_rate: 0.0142
+    collision_rate: 0.2411
+
+gates:
+  nominal_sanity:
+    min_success_rate: 0.80
+    max_collision_rate: 0.02
+  tier_a:
+    min_success_rate: 0.30
+    max_collision_rate: 0.05
+  tier_b:
+    min_success_rate: 0.264
+    max_collision_rate: 0.055
+  tier_c:
+    min_success_rate: 0.248
+    max_collision_rate: 0.050
+  scenario_stratified:
+    classic_collision_rate_max: 0.07
+    francis_collision_rate_max: 0.05
+    classic_success_rate_min: null
+    francis_success_rate_min: null

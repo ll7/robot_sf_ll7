@@ -17,7 +17,7 @@ evaluation:
   frequency_episodes: 10
   evaluation_episodes: 5
   hold_out_scenarios:
-    - classic_crossing_medium
+    - classic_cross_trap_medium
     - classic_bottleneck_high
   step_schedule:
     - every_steps: 20000

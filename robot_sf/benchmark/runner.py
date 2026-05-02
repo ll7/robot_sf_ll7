@@ -603,15 +603,21 @@ def _annotate_and_check_video_perf(
 ) -> None:
     """Annotate manifest with encode timing and enforce optional budgets.
 
-    Adds keys: encode_seconds, overhead_ratio.
+    Adds keys: encode_seconds, overhead_ratio, overhead_budget_status,
+    overhead_budget_enforced, overhead_soft_threshold, and overhead_hard_threshold.
     Budget env vars:
       - ROBOT_SF_VIDEO_OVERHEAD_SOFT (default 0.10)
       - ROBOT_SF_VIDEO_OVERHEAD_HARD (default 0.50)
       - ROBOT_SF_PERF_ENFORCE (any non-empty to enforce)
+      - ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO (for testing only — forces a ratio)
     """
     encode_seconds = float(max(0.0, enc_end - enc_start))
     total_elapsed = float(max(1e-9, enc_end - perf_start))
-    overhead_ratio = float(encode_seconds / total_elapsed)
+    override_ratio_raw = os.getenv("ROBOT_SF_TEST_OVERRIDE_OVERHEAD_RATIO")
+    if override_ratio_raw:
+        overhead_ratio = float(override_ratio_raw)
+    else:
+        overhead_ratio = float(encode_seconds / total_elapsed)
     vid["encode_seconds"] = encode_seconds
     vid["overhead_ratio"] = overhead_ratio
     record["video"] = vid
@@ -619,6 +625,17 @@ def _annotate_and_check_video_perf(
     soft = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.10"))
     hard = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.50"))
     enforce = bool(os.getenv("ROBOT_SF_PERF_ENFORCE"))
+    if overhead_ratio > hard:
+        budget_status = "hard_breach"
+    elif overhead_ratio > soft:
+        budget_status = "soft_breach"
+    else:
+        budget_status = "ok"
+    vid["overhead_budget_status"] = budget_status
+    vid["overhead_budget_enforced"] = enforce
+    vid["overhead_soft_threshold"] = soft
+    vid["overhead_hard_threshold"] = hard
+
     if overhead_ratio > hard:
         if enforce:
             raise RuntimeError(
@@ -1038,7 +1055,7 @@ def validate_and_write(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 __all__ = [
@@ -1100,7 +1117,7 @@ def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[st
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(rec) + "\n")
+        f.write(json.dumps(rec, sort_keys=True) + "\n")
 
 
 def _run_batch_sequential(
@@ -1148,7 +1165,7 @@ def _run_batch_sequential(
     return wrote, failures
 
 
-def _run_batch_parallel(
+def _run_batch_parallel(  # noqa: C901
     jobs: list[tuple[dict[str, Any], int]],
     *,
     out_path: Path,
@@ -1166,6 +1183,7 @@ def _run_batch_parallel(
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
+    results_by_idx: dict[int, dict[str, Any]] = {}
     # Submit all jobs
     with ProcessPoolExecutor(max_workers=int(workers)) as ex:
         future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
@@ -1175,9 +1193,7 @@ def _run_batch_parallel(
         for fut in as_completed(future_to_job):
             idx, sc, seed = future_to_job[fut]
             try:
-                rec = fut.result()
-                _write_validated_record(out_path, schema, rec)
-                wrote += 1
+                results_by_idx[idx] = fut.result()
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, True, None)
@@ -1197,10 +1213,23 @@ def _run_batch_parallel(
                     except Exception:  # pragma: no cover
                         pass
                 if fail_fast:
-                    # Cancel remaining futures and re-raise
                     for f in future_to_job:
                         f.cancel()
                     raise
+    for idx in sorted(results_by_idx):
+        try:
+            _write_validated_record(out_path, schema, results_by_idx[idx])
+            wrote += 1
+        except Exception as e:  # pragma: no cover - write/validate path
+            failures.append(
+                {
+                    "scenario_id": results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
+                    "seed": results_by_idx[idx].get("seed", -1),
+                    "error": repr(e),
+                },
+            )
+            if fail_fast:
+                raise
     return wrote, failures
 
 

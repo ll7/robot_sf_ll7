@@ -113,3 +113,75 @@ Interpretation:
 - The bundled SoNIC checkpoint is reusable at inference time only with narrow compatibility shims.
 - This is enough to justify future model-only adapter work.
 - It is not enough to claim source-harness parity or benchmark-readiness.
+
+## Aggressive Source Repro Follow-up
+
+Date: 2026-04-15
+
+Artifacts:
+
+- `output/validation/issue_626_sonic_source_repro/latest/create_env_stdout.log`
+- `output/validation/issue_626_sonic_source_repro/latest/environment_probe.txt`
+- `output/validation/issue_626_sonic_source_repro/latest/install_gym.stdout.log`
+- `output/validation/issue_626_sonic_source_repro/latest/pip_freeze.txt`
+- `output/validation/issue_626_sonic_source_repro/latest/test_without_gym.stderr.log`
+- `output/validation/issue_626_sonic_source_repro/latest/test_with_gym.stderr.log`
+
+Side environment:
+
+- OS: `Linux imech156-u 6.8.0-87-generic #88-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 11 09:28:41 UTC 2025 x86_64`
+- Python: `3.11.11`
+- Timestamp: `2026-04-15T20:47:09+02:00`
+- Venv path: `output/validation/issue_626_sonic_source_repro/latest/.venv`
+- System site packages: enabled via `uv venv --system-site-packages`
+
+Exact commands rerun:
+
+```bash
+uv venv --python /home/luttkule/.local/bin/python --system-site-packages \
+  output/validation/issue_626_sonic_source_repro/latest/.venv
+
+cd output/repos/SoNIC-Social-Nav
+../../validation/issue_626_sonic_source_repro/latest/.venv/bin/python test.py
+
+../../validation/issue_626_sonic_source_repro/latest/.venv/bin/python -m pip install gym==0.26.2
+../../validation/issue_626_sonic_source_repro/latest/.venv/bin/python -m pip freeze \
+  > ../../validation/issue_626_sonic_source_repro/latest/pip_freeze.txt
+../../validation/issue_626_sonic_source_repro/latest/.venv/bin/python test.py
+```
+
+Observed environment probe before the install:
+
+- `gym_import=False`
+- `matplotlib_import=False`
+
+Observed package install:
+
+- explicit side-env install command: `python -m pip install gym==0.26.2`
+- installed gym version after rerun: `0.26.2`
+
+Observed stderr before and after the `gym` install:
+
+```text
+Traceback (most recent call last):
+  File "/home/luttkule/git/robot_sf_ll7/output/repos/SoNIC-Social-Nav/test.py", line 5, in <module>
+    from matplotlib import pyplot as plt
+ModuleNotFoundError: No module named 'matplotlib'
+```
+
+```text
+Traceback (most recent call last):
+  File "/home/luttkule/git/robot_sf_ll7/output/repos/SoNIC-Social-Nav/test.py", line 5, in <module>
+    from matplotlib import pyplot as plt
+ModuleNotFoundError: No module named 'matplotlib'
+```
+
+Interpretation:
+
+- the exact side-environment rerun is now recorded and reproducible
+- on the current upstream `test.py`, the first retained blocker is `matplotlib`, both before and
+  after explicitly installing `gym==0.26.2`
+- the earlier informal summary that the blocker moved from `gym` to `matplotlib` was not backed by
+  retained artifacts and should not be treated as canonical evidence
+- the source harness remains blocked, and any future source-harness claim should reference the
+  artifact bundle above rather than the previous abbreviated note

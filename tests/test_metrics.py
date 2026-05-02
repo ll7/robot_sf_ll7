@@ -385,16 +385,24 @@ def test_per_ped_force_quantiles_handles_missing_timesteps():
 
 
 def test_per_ped_force_quantiles_perf_smoke():
-    """T016: Performance smoke for large (T=1000, K=50) array."""
+    """T016: Performance smoke for large (T=1000, K=50) array.
+
+    Use the fastest timing across a few back-to-back runs to reduce flakiness when
+    the full xdist suite is contending for CPU on shared CI workers.
+    """
 
     T, K = 1000, 50
     ep = _make_episode(T=T, K=K)
     rng = np.random.default_rng(0)
     ep.ped_forces = rng.standard_normal((T, K, 2))
 
-    start = time.perf_counter()
-    out = metrics_mod.per_ped_force_quantiles(ep)
-    elapsed = time.perf_counter() - start
+    timings: list[float] = []
+    out = {}
+    for _ in range(5):
+        start = time.perf_counter()
+        out = metrics_mod.per_ped_force_quantiles(ep)
+        timings.append(time.perf_counter() - start)
+    elapsed = min(timings)
 
     assert elapsed < 0.05, f"per_ped_force_quantiles too slow: {elapsed:.4f}s"
     assert all(np.isfinite(v) for v in out.values())

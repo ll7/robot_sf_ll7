@@ -12,11 +12,14 @@ This repository now distinguishes between:
 The following planners are currently treated as testing-only and fail closed by default:
 
 - `risk_dwa`
+- `hybrid_rule_local_planner`
 - `mppi_social`
 - `predictive_mppi`
 - `hybrid_portfolio`
 - `stream_gap`
 - `gap_prediction`
+- `sicnav`
+- `dr_mpc`
 
 These planners are blocked unless their algo config explicitly contains:
 
@@ -69,20 +72,23 @@ Supporting issue-596 notes:
 
 ## Current planner-specific promotion criteria
 
-The following planner-specific evidence notes are the current citation surface for the six
+The following planner-specific evidence notes are the current citation surface for the testing-only
 testing-only planners. None of them currently meet the promotion bar.
 
 | Planner | Evidence note | Current blocker | Promotion criterion | Next proof required |
 | --- | --- | --- | --- | --- |
 | `risk_dwa` | `docs/context/issue_679_risk_dwa_benchmark.md` | Much lower success and higher collisions than predictive baselines despite faster runtime. | Show a concrete revision that recovers goal-reaching to a competitive level without giving back the reactive safety/runtime advantages. | Rerun benchmark evidence only after a hypothesis-driven change to progress recovery or action selection. |
+| `hybrid_rule_local_planner` | `docs/context/policy_search/reports/2026-04-30_best_non_learning_local_policy_report.md` | Best current hybrid-rule configuration is `hybrid_rule_v3_static_margin0_waypoint2`: collision-free on nominal sanity and stress slice, with better stress success/near-miss rates than the previous margin-0 candidate. Follow-up route-lookahead, route-commitment, static-escape, mild-speed, and comfort/progress variants either introduced static collisions or regressed success/stress behavior. | Show broader matrix gains without increasing collisions or severe timeout/freezing. | Investigate doorway comfort and dynamic-agent passage logic before adding broader recovery or ensemble claims. |
 | `mppi_social` | `docs/context/issue_677_mppi_social_benchmark.md` | Severe runtime cost plus lower success than predictive baselines. | Demonstrate a materially better runtime-success tradeoff than the current predictive baselines while preserving the observed safety signal. | Provide a concrete runtime-reduction or horizon-simplification hypothesis, then rerun the verified-simple gate and broader benchmark. |
 | `predictive_mppi` | `docs/context/issue_675_predictive_mppi_benchmark.md` | Roughly order-of-magnitude runtime penalty plus worse success and collision outcomes. | Show that the control-search change produces either clear outcome gains or a defensible safety/runtime win over the predictive baselines. | Land a new search or sampling hypothesis first; do not rerun the unchanged config. |
 | `hybrid_portfolio` | `docs/context/issue_673_hybrid_portfolio_benchmark.md` | Planner switching loses both success and runtime efficiency while still colliding more. | Prove that portfolio arbitration yields a measurable benchmark benefit beyond its component planners, not just a near-miss reduction. | Revisit only with explicit evidence about why the switching logic should improve commitment and runtime behavior. |
 | `stream_gap` | `docs/context/issue_681_stream_gap_benchmark.md` | Strong safety/runtime signal but zero goal-reaching on the paper surface. | Recover non-trivial goal-reaching while preserving the low-collision, low-near-miss behavior that makes the planner interesting. | Show a concrete commitment/progress fix on the verified-simple gate before spending more full-benchmark time. |
 | `gap_prediction` | `docs/context/issue_671_gap_prediction_benchmark.md` | Over-conservative veto behavior collapses success to zero. | Demonstrate that the veto/prediction interaction can support actual progress rather than only suppressing motion. | Bring a concrete fix for progress recovery, then rerun verified-simple and only escalate to the paper surface if success returns. |
+| `sicnav` | `docs/context/issue_771_drmpscnav_assessment.md` | External MPC dependency stack is still being staged against the verified-simple gate. | Show the SICNav wrapper can run deterministically on the verified-simple subset without fallback-only behavior. | Land a real dependency-backed smoke run and compare it against the current baselines before promoting the planner. |
+| `dr_mpc` | `docs/context/issue_771_drmpscnav_assessment.md` | External DR-MPC runtime is assessment-only and not yet benchmark-ready in-repo. | Show the wrapper can resolve the upstream contract and produce stable actions without fallback-only behavior. | Keep DR-MPC as a follow-up anchor until the benchmark wrapper is backed by a real upstream runtime. |
 
 ## Current status
 
-- Keep all six planners behind `allow_testing_algorithms: true`.
+- Keep all nine planners behind `allow_testing_algorithms: true`.
 - Treat their existing benchmark notes as negative evidence, not missing paperwork.
 - Do not remove the guard for documentation completeness alone.

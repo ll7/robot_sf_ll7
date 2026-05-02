@@ -74,16 +74,18 @@ class RunSettings:
     notes: list[str] = field(default_factory=list)
     baseline_extractor: str | None = None
     convergence_fraction: float = 0.95
+    training_diagnostics: bool = False
+    diagnostics_start_timestep: int = 0
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> RunSettings:
-        """TODO docstring. Document this function.
+        """Build run settings from the YAML configuration payload.
 
         Args:
-            payload: TODO docstring.
+            payload: Parsed scenario configuration mapping.
 
         Returns:
-            TODO docstring.
+            Normalized run settings with validation applied to user-provided overrides.
         """
         options = payload.get("run", {})
         settings = cls()
@@ -101,6 +103,12 @@ class RunSettings:
         settings.convergence_fraction = float(
             options.get("convergence_fraction", settings.convergence_fraction)
         )
+        settings.training_diagnostics = bool(
+            options.get("training_diagnostics", settings.training_diagnostics)
+        )
+        settings.diagnostics_start_timestep = int(
+            options.get("diagnostics_start_timestep", settings.diagnostics_start_timestep)
+        )
 
         if settings.worker_mode not in {"single-thread", "vectorized"}:
             raise ValueError(f"Unknown worker_mode: {settings.worker_mode}")
@@ -113,6 +121,8 @@ class RunSettings:
             raise ValueError(f"Unsupported device requested: {settings.device}")
         if not (0.0 < settings.convergence_fraction <= 1.0):
             raise ValueError("convergence_fraction must be in (0, 1].")
+        if settings.diagnostics_start_timestep < 0:
+            raise ValueError("diagnostics_start_timestep must be non-negative.")
         return settings
 
     def effective_timesteps(self, *, test_mode: bool) -> int:
@@ -379,6 +389,42 @@ def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureEx
     return config
 
 
+def _make_ppo_model(
+    *,
+    train_env: Any,
+    tensorboard_log: Path,
+    policy_kwargs: dict[str, Any],
+    device: str,
+    diagnostics_path: Path | None,
+    diagnostics_start_timestep: int,
+) -> Any:
+    """Create a normal PPO model or the diagnostics-enabled PPO variant."""
+    from stable_baselines3 import PPO
+
+    if diagnostics_path is None:
+        return PPO(
+            "MultiInputPolicy",
+            train_env,
+            tensorboard_log=str(tensorboard_log),
+            policy_kwargs=policy_kwargs,
+            verbose=0,
+            device=device,
+        )
+
+    from robot_sf.training.ppo_diagnostics import DiagnosticPPO
+
+    return DiagnosticPPO(
+        "MultiInputPolicy",
+        train_env,
+        tensorboard_log=str(tensorboard_log),
+        diagnostics_path=diagnostics_path,
+        diagnostics_start_timestep=diagnostics_start_timestep,
+        policy_kwargs=policy_kwargs,
+        verbose=0,
+        device=device,
+    )
+
+
 def _gpu_available() -> bool:
     """TODO docstring. Document this function.
 
@@ -481,21 +527,20 @@ def _run_sb3_training(
     start_time_iso: str,
     start_wall: float,
 ) -> ExtractorRunRecord:
-    """TODO docstring. Document this function.
+    """Train one feature extractor with SB3 PPO and collect run artifacts.
 
     Args:
-        profile: TODO docstring.
-        context: TODO docstring.
-        extractor_dir: TODO docstring.
-        artifacts: TODO docstring.
-        start_time_iso: TODO docstring.
-        start_wall: TODO docstring.
+        profile: Extractor profile being trained.
+        context: Resolved run context with hardware, settings, and output paths.
+        extractor_dir: Directory where model, eval, checkpoint, and metric artifacts are written.
+        artifacts: Mutable artifact map carried into the run record.
+        start_time_iso: ISO timestamp captured before the run started.
+        start_wall: Monotonic wall-clock timestamp captured before the run started.
 
     Returns:
-        TODO docstring.
+        Extractor run record with status, metrics, artifacts, and failure reason when applicable.
     """
     try:
-        from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import (
             CallbackList,
             CheckpointCallback,
@@ -541,13 +586,19 @@ def _run_sb3_training(
             vec_env_cls=DummyVecEnv,
         )
 
-        model = PPO(
-            "MultiInputPolicy",
-            train_env,
-            tensorboard_log=str(extractor_dir / "tensorboard"),
+        diagnostics_path = (
+            extractor_dir / "training_diagnostics.jsonl"
+            if context.settings.training_diagnostics
+            else None
+        )
+
+        model = _make_ppo_model(
+            train_env=train_env,
+            tensorboard_log=extractor_dir / "tensorboard",
             policy_kwargs=config.get_policy_kwargs(),
-            verbose=0,
             device=context.settings.device,
+            diagnostics_path=diagnostics_path,
+            diagnostics_start_timestep=context.settings.diagnostics_start_timestep,
         )
 
         eval_callback = EvalCallback(
@@ -581,6 +632,9 @@ def _run_sb3_training(
         checkpoints_dir = extractor_dir / "checkpoints"
         if checkpoints_dir.exists() and any(checkpoints_dir.iterdir()):
             artifacts["checkpoints"] = str(checkpoints_dir.relative_to(context.run_dir))
+
+        if diagnostics_path is not None and diagnostics_path.exists():
+            artifacts["training_diagnostics"] = str(diagnostics_path.relative_to(context.run_dir))
 
         total_parameters = sum(p.numel() for p in model.policy.parameters())
         trainable_parameters = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)

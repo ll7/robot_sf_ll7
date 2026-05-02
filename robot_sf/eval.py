@@ -289,6 +289,42 @@ class PedEnvMetrics:
     route_outcomes: deque[EnvOutcome] = field(default_factory=lambda: deque(maxlen=10))
     avg_distance: deque[float] = field(default_factory=lambda: deque(maxlen=10))
     route_distances: list[float] = field(default_factory=list)
+    ego_ped_speed_at_collision: deque[float] = field(default_factory=lambda: deque(maxlen=10))
+    collision_impact_angle_rad_at_collision: deque[float] = field(
+        default_factory=lambda: deque(maxlen=10)
+    )
+    _last_ego_ped_speed: float = field(default=0.0, init=False, repr=False)
+    _last_collision_impact_angle_rad: float = field(default=0.0, init=False, repr=False)
+
+    @property
+    def avg_ego_ped_speed_at_collision(self) -> float:
+        """Average ego pedestrian speed at robot-collision outcomes.
+
+        Returns:
+            float: Mean of recorded ``ego_ped_speed`` values observed when
+            ``is_robot_pedestrian_collision`` ended a route, or 0.0 if no
+            such event exists.
+        """
+        return mean(self.ego_ped_speed_at_collision) if self.ego_ped_speed_at_collision else 0.0
+
+    @property
+    def avg_ego_ped_speed(self) -> float:
+        """Backward-compatible alias for average ego pedestrian collision speed."""
+        return self.avg_ego_ped_speed_at_collision
+
+    @property
+    def avg_collision_impact_angle_rad_at_collision(self) -> float:
+        """Average collision impact angle in radians for terminal collision outcomes."""
+        return (
+            mean(self.collision_impact_angle_rad_at_collision)
+            if self.collision_impact_angle_rad_at_collision
+            else 0.0
+        )
+
+    @property
+    def avg_collision_impact_angle_rad(self) -> float:
+        """Backward-compatible alias for average collision impact angle."""
+        return self.avg_collision_impact_angle_rad_at_collision
 
     @property
     def total_routes(self) -> int:
@@ -452,6 +488,8 @@ class PedEnvMetrics:
             meta: TODO docstring.
         """
         self.route_distances.append(meta["distance_to_robot"])
+        self._last_ego_ped_speed = float(meta.get("ego_ped_speed", 0.0))
+        self._last_collision_impact_angle_rad = float(meta.get("collision_impact_angle_rad", 0.0))
 
         if not self._is_end_of_route(meta):
             return
@@ -491,9 +529,9 @@ class PedEnvMetrics:
         """
         # Check collisions first (highest priority)
         collision_checks = [
-            ("is_robot_collision", EnvOutcome.ROBOT_COLLISION),
             ("is_robot_pedestrian_collision", EnvOutcome.ROBOT_PEDESTRIAN_COLLISION),
             ("is_robot_obstacle_collision", EnvOutcome.ROBOT_OBSTACLE_COLLISION),
+            ("is_robot_collision", EnvOutcome.ROBOT_COLLISION),
             ("is_pedestrian_collision", EnvOutcome.PEDESTRIAN_COLLISION),
             ("is_obstacle_collision", EnvOutcome.OBSTACLE_COLLISION),
         ]
@@ -517,6 +555,11 @@ class PedEnvMetrics:
     def _finalize_route_outcome(self, outcome: EnvOutcome):
         """Finalize the route outcome and update metrics."""
         self.route_outcomes.append(outcome)
+        if outcome == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION:
+            self.ego_ped_speed_at_collision.append(self._last_ego_ped_speed)
+            self.collision_impact_angle_rad_at_collision.append(
+                self._last_collision_impact_angle_rad
+            )
         self.avg_distance.append(mean(self.route_distances))
         self.route_distances.clear()
 
@@ -606,6 +649,36 @@ class PedVecEnvMetrics:
             TODO docstring.
         """
         return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
+
+    @property
+    def avg_ego_ped_speed_at_collision(self) -> float:
+        """Average ego pedestrian speed at robot-collision outcomes across all environments.
+
+        Returns:
+            float: The mean of average ego pedestrian speeds at collision.
+        """
+        samples = [speed for metric in self.metrics for speed in metric.ego_ped_speed_at_collision]
+        return mean(samples) if samples else 0.0
+
+    @property
+    def avg_ego_ped_speed(self) -> float:
+        """Backward-compatible alias for average ego pedestrian collision speed."""
+        return self.avg_ego_ped_speed_at_collision
+
+    @property
+    def avg_collision_impact_angle_rad_at_collision(self) -> float:
+        """Average impact angle across environments for collision outcomes."""
+        samples = [
+            angle
+            for metric in self.metrics
+            for angle in metric.collision_impact_angle_rad_at_collision
+        ]
+        return mean(samples) if samples else 0.0
+
+    @property
+    def avg_collision_impact_angle_rad(self) -> float:
+        """Backward-compatible alias for average collision impact angle."""
+        return self.avg_collision_impact_angle_rad_at_collision
 
     def update(self, metas: list[dict]):
         """TODO docstring. Document this function.

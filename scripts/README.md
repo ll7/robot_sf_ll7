@@ -21,6 +21,7 @@ This directory contains all executable scripts for the Robot SF project, organiz
 * **Train a robot policy** → [`training/train_ppo.py`](#training-directory)
 * **Train/evaluate predictive planner** → [`scripts/training/train_predictive_planner.py`](#predictive-planner-workflow) and [`scripts/validation/run_predictive_success_campaign.py`](#predictive-planner-workflow)
 * **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
+* **Search policy candidates** → [`scripts/validation/run_policy_search_candidate.py`](#validation-directory) plus the comparison and failure-report tools under [`tools/`](#tools--utilities)
 * **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
 * **Validate changes** → [`validation/`](#validation-directory)
 * **Compare training runs** → [`tools/compare_training_runs.py`](#toolscompare_training_runspy)
@@ -61,6 +62,7 @@ scripts/
 │   ├── run_predictive_hard_seed_diagnostics.py # Per-seed diagnostics traces
 │   ├── run_predictive_success_campaign.py # Checkpoint/config campaign sweep
 │   ├── run_planner_portfolio_campaign.py # Multi-planner campaign sweep
+│   ├── run_policy_search_candidate.py # Stage-gated policy-search candidate runner
 │   ├── run_examples_smoke.py         # Example script smoke tests
 │   ├── verify_maps.py                # Map file validation
 │   └── test_*.sh                     # Shell-based validation tests
@@ -68,6 +70,10 @@ scripts/
 ├── tools/                             # Utilities & helpers
 │   ├── run_tracker_cli.py            # Run tracking CLI
 │   ├── compare_training_runs.py      # Training comparison
+│   ├── compare_policy_search_candidates.py # Compare policy-search summary JSON files
+│   ├── build_policy_search_failure_report.py # Failure taxonomy report from policy-search JSONL
+│   ├── plot_policy_search_pareto_front.py # Success-vs-collision plot for policy-search summaries
+│   ├── promote_policy_search_candidate.py # Evaluate summary JSON against promotion gates
 │   ├── preview_scenario_trajectories.py # Scenario trajectory preview helper
 │   ├── render_scenario_videos.py     # Render scenario videos from trajectories
 │   ├── migrate_artifacts.py          # Artifact migration
@@ -123,6 +129,10 @@ Run checkpoint/config sweep with hard/global ranking and confidence intervals.
 #### `scripts/validation/run_planner_portfolio_campaign.py`
 
 Run side-by-side campaign sweeps across multiple planner families (predictive and non-predictive).
+
+#### `scripts/validation/run_policy_search_candidate.py`
+
+Run one policy-search candidate through the staged `smoke` / `nominal_sanity` / `stress_slice` funnel and emit a summary JSON plus markdown report under `docs/context/policy_search/`.
 
 #### `training_a2c.py`
 

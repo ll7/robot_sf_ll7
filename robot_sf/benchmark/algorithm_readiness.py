@@ -40,6 +40,51 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="ORCA baseline (requires rvo2 or explicit fallback policy).",
     ),
     AlgorithmReadiness(
+        canonical_name="socnav_orca_nonholonomic",
+        tier="experimental",
+        aliases=("socnav_orca_nonholonomic",),
+        note="SocNav ORCA variant tuned for nonholonomic commitment.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="socnav_orca_dd",
+        tier="experimental",
+        aliases=("socnav_orca_dd",),
+        note="SocNav ORCA variant tuned for differential-drive compatibility.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="socnav_orca_relaxed",
+        tier="experimental",
+        aliases=("socnav_orca_relaxed",),
+        note="SocNav ORCA variant with relaxed safety tuning.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="socnav_hrvo",
+        tier="experimental",
+        aliases=("socnav_hrvo",),
+        note="SocNav HRVO variant with hybrid reciprocal velocity obstacles.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="hrvo",
+        tier="experimental",
+        aliases=("hrvo",),
+        note="Local hybrid reciprocal velocity obstacles planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="drl_vo",
+        tier="experimental",
+        aliases=("drl_vo", "drlvo", "drl-vo"),
+        note=(
+            "DRL-VO hybrid planner (learned policy augmented with velocity obstacle fallback); "
+            "prototype stage."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_orca",
         tier="experimental",
         aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),
@@ -48,26 +93,93 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_socialforce",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"),
+        aliases=(
+            "social_navigation_pyenvs_socialforce",
+            "social_nav_pyenvs_socialforce",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable SocialForce wrapper.",
     ),
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_sfm_helbing",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"),
+        aliases=(
+            "social_navigation_pyenvs_sfm_helbing",
+            "social_nav_pyenvs_sfm_helbing",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
     ),
     AlgorithmReadiness(
         canonical_name="social_navigation_pyenvs_hsfm_new_guo",
         tier="experimental",
-        aliases=("social_navigation_pyenvs_hsfm_new_guo", "social_nav_pyenvs_hsfm_new_guo"),
+        aliases=(
+            "social_navigation_pyenvs_hsfm_new_guo",
+            "social_nav_pyenvs_hsfm_new_guo",
+        ),
         note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="crowdnav_height",
+        tier="experimental",
+        aliases=("crowdnav_height",),
+        note="Upstream CrowdNav_HEIGHT model-only checkpoint wrapper.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="sonic_crowdnav",
+        tier="experimental",
+        aliases=("sonic_crowdnav", "sonic_gst"),
+        note="Upstream SoNIC model-only checkpoint wrapper with fail-fast source asset checks.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_ours_gst",
+        tier="experimental",
+        aliases=("gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"),
+        note="Upstream GenSafeNav constrained learned checkpoint wrapper with fail-fast asset checks.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_ours_gst_guarded",
+        tier="experimental",
+        aliases=("gensafenav_ours_gst_guarded", "ours_gst_guarded"),
+        note=(
+            "GenSafeNav Ours_GST wrapper with explicit short-horizon safety guard and goal fallback "
+            "for static-risk-heavy slices."
+        ),
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_gst_predictor_rand",
+        tier="experimental",
+        aliases=(
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
+        ),
+        note=(
+            "Upstream GenSafeNav CrowdNav++-style learned checkpoint wrapper with fail-fast "
+            "asset checks."
+        ),
+    ),
+    AlgorithmReadiness(
+        canonical_name="gensafenav_gst_predictor_rand_guarded",
+        tier="experimental",
+        aliases=(
+            "gensafenav_gst_predictor_rand_guarded",
+            "gst_predictor_rand_guarded",
+        ),
+        note=(
+            "GenSafeNav GST_predictor_rand wrapper with explicit short-horizon safety guard and "
+            "goal fallback for static-risk-heavy slices."
+        ),
     ),
     AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
         aliases=("ppo",),
         note="Learned PPO baseline (paper profile requires provenance + quality gate).",
+    ),
+    AlgorithmReadiness(
+        canonical_name="sac",
+        tier="experimental",
+        aliases=("sac",),
+        note="Learned SB3 SAC baseline; benchmarkable only after checkpoint-specific quality gate.",
     ),
     AlgorithmReadiness(
         canonical_name="guarded_ppo",
@@ -86,6 +198,20 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("sacadrl", "sa_cadrl"),
         note="GA3C-CADRL adapter; dependency/model-sensitive.",
+    ),
+    AlgorithmReadiness(
+        canonical_name="sicnav",
+        tier="experimental",
+        aliases=("sicnav",),
+        note="External SICNav MPC wrapper; dependency-sensitive and testing-only.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="dr_mpc",
+        tier="experimental",
+        aliases=("dr_mpc", "drmpc"),
+        note="External DR-MPC wrapper; dependency-sensitive assessment anchor.",
+        requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
         canonical_name="prediction_planner",
@@ -108,6 +234,27 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="hybrid_rule_local_planner",
+        tier="experimental",
+        aliases=("hybrid_rule_local_planner", "hybrid_rule_v0_minimal"),
+        note="Deterministic hybrid-rule local planner family; v0 is minimal DWA-style.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="safety_barrier",
+        tier="experimental",
+        aliases=("safety_barrier",),
+        note="Testing-only clean-room static-obstacle safety-barrier planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="grid_route",
+        tier="experimental",
+        aliases=("grid_route",),
+        note="Testing-only occupancy-grid route planner for static obstacle slices.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="mppi_social",
         tier="experimental",
         aliases=("mppi_social",),
@@ -119,6 +266,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("hybrid_portfolio",),
         note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="hybrid_orca_sampler",
+        tier="experimental",
+        aliases=("hybrid_orca_sampler",),
+        note="ORCA primary planner with short-horizon MPPI repair for stalled or unsafe scenes.",
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
@@ -158,6 +312,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("teb",),
         note="Native corridor-commitment planner inspired by TEB-style local optimization.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="nmpc_social",
+        tier="experimental",
+        aliases=("nmpc_social", "nmpc"),
+        note="Native NMPC-style local planner with short-horizon nonlinear optimization.",
         requires_explicit_opt_in=True,
     ),
 )

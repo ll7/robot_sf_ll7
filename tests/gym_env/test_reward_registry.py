@@ -6,6 +6,7 @@ import math
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import (
+    build_reward_curriculum_function,
     build_reward_function,
     punish_action_reward,
     route_completion_v2_reward,
@@ -13,6 +14,7 @@ from robot_sf.gym_env.reward import (
     simple_ped_reward,
     snqi_step_reward,
     social_quality_v1_reward,
+    stationary_collision_ped_reward,
 )
 
 
@@ -94,6 +96,93 @@ def test_make_robot_env_builds_reward_func_from_reward_name(monkeypatch):
     assert callable(captured["reward_func"])
 
 
+def test_build_reward_curriculum_function_advances_after_terminal_episode() -> None:
+    """Reward curriculum should switch stages after terminal episodes complete."""
+    curriculum = build_reward_curriculum_function(
+        {
+            "stages": [
+                {
+                    "until_episodes": 1,
+                    "reward_name": "route_completion_v3",
+                    "reward_kwargs": {"weights": {"terminal_bonus": 1.0}},
+                },
+                {
+                    "reward_name": "route_completion_v3",
+                    "reward_kwargs": {"weights": {"terminal_bonus": 5.0}},
+                },
+            ]
+        },
+        default_reward_name="route_completion_v3",
+    )
+
+    terminal_meta = {
+        "prev_distance_to_goal": 3.0,
+        "distance_to_goal": 2.0,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": True,
+        "step_of_episode": 50,
+        "max_sim_steps": 100,
+    }
+
+    first_reward = curriculum(dict(terminal_meta))
+    second_reward = curriculum(dict(terminal_meta))
+
+    assert first_reward < second_reward
+    assert curriculum.episodes_completed == 1
+    assert curriculum.current_stage_index == 1
+    assert curriculum.current_stage_label.startswith("route_completion_v3:")
+
+
+def test_make_robot_env_supports_reward_curriculum(monkeypatch):
+    """Factory should build staged reward callables when reward_curriculum is provided."""
+    captured: dict[str, object] = {}
+
+    class _DummyEnv:
+        pass
+
+    def _fake_create_robot_env(**kwargs):
+        captured.update(kwargs)
+        return _DummyEnv()
+
+    env_factory_cls = make_robot_env.__globals__["EnvironmentFactory"]
+    monkeypatch.setattr(env_factory_cls, "create_robot_env", staticmethod(_fake_create_robot_env))
+    env = make_robot_env(
+        reward_name="route_completion_v3",
+        reward_kwargs={"weights": {"terminal_bonus": 1.0}},
+        reward_curriculum={
+            "stages": [
+                {
+                    "until_episodes": 1,
+                    "reward_kwargs": {"weights": {"terminal_bonus": 1.0}},
+                },
+                {
+                    "reward_kwargs": {"weights": {"terminal_bonus": 5.0}},
+                },
+            ]
+        },
+    )
+
+    assert isinstance(env, _DummyEnv)
+    reward_func = captured["reward_func"]
+    assert callable(reward_func)
+
+    terminal_meta = {
+        "prev_distance_to_goal": 3.0,
+        "distance_to_goal": 2.0,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": True,
+        "step_of_episode": 50,
+        "max_sim_steps": 100,
+    }
+    first_reward = reward_func(dict(terminal_meta))
+    second_reward = reward_func(dict(terminal_meta))
+    assert first_reward < second_reward
+
+
 def test_route_completion_and_social_rewards_emit_term_decomposition() -> None:
     """Route/social profile rewards should populate bounded reward decomposition fields."""
     meta = {
@@ -163,12 +252,34 @@ def test_simple_ped_reward_ignores_legacy_robot_goal_flag_without_route_complete
     assert simple_ped_reward(legacy_meta) == simple_ped_reward(base_meta)
 
 
+def test_stationary_collision_ped_reward_only_rewards_stationary_collision() -> None:
+    """Pedestrian collision bonus should apply only when ego pedestrian speed is near zero."""
+    stationary_meta = {
+        "max_sim_steps": 100,
+        "distance_to_robot": 1.5,
+        "is_pedestrian_collision": False,
+        "is_obstacle_collision": False,
+        "is_robot_collision": True,
+        "is_route_complete": False,
+        "ego_ped_speed": 0.0,
+    }
+    moving_meta = dict(stationary_meta)
+    moving_meta["ego_ped_speed"] = 0.2
+
+    stationary_reward = stationary_collision_ped_reward(stationary_meta)
+    moving_reward = stationary_collision_ped_reward(moving_meta)
+
+    assert stationary_reward > moving_reward
+
+
 def test_build_reward_function_accepts_new_aliases_and_rejects_unknown() -> None:
     """Registry should resolve new aliases and reject unsupported names."""
     assert callable(build_reward_function("route_completion"))
     assert callable(build_reward_function("social_quality"))
     assert callable(build_reward_function("simple"))
     assert callable(build_reward_function("punish_action"))
+    assert callable(build_reward_function("stationary_collision_ped"))
+    assert callable(build_reward_function("ped_stationary_collision"))
     try:
         build_reward_function("unknown-reward")
     except ValueError as exc:

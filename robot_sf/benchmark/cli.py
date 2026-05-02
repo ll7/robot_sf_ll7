@@ -785,21 +785,37 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
     """Describe the scenario matrix source and include structure.
 
     Returns:
-        dict[str, object]: Source metadata including format and include list.
+        dict[str, object]: Source metadata including format, include list, and selector list.
     """
     path = Path(matrix_path)
     includes: list[str] = []
+    select_scenarios: list[str] = []
     format_hint = "unknown"
     try:
         with path.open("r", encoding="utf-8") as handle:
             docs = list(yaml.safe_load_all(handle))
     except Exception:
-        return {"path": str(path), "format": format_hint, "includes": includes}
+        return {
+            "path": str(path),
+            "format": format_hint,
+            "includes": includes,
+            "select_scenarios": select_scenarios,
+        }
     if len(docs) > 1:
         format_hint = "stream"
-        return {"path": str(path), "format": format_hint, "includes": includes}
+        return {
+            "path": str(path),
+            "format": format_hint,
+            "includes": includes,
+            "select_scenarios": select_scenarios,
+        }
     if not docs:
-        return {"path": str(path), "format": format_hint, "includes": includes}
+        return {
+            "path": str(path),
+            "format": format_hint,
+            "includes": includes,
+            "select_scenarios": select_scenarios,
+        }
     doc = docs[0]
     if isinstance(doc, Mapping):
         raw_includes = doc.get("includes") or doc.get("include") or doc.get("scenario_files")
@@ -807,12 +823,22 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
             includes = [str(entry) for entry in raw_includes]
         elif isinstance(raw_includes, (str, Path)):
             includes = [str(raw_includes)]
-        format_hint = "manifest" if includes else "dict"
+        raw_select = doc.get("select_scenarios")
+        if isinstance(raw_select, list):
+            select_scenarios = [str(entry) for entry in raw_select]
+        elif isinstance(raw_select, (str, Path)):
+            select_scenarios = [str(raw_select)]
+        format_hint = "manifest" if includes or select_scenarios else "dict"
         if "scenarios" in doc:
-            format_hint = "manifest" if includes else "list"
+            format_hint = "manifest" if includes or select_scenarios else "list"
     elif isinstance(doc, list):
         format_hint = "list"
-    return {"path": str(path), "format": format_hint, "includes": includes}
+    return {
+        "path": str(path),
+        "format": format_hint,
+        "includes": includes,
+        "select_scenarios": select_scenarios,
+    }
 
 
 def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
@@ -887,11 +913,11 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                 map_path = (base_dir / map_path).resolve()
             if not map_path.exists():
                 warn(idx, scenario_id, f"map_file not found at {map_path}", "/map_file")
-            elif map_path.suffix.lower() not in {".svg", ".json"}:
+            elif map_path.suffix.lower() != ".svg":
                 warn(
                     idx,
                     scenario_id,
-                    f"map_file extension '{map_path.suffix}' not supported",
+                    f"map_file extension '{map_path.suffix}' not supported; use SVG maps",
                     "/map_file",
                 )
 

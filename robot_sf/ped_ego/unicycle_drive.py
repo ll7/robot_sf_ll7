@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""This module describes a unicycle drive pedestrian model."""
 
 from dataclasses import dataclass, field
 from math import atan2, cos, sin, tan
@@ -42,11 +42,11 @@ class UnicycleDriveState:
 
     @property
     def pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
+        """Get the position of the pedestrian.
 
 
         Returns:
-            TODO docstring.
+            Vec2D: The (x, y) position of the pedestrian.
         """
         return self.pose[0]
 
@@ -131,7 +131,7 @@ class UnicycleDrivePedestrian:
     movement: UnicycleMotion = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize the UnicycleMotion"""
         self.movement = UnicycleMotion(self.config)
 
     @property

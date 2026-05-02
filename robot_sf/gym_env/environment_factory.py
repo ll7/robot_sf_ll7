@@ -47,6 +47,7 @@ from __future__ import annotations
 import importlib
 import os
 import random
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -65,7 +66,11 @@ except (ImportError, ModuleNotFoundError):
 from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
-from robot_sf.gym_env.reward import build_reward_function, simple_ped_reward
+from robot_sf.gym_env.reward import (
+    build_reward_curriculum_function,
+    build_reward_function,
+    simple_ped_reward,
+)
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -185,6 +190,7 @@ class EnvironmentFactory:
         telemetry_refresh_hz: float = 1.0,
         telemetry_pane_layout: str = "vertical_split",
         telemetry_decimation: int = 1,
+        asymmetric_critic: bool = False,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
 
@@ -214,6 +220,8 @@ class EnvironmentFactory:
             telemetry_refresh_hz: Target refresh rate for telemetry (Hz).
             telemetry_pane_layout: Pane docking layout (vertical_split or horizontal_split).
             telemetry_decimation: Decimation factor for telemetry persistence (>=1).
+            asymmetric_critic: When True, add a critic-only privileged state vector to the
+                observation space for asymmetric actor-critic training.
 
         Returns:
             SingleAgentEnv: Fully initialized robot environment instance.
@@ -262,6 +270,7 @@ class EnvironmentFactory:
             scenario_name=scenario_name,
             algorithm_name=algorithm_name,
             recording_seed=recording_seed,
+            asymmetric_critic=asymmetric_critic,
         )  # type: ignore[return-value]
 
     @staticmethod
@@ -482,6 +491,7 @@ def make_robot_env(  # noqa: PLR0913
     reward_func: Callable | None = None,
     reward_name: str | None = None,
     reward_kwargs: Mapping[str, object] | None = None,
+    reward_curriculum: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -501,6 +511,7 @@ def make_robot_env(  # noqa: PLR0913
     telemetry_refresh_hz: float = 1.0,
     telemetry_pane_layout: str = "vertical_split",
     telemetry_decimation: int = 1,
+    asymmetric_critic: bool = False,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with lidar-based observations (non-image).
@@ -522,6 +533,8 @@ def make_robot_env(  # noqa: PLR0913
             `simple`, `punish_action`, `snqi_step`, `alyassi`).
             Ignored when ``reward_func`` is provided.
         reward_kwargs: Optional keyword arguments passed to the named reward preset builder.
+        reward_curriculum: Optional staged reward curriculum. When provided, the reward callable
+            is wrapped so stage selection advances after terminal episodes.
         debug: Enable debug/visual features (may trigger view creation when recording).
         recording_enabled: Master switch gating recording runtime even if options request
             it (feature flag style).
@@ -551,6 +564,8 @@ def make_robot_env(  # noqa: PLR0913
             horizontal_split).
         telemetry_decimation: Decimation factor applied when persisting/visualizing telemetry
             (>=1).
+        asymmetric_critic: When True, add a critic-only privileged state vector to the
+            observation space for asymmetric actor-critic training.
         **legacy_kwargs: Deprecated legacy surface (mapped via apply_legacy_kwargs). Unknown
             params rejected unless ROBOT_SF_FACTORY_LEGACY env var is truthy (permissive mode).
 
@@ -573,7 +588,14 @@ def make_robot_env(  # noqa: PLR0913
 
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
-        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
+        if reward_curriculum is not None:
+            reward_func = build_reward_curriculum_function(
+                reward_curriculum,
+                default_reward_name=reward_name,
+                default_reward_kwargs=reward_kwargs,
+            )
+        else:
+            reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
 
     _apply_global_seed(seed)
 
@@ -622,6 +644,7 @@ def make_robot_env(  # noqa: PLR0913
         telemetry_refresh_hz=telemetry_refresh_hz,
         telemetry_pane_layout=telemetry_pane_layout,
         telemetry_decimation=telemetry_decimation,
+        asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed
     return env
@@ -635,6 +658,7 @@ def make_image_robot_env(  # noqa: PLR0913
     reward_func: Callable | None = None,
     reward_name: str | None = None,
     reward_kwargs: Mapping[str, object] | None = None,
+    reward_curriculum: Mapping[str, object] | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
@@ -648,6 +672,7 @@ def make_image_robot_env(  # noqa: PLR0913
     scenario_name: str = "default",
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
+    asymmetric_critic: bool = False,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
@@ -665,7 +690,14 @@ def make_image_robot_env(  # noqa: PLR0913
         recording_options = _apply_recording(mapped, recording_options)
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
-        reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
+        if reward_curriculum is not None:
+            reward_func = build_reward_curriculum_function(
+                reward_curriculum,
+                default_reward_name=reward_name,
+                default_reward_kwargs=reward_kwargs,
+            )
+        else:
+            reward_func = build_reward_function(reward_name, reward_kwargs=reward_kwargs)
     _apply_global_seed(seed)
 
     # Validate configuration and log resolved config (T030/T031)
@@ -707,6 +739,7 @@ def make_image_robot_env(  # noqa: PLR0913
         scenario_name=scenario_name,
         algorithm_name=algorithm_name,
         recording_seed=recording_seed,
+        asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed
     return env

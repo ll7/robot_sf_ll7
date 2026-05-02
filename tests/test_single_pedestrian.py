@@ -3,7 +3,7 @@ Tests for single pedestrian spawning and control functionality.
 
 This module tests:
 - Spawning single pedestrians with fixed goals
-- Loading single pedestrians from SVG/JSON maps
+- Loading single pedestrians from SVG maps
 - Trajectory-following behavior
 - Visualization of single pedestrian elements
 - Multi-pedestrian interactions

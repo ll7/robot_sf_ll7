@@ -1,0 +1,23 @@
+- name: sac_gate_socnav_struct
+  config: gate_socnav_struct.yaml
+  description: Baseline SAC gate run using benchmark-compatible socnav_struct observations.
+
+- name: sac_gate_socnav_struct_ego
+  config: gate_socnav_struct_ego.yaml
+  description: Ego-frame SAC observation ablation for benchmark adapter alignment.
+
+- name: sac_gate_socnav_struct_ego_safe_v1
+  config: gate_socnav_struct_ego_safe_v1.yaml
+  description: Safety-penalized SAC variant to reduce collisions.
+
+- name: sac_gate_socnav_struct_ego_curriculum_v1
+  config: gate_socnav_struct_ego_curriculum.yaml
+  description: New curriculum config weighted toward hard verified subset cases.
+
+- name: sac_gate_socnav_struct_ego_curriculum_v2
+  config: gate_socnav_struct_ego_curriculum_v2.yaml
+  description: Cycle-sampling variant with stronger safety penalties and a slower learning rate.
+
+- name: sac_gate_socnav_struct_ego_all_random_wandb_v3
+  config: gate_socnav_struct_ego_all_random_wandb_v3.yaml
+  description: All-scenarios random-sampling run with random per-episode seeds and W&B telemetry.

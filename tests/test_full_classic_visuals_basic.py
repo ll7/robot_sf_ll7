@@ -18,21 +18,16 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal config shim for exercising full-benchmark artifact generation in tests."""
 
     def __init__(self, tmp_path: Path, smoke: bool = True, disable_videos: bool = False):
-        # Minimal fields used by orchestrator & video/plot logic
-        """TODO docstring. Document this function.
+        """Populate the small subset of orchestrator settings this test depends on."""
 
-        Args:
-            tmp_path: TODO docstring.
-            smoke: TODO docstring.
-            disable_videos: TODO docstring.
-        """
+        # Minimal fields used by orchestrator & video/plot logic
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"  # assuming exists
         self.initial_episodes = 1
-        self.max_episodes = 2
+        self.max_episodes = 1
         self.batch_size = 1
         self.algo = "ppo"
         self.workers = 1
@@ -41,6 +36,11 @@ class _Cfg:
         self.disable_videos = disable_videos
         self.max_videos = 1
         self.capture_replay = True
+        # Tight smoke caps keep this artifact-presence check fast; validate broader runtime
+        # behavior with the full tests/ suite and targeted slow-marker reruns before merge.
+        self.smoke_limit_jobs = True
+        self.smoke_episodes = 1
+        self.smoke_horizon_cap = 5
         # Targets (unused placeholder for precision)
         self.target_collision_half_width = 0.05
         self.target_success_half_width = 0.05

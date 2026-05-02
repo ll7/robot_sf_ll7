@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
 SKILL_FILES = [
-    ROOT / ".codex" / "skills" / "gh-issue-creator" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
-    ROOT / ".codex" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
 ]
 KNOWN_LABELS = {
     "bug",
@@ -94,9 +94,9 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
     assert "../.github/ISSUE_TEMPLATE/issue_default.md" in docs_text
-    assert "../.codex/skills/gh-issue-creator/SKILL.md" in docs_text
-    assert "../.codex/skills/gh-issue-template-auditor/SKILL.md" in docs_text
-    assert "../.codex/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-creator/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-template-auditor/SKILL.md" in docs_text
+    assert "../.agents/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
 
     prioritization_text = (ROOT / "docs" / "project_prioritization.md").read_text(encoding="utf-8")
     assert "Plausibility Checks" in prioritization_text
@@ -106,6 +106,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "High `Success Probability`" in prioritization_text
 
     creator_text = SKILL_FILES[0].read_text(encoding="utf-8")
+    assert "GitHub MCP / GitHub app tools" in creator_text
     assert "gh issue create" in creator_text
     assert "gh project item-add" in creator_text
     assert "gh project item-edit" in creator_text
@@ -117,12 +118,14 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Reviewed" in creator_text
 
     auditor_text = SKILL_FILES[1].read_text(encoding="utf-8")
+    assert "GitHub MCP / GitHub app tools" in auditor_text
     assert "uv run python scripts/tools/issue_template_audit.py" in auditor_text
     assert "gh issue view" in auditor_text
     assert "gh issue edit" in auditor_text
     assert "decision-required" in auditor_text
 
     assessor_text = SKILL_FILES[2].read_text(encoding="utf-8")
+    assert "GitHub MCP / GitHub app tools" in assessor_text
     assert "docs/project_prioritization.md" in assessor_text
     assert "gh issue view" in assessor_text
     assert "gh project item-list" in assessor_text

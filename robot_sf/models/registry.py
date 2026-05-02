@@ -16,6 +16,26 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+_LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
+
+
+def _local_only_resolution_error(
+    entry: dict[str, Any], *, local_path: str | None
+) -> FileNotFoundError:
+    """Build a clear resolution error for models intentionally scoped to one machine.
+
+    Returns:
+        FileNotFoundError: Resolution error with optional migration guidance.
+    """
+    model_id = str(entry.get("model_id", "unknown-model"))
+    replacement = str(entry.get("replacement_model_id", "") or "").strip()
+    message = (
+        f"Model '{model_id}' is marked local-only and is unavailable on this machine. "
+        f"Expected local path: {local_path or '<unset>'}."
+    )
+    if replacement:
+        message += f" Use '{replacement}' instead."
+    return FileNotFoundError(message)
 
 
 @dataclass(frozen=True)
@@ -98,6 +118,12 @@ def resolve_model_path(
             resolved = Path.cwd() / resolved
         if resolved.exists():
             return resolved
+
+    if bool(entry.get("local_only")):
+        raise _local_only_resolution_error(
+            entry,
+            local_path=str(local_path) if local_path is not None else None,
+        )
 
     if not allow_download:
         raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
@@ -250,7 +276,10 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
 
     cached_path = cache_root / file_name
     if cached_path.exists():
-        logger.info("Using cached model artifact: {}", cached_path)
+        resolved_cached_path = cached_path.resolve()
+        if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
+            _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
+            logger.info("Using cached model artifact: {}", cached_path)
         return cached_path
 
     logger.info("Downloading model artifact {} from {}", file_name, run_path)

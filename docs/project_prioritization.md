@@ -56,6 +56,10 @@ When processing a batch of issues, keep the GitHub work in three separate passes
 This keeps issue cleanup independent from project routing and makes it easier to avoid GraphQL
 quota exhaustion mid-batch.
 
+Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
+Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
+batch sync and local/manual score recomputation.
+
 Canonical workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
@@ -67,11 +71,11 @@ and clamps values into stable ranges:
 
 | Field | Default | Range / clamp |
 | --- | --- | --- |
-| Improvement | `1.0` | `>= 0.0` |
+| Improvement | `1.0` | `0.1 .. 10.0` |
 | Success Probability | `0.7` | `0.0 .. 1.0` |
 | Expected Duration in Hours | `1.0` | `>= 0.1` |
-| Time Criticality | `1.0` | `0.5 .. 2.0` |
-| Unlock Factor | `1.0` | `1.0 .. 3.0` |
+| Time Criticality | `1.0` | `0.1 .. 10.0` |
+| Unlock Factor | `1.0` | `0.1 .. 10.0` |
 
 The helper writes `Priority Score` rounded to 6 decimal places.
 
@@ -84,8 +88,8 @@ Use coarse estimates, not false precision.
 This measures the expected project-level gain, not just the amount of code
 changed.
 
-- `5.0` required for benchmark or paper correctness
-- `3.0` significant planner / benchmark improvement
+- `9.0` required for benchmark or paper correctness
+- `5.0` significant planner / benchmark improvement
 - `1.0` normal useful task
 - `0.2` cleanup or low-impact polish
 
@@ -94,10 +98,10 @@ changed.
 This is the probability that the scoped work can be completed and validated in
 this repository, not the probability that the idea is generally good.
 
-- `0.9` straightforward extension
+- `1.0` straightforward extension
 - `0.7` normal implementation path
 - `0.5` uncertain integration
-- `0.3` research-heavy or highly uncertain
+- `0.1` research-heavy and highly uncertain
 
 Avoid `0.0` unless the task is effectively impossible under current
 constraints.
@@ -106,7 +110,8 @@ constraints.
 
 This reflects cost of delay, blockers, or deadline pressure.
 
-- `2.0` milestone-critical or actively blocking a deadline
+- `10.0` milestone-critical or actively blocking a deadline
+- `5.0` very urgent and should be done soon
 - `1.0` normal
 - `0.5` can wait
 
@@ -114,7 +119,8 @@ This reflects cost of delay, blockers, or deadline pressure.
 
 This captures how much downstream work the issue unblocks.
 
-- `3.0` unlocks many downstream tasks
+- `10.0` opens a completely different line of work
+- `5.0` unlocks many downstream tasks
 - `1.5` partial enabler
 - `1.0` standalone work
 
@@ -177,43 +183,28 @@ Useful flags:
 - `--issue-number <n>` updates one issue only
 - `--skip-status Done` skips completed work
 
-### GitHub Actions Sync
+This helper is intentionally `gh`-based even when interactive GitHub work is MCP-first.
 
-The repository workflow
-`/.github/workflows/project-priority-score-sync.yml` runs:
+### Supported Sync Mode
 
-- manually via `workflow_dispatch`
-- nightly on a schedule
-- on issue metadata changes such as `opened`, `edited`, `labeled`, and
-  `unlabeled`
+Repository-supported score sync is local/manual only. The GitHub Actions
+workflow has been retired so Project #5 score updates no longer depend on a
+repository secret or scheduled issue-event automation.
 
-## GitHub Actions Limitation
+Recommended usage:
 
-Projects v2 field edits do not currently provide a simple repository-local
-workflow trigger equivalent to normal issue events. That means this repository
-cannot do true immediate recomputation on every Project field edit with a
-purely in-repo workflow alone.
-
-The current implementation is intentionally pragmatic:
-
-- do now: manual, scheduled, and issue-event sync
-- do later if needed: webhook- or GitHub-App-driven sync on
-  `projects_v2_item`
+- run the local command explicitly after a batch of issue/project edits
+- use `--dry-run` first when changing score inputs or debugging field state
+- keep interactive inspection and issue cleanup MCP-first, with this helper as
+  the scripted fallback
 
 ## Authentication
 
-The workflow uses a PAT-style secret:
-
-- `PROJECT_AUTOMATION_TOKEN`
-
-It must have at least:
-
-- `repo`
-- `project`
-- `workflow`
-
-`GITHUB_TOKEN` is not sufficient for this user-owned Projects v2 automation
-path.
+The local/manual workflow uses your authenticated GitHub CLI session. Before
+running sync, verify that `gh auth status` shows an account with access to the
+target repository and Project #5. The standard `GITHUB_TOKEN` environment
+variable is typically insufficient for user-owned Projects v2; ensure your
+local `gh` session is authenticated with project scope.
 
 ## Worked Example
 

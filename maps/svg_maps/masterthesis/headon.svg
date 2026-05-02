@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="61"
+   height="21.974001"
+   viewBox="0 0 61 21.974011"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.3 (fcd0343856, 2026-01-01)"
+   sodipodi:docname="headon.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="12.993087"
+     inkscape:cx="36.096118"
+     inkscape:cy="32.555774"
+     inkscape:window-width="1877"
+     inkscape:window-height="1214"
+     inkscape:window-x="387"
+     inkscape:window-y="124"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer3" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Ped"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#107400;fill-opacity:1;stroke:#107400;stroke-width:0.0618705;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect6"
+       width="3.9381294"
+       height="3.9381294"
+       x="6.9620371"
+       y="9.2176275"
+       ry="0.083189718"
+       inkscape:label="ped_goal_zone" />
+    <rect
+       style="fill:#23ff00;fill-opacity:1;stroke:#23ff00;stroke-width:0.0606029;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5"
+       width="3.9393971"
+       height="3.9393971"
+       x="47.021725"
+       y="9.0898228"
+       ry="0.075839706"
+       inkscape:label="ped_spawn_zone" />
+    <path
+       style="fill:none;stroke:#b40305;stroke-width:0.281016;stroke-linejoin:bevel;stroke-opacity:1"
+       d="M 46.490615,11.185024 H 11.490615"
+       id="path3"
+       inkscape:label="ped_route_0_0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Obstacles">
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.178863;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect10"
+       width="1.5782056"
+       height="14.544504"
+       x="3.7203307"
+       y="3.480196"
+       ry="0.064065583"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.181595;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect11"
+       width="1.803046"
+       height="15.422738"
+       x="52.941235"
+       y="3.1322105"
+       ry="0.068266854"
+       inkscape:label="obstacle" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Robot">
+    <path
+       style="fill:none;stroke:#3544ff;stroke-width:0.336956;stroke-linejoin:bevel;stroke-opacity:1"
+       d="M 11.580561,11.864166 H 17.51663 24.70975 29.877622 34.556641 39.794347 L 44.822553,12.48051 46.568454,11.864166"
+       id="path2"
+       inkscape:label="robot_route_0_0" />
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#ff6c00;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4-1"
+       width="2"
+       height="2"
+       x="47.98032"
+       y="10.204405"
+       ry="0.056305632"
+       inkscape:label="robot_goal_zone" />
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3"
+       width="2"
+       height="2"
+       x="7.7572761"
+       y="10.53711"
+       ry="0.041662347"
+       inkscape:label="robot_spawn_zone" />
+  </g>
+</svg>

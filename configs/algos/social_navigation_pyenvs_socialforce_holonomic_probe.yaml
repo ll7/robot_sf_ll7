@@ -1,0 +1,17 @@
+repo_root: output/repos/Social-Navigation-PyEnvs
+policy_name: socialforce
+preferred_speed: 1.0
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+provenance:
+  upstream_repo: https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs
+  upstream_commit: f9cd244d3e529247ca1031364de22954717b9493
+  checkout_path: output/repos/Social-Navigation-PyEnvs
+  upstream_policy: crowd_nav.policy_no_train.socialforce.SocialForce
+  # Holonomic path: the upstream ActionXY world-frame velocity is forwarded
+  # directly into the holonomic vx_vy benchmark action space without
+  # unicycle projection. This is the execution_detail used when the benchmark
+  # config sets holonomic_command_mode: vx_vy.
+  projection_policy: world_velocity_passthrough
+  runtime_dependency: socialforce==0.2.3
+  issue: 697

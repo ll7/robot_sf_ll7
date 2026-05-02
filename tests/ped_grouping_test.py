@@ -122,3 +122,11 @@ def test_can_redirect_group_towards_new_goal():
     new_goal = old_goal[0] + 1, old_goal[1] + 1
     groups.redirect_group(redirected_gid, new_goal)
     assert groups.goal_of_group(redirected_gid) == new_goal
+
+
+def test_group_centroid_matches_member_position_mean():
+    """Verify centroid contract because route behaviors use it every simulation step."""
+    groups = init_groups()
+
+    assert groups.group_centroid(0) == (0.5, 1.0)
+    assert groups.group_centroid(1) == (2.5, 2.5)

@@ -8,7 +8,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
-**The Social Navigation Benchmark Platform is now fully operational!** 
+**The Social Navigation Benchmark Platform is now fully operational!**
 
 ### Quick Start
 
@@ -20,7 +20,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 * **Episode Runner**: Parallel execution with resume functionality and deterministic seeding
 * **Metrics Suite**: SNQI composite index with component breakdown and weight recomputation
-* **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners  
+* **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners
 * **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
 * **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
 * **CLI Tools**: 15 subcommands covering full experiment workflow
@@ -74,23 +74,30 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * [🔗 External Links](#-external-links)
 * [🤝 Contributing](#-contributing)
 * [📞 Support](#-support)
-* [Helper Catalog](#helper-catalog)
+* [Planner Documentation](#planner-documentation)
 
 ## 📚 Documentation Index
 
 ### Getting Started
+
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
-* **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, sync workflow, and GitHub Actions limitations
+* **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
+* **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
+* **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
+* **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
+* **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
+* **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
 * **[SLURM Submission Workflow](./dev/slurm_submission.md)** - Submit batch jobs with the effective partition/QoS max wall time by default
+* **[SLURM Multi-Worktree Branch Workflow](./context/slurm_multi_worktree_branch_workflow.md)** - Submit jobs from multiple active branches on one login node without branch-switch ambiguity
 * **[SLURM Resource Audit](./dev/slurm_resource_audit.md)** - Inspect Slurm allocations, query W&B system metrics correctly, and decide whether CPU, memory, or GPU requests are oversized
 * **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
 * **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
@@ -100,6 +107,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
+* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Canonical issue-708 PPO retrain config, SLURM submission path, deterministic eval surface, and promotion checklist.
+* **[Issue 791 Promotion Campaign](./context/issue_791_promotion_campaign_128k_256k.md)** - Medium- and long-horizon ablation campaign status, GPU predictive-foresight fix, active long runs, and follow-up boundaries.
+* **[Issue 863 SVG/Model Log Spam](./context/issue_863_svg_model_log_spam.md)** - Log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
+* **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Early reward/observation screening matrix and conservative next-step recommendation for PPO issue-708 follow-up work.
 * **[Predictive Planner Complete Tutorial](./training/predictive_planner_complete_tutorial.md)** - Full concept-to-code tutorial (model, scoring, risk-adaptive search, diagnostics, and reproducibility)
 * **[DreamerV3 RLlib Runbook (`drive_state` + `rays`)](./training/dreamerv3_rllib_drive_state_rays.md)** - Config-first training flow for RLlib DreamerV3 without image observations.
 * **[Global Planner Quickstart (WIP)](../specs/342-svg-global-planner/quickstart.md)** - Placeholder for the upcoming SVG-based global planner documentation and examples.
@@ -110,14 +121,22 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
 
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
+* **[Issue #832 Paper-Matrix Extended Seed Schedule](./context/issue_832_paper_matrix_extended_seed_schedule.md)** - Staged S5/S10/S20 seed extension policy, runtime estimates, tmux commands, and comparison artifact contract for the frozen paper matrix
+* **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
+* **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
+* **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
+* **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
+* **[Grid Route Deep Dive](./context/issue_717_grid_route_deep_dive.md)** - Standalone experimental-planner note covering `grid_route` contract, full scenario-set deep dive, and the remaining `narrow_passage` boundary
 * **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
 * **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership
 * **[Issue #596 ORCA Failure Analysis](./context/issue_596_orca_failure_analysis.md)** - Targeted ORCA probe results showing which atomic scenarios still fail and why
@@ -127,6 +146,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
@@ -138,19 +158,22 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary
 * **[Prediction Planner PR Readiness (2026-02-20)](./context/predictive_planner_pr_readiness_2026-02-20.md)** - Completed integration checklist and remaining maintainer decisions before final merge
-* **[Issues 485-492 Execution Trace](./context/issues_485_492_execution.md)** - Implementation summary, validation runs, and rollout notes for the benchmark hardening changes
-* **[Issues 500-504 Execution Notes](./context/issues_500_501_504_execution.md)** - Metadata enrichment, time-to-goal contract extensions, and adapter-impact probing implementation
-* **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
-* **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary
-* **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
+* **[Issues 485-492 Execution Trace](./context/issues_485_492_execution.md)** - Implementation summary, validation runs, and rollout notes for the benchmark hardening changes
+* **[Issue 499 Execution Notes](./context/issue_499_execution.md)** - Publication bundle tooling, policy, and size-measurement workflow
+* **[Issues 500-504 Execution Notes](./context/issues_500_501_504_execution.md)** - Metadata enrichment, time-to-goal contract extensions, and adapter-impact probing implementation
+* **[Benchmark Post-Prediction Fix Report (2026-02-20)](./context/benchmark_post_prediction_fix_2026-02-20.md)** - Baseline promotion, predictive compatibility fixes, hotspot diagnostics, and campaign comparison artifacts
 * **[Issue #535 Execution Note (Paper Matrix Freeze)](./context/issue_535_paper_matrix_freeze.md)** - Frozen paper-facing experiment matrix contract and canonical command path
+* **[Issue #600 DSRNN Stretch Follow-up](./context/issue_600_dsrnn_stretch_follow_up.md)** - Canonical DSRNN source anchors, dependency ordering behind the first attention/prediction spikes, and the extra graph/recurrent integration burden that keeps this family in assessment-only status
+* **[Issue #603 Alyassi Planner Reference Set](./context/issue_603_alyassi_reference_set_2026-03-06.md)** - Canonical paper-side planner anchors, citekeys, local clone locations, and current SoNIC provenance caveats
+* **[Issue #651 Social-Navigation-PyEnvs ORCA Self-Velocity Contract Note](./context/issue_651_social_navigation_pyenvs_orca_self_velocity.md)** - Explicit planar self-velocity contract fix for the upstream ORCA adapter, restored raw `ActionXY` parity on upstream scenarios, and paper-surface rerun showing the corrected prototype remains weak
+* **[Issue #653 Social-Navigation-PyEnvs SocialForce Runtime Reproduction Note](./context/issue_653_social_navigation_pyenvs_socialforce_runtime.md)** - Compatibility-runtime probe proving the upstream SocialForce policy can run unchanged against `socialforce==0.2.3` through an explicit shim, which justifies a benchmark-facing retry
+* **[Issue #656 Social-Navigation-PyEnvs SocialForce Retry Note](./context/issue_656_social_navigation_pyenvs_socialforce_retry.md)** - Benchmark-facing SocialForce retry showing the constructor blocker is fixed through an explicit shim, but the planner remains weak and partially unstable on the paper surface
+* **[Issue #659 gym-collision-avoidance Headless Reproduction](./context/issue_659_gym_collision_avoidance_headless.md)** - Explicit headless compatibility shims that let the upstream GA3C-CADRL example complete in the isolated side environment, turning this family from generic runtime-blocked into wrapper/parity-justified
 * **[Issue #661 gym-collision-avoidance Model Parity Probe](./context/issue_661_gym_collision_avoidance_model_parity.md)** - Live native-observation parity check showing the current local `_SACADRLModel` already matches upstream GA3C-CADRL checkpoint inference, shifting the remaining risk to Robot SF observation mapping and benchmark behavior
 * **[Issue #663 SACADRL Observation Parity Note](./context/issue_663_sacadrl_observation_parity.md)** - Controlled and live upstream parity probe showing the current `SACADRLPlannerAdapter` reproduces the GA3C-CADRL network input on tested cases, shifting the remaining risk from observation mapping to planner quality and scenario transfer
-* **[Issue #659 gym-collision-avoidance Headless Reproduction](./context/issue_659_gym_collision_avoidance_headless.md)** - Explicit headless compatibility shims that let the upstream GA3C-CADRL example complete in the isolated side environment, turning this family from generic runtime-blocked into wrapper/parity-justified
-* **[Issue #656 Social-Navigation-PyEnvs SocialForce Retry Note](./context/issue_656_social_navigation_pyenvs_socialforce_retry.md)** - Benchmark-facing SocialForce retry showing the constructor blocker is fixed through an explicit shim, but the planner remains weak and partially unstable on the paper surface
-* **[Issue #653 Social-Navigation-PyEnvs SocialForce Runtime Reproduction Note](./context/issue_653_social_navigation_pyenvs_socialforce_runtime.md)** - Compatibility-runtime probe proving the upstream SocialForce policy can run unchanged against `socialforce==0.2.3` through an explicit shim, which justifies a benchmark-facing retry
-* **[Issue #651 Social-Navigation-PyEnvs ORCA Self-Velocity Contract Note](./context/issue_651_social_navigation_pyenvs_orca_self_velocity.md)** - Explicit planar self-velocity contract fix for the upstream ORCA adapter, restored raw `ActionXY` parity on upstream scenarios, and paper-surface rerun showing the corrected prototype remains weak
+* **[Issue #690 Holonomic Benchmark Feasibility Note](./context/issue_690_holonomic_benchmark_feasibility.md)** - Parallel holonomic benchmark sibling, strict fail-closed planner policy, and adapter-strategy feasibility summary
+* **[Issue #759 Francis Guideline Mapping](./context/issue_759_francis_guideline_mapping.md)** - Mapping Robot SF benchmark contract to Francis et al. social navigation evaluation principles
 * **[Issue #649 Social-Navigation-PyEnvs ORCA Parity Note](./context/issue_649_social_navigation_pyenvs_orca_parity.md)** - Same-snapshot upstream-versus-wrapper parity probe showing the pre-fix self-velocity contract mismatch in the original ORCA adapter before downstream unicycle projection
 * **[Issue #647 Social-Navigation-PyEnvs HSFM Integration Note](./context/issue_647_social_navigation_pyenvs_hsfm_integration.md)** - Benchmark-facing headed-force-model prototype for upstream HSFM-New-Guo with explicit body-frame action contract, angular-rate observation extension, and benchmark validation path
 * **[Issue #646 Social-Navigation-PyEnvs SocialForce and SFM Integration Note](./context/issue_646_social_navigation_pyenvs_force_models_integration.md)** - Benchmark-facing force-model split showing SFM-Helbing runs as an upstream-backed sanity-surface prototype while SocialForce is blocked by an external package API mismatch
@@ -159,6 +182,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #641 gym-collision-avoidance Side-Environment Reproduction](./context/issue_641_gym_collision_avoidance_side_env.md)** - Isolated legacy-runtime reproduction showing GA3C-CADRL learned-policy initialization succeeds in a side environment while the canonical upstream example remains blocked on the macOS TkAgg visualization path
 * **[Issue #639 gym-collision-avoidance Source Harness Probe](./context/issue_639_gym_collision_avoidance_source_harness_probe.md)** - Fail-fast CADRL-family source-harness probe, extracted observation/action contract, and blocked verdict showing wrapper work is not yet justified in the main runtime
 * **[Issue #635 SNQI v3 Paper-Facing Contract Note](./context/issue_635_snqi_v3_paper_contract.md)** - Exact SNQI v3 asset contract, delta versus the corrected pre-v3 rerun, canonical field mapping, and paper regeneration guidance
+* **[Issue #838 SNQI Calibration Analysis](./context/issue_838_snqi_calibration_analysis.md)** - Follow-up sensitivity analysis comparing fixed v3 against weight perturbations and normalization-anchor variants
 * **[Issue #632 Python-RVO2 Prototype Note](./context/issue_632_python_rvo2_prototype.md)** - Upstream ORCA provenance, explicit velocity-to-unicycle projection contract, validation commands, and same-surface comparison showing documentation gain but no paper-matrix performance upgrade
 * **[Issue #605 gym-collision-avoidance Reference Note](./context/issue_605_gym_collision_avoidance_reference_note.md)** - CADRL-family reference assessment, source-harness recommendation, and explicit wrapper boundary for future reproduction
 * **[Issue #604 Pred2Nav Assessment Note](./context/issue_604_pred2nav_assessment.md)** - External predictive-MPC assessment showing Pred2Nav is useful as a concept source but blocked for direct reuse by unclear licensing, legacy runtime, and holonomic action semantics
@@ -173,9 +197,12 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #679 Risk DWA Benchmark Note](./context/issue_679_risk_dwa_benchmark.md)** - Paper-surface comparison showing `risk_dwa` is faster and has fewer near misses but loses too much success and collision quality to be promoted
 * **[Issue #681 Stream Gap Benchmark Note](./context/issue_681_stream_gap_benchmark.md)** - Paper-surface comparison showing `stream_gap` is extremely safe and fast but fails completely on goal-reaching, so it remains testing-only
 * **[Issue #684 Guarded PPO Tuning](./context/issue_684_guarded_ppo_tuning.md)** - Config-only guarded-PPO threshold/fallback tuning showing the best relaxed profile recovers some success but still falls well short of the benchmark leaders
+* **[Issue #768 ORCA Variants Benchmark](./context/issue_768_orca_variants.md)** - ORCA variant evaluation (nonholonomic, DD-style, relaxed, HRVO) on classic interactions, with a conservative decision to promote `socnav_orca_dd`
 * **[Issue #602 Guarded PPO Safety-Aware Profile Note](./context/issue_602_guarded_ppo_profile.md)** - Canonical guarded-PPO contract, paper-surface comparison against `ppo` and `orca`, and conservative boundary for internal safety-aware support
 * **[Issue #629 Planner Zoo Research Prompt](./context/issue_629_planner_zoo_research_prompt.md)** - Deep-research prompt, evaluation rubric, and execution sequence for external local planner candidates
+* **[External Planner Reuse Checklist](./context/external_planner_reuse_checklist.md)** - Fail-fast upstream provenance, source-harness repro, wrapper smoke, and verdict checklist for future planner reuse work
 * **[Issue #626 SoNIC Source Harness Probe](./context/issue_626_sonic_source_harness_probe.md)** - Fail-fast source-harness reproduction command, captured SoNIC contract, blocked verdict, and model-only reuse follow-up
+* **[Issue #627 SoNIC Wrapper Follow-up](./context/issue_627_sonic_wrapper_followup.md)** - Fail-fast model-only Robot SF wrapper, translation tests, benchmark-boundary verdict, and current source-harness limitation
 * **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
 * **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
@@ -196,7 +223,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[UV Migration Notes](./UV_MIGRATION.md)** - Migration to UV package manager
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
 * **[Agents & Contributor Onboarding](../AGENTS.md)** - High-level repository structure, coding/testing conventions, workflow tips
-* **[Benchmark/Planner Review Guide](../code_review.md)** - Review checklist for benchmark semantics, normalization, scenario distributions, reproducibility, and provenance
+* **[Benchmark/Planner Review Guide](./code_review.md)** - Review checklist for benchmark semantics, normalization, scenario distributions, reproducibility, and provenance
 
 ### Simulation & UI
 
@@ -268,39 +295,42 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
+* [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests
 * **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, station-platform, and group crossing archetypes for benchmark coverage.
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
   scenario matrix in [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml).
 * **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
 
-### 📊 Analysis & Tools  
+### 📊 Analysis & Tools
 
 * [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
 * [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
 * [**Full SNQI Flow (episodes → baseline → figures)**](../examples/benchmarks/snqi_full_flow.py) - End-to-end reproducible pipeline script
- - [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys, `_meta` warnings, and validation hooks
- - [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
- - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
- - **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
- - **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [ `benchmark_visuals.md` ](./benchmark_visuals.md)
- - **Episode Video Artifacts (MVP)** – Design notes and links: [ `docs/dev/issues/video-artifacts/design.md` ](./dev/issues/video-artifacts/design.md)
- - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
-   - [Random baseline](./dev/baselines/random.md) — how to use and configure
- - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
- - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
- - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
+
+* [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys,  `_meta` warnings, and validation hooks
+* [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
+* [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
+* **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
+* **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [ `benchmark_visuals.md` ](./benchmark_visuals.md)
+* **Episode Video Artifacts (MVP)** – Design notes and links: [ `docs/dev/issues/video-artifacts/design.md` ](./dev/issues/video-artifacts/design.md)
+* [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
+  + [Random baseline](./dev/baselines/random.md) — how to use and configure
+* [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
+* [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
+* [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
 
 </details>
 
 #### Social Navigation Benchmark (Overview)
 
 The benchmark layer provides:
- - Deterministic episode JSONL schema (versioned) with per-episode metrics.
- - Batch runner with resume manifest for incremental extensions.
- - Metrics suite + SNQI composite index (with weight recomputation tooling).
- - Aggregation + bootstrap CI utilities for statistical reporting.
- - Figure orchestrator to generate distributions, Pareto frontiers, force-field visualizations, thumbnails, and tables.
-See the dedicated design page above for full specification and usage examples.
+
+* Deterministic episode JSONL schema (versioned) with per-episode metrics.
+* Batch runner with resume manifest for incremental extensions.
+* Metrics suite + SNQI composite index (with weight recomputation tooling).
+* Aggregation + bootstrap CI utilities for statistical reporting.
+* Figure orchestrator to generate distributions, Pareto frontiers, force-field visualizations, thumbnails, and tables.
+  See the dedicated design page above for full specification and usage examples.
 
 #### Figures naming and outputs
 
@@ -341,10 +371,10 @@ uv run python -m robot_sf.benchmark.cli table \
 ```
 
 Optional tuning:
+
 * Reorder metrics via `--metrics` list order.
 * Confidence intervals (bootstrap):
   1. Produce an aggregate summary with bootstrap CIs:
-     
 
 ```bash
      uv run robot_sf_bench aggregate \
@@ -354,7 +384,6 @@ Optional tuning:
      ```
 
   2. Generate tables from the summary adding CI columns:
-     
 
 ```bash
      uv run python scripts/generate_figures.py \
@@ -387,9 +416,10 @@ uv run python scripts/generate_figures.py \
   --table-stats mean,median \
   --table-include-ci --ci-column-suffix ci90 --table-tex \
   --no-pareto --out-dir docs/figures/ci90_example
-```
+````
 
 Fast iteration tip:
+
 * Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.
 * Restrict distributions via `--dmetrics collisions,snqi` for quick rebuilds.
 
@@ -401,7 +431,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 * Report: Top 10 slowest tests printed with guidance at session end
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,  `ROBOT_SF_PERF_HARD`.
+* Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 
@@ -410,12 +440,14 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 * [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
 * [**Subtree Migration**](./SUBTREE_MIGRATION.md) - Git subtree integration for fast-pysf (migration from submodule)
 
-### 📈 Pedestrian Metrics  
+### 📈 Pedestrian Metrics
 
 * [**Pedestrian Metrics Overview**](./ped_metrics/PED_METRICS.md) - Summary of implemented metrics and their purpose
 * [**Metric Analysis**](./ped_metrics/PED_METRICS_ANALYSIS.md) - Overview of metrics used in research and validation
 * [**NPC Pedestrian Design**](./ped_metrics/NPC_PEDESTRIAN.md) - Details on the design and behavior of NPC pedestrians
- - [**Pedestrian Density Reference**](./ped_metrics/PEDESTRIAN_DENSITY.md) - Units, canonical triad (0.02/0.05/0.08), advisory range, difficulty mapping & test policy
+
+* [**Pedestrian Density Reference**](./ped_metrics/PEDESTRIAN_DENSITY.md) - Units, canonical triad (0.02/0.05/0.08), advisory range, difficulty mapping & test policy
+
 * [Per-pedestrian force quantiles demo](../examples/benchmarks/per_ped_force_quantiles_demo.py) - Script comparing aggregated vs per-ped force quantiles
 * [**Issue 503 Pedestrian-Impact Metrics Notes**](./context/issue_503_pedestrian_impact_metrics.md) - Execution notes for the optional experimental `ped_impact_*` metric group
 
@@ -526,7 +558,8 @@ When contributing to the project:
 
 * **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
+* **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.
 
 ---
 
-*Last updated: February 2026 - Cold/warm performance regression suite added*
+_Last updated: April 2026 - Paper-matrix extended seed schedule context added_

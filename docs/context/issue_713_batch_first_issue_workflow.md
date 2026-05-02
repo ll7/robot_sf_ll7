@@ -5,10 +5,14 @@ without wasting GitHub API quota.
 
 ## Rule
 
+- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project inspection when
+  available.
 - Do issue cleanup first: body rewrites, labels, comments, and title fixes.
 - Do Project #5 routing second: status, priority, duration, and review metadata.
 - Do derived score sync last: run the score helper once after the batch, not after each issue.
 - Cache the project ID and field IDs once per shell session and reuse them for all edits in that batch.
+- Keep `gh` as the deterministic fallback for scripted project writes, score sync, and
+  auth/debugging.
 
 ## Recommended Sequence
 
@@ -31,6 +35,8 @@ without wasting GitHub API quota.
 ## Operational Notes
 
 - If GraphQL quota is low, stop project writes and keep working on issue text first.
+- MCP-first does not mean MCP-only: issue cleanup can use MCP, while score sync and some batch
+  project writes may still be best done through `gh`.
 - Use `scripts/dev/gh_comment.sh` for multiline comments instead of ad hoc `gh` heredocs.
 - Keep the batch small enough that a retry does not make the project state ambiguous.
 

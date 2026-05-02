@@ -107,7 +107,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
-* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Canonical issue-708 PPO retrain config, SLURM submission path, deterministic eval surface, and promotion checklist.
+* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
 * **[Issue 791 Promotion Campaign](./context/issue_791_promotion_campaign_128k_256k.md)** - Medium- and long-horizon ablation campaign status, GPU predictive-foresight fix, active long runs, and follow-up boundaries.
 * **[Issue 863 SVG/Model Log Spam](./context/issue_863_svg_model_log_spam.md)** - Log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 * **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Early reward/observation screening matrix and conservative next-step recommendation for PPO issue-708 follow-up work.

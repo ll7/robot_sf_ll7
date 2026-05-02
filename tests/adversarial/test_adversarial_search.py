@@ -68,7 +68,12 @@ def _write_space(path: Path, *, min_distance: float = 0.5) -> None:
     )
 
 
-def _config(tmp_path: Path, *, require_certification: bool = False) -> SearchConfig:
+def _config(
+    tmp_path: Path,
+    *,
+    require_certification: bool = False,
+    workers: int = 1,
+) -> SearchConfig:
     template = tmp_path / "template.yaml"
     search_space = tmp_path / "space.yaml"
     _write_template(template)
@@ -81,6 +86,7 @@ def _config(tmp_path: Path, *, require_certification: bool = False) -> SearchCon
         output_dir=tmp_path / "out",
         budget=2,
         seed=123,
+        workers=workers,
         require_certification=require_certification,
     )
 
@@ -213,6 +219,49 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert manifest["summary"]["best_bundle_path"].endswith("candidate_0001")
     assert (config.output_dir / "candidate_0001" / "scenario.yaml").exists()
     assert (config.output_dir / "candidate_0001" / "route_overrides.yaml").exists()
+
+
+def test_default_search_keeps_candidate_evaluation_sequential(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Candidate search order is deterministic; workers are scoped to each benchmark call."""
+    config = _config(tmp_path, workers=4)
+    call_order: list[tuple[Path, int]] = []
+
+    def fake_run_batch(
+        _scenario_yaml_path: Path,
+        *,
+        out_path: Path,
+        workers: int,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        call_order.append((out_path.parent, workers))
+        record: dict[str, Any] = {
+            "episode_id": out_path.parent.name,
+            "seed": len(call_order),
+            "status": "success",
+            "steps": 3,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"snqi": 0.5, "success": 1.0},
+        }
+        out_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return {"failures": []}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    result = search.run_adversarial_search(
+        config,
+        certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
+        sampler=_SequenceSampler([_candidate(7), _candidate(7)]),
+    )
+
+    assert result.num_candidates == 2
+    assert call_order == [
+        (config.output_dir / "candidate_0000", 4),
+        (config.output_dir / "candidate_0001", 4),
+    ]
 
 
 def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path) -> None:

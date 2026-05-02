@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateSpec
+
+
+_CLASSIFICATION_TO_ELIGIBILITY = {
+    "invalid": "excluded",
+    "geometrically_infeasible": "excluded",
+    "kinodynamically_infeasible": "excluded",
+    "dynamically_overconstrained": "excluded",
+    "knife_edge": "stress_only",
+    "hard_but_solvable": "eligible",
+    "valid": "eligible",
+}
+_ELIGIBILITY_SEVERITY = {
+    "eligible": 0,
+    "stress_only": 1,
+    "excluded": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -77,14 +94,18 @@ def certify_candidate(
     available, this function fails closed with a ``not_available`` status.
     """
     try:
-        from robot_sf.scenario_certification import certify_scenario  # type: ignore
+        scenario_certification = import_module("robot_sf.scenario_certification")
     except ImportError:
         if require_certification:
             return not_available_status("scenario_cert.v1 adapter is not available")
         return passed_status("scenario_cert.v1 adapter not available; advisory mode")
 
     try:
-        payload = certify_scenario(scenario_yaml_path, candidate=candidate)
+        payload = _run_scenario_certification_adapter(
+            scenario_certification,
+            candidate=candidate,
+            scenario_yaml_path=scenario_yaml_path,
+        )
     except Exception as exc:  # pragma: no cover - defensive against future adapter errors
         return failed_status(
             "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
@@ -102,6 +123,59 @@ def certify_candidate(
     if status in {"not_available", "unavailable"}:
         return CertificationStatus("scenario_cert.v1", "not_available", reason, details)
     return CertificationStatus("scenario_cert.v1", "failed", reason, details)
+
+
+def _run_scenario_certification_adapter(
+    scenario_certification: Any,
+    *,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path,
+) -> dict[str, Any]:
+    """Run the available scenario certification API and normalize its payload."""
+    certify_scenario_file = getattr(scenario_certification, "certify_scenario_file", None)
+    certificate_to_dict = getattr(scenario_certification, "certificate_to_dict", None)
+    if callable(certify_scenario_file) and callable(certificate_to_dict):
+        certificates = certify_scenario_file(scenario_yaml_path)
+        payloads = [certificate_to_dict(certificate) for certificate in certificates]
+        if not payloads:
+            return {"status": "failed", "reason": "scenario_cert.v1 returned no certificates"}
+        worst = max(payloads, key=_certificate_payload_severity)
+        eligibility = _certificate_payload_eligibility(worst)
+        status = "failed" if eligibility in {"", "excluded"} else "passed"
+        reasons = worst.get("reasons", [])
+        reason = "; ".join(str(reason) for reason in reasons) if isinstance(reasons, list) else ""
+        return {
+            "status": status,
+            "reason": reason or str(worst.get("classification", status)),
+            "details": {"certificates": payloads},
+        }
+
+    certify_scenario = getattr(scenario_certification, "certify_scenario", None)
+    if callable(certify_scenario):
+        return certify_scenario(scenario_yaml_path, candidate=candidate)
+    return {"status": "not_available", "reason": "scenario_cert.v1 adapter is not available"}
+
+
+def _normalize_certificate_text(value: Any) -> str:
+    """Normalize optional certificate enum fields without stringifying null values."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower()
+
+
+def _certificate_payload_eligibility(payload: dict[str, Any]) -> str:
+    """Return benchmark eligibility, inferring it from classification when omitted."""
+    eligibility = _normalize_certificate_text(payload.get("benchmark_eligibility"))
+    if eligibility in _ELIGIBILITY_SEVERITY:
+        return eligibility
+    classification = _normalize_certificate_text(payload.get("classification"))
+    return _CLASSIFICATION_TO_ELIGIBILITY.get(classification, "")
+
+
+def _certificate_payload_severity(payload: dict[str, Any]) -> tuple[int, str]:
+    """Sort certificates by benchmark eligibility severity, failing closed on unknown values."""
+    eligibility = _certificate_payload_eligibility(payload)
+    return (_ELIGIBILITY_SEVERITY.get(eligibility, 3), eligibility)
 
 
 def candidate_allowed(status: CertificationStatus, *, require_certification: bool) -> bool:

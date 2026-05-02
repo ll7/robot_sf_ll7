@@ -8,12 +8,15 @@ from robot_sf.adversarial.config import (
     SearchRunResult,
     SearchSpaceConfig,
 )
+from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
 from robot_sf.adversarial.search import run_adversarial_search
 
 __all__ = [
     "CandidateEvaluation",
     "CandidateSpec",
+    "CoordinateRefinementSampler",
     "Pose2D",
+    "RandomCandidateSampler",
     "SearchConfig",
     "SearchRunResult",
     "SearchSpaceConfig",

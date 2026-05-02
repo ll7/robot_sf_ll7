@@ -105,6 +105,12 @@ knowledge, not every transient iteration detail.
 - [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
   log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
+## Performance Notes
+
+- [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
+  cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
+  cold startup and lazy first-step initialization, not warm steady-state stepping.
+
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)

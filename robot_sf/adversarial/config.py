@@ -1,0 +1,389 @@
+"""Configuration and public contracts for adversarial scenario search."""
+
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from random import Random
+from typing import TYPE_CHECKING, Any
+
+import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from robot_sf.adversarial.attribution import FailureAttribution
+    from robot_sf.adversarial.certification import CertificationStatus
+
+
+@dataclass(frozen=True)
+class Pose2D:
+    """Planar pose used by the adversarial candidate contract."""
+
+    x: float
+    y: float
+    theta: float = 0.0
+
+    def as_waypoint(self) -> list[float]:
+        """Return the pose position as a route waypoint."""
+        return [float(self.x), float(self.y)]
+
+    def to_json(self) -> dict[str, float]:
+        """Return a JSON-serializable payload."""
+        return {"x": float(self.x), "y": float(self.y), "theta": float(self.theta)}
+
+
+@dataclass(frozen=True)
+class CandidateSpec:
+    """One sampled adversarial scenario candidate."""
+
+    start: Pose2D
+    goal: Pose2D
+    spawn_time_s: float
+    pedestrian_speed_mps: float
+    pedestrian_delay_s: float
+    scenario_seed: int
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serializable candidate payload."""
+        return {
+            "start": self.start.to_json(),
+            "goal": self.goal.to_json(),
+            "spawn_time_s": float(self.spawn_time_s),
+            "pedestrian_speed_mps": float(self.pedestrian_speed_mps),
+            "pedestrian_delay_s": float(self.pedestrian_delay_s),
+            "scenario_seed": int(self.scenario_seed),
+        }
+
+
+@dataclass(frozen=True)
+class CandidateEvaluation:
+    """Evaluation result for one candidate."""
+
+    candidate: CandidateSpec
+    certification_status: CertificationStatus
+    objective_value: float | None
+    failure_attribution: FailureAttribution | None
+    episode_record_path: Path | None
+    trajectory_csv_path: Path | None
+    scenario_yaml_path: Path | None
+    bundle_path: Path | None = None
+    error: str | None = None
+
+    def with_objective(self, objective_value: float | None) -> CandidateEvaluation:
+        """Return a copy with an objective score attached."""
+        return replace(self, objective_value=objective_value)
+
+
+@dataclass(frozen=True)
+class SearchRunResult:
+    """Summary returned by :func:`run_adversarial_search`."""
+
+    manifest_path: Path
+    best_candidate: CandidateEvaluation | None
+    best_bundle_path: Path | None
+    num_candidates: int
+    num_valid_candidates: int
+    num_invalid_candidates: int
+    num_failed_evaluations: int
+
+    @property
+    def best_objective_value(self) -> float | None:
+        """Return the best objective value, if any candidate scored."""
+        if self.best_candidate is None:
+            return None
+        return self.best_candidate.objective_value
+
+
+@dataclass(frozen=True)
+class RangeConfig:
+    """Inclusive numeric sampling range."""
+
+    min: float
+    max: float
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, name: str) -> RangeConfig:
+        """Build a range from YAML payload."""
+        if "min" not in payload or "max" not in payload:
+            raise ValueError(f"search_space.{name} must define min and max")
+        lo = float(payload["min"])
+        hi = float(payload["max"])
+        if not math.isfinite(lo) or not math.isfinite(hi):
+            raise ValueError(f"search_space.{name} bounds must be finite")
+        if lo > hi:
+            raise ValueError(f"search_space.{name}.min must be <= max")
+        return cls(min=lo, max=hi)
+
+    def sample(self, rng: Random) -> float:
+        """Sample a value from the range."""
+        return float(rng.uniform(self.min, self.max))
+
+    def contains(self, value: float) -> bool:
+        """Return whether a value falls inside the inclusive range."""
+        return self.min <= float(value) <= self.max
+
+    def to_json(self) -> dict[str, float]:
+        """Return a JSON-serializable range payload."""
+        return {"min": float(self.min), "max": float(self.max)}
+
+
+@dataclass(frozen=True)
+class SearchSpaceConfig:
+    """Validated candidate sampling space for adversarial search."""
+
+    start_x: RangeConfig
+    start_y: RangeConfig
+    goal_x: RangeConfig
+    goal_y: RangeConfig
+    spawn_time_s: RangeConfig = field(default_factory=lambda: RangeConfig(0.0, 0.0))
+    pedestrian_speed_mps: RangeConfig = field(default_factory=lambda: RangeConfig(1.0, 1.0))
+    pedestrian_delay_s: RangeConfig = field(default_factory=lambda: RangeConfig(0.0, 0.0))
+    scenario_seed: RangeConfig = field(default_factory=lambda: RangeConfig(1.0, 1.0))
+    min_start_goal_distance_m: float = 0.25
+    pedestrian_id: str | None = None
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> SearchSpaceConfig:
+        """Load and validate a search-space YAML file."""
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError(f"Search-space config must be a mapping: {path}")
+        return cls.from_mapping(raw)
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> SearchSpaceConfig:
+        """Build a search-space config from a mapping."""
+        variables = payload.get("variables", payload)
+        if not isinstance(variables, dict):
+            raise ValueError("search-space variables must be a mapping")
+
+        def _range(name: str, default: tuple[float, float] | None = None) -> RangeConfig:
+            raw_value = variables.get(name)
+            if raw_value is None:
+                if default is None:
+                    raise ValueError(f"search_space.{name} is required")
+                return RangeConfig(*default)
+            if not isinstance(raw_value, dict):
+                raise ValueError(f"search_space.{name} must be a mapping")
+            return RangeConfig.from_mapping(raw_value, name=name)
+
+        constraints = payload.get("constraints", {})
+        if constraints is None:
+            constraints = {}
+        if not isinstance(constraints, dict):
+            raise ValueError("search-space constraints must be a mapping")
+        pedestrian = payload.get("pedestrian", {})
+        if pedestrian is None:
+            pedestrian = {}
+        if not isinstance(pedestrian, dict):
+            raise ValueError("search-space pedestrian section must be a mapping")
+        pedestrian_id = pedestrian.get("id")
+        if pedestrian_id is not None:
+            pedestrian_id = str(pedestrian_id).strip() or None
+
+        config = cls(
+            start_x=_range("start_x"),
+            start_y=_range("start_y"),
+            goal_x=_range("goal_x"),
+            goal_y=_range("goal_y"),
+            spawn_time_s=_range("spawn_time_s", (0.0, 0.0)),
+            pedestrian_speed_mps=_range("pedestrian_speed_mps", (1.0, 1.0)),
+            pedestrian_delay_s=_range("pedestrian_delay_s", (0.0, 0.0)),
+            scenario_seed=_range("scenario_seed", (1.0, 1.0)),
+            min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
+            pedestrian_id=pedestrian_id,
+        )
+        if not config.scenario_seed.min.is_integer() or not config.scenario_seed.max.is_integer():
+            raise ValueError("search-space scenario_seed bounds must be integers")
+        if (
+            not math.isfinite(config.min_start_goal_distance_m)
+            or config.min_start_goal_distance_m < 0.0
+        ):
+            raise ValueError("search-space min_start_goal_distance_m must be finite and >= 0")
+        return config
+
+    def sample_candidate(self, rng: Random) -> CandidateSpec:
+        """Sample a candidate deterministically from the provided RNG."""
+        return CandidateSpec(
+            start=Pose2D(self.start_x.sample(rng), self.start_y.sample(rng)),
+            goal=Pose2D(self.goal_x.sample(rng), self.goal_y.sample(rng)),
+            spawn_time_s=self.spawn_time_s.sample(rng),
+            pedestrian_speed_mps=self.pedestrian_speed_mps.sample(rng),
+            pedestrian_delay_s=self.pedestrian_delay_s.sample(rng),
+            scenario_seed=rng.randint(int(self.scenario_seed.min), int(self.scenario_seed.max)),
+        )
+
+    def validate_candidate(self, candidate: CandidateSpec) -> list[str]:
+        """Return validation errors for a candidate; empty means valid."""
+        errors: list[str] = []
+        values = {
+            "start.x": candidate.start.x,
+            "start.y": candidate.start.y,
+            "goal.x": candidate.goal.x,
+            "goal.y": candidate.goal.y,
+            "spawn_time_s": candidate.spawn_time_s,
+            "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
+            "pedestrian_delay_s": candidate.pedestrian_delay_s,
+        }
+        for name, value in values.items():
+            if not math.isfinite(float(value)):
+                errors.append(f"{name} must be finite")
+        if not self.start_x.contains(candidate.start.x):
+            errors.append("start.x outside search space")
+        if not self.start_y.contains(candidate.start.y):
+            errors.append("start.y outside search space")
+        if not self.goal_x.contains(candidate.goal.x):
+            errors.append("goal.x outside search space")
+        if not self.goal_y.contains(candidate.goal.y):
+            errors.append("goal.y outside search space")
+        if not self.spawn_time_s.contains(candidate.spawn_time_s):
+            errors.append("spawn_time_s outside search space")
+        if not self.pedestrian_speed_mps.contains(candidate.pedestrian_speed_mps):
+            errors.append("pedestrian_speed_mps outside search space")
+        if not self.pedestrian_delay_s.contains(candidate.pedestrian_delay_s):
+            errors.append("pedestrian_delay_s outside search space")
+        if not self.scenario_seed.contains(float(candidate.scenario_seed)):
+            errors.append("scenario_seed outside search space")
+        if candidate.spawn_time_s < 0.0:
+            errors.append("spawn_time_s must be non-negative")
+        if candidate.pedestrian_speed_mps <= 0.0:
+            errors.append("pedestrian_speed_mps must be positive")
+        if candidate.pedestrian_delay_s < 0.0:
+            errors.append("pedestrian_delay_s must be non-negative")
+        if candidate.scenario_seed < 0:
+            errors.append("scenario_seed must be non-negative")
+        dx = float(candidate.goal.x) - float(candidate.start.x)
+        dy = float(candidate.goal.y) - float(candidate.start.y)
+        if math.hypot(dx, dy) < self.min_start_goal_distance_m:
+            errors.append("start and goal are closer than min_start_goal_distance_m")
+        return errors
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serializable search-space payload."""
+        return {
+            "variables": {
+                "start_x": self.start_x.to_json(),
+                "start_y": self.start_y.to_json(),
+                "goal_x": self.goal_x.to_json(),
+                "goal_y": self.goal_y.to_json(),
+                "spawn_time_s": self.spawn_time_s.to_json(),
+                "pedestrian_speed_mps": self.pedestrian_speed_mps.to_json(),
+                "pedestrian_delay_s": self.pedestrian_delay_s.to_json(),
+                "scenario_seed": self.scenario_seed.to_json(),
+            },
+            "constraints": {"min_start_goal_distance_m": self.min_start_goal_distance_m},
+            "pedestrian": {"id": self.pedestrian_id} if self.pedestrian_id else {},
+        }
+
+
+@dataclass(frozen=True)
+class SearchConfig:
+    """Top-level adversarial-search run configuration."""
+
+    policy: str
+    scenario_template: Path
+    search_space_path: Path
+    search_space: SearchSpaceConfig
+    objective: str
+    output_dir: Path
+    budget: int = 64
+    seed: int = 0
+    algo_config_path: Path | None = None
+    horizon: int | None = None
+    dt: float | None = None
+    workers: int = 1
+    record_forces: bool = True
+    require_certification: bool = False
+    benchmark_profile: str = "baseline-safe"
+    snqi_weights_path: Path | None = None
+    snqi_baseline_path: Path | None = None
+
+    @classmethod
+    def from_files(
+        cls,
+        *,
+        policy: str,
+        scenario_template: Path,
+        search_space: Path,
+        objective: str,
+        output_dir: Path,
+        budget: int = 64,
+        seed: int = 0,
+        algo_config_path: Path | None = None,
+        horizon: int | None = None,
+        dt: float | None = None,
+        workers: int = 1,
+        record_forces: bool = True,
+        require_certification: bool = False,
+        benchmark_profile: str = "baseline-safe",
+        snqi_weights_path: Path | None = None,
+        snqi_baseline_path: Path | None = None,
+    ) -> SearchConfig:
+        """Create a search config by loading the search-space YAML."""
+        return cls(
+            policy=policy,
+            scenario_template=Path(scenario_template),
+            search_space_path=Path(search_space),
+            search_space=SearchSpaceConfig.from_file(search_space),
+            objective=objective,
+            output_dir=Path(output_dir),
+            budget=int(budget),
+            seed=int(seed),
+            algo_config_path=Path(algo_config_path) if algo_config_path else None,
+            horizon=horizon,
+            dt=dt,
+            workers=int(workers),
+            record_forces=bool(record_forces),
+            require_certification=bool(require_certification),
+            benchmark_profile=benchmark_profile,
+            snqi_weights_path=Path(snqi_weights_path) if snqi_weights_path else None,
+            snqi_baseline_path=Path(snqi_baseline_path) if snqi_baseline_path else None,
+        )
+
+    def validate(self) -> None:
+        """Validate top-level search settings."""
+        if not self.policy.strip():
+            raise ValueError("policy must be non-empty")
+        if self.budget < 1:
+            raise ValueError("budget must be >= 1")
+        if self.workers < 1:
+            raise ValueError("workers must be >= 1")
+        if not self.scenario_template.exists():
+            raise FileNotFoundError(f"Scenario template not found: {self.scenario_template}")
+        if self.algo_config_path is not None and not self.algo_config_path.exists():
+            raise FileNotFoundError(f"Algorithm config not found: {self.algo_config_path}")
+
+    def load_optional_json(self, path: Path | None) -> dict[str, Any] | None:
+        """Load an optional JSON config file."""
+        if path is None:
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serializable config payload for manifests."""
+        return {
+            "policy": self.policy,
+            "scenario_template": self.scenario_template.as_posix(),
+            "search_space_path": self.search_space_path.as_posix(),
+            "search_space": self.search_space.to_json(),
+            "objective": self.objective,
+            "output_dir": self.output_dir.as_posix(),
+            "budget": int(self.budget),
+            "seed": int(self.seed),
+            "algo_config_path": self.algo_config_path.as_posix() if self.algo_config_path else None,
+            "horizon": self.horizon,
+            "dt": self.dt,
+            "workers": int(self.workers),
+            "record_forces": bool(self.record_forces),
+            "require_certification": bool(self.require_certification),
+            "benchmark_profile": self.benchmark_profile,
+            "snqi_weights_path": self.snqi_weights_path.as_posix()
+            if self.snqi_weights_path
+            else None,
+            "snqi_baseline_path": self.snqi_baseline_path.as_posix()
+            if self.snqi_baseline_path
+            else None,
+        }

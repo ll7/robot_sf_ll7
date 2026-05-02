@@ -1,0 +1,14 @@
+# SICNav exploratory wrapper for the verified-simple benchmark gate.
+allow_testing_algorithms: true
+include_in_paper: false
+
+repo_root: third_party/external_mpc_repos/sicnav
+checkpoint_path: sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt
+solver: ipopt
+device: cpu
+mode: unicycle
+action_space: unicycle
+v_max: 1.5
+omega_max: 1.2
+safety_clamp: true
+fallback_on_error: false

@@ -497,6 +497,8 @@ def _register_model_entry(
     dataset: Path,
     summary_path: Path,
     selection: dict[str, Any],
+    registry_wandb_provenance: dict[str, str] | None = None,
+    replacement_model_id: str | None = None,
 ) -> None:
     """Upsert registry metadata for a promoted predictive checkpoint."""
     rel_checkpoint = checkpoint_path
@@ -505,6 +507,30 @@ def _register_model_entry(
     except ValueError:
         rel_checkpoint = checkpoint_path
 
+    portable_provenance: dict[str, str] = {}
+    if isinstance(registry_wandb_provenance, dict):
+        candidate_provenance = {
+            key: str(registry_wandb_provenance.get(key, "") or "").strip()
+            for key in (
+                "wandb_run_id",
+                "wandb_run_path",
+                "wandb_entity",
+                "wandb_project",
+                "wandb_file",
+            )
+        }
+        has_run_path = bool(candidate_provenance.get("wandb_run_path"))
+        has_split_ids = all(
+            candidate_provenance.get(key)
+            for key in ("wandb_entity", "wandb_project", "wandb_run_id")
+        )
+        if has_run_path or has_split_ids:
+            candidate_provenance["wandb_file"] = (
+                candidate_provenance.get("wandb_file") or "model.zip"
+            )
+            portable_provenance = candidate_provenance
+    local_only = not portable_provenance
+
     upsert_registry_entry(
         {
             "model_id": model_id,
@@ -512,16 +538,23 @@ def _register_model_entry(
             "local_path": str(rel_checkpoint),
             "config_path": "",
             "commit": _git_commit(),
-            "wandb_run_id": "",
-            "wandb_run_path": "",
-            "wandb_entity": "",
-            "wandb_project": "",
-            "wandb_file": "",
+            "wandb_run_id": portable_provenance.get("wandb_run_id", ""),
+            "wandb_run_path": portable_provenance.get("wandb_run_path", ""),
+            "wandb_entity": portable_provenance.get("wandb_entity", ""),
+            "wandb_project": portable_provenance.get("wandb_project", ""),
+            "wandb_file": portable_provenance.get("wandb_file", ""),
+            "local_only": local_only,
+            "replacement_model_id": str(replacement_model_id or ""),
             "tags": ["predictive", "rgl", "planner", "trajectory", "benchmark-reset-v2"],
             "notes": [
                 f"Dataset: {dataset}",
                 f"Training summary: {summary_path}",
                 f"Selection mode: {selection.get('selection_mode', 'unknown')}",
+                (
+                    "Portable W&B provenance recorded in registry."
+                    if portable_provenance
+                    else "Local-only registry entry; portable W&B provenance not recorded."
+                ),
                 "Promoted by scripts/training/train_predictive_planner.py",
             ],
         }
@@ -655,12 +688,20 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         selection = summary.get("selection", {})
         if not isinstance(selection, dict):
             selection = {}
+        registry_wandb_provenance = summary.get("registry_wandb_provenance")
+        if not isinstance(registry_wandb_provenance, dict):
+            registry_wandb_provenance = None
+        replacement_model_id = summary.get("replacement_model_id")
+        if replacement_model_id is not None:
+            replacement_model_id = str(replacement_model_id)
         _register_model_entry(
             model_id=str(args.model_id),
             checkpoint_path=args.checkpoint_only_register,
             dataset=args.dataset,
             summary_path=args.training_summary,
             selection=selection,
+            registry_wandb_provenance=registry_wandb_provenance,
+            replacement_model_id=replacement_model_id,
         )
         print(
             json.dumps(
@@ -676,6 +717,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
 
     if not args.dataset.exists():
         raise FileNotFoundError(f"Dataset not found: {args.dataset}")
+
+    started_at_utc = datetime.now(UTC)
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -946,11 +989,17 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         best_proxy=best_proxy,
     )
 
+    finished_at_utc = datetime.now(UTC)
+    total_runtime_sec = float((finished_at_utc - started_at_utc).total_seconds())
+
     summary = {
         "contract_version": _CONTRACT_VERSION,
         "training_family": _TRAINING_FAMILY,
         "artifact_role": "predictive_training_summary",
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": finished_at_utc.isoformat(),
+        "started_at_utc": started_at_utc.isoformat(),
+        "finished_at_utc": finished_at_utc.isoformat(),
+        "total_runtime_sec": total_runtime_sec,
         "model_id": args.model_id,
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),
@@ -992,6 +1041,20 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         },
         "dataset_diagnostics_path": str(diagnostics_path),
         "dataset_diagnostics": diagnostics,
+        "wandb": (
+            {
+                "run_id": str(getattr(wandb_run, "id", "") or ""),
+                "run_path": "/".join(getattr(wandb_run, "path", []) or ()),
+                "entity": str(getattr(wandb_run, "entity", "") or ""),
+                "project": str(getattr(wandb_run, "project", "") or ""),
+                "name": str(getattr(wandb_run, "name", "") or ""),
+                "job_type": str(getattr(wandb_run, "job_type", "") or ""),
+            }
+            if wandb_run is not None
+            else None
+        ),
+        "registry_wandb_provenance": None,
+        "replacement_model_id": None,
         "history": history,
     }
 

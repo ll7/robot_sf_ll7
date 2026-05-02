@@ -13,22 +13,27 @@ large maps or dense crowds.
 
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numba
 import numpy as np
 
 from robot_sf.common.geometry import euclid_dist
-from robot_sf.common.types import Circle2D, Line2D, Vec2D
+from robot_sf.common.types import Circle2D, Line2D, RobotPose, Vec2D
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
 logger = logging.getLogger(__name__)
 
+# Squared-length cutoff below which a segment is treated as degenerate (a point).
+# Reaching the quadratic step with a == 0 would make the discriminant check trivially
+# true (0 <= 0 <= 0), so degenerate segments must be rejected explicitly.
+_DEGENERATE_SEGMENT_EPS = 1e-12
 
-@numba.njit(fastmath=True)
+
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     """
     Checks if two circles intersect.
@@ -65,7 +70,28 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     return dist_sq <= rad_sum_sq
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
+def _circle_collides_any_points(
+    center_x: float,
+    center_y: float,
+    radius: float,
+    points: np.ndarray,
+    other_radius: float,
+) -> bool:
+    """Check one circle against equal-radius circles centered at an ``(N, 2)`` array.
+
+    Returns:
+        bool: True if any point-centered circle intersects the query circle.
+    """
+    rad_sum_sq = (radius + other_radius) ** 2
+    for idx in range(points.shape[0]):
+        dist_sq = (center_x - points[idx, 0]) ** 2 + (center_y - points[idx, 1]) ** 2
+        if dist_sq <= rad_sum_sq:
+            return True
+    return False
+
+
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     """Simple vector math implementation using quadratic solution formula.
 
@@ -90,6 +116,9 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     s_x, s_y = p2_x - p1_x, p2_y - p1_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2
+    # Degenerate (zero-length) segment with endpoints already shown outside the circle.
+    if a < _DEGENERATE_SEGMENT_EPS:
+        return False
     b = 2 * (s_x * t_x + s_y * t_y)
     c = norm_p1 - r_sq
 
@@ -101,6 +130,50 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     # check if collision is actually within the line segment
     disc_root = disc**0.5
     return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
+
+
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via callers; not line-traceable.
+def _circle_collides_any_flat_segments(
+    c_x: float,
+    c_y: float,
+    radius: float,
+    segments: np.ndarray,
+) -> bool:
+    """Check collision against an ``(N, 4)`` segment array without Python loop overhead.
+
+    Returns:
+        bool: True if any segment intersects the circle.
+    """
+    r_sq = radius**2
+    for idx in range(segments.shape[0]):
+        p1_x = segments[idx, 0] - c_x
+        p1_y = segments[idx, 1] - c_y
+        p2_x = segments[idx, 2] - c_x
+        p2_y = segments[idx, 3] - c_y
+
+        norm_p1 = p1_x**2 + p1_y**2
+        norm_p2 = p2_x**2 + p2_y**2
+        if norm_p1 <= r_sq or norm_p2 <= r_sq:
+            return True
+
+        s_x = p2_x - p1_x
+        s_y = p2_y - p1_y
+        a = s_x**2 + s_y**2
+        # Degenerate (zero-length) segment with endpoints already shown outside the circle.
+        if a < _DEGENERATE_SEGMENT_EPS:
+            continue
+        b = 2 * (s_x * p1_x + s_y * p1_y)
+        c = norm_p1 - r_sq
+
+        disc = b**2 - 4 * a * c
+        if disc < 0:
+            continue
+
+        disc_root = disc**0.5
+        if 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a:
+            return True
+
+    return False
 
 
 def circle_collides_any(circle: Circle2D, others: Iterable[Circle2D]) -> bool:
@@ -130,10 +203,8 @@ def circle_collides_any_lines(circle: Circle2D, segments: Iterable[Line2D] | np.
         bool: True if any intersection is found.
     """
     if isinstance(segments, np.ndarray):
-        for s_x, s_y, e_x, e_y in segments:
-            if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
-                return True
-        return False
+        (c_x, c_y), radius = circle
+        return bool(_circle_collides_any_flat_segments(c_x, c_y, radius, segments))
 
     for idx, seg in enumerate(segments):
         try:
@@ -168,6 +239,8 @@ class ContinuousOccupancy:
         A function to get the obstacle coordinates.
     get_pedestrian_coords : Callable[[], np.ndarray]
         A function to get the pedestrian coordinates.
+    get_agent_pose : Callable[[], RobotPose] | None
+        Optional callback returning the full agent pose ``((x, y), heading)``.
     agent_radius : float, optional
         The robot radius, by default 1.0.
     ped_radius : float, optional
@@ -182,10 +255,25 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
-    get_dynamic_objects: Callable[[], list[Circle2D]] | None = None
+    get_agent_pose: Callable[[], RobotPose] | None = field(default=None, kw_only=True)
+    get_dynamic_objects: Callable[[], list[Circle2D]] | None = field(
+        default=None,
+        kw_only=True,
+    )
     agent_radius: float = 1.0
     ped_radius: float = 0.4
     goal_radius: float = 1.0
+
+    @property
+    def agent_heading(self) -> float | None:
+        """Return agent heading when full pose callback is available.
+
+        Returns:
+            float | None: Agent heading in radians, or ``None`` when unavailable.
+        """
+        if self.get_agent_pose is None:
+            return None
+        return float(self.get_agent_pose()[1])
 
     @property
     def obstacle_coords(self) -> np.ndarray:
@@ -241,8 +329,20 @@ class ContinuousOccupancy:
         """
         collision_distance = self.agent_radius
         ped_radius = self.ped_radius
-        circle_agent = (self.get_agent_coords(), collision_distance)
-        ped_circles = (((ped_x, ped_y), ped_radius) for ped_x, ped_y in self.pedestrian_coords)
+        agent_x, agent_y = self.get_agent_coords()
+        pedestrian_coords = self.pedestrian_coords
+        if isinstance(pedestrian_coords, np.ndarray):
+            return bool(
+                _circle_collides_any_points(
+                    agent_x,
+                    agent_y,
+                    collision_distance,
+                    pedestrian_coords,
+                    ped_radius,
+                )
+            )
+        circle_agent = ((agent_x, agent_y), collision_distance)
+        ped_circles = (((ped_x, ped_y), ped_radius) for ped_x, ped_y in pedestrian_coords)
         return circle_collides_any(circle_agent, ped_circles)
 
     @property

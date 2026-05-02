@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -21,7 +20,6 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
-    serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -45,12 +43,51 @@ def _load_yaml_documents(path: Path) -> Any:
         return yaml.safe_load(handle)
 
 
+def _load_scenario_manifest(
+    data: Any,
+    *,
+    source: Path,
+) -> tuple[list[Any], list[Path], list[Path]]:
+    """Extract scenario entries, includes, and search paths from loaded YAML.
+
+    Returns:
+        tuple[list[Any], list[Path], list[Path]]: Scenarios, include paths, and
+        resolved map search paths.
+    """
+    scenarios: list[Any] = []
+    includes: list[Path] = []
+    local_map_search_paths = (
+        _resolve_map_search_paths(data, source=source) if isinstance(data, Mapping) else []
+    )
+    if local_map_search_paths:
+        logger.info(
+            "Scenario manifest '{}' configured map_search_paths: {}",
+            source,
+            ", ".join(str(path) for path in local_map_search_paths),
+        )
+    if isinstance(data, Mapping):
+        includes = _resolve_includes(data, source=source)
+        if "scenarios" in data:
+            scenarios = data["scenarios"]
+            if not isinstance(scenarios, list):
+                raise ValueError(f"Scenario config 'scenarios' must be a list: {source}")
+        elif not includes:
+            raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
+    elif isinstance(data, list):
+        scenarios = data
+    else:  # pragma: no cover - malformed input handled by caller
+        raise ValueError(f"Scenario config must contain a 'scenarios' list: {source}")
+    return scenarios, includes, local_map_search_paths
+
+
 def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
     Supports a list of scenarios, a mapping with ``scenarios``, and optional
     include lists (``includes``, ``include``, or ``scenario_files``) for
     composing per-scenario and per-archetype files into a single list.
+    Manifests can also provide ``select_scenarios`` to keep only an explicit,
+    deterministic subset of the expanded scenarios by name.
 
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
@@ -83,34 +120,16 @@ def _load_scenarios_recursive(
     visited.add(resolved)
     try:
         data = _load_yaml_documents(resolved)
-        scenarios: list[Any] = []
-        includes: list[Path] = []
-        local_map_search_paths = (
-            _resolve_map_search_paths(data, root=root) if isinstance(data, Mapping) else []
+        scenarios, includes, local_map_search_paths = _load_scenario_manifest(
+            data,
+            source=resolved,
         )
-        if local_map_search_paths:
-            logger.info(
-                "Scenario manifest '{}' configured map_search_paths: {}",
-                resolved,
-                ", ".join(str(path) for path in local_map_search_paths),
-            )
-        if isinstance(data, Mapping):
-            includes = _resolve_includes(data, source=resolved)
-            if "scenarios" in data:
-                scenarios = data["scenarios"]
-            elif not includes:
-                raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
-        elif isinstance(data, list):
-            scenarios = data
-        else:  # pragma: no cover - malformed input handled by caller
-            raise ValueError(f"Scenario config must contain a 'scenarios' list: {resolved}")
-
-        if scenarios and not isinstance(scenarios, list):
-            raise ValueError(f"Scenario config 'scenarios' must be a list: {resolved}")
-
         combined: list[Mapping[str, Any]] = []
         inherited_search_paths = map_search_paths or []
-        effective_search_paths = local_map_search_paths or inherited_search_paths
+        effective_search_paths = _merge_map_search_paths(
+            inherited_search_paths,
+            local_map_search_paths,
+        )
         for include_path in includes:
             combined.extend(
                 _load_scenarios_recursive(
@@ -128,6 +147,8 @@ def _load_scenarios_recursive(
                 map_search_paths=effective_search_paths,
             )
         )
+        if isinstance(data, Mapping):
+            combined = _apply_scenario_selection(combined, data=data, source=resolved)
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -166,8 +187,95 @@ def _resolve_includes(data: Mapping[str, Any], *, source: Path) -> list[Path]:
     return includes
 
 
-def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Path]:
-    """Resolve optional map search paths for the scenario root.
+def _resolve_scenario_selection(data: Mapping[str, Any], *, source: Path) -> list[str]:
+    """Resolve explicit scenario selection names from a manifest.
+
+    Returns:
+        list[str]: Ordered scenario names to keep.
+    """
+    raw = data.get("select_scenarios")
+    if raw is None:
+        return []
+    if isinstance(raw, (str, Path)):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        raise ValueError(f"select_scenarios must be a list or string in '{source}'.")
+    selected: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, (str, Path)):
+            raise ValueError(f"select_scenarios entry '{entry}' must be a string in '{source}'.")
+        name = str(entry).strip()
+        if not name:
+            raise ValueError(f"select_scenarios entry must not be empty in '{source}'.")
+        key = name.lower()
+        if key in seen:
+            raise ValueError(f"Duplicate select_scenarios entry '{name}' in '{source}'.")
+        seen.add(key)
+        selected.append(name)
+    if not selected:
+        raise ValueError(f"select_scenarios must not be empty in '{source}'.")
+    return selected
+
+
+def _apply_scenario_selection(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    data: Mapping[str, Any],
+    source: Path,
+) -> list[Mapping[str, Any]]:
+    """Apply explicit scenario selection after manifest expansion.
+
+    Returns:
+        list[Mapping[str, Any]]: Filtered scenarios in selector order.
+    """
+    selected_names = _resolve_scenario_selection(data, source=source)
+    if not selected_names:
+        return scenarios
+
+    scenario_map: dict[str, Mapping[str, Any]] = {}
+    for idx, scenario in enumerate(scenarios):
+        name = _scenario_identifier(scenario, source=source, index=idx)
+        key = name.lower()
+        if key in scenario_map:
+            raise ValueError(
+                f"Duplicate scenario name '{name}' in '{source}' prevents select_scenarios."
+            )
+        scenario_map[key] = scenario
+
+    selected: list[Mapping[str, Any]] = []
+    for name in selected_names:
+        key = name.lower()
+        if key not in scenario_map:
+            raise ValueError(f"Unknown select_scenarios entry '{name}' in '{source}'.")
+        selected.append(scenario_map[key])
+    return selected
+
+
+def _scenario_identifier(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    index: int,
+) -> str:
+    """Return the stable scenario identifier used for selection and deduping."""
+    name = scenario.get("name") or scenario.get("scenario_id")
+    if name is None:
+        raise ValueError(f"Scenario entry {index} in '{source}' is missing a name or scenario_id.")
+    if not isinstance(name, str):
+        raise ValueError(f"Scenario name must be a string in '{source}' at index {index}.")
+    normalized = name.strip()
+    if not normalized:
+        raise ValueError(
+            f"Scenario name must be a non-empty string in '{source}' at index {index}."
+        )
+    return normalized
+
+
+def _resolve_map_search_paths(data: Mapping[str, Any], *, source: Path) -> list[Path]:
+    """Resolve optional map search paths for the scenario manifest.
 
     Returns:
         list[Path]: Resolved search paths.
@@ -180,12 +288,12 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
     elif isinstance(raw, list):
         entries = raw
     else:
-        raise ValueError(f"map_search_paths must be a list or string in '{root}'.")
+        raise ValueError(f"map_search_paths must be a list or string in '{source}'.")
     resolved: list[Path] = []
-    base_root = root if root.is_dir() else root.parent
+    base_root = source.parent
     for entry in entries:
         if not isinstance(entry, (str, Path)):
-            raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{root}'.")
+            raise ValueError(f"map_search_paths entry '{entry}' must be a string in '{source}'.")
         candidate = Path(entry)
         if not candidate.is_absolute():
             candidate = (base_root / candidate).resolve()
@@ -194,6 +302,24 @@ def _resolve_map_search_paths(data: Mapping[str, Any], *, root: Path) -> list[Pa
             continue
         resolved.append(candidate)
     return resolved
+
+
+def _merge_map_search_paths(*path_groups: list[Path]) -> list[Path]:
+    """Combine map search paths while preserving order and removing duplicates.
+
+    Returns:
+        list[Path]: Deduplicated search paths in first-seen order.
+    """
+    merged: list[Path] = []
+    seen: set[Path] = set()
+    for group in path_groups:
+        for path in group:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            merged.append(resolved)
+    return merged
 
 
 def _resolve_map_registry_path() -> Path | None:
@@ -578,12 +704,18 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
     """Load and convert a map definition, caching by absolute path.
 
+    The cache size is set to 256 to accommodate all unique maps across typical
+    multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
+    references 12 distinct SVG maps; the previous ``maxsize=8`` caused
+    repeated cache evictions and redundant SVG parsing whenever more than
+    8 unique maps were active in the same training session.
+
     Returns:
-        MapDefinition | None: Parsed map definition for supported formats, else ``None``.
+        MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
     path = Path(map_path)
@@ -592,13 +724,6 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         return None
     if path.suffix.lower() == ".svg":
         return convert_map(str(path))
-    if path.suffix.lower() == ".json":
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-            logger.error("Invalid JSON map '{}': {}", path, exc)
-            return None
-        return serialize_map(data)
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
 
@@ -1240,10 +1365,26 @@ def _apply_map_pool(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> None:
-    """Load a scenario map file into the config map pool."""
+    """Load a scenario map file into the config map pool.
+
+    Raises:
+        ValueError: When ``map_file`` is explicitly specified in the scenario but
+            the file cannot be resolved or loaded.  Failing early here prevents
+            the silent fallback to the default map pool — which would either use
+            an unrelated map (``uni_campus_big``) or raise a confusing
+            ``"Map pool is empty!"`` error much later during the first scenario
+            reset (the original issue #830 failure mode on long SLURM runs).
+    """
     map_file = scenario.get("map_file")
     map_def = resolve_map_definition(map_file, scenario_path=scenario_path)
     if map_def is None:
+        if map_file:
+            scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+            raise ValueError(
+                f"Scenario '{scenario_name}': map_file '{map_file}' could not be "
+                f"resolved or loaded from scenario_path='{scenario_path}'. "
+                "Check the map_file path or manifest map_search_paths."
+            )
         return
     map_id = scenario.get("map_id")
     map_name = str(map_id) if isinstance(map_id, str) and map_id.strip() else None
@@ -1414,11 +1555,36 @@ def _apply_route_overrides(
     config.map_pool.map_defs[map_name] = map_copy
 
 
+def map_cache_info() -> dict[str, int]:
+    """Return hit/miss/eviction statistics for the map-definition cache.
+
+    Useful for diagnosing cache churn during multi-scenario training runs.
+    Example::
+
+        from robot_sf.training.scenario_loader import map_cache_info
+
+        info = map_cache_info()
+        # {'hits': 42, 'misses': 12, 'maxsize': 64, 'currsize': 12}
+
+    Returns:
+        dict[str, int]: Mapping of ``hits``, ``misses``, ``maxsize``, and
+        ``currsize`` from the underlying LRU cache.
+    """
+    ci = _load_map_definition.cache_info()
+    return {
+        "hits": ci.hits,
+        "misses": ci.misses,
+        "maxsize": ci.maxsize,
+        "currsize": ci.currsize,
+    }
+
+
 __all__ = [
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
+    "map_cache_info",
     "resolve_map_definition",
     "select_scenario",
 ]

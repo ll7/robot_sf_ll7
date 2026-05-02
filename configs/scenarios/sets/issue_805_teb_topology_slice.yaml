@@ -1,0 +1,88 @@
+scenarios:
+  - name: line_wall_detour
+    map_id: atomic_line_wall_obstacle
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: line_wall_detour
+      label: line wall detour
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: oscillation
+      purpose: Validate that TEB corridor commitment can pick a stable wall-side detour.
+      expected_behavior: Commit to a viable side and maintain progress around the wall.
+      expected_pass_criteria: Reach the goal after one stable bypass without wall collision.
+      failure_modes: [side-switch oscillation, wall collision, indecision deadlock]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]
+
+  - name: narrow_passage
+    map_id: atomic_narrow_passage_test
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config:
+      radius: 0.3
+    metadata:
+      archetype: narrow_passage
+      label: narrow passage
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: Validate that stronger corridor commitment improves gap alignment.
+      expected_behavior: Align with the opening early, pass through once, and avoid wall contact.
+      expected_pass_criteria: Reach the goal without scraping either side of the gap.
+      failure_modes: [passage collision, opening oscillation, refusal to enter viable gap]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]
+
+  - name: symmetry_ambiguous_choice
+    map_id: atomic_symmetry_split_test
+    simulation_config:
+      max_episode_steps: 320
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: symmetry_ambiguous_choice
+      label: symmetry ambiguous choice
+      flow: none
+      behavior: none
+      density_advisory: zero_baseline_route_spawn
+      primary_capability: robustness
+      target_failure_mode: deadlock
+      purpose: Validate that the planner keeps a stable side choice in symmetric detours.
+      expected_behavior: Commit to one side and clear the split without repeated dithering.
+      expected_pass_criteria: Reach the goal after one committed bypass choice.
+      failure_modes: [left-right dithering, indecision deadlock, unnecessary path thrashing]
+      determinism: deterministic
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: null
+        metrics_updated_on: null
+        metrics: {min_distance: null, mean_distance: null, robot_ped_within_5m_frac: null, ped_force_mean: null, force_q95: null}
+    seeds: [59611, 59612, 59613]

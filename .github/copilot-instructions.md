@@ -1,9 +1,16 @@
 # Copilot Instructions
 
+`AGENTS.md` is the canonical repository instruction source. Treat this file as the Copilot-facing
+entrypoint and keep it limited to Copilot-specific pointers that are not already covered there.
+
 ALWAYS use the official [dev_guide](../docs/dev_guide.md) as the primary reference for development-related tasks.
 It is everyones guide on how to use this repository effectively.
 
 ## Additional Instructions
+
+- For machine-specific limits and execution routing, check local machine context files at repo
+  root when present: `local.machine.md` or `local.machine.<name>.md` (template:
+  `docs/templates/local.machine.example.md`). If absent, use conservative defaults.
 
 - Use scriptable interfaces instead of cli interfaces when possible.
 - Make everything reproducible.
@@ -12,21 +19,36 @@ It is everyones guide on how to use this repository effectively.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
   `docs/context/issue_713_batch_first_issue_workflow.md`: clean up issues first, route project
   metadata second, run derived score sync last, and cache IDs once per shell session.
+- For measurement-driven improvement loops, use `.agents/skills/autoresearch/SKILL.md`.
+  For shorter refinement passes, use `.agents/skills/auto-improvement/SKILL.md`.
+  See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.
+- For the end-to-end AI coding workflow from prompt to PR, see `docs/ai/ai-workflow.md`.
+- For the repository's cross-agent compatibility stance (retrieval → planning → execution →
+  verification discipline, accepted and rejected external concepts), see
+  `docs/context/issue_728_coding_agents_compatibility.md`.
+- For stable cross-session repo memory, start with `memory/MEMORY.md`, then open only the relevant
+  linked topic files under `memory/`. Use `docs/context/` for issue-specific execution notes rather
+  than storing those narratives in `memory/`.
+- For context discovery, use `.agents/skills/context-map/SKILL.md` before multi-file changes and
+  `.agents/skills/what-context-needed/SKILL.md` when the task is underspecified.
+- For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+  handoff context in linked Markdown notes under `docs/context/` when that context would otherwise
+  be lost. Prefer updating the canonical existing note over creating a duplicate, and use
+  `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing those notes.
+- For proof-first quality work, use `.agents/skills/quality-playbook/SKILL.md` for non-trivial
+  changes, `.agents/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
+  `.agents/skills/review-and-refactor/SKILL.md` for narrow review-then-refactor passes.
+- For doc synchronization, use `.agents/skills/update-docs-on-code-change/SKILL.md` when code
+  changes would make docs stale.
+- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work.
+- Keep `gh` for deterministic batch automation, score sync, and auth/debugging fallback.
+- Before opening a PR, follow the latest-main sync rule in
+  `docs/dev_guide.md`: fetch `origin/main`, merge or rebase it into the feature branch, then run
+  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.
 - Source the environment before using python or uv `source .venv/bin/activate`.
-
-## Recent Changes
-- 343-telemetry-viz: Added Python 3.11 + Pygame/SDL, matplotlib (agg), NumPy, robot_sf.telemetry (manifest writer, sampler), Loguru
-
-- 270-imitation-report: Added Python 3.11 (existing uv-managed environment)
-- 001-map-verification: Added Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)
-
-## Active Technologies
-- Python 3.11 + Pygame/SDL, matplotlib (agg), NumPy, robot_sf.telemetry (manifest writer, sampler), Loguru (343-telemetry-viz)
-- Append-only JSONL telemetry + PNG/SVG summary artifacts under `output/` (respecting artifact policy) (343-telemetry-viz)
-
 
 ## Test Failure Evaluation
 

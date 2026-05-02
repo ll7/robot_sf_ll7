@@ -1,0 +1,66 @@
+# SAC all-scenarios training config with random scenario sampling, random per-episode
+# environment seeds, and W&B tracking enabled for resource/utilization monitoring.
+
+policy_id: sac_gate_socnav_struct_ego_all_random_wandb_v3
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 100000
+num_envs: 4
+action_semantics: delta
+relative_obs: true
+obs_transform: ego
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 3.0e-4
+  buffer_size: 150000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 5000
+
+env_overrides:
+  observation_mode: socnav_struct
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 3.0
+      living: -0.01
+      collision: -8.0
+      near_miss: -1.0
+      ttc_risk: -1.0
+      comfort: -0.4
+      smoothness: -0.1
+      terminal_bonus: 5.0
+
+# No fixed seed: ScenarioSwitchingEnv will draw random seeds per episode.
+scenario_sampling:
+  strategy: random
+
+evaluation:
+  enabled: true
+  frequency_steps: 20000
+  scenario_matrix: ../../scenarios/sets/verified_simple_subset_v1.yaml
+  algo_config: ../../../configs/baselines/sac_gate_socnav_struct_ego.yaml
+  output_dir: output/tmp/sac_eval
+  tag_prefix: sac_eval_allrand_wandb_v3
+  horizon: 250
+  dt: 0.1
+  workers: 1
+  min_success_rate: 0.3
+
+tracking:
+  enabled: true
+  project: robot_sf_sac
+  run_name: sac_gate_socnav_struct_ego_all_random_wandb_v3
+  tags:
+    - sac
+    - ego
+    - all-scenarios
+    - random-seeds
+    - wandb

@@ -1,0 +1,6 @@
+# Full maintained positive eval surface for issue-708 PPO promotion checks:
+# - 47 classic/francis maintained benchmark scenarios
+# - 23 maintained atomic scenarios
+includes:
+  - ../classic_interactions_francis2023.yaml
+  - atomic_navigation_minimal_full_v1.yaml

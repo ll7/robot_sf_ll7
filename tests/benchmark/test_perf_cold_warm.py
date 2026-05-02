@@ -176,7 +176,7 @@ def test_render_markdown_report_includes_diagnostics() -> None:
         ),
     )
     rendered = perf_cold_warm.render_markdown_report(
-        scenario_label="classic_crossing_low",
+        scenario_label="classic_cross_trap_low",
         episode_steps=64,
         cold_runs=1,
         warm_runs=2,
@@ -186,7 +186,7 @@ def test_render_markdown_report_includes_diagnostics() -> None:
     )
     assert "Status: **FAIL**" in rendered
     assert "### Diagnostics" in rendered
-    assert "classic_crossing_low" in rendered
+    assert "classic_cross_trap_low" in rendered
 
 
 def test_render_markdown_report_includes_startup_warning_note() -> None:
@@ -210,7 +210,7 @@ def test_render_markdown_report_includes_startup_warning_note() -> None:
         ),
     )
     rendered = perf_cold_warm.render_markdown_report(
-        scenario_label="classic_crossing_low",
+        scenario_label="classic_cross_trap_low",
         episode_steps=64,
         cold_runs=1,
         warm_runs=2,
@@ -229,7 +229,7 @@ def test_render_markdown_report_without_baseline() -> None:
         warm=_sample(create=0.5, first=0.05, episode=0.8, sps=40.0),
     )
     rendered = perf_cold_warm.render_markdown_report(
-        scenario_label="classic_crossing_low",
+        scenario_label="classic_cross_trap_low",
         episode_steps=32,
         cold_runs=1,
         warm_runs=1,
@@ -310,8 +310,8 @@ def test_run_suite_uses_warmup_then_warm_samples(monkeypatch: pytest.MonkeyPatch
     cold, warm = perf_cold_warm.run_suite(
         config=object(),  # type: ignore[arg-type]
         script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
-        scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-        scenario_name="classic_crossing_low",
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="classic_cross_trap_low",
         seed=10,
         episode_steps=8,
         cold_runs=2,
@@ -381,7 +381,7 @@ def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         perf_cold_warm,
         "load_scenarios",
-        lambda _path: [{"name": "classic_crossing_low"}],
+        lambda _path: [{"name": "classic_cross_trap_low"}],
     )
     monkeypatch.setattr(
         perf_cold_warm,
@@ -389,11 +389,11 @@ def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> 
         lambda _scenario, scenario_path: _Config(),
     )
     config, label = perf_cold_warm._load_scenario_config(
-        Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-        "classic_crossing_low",
+        Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        "classic_cross_trap_low",
         20,
     )
-    assert label == "classic_crossing_low"
+    assert label == "classic_cross_trap_low"
     assert config.sim_config.sim_time_in_secs == pytest.approx(4.0)
 
     monkeypatch.setattr(perf_cold_warm, "load_scenarios", lambda _path: [])
@@ -421,8 +421,8 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     )
     sample = perf_cold_warm._measure_cold_subprocess(
         script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
-        scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-        scenario_name="classic_crossing_low",
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="classic_cross_trap_low",
         seed=1,
         episode_steps=10,
     )
@@ -436,8 +436,8 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     with pytest.raises(RuntimeError, match="failed"):
         perf_cold_warm._measure_cold_subprocess(
             script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
-            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-            scenario_name="classic_crossing_low",
+            scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+            scenario_name="classic_cross_trap_low",
             seed=1,
             episode_steps=10,
         )
@@ -450,8 +450,8 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     with pytest.raises(RuntimeError, match="did not return JSON"):
         perf_cold_warm._measure_cold_subprocess(
             script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
-            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-            scenario_name="classic_crossing_low",
+            scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+            scenario_name="classic_cross_trap_low",
             seed=1,
             episode_steps=10,
         )
@@ -467,8 +467,8 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     with pytest.raises(RuntimeError, match="timed out"):
         perf_cold_warm._measure_cold_subprocess(
             script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
-            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-            scenario_name="classic_crossing_low",
+            scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+            scenario_name="classic_cross_trap_low",
             seed=1,
             episode_steps=10,
         )
@@ -479,7 +479,7 @@ def test_parse_args_custom_values() -> None:
     parsed = perf_cold_warm.parse_args(
         [
             "--scenario-name",
-            "classic_crossing_medium",
+            "classic_cross_trap_medium",
             "--episode-steps",
             "48",
             "--cold-runs",
@@ -489,7 +489,7 @@ def test_parse_args_custom_values() -> None:
             "--fail-on-regression",
         ]
     )
-    assert parsed.scenario_name == "classic_crossing_medium"
+    assert parsed.scenario_name == "classic_cross_trap_medium"
     assert parsed.episode_steps == 48
     assert parsed.cold_runs == 2
     assert parsed.warm_runs == 3
@@ -514,8 +514,8 @@ def test_main_internal_measure_path(
         "parse_args",
         lambda _argv=None: Namespace(
             internal_measure_once=True,
-            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-            scenario_name="classic_crossing_low",
+            scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+            scenario_name="classic_cross_trap_low",
             episode_steps=8,
             seed=5,
         ),
@@ -540,8 +540,8 @@ def test_main_non_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     def _common_args() -> Namespace:
         return Namespace(
             internal_measure_once=False,
-            scenario_config=Path("configs/scenarios/archetypes/classic_crossing.yaml"),
-            scenario_name="classic_crossing_low",
+            scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+            scenario_name="classic_cross_trap_low",
             episode_steps=16,
             seed=42,
             cold_runs=1,

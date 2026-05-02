@@ -41,7 +41,8 @@ def _collect_gpu_metadata() -> tuple[str | None, str | None]:
     try:
         device_index = torch.cuda.current_device()
         gpu_model = torch.cuda.get_device_name(device_index)
-        cuda_version = getattr(torch, "version", {}).get("cuda", None)
+        version_mod = getattr(torch, "version", None)
+        cuda_version = getattr(version_mod, "cuda", None) if version_mod is not None else None
         return gpu_model, cuda_version
     except (
         OSError,

@@ -29,6 +29,19 @@ SOCNAV_POSITION_CAP_M = 50.0
 """Global cap for SocNav position-like observations to keep bounds consistent."""
 
 
+def _map_position_cap(map_def: Any) -> np.ndarray:
+    """Return per-axis position caps that preserve coordinates on larger maps."""
+    width = float(getattr(map_def, "width", SOCNAV_POSITION_CAP_M) or SOCNAV_POSITION_CAP_M)
+    height = float(getattr(map_def, "height", SOCNAV_POSITION_CAP_M) or SOCNAV_POSITION_CAP_M)
+    return np.array(
+        [
+            max(SOCNAV_POSITION_CAP_M, width),
+            max(SOCNAV_POSITION_CAP_M, height),
+        ],
+        dtype=np.float32,
+    )
+
+
 def socnav_observation_space(
     map_def: MapDefinition,
     env_config: RobotSimulationConfig,
@@ -40,7 +53,7 @@ def socnav_observation_space(
     Returns:
         spaces.Dict: Structured observation specification for the SocNav mode.
     """
-    pos_cap = np.array([SOCNAV_POSITION_CAP_M, SOCNAV_POSITION_CAP_M], dtype=np.float32)
+    pos_cap = _map_position_cap(map_def)
     pos_low = np.array([0.0, 0.0], dtype=np.float32)
     pos_high = pos_cap
     heading_low = np.array([-pi], dtype=np.float32)
@@ -81,7 +94,7 @@ def socnav_observation_space(
                     ),
                     "radius": spaces.Box(
                         low=radius_bounds,
-                        high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
+                        high=np.array([float(np.max(pos_cap))], dtype=np.float32),
                         dtype=np.float32,
                     ),
                 },
@@ -106,7 +119,7 @@ def socnav_observation_space(
                     ),
                     "radius": spaces.Box(
                         low=radius_bounds,
-                        high=np.array([SOCNAV_POSITION_CAP_M], dtype=np.float32),
+                        high=np.array([float(np.max(pos_cap))], dtype=np.float32),
                         dtype=np.float32,
                     ),
                     "count": spaces.Box(
@@ -270,8 +283,10 @@ class SocNavObservationFusion:
             else np.zeros(2, dtype=np.float32)
         )
 
+        position_cap = _map_position_cap(self.simulator.map_def)
+
         def _clip_positions(values: np.ndarray) -> np.ndarray:
-            return np.clip(values, 0.0, SOCNAV_POSITION_CAP_M)
+            return np.clip(values, 0.0, position_cap)
 
         robot_pos_clipped = _clip_positions(robot_pos)
         goal_clipped = _clip_positions(goal)
@@ -281,7 +296,7 @@ class SocNavObservationFusion:
             [self.simulator.map_def.width, self.simulator.map_def.height],
             dtype=np.float32,
         )
-        map_size = np.minimum(map_size, SOCNAV_POSITION_CAP_M)
+        map_size = np.minimum(map_size, position_cap)
 
         # Wrap heading to [-pi, pi] to stay within declared observation bounds
         wrapped_heading = ((robot_pose[1] + np.pi) % (2 * np.pi)) - np.pi
@@ -308,7 +323,7 @@ class SocNavObservationFusion:
                 "positions": padded,
                 "velocities": padded_vel,
                 "radius": np.array(
-                    [min(self.env_config.sim_config.ped_radius, SOCNAV_POSITION_CAP_M)],
+                    [min(self.env_config.sim_config.ped_radius, float(np.max(position_cap)))],
                     dtype=np.float32,
                 ),
                 "count": np.array(

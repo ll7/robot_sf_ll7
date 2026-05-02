@@ -21,6 +21,7 @@ from robot_sf.common.artifact_paths import (
     get_artifact_root,
     get_expert_policy_manifest_path,
     get_imitation_report_dir,
+    get_repository_root,
     get_trajectory_dataset_dir,
 )
 
@@ -44,7 +45,10 @@ def _path_to_manifest(path: Path) -> str:
     """Deserialise ``path`` to a portable string, relative to the artefact root when possible.
 
     Returns:
-        Portable path string relative to artifact root if possible, otherwise absolute.
+        Portable path string relative to artifact root or repository root.
+
+    Raises:
+        ValueError: If ``path`` is absolute and outside both the artifact root and repository root.
     """
 
     path_obj = Path(path)
@@ -54,7 +58,13 @@ def _path_to_manifest(path: Path) -> str:
     try:
         return str(path_obj.resolve(strict=False).relative_to(root))
     except ValueError:
-        return str(path_obj)
+        repo_root = get_repository_root().resolve(strict=False)
+        try:
+            return str(path_obj.resolve(strict=False).relative_to(repo_root))
+        except ValueError:
+            raise ValueError(
+                f"Path '{path_obj}' is outside allowed roots: '{root}' and '{repo_root}'"
+            ) from None
 
 
 def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:
@@ -189,9 +199,19 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
             if artifact.eval_timeline_path is not None
             else None
         ),
+        "eval_per_scenario_path": (
+            _path_to_manifest(artifact.eval_per_scenario_path)
+            if artifact.eval_per_scenario_path is not None
+            else None
+        ),
         "perf_summary_path": (
             _path_to_manifest(artifact.perf_summary_path)
             if artifact.perf_summary_path is not None
+            else None
+        ),
+        "evaluation_scenario_config": (
+            _path_to_manifest(artifact.evaluation_scenario_config)
+            if artifact.evaluation_scenario_config is not None
             else None
         ),
         "wall_clock_hours": artifact.wall_clock_hours,

@@ -1,3 +1,6 @@
+# Deprecated compatibility aliases for issue #594.
+# Prefer configs/scenarios/archetypes/classic_cross_trap.yaml and
+# classic_cross_trap_{low,medium,high} in new configs.
 scenarios:
 - name: classic_crossing_low
   map_file: ../../../maps/svg_maps/classic_crossing.svg
@@ -6,6 +9,7 @@ scenarios:
     ped_density: 0.02
   robot_config: {}
   metadata:
+    deprecated_alias_for: classic_cross_trap_low
     archetype: crossing
     label: cross plaza circulation
     density: low
@@ -35,6 +39,7 @@ scenarios:
     ped_density: 0.05
   robot_config: {}
   metadata:
+    deprecated_alias_for: classic_cross_trap_medium
     archetype: crossing
     label: cross plaza circulation
     density: medium
@@ -64,6 +69,7 @@ scenarios:
     ped_density: 0.08
   robot_config: {}
   metadata:
+    deprecated_alias_for: classic_cross_trap_high
     archetype: crossing
     label: cross plaza circulation
     density: high

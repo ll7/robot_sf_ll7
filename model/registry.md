@@ -18,6 +18,10 @@ notebooks to insert/update entries without manual YAML editing.
 - W&B metadata (optional): either `wandb_run_path` or `wandb_entity` +
   `wandb_project` + `wandb_run_id` so auto-download works.
 - `wandb_file`: file to download from the run (defaults to `model.zip`).
+- `local_only`: mark entries that are only valid when the recorded `local_path`
+  exists on the current machine.
+- `replacement_model_id`: optional migration target surfaced in local-only
+  resolution errors.
 - `tags` / `notes`: free-form metadata for discovery.
 
 ### Minimal schema (YAML)
@@ -35,6 +39,8 @@ models:
     wandb_project:
     wandb_run_id: run_id
     wandb_file: model.zip
+    local_only: false
+    replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]
     notes: ["Add any extra context here."]
 ```

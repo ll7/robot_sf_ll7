@@ -1,0 +1,6 @@
+name: hybrid_rule_v3_waypoint2_route_commit
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+params:
+  route_guide_commitment_weight: 1.0
+  route_guide_commitment_progress_threshold: 0.5

@@ -218,7 +218,6 @@ Yes.
 
 All paper tables and plots that depend on benchmark numbers should be regenerated from the final
 canonical publication bundle:
-
 - `output/benchmarks/publication/paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407_publication_bundle`
 
 Why this is required:
@@ -255,6 +254,59 @@ Conservative interpretation:
 - so paper-side logic should consume the final issue-579 bundle as a fresh canonical export rather
   than assuming issue-580 and issue-579 are interchangeable.
 
+## Follow-up From Issue 822
+
+On 2026-04-14, [issue 822](./issue_822_snqi_strengthening_analysis.md) replayed the frozen
+publication bundle against both the v1 and v3 SNQI assets and found that the v3 contract is
+materially better aligned with the planner and component signals on that slice.
+
+Observed follow-up signal:
+
+- planner ordering changed from `goal > orca > social_force` under the v1 contract to
+  `orca > goal > social_force` under the v3 contract
+- the v3 contract shows materially better alignment with `success`, `time_to_goal_norm`,
+  `near_misses`, `comfort_exposure`, and `force_exceed_events`
+- `collisions` is constant on the frozen slice, so collision correlation is undefined there
+
+Recommendation carried forward from issue 822:
+
+- keep SNQI in the main narrative as an operational multi-objective aggregation metric
+- keep the explicit caveat that it is a benchmark aggregate, not a universal ground-truth utility
+- use the strengthened `reports/snqi_diagnostics.{json,md}` and `reports/snqi_sensitivity.csv`
+  artifacts as the paper-facing evidence surface for that claim
+
+The scratch analysis artifacts live under:
+
+- `output/ai/autoresearch/snqi_issue822/v1`
+- `output/ai/autoresearch/snqi_issue822/v3`
+
+## Follow-up From Issue 838
+
+On 2026-04-16, [issue 838](./issue_838_snqi_calibration_analysis.md) added a reproducible
+calibration-robustness workflow for testing v3 against local weight perturbations and alternative
+normalization anchors.
+
+The issue-838 run available in this branch used the closest mounted frozen camera-ready campaign,
+because the exact issue-635 publication bundle path was not present in the checkout:
+
+- `output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_rel_0_0_2_full_rerun_20260414_081244`
+
+Observed signal on that slice:
+
+- v3 component alignment was healthy: `6 / 6` variable metrics aligned with expected direction
+- local +-15% weight perturbations stayed highly rank-stable at the planner level
+  (`min rho = 0.928571`)
+- normalization-anchor variants were materially more sensitive
+  (`anchor min planner rho = 0.607143`)
+- no tested variant justified a replacement v4 contract
+
+Conservative carry-forward:
+
+- keep the fixed v3 asset contract unchanged for already-frozen paper bundles,
+- treat SNQI more cautiously as a supporting synthesis aid unless the canonical publication bundle
+  rerun clears the same anchor-robustness check,
+- do not retrofit current paper-facing values from the issue-838 analysis alone.
+
 ## Conservative manuscript recommendation
 
 Methods wording that can now be tightened:
@@ -270,7 +322,9 @@ Methods wording that should remain cautious:
   identical to the corrected issue-580 rerun,
 - do not imply that the bundle payload manifest alone captures the full SNQI diagnostics contract,
 - do not state that all implemented planners are faithful literature-family representatives,
-- do not overclaim metric-method closure beyond the final v3 asset pinning and diagnostics evidence.
+- do not overclaim metric-method closure beyond the final v3 asset pinning and diagnostics evidence,
+- do not present SNQI v3 as anchor-robust or locally optimal without rerunning the issue-838
+  calibration workflow on the canonical publication bundle.
 
 ## Final recommendation
 

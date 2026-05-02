@@ -7,6 +7,14 @@ Canonical benchmark fallback policy:
 
 - `docs/context/issue_691_benchmark_fallback_policy.md`
 
+Scenario certification contract:
+
+- [`docs/scenario_certification.md`](./scenario_certification.md)
+
+Francis-guideline crosswalk for the current benchmark contract:
+
+- [Francis Guideline Mapping For Robot SF](./context/issue_759_francis_guideline_mapping.md)
+
 ## Scope
 
 This spec documents the map-based benchmark workflow driven by scenario manifests under
@@ -62,6 +70,10 @@ Notes:
 * ORCA requires the rvo2 binding; install with `uv sync --extra orca`.
 * Fallback execution may still be used for explicit diagnostics, but it is not benchmark-success
   evidence and must fail closed in benchmark mode.
+* `scenario_cert.v1` certificates classify malformed, infeasible, stress-only, and
+  hard-but-solvable scenarios before benchmark interpretation. Treat `excluded` certificates as
+  non-benchmark evidence and `stress_only` certificates as caveated stress coverage unless a
+  separate benchmark issue promotes them.
 * `socnav_bench` requires SocNavBench prerequisites (including `skfmm`); install with
   `uv sync --extra socnav` for native upstream execution.
 * `socnav_sampling` uses the in-repo sampling adapter baseline, while `socnav_bench` is the

@@ -135,6 +135,28 @@ class LidarScannerSettings:
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
 
+    @classmethod
+    def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
+        """Create a lidar configuration for ego pedestrian with 120 degree view and extended range.
+
+        Returns:
+            LidarScannerSettings: Lidar configuration with 120° field of view and 30m range.
+        """
+        return cls(
+            max_scan_dist=30.0,  # Extended range
+            visual_angle_portion=1.0 / 3.0,  # 120 degrees (1/3 of 360)
+            num_rays=272,  # Same granularity
+        )
+
+    @classmethod
+    def default(cls) -> "LidarScannerSettings":
+        """Create default lidar configuration (360 degree view, 10m range).
+
+        Returns:
+            LidarScannerSettings: Default lidar configuration.
+        """
+        return cls()
+
 
 @numba.njit(fastmath=True)
 def raycast_pedestrians(

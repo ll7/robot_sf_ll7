@@ -6,6 +6,7 @@ import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,14 +16,25 @@ import numpy as np
 import yaml
 from loguru import logger
 
+from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
+from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.baselines.sac import SACPlanner
+from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
 )
-from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile, require_algorithm_allowed
+from robot_sf.benchmark.algorithm_readiness import (
+    BenchmarkProfile,
+    require_algorithm_allowed,
+)
 from robot_sf.benchmark.fallback_policy import availability_payload
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
+from robot_sf.benchmark.metrics import (
+    EpisodeData,
+    compute_all_metrics,
+    post_process_metrics,
+)
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -46,23 +58,53 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
-from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter, build_gap_prediction_config
+from robot_sf.planner.crowdnav_height import (
+    CrowdNavHeightAdapter,
+    build_crowdnav_height_config,
+)
+from robot_sf.planner.gap_prediction import (
+    GapAwarePredictionAdapter,
+    build_gap_prediction_config,
+)
+from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
 )
+from robot_sf.planner.hybrid_orca_sampler import (
+    HybridORCASamplerAdapter,
+    build_hybrid_orca_sampler_build_config,
+)
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
-from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
-from robot_sf.planner.mppi_social import MPPISocialPlannerAdapter, build_mppi_social_config
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleLocalPlannerAdapter,
+    build_hybrid_rule_local_planner_config,
+)
+from robot_sf.planner.kinematics_model import (
+    KinematicsModel,
+    resolve_benchmark_kinematics_model,
+)
+from robot_sf.planner.mppi_social import (
+    MPPISocialPlannerAdapter,
+    build_mppi_social_config,
+)
+from robot_sf.planner.nmpc_social import (
+    NMPCSocialPlannerAdapter,
+    build_nmpc_social_config,
+)
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.safety_barrier import (
+    SafetyBarrierPlannerAdapter,
+    build_safety_barrier_config,
+)
 from robot_sf.planner.social_navigation_pyenvs_force_model import (
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
@@ -76,6 +118,7 @@ from robot_sf.planner.social_navigation_pyenvs_orca import (
     build_social_navigation_pyenvs_orca_config,
 )
 from robot_sf.planner.socnav import (
+    HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -84,10 +127,20 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.sonic_crowdnav import (
+    SonicCrowdNavAdapter,
+    build_sonic_crowdnav_config,
+)
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
-from robot_sf.planner.teb_commitment import TEBCommitmentPlannerAdapter, build_teb_commitment_config
+from robot_sf.planner.teb_commitment import (
+    TEBCommitmentPlannerAdapter,
+    build_teb_commitment_config,
+)
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -99,11 +152,13 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_sampling",
     "sampling",
     "orca",
+    "hrvo",
     "sacadrl",
     "prediction_planner",
     "sa_cadrl",
     "socnav_bench",
     "hybrid_portfolio",
+    "hybrid_orca_sampler",
     "social_navigation_pyenvs_orca",
     "social_nav_pyenvs_orca",
     "social_navigation_pyenvs_socialforce",
@@ -112,6 +167,25 @@ _SOCNAV_ALGO_KEYS = {
     "social_nav_pyenvs_sfm_helbing",
     "social_navigation_pyenvs_hsfm_new_guo",
     "social_nav_pyenvs_hsfm_new_guo",
+    "socnav_orca_nonholonomic",
+    "socnav_orca_dd",
+    "socnav_orca_relaxed",
+    "socnav_hrvo",
+    "crowdnav_height",
+    "sonic_crowdnav",
+    "sonic_gst",
+    "gensafenav_ours_gst",
+    "gensafe_ours_gst",
+    "ours_gst",
+    "gensafenav_ours_gst_guarded",
+    "ours_gst_guarded",
+    "gensafenav_gst_predictor_rand",
+    "gensafe_gst_predictor_rand",
+    "gst_predictor_rand",
+    "gensafenav_gst_predictor_rand_guarded",
+    "gst_predictor_rand_guarded",
+    "sicnav",
+    "dr_mpc",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -236,6 +310,92 @@ def _project_with_feasibility(
     return projected
 
 
+def _build_adapter_policy(
+    *,
+    algo_key: str,
+    algo_config: dict[str, Any],
+    meta: dict[str, Any],
+    adapter: Any,
+    adapter_name: str,
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    limitations: str | None = None,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Construct a projected adapter policy with standard metadata wiring.
+
+    Returns:
+        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+            Projected policy callable and populated benchmark metadata.
+    """
+    meta.update(
+        {
+            "status": "ok",
+            "config": algo_config,
+            "config_hash": _config_hash(algo_config),
+        }
+    )
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="adapter",
+        adapter_name=adapter_name,
+        robot_kinematics=robot_kinematics,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+        if limitations is not None:
+            planner_meta["limitations"] = limitations
+    adapter_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        linear, angular = adapter.plan(obs)
+        return _project_with_feasibility(
+            model=adapter_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+
+    _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
+    if hasattr(adapter, "close"):
+        _policy._planner_close = adapter.close
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
+
+    return _policy, meta
+
+
+def _attach_planner_reset(policy: Callable[..., Any], adapter: Any) -> None:
+    """Attach a planner reset hook that tolerates adapters without seed support."""
+    reset = getattr(adapter, "reset", None)
+    if not callable(reset):
+        return
+
+    def _planner_reset(seed: int | None = None) -> None:
+        if seed is None:
+            reset()
+            return
+        try:
+            reset(seed=seed)
+        except TypeError:
+            reset()
+
+    policy._planner_reset = _planner_reset
+
+
 def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
     """Finalize per-episode feasibility rates/means and strip internal accumulators."""
     feasibility = meta.get("kinematics_feasibility")
@@ -262,6 +422,65 @@ def _finalize_feasibility_metadata(meta: dict[str, Any]) -> None:
     feasibility["max_abs_delta_angular"] = max_angular
 
 
+class _ExternalMPCAdapter:
+    """Bridge an external MPC wrapper into the map-runner adapter contract.
+
+    The external wrapper is expected to expose ``step(obs) -> dict`` while the
+    benchmark runner expects ``plan(obs) -> (linear, angular)``. The adapter also
+    normalizes the upstream observation into the structured Robot SF payload used
+    by the other external planner bridges.
+    """
+
+    def __init__(
+        self,
+        planner: Any,
+        *,
+        algo_config: dict[str, Any],
+        robot_kinematics: str | None,
+        planner_name: str,
+    ) -> None:
+        self._planner = planner
+        self._algo_config = algo_config
+        self._robot_kinematics = robot_kinematics
+        self._planner_name = planner_name
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset the wrapped planner if it exposes the standard hook."""
+        if hasattr(self._planner, "reset"):
+            if seed is None:
+                self._planner.reset()
+            else:
+                try:
+                    self._planner.reset(seed=seed)
+                except TypeError:
+                    self._planner.reset()
+
+    def close(self) -> None:
+        """Release wrapped planner resources if available."""
+        if hasattr(self._planner, "close"):
+            self._planner.close()
+
+    def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
+        """Produce a map-runner command from an external MPC planner step.
+
+        Returns:
+            tuple[float, float]: Projected ``(linear, angular)`` command.
+        """
+        action = self._planner.step(_obs_to_external_mpc_format(obs))
+        if not isinstance(action, dict):
+            raise TypeError(
+                f"{self._planner_name} returned unsupported action payload: {type(action)}"
+            )
+        linear, angular, _conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            self._algo_config,
+            robot_kinematics=self._robot_kinematics,
+            project_command=False,
+        )
+        return linear, angular
+
+
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not algo_config_path:
         return {}
@@ -274,7 +493,9 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     return data
 
 
-def _prediction_planner_metadata_overrides(algo_config: dict[str, Any]) -> dict[str, Any]:
+def _prediction_planner_metadata_overrides(
+    algo_config: dict[str, Any],
+) -> dict[str, Any]:
     """Expose predictive-planner search and uncertainty modes as first-class metadata.
 
     Returns:
@@ -328,7 +549,10 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
         min_success_f = float(min_success)
         measured_success_f = float(measured_success)
     except (TypeError, ValueError):
-        return False, "quality gate requires numeric min_success_rate and measured_success_rate"
+        return (
+            False,
+            "quality gate requires numeric min_success_rate and measured_success_rate",
+        )
     if not math.isfinite(min_success_f) or not math.isfinite(measured_success_f):
         return False, "quality gate success-rate values must be finite"
     if measured_success_f < min_success_f:
@@ -502,7 +726,10 @@ def _preflight_policy(  # noqa: C901, PLR0915
 
     try:
         _build_and_close(algo_config)
-        return dict(algo_config), {"status": "ok", "learned_policy_contract": learned_contract}
+        return dict(algo_config), {
+            "status": "ok",
+            "learned_policy_contract": learned_contract,
+        }
     except Exception as exc:
         if not _is_socnav_algorithm(algo):
             raise
@@ -626,7 +853,9 @@ def _normalize_xy_rows(values: Any) -> np.ndarray:
     return np.zeros((0, 2), dtype=float)
 
 
-def _extract_ppo_pedestrians(pedestrians: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, float]:
+def _extract_ppo_pedestrians(
+    pedestrians: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Extract count-aware pedestrian positions, velocities, and shared radius.
 
     Returns:
@@ -686,6 +915,7 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
         heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
         robot_vel = np.array([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
     robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
     robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
 
     ped_pos, ped_vel, ped_radius = _extract_ppo_pedestrians(pedestrians)
@@ -714,11 +944,39 @@ def _obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
             "goal": [float(robot_goal[0]), float(robot_goal[1])]
             if robot_goal.size >= 2
             else [0.0, 0.0],
+            "heading": robot_heading,
             "radius": robot_radius,
         },
         "agents": agents,
         "obstacles": [],
     }
+
+
+def _obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
+    """Convert map-runner observations into the external MPC wrapper contract.
+
+    Returns:
+        dict[str, Any]: Structured observation with obstacles preserved when present.
+
+    The external MPC wrappers use the same robot/human fields as the PPO bridge,
+    but they may also reason about obstacle payloads when the upstream contract
+    exposes them, so preserve the raw obstacle list when available.
+    """
+    payload = _obs_to_ppo_format(obs)
+    obstacles = obs.get("obstacles")
+    if isinstance(obstacles, list):
+        payload["obstacles"] = obstacles
+    return payload
+
+
+class _GoalFallbackAdapter:
+    """Simple goal-policy fallback adapter for guarded wrapper experiments."""
+
+    def __init__(self, *, max_speed: float) -> None:
+        self._max_speed = float(max_speed)
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        return _goal_policy(observation, max_speed=self._max_speed)
 
 
 def _normalize_heading(value: float) -> float:
@@ -784,6 +1042,25 @@ def _ppo_action_to_unicycle(
     return v, omega, "adapter"
 
 
+def _update_adapter_impact_metrics(
+    meta: dict[str, Any],
+    conversion_mode: str,
+    *,
+    count_native: bool | None = None,
+) -> None:
+    """Update native-vs-adapted step counters when adapter-impact probing is enabled."""
+    impact = meta.get("adapter_impact")
+    if not isinstance(impact, dict) or not bool(impact.get("requested", False)):
+        return
+    if count_native is None:
+        count_native = conversion_mode == "native"
+    if count_native:
+        impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
+    else:
+        impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
+    impact["status"] = "collecting"
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -818,7 +1095,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
         )
         meta = enrich_algorithm_metadata(
             algo=algo_key,
@@ -847,77 +1128,67 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
     if algo_key == "risk_dwa":
         adapter = RiskDWAPlannerAdapter(config=build_risk_dwa_config(algo_config))
-        meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="adapter",
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
             adapter_name="RiskDWAPlannerAdapter",
             robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        adapter_kinematics_model = resolve_benchmark_kinematics_model(
+
+    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+        adapter = HybridRuleLocalPlannerAdapter(
+            config=build_hybrid_rule_local_planner_config(algo_config)
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            linear, angular = adapter.plan(obs)
-            return _project_with_feasibility(
-                model=adapter_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
+    if algo_key == "safety_barrier":
+        adapter = SafetyBarrierPlannerAdapter(config=build_safety_barrier_config(algo_config))
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="SafetyBarrierPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="static_obstacle_first_testing_only",
+        )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
-        return _policy, meta
+    if algo_key == "grid_route":
+        adapter = GridRoutePlannerAdapter(config=build_grid_route_config(algo_config))
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="GridRoutePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="static_obstacle_first_testing_only",
+        )
 
     if algo_key == "stream_gap":
         adapter = StreamGapPlannerAdapter(config=build_stream_gap_config(algo_config))
-        meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="adapter",
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
             adapter_name="StreamGapPlannerAdapter",
             robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        adapter_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            linear, angular = adapter.plan(obs)
-            return _project_with_feasibility(
-                model=adapter_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
-        return _policy, meta
 
     if algo_key == "gap_prediction":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
@@ -925,77 +1196,27 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             config=build_gap_prediction_config(algo_config),
             allow_fallback=allow_fallback,
         )
-        meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="adapter",
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
             adapter_name="GapAwarePredictionAdapter",
             robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        adapter_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            linear, angular = adapter.plan(obs)
-            return _project_with_feasibility(
-                model=adapter_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
-        return _policy, meta
 
     if algo_key == "mppi_social":
         adapter = MPPISocialPlannerAdapter(config=build_mppi_social_config(algo_config))
-        meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="adapter",
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
             adapter_name="MPPISocialPlannerAdapter",
             robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        adapter_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            linear, angular = adapter.plan(obs)
-            return _project_with_feasibility(
-                model=adapter_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
-        return _policy, meta
 
     if algo_key == "predictive_mppi":
         allow_fallback = bool(algo_config.get("allow_fallback", False))
@@ -1004,7 +1225,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             allow_fallback=allow_fallback,
         )
         meta.update(
-            {"status": "ok", "config": algo_config, "config_hash": _config_hash(algo_config)}
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
         )
         meta = enrich_algorithm_metadata(
             algo=algo_key,
@@ -1034,9 +1259,58 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 meta=meta,
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
         return _policy, meta
+
+    if algo_key == "sicnav":
+        planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "SICNav dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="SICNavPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="SICNavPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
+
+    if algo_key == "dr_mpc":
+        planner = DRMPCPlanner(build_dr_mpc_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "DR-MPC dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        adapter = _ExternalMPCAdapter(
+            planner,
+            algo_config=algo_config,
+            robot_kinematics=robot_kinematics,
+            planner_name="DRMPCPlanner",
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="DRMPCPlanner",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="external_mpc_dependency_sensitive",
+        )
 
     socnav_cfg = _build_socnav_config(algo_config)
 
@@ -1112,13 +1386,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 command=(float(linear), float(angular)),
                 meta=meta,
             )
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native":
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(meta, conversion_mode)
             return linear, angular
 
         _policy._planner_close = ppo_planner.close
@@ -1136,6 +1404,142 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta["paper_ready"] = bool(paper_ready)
         if paper_reason:
             meta["paper_gate_reason"] = paper_reason
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key in {"sac"}:
+        sac_planner = SACPlanner(algo_config, seed=None)
+        planner_cfg = getattr(sac_planner, "config", None)
+        if isinstance(planner_cfg, dict):
+            sac_obs_mode = str(planner_cfg.get("obs_mode", "dict")).strip().lower()
+        else:
+            sac_obs_mode = str(getattr(planner_cfg, "obs_mode", "dict")).strip().lower()
+        if hasattr(sac_planner, "get_metadata"):
+            planner_meta = sac_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="ppo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+        sac_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
+        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
+        # Native bypass is only valid for delta-unicycle outputs from the SAC model itself.
+        # Fallback steps emit absolute goal-directed commands that must go through the
+        # command→env-action conversion path.  We decide per step by checking the planner
+        # status *after* each sac_planner.step() call.
+        _sac_can_be_native = sac_action_semantics == "delta" and sac_action_space == "unicycle"
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
+                sac_obs = obs
+            else:
+                sac_obs = _obs_to_ppo_format(obs)
+            action = sac_planner.step(sac_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
+            # Track per step whether this output is a native env action (model ran) or an
+            # absolute goal-directed fallback command (planner in fallback mode).
+            _policy._last_step_native = (
+                _sac_can_be_native and getattr(sac_planner, "_status", "fallback") == "ok"
+            )
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=sac_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=sac_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+            _update_adapter_impact_metrics(meta, conversion_mode)
+            return linear, angular
+
+        _policy._planner_close = sac_planner.close
+        _policy._planner_native_env_action = _sac_can_be_native
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "sac")
+        meta.setdefault("config", algo_config)
+        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
+        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+        return _policy, meta
+    elif algo_key == "drl_vo":
+        drl_planner = DrlVoPlanner(algo_config, seed=None)
+        if hasattr(drl_planner, "get_metadata"):
+            planner_meta = drl_planner.get_metadata()
+            if isinstance(planner_meta, dict):
+                meta.update(planner_meta)
+
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="drl_vo_action_to_unicycle",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+
+        drl_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            drl_obs = _obs_to_ppo_format(obs)
+            action = drl_planner.step(drl_obs)
+            if not isinstance(action, dict):
+                raise TypeError(f"DRL-VO planner returned non-dict action: {type(action)}")
+            linear, angular, conversion_mode = _ppo_action_to_unicycle(
+                action,
+                obs,
+                algo_config,
+                robot_kinematics=robot_kinematics,
+                kinematics_model=drl_kinematics_model,
+                project_command=False,
+            )
+            linear, angular = _project_with_feasibility(
+                model=drl_kinematics_model,
+                command=(float(linear), float(angular)),
+                meta=meta,
+            )
+            _update_adapter_impact_metrics(meta, conversion_mode)
+            return linear, angular
+
+        _policy._planner_close = drl_planner.close
+        _attach_planner_reset(_policy, drl_planner)
+        if "status" not in meta:
+            meta["status"] = "ok"
+        meta.setdefault("algorithm", "drl_vo")
+        meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
     elif algo_key in {"guarded_ppo"}:
@@ -1213,13 +1617,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            impact = meta.get("adapter_impact")
-            if isinstance(impact, dict) and bool(impact.get("requested", False)):
-                if conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"}:
-                    impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-                else:
-                    impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-                impact["status"] = "collecting"
+            _update_adapter_impact_metrics(
+                meta,
+                conversion_mode,
+                count_native=conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"},
+            )
             return linear, angular
 
         _policy._planner_close = ppo_planner.close
@@ -1228,21 +1630,164 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta.setdefault("config", algo_config)
         meta["config_hash"] = _config_hash(meta.get("config", algo_config))
         return _policy, meta
+    elif algo_key in {
+        "gensafenav_ours_gst_guarded",
+        "ours_gst_guarded",
+        "gensafenav_gst_predictor_rand_guarded",
+        "gst_predictor_rand_guarded",
+    }:
+        holonomic_vx_vy_mode = (
+            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+            and normalized_robot_command_mode == "vx_vy"
+        )
+        if holonomic_vx_vy_mode:
+            raise ValueError(
+                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
+                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
+                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
+                "commands, so this path fails closed instead of collapsing ActionXY through a "
+                "lossy (v, w) round-trip."
+            )
+
+        guarded_root = {
+            "gensafenav_ours_gst_guarded",
+            "ours_gst_guarded",
+        }
+        model_name = (
+            str(algo_config.get("model_name", "Ours_GST"))
+            if algo_key in guarded_root
+            else str(algo_config.get("model_name", "GST_predictor_rand"))
+        )
+        sonic_adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": model_name,
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+        guard_adapter = GuardedPPOAdapter(
+            config=build_guarded_ppo_config(algo_config),
+            fallback_adapter=_GoalFallbackAdapter(
+                max_speed=float(algo_config.get("guard_fallback_max_speed", 1.0)),
+            ),
+        )
+        meta.update(
+            {
+                "status": "ok",
+                "config": algo_config,
+                "config_hash": _config_hash(algo_config),
+            }
+        )
+        meta = enrich_algorithm_metadata(
+            algo=algo_key,
+            metadata=meta,
+            execution_mode="mixed",
+            adapter_name="sonic_guarded_goal_fallback",
+            robot_kinematics=robot_kinematics,
+            adapter_impact_requested=adapter_impact_eval,
+        )
+        _init_feasibility_metadata(meta)
+        meta["guard_stats"] = {
+            "ppo_clear": 0,
+            "ppo_safe": 0,
+            "fallback_safe": 0,
+            "stop_safe": 0,
+            "fallback_best_effort": 0,
+            "stop_best_effort": 0,
+            "goal_reached": 0,
+        }
+        planner_meta = meta.get("planner_kinematics")
+        if isinstance(planner_meta, dict):
+            planner_meta["planner_command_space"] = _default_robot_command_space(
+                robot_kinematics,
+                algo_config,
+                robot_command_mode=normalized_robot_command_mode,
+            )
+            planner_meta["guard_strategy"] = "short_horizon_safety_gate"
+            planner_meta["fallback_policy"] = "goal"
+
+        guarded_kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=algo_config,
+        )
+
+        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            sonic_command = sonic_adapter.plan(obs)
+            chosen, decision = guard_adapter.choose_command(
+                obs,
+                (float(sonic_command[0]), float(sonic_command[1])),
+            )
+            linear, angular = _project_with_feasibility(
+                model=guarded_kinematics_model,
+                command=(float(chosen[0]), float(chosen[1])),
+                meta=meta,
+            )
+            guard_stats = meta.get("guard_stats")
+            if isinstance(guard_stats, dict):
+                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            _update_adapter_impact_metrics(
+                meta,
+                "adapter",
+                count_native=False,
+            )
+            return linear, angular
+
+        _attach_planner_reset(_policy, sonic_adapter)
+        if hasattr(sonic_adapter, "close"):
+            _policy._planner_close = sonic_adapter.close
+        return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_nonholonomic"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_heading_slowdown = 0.8
+        config.orca_commit_distance = 1.8
+        config.orca_commit_lateral_gain = 0.6
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_dd"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 3.0
+        config.orca_neighbor_dist = 8.0
+        config.orca_max_neighbors = 6
+        config.orca_stall_speed_threshold = 0.1
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_orca_relaxed"}:
+        allow_fallback = bool(algo_config.get("allow_fallback", False))
+        config = deepcopy(socnav_cfg)
+        config.orca_time_horizon = 8.0
+        config.orca_obstacle_range = 8.0
+        config.orca_obstacle_threshold = 0.6
+        config.orca_head_on_bias = 0.4
+        config.orca_symmetry_bias = 0.15
+        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
+    elif algo_key in {"socnav_hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
+    elif algo_key in {"hrvo"}:
+        adapter = HRVOPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
         adapter = SocialNavigationPyEnvsORCAAdapter(
             config=build_social_navigation_pyenvs_orca_config(algo_config)
         )
-    elif algo_key in {"social_navigation_pyenvs_socialforce", "social_nav_pyenvs_socialforce"}:
+    elif algo_key in {
+        "social_navigation_pyenvs_socialforce",
+        "social_nav_pyenvs_socialforce",
+    }:
         adapter = SocialNavigationPyEnvsForceModelAdapter(
             config=build_social_navigation_pyenvs_force_model_config(
                 algo_config,
                 default_policy_name="socialforce",
             )
         )
-    elif algo_key in {"social_navigation_pyenvs_sfm_helbing", "social_nav_pyenvs_sfm_helbing"}:
+    elif algo_key in {
+        "social_navigation_pyenvs_sfm_helbing",
+        "social_nav_pyenvs_sfm_helbing",
+    }:
         adapter = SocialNavigationPyEnvsForceModelAdapter(
             config=build_social_navigation_pyenvs_force_model_config(
                 algo_config,
@@ -1257,6 +1802,36 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             config=build_social_navigation_pyenvs_hsfm_config(
                 algo_config,
                 default_policy_name="hsfm_new_guo",
+            )
+        )
+    elif algo_key in {"crowdnav_height"}:
+        adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
+    elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+        adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
+    elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "Ours_GST"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
+            )
+        )
+    elif algo_key in {
+        "gensafenav_gst_predictor_rand",
+        "gensafe_gst_predictor_rand",
+        "gst_predictor_rand",
+    }:
+        adapter = SonicCrowdNavAdapter(
+            config=build_sonic_crowdnav_config(
+                {
+                    **algo_config,
+                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                    "model_name": algo_config.get("model_name", "GST_predictor_rand"),
+                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+                }
             )
         )
     elif algo_key in {"sacadrl", "sa_cadrl"}:
@@ -1278,11 +1853,24 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 config=hybrid_cfg.socnav, allow_fallback=allow_fallback
             ),
         )
+    elif algo_key == "hybrid_orca_sampler":
+        allow_fallback = bool(algo_config.get("allow_fallback", True))
+        hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
+        adapter = HybridORCASamplerAdapter(
+            config=hybrid_cfg.guard,
+            orca_adapter=ORCAPlannerAdapter(
+                config=hybrid_cfg.socnav,
+                allow_fallback=allow_fallback,
+            ),
+            sampler_adapter=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
+        )
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
     elif algo_key == "teb":
         adapter = TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config))
+    elif algo_key in {"nmpc_social", "nmpc"}:
+        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
     elif algo_key in {"rvo", "dwa"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
@@ -1314,10 +1902,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         robot_kinematics=robot_kinematics,
         command_limits=algo_config,
     )
+    planner_bind_env = None
+    if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
+
+        def _bind_env(env: Any) -> None:
+            simulator = getattr(env, "simulator", None)
+            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
+                return
+            spacing = max(
+                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
+                0.25,
+            )
+            points = sample_obstacle_points(
+                simulator.iter_obstacle_segments(),
+                spacing=spacing,
+            )
+            adapter.bind_static_obstacle_points(points, spacing=spacing)
+
+        planner_bind_env = _bind_env
+    elif hasattr(adapter, "bind_env"):
+        planner_bind_env = adapter.bind_env
     holonomic_world_velocity_mode = (
         algo_key
         in {
             "orca",
+            "hrvo",
+            "socnav_hrvo",
             "social_force",
             "sf",
             "social_navigation_pyenvs_orca",
@@ -1326,6 +1936,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "social_nav_pyenvs_socialforce",
             "social_navigation_pyenvs_sfm_helbing",
             "social_nav_pyenvs_sfm_helbing",
+            "sonic_crowdnav",
+            "sonic_gst",
+            "gensafenav_ours_gst",
+            "gensafe_ours_gst",
+            "ours_gst",
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
         }
         and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
         and normalized_robot_command_mode == "vx_vy"
@@ -1336,6 +1954,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
                 "coordinates, then forward that world-frame velocity directly into the "
                 "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {"hrvo", "socnav_hrvo"}:
+            adapter_boundary = (
+                "Run the local HRVO geometry solver in world velocity space, then forward the "
+                "selected world-frame velocity directly into the holonomic vx_vy benchmark "
+                "action space."
             )
         elif algo_key == "social_force":
             adapter_boundary = (
@@ -1348,6 +1972,28 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
                 "JointState contract, run upstream ORCA predict(), and forward the resulting "
                 "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
+            adapter_boundary = (
+                "Run the upstream SoNIC checkpoint through the model-only Robot SF wrapper and "
+                "forward the resulting ActionXY world velocity directly into the holonomic vx_vy "
+                "benchmark action space."
+            )
+        elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav Ours_GST checkpoint through the model-only Robot SF "
+                "wrapper and forward the resulting ActionXY world velocity directly into the "
+                "holonomic vx_vy benchmark action space."
+            )
+        elif algo_key in {
+            "gensafenav_gst_predictor_rand",
+            "gensafe_gst_predictor_rand",
+            "gst_predictor_rand",
+        }:
+            adapter_boundary = (
+                "Run the upstream GenSafeNav GST_predictor_rand checkpoint through the model-only "
+                "Robot SF wrapper and forward the resulting ActionXY world velocity directly into "
+                "the holonomic vx_vy benchmark action space."
             )
         else:
             adapter_boundary = (
@@ -1369,8 +2015,10 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 float(velocity_world[1]),
             )
 
-        if hasattr(adapter, "reset"):
-            _policy._planner_reset = lambda seed=None: adapter.reset()
+        _attach_planner_reset(_policy, adapter)
+        _policy._planner_adapter = adapter
+        if planner_bind_env is not None:
+            _policy._planner_bind_env = planner_bind_env
         return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
@@ -1381,8 +2029,16 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
         )
 
-    if hasattr(adapter, "reset"):
-        _policy._planner_reset = lambda seed=None: adapter.reset()
+    _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
+    if planner_bind_env is not None:
+        _policy._planner_bind_env = planner_bind_env
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
     return _policy, meta
 
 
@@ -1719,6 +2375,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
 ) -> dict[str, Any]:
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
+    scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -1743,9 +2400,16 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
+    planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
+    planner_stats = getattr(policy_fn, "_planner_stats", None)
+    planner_native_action = getattr(policy_fn, "_planner_native_env_action", False)
+
+    planner_runtime_snapshot: dict[str, Any] | None = None
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
+    if callable(planner_bind_env):
+        planner_bind_env(env)
     if callable(planner_reset):
         planner_reset(seed=int(seed))
 
@@ -1762,11 +2426,19 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     try:
         for step_idx in range(horizon_val):
             policy_command = policy_fn(obs)
-            action = _policy_command_to_env_action(
-                env=env,
-                config=config,
-                command=policy_command,
-            )
+            # Use per-step flag when available (e.g. SAC with fallback); fall back to the
+            # static cached value for planners that set _planner_native_env_action once.
+            step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
+            if step_is_native:
+                # Policy already outputs native env actions (e.g. delta velocities);
+                # skip the absolute→delta conversion done by _policy_command_to_env_action.
+                action = np.asarray(policy_command, dtype=np.float32)
+            else:
+                action = _policy_command_to_env_action(
+                    env=env,
+                    config=config,
+                    command=policy_command,
+                )
             obs, _reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.
@@ -1816,6 +2488,14 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             map_def = env.simulator.map_def
             goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
+        if callable(planner_stats):
+            try:
+                planner_runtime = planner_stats()
+            except (RuntimeError, ValueError, TypeError):
+                logger.debug("Planner stats hook failed before close", exc_info=True)
+                planner_runtime = None
+            if isinstance(planner_runtime, dict):
+                planner_runtime_snapshot = dict(planner_runtime)
         if callable(planner_close):
             try:
                 planner_close()
@@ -1839,7 +2519,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         shortest_path = float("nan")
 
     if robot_pos_arr.size == 0:
-        metrics_raw = {"success": 0.0, "time_to_goal_norm": float("nan"), "collisions": 0.0}
+        metrics_raw = {
+            "success": 0.0,
+            "time_to_goal_norm": float("nan"),
+            "collisions": 0.0,
+        }
     else:
         robot_config = getattr(config, "robot_config", None)
         ep = EpisodeData(
@@ -1881,6 +2565,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
     _finalize_feasibility_metadata(algo_meta)
+    if isinstance(planner_runtime_snapshot, dict):
+        algo_meta["planner_runtime"] = planner_runtime_snapshot
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -1945,16 +2631,36 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     return record
 
 
+def _scenario_with_episode_seed_defaults(
+    scenario: dict[str, Any],
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    """Return a scenario copy with seed-derived defaults for stochastic subcomponents.
+
+    Some scenario-level generators use their own NumPy ``default_rng`` instances.  When those
+    fields are left unset they bypass the episode seed and make benchmark rows depend on process
+    history.  Fill only missing values here so explicit scenario provenance remains unchanged.
+    """
+    updated = deepcopy(scenario)
+    sim_config = updated.setdefault("simulation_config", {})
+    if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
+        sim_config["route_spawn_seed"] = int(seed)
+    return updated
+
+
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
     violations = validate_episode_success_integrity(record)
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
     with out_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record) + "\n")
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def _run_map_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+def _run_map_job_worker(
+    job: tuple[dict[str, Any], int, dict[str, Any]],
+) -> dict[str, Any]:
     scenario, seed, params = job
     return _run_map_episode(
         scenario,
@@ -2288,13 +2994,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     }
                 )
     else:
+        results_by_idx: dict[int, dict[str, Any]] = {}
         with ProcessPoolExecutor(max_workers=int(workers)) as ex:
-            future_to_job: dict[Any, tuple[dict[str, Any], int]] = {}
-            for scenario, seed in jobs:
+            future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
+            for idx, (scenario, seed) in enumerate(jobs, start=1):
                 fut = ex.submit(_run_map_job_worker, (scenario, seed, fixed_params))
-                future_to_job[fut] = (scenario, seed)
+                future_to_job[fut] = (idx, scenario, seed)
             for fut in as_completed(future_to_job):
-                scenario, seed = future_to_job[fut]
+                idx, scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
                     requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
@@ -2308,8 +3015,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         runtime_algorithm_contract or {},
                         rec.get("algorithm_metadata"),
                     )
-                    _write_validated(out_path, schema, rec)
-                    wrote += 1
+                    results_by_idx[idx] = rec
                 except Exception as exc:  # pragma: no cover
                     failures.append(
                         {
@@ -2318,6 +3024,20 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "error": repr(exc),
                         }
                     )
+        for idx in sorted(results_by_idx):
+            try:
+                _write_validated(out_path, schema, results_by_idx[idx])
+                wrote += 1
+            except Exception as exc:  # pragma: no cover - write/validate path
+                rec = results_by_idx[idx]
+                failures.append(
+                    {
+                        "scenario_id": rec.get("scenario_id")
+                        or rec.get("scenario", {}).get("name", "unknown"),
+                        "seed": rec.get("seed", -1),
+                        "error": repr(exc),
+                    }
+                )
 
     impact_contract = algo_contract.get("adapter_impact")
     if (

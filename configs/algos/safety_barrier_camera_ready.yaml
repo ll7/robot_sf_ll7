@@ -1,0 +1,14 @@
+# Testing-only native safety-barrier prototype.
+allow_testing_algorithms: true
+max_linear_speed: 0.8
+max_angular_speed: 1.2
+goal_tolerance: 0.25
+safe_distance: 1.0
+stop_distance: 0.35
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+forward_clearance_weight: 1.5
+turn_away_gain: 1.1
+progress_weight: 0.8
+heading_weight: 1.4
+recovery_turn_rate: 0.9

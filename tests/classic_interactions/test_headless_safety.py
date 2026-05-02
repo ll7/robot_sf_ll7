@@ -6,17 +6,18 @@ TDD: expects episodes list to be non-empty (will fail until implementation retur
 
 from __future__ import annotations
 
-import importlib
-import os
+from importlib import import_module
 
 import pytest
 
 
 @pytest.mark.slow
-def test_headless_dummy_driver_runs():
+def test_headless_dummy_driver_runs(monkeypatch):
     """Run the classic interactions demo in headless mode without crashing."""
-    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-    mod = importlib.import_module("examples.classic_interactions_pygame")
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("ROBOT_SF_FAST_DEMO", "1")
+    monkeypatch.setenv("ROBOT_SF_EXAMPLES_MAX_STEPS", "8")
+    mod = import_module("examples.classic_interactions_pygame")
     if hasattr(mod, "DRY_RUN"):
         original = mod.DRY_RUN
         mod.DRY_RUN = False  # type: ignore

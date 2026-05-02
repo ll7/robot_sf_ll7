@@ -18,7 +18,7 @@ Output format:
 import json
 from pathlib import Path
 
-import geopandas as gpd
+import geopandas
 import matplotlib.pyplot as plt
 import pandas as pd
 from loguru import logger
@@ -27,7 +27,7 @@ from shapely.affinity import translate
 from robot_sf.nav.osm_map_builder import project_to_utm
 
 
-def _visible_features_mask(gdf: gpd.GeoDataFrame) -> pd.Series:
+def _visible_features_mask(gdf: geopandas.GeoDataFrame) -> pd.Series:
     """Return mask of features that contribute to the rendered layers."""
 
     mask = pd.Series(False, index=gdf.index)
@@ -51,18 +51,18 @@ def _visible_features_mask(gdf: gpd.GeoDataFrame) -> pd.Series:
     return mask
 
 
-def _load_osm_data(pbf_file: str) -> gpd.GeoDataFrame:
+def _load_osm_data(pbf_file: str) -> geopandas.GeoDataFrame:
     """Load OSM data from the available PBF layers.
 
     Returns:
         GeoDataFrame containing merged OSM features.
     """
     layers_to_load = ["lines", "multipolygons", "multilinestrings"]
-    gdfs: list[gpd.GeoDataFrame] = []
+    gdfs: list[geopandas.GeoDataFrame] = []
 
     for layer in layers_to_load:
         try:
-            gdf_layer = gpd.read_file(pbf_file, layer=layer)
+            gdf_layer = geopandas.read_file(pbf_file, layer=layer)
         except (OSError, ValueError) as exc:
             logger.debug(f"Skipping layer '{layer}': {exc}")
             continue
@@ -71,7 +71,7 @@ def _load_osm_data(pbf_file: str) -> gpd.GeoDataFrame:
             logger.info(f"Loaded {len(gdf_layer)} features from layer '{layer}'")
 
     if not gdfs:
-        return gpd.read_file(pbf_file)
+        return geopandas.read_file(pbf_file)
 
     return pd.concat(gdfs, ignore_index=False).reset_index(drop=True)
 

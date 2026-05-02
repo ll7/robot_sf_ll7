@@ -1,0 +1,51 @@
+# Feature extractor evaluation config for issue #193
+#
+# Compares the original DynamicsExtractor against three alternative designs
+# (MLP, LightweightCNN, Attention) on an RTX 3070 with CUDA.
+#
+# Reproducible command:
+#   uv run python scripts/multi_extractor_training.py \
+#       --config configs/scenarios/multi_extractor_eval_193.yaml
+#
+# Quick smoke mode (CI / no GPU):
+#   ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE=1 uv run python scripts/multi_extractor_training.py \
+#       --config configs/scenarios/multi_extractor_eval_193.yaml
+
+run:
+  run_id: "eval_193"
+  worker_mode: "single-thread"
+  num_envs: 1
+  # 32 000 steps gives ~8 eval checkpoints; enough to see early convergence
+  # signal without an unbounded training campaign.
+  total_timesteps: 32000
+  eval_freq: 4000
+  save_freq: 16000
+  n_eval_episodes: 5
+  device: "cuda"
+  seed: 42
+  baseline_extractor: "dynamics_original"
+  convergence_fraction: 0.9
+  notes:
+    - "Issue 193: evaluation-first feature extractor comparison"
+    - "Machine: imech156-u, RTX 3070 8 GB, CUDA 12.8"
+
+extractors:
+  - name: "dynamics_original"
+    preset: "dynamics_original"
+    description: "Baseline – Conv1D stack (4 layers, 64/16/16/16 filters, dropout 0.3 each)"
+    expected_resources: "gpu"
+
+  - name: "mlp_small"
+    preset: "mlp_small"
+    description: "Compact MLP baseline (ray: [64,32], drive: [16,8], dropout 0.1)"
+    expected_resources: "gpu"
+
+  - name: "lightweight_cnn"
+    preset: "lightweight_cnn"
+    description: "Lightweight CNN (2 conv layers: [32,16] filters, kernels [5,3], dropout 0.1)"
+    expected_resources: "gpu"
+
+  - name: "attention_small"
+    preset: "attention_small"
+    description: "Small attention extractor (embed_dim 32, 2 heads, 1 layer, dropout 0.1)"
+    expected_resources: "gpu"

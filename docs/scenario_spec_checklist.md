@@ -11,7 +11,7 @@ Use this checklist when creating **per-scenario** files, **archetype** bundles, 
 
 ## 2) Required Structure
 - [ ] `name` or `scenario_id` is set and unique.
-- [ ] `map_file` points to a valid SVG/JSON map.
+- [ ] `map_file` points to a valid SVG map. Legacy JSON is supported only for historical inputs and migration.
 - [ ] `simulation_config.max_episode_steps` set to a realistic horizon.
 - [ ] `metadata.archetype` and `metadata.density` filled (for coverage reporting).
 

@@ -25,6 +25,16 @@ def _get_ppo_planner():
     return module.PPOPlanner
 
 
+def _get_sac_planner():
+    """Lazy import for SAC baseline adapter.
+
+    Returns:
+        The SACPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.sac")
+    return module.SACPlanner
+
+
 def _get_random_planner():
     """Lazy import for Random baseline.
 
@@ -35,12 +45,46 @@ def _get_random_planner():
     return module.RandomPlanner
 
 
+def _get_sicnav_planner():
+    """Lazy import for SICNav baseline adapter.
+
+    Returns:
+        The SICNavPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.sicnav")
+    return module.SICNavPlanner
+
+
+def _get_drm_mp_planner():
+    """Lazy import for DR-MPC baseline adapter.
+
+    Returns:
+        The DRMPCPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.dr_mpc")
+    return module.DRMPCPlanner
+
+
+def _get_drl_vo_planner():
+    """Lazy import for DRL-VO baseline.
+
+    Returns:
+        The DrlVoPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.drl_vo")
+    return module.DrlVoPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
     "baseline_sf": _get_social_force_planner,  # Backward compatibility
     "ppo": _get_ppo_planner,
+    "sac": _get_sac_planner,
     "random": _get_random_planner,
+    "sicnav": _get_sicnav_planner,
+    "dr_mpc": _get_drm_mp_planner,
+    "drl_vo": _get_drl_vo_planner,
 }
 
 

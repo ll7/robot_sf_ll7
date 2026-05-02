@@ -8,9 +8,14 @@
 #SBATCH --cpus-per-task=22
 #SBATCH --mem=32G
 #SBATCH --time=01:00:00
-#SBATCH --output=auxme-uv-setup-%j.out
+#SBATCH --output=output/slurm/%j-auxme-uv-setup.out
+# NOTE: output/slurm/ must exist at submit time (Slurm opens the log before the
+# body runs). scripts/dev/sbatch_use_max_time.sh creates it; the early mkdir
+# below additionally covers direct `bash` execution for local smoke tests.
 
 set -euo pipefail
+
+mkdir -p output/slurm
 
 PROJECT_ROOT=${SLURM_SUBMIT_DIR}
 SCRATCH_ROOT=${AUXME_SCRATCH_ROOT:-/scratch/${USER}}

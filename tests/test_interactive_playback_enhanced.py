@@ -2,11 +2,27 @@
 
 import tempfile
 
+import numpy as np
+
 from robot_sf.render.interactive_playback import (
     create_interactive_playback_from_batch,
 )
-from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
+from robot_sf.render.jsonl_playback import BatchPlayback, JSONLPlaybackLoader, PlaybackEpisode
 from robot_sf.render.jsonl_recording import JSONLRecorder
+from robot_sf.render.sim_view import VisualizableSimState
+
+
+def _state(x: float, y: float, timestep: int = 0) -> VisualizableSimState:
+    """Build a minimal playback state for tests."""
+
+    return VisualizableSimState(
+        timestep=timestep,
+        robot_action=None,
+        robot_pose=((x, y), 0.0),
+        pedestrian_positions=np.array([]),
+        ray_vecs=np.array([]),
+        ped_actions=np.array([]),
+    )
 
 
 def test_episode_boundary_detection():
@@ -27,19 +43,8 @@ def test_episode_boundary_detection():
             recorder.current_episode_id = ep_idx
             recorder.start_episode()
 
-            import numpy as np
-
-            from robot_sf.render.sim_view import VisualizableSimState
-
             for step in range(num_states):
-                state = VisualizableSimState(
-                    timestep=step,
-                    robot_action=None,
-                    robot_pose=((step * 1.0, ep_idx * 5.0), 0.0),  # Different position per episode
-                    pedestrian_positions=np.array([]),
-                    ray_vecs=np.array([]),
-                    ped_actions=np.array([]),
-                )
+                state = _state(step * 1.0, ep_idx * 5.0, timestep=step)
                 recorder.record_step(state)
 
             recorder.end_episode()
@@ -75,20 +80,9 @@ def test_trajectory_clearing_at_boundaries():
             recorder.current_episode_id = ep_idx
             recorder.start_episode()
 
-            import numpy as np
-
-            from robot_sf.render.sim_view import VisualizableSimState
-
             # Add 2 states per episode
             for step in range(2):
-                state = VisualizableSimState(
-                    timestep=step,
-                    robot_action=None,
-                    robot_pose=((step + ep_idx * 10, step + ep_idx * 10), 0.0),
-                    pedestrian_positions=np.array([]),
-                    ray_vecs=np.array([]),
-                    ped_actions=np.array([]),
-                )
+                state = _state(step + ep_idx * 10, step + ep_idx * 10, timestep=step)
                 recorder.record_step(state)
 
             recorder.end_episode()
@@ -118,6 +112,48 @@ def test_trajectory_clearing_at_boundaries():
         # Update trajectories (should clear due to boundary)
         player._update_trajectories(player.states[2])
         assert len(player.robot_trajectory) == 1  # Should be cleared and restarted
+
+
+def test_batch_playback_merges_episode_telemetry_for_analyzer():
+    """Batch playback should offset telemetry frames and expose metric filtering state."""
+    episode_one = PlaybackEpisode(
+        episode_id=0,
+        states=[_state(0.0, 0.0, 0), _state(1.0, 0.0, 1)],
+        telemetry_samples=[
+            {
+                "episode_id": 0,
+                "frame_idx": 0,
+                "reward_total": 1.0,
+                "reward_terms": {"progress": 0.5},
+                "step_metrics": {"near_misses": 0.0},
+            }
+        ],
+    )
+    episode_two = PlaybackEpisode(
+        episode_id=1,
+        states=[_state(5.0, 5.0, 0)],
+        telemetry_samples=[
+            {
+                "episode_id": 1,
+                "frame_idx": 0,
+                "reward_total": 2.0,
+                "reward_terms": {"progress": 1.0},
+                "step_metrics": {"comfort_exposure": 0.2},
+            }
+        ],
+    )
+    batch = BatchPlayback(
+        episodes=[episode_one, episode_two],
+        map_def=JSONLPlaybackLoader._default_map_definition(),
+        total_episodes=2,
+        total_steps=3,
+    )
+
+    player = create_interactive_playback_from_batch(batch)
+
+    assert player.telemetry_replay is not None
+    assert [sample["frame_idx"] for sample in player.telemetry_replay.samples] == [0, 2]
+    assert sorted(player.available_metric_keys) == ["comfort_exposure", "near_misses"]
 
 
 if __name__ == "__main__":

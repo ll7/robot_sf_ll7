@@ -121,4 +121,4 @@ The campaign summary now carries benchmark-release provenance:
 - `docs/benchmark_camera_ready_release.md`
 - `docs/benchmark_artifact_publication.md`
 - `docs/benchmark_release_reproducibility.md`
-- `RELEASE.md`
+- `docs/RELEASE.md`

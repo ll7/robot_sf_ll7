@@ -1,0 +1,77 @@
+# SAC gate training configuration variant v2 with cycle sampling and tuned reward scaling.
+#
+# Purpose: Create an alternate exploration/coverage regime for the verified subset
+# that cycles through hard cases deterministically and penalizes unsafe behavior more strongly.
+
+policy_id: sac_gate_socnav_struct_ego_curriculum_v2
+scenario_config: ../../scenarios/sets/verified_simple_subset_v1.yaml
+total_timesteps: 100000
+seed: 42
+action_semantics: delta
+relative_obs: true
+obs_transform: ego
+
+output_dir: output/models/sac
+
+sac_hyperparams:
+  learning_rate: 1.0e-4
+  buffer_size: 150000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.995
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: "auto"
+  learning_starts: 5000
+
+env_overrides:
+  observation_mode: socnav_struct
+
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.005
+      collision: -10.0
+      near_miss: -1.2
+      ttc_risk: -1.2
+      comfort: -0.3
+      smoothness: -0.1
+      terminal_bonus: 6.0
+
+scenario_sampling:
+  strategy: cycle
+  weights:
+    head_on_interaction: 4.0
+    overtaking_interaction: 3.0
+    narrow_passage: 3.0
+    line_wall_detour: 2.5
+    single_ped_crossing_orthogonal: 2.0
+    single_obstacle_circle: 2.0
+    goal_behind_robot: 1.0
+    empty_map_8_directions_east: 0.5
+    empty_map_8_directions_north: 0.5
+    empty_map_8_directions_west: 0.5
+
+evaluation:
+  enabled: true
+  frequency_steps: 20000
+  scenario_matrix: ../../scenarios/sets/verified_simple_subset_v1.yaml
+  algo_config: ../../../configs/baselines/sac_gate_socnav_struct_ego.yaml
+  output_dir: output/tmp/sac_eval
+  tag_prefix: sac_eval_cur_v2
+  horizon: 250
+  dt: 0.1
+  workers: 1
+  min_success_rate: 0.3
+
+tracking:
+  enabled: false
+  project: robot_sf_sac
+  run_name: sac_gate_socnav_struct_ego_curriculum_v2
+  tags:
+    - sac
+    - ego
+    - curriculum
+    - cycle

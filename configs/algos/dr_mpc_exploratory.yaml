@@ -1,0 +1,13 @@
+# DR-MPC assessment anchor for controlled experiments.
+allow_testing_algorithms: true
+include_in_paper: false
+
+repo_root: third_party/external_mpc_repos/dr_mpc
+checkpoint_path: null
+device: cpu
+mode: unicycle
+action_space: unicycle
+v_max: 1.5
+omega_max: 1.2
+safety_clamp: true
+fallback_on_error: false

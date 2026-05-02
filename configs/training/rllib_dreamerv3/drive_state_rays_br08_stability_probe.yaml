@@ -1,0 +1,91 @@
+# BR-08 stability probe for DreamerV3 on the simpler drive_state+rays contract.
+# Use this when the goal is to test training stability before spending budget on a longer run.
+experiment:
+  run_id: dreamerv3_br08_drive_state_rays_stability_probe
+  output_root: output/dreamerv3
+  train_iterations: 120
+  checkpoint_every: 20
+  seed: 123
+  log_level: WARNING
+
+ray:
+  address: null
+  local_mode: false
+  include_dashboard: false
+  num_cpus: 8
+  num_gpus: 1
+  disable_uv_run_runtime_env: true
+  runtime_env:
+    working_dir: .
+    excludes:
+      - ".git"
+      - ".venv"
+      - ".pytest_cache"
+      - ".ruff_cache"
+      - "__pycache__"
+      - "output"
+      - "results"
+      - "dist"
+      - "robot_sf.egg-info"
+      - "*.mp4"
+      - "*.gif"
+
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf_dreamerv3
+    group: br08-drive-state-rays-stability-probe
+    job_type: train
+    mode: offline
+    tags: [dreamerv3, rllib, br08, stability-probe, drive_state_rays]
+    dir: output/wandb
+
+env:
+  flatten_observation: true
+  flatten_keys: [drive_state, rays]
+  normalize_actions: true
+  factory_kwargs:
+    debug: false
+    recording_enabled: false
+    reward_name: route_completion_v3
+    reward_kwargs:
+      weights:
+        progress: 1.1
+        living: -0.015
+        collision: -15.0
+        near_miss: -3.0
+        ttc_risk: -2.8
+        comfort: -0.5
+        smoothness: -0.18
+        timeout: -6.5
+        stagnation: -2.0
+        terminal_bonus: 20.0
+  config:
+    use_image_obs: false
+    include_grid_in_observation: false
+
+evaluation:
+  enabled: true
+  every_iterations: 20
+  evaluation_episodes: 4
+  output_subdir: evaluation
+
+algorithm:
+  framework: torch
+  env_runners:
+    num_env_runners: 4
+    num_envs_per_env_runner: 1
+    rollout_fragment_length: 16
+  resources:
+    num_gpus: 1
+  learners:
+    num_learners: 0
+  training:
+    model_size: XS
+    training_ratio: 32
+    batch_size_B: 16
+    batch_length_T: 32
+    horizon_H: 8
+    world_model_lr: 0.00005
+    actor_lr: 0.00001
+    critic_lr: 0.00001

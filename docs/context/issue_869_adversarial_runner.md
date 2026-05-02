@@ -15,9 +15,41 @@ programs, tests, notebooks, and future optimizer adapters can call the same core
 - Candidate generation is deterministic for a fixed seed.
 - Search-space validation rejects malformed candidates before policy evaluation.
 - `require_certification=True` fails closed when `scenario_cert.v1` is not available.
+- When the in-repo `robot_sf.scenario_certification` API is available, strict certification uses
+  `certify_scenario_file(...)` and excludes candidates whose certificate has
+  `benchmark_eligibility: excluded`.
 - The default evaluator delegates to the existing benchmark `run_batch` path.
 - Tests can inject evaluator, certifier, and sampler callables to cover orchestration without
   spawning a subprocess.
+- Feedback-capable samplers may implement `observe(evaluation)` and can be injected through the
+  existing `sampler=` argument. `CoordinateRefinementSampler` is the dependency-light v1 optimizer
+  adapter; it is deterministic for a fixed seed but intentionally simpler than CMA-ES or Bayesian
+  optimization.
+
+## Optimizer Sampler Boundary
+
+`CoordinateRefinementSampler` starts from the search-space midpoint and proposes bounded
+coordinate perturbations around the best scored candidate observed so far. It is intended for small
+synthetic or development stress-search pilots where avoiding optional optimizer dependencies matters.
+Random search remains preferable for broad exploratory sweeps, and stronger optimizers should stay
+behind explicit optional-dependency boundaries if they are added later.
+
+Search-space validation still runs before certification or policy evaluation for every sampled
+candidate, including optimizer proposals. Invalid proposals are recorded in the manifest as invalid
+candidates and are reported back to feedback-capable samplers with no objective value.
+
+## Concurrency Model
+
+`run_adversarial_search(...)` evaluates candidates sequentially in sampler order. Candidate
+sampling, certification, bundle paths such as `candidate_0000`, objective scoring, and manifest
+rows all follow that deterministic order. This is the intended v1 behavior because optimizer
+adapters and replay bundles depend on stable candidate ordering.
+
+`SearchConfig.workers` is still honored, but only inside each single-candidate benchmark
+evaluation: the value is forwarded to `run_batch(..., workers=config.workers)` for the candidate
+currently being evaluated. It does not launch multiple adversarial candidates concurrently. Any
+future candidate-level parallelism must preserve deterministic manifest ordering or explicitly
+document the ordering change before it can be used as benchmark evidence.
 
 ## Artifact Contract
 
@@ -26,7 +58,8 @@ Each valid candidate gets a bundle directory under the configured `output_dir`:
 - `scenario.yaml` for replay through the normal scenario loader,
 - `route_overrides.yaml` with generated robot route waypoints,
 - `episode_records.jsonl` from the benchmark runner when evaluation runs,
-- `trajectory.csv` as a replay index until the benchmark runner exposes dense per-step export,
+- `trajectory.csv` with dense per-step rows when the episode record contains `trajectory_data`;
+  otherwise a replay-identifying fallback row for older records,
 - `failure_attribution.json`,
 - top-level `manifest.json` summarizing all candidates and the best scored bundle.
 
@@ -93,8 +126,9 @@ Ruff, then failed in the broad parallel pytest phase due unrelated performance/w
 
 ## Deferred Follow-Ups
 
-- Add a real `scenario_cert.v1` adapter once the certification package lands.
-- Replace the `trajectory.csv` replay index with dense per-step trajectory export when the
-  benchmark runner exposes robot/pedestrian trajectories.
+- Keep strict-certification smoke coverage in `tests/adversarial/test_adversarial_search.py` as the
+  `scenario_cert.v1` contract evolves.
+- Keep `trajectory.csv` dense-row extraction aligned with any future benchmark-runner trajectory
+  schema changes.
 - Add optimizer adapters such as CMA-ES or Bayesian optimization only after the scenario semantics
   and bundle contract are stable.

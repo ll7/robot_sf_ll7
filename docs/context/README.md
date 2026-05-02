@@ -107,6 +107,9 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+- [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
+  keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
+  available; documents the rerun evidence and non-blocking policy.
 - [Issue #867 PPO Evaluation Reload Profile](./issue_867_ppo_eval_reload_profile.md)
   measurement-only issue-791 evaluation probe showing cached predictive-model reloads are small
   compared with shared cold startup and first-step overhead.

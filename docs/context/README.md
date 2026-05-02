@@ -127,6 +127,10 @@ knowledge, not every transient iteration detail.
 - [Issue #907 Social-Jym SARL Wrapper Parity](./issue_907_social_jym_sarl_parity.md)
   proves controlled one-human SARL input parity for the wrapper and quantifies holonomic-to-unicycle
   projection loss, while keeping benchmark integration blocked on trained-policy provenance.
+- [Issue #909 Social-Jym Trained-Policy Provenance](./issue_909_social_jym_policy_provenance.md)
+  records the fail-closed finding that the pinned upstream checkout references SARL/SARL-PPO
+  artifacts but does not include reproducible trained policy weights, so benchmark smoke remains
+  unjustified.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.

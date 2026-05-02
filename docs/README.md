@@ -107,10 +107,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
-* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Canonical issue-708 PPO retrain config, SLURM submission path, deterministic eval surface, and promotion checklist.
+* **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
 * **[Issue 791 Promotion Campaign](./context/issue_791_promotion_campaign_128k_256k.md)** - Medium- and long-horizon ablation campaign status, GPU predictive-foresight fix, active long runs, and follow-up boundaries.
 * **[Issue 863 SVG/Model Log Spam](./context/issue_863_svg_model_log_spam.md)** - Log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
-* **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Early reward/observation screening matrix and conservative next-step recommendation for PPO issue-708 follow-up work.
+* **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Final reward/observation/optimizer ablation outcome: no tested simplification improved over the issue-708 baseline, with a pointer to the Stage 2 decision record.
 * **[Predictive Planner Complete Tutorial](./training/predictive_planner_complete_tutorial.md)** - Full concept-to-code tutorial (model, scoring, risk-adaptive search, diagnostics, and reproducibility)
 * **[DreamerV3 RLlib Runbook (`drive_state` + `rays`)](./training/dreamerv3_rllib_drive_state_rays.md)** - Config-first training flow for RLlib DreamerV3 without image observations.
 * **[Global Planner Quickstart (WIP)](../specs/342-svg-global-planner/quickstart.md)** - Placeholder for the upcoming SVG-based global planner documentation and examples.
@@ -122,6 +122,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
 * **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
+* **[Issue #845 Slurm Utilization Probe](./context/issue_845_slurm_utilization_probe.md)** - Collect `sstat`/`sacct`/`seff` evidence for low CPU-utilization investigations without launching new jobs
 
 ### Benchmarking & Metrics
 
@@ -133,9 +134,13 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
+* **[Issue #435 Map Coverage Flow](./context/issue_435_map_coverage_flow.md)** - Parent flow state for map coverage, SocNavBench import, and map-quality child issues
+* **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
+* **[Issues #717/#718 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike and nominal-controller closeout; current static-slice evidence remains testing-only, not a promotion claim
 * **[Grid Route Deep Dive](./context/issue_717_grid_route_deep_dive.md)** - Standalone experimental-planner note covering `grid_route` contract, full scenario-set deep dive, and the remaining `narrow_passage` boundary
 * **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
 * **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership
@@ -146,6 +151,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Issue #589 Public Leaderboard MVP Boundary](./context/issue_589_public_leaderboard_mvp.md)** - Conservative no-implementation-now decision and future PR-based leaderboard prerequisites
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
@@ -156,6 +162,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
+* **[Issue #592 Hybrid Obstacle-Context Predictor Design](./context/issue_592_hybrid_obstacle_predictor_design.md)** - Feature-baseline-first plan for obstacle-conditioned predictive models, with config-first experiment path and benchmark proof gates
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary
 * **[Prediction Planner PR Readiness (2026-02-20)](./context/predictive_planner_pr_readiness_2026-02-20.md)** - Completed integration checklist and remaining maintainer decisions before final merge
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary

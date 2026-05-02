@@ -35,10 +35,65 @@ as a native planner path after `#695` ruled out provenance-safe upstream wrappin
 
 ## Result
 
-Assessment: `limited but interesting, needs hypothesis-driven revision`
+Assessment: `limited success, keep testing-only, stop local-reactive patching`
 
-The clean-room spike is benchmark-contract compliant and runnable, but the current heuristic is
-too weak to continue broadening as-is.
+The clean-room spike is benchmark-contract compliant and runnable. Follow-up issue #718 verified
+that the nominal-control failures from the first spike are fixed on `main`, but the remaining
+failures are obstacle-geometry failures. This supports keeping the planner as testing-only context,
+not broadening it as a benchmark family.
+
+### Issue #718 closeout reproduction
+
+Current reproduction on 2026-05-02:
+
+```bash
+uv run python scripts/validation/run_safety_barrier_static_slice.py \
+  --output-dir output/validation/safety_barrier_static_slice/issue718_current_repro
+```
+
+Summary:
+
+- episodes: `18`
+- success rate: `0.6667`
+- collision rate: `0.3333`
+- terminations: `12 success`, `6 collision`
+
+Per scenario:
+
+- `empty_map_8_directions_east`: `3/3` success
+- `goal_behind_robot`: `3/3` success
+- `single_obstacle_rectangle`: `3/3` success
+- `narrow_passage`: `3/3` success
+- `single_obstacle_circle`: `0/3` success, all `collision`
+- `line_wall_detour`: `0/3` success, all `collision`
+
+Risk-DWA reference on the same slice:
+
+```bash
+uv run python scripts/validation/run_safety_barrier_static_slice.py \
+  --algo risk_dwa \
+  --algo-config configs/algos/risk_dwa_camera_ready.yaml \
+  --output-dir output/validation/safety_barrier_static_slice/issue718_current_risk_dwa_reference
+```
+
+Summary:
+
+- episodes: `18`
+- success rate: `0.2778`
+- collision rate: `0.5556`
+- terminations: `5 success`, `3 terminated`, `10 collision`
+
+Interpretation:
+
+- The #718 nominal-controller acceptance cases are satisfied: open-space east and goal-behind both
+  complete reproducibly.
+- The planner also clears rectangle and narrow-passage cases on this current run.
+- The remaining failures are `single_obstacle_circle` and `line_wall_detour`; these are not
+  nominal-progress failures.
+- The current safety-barrier result beats the same-slice `risk_dwa` reference, but still leaves
+  enough geometry failures that paper-facing or broader benchmark promotion would overclaim.
+- Further work should not continue ad hoc local-reactive tweaks. A new issue should start only from
+  a topology-aware or otherwise structural hypothesis.
 
 ### Observed static-slice outcomes
 
@@ -168,7 +223,8 @@ But any continuation should start from a redesign hypothesis, not incremental be
 Recommended next focus:
 - keep `safety_barrier` as a documented negative-result spike,
 - shift experimentation to topology-aware planners such as `grid_route`,
-- use `narrow_passage` as the next acceptance gate for any continuation,
+- use `single_obstacle_circle` and `line_wall_detour` as the next acceptance gate for any
+  continuation,
 - do not revisit local-reactive `safety_barrier` redesigns without a new, explicit structural
   hypothesis.
 
@@ -189,6 +245,8 @@ Standalone `grid_route` deep-dive note:
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter2`
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter3`
 - `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo grid_route --algo-config configs/algos/grid_route_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/grid_route_iter4`
+- `uv run python scripts/validation/run_safety_barrier_static_slice.py --output-dir output/validation/safety_barrier_static_slice/issue718_current_repro`
+- `uv run python scripts/validation/run_safety_barrier_static_slice.py --algo risk_dwa --algo-config configs/algos/risk_dwa_camera_ready.yaml --output-dir output/validation/safety_barrier_static_slice/issue718_current_risk_dwa_reference`
 
 Artifacts:
 - `output/validation/safety_barrier_static_slice/issue717_iter3/summary.json`
@@ -211,6 +269,10 @@ Artifacts:
 - `output/validation/safety_barrier_static_slice/grid_route_iter3/summary.md`
 - `output/validation/safety_barrier_static_slice/grid_route_iter4/summary.json`
 - `output/validation/safety_barrier_static_slice/grid_route_iter4/summary.md`
+- `output/validation/safety_barrier_static_slice/issue718_current_repro/summary.json`
+- `output/validation/safety_barrier_static_slice/issue718_current_repro/summary.md`
+- `output/validation/safety_barrier_static_slice/issue718_current_risk_dwa_reference/summary.json`
+- `output/validation/safety_barrier_static_slice/issue718_current_risk_dwa_reference/summary.md`
 
 ## Risks / Follow-ups
 
@@ -218,5 +280,5 @@ Artifacts:
   broader barrier-style controller idea.
 - Follow-up should be a redesign issue, not a benchmark-surface expansion issue.
 - Follow-up tracker: `#718` `Redesign safety_barrier nominal controller before broader evaluation`.
-- The stronger next candidate is the topology-aware `grid_route` design, but it still needs a
-  narrow-passage solution before broader benchmark use is justified.
+- The stronger next candidate is the topology-aware `grid_route` design, but further work should
+  compare it against the current `12/18` safety-barrier reproduction before making benchmark claims.

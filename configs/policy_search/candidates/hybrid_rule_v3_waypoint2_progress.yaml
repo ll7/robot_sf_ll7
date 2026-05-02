@@ -1,0 +1,9 @@
+name: hybrid_rule_v3_waypoint2_progress
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  static_hard_safety_margin: 0.0
+  waypoint_switch_distance: 2.0
+  goal_progress_weight: 4.8
+  speed_preference_weight: 0.8
+  freezing_weight: 1.0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
@@ -15,6 +16,17 @@ import yaml
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, SearchConfig
 
 MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
+DENSE_TRAJECTORY_COLUMNS = [
+    "episode_id",
+    "seed",
+    "step",
+    "entity_type",
+    "entity_id",
+    "time_s",
+    "x",
+    "y",
+    "theta",
+]
 
 
 def _load_template(path: Path) -> dict[str, Any]:
@@ -127,15 +139,17 @@ def write_json(path: Path, payload: dict[str, Any]) -> Path:
 
 
 def write_trajectory_csv(path: Path, record: dict[str, Any] | None) -> Path:
-    """Write a small CSV replay index for the evaluated candidate.
-
-    The current benchmark episode record does not expose full per-step
-    trajectories. This CSV therefore records replay-identifying fields and can
-    be replaced by a denser trajectory export once the runner exposes one.
-    """
+    """Write dense trajectory rows when present, otherwise a replay index."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if record is None:
         path.write_text("episode_id,seed,status,steps,termination_reason\n", encoding="utf-8")
+        return path
+    dense_rows = _dense_trajectory_rows(record)
+    if record.get("trajectory_data") is not None:
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(DENSE_TRAJECTORY_COLUMNS)
+            writer.writerows(dense_rows)
         return path
     row = [
         str(record.get("episode_id", "")),
@@ -149,6 +163,110 @@ def write_trajectory_csv(path: Path, record: dict[str, Any] | None) -> Path:
         writer.writerow(["episode_id", "seed", "status", "steps", "termination_reason"])
         writer.writerow(row)
     return path
+
+
+def _dense_trajectory_rows(record: dict[str, Any]) -> list[list[str]]:
+    """Extract dense trajectory CSV rows from common episode-record trajectory shapes."""
+    trajectory_data = record.get("trajectory_data")
+    if not isinstance(trajectory_data, Sequence) or isinstance(trajectory_data, str | bytes):
+        return []
+    rows: list[list[str]] = []
+    for step_index, frame in enumerate(trajectory_data):
+        rows.extend(_frame_trajectory_rows(record, frame, step_index=step_index))
+    return rows
+
+
+def _frame_trajectory_rows(
+    record: dict[str, Any],
+    frame: object,
+    *,
+    step_index: int,
+) -> list[list[str]]:
+    """Extract robot and pedestrian rows from one trajectory frame."""
+    episode_id = str(record.get("episode_id", ""))
+    seed = str(record.get("seed", ""))
+    if isinstance(frame, Mapping):
+        step = str(frame.get("step", step_index))
+        time_s = str(frame.get("time_s", frame.get("time", "")))
+        rows: list[list[str]] = []
+        direct_pose = _pose_components(frame)
+        if direct_pose is not None:
+            rows.append(
+                _trajectory_row(
+                    episode_id,
+                    seed,
+                    step,
+                    str(frame.get("entity_type", "robot")),
+                    str(frame.get("entity_id", "robot")),
+                    time_s,
+                    direct_pose,
+                )
+            )
+        for key in ("robot", "robot_pose", "robot_position"):
+            pose = _pose_components(frame.get(key))
+            if pose is not None:
+                rows.append(_trajectory_row(episode_id, seed, step, "robot", "robot", time_s, pose))
+                break
+        pedestrians = frame.get("pedestrians", frame.get("pedestrian_positions"))
+        rows.extend(_pedestrian_rows(episode_id, seed, step, time_s, pedestrians))
+        return rows
+
+    pose = _pose_components(frame)
+    if pose is None:
+        return []
+    return [_trajectory_row(episode_id, seed, str(step_index), "robot", "robot", "", pose)]
+
+
+def _pedestrian_rows(
+    episode_id: str,
+    seed: str,
+    step: str,
+    time_s: str,
+    pedestrians: object,
+) -> list[list[str]]:
+    """Extract pedestrian trajectory rows from mapping or sequence containers."""
+    rows: list[list[str]] = []
+    if isinstance(pedestrians, Mapping):
+        iterator = pedestrians.items()
+    elif isinstance(pedestrians, Sequence) and not isinstance(pedestrians, str | bytes):
+        iterator = enumerate(pedestrians)
+    else:
+        return rows
+    for ped_id, ped_pose in iterator:
+        pose = _pose_components(ped_pose)
+        if pose is not None:
+            rows.append(
+                _trajectory_row(episode_id, seed, step, "pedestrian", str(ped_id), time_s, pose)
+            )
+    return rows
+
+
+def _pose_components(value: object) -> tuple[str, str, str] | None:
+    """Normalize mapping or sequence pose data into x/y/theta strings."""
+    if isinstance(value, Mapping):
+        if "x" in value and "y" in value:
+            return str(value["x"]), str(value["y"]), str(value.get("theta", ""))
+        position = value.get("position")
+        if position is not None:
+            return _pose_components(position)
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes) and len(value) >= 2:
+        theta = value[2] if len(value) >= 3 else ""
+        return str(value[0]), str(value[1]), str(theta)
+    return None
+
+
+def _trajectory_row(
+    episode_id: str,
+    seed: str,
+    step: str,
+    entity_type: str,
+    entity_id: str,
+    time_s: str,
+    pose: tuple[str, str, str],
+) -> list[str]:
+    """Build one dense trajectory CSV row."""
+    x, y, theta = pose
+    return [episode_id, seed, step, entity_type, entity_id, time_s, x, y, theta]
 
 
 def write_search_manifest(

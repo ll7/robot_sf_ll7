@@ -1,0 +1,84 @@
+{
+  "rows": [
+    {
+      "candidate": "risk_guarded_ppo_v1",
+      "stage": "smoke",
+      "success_rate": 1.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "classic_collision_rate": 0.0,
+      "francis_collision_rate": 0.0,
+      "summary_json": "output/policy_search/risk_guarded_ppo_v1/smoke/latest/summary.json"
+    },
+    {
+      "candidate": "scenario_adaptive_orca_v1",
+      "stage": "smoke",
+      "success_rate": 1.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "classic_collision_rate": 0.0,
+      "francis_collision_rate": 0.0,
+      "summary_json": "output/policy_search/scenario_adaptive_orca_v1/smoke/latest/summary.json"
+    },
+    {
+      "candidate": "ppo",
+      "stage": "baseline_reference",
+      "success_rate": 0.2482,
+      "collision_rate": 0.0993,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    },
+    {
+      "candidate": "orca",
+      "stage": "baseline_reference",
+      "success_rate": 0.1844,
+      "collision_rate": 0.0355,
+      "near_miss_rate": null,
+      "classic_collision_rate": 0.03,
+      "francis_collision_rate": 0.04,
+      "summary_json": null
+    },
+    {
+      "candidate": "goal",
+      "stage": "baseline_reference",
+      "success_rate": 0.0142,
+      "collision_rate": 0.2411,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    },
+    {
+      "candidate": "hybrid_orca_sampler_v1",
+      "stage": "smoke",
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "classic_collision_rate": 0.0,
+      "francis_collision_rate": 0.0,
+      "summary_json": "output/policy_search/hybrid_orca_sampler_v1/smoke/latest/summary.json"
+    },
+    {
+      "candidate": "mpc_clearance_sampler_v1",
+      "stage": "smoke",
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "classic_collision_rate": 0.0,
+      "francis_collision_rate": 0.0,
+      "summary_json": "output/policy_search/mpc_clearance_sampler_v1/smoke/latest/summary.json"
+    },
+    {
+      "candidate": "planner_selector_v1",
+      "stage": "smoke",
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "classic_collision_rate": 0.0,
+      "francis_collision_rate": 0.0,
+      "summary_json": "output/policy_search/planner_selector_v1/smoke/latest/summary.json"
+    }
+  ]
+}

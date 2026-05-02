@@ -1,0 +1,28 @@
+name: planner_selector_v1
+algo: hybrid_portfolio
+base_config_path: configs/algos/hybrid_portfolio_camera_ready.yaml
+params:
+  hybrid:
+    emergency_clearance: 0.58
+    caution_clearance: 1.05
+    dense_ped_count: 4
+    near_field_distance: 2.3
+    hysteresis_steps: 6
+  risk_dwa:
+    goal_progress_weight: 6.6
+    heading_weight: 1.2
+    ped_clearance_weight: 1.7
+    obstacle_clearance_weight: 1.1
+    ttc_weight: 0.26
+    near_field_speed_cap: 0.75
+  mppi_social:
+    sample_count: 32
+    iterations: 1
+    horizon_steps: 6
+    goal_progress_weight: 5.8
+    clearance_weight: 1.9
+  predictive_goal_weight: 6.8
+  predictive_collision_weight: 0.56
+  predictive_ttc_weight: 0.30
+  predictive_progress_risk_weight: 2.4
+  predictive_hard_clearance_weight: 2.9

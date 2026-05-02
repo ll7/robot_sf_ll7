@@ -95,6 +95,12 @@ Current promoted all-planners baseline run:
   + escalation target using `paper_eval_s10=[111..120]`
   + use when the S5 comparison still shows material interval width, ranking, or scenario-winner
     instability
+* `configs/benchmarks/socnav_bench_reentry_probe.yaml`
+  + focused `socnav_bench` re-entry probe on one Francis blind-corner scenario and seeds
+    `[111, 112, 113]`
+  + includes only `goal` and `socnav_bench` so runtime and outcome comparison stays cheap and
+    attributable
+  + keeps `socnav_bench` fail-fast; fallback/degraded execution is not valid re-entry evidence
 
 * `configs/algos/prediction_planner_camera_ready.yaml`
   + explicit `prediction_planner` camera-ready profile used by all-planners presets
@@ -106,6 +112,11 @@ For reproducible runs, verify that the configured model id exists and resolves t
 Testing-only planners remain opt-in only under the guardrail policy in
 `docs/benchmark_experimental_planners.md` . Issue 596 adds a verified-simple stage gate for any
 future reconsideration, but does not remove the opt-in requirement by itself.
+
+`socnav_bench` remains outside the canonical paper matrix. Re-entry requires the issue-562 focused
+probe to pass without fallback, complete all three probe episodes, show non-zero success, and keep
+runtime within `3x` the `goal` row on the same slice before any broader paper-compatible subset is
+run. See `docs/context/issue_562_socnav_bench_reentry.md`.
 
 SNQI calibration assets used by camera-ready presets:
 

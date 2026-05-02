@@ -105,11 +105,21 @@ knowledge, not every transient iteration detail.
 - [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
   log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
+## Performance Notes
+
+- [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
+  cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
+  cold startup and lazy first-step initialization, not warm steady-state stepping.
+
 ## Planner Integration Notes
 
 - [External Planner Reuse Checklist](./external_planner_reuse_checklist.md)
+- [Issue #562 SocNavBench Re-Entry Gate](./issue_562_socnav_bench_reentry.md)
+  defines the fail-fast focused probe and concrete keep-out/re-entry criteria for `socnav_bench`
+  before it can be reconsidered for paper-facing benchmarks.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+- [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
 
 ## Reasoning Notes
 

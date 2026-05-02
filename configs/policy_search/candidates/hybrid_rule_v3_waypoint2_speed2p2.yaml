@@ -1,0 +1,6 @@
+name: hybrid_rule_v3_waypoint2_speed2p2
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+params:
+  max_linear_speed: 2.2
+  max_linear_accel: 2.2

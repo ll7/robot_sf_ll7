@@ -1,6 +1,17 @@
 # Issue 739: PPO Reward and Observation Ablation Stage 1
 
-## Goal
+## Current Outcome
+
+Stage 1 and Stage 2 are complete. Across seven tested variants, none of the reward,
+observation, optimizer-scale, or scenario-sampling changes improved over the issue-708 baseline
+screening configuration.
+
+Use [Stage 2 documentation](issue_739_ppo_ablation_stage2.md) as the current decision record:
+return to the baseline reward/observation stack, avoid further broad simplification sweeps, and use
+`configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml` only if maintainers choose to
+spend training budget on a shorter baseline retrain.
+
+## Original Goal
 
 Run a bounded first-pass ablation against the issue-708 PPO setup instead of continuing opaque
 reward and observation tweaking.

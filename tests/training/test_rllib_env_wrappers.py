@@ -93,6 +93,25 @@ def test_flatten_dict_observation_wrapper_handles_nested_dicts():
     )
 
 
+def test_flatten_dict_observation_wrapper_handles_deep_dicts_iteratively():
+    """Deep declared Dict spaces should not depend on Python recursion depth."""
+    env = _DummyDictEnv()
+    space: spaces.Space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+    observation: dict[str, object] | np.ndarray = np.array([0.5], dtype=np.float32)
+    for index in range(1200):
+        key = f"level_{index}"
+        space = spaces.Dict({key: space})
+        observation = {key: observation}
+    env.observation_space = spaces.Dict({"deep": space})
+    env._obs = {"deep": observation}
+
+    wrapped = FlattenDictObservationWrapper(env, keys=("deep",))
+    obs, _ = wrapped.reset()
+
+    assert wrapped.observation_space.shape == (1,)
+    np.testing.assert_allclose(obs, np.array([0.5], dtype=np.float32))
+
+
 def test_symmetric_action_rescale_wrapper_maps_minus1_plus1_to_env_bounds():
     """Rescaled actions should map exactly to the original action-space bounds."""
     env = _DummyDictEnv()

@@ -1454,7 +1454,6 @@ def _run_training_iterations(  # noqa: C901
     history: list[dict[str, object]] = []
     best_checkpoint: dict[str, object] | None = None
     best_reward_mean: float | int | None = None
-    diagnostics_dir = result_log_path.parent / "diagnostics"
     first_nonfinite_iteration: int | None = None
     for iteration in range(1, run_config.experiment.train_iterations + 1):
         result = dict(algo.train())
@@ -1521,6 +1520,7 @@ def _run_training_iterations(  # noqa: C901
                 reward_mean=reward_mean_raw,
                 timesteps_total=timesteps_total,
             )
+            diagnostics_dir = result_log_path.parent / "diagnostics"
             diagnostics_path = diagnostics_dir / f"iteration_{iteration:06d}_nonfinite.json"
             _write_json(diagnostics_path, diagnostics)
             history[-1]["nonfinite_diagnostics_path"] = str(diagnostics_path)

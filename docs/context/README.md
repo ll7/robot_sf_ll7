@@ -129,6 +129,10 @@ knowledge, not every transient iteration detail.
 Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve
 why a change was made rather than a full issue execution transcript.
 
+- [Issue #589 Public Leaderboard MVP Boundary](./issue_589_public_leaderboard_mvp.md)
+  records the no-implementation-now decision, future PR-based MVP boundary, and prerequisites for
+  any public planner leaderboard work.
+
 ## Execution Workflow Notes
 
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated

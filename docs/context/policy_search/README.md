@@ -19,6 +19,11 @@ Use it for three things only:
 - `validation/`: local smoke or narrow validation notes.
 - `SLURM/`: deferred training TODO plus detailed handoff instructions.
 
+## Current Diagnostic Notes
+
+- `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
+  remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+
 ## Reproducible Entry Points
 
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`

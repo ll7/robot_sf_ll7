@@ -775,15 +775,52 @@ def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path 
     return (path.parent / candidate).resolve()
 
 
+def _deep_merge_config(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
+    """Return ``base`` recursively merged with ``overlay`` values taking precedence."""
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key == "base_config":
+            continue
+        base_value = merged.get(key)
+        if isinstance(base_value, Mapping) and isinstance(value, Mapping):
+            merged[key] = _deep_merge_config(base_value, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_expert_training_config_mapping(
+    path: Path,
+    *,
+    seen: frozenset[Path] = frozenset(),
+) -> dict[str, Any]:
+    """Load a PPO YAML config mapping, expanding an optional same-family base config."""
+    resolved = path.resolve()
+    if resolved in seen:
+        raise ValueError(f"Configuration base_config cycle detected at {resolved}")
+    with resolved.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    if not isinstance(data, Mapping):  # pragma: no cover - guard against malformed YAML
+        raise ValueError(f"Configuration must be a mapping, received {type(data)!r}")
+
+    base_raw = data.get("base_config")
+    if base_raw is None:
+        return dict(data)
+    base_path = Path(str(base_raw))
+    if not base_path.is_absolute():
+        base_path = resolved.parent / base_path
+    base_data = _load_expert_training_config_mapping(
+        base_path,
+        seen=seen | frozenset({resolved}),
+    )
+    return _deep_merge_config(base_data, data)
+
+
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
     """Load an :class:`ExpertTrainingConfig` from a YAML file."""
 
     path = Path(config_path).resolve()
-    with path.open(encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
-
-    if not isinstance(data, Mapping):  # pragma: no cover - guard against malformed YAML
-        raise ValueError(f"Configuration must be a mapping, received {type(data)!r}")
+    data = _load_expert_training_config_mapping(path)
 
     scenario_raw = Path(data["scenario_config"])
     scenario_config = (

@@ -585,6 +585,111 @@ def test_load_expert_training_config_supports_auto_stable_num_envs(tmp_path) -> 
     assert config.num_envs == "auto_stable"
 
 
+def test_load_expert_training_config_merges_base_config(tmp_path) -> None:
+    """PPO configs may inherit common settings while preserving explicit variants."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    base_path = tmp_path / "base.yaml"
+    base_path.write_text(
+        yaml.safe_dump(
+            {
+                "policy_id": "base_policy",
+                "scenario_config": str(scenario_config),
+                "num_envs": 8,
+                "worker_mode": "subproc",
+                "seeds": [123],
+                "randomize_seeds": True,
+                "total_timesteps": 16000000,
+                "feature_extractor": "grid_socnav",
+                "env_overrides": {
+                    "observation_mode": "socnav_struct",
+                    "use_occupancy_grid": True,
+                },
+                "tracking": {
+                    "wandb": {
+                        "enabled": True,
+                        "project": "robot_sf",
+                        "group": "shared",
+                        "tags": ["base"],
+                    }
+                },
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 3000,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 20,
+                    "hold_out_scenarios": [],
+                    "step_schedule": [{"until_step": 16000000, "every_steps": 500000}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    variant_path = tmp_path / "variant.yaml"
+    variant_path.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "base.yaml",
+                "policy_id": "variant_policy",
+                "num_envs": 14,
+                "env_overrides": {"include_grid_in_observation": True},
+                "tracking": {"wandb": {"tags": ["base", "num-envs-14"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_expert_training_config(variant_path)
+
+    assert config.policy_id == "variant_policy"
+    assert config.num_envs == 14
+    assert config.worker_mode == "subproc"
+    assert config.env_overrides["observation_mode"] == "socnav_struct"
+    assert config.env_overrides["use_occupancy_grid"] is True
+    assert config.env_overrides["include_grid_in_observation"] is True
+    assert config.tracking["wandb"]["project"] == "robot_sf"
+    assert config.tracking["wandb"]["tags"] == ["base", "num-envs-14"]
+
+
+@pytest.mark.parametrize("num_envs", [8, 14, 16, 30, 32])
+def test_num_envs_benchmark_variants_inherit_shared_config(num_envs: int) -> None:
+    """The issue-576 num_envs variants should keep only launch-specific overrides."""
+    config_path = Path(
+        "configs/training/ppo/benchmark_num_envs/"
+        f"expert_ppo_issue_576_br06_v8_num_envs_benchmark_{num_envs:02d}_1m.yaml"
+    ).resolve()
+
+    config = load_expert_training_config(config_path)
+
+    assert config.policy_id == f"ppo_expert_br06_v8_num_envs_benchmark_{num_envs:02d}_1m"
+    assert config.num_envs == num_envs
+    assert config.worker_mode == "subproc"
+    assert config.resume_model_id == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+    assert config.total_timesteps == 16000000
+    assert config.best_checkpoint_metric == "success_rate"
+    assert config.feature_extractor == "grid_socnav"
+    assert config.env_overrides["predictive_foresight_model_id"] == (
+        "predictive_proxy_selected_v2_full"
+    )
+    assert config.env_overrides["robot_config"]["type"] == "differential_drive"
+    assert config.env_factory_kwargs["reward_name"] == "route_completion_v3"
+    assert config.scenario_sampling["weights"]["classic_cross_trap_high"] == 4.0
+    assert config.evaluation.step_schedule == ((16000000, 500000),)
+    assert config.tracking["wandb"]["group"] == "benchmark-num-envs-imech156u-v8"
+    assert config.tracking["wandb"]["tags"] == [
+        "issue-576",
+        "br-06",
+        "ppo",
+        "predictive-foresight",
+        "success-priority-reward",
+        "num-envs-benchmark",
+        "imech156-u",
+        f"num-envs-{num_envs}",
+        "1m-continuation",
+    ]
+
+
 def test_resolve_num_envs_auto_modes_use_cpu_and_memory_caps(monkeypatch) -> None:
     """Auto env modes should resolve to throughput and stable host-aware counts."""
 

@@ -137,6 +137,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
 * **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
+* **[Issues #717/#718 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike and nominal-controller closeout; current static-slice evidence remains testing-only, not a promotion claim
 * **[Grid Route Deep Dive](./context/issue_717_grid_route_deep_dive.md)** - Standalone experimental-planner note covering `grid_route` contract, full scenario-set deep dive, and the remaining `narrow_passage` boundary
 * **[Issue #596 Atomic Scenario Suite Proposal](./context/issue_596_verified_simple_gate_proposal.md)** - Full-breadth atomic suite, verified-simple subset, validation fixtures, and scenario-contract rationale
 * **[Issue #596 Atomic Scenario Matrix](./context/issue_596_atomic_scenario_matrix.md)** - Compact scenario-by-scenario matrix covering capabilities, failure modes, and verified-simple membership
@@ -147,6 +148,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Issue #589 Public Leaderboard MVP Boundary](./context/issue_589_public_leaderboard_mvp.md)** - Conservative no-implementation-now decision and future PR-based leaderboard prerequisites
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
@@ -157,6 +159,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
+* **[Issue #592 Hybrid Obstacle-Context Predictor Design](./context/issue_592_hybrid_obstacle_predictor_design.md)** - Feature-baseline-first plan for obstacle-conditioned predictive models, with config-first experiment path and benchmark proof gates
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary
 * **[Prediction Planner PR Readiness (2026-02-20)](./context/predictive_planner_pr_readiness_2026-02-20.md)** - Completed integration checklist and remaining maintainer decisions before final merge
 * **[Issue #454 Execution Note (Kinematics Contract + Parity)](./context/issue_454_kinematics_parity_execution_note.md)** - Runtime kinematics wiring, feasibility diagnostics, and parity campaign evidence summary

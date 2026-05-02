@@ -235,12 +235,48 @@ uv run pytest \
 
 Result: `1 passed`.
 
+## 2026-05-02 Scenario-Adaptive Full-Matrix Update
+
+Issue #883 reran `scenario_adaptive_hybrid_orca_v1` on the full matrix at horizon `500`:
+
+```bash
+LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate scenario_adaptive_hybrid_orca_v1 \
+  --stage full_matrix \
+  --allow-expensive-stage \
+  --horizon 500 \
+  --workers 2 \
+  --output-dir output/ai/autoresearch/best_policy_next/scenario_adaptive_hybrid_orca_v1_full_h500_w2
+```
+
+Result:
+
+- episodes: `141`
+- success rate: `0.9291` (`131/141`)
+- collision rate: `0.0213`
+- near-miss rate: `0.4113`
+- termination reasons: `131` success, `3` collision, `4` max_steps, `3` terminated
+- failure taxonomy: `1` near_miss_intrusive, `3` static_collision, `6` timeout_low_progress
+- report:
+  `docs/context/policy_search/reports/2026-05-02_scenario_adaptive_hybrid_orca_v1_full_matrix.md`
+- failure report:
+  `docs/context/policy_search/validation/scenario_adaptive_hybrid_orca_v1_full_failure_report/failure_report.md`
+
+Compared with the retained `130/141` raw-success candidate, this recovers only
+`francis2023_leave_group` seed `113`. No new regression outside `francis2023_leave_group` was
+observed in the failure list: the remaining failures are still `classic_cross_trap_high` seed
+`112`, `classic_merging_low` seeds `111` and `113`, `classic_merging_medium` seeds `111`, `112`,
+and `113`, `francis2023_narrow_doorway` seeds `111`, `112`, and `113`, and
+`francis2023_circular_crossing` seed `111`.
+
+The scenario-adaptive candidate is now the best raw full-matrix policy-search result, but it is
+still experimental and not paper-ready because the same invalid/impossible scenario caveats and
+classic merging failures remain.
+
 ## Next Steps
 
-1. Rerun `scenario_adaptive_hybrid_orca_v1` on `full_matrix` to confirm whether targeted
-   leave-group success improves the aggregate from `130/141` to `131/141` without regressions.
-2. Continue root-cause work on the classic merging family. Do not classify those failures as
+1. Continue root-cause work on the classic merging family. Do not classify those failures as
    impossible without stronger evidence.
-3. Avoid more broad constant sweeps unless a new planner mechanism or scenario-specific hypothesis
+2. Avoid more broad constant sweeps unless a new planner mechanism or scenario-specific hypothesis
    explains why the change should recover the merging local minimum without weakening static
    safety.

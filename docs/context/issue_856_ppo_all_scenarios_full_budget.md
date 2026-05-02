@@ -109,6 +109,63 @@ Job `12226` completed successfully on `pro6000`:
 - warnings: none
 - runtime: about `1555s`
 
+## Comparison vs Job 12122 (Eval-Aligned Leader)
+
+Read directly from
+`output/benchmarks/issue_856/.../reports/campaign_table_experimental.md` (broad-training PPO row,
+141 episodes) against the note's recorded reference for job 12122 on the same camera-ready matrix:
+
+| Metric | Broad-training (12223) | Eval-aligned reference (12122) | Δ (broad − eval) |
+|---|---:|---:|---:|
+| `success_mean` | 0.2199 | 0.2553 | −0.0354 |
+| `collisions_mean` | 0.0922 | 0.0851 | +0.0071 |
+| `snqi_mean` | −0.3305 | −0.2906 | −0.0399 |
+
+Verdict: **broad-training underperforms the eval-aligned leader on every metric** of the
+camera-ready matrix at fixed 10M budget. The arm is therefore not publication grade as a
+replacement PPO row; it is a single-seed negative control that strengthens the
+alignment-dominates claim already recorded in
+[memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md](../../memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md).
+
+Caveat: this is a single-seed comparison. The seed-band from replicas 12257 / 12258 is required
+before treating the gap as statistically meaningful for the manuscript. The memory note records
+the same caveat.
+
+## Replica Seed-Band Write-Back
+
+When jobs `12257` (seed 231) and `12258` (seed 1337) finish, write the outcome in two places:
+
+1. Append a "Replica Seed-Band" subsection here with the per-seed best-checkpoint metrics, the
+   per-seed PPO row of the camera-ready matrix, and the seed-band mean ± std vs the 12122
+   reference.
+2. Update
+   [memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md](../../memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md)
+   so the alignment-vs-diversity entry references the seed band rather than the single-seed
+   point estimate.
+
+If the seed band still underperforms the 12122 reference by more than `0.02` on `success_mean`,
+do not promote the broad-training arm. If it falls within the 12122 seed band, promote the 12223
+checkpoint to a durable store before opening any benchmark-facing PR (see "Durable Artifact
+Decision" below).
+
+## Durable Artifact Decision
+
+The 12223 best checkpoint currently exists only at the worktree-local path
+`output/slurm/issue791-reward-curriculum-job-12223/.../*_best.zip`, with provenance through
+WandB run `ll7/robot_sf/ateif3c8`. Per the durable-artifact rule in
+[AGENTS.md](../../AGENTS.md):
+
+- The checkpoint stays as a worktree-local control while broad-training remains a single-seed
+  negative result. The WandB run is the durable provenance handle.
+- The checkpoint is promoted to a durable store (W&B model artifact, Zenodo, or model registry
+  entry) only if the seed-band lands inside the 12122 reference band and the broad-training row
+  becomes a publication candidate. The promotion step writes a `model/registry.yaml` entry whose
+  artifact reference is the durable URL, not the local path.
+- The 532K publication bundle at
+  `output/benchmarks/issue_856/publication/issue856_all_scenarios_12223_12226_publication_bundle.tar.gz`
+  is treated the same way: keep local until promotion, then upload as part of the same release
+  step. No downstream workflow may depend on the local bundle path.
+
 Queued three lightweight post-benchmark jobs on `pro6000` for provenance and publication handling:
 
 | Job | Purpose | Output |

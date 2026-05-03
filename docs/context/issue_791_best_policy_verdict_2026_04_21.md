@@ -95,3 +95,28 @@ next step.
 - `docs/context/issue_791_dead_ends_and_deprioritized.md`
 - `memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md`
 - `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`
+
+## Issue 852 Seed-Fixed Correction
+
+PR #851 review found that the historical 10M seed-1337 large-capacity leader replica declared
+`seeds: [1337]` while keeping `randomize_seeds: true`, so the trainer ignored the declared seed.
+That weakens any seed-fixed variance claim from job 11873.
+
+Correction configs were added on 2026-04-29:
+
+- `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml`
+- `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml`
+
+Both set `randomize_seeds: false`, use W&B group `issue-852-seed-fixed-replicas`, and keep the
+Wave-5 leader recipe otherwise unchanged. SLURM jobs **12176** (seed 1337) and **12177** (seed
+231) were submitted to a30 on 2026-04-29 and were initially pending with
+`QOSMaxJobsPerUserLimit`.
+
+Do not update the final seed-variance band until those jobs finish and their best-checkpoint eval
+metrics are recorded in `docs/context/issue_791_promotion_campaign_128k_256k.md`.
+
+2026-05-01 result: both fixed-seed correction jobs completed. Seed 1337 reached
+`success_rate=0.9000`, `collision_rate=0.1000`; seed 231 reached `success_rate=0.9143`,
+`collision_rate=0.0857`. These are close enough to validate the leader recipe, but below the
+single-run 11724 point estimate (`0.929 / 0.071`), so keep the paper claim as a single promoted
+leader plus seed-replica context rather than a tight seed-variance guarantee.

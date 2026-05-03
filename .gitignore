@@ -13,7 +13,8 @@ images
 logs
 # model
 SLURM/model
-slurm-*.out
+/slurm-*.out
+/slurm-*.err
 model/**/model.zip
 profile.json
 profiles

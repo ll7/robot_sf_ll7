@@ -34,11 +34,25 @@ the full test suite, and resolve the review threads after pushing.
    - Use the repo standard test command unless instructed otherwise.
    - Report failures and decide whether to continue or request input.
 
-6. Commit and push fixes.
+6. Check local artifact persistence before committing or pushing.
+   - Inspect ignored/generated outputs:
+     - `git status --ignored --short -uall output`
+   - For likely durable artifacts, inspect size, timestamps, and hashes with `find output ...`,
+     `du -sh`, and `sha256sum`.
+   - Decide whether each relevant artifact is disposable, an ignored cache, represented by a
+     tracked manifest/registry entry, or must be uploaded to durable storage.
+   - Treat benchmark bundles, model checkpoints, W&B run outputs, policy-analysis reports, and
+     config dependencies under `output/model_cache` as durable-candidate artifacts.
+   - If the review fix introduces or discovers a dependency on an ignored local artifact, make it
+     persistent before pushing, preferably via `model/registry.yaml` with W&B artifact metadata or
+     another explicit durable reference.
+   - Mention the artifact persistence decision in the PR reply or follow-up comment.
+
+7. Commit and push fixes.
    - Use a conventional commit message.
    - Mention which comments were addressed.
 
-7. Resolve review threads.
+8. Resolve review threads.
    - Use `gh pr review --comment` for replies and `gh api` or `gh pr review` to resolve threads.
    - Resolve only after the fix is pushed.
 

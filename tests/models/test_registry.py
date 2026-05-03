@@ -353,9 +353,43 @@ def test_download_from_wandb_builds_run_path_from_split_fields(monkeypatch, tmp_
     assert resolved == downloaded
 
 
+def test_download_from_wandb_prefers_artifact_path(monkeypatch, tmp_path: Path) -> None:
+    """Durable W&B artifact paths should be used before run-file downloads."""
+    downloaded = tmp_path / "cache" / "demo" / "model.zip"
+    calls: list[tuple[str, str]] = []
+
+    class _Artifact:
+        def download(self, *, root: str):
+            path = Path(root) / "model.zip"
+            path.write_text("checkpoint", encoding="utf-8")
+            return str(Path(root))
+
+    class _Api:
+        def artifact(self, path: str):
+            calls.append(("artifact", path))
+            return _Artifact()
+
+        def run(self, path: str):  # pragma: no cover - should not be reached
+            calls.append(("run", path))
+            raise AssertionError(path)
+
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=_Api))
+    resolved = registry._download_from_wandb(
+        {
+            "model_id": "demo",
+            "wandb_artifact_path": "ll7/robot_sf/demo-best:v1",
+            "wandb_run_path": "ll7/robot_sf/demo-run",
+            "wandb_file": "model.zip",
+        },
+        cache_dir=tmp_path / "cache",
+    )
+    assert resolved == downloaded
+    assert calls == [("artifact", "ll7/robot_sf/demo-best:v1")]
+
+
 def test_download_from_wandb_rejects_missing_run_metadata(tmp_path: Path) -> None:
     """Download helper should fail clearly when the registry row lacks W&B location metadata."""
-    with pytest.raises(ValueError, match="missing wandb_run_path"):
+    with pytest.raises(ValueError, match="missing wandb_artifact_path"):
         registry._download_from_wandb({"model_id": "demo"}, cache_dir=tmp_path / "cache")
 
 

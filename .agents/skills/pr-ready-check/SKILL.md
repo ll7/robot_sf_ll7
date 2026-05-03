@@ -42,4 +42,12 @@ Run the same PR validation pipeline used by local VS Code tasks, but via reusabl
 6. Commit and PR
    - Once all checks pass, commit your changes with a clear message.
    - Verify the issue addressed is actually resolved by the changes.
+   - Before push/PR handoff, inspect ignored/generated artifacts:
+     - `git status --ignored --short -uall output`
+   - For any benchmark bundle, model checkpoint, W&B output, policy-analysis report, or
+     `output/model_cache` dependency, decide whether it is disposable, an ignored cache, covered by
+     a tracked manifest/registry pointer, or needs durable upload.
+   - Make required artifacts persistent before handoff, preferably through W&B artifact metadata,
+     `model/registry.yaml`, a tracked manifest, or another explicit durable source.
+   - Record the artifact persistence decision in the PR body or linked context note.
    - Push to your branch and create/update the PR referencing related issues.

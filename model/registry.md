@@ -15,8 +15,9 @@ notebooks to insert/update entries without manual YAML editing.
 - `local_path`: local checkout path to the model file (if available).
 - `config_path`: training config used to produce the model.
 - `commit`: git commit hash for reproducibility.
-- W&B metadata (optional): either `wandb_run_path` or `wandb_entity` +
-  `wandb_project` + `wandb_run_id` so auto-download works.
+- W&B metadata (optional): prefer `wandb_artifact_path` for durable model artifacts;
+  otherwise use either `wandb_run_path` or `wandb_entity` + `wandb_project` +
+  `wandb_run_id` so auto-download works.
 - `wandb_file`: file to download from the run (defaults to `model.zip`).
 - `local_only`: mark entries that are only valid when the recorded `local_path`
   exists on the current machine.
@@ -39,6 +40,7 @@ models:
     wandb_project:
     wandb_run_id: run_id
     wandb_file: model.zip
+    wandb_artifact_path: entity/project/artifact_name:version
     local_only: false
     replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]
@@ -73,7 +75,7 @@ If the model is not present locally and W&B metadata is configured in
 
 Current PPO expert model id in `model/registry.yaml`:
 
-- `ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`
+- `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`
 
 Deprecated legacy entries kept for traceability:
 

@@ -15,7 +15,7 @@
 # in-distribution; report as benchmark-set performance, not OOD generalization.
 # A held-out scenario family is still required to measure true OOD generalization.
 
-model_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
 
 device: auto
 deterministic: true

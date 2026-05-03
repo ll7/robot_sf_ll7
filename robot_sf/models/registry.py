@@ -256,18 +256,6 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
     if wandb is None:  # pragma: no cover - optional dependency
         raise RuntimeError("W&B not available; cannot download model artifact.")
 
-    run_path = entry.get("wandb_run_path")
-    if not run_path:
-        entity = entry.get("wandb_entity")
-        project = entry.get("wandb_project")
-        run_id = entry.get("wandb_run_id")
-        if entity and project and run_id:
-            run_path = f"{entity}/{project}/{run_id}"
-        else:
-            raise ValueError(
-                "Registry entry missing wandb_run_path or wandb_entity/project/run_id."
-            )
-
     file_name = entry.get("wandb_file", "model.zip")
     model_id = entry.get("model_id", "unknown-model")
     cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
@@ -281,6 +269,32 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
             _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
             logger.info("Using cached model artifact: {}", cached_path)
         return cached_path
+
+    artifact_path = entry.get("wandb_artifact_path")
+    if artifact_path:
+        logger.info("Downloading model artifact {} from W&B artifact {}", file_name, artifact_path)
+        api = wandb.Api()
+        artifact = api.artifact(str(artifact_path))
+        artifact.download(root=str(cache_root))
+        downloaded_artifact_path = cache_root / file_name
+        if downloaded_artifact_path.exists():
+            return downloaded_artifact_path
+        raise FileNotFoundError(
+            f"W&B artifact '{artifact_path}' did not contain expected file '{file_name}'."
+        )
+
+    run_path = entry.get("wandb_run_path")
+    if not run_path:
+        entity = entry.get("wandb_entity")
+        project = entry.get("wandb_project")
+        run_id = entry.get("wandb_run_id")
+        if entity and project and run_id:
+            run_path = f"{entity}/{project}/{run_id}"
+        else:
+            raise ValueError(
+                "Registry entry missing wandb_artifact_path, wandb_run_path, "
+                "or wandb_entity/project/run_id."
+            )
 
     logger.info("Downloading model artifact {} from {}", file_name, run_path)
     api = wandb.Api()

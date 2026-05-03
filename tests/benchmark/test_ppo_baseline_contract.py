@@ -64,11 +64,12 @@ def test_model_registry_loads_without_duplicate_model_ids(repo_root: Path) -> No
 def test_canonical_ppo_baseline_points_at_promoted_artifact_path(
     repo_root: Path, canonical_entry: dict
 ) -> None:
-    """Benchmark-facing PPO baseline should stay path-based and offline-safe."""
+    """Benchmark-facing PPO baseline should resolve through the durable registry entry."""
     baseline_config = _load_yaml(repo_root / "configs" / "baselines" / "ppo_15m_grid_socnav.yaml")
 
-    assert "model_id" not in baseline_config
-    assert baseline_config["model_path"] == canonical_entry["local_path"]
+    assert "model_path" not in baseline_config
+    assert baseline_config["model_id"] == canonical_entry["model_id"]
+    assert canonical_entry["wandb_artifact_path"].endswith("-best-success:v9")
 
 
 def test_issue_576_closeout_config_has_resolved_provenance(

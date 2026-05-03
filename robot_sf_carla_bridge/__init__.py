@@ -7,6 +7,13 @@ the availability helpers before importing or invoking CARLA-specific APIs.
 from robot_sf_carla_bridge.availability import check_carla_availability
 from robot_sf_carla_bridge.export import (
     EXPORT_SCHEMA_VERSION,
+    CertificateRef,
+    PedestrianReplaySpec,
+    Pose2D,
+    RobotReplaySpec,
+    ScenarioReplayRef,
+    SimulationSpec,
+    build_export_payload,
     load_export_schema,
     validate_export_payload,
     write_export_payload,
@@ -14,6 +21,13 @@ from robot_sf_carla_bridge.export import (
 
 __all__ = [
     "EXPORT_SCHEMA_VERSION",
+    "CertificateRef",
+    "PedestrianReplaySpec",
+    "Pose2D",
+    "RobotReplaySpec",
+    "ScenarioReplayRef",
+    "SimulationSpec",
+    "build_export_payload",
     "check_carla_availability",
     "load_export_schema",
     "validate_export_payload",

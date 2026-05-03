@@ -110,6 +110,148 @@ def test_export_payload_round_trip_writes_stable_json(tmp_path) -> None:
     validate_export_payload(loaded)
 
 
+def test_build_export_payload_from_typed_sections_validates() -> None:
+    """Typed builder sections should produce the same schema-valid T0 payload shape."""
+    from robot_sf_carla_bridge import (
+        CertificateRef,
+        PedestrianReplaySpec,
+        Pose2D,
+        RobotReplaySpec,
+        ScenarioReplayRef,
+        SimulationSpec,
+        build_export_payload,
+        validate_export_payload,
+    )
+
+    payload = build_export_payload(
+        scenario=ScenarioReplayRef(
+            scenario_id="unit_crossing",
+            source_config="configs/scenarios/unit_crossing.yaml",
+            map_id="unit_map",
+            certificate=CertificateRef(status="passed", source="output/cert.json"),
+        ),
+        robot=RobotReplaySpec(
+            start=Pose2D(0.0, 0.0, 0.0),
+            goal=Pose2D(4.0, 0.0, 0.0),
+            radius_m=0.3,
+            kinematics={"model": "unicycle", "max_speed_mps": 1.0},
+        ),
+        pedestrians=[
+            PedestrianReplaySpec(
+                ped_id="ped_0",
+                start=Pose2D(2.0, -1.0, 1.57),
+                route=[Pose2D(2.0, 1.0)],
+                timing={"start_delay_s": 0.0},
+            )
+        ],
+        static_geometry={"obstacles": [], "route_topology_ref": "maps/svg_maps/unit_map.svg"},
+        simulation=SimulationSpec(dt_s=0.1, horizon_s=10.0),
+        trajectory_fields=["success", "collision", "min_distance"],
+        provenance={
+            "robot_sf_commit": "abc123",
+            "created_by": "unit-test",
+            "certificate_generator": "scenario_cert.v1",
+        },
+    )
+
+    validate_export_payload(payload)
+    assert payload["scenario"]["certificate"]["schema_version"] == "scenario_cert.v1"
+    assert payload["pedestrians"][0]["route"] == [{"x": 2.0, "y": 1.0}]
+
+
+def test_builder_output_round_trip_writes_stable_json(tmp_path) -> None:
+    """Builder output should be accepted by the existing JSON writer."""
+    from robot_sf_carla_bridge import (
+        CertificateRef,
+        PedestrianReplaySpec,
+        Pose2D,
+        RobotReplaySpec,
+        ScenarioReplayRef,
+        SimulationSpec,
+        build_export_payload,
+        write_export_payload,
+    )
+
+    payload = build_export_payload(
+        scenario=ScenarioReplayRef(
+            scenario_id="unit_crossing",
+            source_config="configs/scenarios/unit_crossing.yaml",
+            map_id="unit_map",
+            certificate=CertificateRef(status="passed"),
+        ),
+        robot=RobotReplaySpec(
+            start=Pose2D(0.0, 0.0),
+            goal=Pose2D(4.0, 0.0),
+            radius_m=0.3,
+            kinematics={"model": "unicycle"},
+        ),
+        pedestrians=[
+            PedestrianReplaySpec(
+                ped_id="ped_0",
+                start=Pose2D(2.0, -1.0),
+                route=[Pose2D(2.0, 1.0)],
+            )
+        ],
+        static_geometry={"obstacles": []},
+        simulation=SimulationSpec(dt_s=0.1, horizon_s=10.0),
+        trajectory_fields=["success"],
+        provenance={
+            "robot_sf_commit": "abc123",
+            "created_by": "unit-test",
+            "certificate_generator": "scenario_cert.v1",
+        },
+    )
+
+    output_path = write_export_payload(payload, tmp_path / "builder_export.json")
+    loaded = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert loaded == payload
+
+
+def test_builder_invalid_radius_fails_schema_validation() -> None:
+    """Builder validation should fail through the schema for invalid payload values."""
+    from robot_sf_carla_bridge import (
+        CertificateRef,
+        PedestrianReplaySpec,
+        Pose2D,
+        RobotReplaySpec,
+        ScenarioReplayRef,
+        SimulationSpec,
+        build_export_payload,
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="radius_m"):
+        build_export_payload(
+            scenario=ScenarioReplayRef(
+                scenario_id="unit_crossing",
+                source_config="configs/scenarios/unit_crossing.yaml",
+                map_id="unit_map",
+                certificate=CertificateRef(status="passed"),
+            ),
+            robot=RobotReplaySpec(
+                start=Pose2D(0.0, 0.0),
+                goal=Pose2D(4.0, 0.0),
+                radius_m=0.0,
+                kinematics={"model": "unicycle"},
+            ),
+            pedestrians=[
+                PedestrianReplaySpec(
+                    ped_id="ped_0",
+                    start=Pose2D(2.0, -1.0),
+                    route=[Pose2D(2.0, 1.0)],
+                )
+            ],
+            static_geometry={"obstacles": []},
+            simulation=SimulationSpec(dt_s=0.1, horizon_s=10.0),
+            trajectory_fields=["success"],
+            provenance={
+                "robot_sf_commit": "abc123",
+                "created_by": "unit-test",
+                "certificate_generator": "scenario_cert.v1",
+            },
+        )
+
+
 def test_missing_carla_reports_not_available(monkeypatch) -> None:
     """Missing CARLA should be a status object, not an import-time crash."""
     from robot_sf_carla_bridge.availability import check_carla_availability

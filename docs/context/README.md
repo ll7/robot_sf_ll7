@@ -140,6 +140,9 @@ knowledge, not every transient iteration detail.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
+- [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
+  defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
+  claim boundary before runtime implementation under #871.
 
 ## Map Coverage Notes
 

@@ -58,6 +58,10 @@ class HybridPortfolioAdapter:
 
         self._active_head = "risk_dwa"
         self._hold_remaining = 0
+        self._selected_head_counts: dict[str, int] = {}
+        self._fallback_count = 0
+        self._steps = 0
+        self._last_decision: dict[str, Any] | None = None
 
     def _extract_ped_clearance(self, observation: dict[str, Any]) -> tuple[int, float]:
         """Return `(near_count, min_clearance)` around the robot."""
@@ -117,10 +121,41 @@ class HybridPortfolioAdapter:
             return self.prediction.plan(observation)
         return self.orca.plan(observation)
 
+    def _record_decision(
+        self,
+        *,
+        desired_head: str,
+        selected_head: str,
+        fallback: bool = False,
+        fallback_from: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Store JSON-safe diagnostics for one planner-head decision."""
+
+        self._steps += 1
+        self._selected_head_counts[selected_head] = (
+            self._selected_head_counts.get(selected_head, 0) + 1
+        )
+        if fallback:
+            self._fallback_count += 1
+        self._last_decision = {
+            "desired_head": desired_head,
+            "selected_head": selected_head,
+            "fallback": bool(fallback),
+            "fallback_from": fallback_from,
+            "error": error,
+            "active_head": self._active_head,
+            "hold_remaining": int(self._hold_remaining),
+        }
+
     def reset(self) -> None:
         """Clear portfolio hysteresis and reset any stateful child heads."""
         self._active_head = "risk_dwa"
         self._hold_remaining = 0
+        self._selected_head_counts.clear()
+        self._fallback_count = 0
+        self._steps = 0
+        self._last_decision = None
         for head in (self.risk_dwa, self.orca, self.prediction, self.mppi):
             reset = getattr(head, "reset", None)
             if callable(reset):
@@ -130,17 +165,44 @@ class HybridPortfolioAdapter:
         """Return command from selected planner head."""
         desired = self._desired_head(observation)
         self._switch_head(desired)
+        selected = self._active_head
         try:
-            return self._call_head(self._active_head, observation)
-        except Exception:
+            command = self._call_head(selected, observation)
+            self._record_decision(desired_head=desired, selected_head=selected)
+            return command
+        except Exception as exc:
             if not bool(self.config.fallback_on_exception):
                 raise
             logger.warning(
                 "Hybrid portfolio head '{}' failed; falling back to ORCA.",
-                self._active_head,
+                selected,
             )
             self._active_head = "orca"
-            return self.orca.plan(observation)
+            command = self.orca.plan(observation)
+            self._record_decision(
+                desired_head=desired,
+                selected_head="orca",
+                fallback=True,
+                fallback_from=selected,
+                error=str(exc),
+            )
+            return command
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return episode-local planner-head diagnostics.
+
+        Returns:
+            JSON-safe diagnostics for benchmark episode metadata.
+        """
+
+        return {
+            "steps": int(self._steps),
+            "active_head": self._active_head,
+            "hold_remaining": int(self._hold_remaining),
+            "selected_head_counts": dict(self._selected_head_counts),
+            "fallback_count": int(self._fallback_count),
+            "last_decision": dict(self._last_decision) if self._last_decision else None,
+        }
 
 
 @dataclass

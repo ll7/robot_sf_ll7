@@ -87,6 +87,17 @@ if [[ "${MODULES_AVAILABLE}" == "1" ]]; then
   fi
 fi
 
+run_in_allocation() {
+  if command -v srun >/dev/null 2>&1; then
+    echo "[issue791] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
+    srun --cpu_bind=cores --gpus-per-node=1 "$@"
+  else
+    echo "[issue791] srun unavailable on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}; PATH=${PATH}" >&2
+    echo "[issue791] Running directly in the batch allocation." >&2
+    "$@"
+  fi
+}
+
 mkdir -p "${WORKDIR}"
 mkdir -p "${LOCAL_OUTPUT_ROOT}"
 
@@ -214,7 +225,7 @@ echo "[issue791] Log level: ${LOG_LEVEL}"
 # Reusable intent: stage gates can opt out of WandB, but follow-up/promotion runs should be tracked.
 # Override with ISSUE791_WANDB_POLICY=require|allow-off or ISSUE791_REQUIRE_WANDB=true|false.
 
-srun --cpu_bind=cores --gpus-per-node=1 \
+run_in_allocation \
   "${PYTHON_BIN}" scripts/training/train_ppo.py \
   --config "${TRAIN_CONFIG_PATH}" \
   --log-level "${LOG_LEVEL}"

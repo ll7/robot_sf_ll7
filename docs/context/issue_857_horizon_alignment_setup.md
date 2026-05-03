@@ -40,12 +40,14 @@ leader can be evaluated under the same nominal 100-step budget as the camera-rea
   binary collision share=0.000), `snqi_mean=-0.1781`, `path_efficiency_mean=0.9675`,
   `time_to_goal_norm_mean=0.4391`. Per-episode rows: 117/141 success (83.0%),
   0/141 binary collision (0.0%), 24/141 neither success nor collision (17.0%).
-- Phase F **submitted**: horizon influence sweep jobs for the issue-791 Wave-5 leader:
-  `12212` (`horizon=200`, label `issue857-horizon200-leader-11724`),
-  `12213` (`horizon=300`, label `issue857-horizon300-leader-11724`), and
-  `12214` (`horizon=600`, label `issue857-horizon600-leader-11724`). All three were
-  submitted `2026-04-30T12:41` and were initially pending on `l40s` with
-  `QOSMaxJobsPerUserLimit`.
+- Phase F **complete**: horizon influence sweep jobs for the issue-791 Wave-5 leader:
+  `12212` (`horizon=200`), `12213` (`horizon=300`), and `12214` (`horizon=600`) all finished
+  successfully on `pro6000` on 2026-04-30. PPO rows:
+  - horizon 100: `success_mean=0.2553`, `collisions_mean=0.0851` (job 12122 reference).
+  - horizon 200: `success_mean=0.7518`, `collisions_mean=0.1489`.
+  - horizon 300: `success_mean=0.8440`, `collisions_mean=0.1418`.
+  - horizon 400: `success_mean=0.8298`, `collisions_mean=0.1489`.
+  - horizon 600: `success_mean=0.8369`, `collisions_mean=0.1489`.
 
 Local preflight (`scripts/tools/run_camera_ready_benchmark.py --mode preflight`) on the
 Phase C config validated 47 scenarios × 7 planners × 3 seeds (eval seed-set
@@ -129,9 +131,9 @@ findings:
 Recommended next steps:
 
 - Treat horizon 400 as the paper-facing reference for the issue-791 leader row.
-- Run a horizon influence sweep at 200/300/600 against the same planner matrix and seed set, then
-  compare against the completed horizon-100 and horizon-400 rows. This should locate whether the
-  success-vs-budget curve saturates near 400 or keeps improving beyond the paper-facing budget.
+- Treat the completed horizon influence sweep as saturated by roughly horizon 300. The large jump
+  is from 100 to 200; horizons 300/400/600 are all in the `0.83-0.84` success band while collision
+  stays near `0.14-0.15`.
 - If the goal remains improving shorter-budget behavior, investigate reachability and
   reward/time-pressure shaping before any further horizon-100 retraining. The current evidence says
   "more time fixes the old leader," not "horizon-100 retraining is solved."
@@ -203,6 +205,15 @@ Phase F horizon-sweep preflight:
 Result on 2026-04-30: all three preflights passed, each resolving the same 47-scenario,
 7-planner, 3-seed matrix used by the completed horizon-400 reference.
 
+Phase F Slurm results:
+
+- `12212` (`horizon=200`): complete, 141 PPO episodes, `success_mean=0.7518`,
+  `collisions_mean=0.1489`, `snqi_mean=-0.2208`.
+- `12213` (`horizon=300`): complete, 141 PPO episodes, `success_mean=0.8440`,
+  `collisions_mean=0.1418`, `snqi_mean=-0.1912`.
+- `12214` (`horizon=600`): complete, 141 PPO episodes, `success_mean=0.8369`,
+  `collisions_mean=0.1489`, `snqi_mean=-0.1752`.
+
 ## Related surfaces
 
 - Issue body: GitHub issue `#857`
@@ -226,7 +237,7 @@ Result on 2026-04-30: all three preflights passed, each resolving the same 47-sc
   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon200_probe.yaml`,
   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon300_probe.yaml`,
   `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon600_probe.yaml`.
-- Phase F submitted logs once jobs start:
+- Phase F job logs:
   `output/slurm/12212-issue791-benchmark.out`,
   `output/slurm/12213-issue791-benchmark.out`,
   `output/slurm/12214-issue791-benchmark.out`.
@@ -241,13 +252,10 @@ Phases covered as of 2026-04-30:
 - Phase D (decision): recorded above — fall back to leader 11724, no replicas.
 - Phase E (horizon=400 probe of leader 11724): complete; leader-side horizon
   attribution recorded above.
-- Phase F (horizon influence sweep at 200/300/600): submitted and pending.
+- Phase F (horizon influence sweep at 200/300/600): complete; success saturates by roughly
+  horizon 300 and is recorded above plus in the reusable experiment memory note.
 
 Still to do:
 
-- harvest Phase F results once jobs `12212`, `12213`, and `12214` finish,
-- compare PPO success/collision/SNQI/time-to-goal across horizons 100/200/300/400/600,
-- append the horizon-sweep outcome to
-  `memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md`,
-- update GitHub issue `#857` with the Phase B/C/E outcome and close or leave open
-  only if a horizon-sweep follow-up is explicitly desired.
+- update GitHub issue `#857` with the Phase B/C/E/F outcome and close or leave open
+  only if a shorter-budget reward/time-pressure follow-up is explicitly desired.

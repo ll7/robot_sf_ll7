@@ -267,7 +267,7 @@ def test_issue_857_horizon400_probe_only_changes_horizon_and_bundle_export() -> 
 
     planners = {planner.key: planner for planner in cfg.planners}
     assert cfg.horizon == 400
-    assert cfg.paper_facing is False
+    assert cfg.paper_facing is True
     assert cfg.export_publication_bundle is False
     assert (
         planners["ppo"].algo_config_path

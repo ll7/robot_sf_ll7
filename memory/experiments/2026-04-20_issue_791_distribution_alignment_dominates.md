@@ -57,8 +57,12 @@ Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md
   conservative policy.
 - Practical implication: keep 11724 as the canonical PPO leader for now, avoid claiming a
   horizon-100 PPO fix, and compare against horizon 400 as the paper-facing reference.
-- Horizon influence sweep jobs were submitted on 2026-04-30 after preflight:
-  `12212` for horizon 200, `12213` for horizon 300, and `12214` for horizon 600. Once complete,
-  compare PPO success/collision/SNQI/time-to-goal across 100/200/300/400/600.
+- Horizon influence sweep jobs completed on 2026-04-30:
+  `12212` horizon 200 (`success_mean=0.7518`, `collisions_mean=0.1489`,
+  `snqi_mean=-0.2208`), `12213` horizon 300 (`success_mean=0.8440`,
+  `collisions_mean=0.1418`, `snqi_mean=-0.1912`), and `12214` horizon 600
+  (`success_mean=0.8369`, `collisions_mean=0.1489`, `snqi_mean=-0.1752`). The curve jumps
+  sharply from horizon 100 to 200 and is effectively saturated by horizon 300/400; extra budget
+  beyond 400 does not materially lift success.
 
 Full issue-857 write-up: `docs/context/issue_857_horizon_alignment_setup.md`.

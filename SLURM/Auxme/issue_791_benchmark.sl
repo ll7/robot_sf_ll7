@@ -139,6 +139,32 @@ ensure_model_cache_artifact() {
   return 1
 }
 
+benchmark_references_model_artifact() {
+  local relative_path="$1"
+  if grep -Fq "${relative_path}" "${BENCHMARK_CONFIG_PATH}"; then
+    return 0
+  fi
+
+  local config_ref config_path
+  while IFS= read -r config_ref; do
+    config_ref="${config_ref#\"}"
+    config_ref="${config_ref%\"}"
+    config_ref="${config_ref#\'}"
+    config_ref="${config_ref%\'}"
+    [[ -z "${config_ref}" ]] && continue
+    if [[ "${config_ref}" = /* ]]; then
+      config_path="${config_ref}"
+    else
+      config_path="${PROJECT_ROOT}/${config_ref}"
+    fi
+    if [[ -f "${config_path}" ]] && grep -Fq "${relative_path}" "${config_path}"; then
+      return 0
+    fi
+  done < <(sed -n 's/^[[:space:]]*algo_config:[[:space:]]*//p' "${BENCHMARK_CONFIG_PATH}")
+
+  return 1
+}
+
 run_in_allocation() {
   if command -v srun >/dev/null 2>&1; then
     echo "[issue791-bench] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
@@ -158,11 +184,15 @@ mkdir -p "${BENCHMARK_OUTPUT_ROOT}"
 # configs/baselines/*.yaml. The Wave-5 leader artifact must already exist at
 # output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip.
 EXPECTED_LEADER=${PROJECT_ROOT}/${WAVE5_LEADER_RELATIVE}
-if ! ensure_model_cache_artifact "${WAVE5_LEADER_RELATIVE}"; then
-  echo "[issue791-bench] Wave-5 leader artifact missing: ${EXPECTED_LEADER}" >&2
-  echo "[issue791-bench] Also checked primary checkout: ${PRIMARY_PROJECT_ROOT}/${WAVE5_LEADER_RELATIVE}" >&2
-  echo "[issue791-bench] Restore it from output/slurm/issue791-reward-curriculum-job-11724/benchmarks/expert_policies/checkpoints/.../...best.zip before resubmitting." >&2
-  exit 1
+if benchmark_references_model_artifact "${WAVE5_LEADER_RELATIVE}"; then
+  if ! ensure_model_cache_artifact "${WAVE5_LEADER_RELATIVE}"; then
+    echo "[issue791-bench] Wave-5 leader artifact missing: ${EXPECTED_LEADER}" >&2
+    echo "[issue791-bench] Also checked primary checkout: ${PRIMARY_PROJECT_ROOT}/${WAVE5_LEADER_RELATIVE}" >&2
+    echo "[issue791-bench] Restore it from output/slurm/issue791-reward-curriculum-job-11724/benchmarks/expert_policies/checkpoints/.../...best.zip before resubmitting." >&2
+    exit 1
+  fi
+else
+  echo "[issue791-bench] Benchmark config does not reference the Wave-5 leader artifact; skipping leader cache check."
 fi
 
 if [[ ! -x "${PYTHON_BIN}" ]]; then

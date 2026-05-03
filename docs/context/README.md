@@ -181,6 +181,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #940 CARLA T0 Export Read Helper](issue_940_carla_t0_export_read_helper.md)
   adds a schema-validating `read_export_payload(...)` boundary for exported replay JSON, stacked on
   the issue #934 builder API.
+- [Issue #942 CARLA T0 MapDefinition Adapter](issue_942_carla_t0_map_definition_adapter.md)
+  converts already-certified Robot-SF `MapDefinition` objects into schema-valid neutral export
+  payloads, stacked on the issue #940 read helper.
 
 ## DreamerV3 Notes
 

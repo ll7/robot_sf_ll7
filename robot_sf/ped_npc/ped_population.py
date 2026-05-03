@@ -608,7 +608,10 @@ def populate_single_pedestrians(
         ped_states[i, 0:2] = ped.start
 
         # Initial velocity pointing toward goal or first trajectory waypoint
-        if ped.goal is not None:
+        if float(getattr(ped, "start_delay_s", 0.0)) > 0.0:
+            ped_states[i, 2:4] = [0, 0]
+            ped_states[i, 4:6] = ped.start
+        elif ped.goal is not None:
             direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])
             ped_states[i, 2:4] = [ped_speed * cos(direction), ped_speed * sin(direction)]
             ped_states[i, 4:6] = ped.goal
@@ -640,6 +643,7 @@ def populate_single_pedestrians(
                 "speed_m_s": ped_speed,
                 "note": ped.note,
                 "wait_at": ped.wait_at or [],
+                "start_delay_s": float(getattr(ped, "start_delay_s", 0.0)),
                 "role": ped.role,
                 "role_target_id": ped.role_target_id,
                 "role_offset": ped.role_offset,

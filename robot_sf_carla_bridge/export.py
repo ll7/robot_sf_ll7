@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import jsonschema
 
@@ -219,3 +219,19 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def read_export_payload(input_path: str | Path) -> dict[str, Any]:
+    """Read and validate one T0 export payload from UTF-8 JSON.
+
+    Returns:
+        Schema-valid export payload dictionary.
+
+    Raises:
+        json.JSONDecodeError: if the file does not contain valid JSON.
+        jsonschema.ValidationError: if the parsed payload does not satisfy the export schema.
+    """
+
+    payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    validate_export_payload(payload)
+    return cast("dict[str, Any]", payload)

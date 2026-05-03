@@ -15,6 +15,7 @@ from robot_sf_carla_bridge.export import (
     SimulationSpec,
     build_export_payload,
     load_export_schema,
+    read_export_payload,
     validate_export_payload,
     write_export_payload,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "build_export_payload",
     "check_carla_availability",
     "load_export_schema",
+    "read_export_payload",
     "validate_export_payload",
     "write_export_payload",
 ]

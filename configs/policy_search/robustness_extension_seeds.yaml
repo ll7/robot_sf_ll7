@@ -1,0 +1,8 @@
+classic_bottleneck_medium: [ 114, 115 ]
+classic_doorway_medium: [ 114, 115 ]
+classic_group_crossing_medium: [ 114, 115 ]
+classic_t_intersection_medium: [ 114, 115 ]
+francis2023_blind_corner: [ 114, 115 ]
+francis2023_intersection_wait: [ 114, 115 ]
+francis2023_parallel_traffic: [ 114, 115 ]
+francis2023_crowd_navigation: [ 114, 115 ]

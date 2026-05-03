@@ -1,0 +1,4 @@
+name: hybrid_rule_v4_recovery_aware
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v4_recovery_aware.yaml
+params: {}

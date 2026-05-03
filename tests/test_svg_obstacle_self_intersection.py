@@ -8,6 +8,7 @@ from textwrap import dedent
 from loguru import logger
 from shapely.geometry import GeometryCollection, Polygon
 
+from robot_sf.nav import svg_map_parser
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 
@@ -42,6 +43,7 @@ def test_self_intersecting_obstacle_paths_are_repaired() -> None:
 
 def test_self_intersecting_obstacle_warnings_include_svg_filename() -> None:
     """Obstacle repair warnings should name the SVG map file that triggered them."""
+    svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
     repo_root = Path(__file__).resolve().parents[1]
     svg_fixture = (
         repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
@@ -58,6 +60,75 @@ def test_self_intersecting_obstacle_warnings_include_svg_filename() -> None:
 
     assert any(svg_fixture.name in message for message in messages)
     assert any("invalid polygon" in message and svg_fixture.name in message for message in messages)
+
+
+def test_self_intersecting_obstacle_repair_logs_once_per_path() -> None:
+    """Repeated reparsing should not spam the same obstacle repair warning/info lines."""
+    svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+    repo_root = Path(__file__).resolve().parents[1]
+    svg_fixture = (
+        repo_root / "maps" / "obstacle_svg_maps" / "uni_campus_with_lake_as_obstacle_and_routes.svg"
+    )
+    converter = SvgMapConverter(str(svg_fixture))
+    svg_path = _get_path_by_id(converter, "path3")
+    svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+
+    messages: list[tuple[str, str]] = []
+    sink_id = logger.add(
+        lambda message: messages.append((message.record["level"].name, message.record["message"])),
+        level="INFO",
+    )
+    try:
+        converter._process_obstacle_path(svg_path)
+        converter._process_obstacle_path(svg_path)
+    finally:
+        logger.remove(sink_id)
+        svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+
+    invalid_warnings = [
+        message
+        for level, message in messages
+        if level == "WARNING" and "invalid polygon" in message
+    ]
+    repair_infos = [
+        message
+        for level, message in messages
+        if level == "INFO" and "repaired invalid obstacle path" in message
+    ]
+    assert len(invalid_warnings) == 1
+    assert len(repair_infos) == 1
+
+
+def test_obstacle_log_dedupe_distinguishes_same_filename_in_different_dirs(
+    tmp_path: Path,
+) -> None:
+    """Obstacle log dedupe should key by full path while keeping filename-only output."""
+    svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+    first_svg = tmp_path / "first" / "same.svg"
+    second_svg = tmp_path / "second" / "same.svg"
+    first_svg.parent.mkdir()
+    second_svg.parent.mkdir()
+    messages: list[str] = []
+    sink_id = logger.add(
+        lambda message: messages.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        for svg_path in (first_svg, second_svg, first_svg):
+            svg_map_parser._log_obstacle_path_event_once(
+                "invalid_polygon",
+                svg_path,
+                "obstacle_13",
+                "warning",
+                "SVG file '{svg}' obstacle path id={pid} produced invalid polygon",
+            )
+    finally:
+        logger.remove(sink_id)
+        svg_map_parser._LOGGED_OBSTACLE_PATH_EVENTS.clear()
+
+    assert messages == [
+        "SVG file 'same.svg' obstacle path id=obstacle_13 produced invalid polygon",
+        "SVG file 'same.svg' obstacle path id=obstacle_13 produced invalid polygon",
+    ]
 
 
 def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> None:

@@ -1,0 +1,5 @@
+name: hybrid_rule_v3_waypoint2_route_lookahead6
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+params:
+  route_guide_waypoint_lookahead_cells: 6

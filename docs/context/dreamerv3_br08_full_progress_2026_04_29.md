@@ -1,7 +1,7 @@
-# DreamerV3 BR-08 full retrain — progress check, 2026-04-29 ~4h elapsed
+# DreamerV3 BR-08 full retrain — outcome record, 2026-04-29 / 2026-04-30
 
-Date: 2026-04-29 (snapshot at 12:33 UTC, run elapsed ~4h 11m)
-Author: live progress check during user session.
+Date: 2026-04-29 (run start) → 2026-04-30 (slurm OOM kill, retrospective updated 2026-04-30)
+Author: live progress check during user session, then post-mortem update once the run terminated.
 Predecessor submission record: [dreamerv3_br08_submission_2026_04_29.md](dreamerv3_br08_submission_2026_04_29.md)
 Predecessor handoff: [dreamerv3_program_full_handoff_2026_04_28.md](dreamerv3_program_full_handoff_2026_04_28.md)
 
@@ -18,7 +18,111 @@ Predecessor handoff: [dreamerv3_program_full_handoff_2026_04_28.md](dreamerv3_pr
   inflight `non_finite_reward_mean` warnings later proven to be RLlib reporting empty-episode
   means — see submission record.
 
-## Health: training is clean, NaN-free, and learning
+## Final outcome — FAILED (OUT_OF_MEMORY + NaN reward collapse)
+
+`sacct` verdict for `12159`:
+
+| Field | Value |
+| --- | --- |
+| State | `OUT_OF_MEMORY` |
+| Exit code | `0:125` (slurm OOM kill, batch step) |
+| Elapsed | 23:20:44 |
+| `MaxRSS` | **106.27 GB** |
+| `ReqMem` | 64 GB |
+
+Two independent failure modes hit the same run:
+
+1. **Host RAM leak.** `MaxRSS = 106 GB` against a 64 GB cgroup. Slurm killed the
+   batch step; immediately before, 20 Ray worker `oom_kill` events are logged in
+   [output/slurm/12159-dreamer-br08-full.out](../../output/slurm/12159-dreamer-br08-full.out)
+   and the env runners died en masse. The terminal Python traceback
+   (`ZeroDivisionError: division by zero` in
+   `ray/rllib/algorithms/dreamerv3/dreamerv3.py:591` —
+   `replayed_steps_this_iter / env_steps_last_regular_sample`) is a downstream
+   symptom: with all env runners OOM-killed, `env_steps_last_regular_sample = 0`.
+2. **Reward NaN cascade re-emerged.** Despite the parity-corrected env, the same
+   non-finite reward pattern that doomed the 2026-04-09 stability probe and the
+   2026-04-29 gate reappeared in the full run.
+
+Final-state numbers from
+`output/dreamerv3/dreamerv3_br08_benchmark_socnav_grid_full_20260429T082210Z`:
+
+- `result.jsonl`: 585 rows (iters 1–585), final `timesteps_total = 177,088`
+- `diagnostics/`: **164** `iteration_*_nonfinite.json` files
+- First nonfinite iter: **207**; last nonfinite iter: **585**
+- Peak `reward_mean_raw`: **+23.96 at iter 453** (saved to `checkpoints/best_reward`)
+- Final iter 585 `reward_mean_raw = NaN`, `reward_mean_status = nonfinite`
+- ~470/585 iters are finite-reward; the run was learning, then drifted into
+  intermittent NaN spikes from iter 207 onward, never recovering to a clean regime.
+
+The run did *not* hit walltime; it was killed at ~23h20m by the OOM cgroup,
+well short of the projected ~36h budget.
+
+## Trajectory contrast (full vs gate vs prior probe)
+
+| Run | Model size | Best `reward_mean` | NaN onset | Terminated by |
+| --- | --- | --- | --- | --- |
+| 2026-04-09 stability probe (drive-state-rays) | XS | −15.56 @ iter 119 | iter 3 | clean exit, no learning |
+| 2026-04-29 gate (12156, 13m) | XS | −14.84 @ iter 41 | iter 12 | clean exit at 60 iters |
+| **2026-04-29 full (12159)** | **S** | **+23.96 @ iter 453** | **iter 207** | **OOM kill at iter 585** |
+
+The full run *did* clear the gate's reward floor (positive-mean episodes,
++24 peak strongly suggests `terminal_bonus` route completions) but never
+escaped the NaN regime once it started, and bled host memory until slurm
+killed the cgroup. **No eval block fired** — eval cadence was every 100
+iters, but every eval iter on or after iter 207 was inside a NaN window or
+host RAM was already past 64 GB. The `evaluation/` subdir contains no
+verdict block.
+
+## "Third-time-blind" stop is now triggered
+
+Per the umbrella `#578` stop rule, this is the third blind BR-08 retrain
+that produced no usable eval signal:
+
+1. 2026-04-09 stability probe — flat-vector, NaN-from-iter-3, no eval signal.
+2. 2026-04-29 gate (12156) — flat-vector, NaN-from-iter-12, gate reward only.
+3. 2026-04-29 full (12159) — flat-vector parity-corrected, NaN-from-iter-207
+   *plus* OOM, no eval block, OOM-killed before walltime.
+
+The flat-vector BR-08 architecture should not get another compute slot
+without (a) a host-RAM leak diagnosis, and (b) a structural change to the
+reward / observation pipeline that explains why the NaN regime keeps
+re-emerging. Pivot options remain
+[issue_789_dreamer_multimodal_encoder.md](issue_789_dreamer_multimodal_encoder.md)
+and [issue_782_dreamerv3_pretraining_design.md](issue_782_dreamerv3_pretraining_design.md).
+
+## Cost spent on this attempt
+
+- Gate (12156): 13m on a30 (cheap, scientific value: confirmed NaN re-emerges).
+- Full (12159): 23h20m on a30 (single A30 24GB), no eval block, OOM kill.
+- W&B run id `1t6gadx5` exists with reward curves and is the cheapest
+  artifact for any future post-mortem; do not re-run from this branch
+  without resolving the two failure modes first.
+
+## What can still be salvaged
+
+- `checkpoints/best_reward` (peak iter 453, reward +23.96) is on disk.
+  It is **not** a paper-facing checkpoint — never passed an eval block,
+  was followed by NaN, and lives downstream of an OOM-killed run. At most
+  it could be loaded for a one-off policy-analysis sanity check to see if
+  any deterministic episode can complete a route, but treat the result as
+  diagnostic only.
+- `result.jsonl` and the 164 `diagnostics/iteration_*_nonfinite.json`
+  files are the right starting point for a NaN-pattern investigation
+  (which iter, which env runner, which reward component). The first
+  nonfinite at iter 207 (177k env steps in) is the wedge.
+
+---
+
+## Mid-run snapshot (historical, 2026-04-29 12:33 UTC, ~4h elapsed)
+
+The section below is the original live progress check written when the run
+still looked healthy (52 iters in, no NaN yet). It is preserved as a
+historical record of what the run looked like *before* the failures
+emerged. **Do not treat its conclusions as the final outcome** — the
+current outcome is the OOM + NaN-collapse summary above.
+
+### Health: training was clean, NaN-free, and learning
 
 Compared to the gate, the full run shows **no NaN drift**:
 
@@ -31,7 +135,7 @@ Compared to the gate, the full run shows **no NaN drift**:
 A `best_reward` checkpoint has already been saved with full algorithm state
 (`algorithm_state.pkl`, `env_runner/`, `learner_group/`, `rllib_checkpoint.json`).
 
-## Reward trajectory — meaningful improvement
+### Reward trajectory — meaningful improvement (mid-run, since reverted)
 
 Reward statistics over the 52 reported iterations (raw `reward_mean_raw` from `result.jsonl`):
 
@@ -58,7 +162,7 @@ Key contrast with prior runs:
 - This run (Slurm 12159, model_size=S, parity-corrected env): peak +22.90 at iter 45,
   no NaN cascades, mean improving.
 
-## Throughput — slow per-iter, walltime-bound rather than iter-bound
+### Throughput — slow per-iter, walltime-bound rather than iter-bound (mid-run)
 
 - 52 iters in 244 min wall ⇒ **~281 sec/iter** (~4.7 min/iter)
 - Projected at this rate: **~460 iters** in the 36h walltime cap
@@ -71,13 +175,13 @@ world-model gradient updates per env step) on a single A30. Not a problem per se
 DreamerV3 is sample-efficient by design, and 294K env steps is in the right ballpark
 to learn a SocNav-class task if the reward provides enough signal.
 
-## Eval cadence — first verdict block expected at iter 100
+### Eval cadence — first verdict block expected at iter 100 (never fired)
 
 `evaluation: every_iterations: 100, evaluation_episodes: 30`. We are at iter 52 with
 ~5h until iter 100. **No eval block has fired yet.** Until iter-100 eval lands, the
 training-side `reward_mean` is the only learning indicator.
 
-## What to watch for next
+### What to watch for next (obsolete — captured for completeness)
 
 In rough order of priority:
 
@@ -96,7 +200,7 @@ In rough order of priority:
    current candidate for downstream policy-analysis. If reward keeps climbing the
    checkpoint advances on its own; if it regresses, we still have the +22.9 snapshot.
 
-## Risks and stop conditions still in force
+### Risks and stop conditions still in force (mid-run wording)
 
 - Do not edit `benchmark_socnav_grid_br08_full.yaml` while 12159 is running. If the
   run reveals a config defect, open a follow-up issue with a new sibling config and a
@@ -109,7 +213,7 @@ In rough order of priority:
   `configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml` (per
   `dreamerv3_program_full_handoff_2026_04_28.md` step 3 of #578).
 
-## Convenience commands
+### Convenience commands (still valid for inspecting the dead run)
 
 ```bash
 # Live status

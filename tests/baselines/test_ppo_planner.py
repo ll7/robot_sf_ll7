@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.social_force import Observation
@@ -269,6 +271,32 @@ def test_load_model_resolves_registry_model_id(monkeypatch, tmp_path):
     )
     planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
     assert called["model_id"] == "ppo_demo"
+    assert planner._model["path"] == str(resolved_model)
+
+
+def test_issue_791_portable_baseline_uses_registry_and_auto_device(monkeypatch, tmp_path):
+    """The portable issue-791 baseline should load through model_id on CPU-safe settings."""
+    config_path = Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity_portable.yaml")
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    resolved_model = tmp_path / "model.zip"
+    resolved_model.write_text("checkpoint", encoding="utf-8")
+    called = {}
+
+    def _fake_resolve(model_id: str):
+        called["model_id"] = model_id
+        return resolved_model
+
+    monkeypatch.setattr("robot_sf.baselines.ppo.resolve_model_path", _fake_resolve)
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.PPO",
+        SimpleNamespace(load=lambda path, **kwargs: {"path": path, **kwargs}),
+    )
+
+    planner = PPOPlanner(config)
+
+    assert "model_path" not in config
+    assert config["predictive_foresight_device"] == "auto"
+    assert called["model_id"] == config["model_id"]
     assert planner._model["path"] == str(resolved_model)
 
 

@@ -107,13 +107,27 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
    - Run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` after the sync; a readiness result
      from before the sync is stale.
 
-11. Push and open draft PR
+11. Check local artifact persistence before PR handoff
+   - Inspect ignored/generated outputs:
+     - `git status --ignored --short -uall output`
+   - For likely durable artifacts, inspect size, timestamps, and hashes with `find output ...`,
+     `du -sh`, and `sha256sum`.
+   - Classify relevant artifacts as disposable, ignored cache, represented by a tracked
+     manifest/registry pointer, or requiring durable upload before PR handoff.
+   - Treat benchmark bundles, model checkpoints, W&B run outputs, policy-analysis reports, and
+     config dependencies under `output/model_cache` as durable-candidate artifacts.
+   - If code/config/docs rely on a local ignored artifact, persist the dependency first, preferably
+     through `model/registry.yaml` with W&B metadata such as `wandb_artifact_path`, a tracked
+     manifest, or another explicit durable source.
+   - Include the persistence decision in the PR body and any issue handoff comment.
+
+12. Push and open draft PR
    - `git push -u origin "$(git branch --show-current)"`
    - Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - Open draft PR linking issue:
      - `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`
 
-12. Create follow-up issues when needed
+13. Create follow-up issues when needed
    - For deferred but important work, create dedicated issues:
      - `gh issue create --title "<follow-up>" --body-file <body.md> --label "enhancement,technical-debt" --milestone "<milestone>"`
    - Add to project:
@@ -123,7 +137,7 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
    - If you are processing a larger batch, finish all issue cleanup before the project-write pass
      and run score sync once at the end.
 
-13. Close loop metadata
+14. Close loop metadata
    - Parent issue:
      - keep open while PR is draft; use closing keyword in PR body (`Closes #<n>`) when ready.
    - Project:
@@ -136,5 +150,6 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
   - selected issue number + why it was selected
   - ambiguity decisions taken (or why none were needed)
   - commands run for validation
+  - local artifact persistence decision for generated `output/` files
   - follow-up issues created (if any) with labels/milestone/priority
   - draft PR URL

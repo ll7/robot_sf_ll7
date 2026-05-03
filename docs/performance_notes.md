@@ -113,6 +113,15 @@ Nightly behavior:
 Regression diagnostics include whether degradation is startup-dominated
 (`env_create_sec`/`first_step_sec`) or steady-state-dominated (`episode_sec`/`steps_per_sec`).
 
+High-density gate policy:
+- `classic_cross_trap_low` and `classic_cross_trap_medium` are blocking in the matrix.
+- `classic_cross_trap_high` remains advisory (`enforce_regression_gate: false`) until enough
+  nightly history exists to distinguish stable degradation from hardware/runtime noise.
+- Issue #513 local calibration on 2026-05-02 found no local history reports under
+  `output/benchmarks/perf/trend/history/*.json`; the high-density run stayed startup-only `warn`
+  with warm throughput above the stored medium baseline. Do not promote this scenario to blocking
+  from a one-off local run.
+
 ### Baseline Management
 
 Use the committed snapshot as the initial reference point. If hardware/runtime

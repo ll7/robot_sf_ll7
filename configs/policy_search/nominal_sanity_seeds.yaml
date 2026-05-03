@@ -1,0 +1,6 @@
+planner_sanity_simple: [ 111, 112, 113 ]
+classic_head_on_corridor_low: [ 111, 112, 113 ]
+classic_crossing_low: [ 111, 112, 113 ]
+classic_doorway_low: [ 111, 112, 113 ]
+classic_overtaking_low: [ 111, 112, 113 ]
+francis2023_following_human: [ 111, 112, 113 ]

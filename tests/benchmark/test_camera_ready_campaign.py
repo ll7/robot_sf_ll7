@@ -240,6 +240,27 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
     assert ppo_cfg["fallback_to_goal"] is False
 
 
+def test_socnav_bench_reentry_probe_config_is_focused_and_fail_fast() -> None:
+    """The SocNavBench re-entry probe should stay narrow and fail closed."""
+
+    cfg = load_campaign_config(Path("configs/benchmarks/socnav_bench_reentry_probe.yaml"))
+
+    assert cfg.name == "socnav_bench_reentry_probe"
+    assert cfg.scenario_matrix_path == (
+        get_repository_root() / "configs/scenarios/single/francis2023_blind_corner.yaml"
+    )
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111, 112, 113]
+    assert cfg.horizon == 30
+    assert cfg.workers == 1
+
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert list(planners) == ["goal", "socnav_bench"]
+    assert planners["goal"].planner_group == "core"
+    assert planners["socnav_bench"].planner_group == "experimental"
+    assert planners["socnav_bench"].socnav_missing_prereq_policy == "fail-fast"
+
+
 def test_issue_791_eval_aligned_ppo_config_is_serial_and_fail_closed() -> None:
     """Issue-791 benchmark candidate should not silently fallback or fork CUDA workers."""
     cfg = load_campaign_config(
@@ -254,6 +275,11 @@ def test_issue_791_eval_aligned_ppo_config_is_serial_and_fail_closed() -> None:
     assert planners["ppo"].workers_override == 1
 
     ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert (
+        ppo_cfg["model_id"]
+        == "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert "model_path" not in ppo_cfg
     assert ppo_cfg["fallback_to_goal"] is False
     assert ppo_cfg["predictive_foresight_enabled"] is True
     assert ppo_cfg["predictive_foresight_model_id"] == "predictive_proxy_selected_v2_full"

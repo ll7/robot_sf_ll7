@@ -16,6 +16,7 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+_LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
 
 
 def _local_only_resolution_error(
@@ -255,6 +256,33 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
     if wandb is None:  # pragma: no cover - optional dependency
         raise RuntimeError("W&B not available; cannot download model artifact.")
 
+    file_name = entry.get("wandb_file", "model.zip")
+    model_id = entry.get("model_id", "unknown-model")
+    cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
+    cache_root = cache_root / model_id
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    cached_path = cache_root / file_name
+    if cached_path.exists():
+        resolved_cached_path = cached_path.resolve()
+        if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
+            _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
+            logger.info("Using cached model artifact: {}", cached_path)
+        return cached_path
+
+    artifact_path = entry.get("wandb_artifact_path")
+    if artifact_path:
+        logger.info("Downloading model artifact {} from W&B artifact {}", file_name, artifact_path)
+        api = wandb.Api()
+        artifact = api.artifact(str(artifact_path))
+        artifact.download(root=str(cache_root))
+        downloaded_artifact_path = cache_root / file_name
+        if downloaded_artifact_path.exists():
+            return downloaded_artifact_path
+        raise FileNotFoundError(
+            f"W&B artifact '{artifact_path}' did not contain expected file '{file_name}'."
+        )
+
     run_path = entry.get("wandb_run_path")
     if not run_path:
         entity = entry.get("wandb_entity")
@@ -264,19 +292,9 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
             run_path = f"{entity}/{project}/{run_id}"
         else:
             raise ValueError(
-                "Registry entry missing wandb_run_path or wandb_entity/project/run_id."
+                "Registry entry missing wandb_artifact_path, wandb_run_path, "
+                "or wandb_entity/project/run_id."
             )
-
-    file_name = entry.get("wandb_file", "model.zip")
-    model_id = entry.get("model_id", "unknown-model")
-    cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
-    cache_root = cache_root / model_id
-    cache_root.mkdir(parents=True, exist_ok=True)
-
-    cached_path = cache_root / file_name
-    if cached_path.exists():
-        logger.info("Using cached model artifact: {}", cached_path)
-        return cached_path
 
     logger.info("Downloading model artifact {} from {}", file_name, run_path)
     api = wandb.Api()

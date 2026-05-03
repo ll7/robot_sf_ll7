@@ -28,6 +28,7 @@ import shutil
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -264,6 +265,24 @@ def _preconfigure_loguru_level_from_argv() -> None:
 
 
 _preconfigure_loguru_level_from_argv()
+
+
+@contextmanager
+def _subproc_worker_log_environment(worker_mode: str):
+    """Temporarily quiet import-time info logs inherited by PPO subprocess workers."""
+    if worker_mode != "subproc":
+        yield
+        return
+
+    previous_level = os.environ.get("LOGURU_LEVEL")
+    os.environ["LOGURU_LEVEL"] = "WARNING"
+    try:
+        yield
+    finally:
+        if previous_level is None:
+            os.environ.pop("LOGURU_LEVEL", None)
+        else:
+            os.environ["LOGURU_LEVEL"] = previous_level
 
 
 class _TeeStream:
@@ -756,15 +775,52 @@ def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path 
     return (path.parent / candidate).resolve()
 
 
+def _deep_merge_config(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
+    """Return ``base`` recursively merged with ``overlay`` values taking precedence."""
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key == "base_config":
+            continue
+        base_value = merged.get(key)
+        if isinstance(base_value, Mapping) and isinstance(value, Mapping):
+            merged[key] = _deep_merge_config(base_value, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_expert_training_config_mapping(
+    path: Path,
+    *,
+    seen: frozenset[Path] = frozenset(),
+) -> dict[str, Any]:
+    """Load a PPO YAML config mapping, expanding an optional same-family base config."""
+    resolved = path.resolve()
+    if resolved in seen:
+        raise ValueError(f"Configuration base_config cycle detected at {resolved}")
+    with resolved.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    if not isinstance(data, Mapping):  # pragma: no cover - guard against malformed YAML
+        raise ValueError(f"Configuration must be a mapping, received {type(data)!r}")
+
+    base_raw = data.get("base_config")
+    if base_raw is None:
+        return dict(data)
+    base_path = Path(str(base_raw))
+    if not base_path.is_absolute():
+        base_path = resolved.parent / base_path
+    base_data = _load_expert_training_config_mapping(
+        base_path,
+        seen=seen | frozenset({resolved}),
+    )
+    return _deep_merge_config(base_data, data)
+
+
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
     """Load an :class:`ExpertTrainingConfig` from a YAML file."""
 
     path = Path(config_path).resolve()
-    with path.open(encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
-
-    if not isinstance(data, Mapping):  # pragma: no cover - guard against malformed YAML
-        raise ValueError(f"Configuration must be a mapping, received {type(data)!r}")
+    data = _load_expert_training_config_mapping(path)
 
     scenario_raw = Path(data["scenario_config"])
     scenario_config = (
@@ -2241,7 +2297,8 @@ def _init_training_model(
         for seed in env_seeds
     ]
     if worker_mode == "subproc":
-        vec_env = SubprocVecEnv(env_fns)
+        with _subproc_worker_log_environment(worker_mode):
+            vec_env = SubprocVecEnv(env_fns)
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)
@@ -2406,6 +2463,13 @@ def _evaluate_policy(
             strategy=sampler_strategy,
         )
     scenario_cycle_length = max(1, len(sampler.scenario_ids))
+    logger.info(
+        "PPO evaluation phase start step={} episodes={} scenarios={} seed_mode={}",
+        eval_step if eval_step is not None else "final",
+        episodes,
+        len(sampler.scenario_ids),
+        "random" if use_random else "deterministic",
+    )
 
     for episode_idx in range(episodes):
         seed = (
@@ -2464,7 +2528,23 @@ def _evaluate_policy(
                 "metrics": metric_row,
             },
         )
+        episode_num = episode_idx + 1
+        if episode_num == episodes or episode_num % 10 == 0:
+            logger.info(
+                "PPO evaluation progress step={} episode={}/{} scenario={} steps={} success={:.3f}",
+                eval_step if eval_step is not None else "final",
+                episode_num,
+                episodes,
+                scenario_name,
+                steps,
+                metric_row["success_rate"],
+            )
 
+    logger.info(
+        "PPO evaluation phase complete step={} episodes={}",
+        eval_step if eval_step is not None else "final",
+        episodes,
+    )
     return metrics, episode_records
 
 

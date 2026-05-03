@@ -160,6 +160,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter`.
+- [Issue #938 Hybrid Portfolio Last Decision](./issue_938_hybrid_portfolio_last_decision.md)
+  adds a step-level `HybridPortfolioAdapter.last_decision()` accessor consistent with nearby
+  planner diagnostics APIs.
 - [Issue #589 Public Leaderboard MVP Boundary](./issue_589_public_leaderboard_mvp.md)
   records the no-implementation-now decision, future PR-based MVP boundary, and prerequisites for
   any public planner leaderboard work.

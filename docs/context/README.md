@@ -172,6 +172,9 @@ why a change was made rather than a full issue execution transcript.
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
 - [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
+- [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)
+  records the pure-data materializer from `adversarial-multi-ped.v1` configs to scenario-loader
+  `single_pedestrians` override dictionaries, stacked on the issue #923 schema PR.
 - [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 

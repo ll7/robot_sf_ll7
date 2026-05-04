@@ -280,19 +280,27 @@ def _resolve_scenario_overrides(
 
 
 def _deep_merge_mapping(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
-    """Recursively merge a nested override mapping into a scenario mapping.
+    """Iteratively merge a nested override mapping into a scenario mapping.
+
+    Iterative implementation avoids stack exhaustion on deeply nested override
+    payloads from external manifests.
 
     Returns:
         dict[str, Any]: Deep-merged mapping with override values taking
             precedence.
     """
-    merged = deepcopy(dict(base))
-    for key, value in overrides.items():
-        current = merged.get(key)
-        if isinstance(current, Mapping) and isinstance(value, Mapping):
-            merged[key] = _deep_merge_mapping(current, value)
-        else:
-            merged[key] = deepcopy(value)
+    merged: dict[str, Any] = deepcopy(dict(base))
+    stack: list[tuple[dict[str, Any], Mapping[str, Any]]] = [(merged, overrides)]
+    while stack:
+        target, source = stack.pop()
+        for key, value in source.items():
+            current = target.get(key)
+            if isinstance(current, Mapping) and isinstance(value, Mapping):
+                nested = dict(current)
+                target[key] = nested
+                stack.append((nested, value))
+            else:
+                target[key] = deepcopy(value)
     return merged
 
 

@@ -419,15 +419,14 @@ def test_horizon100_eval_manifest_overrides_all_episode_limits() -> None:
     scenario_ids = [
         str(scenario.get("name") or scenario.get("scenario_id")) for scenario in scenarios
     ]
-    step_limits = {
-        int(scenario["simulation_config"]["max_episode_steps"])
-        for scenario in scenarios
-        if "simulation_config" in scenario
-    }
+    step_limits = [
+        int(scenario["simulation_config"]["max_episode_steps"]) for scenario in scenarios
+    ]
 
     assert len(scenarios) == 70
     assert len(set(scenario_ids)) == 70
-    assert step_limits == {100}
+    assert len(step_limits) == 70
+    assert set(step_limits) == {100}
 
 
 def test_issue_857_horizon100_training_config_uses_horizon_matched_surface() -> None:

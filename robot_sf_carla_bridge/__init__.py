@@ -5,8 +5,10 @@ the availability helpers before importing or invoking CARLA-specific APIs.
 """
 
 from robot_sf_carla_bridge.availability import (
+    AVAILABILITY_SCHEMA_VERSION,
     CarlaUnavailableError,
     check_carla_availability,
+    load_availability_schema,
     require_carla,
 )
 from robot_sf_carla_bridge.export import (
@@ -33,6 +35,7 @@ from robot_sf_carla_bridge.export import (
 )
 
 __all__ = [
+    "AVAILABILITY_SCHEMA_VERSION",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "CarlaUnavailableError",
@@ -47,6 +50,7 @@ __all__ = [
     "build_export_payload_from_scenario_entry",
     "build_export_payloads_from_scenario_file",
     "check_carla_availability",
+    "load_availability_schema",
     "load_export_manifest_payloads",
     "load_export_schema",
     "read_export_manifest",

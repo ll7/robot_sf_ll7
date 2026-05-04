@@ -11,6 +11,7 @@ from robot_sf_carla_bridge.availability import check_carla_availability, load_av
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
     load_export_manifest_payloads,
+    load_export_manifest_schema,
     load_export_schema,
     read_export_manifest,
     write_export_records,
@@ -70,8 +71,15 @@ def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
     """
 
     parser = argparse.ArgumentParser(description="Validate a CARLA T0 export manifest.")
-    parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
+    parser.add_argument("--manifest", help="Path to export manifest JSON.")
+    parser.add_argument("--schema", action="store_true", help="Print the JSON Schema contract.")
     args = parser.parse_args(argv)
+
+    if args.schema:
+        sys.stdout.write(f"{json.dumps(load_export_manifest_schema(), sort_keys=True)}\n")
+        return 0
+    if args.manifest is None:
+        parser.error("the following arguments are required: --manifest")
 
     manifest = read_export_manifest(Path(args.manifest))
     export_count = len(manifest["exports"])

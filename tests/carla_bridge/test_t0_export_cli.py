@@ -98,6 +98,17 @@ def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     assert "1 export" in capsys.readouterr().out
 
 
+def test_validate_t0_manifest_main_prints_schema(capsys) -> None:
+    """Manifest validator CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.cli import validate_t0_manifest_main
+    from robot_sf_carla_bridge.export import load_export_manifest_schema
+
+    exit_code = validate_t0_manifest_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_export_manifest_schema()
+
+
 def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     tmp_path,
     monkeypatch,

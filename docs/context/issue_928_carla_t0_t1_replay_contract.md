@@ -30,7 +30,7 @@ minimum fields needed to reconstruct the Robot-SF scenario and compare trajector
 - scenario identity, source config, map identity, and certificate reference,
 - robot start, goal, footprint, kinematic profile, and command/action interpretation,
 - pedestrian initial states, scripted route or behavior metadata, and timing parameters,
-- static obstacle and route/topology references or a durable exported geometry representation,
+- static obstacle and route/topology references (in a right-handed, metric world frame; route/topology IDs may be simulator-specific) or a durable exported geometry representation in that frame,
 - time step, horizon, termination conditions, and metric configuration,
 - provenance fields that identify the Robot-SF commit, config, and certificate generator version.
 
@@ -46,7 +46,7 @@ itself; treating a fallback or partial replay as successful parity would be the 
 - Scenario export must require a valid scenario certificate before it is used for transfer claims.
 - CARLA replay outputs must identify mode as `oracle-replay`, `failed`, or `not-available`.
 - Metric comparison should use trajectory-level fields first: success, collision, minimum distance,
-  TTC where available, comfort, jerk, curvature, intervention rate, and SNQI-compatible fields when
+  TTC where available, comfort, jerk, curvature, intervention rate, and SNQI (Social Navigation Quality Index)-compatible fields when
   the input data supports them.
 - Reports must clearly distinguish Robot-SF evidence from CARLA replay evidence.
 

@@ -549,6 +549,14 @@ def test_read_export_manifest_rejects_invalid_manifest_shape(tmp_path) -> None:
         read_export_manifest(manifest_path)
 
 
+def test_read_export_manifest_rejects_parent_relative_path() -> None:
+    """Manifest reader should reject parent-relative input paths before opening files."""
+    from robot_sf_carla_bridge import read_export_manifest
+
+    with pytest.raises(ValueError, match="parent-relative"):
+        read_export_manifest("../unsafe/manifest.json")
+
+
 def test_builder_invalid_radius_fails_schema_validation() -> None:
     """Builder validation should fail through the schema for invalid payload values."""
     from robot_sf_carla_bridge import (

@@ -389,6 +389,16 @@ def write_export_records(
     return manifest
 
 
+def _validated_input_path(input_path: str | Path, *, label: str) -> Path:
+    raw_path = str(input_path)
+    if not raw_path.strip():
+        raise ValueError(f"{label} must be a non-empty path")
+    path = Path(raw_path)
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{label} must not contain parent-relative segments")
+    return path
+
+
 def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
     """Read and validate a T0 export-record manifest from UTF-8 JSON.
 
@@ -400,7 +410,8 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
         ValueError: if the manifest shape is unsupported.
     """
 
-    with Path(input_path).open("r", encoding="utf-8") as handle:
+    path = _validated_input_path(input_path, label="export manifest path")
+    with path.open("r", encoding="utf-8") as handle:
         manifest = json.load(handle)
     if not isinstance(manifest, dict):
         raise ValueError("export manifest must be a JSON object")

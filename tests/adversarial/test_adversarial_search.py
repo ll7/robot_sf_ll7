@@ -268,10 +268,11 @@ def test_multi_ped_adversarial_config_reports_validation_errors() -> None:
     errors = config.validate()
 
     assert "scenario_seed must be non-negative" in errors
-    assert "pedestrians ids must be unique" in errors
+    assert any("pedestrians ids must be unique" in err for err in errors)
+    assert any("duplicates: blocker" in err for err in errors)
     assert "pedestrians[0].spawn_time_s must be non-negative" in errors
     assert "pedestrians[0].speed_mps must be positive" in errors
-    assert "pedestrians[0] start and goal are closer than min_start_goal_distance_m" in errors
+    assert any(err.startswith("pedestrians[0] start and goal distance") for err in errors)
     assert "pedestrians[1].start.x must be finite" in errors
     assert "pedestrians[1].delay_s must be non-negative" in errors
 

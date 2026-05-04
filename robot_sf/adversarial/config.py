@@ -80,7 +80,8 @@ class MultiPedCandidateSpec:
         """Build one multi-pedestrian entry from a YAML/JSON mapping."""
         if not isinstance(payload, dict):
             raise ValueError(f"pedestrians[{index}] must be a mapping")
-        pedestrian_id = str(payload.get("id", "")).strip()
+        raw_id = payload.get("id")
+        pedestrian_id = str(raw_id).strip() if raw_id is not None else ""
         if not pedestrian_id:
             raise ValueError(f"pedestrians[{index}].id must be non-empty")
         start = _pose_from_mapping(payload.get("start"), name=f"pedestrians[{index}].start")
@@ -90,13 +91,16 @@ class MultiPedCandidateSpec:
             raw_metadata = {}
         if not isinstance(raw_metadata, dict):
             raise ValueError(f"pedestrians[{index}].metadata must be a mapping")
+        spawn_time_raw = payload.get("spawn_time_s")
+        speed_raw = payload.get("speed_mps", payload.get("pedestrian_speed_mps"))
+        delay_raw = payload.get("delay_s", payload.get("pedestrian_delay_s"))
         return cls(
             id=pedestrian_id,
             start=start,
             goal=goal,
-            spawn_time_s=float(payload.get("spawn_time_s", 0.0)),
-            speed_mps=float(payload.get("speed_mps", payload.get("pedestrian_speed_mps", 1.0))),
-            delay_s=float(payload.get("delay_s", payload.get("pedestrian_delay_s", 0.0))),
+            spawn_time_s=float(spawn_time_raw) if spawn_time_raw is not None else 0.0,
+            speed_mps=float(speed_raw) if speed_raw is not None else 1.0,
+            delay_s=float(delay_raw) if delay_raw is not None else 0.0,
             metadata=dict(raw_metadata),
         )
 
@@ -182,14 +186,24 @@ class MultiPedAdversarialConfig:
             errors.append("min_start_goal_distance_m must be finite and >= 0")
         ids = [ped.id for ped in self.pedestrians]
         if len(ids) != len(set(ids)):
-            errors.append("pedestrians ids must be unique")
+            seen: set[str] = set()
+            duplicates: list[str] = []
+            for ped_id in ids:
+                if ped_id in seen and ped_id not in duplicates:
+                    duplicates.append(ped_id)
+                seen.add(ped_id)
+            errors.append(
+                f"pedestrians ids must be unique; duplicates: {', '.join(sorted(duplicates))}"
+            )
         for index, pedestrian in enumerate(self.pedestrians):
             errors.extend(_validate_multi_pedestrian_entry(pedestrian, index=index))
             dx = float(pedestrian.goal.x) - float(pedestrian.start.x)
             dy = float(pedestrian.goal.y) - float(pedestrian.start.y)
-            if math.hypot(dx, dy) < self.min_start_goal_distance_m:
+            distance = math.hypot(dx, dy)
+            if distance < self.min_start_goal_distance_m:
                 errors.append(
-                    f"pedestrians[{index}] start and goal are closer than min_start_goal_distance_m"
+                    f"pedestrians[{index}] start and goal distance ({distance:.3f}m) is less "
+                    f"than min_start_goal_distance_m ({self.min_start_goal_distance_m}m)"
                 )
         return errors
 
@@ -210,7 +224,9 @@ def _pose_from_mapping(payload: object, *, name: str) -> Pose2D:
         raise ValueError(f"{name} must be a mapping")
     if "x" not in payload or "y" not in payload:
         raise ValueError(f"{name} must define x and y")
-    return Pose2D(float(payload["x"]), float(payload["y"]), float(payload.get("theta", 0.0)))
+    theta_raw = payload.get("theta")
+    theta = float(theta_raw) if theta_raw is not None else 0.0
+    return Pose2D(float(payload["x"]), float(payload["y"]), theta)
 
 
 def _validate_multi_pedestrian_entry(

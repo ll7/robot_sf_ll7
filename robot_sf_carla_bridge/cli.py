@@ -9,6 +9,7 @@ from pathlib import Path
 
 from robot_sf_carla_bridge.availability import check_carla_availability, load_availability_schema
 from robot_sf_carla_bridge.export import (
+    BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     build_export_payloads_from_scenario_file,
     load_export_manifest_payloads,
     load_export_manifest_schema,
@@ -16,8 +17,6 @@ from robot_sf_carla_bridge.export import (
     read_export_manifest,
     write_export_records,
 )
-
-_BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
 
 
 def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
@@ -110,7 +109,7 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
             "manifest": manifest_path.as_posix(),
             "payload_count": payload_count,
             "scenario_ids": [str(record["scenario_id"]) for record in records],
-            "schema_version": _BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
+            "schema_version": BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
         }
         sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
         return 0

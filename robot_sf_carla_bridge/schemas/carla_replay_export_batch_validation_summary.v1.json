@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/carla_replay_export_batch_validation_summary.v1.json",
+  "title": "Robot-SF CARLA T0 Export Batch Validation Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest", "payload_count", "scenario_ids"],
+  "properties": {
+    "schema_version": {
+      "const": "carla-replay-export-batch-validation-summary.v1"
+    },
+    "manifest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scenario_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

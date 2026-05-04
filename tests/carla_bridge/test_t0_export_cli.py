@@ -6,6 +6,8 @@ import json
 import tomllib
 from pathlib import Path
 
+import jsonschema
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -168,6 +170,31 @@ def test_validate_t0_export_batch_main_prints_json_summary(
         "scenario_ids": ["first", "second"],
         "schema_version": "carla-replay-export-batch-validation-summary.v1",
     }
+
+
+def test_validate_t0_export_batch_main_json_summary_validates_against_schema(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator JSON summary should satisfy its packaged schema."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge import load_batch_validation_summary_schema
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    def fake_load_payloads(path):
+        assert Path(path) == manifest_path
+        return [{"scenario_id": "unit", "path": tmp_path / "unit.json", "payload": {}}]
+
+    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path), "--json"])
+
+    assert exit_code == 0
+    jsonschema.validate(json.loads(capsys.readouterr().out), load_batch_validation_summary_schema())
 
 
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:

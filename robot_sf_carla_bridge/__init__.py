@@ -12,6 +12,7 @@ from robot_sf_carla_bridge.availability import (
     require_carla,
 )
 from robot_sf_carla_bridge.export import (
+    BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     EXPORT_MANIFEST_SCHEMA_VERSION,
     EXPORT_SCHEMA_VERSION,
     CertificateRef,
@@ -24,6 +25,7 @@ from robot_sf_carla_bridge.export import (
     build_export_payload_from_map_definition,
     build_export_payload_from_scenario_entry,
     build_export_payloads_from_scenario_file,
+    load_batch_validation_summary_schema,
     load_export_manifest_payloads,
     load_export_manifest_schema,
     load_export_schema,
@@ -37,6 +39,7 @@ from robot_sf_carla_bridge.export import (
 
 __all__ = [
     "AVAILABILITY_SCHEMA_VERSION",
+    "BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "CarlaUnavailableError",
@@ -52,6 +55,7 @@ __all__ = [
     "build_export_payloads_from_scenario_file",
     "check_carla_availability",
     "load_availability_schema",
+    "load_batch_validation_summary_schema",
     "load_export_manifest_payloads",
     "load_export_manifest_schema",
     "load_export_schema",

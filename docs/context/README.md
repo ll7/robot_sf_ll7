@@ -243,6 +243,8 @@ why a change was made rather than a full issue execution transcript.
   `robot-sf-validate-carla-t0-batch --schema`.
 - [Issue #994 CARLA Bridge Schema Catalog API](issue_994_carla_schema_catalog_api.md)
   adds an import-safe catalog for CARLA bridge schema names, versions, and loader helpers.
+- [Issue #996 CARLA Bridge Schema Catalog CLI](issue_996_carla_schema_catalog_cli.md)
+  exposes the CARLA bridge schema catalog through `robot-sf-catalog-carla-schemas`.
 
 ## DreamerV3 Notes
 

@@ -424,6 +424,39 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
     return cast("dict[str, Any]", manifest)
 
 
+def resolve_export_manifest_payload_paths(input_path: str | Path) -> list[dict[str, Any]]:
+    """Resolve payload paths from a validated export manifest.
+
+    Returns:
+        Records with ``scenario_id`` and manifest-directory-relative payload ``path`` values.
+
+    Raises:
+        ValueError: if a manifest path is absolute or escapes the manifest directory.
+    """
+
+    manifest_path = Path(input_path)
+    manifest = read_export_manifest(manifest_path)
+    root = manifest_path.parent
+    records: list[dict[str, Any]] = []
+    for index, entry in enumerate(manifest["exports"]):
+        payload_path = Path(entry["path"])
+        if payload_path.is_absolute():
+            raise ValueError(
+                f"export manifest exports[{index}].path must be relative, not absolute"
+            )
+        if ".." in payload_path.parts:
+            raise ValueError(
+                f"export manifest exports[{index}].path must not contain parent escapes"
+            )
+        records.append(
+            {
+                "scenario_id": entry["scenario_id"],
+                "path": root / payload_path,
+            }
+        )
+    return records
+
+
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
 

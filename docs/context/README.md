@@ -203,6 +203,8 @@ why a change was made rather than a full issue execution transcript.
   surface.
 - [Issue #958 CARLA T0 Manifest Validation CLI](issue_958_carla_t0_manifest_validation_cli.md)
   exposes the issue #956 manifest reader through a CARLA-free project script.
+- [Issue #960 CARLA T0 Manifest Payload Paths](issue_960_carla_t0_manifest_payload_paths.md)
+  resolves issue #950 manifest entries to local payload paths while rejecting unsafe path escapes.
 
 ## DreamerV3 Notes
 

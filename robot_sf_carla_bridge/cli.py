@@ -94,8 +94,15 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
 def check_carla_availability_main(argv: list[str] | None = None) -> int:
     """Report whether the optional CARLA Python API is importable.
 
+    The default mode is informational and always exits 0. A follow-up CLI flag
+    (``--require``) is layered on top in a separate change to gate scripts on
+    availability.
+
+    Args:
+        argv: Command-line arguments to parse; ``None`` reads from ``sys.argv``.
+
     Returns:
-        Process-style exit code.
+        Process-style exit code (always 0 in this informational mode).
     """
 
     parser = argparse.ArgumentParser(description="Check optional CARLA Python API availability.")

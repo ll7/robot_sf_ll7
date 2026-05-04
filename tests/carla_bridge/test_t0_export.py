@@ -692,6 +692,7 @@ def test_missing_carla_reports_not_available(monkeypatch) -> None:
 
     assert status["status"] == "not-available"
     assert status["available"] is False
+    assert status["schema_version"] == "carla-availability.v1"
     assert "carla" in status["reason"].lower()
 
 
@@ -707,4 +708,5 @@ def test_importable_carla_reports_available(monkeypatch) -> None:
 
     assert status["status"] == "available"
     assert status["available"] is True
+    assert status["schema_version"] == "carla-availability.v1"
     assert status["dependency"] == "carla"

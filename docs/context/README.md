@@ -221,6 +221,8 @@ why a change was made rather than a full issue execution transcript.
   adds fail-closed availability checking for CARLA-dependent setup gates.
 - [Issue #974 CARLA Availability Boolean Field](issue_974_carla_availability_boolean_field.md)
   adds an explicit boolean to CARLA availability metadata and CLI JSON output.
+- [Issue #976 CARLA Availability Schema Version](issue_976_carla_availability_schema_version.md)
+  adds a schema version to CARLA availability metadata for stable script consumption.
 
 ## DreamerV3 Notes
 

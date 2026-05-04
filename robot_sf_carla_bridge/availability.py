@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+AVAILABILITY_SCHEMA_VERSION = "carla-availability.v1"
+
 
 class CarlaUnavailableError(RuntimeError):
     """Raised when a CARLA-dependent bridge path is used without CARLA installed."""
@@ -20,12 +22,14 @@ def check_carla_availability() -> dict[str, Any]:
 
     if importlib.util.find_spec("carla") is None:
         return {
+            "schema_version": AVAILABILITY_SCHEMA_VERSION,
             "status": "not-available",
             "available": False,
             "reason": "CARLA Python API package 'carla' is not importable",
             "dependency": "carla",
         }
     return {
+        "schema_version": AVAILABILITY_SCHEMA_VERSION,
         "status": "available",
         "available": True,
         "reason": "CARLA Python API package is importable",

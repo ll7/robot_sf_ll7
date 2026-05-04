@@ -225,6 +225,8 @@ why a change was made rather than a full issue execution transcript.
   adds a schema version to CARLA availability metadata for stable script consumption.
 - [Issue #978 CARLA Availability JSON Schema](issue_978_carla_availability_json_schema.md)
   adds a JSON Schema for validating CARLA availability metadata.
+- [Issue #980 CARLA Availability Schema CLI](issue_980_carla_availability_schema_cli.md)
+  exposes the CARLA availability JSON Schema through `robot-sf-check-carla --schema`.
 
 ## DreamerV3 Notes
 

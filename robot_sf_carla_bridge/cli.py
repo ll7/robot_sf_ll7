@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf_carla_bridge.availability import check_carla_availability
+from robot_sf_carla_bridge.availability import check_carla_availability, load_availability_schema
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
     load_export_manifest_payloads,
@@ -100,12 +100,17 @@ def check_carla_availability_main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Check optional CARLA Python API availability.")
     parser.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    parser.add_argument("--schema", action="store_true", help="Print the JSON Schema contract.")
     parser.add_argument(
         "--require",
         action="store_true",
         help="Exit nonzero when the CARLA Python API is not available.",
     )
     args = parser.parse_args(argv)
+
+    if args.schema:
+        sys.stdout.write(f"{json.dumps(load_availability_schema(), sort_keys=True)}\n")
+        return 0
 
     status = check_carla_availability()
     exit_code = 0 if status["status"] == "available" or not args.require else 1

@@ -168,6 +168,17 @@ def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -
     }
 
 
+def test_check_carla_availability_main_prints_schema(capsys) -> None:
+    """CARLA availability CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.availability import load_availability_schema
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    exit_code = check_carla_availability_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_availability_schema()
+
+
 def test_check_carla_availability_main_prints_text_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should keep a concise human-readable output."""
     import robot_sf_carla_bridge.cli as cli_module

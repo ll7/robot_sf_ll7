@@ -399,6 +399,34 @@ def test_hybrid_portfolio_records_selection_diagnostics_and_reset() -> None:
     assert cleared["last_decision"] is None
 
 
+def test_hybrid_portfolio_last_decision_returns_copy_and_resets() -> None:
+    """Step-level tooling should be able to read the latest hybrid decision safely."""
+    risk = _DummyHead("risk")
+    orca = _DummyHead("orca")
+    pred = _DummyHead("pred")
+    mppi = _DummyHead("mppi")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(hysteresis_steps=0),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=mppi,
+    )
+
+    assert hybrid.last_decision() is None
+
+    hybrid.plan(_obs(ped_positions=[(5.0, 0.0)]))
+    last = hybrid.last_decision()
+
+    assert last is not None
+    assert last["selected_head"] == "mppi"
+    last["selected_head"] = "mutated"
+    assert hybrid.last_decision()["selected_head"] == "mppi"
+
+    hybrid.reset()
+    assert hybrid.last_decision() is None
+
+
 def test_hybrid_portfolio_records_fallback_diagnostics() -> None:
     """Fallback diagnostics should explain degraded ORCA selection after head failure."""
 

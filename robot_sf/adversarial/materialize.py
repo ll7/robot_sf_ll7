@@ -106,7 +106,7 @@ def _merge_single_pedestrian_entries(
     """Merge override entries into existing template entries by pedestrian id."""
 
     merged: list[dict[str, Any]] = [
-        dict(entry) for entry in existing if isinstance(entry, dict) and entry.get("id")
+        dict(entry) for entry in existing if isinstance(entry, dict) and entry.get("id") is not None
     ]
     index_by_id = {str(entry["id"]): index for index, entry in enumerate(merged)}
     for override in overrides:

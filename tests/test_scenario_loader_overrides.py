@@ -120,6 +120,23 @@ def test_apply_single_pedestrian_overrides_role_fields():
     assert ped.role_offset == (1.0, -0.5)
 
 
+def test_apply_single_pedestrian_overrides_start_delay():
+    """Verify bounded start-delay dwell can be set from scenario overrides."""
+    map_def = _build_map_with_pois()
+
+    apply_single_pedestrian_overrides(
+        map_def,
+        [
+            {
+                "id": "ped1",
+                "start_delay_s": 2.5,
+            }
+        ],
+    )
+
+    assert map_def.single_pedestrians[0].start_delay_s == pytest.approx(2.5)
+
+
 def test_single_pedestrian_overrides_do_not_mutate_shared_map_defs():
     """Ensure scenario overrides clone map defs to avoid cross-scenario contamination."""
     map_def = _build_map_with_pois()

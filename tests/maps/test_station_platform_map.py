@@ -29,9 +29,9 @@ def test_station_platform_map_parses_with_bidirectional_platform_flow() -> None:
 
     assert map_def.obstacles, "Expected obstacles defining station walls and interior cores"
     assert len(map_def.obstacles) >= 7, "Expected boundary walls plus stair/elevator cores"
-    assert map_def.robot_spawn_zones, "Expected at least one robot spawn zone"
-    assert map_def.robot_goal_zones, "Expected at least one robot goal zone"
-    assert map_def.robot_routes, "Expected a robot route through the concourse edge"
+    assert len(map_def.robot_spawn_zones) >= 1, "Expected at least one robot spawn zone"
+    assert len(map_def.robot_goal_zones) >= 1, "Expected at least one robot goal zone"
+    assert len(map_def.robot_routes) >= 1, "Expected a robot route through the concourse edge"
 
     assert len(map_def.ped_spawn_zones) >= 2, "Expected bidirectional pedestrian spawn zones"
     assert len(map_def.ped_goal_zones) >= 2, "Expected bidirectional pedestrian goal zones"

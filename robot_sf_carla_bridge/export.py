@@ -464,7 +464,9 @@ def load_export_manifest_payloads(input_path: str | Path) -> list[dict[str, Any]
         Ordered records with ``scenario_id``, resolved ``path``, and validated ``payload`` fields.
 
     Raises:
-        FileNotFoundError: if a referenced payload file is missing.
+        FileNotFoundError: if the manifest or a referenced payload file is missing.
+        ValueError: if the manifest shape is unsupported.
+        json.JSONDecodeError: if the manifest or any referenced payload contains invalid JSON.
         jsonschema.ValidationError: if a referenced payload is not schema-valid.
     """
 

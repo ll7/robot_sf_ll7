@@ -80,7 +80,7 @@ After the first smoke implementation, the safe claim should still be experimenta
 - proposal availability is explicit,
 - missing optional planners do not silently become fallback success,
 - diagnostics explain proposal selection and shield interventions,
-- output labels distinguish native, adapter, fallback, degraded, and unavailable modes.
+- output labels distinguish native, adapter, rejected, degraded, and unavailable modes.
 
 ## Validation Path For Future Implementation
 

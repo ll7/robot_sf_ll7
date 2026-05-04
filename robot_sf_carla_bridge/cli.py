@@ -8,6 +8,7 @@ from pathlib import Path
 
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
+    read_export_manifest,
     write_export_records,
 )
 
@@ -37,6 +38,24 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     records = build_export_payloads_from_scenario_file(scenario_file, provenance=provenance)
     write_export_records(records, output_dir)
     sys.stdout.write(f"{(output_dir / 'manifest.json').as_posix()}\n")
+    return 0
+
+
+def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
+    """Validate a local CARLA T0 export manifest.
+
+    Returns:
+        Process-style exit code.
+    """
+
+    parser = argparse.ArgumentParser(description="Validate a CARLA T0 export manifest.")
+    parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
+    args = parser.parse_args(argv)
+
+    manifest = read_export_manifest(Path(args.manifest))
+    export_count = len(manifest["exports"])
+    noun = "export" if export_count == 1 else "exports"
+    sys.stdout.write(f"{Path(args.manifest).as_posix()}: {export_count} {noun}\n")
     return 0
 
 

@@ -201,6 +201,8 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #956 CARLA T0 Export Manifest Reader](issue_956_carla_t0_export_manifest_reader.md)
   adds a local manifest reader for issue #950 export records, stacked on the issue #954 CLI package
   surface.
+- [Issue #958 CARLA T0 Manifest Validation CLI](issue_958_carla_t0_manifest_validation_cli.md)
+  exposes the issue #956 manifest reader through a CARLA-free project script.
 
 ## DreamerV3 Notes
 

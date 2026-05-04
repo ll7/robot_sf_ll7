@@ -226,6 +226,12 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
+* [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
+  #960 path resolver.
+* [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
+  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
+  and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 
 ## DreamerV3 Notes
 

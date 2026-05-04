@@ -601,6 +601,43 @@ def test_resolve_export_manifest_payload_paths_rejects_unsafe_paths(tmp_path) ->
         resolve_export_manifest_payload_paths(manifest_path)
 
 
+def test_load_export_manifest_payloads_preserves_manifest_order(tmp_path) -> None:
+    """Batch loader should read and validate every payload listed by the manifest."""
+    from robot_sf_carla_bridge import load_export_manifest_payloads, write_export_records
+
+    first = _minimal_payload()
+    first["scenario"]["id"] = "first"
+    second = _minimal_payload()
+    second["scenario"]["id"] = "second"
+    write_export_records(
+        [
+            {"scenario_id": "first", "payload": first},
+            {"scenario_id": "second", "payload": second},
+        ],
+        tmp_path / "exports",
+    )
+
+    records = load_export_manifest_payloads(tmp_path / "exports" / "manifest.json")
+
+    assert [record["scenario_id"] for record in records] == ["first", "second"]
+    assert [record["payload"]["scenario"]["id"] for record in records] == ["first", "second"]
+    assert [record["path"].name for record in records] == ["first.json", "second.json"]
+
+
+def test_load_export_manifest_payloads_fails_for_missing_payload(tmp_path) -> None:
+    """Batch loader should surface missing payload files clearly."""
+    from robot_sf_carla_bridge import load_export_manifest_payloads, write_export_records
+
+    write_export_records(
+        [{"scenario_id": "unit", "payload": _minimal_payload()}],
+        tmp_path / "exports",
+    )
+    (tmp_path / "exports" / "unit.json").unlink()
+
+    with pytest.raises(FileNotFoundError):
+        load_export_manifest_payloads(tmp_path / "exports" / "manifest.json")
+
+
 def test_read_export_manifest_rejects_parent_relative_path() -> None:
     """Manifest reader should reject parent-relative input paths before opening files."""
     from robot_sf_carla_bridge import read_export_manifest

@@ -457,6 +457,30 @@ def resolve_export_manifest_payload_paths(input_path: str | Path) -> list[dict[s
     return records
 
 
+def load_export_manifest_payloads(input_path: str | Path) -> list[dict[str, Any]]:
+    """Load every payload referenced by a validated export manifest.
+
+    Returns:
+        Ordered records with ``scenario_id``, resolved ``path``, and validated ``payload`` fields.
+
+    Raises:
+        FileNotFoundError: if a referenced payload file is missing.
+        jsonschema.ValidationError: if a referenced payload is not schema-valid.
+    """
+
+    records: list[dict[str, Any]] = []
+    for entry in resolve_export_manifest_payload_paths(input_path):
+        payload = read_export_payload(entry["path"])
+        records.append(
+            {
+                "scenario_id": entry["scenario_id"],
+                "path": entry["path"],
+                "payload": payload,
+            }
+        )
+    return records
+
+
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
 

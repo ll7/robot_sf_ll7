@@ -205,6 +205,9 @@ why a change was made rather than a full issue execution transcript.
   exposes the issue #956 manifest reader through a CARLA-free project script.
 - [Issue #960 CARLA T0 Manifest Payload Paths](issue_960_carla_t0_manifest_payload_paths.md)
   resolves issue #950 manifest entries to local payload paths while rejecting unsafe path escapes.
+- [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
+  #960 path resolver.
 
 ## DreamerV3 Notes
 

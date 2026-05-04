@@ -3,6 +3,8 @@
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
+    MultiPedAdversarialConfig,
+    MultiPedCandidateSpec,
     Pose2D,
     SearchConfig,
     SearchRunResult,
@@ -15,6 +17,8 @@ __all__ = [
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
+    "MultiPedAdversarialConfig",
+    "MultiPedCandidateSpec",
     "Pose2D",
     "RandomCandidateSampler",
     "SearchConfig",

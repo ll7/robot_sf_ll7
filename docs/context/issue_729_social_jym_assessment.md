@@ -7,6 +7,12 @@ Related issues:
 - `robot_sf_ll7#629` Planner zoo research prompt
 - `robot_sf_ll7#601` CrowdNav family feasibility note
 
+> 2026-05-02 update: the source-harness reproduction question was continued in
+> `docs/context/issue_792_social_jym_source_harness.md`. That follow-up found that the pinned
+> submodules are reachable over HTTPS when the side checkout rewrites `.gitmodules` URLs locally,
+> and a minimal `SocialNav` reset plus upstream `SARL` policy step runs in an isolated side
+> environment. Keep this note for the original assessment and compatibility boundaries.
+
 ## Goal
 
 Evaluate whether `TommasoVandermeer/social-jym` is a reusable integration candidate, a comparison

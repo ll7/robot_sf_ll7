@@ -107,6 +107,12 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+- [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
+  keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
+  available; documents the rerun evidence and non-blocking policy.
+- [Issue #867 PPO Evaluation Reload Profile](./issue_867_ppo_eval_reload_profile.md)
+  measurement-only issue-791 evaluation probe showing cached predictive-model reloads are small
+  compared with shared cold startup and first-step overhead.
 - [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
   cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
   cold startup and lazy first-step initialization, not warm steady-state stepping.
@@ -117,24 +123,69 @@ knowledge, not every transient iteration detail.
 - [Issue #562 SocNavBench Re-Entry Gate](./issue_562_socnav_bench_reentry.md)
   defines the fail-fast focused probe and concrete keep-out/re-entry criteria for `socnav_bench`
   before it can be reconsidered for paper-facing benchmarks.
+- [Issue #792 Social-Jym Source-Harness Reproduction](./issue_792_social_jym_source_harness.md)
+  resolves the prior SSH-submodule blocker via HTTPS in an isolated side environment and proves a
+  minimal upstream `SocialNav` reset plus `SARL` policy step, without claiming Robot SF benchmark
+  integration.
+- [Issue #905 Social-Jym Wrapper Spike](./issue_905_social_jym_wrapper_spike.md)
+  proves a one-step Robot SF smoke loop through a thin random-action upstream `SARL` wrapper and
+  records the remaining parity/provenance boundary.
+- [Issue #907 Social-Jym SARL Wrapper Parity](./issue_907_social_jym_sarl_parity.md)
+  proves controlled one-human SARL input parity for the wrapper and quantifies holonomic-to-unicycle
+  projection loss, while keeping benchmark integration blocked on trained-policy provenance.
+- [Issue #909 Social-Jym Trained-Policy Provenance](./issue_909_social_jym_policy_provenance.md)
+  records the fail-closed finding that the pinned upstream checkout references SARL/SARL-PPO
+  artifacts but does not include reproducible trained policy weights, so benchmark smoke remains
+  unjustified.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
+- [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
+  defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
+  claim boundary before runtime implementation under #871.
+
+## Map Coverage Notes
+
+- [Issue #435 Map Coverage Flow](./issue_435_map_coverage_flow.md)
+  parent flow state for real-world maps, SocNavBench import, and map-quality repair issues.
+- [Issue #328 Real-World Map Parent Tracker](./issue_328_real_world_map_parent.md)
+  parent/child split, current child issue state, and shared validation contract for real-world
+  benchmark maps.
 
 ## Reasoning Notes
 
 Design and decision rationale notes live in `docs/context/reasoning/` when the goal is to preserve
 why a change was made rather than a full issue execution transcript.
 
+- [Issue #592 Hybrid Obstacle-Context Predictor Design](./issue_592_hybrid_obstacle_predictor_design.md)
+  scopes the obstacle-conditioned predictive-model idea into a feature-baseline-first experiment
+  path with proof gates before any grid/CNN or obstacle-node graph prototype.
+- [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
+  records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
+  counts, and last-decision metadata on `HybridPortfolioAdapter`.
+- [Issue #589 Public Leaderboard MVP Boundary](./issue_589_public_leaderboard_mvp.md)
+  records the no-implementation-now decision, future PR-based MVP boundary, and prerequisites for
+  any public planner leaderboard work.
+
 ## Execution Workflow Notes
 
 - [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+- [Issue #845 Slurm Utilization Probe](issue_845_slurm_utilization_probe.md) - `sstat`/`sacct`/`seff`
+  evidence collection path for diagnosing low CPU utilization without launching new jobs.
 - [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+- [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
+  schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 - [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
+- [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)
+  records the import-safe `robot_sf_carla_bridge` package, `carla-replay-export.v1` schema, and
+  missing-CARLA `not-available` guard for future oracle replay work.
+- [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
+  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
+  and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 
 ## DreamerV3 Notes
 

@@ -39,6 +39,14 @@ BENCHMARK_MODE=${ISSUE791_BENCHMARK_MODE:-run}
 BENCHMARK_LOG_LEVEL=${ISSUE791_BENCHMARK_LOG_LEVEL:-INFO}
 MODULES_AVAILABLE=0
 RUN_OUTPUT_DIR=""
+PROJECT_PARENT=$(dirname "${PROJECT_ROOT}")
+if [[ "${PROJECT_PARENT}" == *.worktrees ]]; then
+  DEFAULT_PRIMARY_PROJECT_ROOT=${PROJECT_PARENT%.worktrees}
+else
+  DEFAULT_PRIMARY_PROJECT_ROOT=${PROJECT_ROOT}
+fi
+PRIMARY_PROJECT_ROOT=${ISSUE791_PRIMARY_PROJECT_ROOT:-${DEFAULT_PRIMARY_PROJECT_ROOT}}
+WAVE5_LEADER_RELATIVE=output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
 
 if ! git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[issue791-bench] PROJECT_ROOT is not inside a git work tree: ${PROJECT_ROOT}" >&2
@@ -113,6 +121,61 @@ if [[ "${MODULES_AVAILABLE}" == "1" ]]; then
   fi
 fi
 
+ensure_model_cache_artifact() {
+  local relative_path="$1"
+  local expected_path="${PROJECT_ROOT}/${relative_path}"
+  if [[ -f "${expected_path}" ]]; then
+    return 0
+  fi
+
+  local primary_path="${PRIMARY_PROJECT_ROOT}/${relative_path}"
+  if [[ "${PRIMARY_PROJECT_ROOT}" != "${PROJECT_ROOT}" && -f "${primary_path}" ]]; then
+    echo "[issue791-bench] Linking missing worktree artifact from primary checkout: ${primary_path}"
+    mkdir -p "$(dirname "${expected_path}")"
+    ln -sfn "${primary_path}" "${expected_path}"
+    return 0
+  fi
+
+  return 1
+}
+
+benchmark_references_model_artifact() {
+  local relative_path="$1"
+  if grep -Fq "${relative_path}" "${BENCHMARK_CONFIG_PATH}"; then
+    return 0
+  fi
+
+  local config_ref config_path
+  while IFS= read -r config_ref; do
+    config_ref="${config_ref#\"}"
+    config_ref="${config_ref%\"}"
+    config_ref="${config_ref#\'}"
+    config_ref="${config_ref%\'}"
+    [[ -z "${config_ref}" ]] && continue
+    if [[ "${config_ref}" = /* ]]; then
+      config_path="${config_ref}"
+    else
+      config_path="${PROJECT_ROOT}/${config_ref}"
+    fi
+    if [[ -f "${config_path}" ]] && grep -Fq "${relative_path}" "${config_path}"; then
+      return 0
+    fi
+  done < <(sed -n 's/^[[:space:]]*algo_config:[[:space:]]*//p' "${BENCHMARK_CONFIG_PATH}")
+
+  return 1
+}
+
+run_in_allocation() {
+  if command -v srun >/dev/null 2>&1; then
+    echo "[issue791-bench] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
+    srun --cpu_bind=cores --gpus-per-node=1 "$@"
+  else
+    echo "[issue791-bench] srun unavailable on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}; PATH=${PATH}" >&2
+    echo "[issue791-bench] Running directly in the batch allocation." >&2
+    "$@"
+  fi
+}
+
 mkdir -p "${WORKDIR}"
 mkdir -p "${LOCAL_OUTPUT_ROOT}"
 mkdir -p "${BENCHMARK_OUTPUT_ROOT}"
@@ -120,11 +183,16 @@ mkdir -p "${BENCHMARK_OUTPUT_ROOT}"
 # The campaign runner expects model artifacts to be readable at the paths given by
 # configs/baselines/*.yaml. The Wave-5 leader artifact must already exist at
 # output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip.
-EXPECTED_LEADER=${PROJECT_ROOT}/output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
-if [[ ! -f "${EXPECTED_LEADER}" ]]; then
-  echo "[issue791-bench] Wave-5 leader artifact missing: ${EXPECTED_LEADER}" >&2
-  echo "[issue791-bench] Restore it from output/slurm/issue791-reward-curriculum-job-11724/benchmarks/expert_policies/checkpoints/.../...best.zip before resubmitting." >&2
-  exit 1
+EXPECTED_LEADER=${PROJECT_ROOT}/${WAVE5_LEADER_RELATIVE}
+if benchmark_references_model_artifact "${WAVE5_LEADER_RELATIVE}"; then
+  if ! ensure_model_cache_artifact "${WAVE5_LEADER_RELATIVE}"; then
+    echo "[issue791-bench] Wave-5 leader artifact missing: ${EXPECTED_LEADER}" >&2
+    echo "[issue791-bench] Also checked primary checkout: ${PRIMARY_PROJECT_ROOT}/${WAVE5_LEADER_RELATIVE}" >&2
+    echo "[issue791-bench] Restore it from output/slurm/issue791-reward-curriculum-job-11724/benchmarks/expert_policies/checkpoints/.../...best.zip before resubmitting." >&2
+    exit 1
+  fi
+else
+  echo "[issue791-bench] Benchmark config does not reference the Wave-5 leader artifact; skipping leader cache check."
 fi
 
 if [[ ! -x "${PYTHON_BIN}" ]]; then
@@ -149,7 +217,7 @@ echo "[issue791-bench] Mode: ${BENCHMARK_MODE}"
 echo "[issue791-bench] Output root: ${BENCHMARK_OUTPUT_ROOT}"
 echo "[issue791-bench] Label: ${BENCHMARK_LABEL:-<none>}"
 
-srun --cpu_bind=cores --gpus-per-node=1 \
+run_in_allocation \
   "${PYTHON_BIN}" scripts/tools/run_camera_ready_benchmark.py \
   --config "${BENCHMARK_CONFIG_PATH}" \
   --output-root "${BENCHMARK_OUTPUT_ROOT}" \

@@ -76,6 +76,49 @@ If both `map_id` and `map_file` are provided, `map_id` takes precedence (with a
 warning). To override the registry path, set `ROBOT_SF_MAP_REGISTRY`. You can
 regenerate the registry with `scripts/tools/generate_map_registry.py`.
 
+## Platform Semantics
+
+Station-platform scenarios can declare opt-in semantic regions with
+`platform_semantics`. The current implementation is scenario-side metadata only:
+it validates region shape and intent, but no planner or metric consumes the
+regions yet.
+
+Supported region kinds:
+
+- `hazard`: platform-edge or similar risk areas.
+- `keep_clear`: train-door or circulation areas that should not be treated as
+  ordinary waiting space.
+
+Supported shapes:
+
+- `polygon` with at least three `[x, y]` points.
+- `bbox` with `[min_x, min_y, max_x, max_y]`.
+
+Use `status: metadata_only` for provenance and review. Use
+`status: require_consumers` only when planner/metric behavior must consume the
+regions; `build_robot_config_from_scenario` fails closed for that status until
+explicit consumers are implemented.
+
+```yaml
+scenarios:
+  - name: station_platform_semantics_demo
+    map_file: maps/platform.svg
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: platform_edge
+          kind: hazard
+          shape: polygon
+          points:
+            - [0.0, 0.0]
+            - [10.0, 0.0]
+            - [10.0, 0.5]
+        - id: train_door_keep_clear
+          kind: keep_clear
+          shape: bbox
+          bounds: [4.0, 1.0, 6.0, 2.0]
+```
+
 ## Usage
 
 Point training/analysis configs at a manifest (or a legacy combined file):

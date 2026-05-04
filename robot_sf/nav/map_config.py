@@ -54,6 +54,7 @@ class SinglePedestrianDefinition:
         trajectory (list[Vec2D] | None): List of waypoints for trajectory-based movement (mutually exclusive with goal)
         speed_m_s (float | None): Optional per-pedestrian speed override (m/s).
         wait_at (list[PedestrianWaitRule] | None): Optional waits at trajectory waypoints.
+        start_delay_s (float): Optional bounded dwell at the pedestrian start before release.
         note (str | None): Optional human-readable note for scenario documentation.
         role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
         role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
@@ -66,6 +67,7 @@ class SinglePedestrianDefinition:
     trajectory: list[Vec2D] | None = None
     speed_m_s: float | None = None
     wait_at: list[PedestrianWaitRule] | None = None
+    start_delay_s: float = 0.0
     note: str | None = None
     role: str | None = None
     role_target_id: str | None = None
@@ -87,6 +89,7 @@ class SinglePedestrianDefinition:
         self._validate_trajectory()
         self._validate_speed()
         self._validate_waits()
+        self._validate_start_delay()
         self._validate_role()
         self._validate_role_target()
         self._validate_role_offset()
@@ -182,6 +185,20 @@ class SinglePedestrianDefinition:
                 raise ValueError(
                     f"Pedestrian '{self.id}': wait_at entries must be PedestrianWaitRule instances"
                 )
+
+    def _validate_start_delay(self) -> None:
+        """Validate optional start-delay dwell duration."""
+        try:
+            self.start_delay_s = float(self.start_delay_s)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Pedestrian '{self.id}': start_delay_s must be a non-negative number, "
+                f"got: {self.start_delay_s!r}"
+            ) from None
+        if self.start_delay_s < 0:
+            raise ValueError(
+                f"Pedestrian '{self.id}': start_delay_s must be >= 0, got: {self.start_delay_s!r}"
+            )
 
     def _warn_duplicate_waypoints(self):
         """Warn about duplicate consecutive trajectory waypoints."""
@@ -957,6 +974,7 @@ def _parse_single_pedestrians(
         )
         speed = ped_def.get("speed_m_s")
         wait_at = _parse_wait_rules(ped_def.get("wait_at"))
+        start_delay_s = float(ped_def.get("start_delay_s", 0.0))
         note = ped_def.get("note")
         role = ped_def.get("role")
         role_target_id = ped_def.get("role_target_id")
@@ -978,6 +996,7 @@ def _parse_single_pedestrians(
                 trajectory=trajectory,
                 speed_m_s=float(speed) if speed is not None else None,
                 wait_at=wait_at,
+                start_delay_s=start_delay_s,
                 note=str(note) if note is not None else None,
                 role=str(role) if role is not None else None,
                 role_target_id=role_target_value,

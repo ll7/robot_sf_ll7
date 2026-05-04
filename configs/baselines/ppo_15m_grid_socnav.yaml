@@ -27,7 +27,7 @@
 # policy must fail closed if it cannot produce a valid action, not silently fall back to
 # goal-seeking, since fallback execution is not a successful benchmark outcome.
 
-model_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
 
 device: auto
 deterministic: true

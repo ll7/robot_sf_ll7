@@ -358,6 +358,115 @@ def test_hybrid_fallback_on_exception_and_config_defaults() -> None:
     assert isinstance(build.hybrid, HybridPortfolioConfig)
 
 
+def test_hybrid_portfolio_records_selection_diagnostics_and_reset() -> None:
+    """Hybrid diagnostics should expose selected heads and clear on episode reset."""
+    risk = _DummyHead("risk")
+    orca = _DummyHead("orca")
+    pred = _DummyHead("pred")
+    mppi = _DummyHead("mppi")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(
+            emergency_clearance=0.4,
+            caution_clearance=1.0,
+            dense_ped_count=2,
+            hysteresis_steps=0,
+        ),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=mppi,
+    )
+
+    hybrid.plan(_obs(ped_positions=[(0.8, 0.0), (0.9, 0.0)]))
+    hybrid.plan(_obs(ped_positions=[(5.0, 0.0)]))
+
+    diagnostics = hybrid.diagnostics()
+
+    assert diagnostics["steps"] == 2
+    assert diagnostics["selected_head_counts"] == {"prediction": 1, "mppi": 1}
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["last_decision"]["desired_head"] == "mppi"
+    assert diagnostics["last_decision"]["selected_head"] == "mppi"
+    assert diagnostics["last_decision"]["fallback"] is False
+
+    diagnostics["selected_head_counts"]["mppi"] = 99
+    assert hybrid.diagnostics()["selected_head_counts"]["mppi"] == 1
+
+    hybrid.reset()
+    cleared = hybrid.diagnostics()
+    assert cleared["steps"] == 0
+    assert cleared["selected_head_counts"] == {}
+    assert cleared["last_decision"] is None
+
+
+def test_hybrid_portfolio_records_fallback_diagnostics() -> None:
+    """Fallback diagnostics should explain degraded ORCA selection after head failure."""
+
+    class _FailingHead(_DummyHead):
+        def plan(self, observation: dict) -> tuple[float, float]:
+            raise RuntimeError("boom")
+
+    risk = _FailingHead("risk")
+    orca = _DummyHead("orca")
+    pred = _DummyHead("pred")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(fallback_on_exception=True),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=None,
+    )
+
+    assert hybrid.plan(_obs()) == (0.5, 0.0)
+    diagnostics = hybrid.diagnostics()
+
+    assert diagnostics["steps"] == 1
+    assert diagnostics["fallback_count"] == 1
+    assert diagnostics["selected_head_counts"] == {"orca": 1}
+    assert diagnostics["last_decision"]["desired_head"] == "risk_dwa"
+    assert diagnostics["last_decision"]["selected_head"] == "orca"
+    assert diagnostics["last_decision"]["fallback"] is True
+    assert diagnostics["last_decision"]["fallback_from"] == "risk_dwa"
+    assert "boom" in diagnostics["last_decision"]["error"]
+
+
+def test_hybrid_portfolio_preserves_fallback_diagnostics_if_orca_raises() -> None:
+    """Fallback intent should still be recorded when the ORCA fallback raises."""
+
+    class _FailingHead(_DummyHead):
+        def plan(self, observation: dict) -> tuple[float, float]:
+            _ = observation
+            self.calls += 1
+            raise RuntimeError(f"{self.name} boom")
+
+    risk = _FailingHead("risk")
+    orca = _FailingHead("orca")
+    pred = _DummyHead("pred")
+    hybrid = HybridPortfolioAdapter(
+        hybrid_config=HybridPortfolioConfig(fallback_on_exception=True),
+        risk_dwa=risk,
+        orca=orca,
+        prediction=pred,
+        mppi=None,
+    )
+
+    with pytest.raises(RuntimeError, match="orca boom"):
+        hybrid.plan(_obs())
+
+    diagnostics = hybrid.diagnostics()
+
+    assert risk.calls == 1
+    assert orca.calls == 1
+    assert diagnostics["steps"] == 1
+    assert diagnostics["fallback_count"] == 1
+    assert diagnostics["selected_head_counts"] == {"orca": 1}
+    assert diagnostics["last_decision"]["desired_head"] == "risk_dwa"
+    assert diagnostics["last_decision"]["selected_head"] == "orca"
+    assert diagnostics["last_decision"]["fallback"] is True
+    assert diagnostics["last_decision"]["fallback_from"] == "risk_dwa"
+    assert diagnostics["last_decision"]["error"] == "risk boom"
+
+
 def test_hybrid_builder_applies_full_subhead_fields() -> None:
     """Hybrid build config should preserve full risk/mpii sub-config fields."""
     build = build_hybrid_portfolio_build_config(

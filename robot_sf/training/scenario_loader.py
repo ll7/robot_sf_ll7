@@ -28,6 +28,9 @@ from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
+_PLATFORM_SEMANTIC_STATUSES = {"metadata_only", "require_consumers"}
+_PLATFORM_SEMANTIC_KINDS = {"hazard", "keep_clear"}
+_PLATFORM_SEMANTIC_SHAPES = {"polygon", "bbox"}
 
 
 def _load_yaml_documents(path: Path) -> Any:
@@ -504,6 +507,7 @@ def _validate_scenario_entry(
     _validate_optional_mapping(scenario, key="simulation_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="robot_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="metadata", source=source, index=index)
+    _validate_platform_semantics(scenario, source=source, index=index)
     _validate_seed_list(scenario, source=source, index=index)
 
 
@@ -685,6 +689,106 @@ def _validate_seed_list(
         raise ValueError(f"seeds must contain integers in '{source}' at index {index}.")
 
 
+def _validate_platform_semantics(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+    index: int,
+) -> None:
+    """Validate optional platform hazard and keep-clear semantic metadata."""
+    semantics = scenario.get("platform_semantics")
+    if semantics is None:
+        return
+    if not isinstance(semantics, Mapping):
+        raise ValueError(f"platform_semantics must be a mapping in '{source}' at index {index}.")
+
+    status = semantics.get("status", "metadata_only")
+    if status not in _PLATFORM_SEMANTIC_STATUSES:
+        raise ValueError(
+            f"platform_semantics.status must be one of "
+            f"{sorted(_PLATFORM_SEMANTIC_STATUSES)} in '{source}' at index {index}."
+        )
+
+    regions = semantics.get("regions")
+    if not isinstance(regions, list) or not regions:
+        raise ValueError(
+            f"platform_semantics.regions must be a non-empty list in '{source}' at index {index}."
+        )
+    for region_idx, region in enumerate(regions):
+        _validate_platform_semantic_region(
+            region,
+            source=source,
+            index=index,
+            region_idx=region_idx,
+        )
+
+
+def _validate_platform_semantic_region(
+    region: Any,
+    *,
+    source: Path,
+    index: int,
+    region_idx: int,
+) -> None:
+    """Validate one platform semantic region."""
+    prefix = f"platform_semantics.regions[{region_idx}]"
+    if not isinstance(region, Mapping):
+        raise ValueError(f"{prefix} must be a mapping in '{source}' at index {index}.")
+    region_id = region.get("id")
+    if not isinstance(region_id, str) or not region_id.strip():
+        raise ValueError(f"{prefix}.id must be a non-empty string in '{source}' at index {index}.")
+    kind = region.get("kind")
+    if kind not in _PLATFORM_SEMANTIC_KINDS:
+        raise ValueError(
+            f"{prefix}.kind must be one of {sorted(_PLATFORM_SEMANTIC_KINDS)} "
+            f"in '{source}' at index {index}."
+        )
+    shape = region.get("shape")
+    if shape not in _PLATFORM_SEMANTIC_SHAPES:
+        raise ValueError(
+            f"{prefix}.shape must be one of {sorted(_PLATFORM_SEMANTIC_SHAPES)} "
+            f"in '{source}' at index {index}."
+        )
+    if shape == "polygon":
+        _validate_platform_semantic_polygon(region, prefix=prefix, source=source, index=index)
+    else:
+        _validate_platform_semantic_bbox(region, prefix=prefix, source=source, index=index)
+
+
+def _validate_platform_semantic_polygon(
+    region: Mapping[str, Any],
+    *,
+    prefix: str,
+    source: Path,
+    index: int,
+) -> None:
+    points = region.get("points")
+    if not isinstance(points, list) or len(points) < 3:
+        raise ValueError(
+            f"{prefix}.points must contain at least 3 points in '{source}' at index {index}."
+        )
+    for point_idx, point in enumerate(points):
+        try:
+            _coerce_point(point, f"{prefix}.points[{point_idx}]")
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{prefix}.points[{point_idx}] must be an [x, y] point.") from exc
+
+
+def _validate_platform_semantic_bbox(
+    region: Mapping[str, Any],
+    *,
+    prefix: str,
+    source: Path,
+    index: int,
+) -> None:
+    bounds = region.get("bounds")
+    if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+        raise ValueError(f"{prefix}.bounds must be [min_x, min_y, max_x, max_y].")
+    min_x, min_y, max_x, max_y = (float(value) for value in bounds)
+    if min_x >= max_x or min_y >= max_y:
+        raise ValueError(f"{prefix}.bounds must have min values below max values.")
+
+
 def select_scenario(
     scenarios: list[Mapping[str, Any]],
     scenario_id: str | None,
@@ -739,6 +843,8 @@ def build_robot_config_from_scenario(
         RobotSimulationConfig: Config populated with overrides and map pool.
     """
 
+    _reject_required_platform_semantic_consumers(scenario)
+
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))
@@ -746,6 +852,18 @@ def build_robot_config_from_scenario(
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
     return config
+
+
+def _reject_required_platform_semantic_consumers(scenario: Mapping[str, Any]) -> None:
+    """Fail closed when scenario semantics require consumers that do not exist yet."""
+    semantics = scenario.get("platform_semantics")
+    if not isinstance(semantics, Mapping):
+        return
+    if semantics.get("status", "metadata_only") == "require_consumers":
+        raise NotImplementedError(
+            "platform_semantics consumers are not implemented; use status='metadata_only' "
+            "for provenance-only regions or add explicit planner/metric support."
+        )
 
 
 def _coerce_finite_float(value: Any, *, field_name: str) -> float:
@@ -1243,6 +1361,21 @@ def _resolve_wait_override(
     )
 
 
+def _resolve_start_delay_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> float:
+    """Resolve bounded start-delay dwell overrides for a pedestrian definition.
+
+    Returns:
+        float: Existing or overridden start-delay duration in seconds.
+    """
+    if "start_delay_s" not in entry:
+        return float(ped.start_delay_s)
+    value = entry.get("start_delay_s")
+    return float(value) if value is not None else 0.0
+
+
 def _resolve_note_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -1309,6 +1442,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         trajectory_labels=trajectory_labels,
     )
+    start_delay_s = _resolve_start_delay_override(ped, entry)
     note = _resolve_note_override(ped, entry)
     role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
 
@@ -1319,6 +1453,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         speed_m_s=speed,
         wait_at=wait_at,
+        start_delay_s=start_delay_s,
         note=note,
         role=role,
         role_target_id=role_target_id,

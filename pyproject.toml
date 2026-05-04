@@ -108,6 +108,7 @@ build-backend = "hatchling.build"
 [tool.hatchling.build.targets.wheel]
 packages = [
     { include = "robot_sf" },
+    { include = "robot_sf_carla_bridge" },
     { include = "examples" },
     { include = "third_party" },
 ]
@@ -115,6 +116,7 @@ packages = [
 [tool.hatch.build.targets.wheel]
 packages = [
     "robot_sf",
+    "robot_sf_carla_bridge",
     "examples",
     "third_party",
 ]
@@ -126,6 +128,7 @@ include = ["examples/**"]
 [tool.hatchling.build.targets.sdist]
 include = [
     "/robot_sf",
+    "/robot_sf_carla_bridge",
     "/examples",
     "/third_party",
     "/README.md",

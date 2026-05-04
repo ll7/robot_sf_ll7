@@ -11,6 +11,7 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    wandb_artifact_path: ll7/robot_sf/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity-best-success:v9
     tags:
       - ppo
       - issue-791

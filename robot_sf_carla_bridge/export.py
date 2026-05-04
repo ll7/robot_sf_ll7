@@ -273,3 +273,23 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
     serialized = json.dumps(normalized_payload, indent=2, sort_keys=True)
     path.write_text(serialized + "\n", encoding="utf-8")
     return path
+
+
+def read_export_payload(input_path: str | Path) -> dict[str, Any]:
+    """Read and validate one T0 export payload from UTF-8 JSON.
+
+    Streams the file via ``json.load`` instead of loading its full text first,
+    so very large exports do not need to be held in memory twice.
+
+    Returns:
+        Schema-valid export payload dictionary.
+
+    Raises:
+        json.JSONDecodeError: if the file does not contain valid JSON.
+        jsonschema.ValidationError: if the parsed payload does not satisfy the export schema.
+    """
+
+    with Path(input_path).open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    validate_export_payload(payload)
+    return cast("dict[str, Any]", payload)

@@ -140,6 +140,9 @@ knowledge, not every transient iteration detail.
 - [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 - [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 - [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
+- [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
+  defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
+  claim boundary before runtime implementation under #871.
 
 ## Map Coverage Notes
 
@@ -157,6 +160,12 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #592 Hybrid Obstacle-Context Predictor Design](./issue_592_hybrid_obstacle_predictor_design.md)
   scopes the obstacle-conditioned predictive-model idea into a feature-baseline-first experiment
   path with proof gates before any grid/CNN or obstacle-node graph prototype.
+- [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
+  records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
+  counts, and last-decision metadata on `HybridPortfolioAdapter`.
+- [Issue #938 Hybrid Portfolio Last Decision](./issue_938_hybrid_portfolio_last_decision.md)
+  adds a step-level `HybridPortfolioAdapter.last_decision()` accessor consistent with nearby
+  planner diagnostics APIs.
 - [Issue #589 Public Leaderboard MVP Boundary](./issue_589_public_leaderboard_mvp.md)
   records the no-implementation-now decision, future PR-based MVP boundary, and prerequisites for
   any public planner leaderboard work.
@@ -170,6 +179,14 @@ why a change was made rather than a full issue execution transcript.
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 - [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+- [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
+  schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
+- [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)
+  records the pure-data materializer from `adversarial-multi-ped.v1` configs to scenario-loader
+  `single_pedestrians` override dictionaries, stacked on the issue #923 schema PR.
+- [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
+  adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs,
+  stacked on the issue #936 override materializer.
 - [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 - [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)
@@ -193,6 +210,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
+- [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
+  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
+  and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 
 ## DreamerV3 Notes
 

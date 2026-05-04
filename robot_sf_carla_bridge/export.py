@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 from dataclasses import dataclass
@@ -171,8 +172,9 @@ class SimulationSpec:
         }
 
 
+@functools.lru_cache(maxsize=1)
 def load_export_schema() -> dict[str, Any]:
-    """Load the versioned T0 neutral export JSON schema.
+    """Load the versioned T0 neutral export JSON schema (cached).
 
     Returns:
         Parsed JSON schema dictionary.
@@ -371,7 +373,9 @@ def write_export_records(
         "schema_version": EXPORT_MANIFEST_SCHEMA_VERSION,
         "exports": [],
     }
-    used_names: set[str] = set()
+    # Reserve manifest.json so a scenario_id sanitizing to "manifest" cannot
+    # silently overwrite the manifest file written below.
+    used_names: set[str] = {"manifest.json"}
     for index, record in enumerate(records):
         scenario_id = str(record.get("scenario_id") or "").strip()
         if not scenario_id:

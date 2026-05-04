@@ -485,6 +485,7 @@ imitation = [
 
 [project.scripts]
 robot_sf_bench = "robot_sf.benchmark.cli:main"
+robot-sf-export-carla-t0 = "robot_sf_carla_bridge.cli:export_t0_scenarios_main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml

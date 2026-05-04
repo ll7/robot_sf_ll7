@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
@@ -52,3 +55,18 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     }
     assert calls["write"]["target_dir"] == output_dir
     assert "manifest.json" in capsys.readouterr().out
+
+
+def test_export_t0_cli_is_packaged_as_project_script() -> None:
+    """Project metadata should expose the CLI and include the bridge package."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["scripts"]["robot-sf-export-carla-t0"] == (
+        "robot_sf_carla_bridge.cli:export_t0_scenarios_main"
+    )
+    hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
+    assert {"include": "robot_sf_carla_bridge"} in hatchling_packages
+    assert (
+        "/robot_sf_carla_bridge"
+        in pyproject["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
+    )

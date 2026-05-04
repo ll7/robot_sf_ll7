@@ -196,6 +196,8 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #952 CARLA T0 Export CLI](issue_952_carla_t0_export_cli.md)
   adds a CARLA-free command-line wrapper over scenario-file export and deterministic record writing,
   stacked on the issue #950 record writer.
+- [Issue #954 CARLA T0 Export CLI Packaging](issue_954_carla_t0_export_cli_packaging.md)
+  exposes the issue #952 CLI as an installable project script while keeping the package CARLA-free.
 
 ## DreamerV3 Notes
 

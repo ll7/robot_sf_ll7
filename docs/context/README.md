@@ -193,6 +193,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
+- [Issue #952 CARLA T0 Export CLI](issue_952_carla_t0_export_cli.md)
+  adds a CARLA-free command-line wrapper over scenario-file export and deterministic record writing,
+  stacked on the issue #950 record writer.
 
 ## DreamerV3 Notes
 

@@ -197,6 +197,17 @@ def test_validate_t0_export_batch_main_json_summary_validates_against_schema(
     jsonschema.validate(json.loads(capsys.readouterr().out), load_batch_validation_summary_schema())
 
 
+def test_validate_t0_export_batch_main_prints_schema(capsys) -> None:
+    """Batch validator CLI should expose its JSON summary Schema contract."""
+    from robot_sf_carla_bridge import load_batch_validation_summary_schema
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    exit_code = validate_t0_export_batch_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_batch_validation_summary_schema()
+
+
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should expose deterministic machine-readable status."""
     from robot_sf_carla_bridge.cli import check_carla_availability_main

@@ -23,8 +23,16 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario-file", required=True, help="Scenario manifest YAML path.")
     parser.add_argument("--output-dir", required=True, help="Directory for export JSON files.")
     parser.add_argument("--robot-sf-commit", required=True, help="Robot-SF commit/provenance id.")
-    parser.add_argument("--created-by", default="robot_sf_carla_bridge.cli")
-    parser.add_argument("--certificate-generator", default="scenario_cert.v1")
+    parser.add_argument(
+        "--created-by",
+        default="robot_sf_carla_bridge.cli",
+        help="Provenance producer name recorded in the export payload.",
+    )
+    parser.add_argument(
+        "--certificate-generator",
+        default="scenario_cert.v1",
+        help="Certificate generator id recorded in the export payload provenance.",
+    )
     args = parser.parse_args(argv)
 
     scenario_file = Path(args.scenario_file)
@@ -34,8 +42,12 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
         "created_by": args.created_by,
         "certificate_generator": args.certificate_generator,
     }
-    records = build_export_payloads_from_scenario_file(scenario_file, provenance=provenance)
-    write_export_records(records, output_dir)
+    try:
+        records = build_export_payloads_from_scenario_file(scenario_file, provenance=provenance)
+        write_export_records(records, output_dir)
+    except (ValueError, OSError) as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 1
     sys.stdout.write(f"{(output_dir / 'manifest.json').as_posix()}\n")
     return 0
 

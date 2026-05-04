@@ -1,0 +1,44 @@
+# PPO baseline pinned to the issue-857 horizon-matched candidate.
+#
+# Provenance:
+# - Source job: 12178 (auxme-imech093 class l40s, 8h23m, 2026-04-29 → 2026-04-30).
+# - WandB run: ll7/robot_sf/h746lfsd
+# - Training config: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml
+# - Scenario surface: configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml
+#   (eval-aligned superset with manifest-level scenario_overrides forcing
+#    simulation_config.max_episode_steps: 100 across all 70 scenarios).
+# - Best in-distribution eval (70 episodes, horizon-100):
+#   success_rate=0.6429, collision_rate=0.0429, comfort_exposure=0.0190,
+#   path_efficiency=0.3264, snqi=-0.3298 at step 7,864,320 / 10,000,000.
+# - Recipe is otherwise identical to the issue-791 Wave-5 leader
+#   (configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml); only the
+#   training-time max_episode_steps was reduced from 400-600 to 100 to match
+#   the camera-ready benchmark horizon (issue #857 Phase B).
+#
+# CAVEAT: this is a Phase C candidate. It is NOT promoted; the canonical PPO
+# baseline (configs/baselines/ppo_15m_grid_socnav.yaml) still points at the
+# Wave-5 leader. Promotion is gated on Phase D (camera-ready success_mean ≥ 0.50
+# AND max_steps_share ≤ 0.30) per the issue body.
+
+model_path: output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip
+
+device: auto
+deterministic: true
+
+obs_mode: dict
+
+predictive_foresight_enabled: true
+predictive_foresight_model_id: predictive_proxy_selected_v2_full
+predictive_foresight_device: cuda
+predictive_foresight_max_agents: 16
+predictive_foresight_horizon_steps: 8
+predictive_foresight_rollout_dt: 0.2
+predictive_foresight_near_distance: 0.7
+predictive_foresight_front_corridor_length: 3.0
+predictive_foresight_front_corridor_half_width: 1.0
+
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+
+fallback_to_goal: false

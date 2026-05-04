@@ -1,0 +1,50 @@
+scenarios:
+- name: classic_station_platform_medium
+  map_file: ../../../maps/svg_maps/classic_station_platform.svg
+  simulation_config:
+    max_episode_steps: 650
+    ped_density: 0.05
+  single_pedestrians:
+  - id: p1
+    goal: null
+    trajectory:
+    - - 24.0
+      - 22.0
+    - - 24.0
+      - 18.5
+    - - 38.0
+      - 22.0
+    - - 76.0
+      - 22.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 6.0
+      note: wait near the left stair landing before continuing
+    note: left-to-right pause near stair access
+  - id: p3
+    goal: null
+    trajectory:
+    - - 60.0
+      - 4.2
+    - - 60.0
+      - 8.0
+    - - 44.0
+      - 4.2
+    - - 9.0
+      - 4.2
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 5.0
+      note: short dwell near the right stair landing
+    note: right-to-left pause near stair access
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    label: station hall with stair and elevator cores and a central crossover
+    density: medium
+    flow: bi
+    groups: 0.0
+  seeds:
+  - 301
+  - 302
+  - 303

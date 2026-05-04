@@ -63,6 +63,9 @@ def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
 def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     """Validate a local CARLA T0 export manifest and every referenced payload.
 
+    Args:
+        argv: Command-line arguments to parse; ``None`` reads from ``sys.argv``.
+
     Returns:
         Process-style exit code.
     """
@@ -71,10 +74,11 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
     args = parser.parse_args(argv)
 
-    records = load_export_manifest_payloads(Path(args.manifest))
+    manifest_path = Path(args.manifest)
+    records = load_export_manifest_payloads(manifest_path)
     payload_count = len(records)
     noun = "payload" if payload_count == 1 else "payloads"
-    sys.stdout.write(f"{Path(args.manifest).as_posix()}: {payload_count} {noun}\n")
+    sys.stdout.write(f"{manifest_path.as_posix()}: {payload_count} {noun}\n")
     return 0
 
 

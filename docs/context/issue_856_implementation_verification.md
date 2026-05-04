@@ -12,35 +12,31 @@ and is kept here so future agents can audit how the PR-ready state was reached.
 
 ## Branch Scope
 
-5 commits, +731 / −45. Touches only configs, SLURM wrappers, and docs — no Python source
-changes.
+7 files, +433 / −39. Touches only evidence/config/documentation surfaces for the completed
+seed-123 broad-training control — no Python source or SLURM wrapper changes.
 
 Inventory:
 
-- 2 new training configs: seed-231 and seed-1337 replicas of the issue-791 broad-training recipe.
 - 1 new baseline adapter:
   [configs/baselines/ppo_issue_856_all_scenarios_12223.yaml](../../configs/baselines/ppo_issue_856_all_scenarios_12223.yaml).
 - 1 new benchmark matrix:
   [configs/benchmarks/paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml](../../configs/benchmarks/paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml).
-- 1 new context note:
-  [docs/context/issue_856_ppo_all_scenarios_full_budget.md](issue_856_ppo_all_scenarios_full_budget.md).
-- 4 SLURM wrapper edits: shared `run_in_allocation` srun fallback in
-  `issue_791_{asymmetric_critic,attention_head,reward_curriculum,benchmark}.sl`, plus
-  worktree-aware Wave-5 leader cache symlinking and a benchmark-config gate in
-  `issue_791_benchmark.sl`.
-- `CHANGELOG.md`, [docs/README.md](../README.md) reformatting plus the new context-note link.
+- 2 updated context notes:
+  [docs/context/issue_856_ppo_all_scenarios_full_budget.md](issue_856_ppo_all_scenarios_full_budget.md)
+  and this verification record.
+- 1 experiment-memory update:
+  [memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md](../../memory/experiments/2026-04-20_issue_791_distribution_alignment_dominates.md).
+- `CHANGELOG.md` and [docs/README.md](../README.md) updates for discoverability and verdict
+  preservation.
 
 ## Evidence Matrix
 
 | Claim | Evidence surface | Validation | Result |
 |---|---|---|---|
-| Seed-replica configs (231, 1337) match the base recipe | `diff` vs base; `yaml.safe_load`; job_type ≤ 64 chars | Only `seeds`, `policy_id`, `job_type`, and tags differ; one duplicate `peds_have_obstacle_forces` key dropped (no semantic change, last-wins YAML resolves both copies to `true`) | Pass |
 | Seed-123 (job 12223) trained 10M, best at step 9,961,472, success 0.900 / collision 0.100 / SNQI 0.226 | `output/slurm/issue791-reward-curriculum-job-12223/.../*_best.summary.json` | Numerical match with the context note | Pass |
 | Camera-ready benchmark `12226` ran 7/7 successful, 987 episodes | `output/benchmarks/issue_856/.../reports/campaign_summary.json` | `runs=7`, all `status=ok`, 7×141=987 episodes, no warnings | Pass |
 | Baseline adapter wires the 12223 checkpoint | [configs/baselines/ppo_issue_856_all_scenarios_12223.yaml](../../configs/baselines/ppo_issue_856_all_scenarios_12223.yaml) | Path exists locally; provenance captures WandB `ll7/robot_sf/ateif3c8` | Pass (worktree-local; not durable) |
 | Benchmark matrix swaps only the PPO row vs eval-aligned compare | [paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml](../../configs/benchmarks/paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml) | YAML loads; only the `ppo` row uses `algo_config: configs/baselines/ppo_issue_856_all_scenarios_12223.yaml` | Pass |
-| SLURM wrappers handle missing `srun` and worktree-relative leader cache | `bash -n` parses; `run_in_allocation` falls back; `ensure_model_cache_artifact` symlinks from primary checkout; leader cache check is gated on benchmark-config references | Bash syntax check + diff review | Pass |
-| Replica jobs 12257 / 12258 (seeds 231 / 1337) on l40s | Note records RUNNING on `auxme-imech091/093`, max wall `3-00:00:00` | Note-only (jobs in flight) | Reported, not yet proven in tree |
 | Camera-ready PPO row improves vs reference 12122 | `reports/campaign_table_experimental.md`: PPO row `success_mean=0.2199`, `collisions_mean=0.0922`, `snqi_mean=−0.3305` vs note-stated 12122 reference `0.2553 / 0.0851 / −0.2906` | Read campaign table | Numerical evidence available; broad-training arm is **worse** on all three metrics |
 
 ## Initial Gaps Found
@@ -64,7 +60,7 @@ Inventory:
    didn't pre-commit a destination for the eventual seed-band result.
 
 4. **Trained checkpoint and publication bundle are worktree-local only** — acknowledged in the
-   note, but the durable-artifact policy under `AGENTS.md` was not yet resolved.
+  note, but the durable-artifact policy under `AGENTS.md` was not yet resolved.
 
 ## Fixes Applied
 
@@ -92,11 +88,10 @@ Inventory:
 3. Read [issue 856](https://github.com/ll7/robot_sf_ll7/issues/856),
    [docs/context/issue_856_ppo_all_scenarios_full_budget.md](issue_856_ppo_all_scenarios_full_budget.md),
    and the new configs.
-4. `yaml.safe_load` the new training, baseline, and benchmark configs to confirm validity.
+4. `yaml.safe_load` the new baseline and benchmark configs to confirm validity.
 5. Read `output/benchmarks/issue_856/.../reports/campaign_summary.json` and
    `campaign_table_experimental.md` for camera-ready evidence.
-6. `bash -n` the four SLURM wrappers.
-7. `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+6. `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
 
 ## Related
 

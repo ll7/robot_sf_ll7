@@ -90,7 +90,9 @@ def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[
     include lists (``includes``, ``include``, or ``scenario_files``) for
     composing per-scenario and per-archetype files into a single list.
     Manifests can also provide ``select_scenarios`` to keep only an explicit,
-    deterministic subset of the expanded scenarios by name.
+    deterministic subset of the expanded scenarios by name, and
+    ``scenario_overrides`` to apply the same nested override block to every
+    expanded scenario.
 
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
@@ -152,6 +154,13 @@ def _load_scenarios_recursive(
         )
         if isinstance(data, Mapping):
             combined = _apply_scenario_selection(combined, data=data, source=resolved)
+            combined = _apply_scenario_overrides(
+                combined,
+                data=data,
+                source=resolved,
+                root=root,
+                map_search_paths=effective_search_paths,
+            )
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -255,6 +264,75 @@ def _apply_scenario_selection(
             raise ValueError(f"Unknown select_scenarios entry '{name}' in '{source}'.")
         selected.append(scenario_map[key])
     return selected
+
+
+def _resolve_scenario_overrides(
+    data: Mapping[str, Any],
+    *,
+    source: Path,
+) -> Mapping[str, Any]:
+    """Resolve manifest-wide scenario overrides.
+
+    Returns:
+        Mapping[str, Any]: Nested override mapping applied to each expanded
+            scenario.
+    """
+    raw = data.get("scenario_overrides")
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"scenario_overrides must be a mapping in '{source}'.")
+    return raw
+
+
+def _deep_merge_mapping(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+    """Iteratively merge a nested override mapping into a scenario mapping.
+
+    Iterative implementation avoids stack exhaustion on deeply nested override
+    payloads from external manifests.
+
+    Returns:
+        dict[str, Any]: Deep-merged mapping with override values taking
+            precedence.
+    """
+    merged: dict[str, Any] = deepcopy(dict(base))
+    stack: list[tuple[dict[str, Any], Mapping[str, Any]]] = [(merged, overrides)]
+    while stack:
+        target, source = stack.pop()
+        for key, value in source.items():
+            current = target.get(key)
+            if isinstance(current, Mapping) and isinstance(value, Mapping):
+                nested = dict(current)
+                target[key] = nested
+                stack.append((nested, value))
+            else:
+                target[key] = deepcopy(value)
+    return merged
+
+
+def _apply_scenario_overrides(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    data: Mapping[str, Any],
+    source: Path,
+    root: Path,
+    map_search_paths: list[Path],
+) -> list[Mapping[str, Any]]:
+    """Apply manifest-wide nested overrides after include expansion.
+
+    Returns:
+        list[Mapping[str, Any]]: Scenario list with overrides applied to each
+            scenario.
+    """
+    overrides = _resolve_scenario_overrides(data, source=source)
+    if not overrides:
+        return scenarios
+    return _normalize_scenarios(
+        [_deep_merge_mapping(scenario, overrides) for scenario in scenarios],
+        source=source,
+        root=root,
+        map_search_paths=map_search_paths,
+    )
 
 
 def _scenario_identifier(
@@ -1361,6 +1439,21 @@ def _resolve_wait_override(
     )
 
 
+def _resolve_start_delay_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> float:
+    """Resolve bounded start-delay dwell overrides for a pedestrian definition.
+
+    Returns:
+        float: Existing or overridden start-delay duration in seconds.
+    """
+    if "start_delay_s" not in entry:
+        return float(ped.start_delay_s)
+    value = entry.get("start_delay_s")
+    return float(value) if value is not None else 0.0
+
+
 def _resolve_note_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -1427,6 +1520,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         trajectory_labels=trajectory_labels,
     )
+    start_delay_s = _resolve_start_delay_override(ped, entry)
     note = _resolve_note_override(ped, entry)
     role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
 
@@ -1437,6 +1531,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         speed_m_s=speed,
         wait_at=wait_at,
+        start_delay_s=start_delay_s,
         note=note,
         role=role,
         role_target_id=role_target_id,

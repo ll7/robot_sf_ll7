@@ -120,7 +120,7 @@ class RobotState:
         self.is_collision_with_ped = self.occupancy.is_pedestrian_collision
         self.is_collision_with_obst = self.occupancy.is_obstacle_collision
         self.is_collision_with_robot = self.occupancy.is_dynamic_collision
-        self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
+        self.is_timeout = self.timestep >= self.max_sim_steps
         self.prev_distance_to_goal = float(self.distance_to_goal)
         self.distance_to_goal = self._distance_to_goal()
         return self.sensors.next_obs()

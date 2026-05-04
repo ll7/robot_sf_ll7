@@ -208,6 +208,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
   loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
   #960 path resolver.
+- [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
+  exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
+  script.
 
 ## DreamerV3 Notes
 

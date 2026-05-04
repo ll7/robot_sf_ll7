@@ -86,6 +86,35 @@ def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     assert "1 export" in capsys.readouterr().out
 
 
+def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator CLI should load every manifest payload and report the count."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    calls = {}
+
+    def fake_load_payloads(path):
+        calls["path"] = Path(path)
+        return [
+            {"scenario_id": "first", "path": tmp_path / "first.json", "payload": {}},
+            {"scenario_id": "second", "path": tmp_path / "second.json", "payload": {}},
+        ]
+
+    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path)])
+
+    assert exit_code == 0
+    assert calls["path"] == manifest_path
+    assert "2 payloads" in capsys.readouterr().out
+
+
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
     """Project metadata should expose the CLI and include the bridge package."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -95,6 +124,9 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-manifest"] == (
         "robot_sf_carla_bridge.cli:validate_t0_manifest_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-batch"] == (
+        "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages

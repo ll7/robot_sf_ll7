@@ -100,15 +100,21 @@ def check_carla_availability_main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Check optional CARLA Python API availability.")
     parser.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    parser.add_argument(
+        "--require",
+        action="store_true",
+        help="Exit nonzero when the CARLA Python API is not available.",
+    )
     args = parser.parse_args(argv)
 
     status = check_carla_availability()
+    exit_code = 0 if status["status"] == "available" or not args.require else 1
     if args.json:
         sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
-        return 0
+        return exit_code
 
     sys.stdout.write(f"{status['dependency']}: {status['status']} - {status['reason']}\n")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

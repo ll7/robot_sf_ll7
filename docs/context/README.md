@@ -217,6 +217,8 @@ why a change was made rather than a full issue execution transcript.
   adds a strict optional-CARLA import guard for future replay entry points.
 - [Issue #970 CARLA Availability Check CLI](issue_970_carla_availability_check_cli.md)
   exposes CARLA bridge availability metadata through a CARLA-free project script.
+- [Issue #972 CARLA Availability CLI Require Mode](issue_972_carla_availability_cli_require_mode.md)
+  adds fail-closed availability checking for CARLA-dependent setup gates.
 
 ## DreamerV3 Notes
 

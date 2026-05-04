@@ -193,6 +193,58 @@ def test_check_carla_availability_main_prints_text_status(monkeypatch, capsys) -
     assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
 
 
+def test_check_carla_availability_main_require_fails_when_unavailable(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should fail closed when CARLA is unavailable."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "not-available",
+            "reason": "CARLA Python API package 'carla' is not importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require", "--json"])
+
+    assert exit_code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "dependency": "carla",
+        "reason": "CARLA Python API package 'carla' is not importable",
+        "status": "not-available",
+    }
+
+
+def test_check_carla_availability_main_require_passes_when_available(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should still succeed when CARLA is available."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "available",
+            "reason": "CARLA Python API package is importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require"])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
+
+
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
     """Project metadata should expose the CLI and include the bridge package."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

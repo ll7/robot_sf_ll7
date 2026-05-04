@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+import re
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 EXPORT_SCHEMA_VERSION = "carla-replay-export.v1"
 _SCHEMA_RESOURCE = "schemas/carla_replay_export.v1.json"
+EXPORT_MANIFEST_SCHEMA_VERSION = "carla-replay-export-manifest.v1"
 _EXPORTABLE_CERT_STATUSES = {"passed", "valid", "hard_but_solvable", "knife_edge"}
 _DEFAULT_TRAJECTORY_FIELDS = [
     "success",
@@ -193,7 +195,7 @@ class SimulationSpec:
 
 @functools.lru_cache(maxsize=1)
 def load_export_schema() -> dict[str, Any]:
-    """Load the versioned T0 neutral export JSON schema.
+    """Load the versioned T0 neutral export JSON schema (cached).
 
     Returns:
         Parsed JSON schema dictionary.
@@ -408,6 +410,41 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
     return path
 
 
+def write_export_records(
+    records: list[Mapping[str, Any]], output_dir: str | Path
+) -> dict[str, Any]:
+    """Write ordered T0 export records to an output directory.
+
+    Returns:
+        JSON-safe manifest describing the files written.
+    """
+
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    manifest: dict[str, Any] = {
+        "schema_version": EXPORT_MANIFEST_SCHEMA_VERSION,
+        "exports": [],
+    }
+    # Reserve manifest.json so a scenario_id sanitizing to "manifest" cannot
+    # silently overwrite the manifest file written below.
+    used_names: set[str] = {"manifest.json"}
+    for index, record in enumerate(records):
+        scenario_id = str(record.get("scenario_id") or "").strip()
+        if not scenario_id:
+            raise ValueError(f"export record {index} missing scenario_id")
+        payload = record.get("payload")
+        if not isinstance(payload, dict):
+            raise ValueError(f"export record {index} payload must be a mapping")
+        file_name = _unique_export_file_name(scenario_id, used_names)
+        write_export_payload(payload, root / file_name)
+        manifest["exports"].append({"scenario_id": scenario_id, "path": file_name})
+    (root / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
 
@@ -450,6 +487,19 @@ def _load_scenario_entries(scenario_path: Path) -> list[Mapping[str, Any]]:
     from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
 
     return load_scenarios(scenario_path)
+
+
+def _unique_export_file_name(scenario_id: str, used_names: set[str]) -> str:
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", scenario_id).strip("._")
+    if not stem:
+        stem = "scenario"
+    candidate = f"{stem}.json"
+    suffix = 2
+    while candidate in used_names:
+        candidate = f"{stem}_{suffix}.json"
+        suffix += 1
+    used_names.add(candidate)
+    return candidate
 
 
 def _certificate_payload_for_scenario_entry(

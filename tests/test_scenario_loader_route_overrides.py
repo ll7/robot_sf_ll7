@@ -119,6 +119,34 @@ def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() 
     assert route_path.exists()
 
 
+def test_load_scenarios_rebases_map_path_after_manifest_override(tmp_path: Path) -> None:
+    """Manifest-level map_id overrides should rerun path rebasing on merged scenarios."""
+    manifest_path = tmp_path / "override_manifest.yaml"
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "demo",
+                        "map_file": "maps/svg_maps/classic_bottleneck.svg",
+                    }
+                ],
+                "scenario_overrides": {"map_id": "classic_overtaking"},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    scenarios = load_scenarios(manifest_path)
+
+    assert len(scenarios) == 1
+    assert scenarios[0]["map_id"] == "classic_overtaking"
+    assert (manifest_path.parent / str(scenarios[0]["map_file"])).resolve() == Path(
+        "maps/svg_maps/classic_overtaking.svg"
+    ).resolve()
+
+
 def test_build_robot_config_applies_bicycle_robot_overrides() -> None:
     """Scenario robot_config should instantiate bicycle settings and selected fields."""
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()

@@ -231,6 +231,7 @@ class SinglePedestrianRuntime:
     trajectory: list[Vec2D]
     waypoint_index: int = 0
     pending_waits: dict[int, float] = field(default_factory=dict)
+    start_delay_remaining_s: float = 0.0
     wait_remaining_s: float = 0.0
     waiting_for_advance: bool = False
     joined_group_id: int | None = None
@@ -266,6 +267,7 @@ class SinglePedestrianBehavior:
                     definition=ped,
                     trajectory=ped.trajectory or [],
                     pending_waits=waits,
+                    start_delay_remaining_s=float(ped.start_delay_s),
                 )
             )
 
@@ -276,6 +278,8 @@ class SinglePedestrianBehavior:
     def step(self):
         """Advance single-pedestrian behaviors for one timestep."""
         for runtime in self._runtimes:
+            if self._tick_start_delay(runtime):
+                continue
             role = runtime.definition.role
             if role == "wait":
                 self._hold_position(runtime)
@@ -294,6 +298,7 @@ class SinglePedestrianBehavior:
         """Reset per-pedestrian runtime state for a new episode."""
         for runtime in self._runtimes:
             runtime.waypoint_index = 0
+            runtime.start_delay_remaining_s = float(runtime.definition.start_delay_s)
             runtime.wait_remaining_s = 0.0
             runtime.waiting_for_advance = False
             runtime.joined_group_id = None
@@ -320,6 +325,31 @@ class SinglePedestrianBehavior:
             return
 
         self._advance_waypoint(runtime)
+
+    def _tick_start_delay(self, runtime: SinglePedestrianRuntime) -> bool:
+        """Hold a pedestrian at its start until the configured release time.
+
+        Returns:
+            bool: True while the pedestrian should keep waiting at the start.
+        """
+        if runtime.start_delay_remaining_s <= 0:
+            return False
+        runtime.start_delay_remaining_s = max(
+            0.0,
+            runtime.start_delay_remaining_s - self.time_step_s,
+        )
+        self._hold_position(runtime)
+        if runtime.start_delay_remaining_s <= 0:
+            self._release_start_delay(runtime)
+            return False
+        return True
+
+    def _release_start_delay(self, runtime: SinglePedestrianRuntime) -> None:
+        """Restore the pedestrian's configured goal after a start-delay dwell."""
+        if runtime.trajectory:
+            self.states.redirect(runtime.ped_id, runtime.trajectory[runtime.waypoint_index])
+        elif runtime.definition.goal is not None:
+            self.states.redirect(runtime.ped_id, runtime.definition.goal)
 
     def _advance_waypoint(self, runtime: SinglePedestrianRuntime) -> None:
         """Advance to the next waypoint if available."""

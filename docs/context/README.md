@@ -195,6 +195,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #940 CARLA T0 Export Read Helper](issue_940_carla_t0_export_read_helper.md)
   adds a schema-validating `read_export_payload(...)` boundary for exported replay JSON, stacked on
   the issue #934 builder API.
+- [Issue #942 CARLA T0 MapDefinition Adapter](issue_942_carla_t0_map_definition_adapter.md)
+  converts already-certified Robot-SF `MapDefinition` objects into schema-valid neutral export
+  payloads, stacked on the issue #940 read helper.
 - [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.

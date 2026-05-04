@@ -7,12 +7,26 @@ import json
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import jsonschema
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 EXPORT_SCHEMA_VERSION = "carla-replay-export.v1"
 _SCHEMA_RESOURCE = "schemas/carla_replay_export.v1.json"
+_EXPORTABLE_CERT_STATUSES = {"passed", "valid", "hard_but_solvable", "knife_edge"}
+_DEFAULT_TRAJECTORY_FIELDS = [
+    "success",
+    "collision",
+    "min_distance",
+    "ttc",
+    "comfort",
+    "jerk",
+    "curvature",
+    "intervention_rate",
+]
 
 
 @dataclass(frozen=True)
@@ -230,6 +244,60 @@ def build_export_payload(
     return payload
 
 
+def build_export_payload_from_map_definition(  # noqa: PLR0913
+    *,
+    map_def: Any,
+    certificate: Mapping[str, Any],
+    scenario_id: str,
+    source_config: str | Path,
+    map_id: str,
+    robot_radius_m: float,
+    robot_kinematics: Mapping[str, Any],
+    dt_s: float,
+    horizon_s: float,
+    provenance: Mapping[str, Any],
+    route_index: int = 0,
+    trajectory_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a T0 neutral export payload from a certified Robot-SF map definition.
+
+    The adapter serializes Robot-SF world coordinates and scripted geometry only. CARLA world
+    coordinate conversion and runtime replay remain separate T1 work.
+
+    Returns:
+        Schema-valid export payload dictionary.
+
+    Raises:
+        ValueError: if the certificate is excluded or the selected route is unavailable.
+    """
+
+    certificate_ref = _certificate_ref_from_payload(certificate)
+    route = _select_robot_route(map_def, route_index=route_index)
+    route_points = _route_waypoints(route)
+    if len(route_points) < 2:
+        raise ValueError("Selected robot route must contain at least a start and goal waypoint")
+
+    return build_export_payload(
+        scenario=ScenarioReplayRef(
+            scenario_id=scenario_id,
+            source_config=Path(source_config).as_posix(),
+            map_id=map_id,
+            certificate=certificate_ref,
+        ),
+        robot=RobotReplaySpec(
+            start=Pose2D(*route_points[0]),
+            goal=Pose2D(*route_points[-1]),
+            radius_m=robot_radius_m,
+            kinematics=dict(robot_kinematics),
+        ),
+        pedestrians=_pedestrians_from_map_definition(map_def),
+        static_geometry=_static_geometry_from_map_definition(map_def),
+        simulation=SimulationSpec(dt_s=dt_s, horizon_s=horizon_s),
+        trajectory_fields=list(trajectory_fields or _DEFAULT_TRAJECTORY_FIELDS),
+        provenance=dict(provenance),
+    )
+
+
 def _json_safe(value: Any) -> Any:
     """Recursively convert common Python objects to JSON-safe values.
 
@@ -293,3 +361,119 @@ def read_export_payload(input_path: str | Path) -> dict[str, Any]:
         payload = json.load(handle)
     validate_export_payload(payload)
     return cast("dict[str, Any]", payload)
+
+
+def _certificate_ref_from_payload(certificate: Mapping[str, Any]) -> CertificateRef:
+    """Return an exportable certificate reference or fail closed for excluded certificates."""
+
+    eligibility = str(certificate.get("benchmark_eligibility") or "").strip().lower()
+    if eligibility == "excluded":
+        raise ValueError("Cannot export CARLA T0 payload for excluded scenario certificate")
+
+    status = (
+        str(certificate.get("status") or certificate.get("classification") or "").strip().lower()
+    )
+    if status not in _EXPORTABLE_CERT_STATUSES:
+        raise ValueError(f"Cannot export CARLA T0 payload for certificate status '{status}'")
+    return CertificateRef(
+        status=status,
+        source=str(certificate["source"]) if certificate.get("source") is not None else None,
+    )
+
+
+def _select_robot_route(map_def: Any, *, route_index: int) -> Any:
+    routes = list(getattr(map_def, "robot_routes", []) or [])
+    if route_index < 0 or route_index >= len(routes):
+        raise ValueError(f"robot route index {route_index} is not available")
+    return routes[route_index]
+
+
+def _route_waypoints(route: Any) -> list[tuple[float, float]]:
+    return [_point_tuple(point) for point in getattr(route, "waypoints", [])]
+
+
+def _point_tuple(point: Any) -> tuple[float, float]:
+    if not isinstance(point, list | tuple) or len(point) < 2:
+        raise ValueError(f"Expected 2D point, got {point!r}")
+    return (float(point[0]), float(point[1]))
+
+
+def _pedestrians_from_map_definition(map_def: Any) -> list[PedestrianReplaySpec]:
+    pedestrians: list[PedestrianReplaySpec] = []
+    for ped in getattr(map_def, "single_pedestrians", []) or []:
+        timing: dict[str, Any] = {}
+        speed = getattr(ped, "speed_m_s", None)
+        if speed is not None:
+            timing["speed_m_s"] = float(speed)
+        waits = getattr(ped, "wait_at", None)
+        if waits:
+            timing["wait_at"] = [
+                {
+                    "waypoint_index": int(rule.waypoint_index),
+                    "wait_s": float(rule.wait_s),
+                    **({"note": rule.note} if rule.note else {}),
+                }
+                for rule in waits
+            ]
+        pedestrians.append(
+            PedestrianReplaySpec(
+                ped_id=str(ped.id),
+                start=Pose2D(*_point_tuple(ped.start)),
+                route=[Pose2D(*point) for point in _pedestrian_route_points(ped)],
+                timing=timing or None,
+            )
+        )
+    return pedestrians
+
+
+def _pedestrian_route_points(ped: Any) -> list[tuple[float, float]]:
+    trajectory = getattr(ped, "trajectory", None)
+    if trajectory:
+        return [_point_tuple(point) for point in trajectory]
+    goal = getattr(ped, "goal", None)
+    if goal is not None:
+        return [_point_tuple(goal)]
+    return [_point_tuple(ped.start)]
+
+
+def _static_geometry_from_map_definition(map_def: Any) -> dict[str, Any]:
+    return {
+        "obstacles": _obstacles_from_map_definition(map_def),
+        "map_bounds": {
+            "width_m": float(map_def.width),
+            "height_m": float(map_def.height),
+        },
+    }
+
+
+def _obstacle_vertices(points: Any) -> list[list[float]]:
+    """Return cleaned 2D vertex list; drops a trailing duplicate closing point."""
+
+    coords = [list(_point_tuple(point)) for point in list(points)]
+    if len(coords) >= 2 and coords[0] == coords[-1]:
+        coords = coords[:-1]
+    return coords
+
+
+def _obstacles_from_map_definition(map_def: Any) -> list[dict[str, Any]]:
+    obstacles: list[dict[str, Any]] = []
+    for index, obstacle in enumerate(getattr(map_def, "obstacles", []) or []):
+        polygons = getattr(obstacle, "iter_polygons", lambda: [])()
+        if polygons:
+            for poly_index, polygon in enumerate(polygons):
+                obstacles.append(
+                    {
+                        "id": f"obstacle_{index}_{poly_index}",
+                        "type": "polygon",
+                        "vertices": _obstacle_vertices(polygon.exterior.coords),
+                    }
+                )
+            continue
+        obstacles.append(
+            {
+                "id": f"obstacle_{index}",
+                "type": "polygon",
+                "vertices": _obstacle_vertices(getattr(obstacle, "vertices", [])),
+            }
+        )
+    return obstacles

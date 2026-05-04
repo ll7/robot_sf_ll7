@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import importlib
 import json
+from pathlib import Path
 
 import jsonschema
 import pytest
+
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.nav.obstacle import Obstacle
 
 
 def _minimal_payload() -> dict:
@@ -65,6 +70,61 @@ def _minimal_payload() -> dict:
             "certificate_generator": "scenario_cert.v1",
         },
     }
+
+
+def _zone(
+    x: float, y: float
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Return a tiny triangular zone around one point."""
+    return ((x - 0.2, y - 0.2), (x + 0.2, y - 0.2), (x + 0.2, y + 0.2))
+
+
+def _bounds(width: float, height: float) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Return rectangular map bounds as line segments."""
+    return [
+        ((0.0, 0.0), (width, 0.0)),
+        ((width, 0.0), (width, height)),
+        ((width, height), (0.0, height)),
+        ((0.0, height), (0.0, 0.0)),
+    ]
+
+
+def _programmatic_map() -> MapDefinition:
+    """Return a small map with one robot route, one obstacle, and scripted pedestrians."""
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(1.0, 1.0), (5.0, 1.0)],
+        spawn_zone=_zone(1.0, 1.0),
+        goal_zone=_zone(5.0, 1.0),
+        source_label="unit_route",
+    )
+    return MapDefinition(
+        width=6.0,
+        height=4.0,
+        obstacles=[Obstacle([(2.0, 2.0), (3.0, 2.0), (3.0, 3.0), (2.0, 3.0)])],
+        robot_spawn_zones=[route.spawn_zone],
+        ped_spawn_zones=[],
+        robot_goal_zones=[route.goal_zone],
+        bounds=_bounds(6.0, 4.0),
+        robot_routes=[route],
+        ped_goal_zones=[],
+        ped_crowded_zones=[],
+        ped_routes=[],
+        single_pedestrians=[
+            SinglePedestrianDefinition(
+                id="ped_goal",
+                start=(3.0, 0.5),
+                goal=(3.0, 3.5),
+                speed_m_s=1.1,
+            ),
+            SinglePedestrianDefinition(
+                id="ped_route",
+                start=(4.0, 0.5),
+                trajectory=[(4.0, 2.0), (4.0, 3.5)],
+            ),
+        ],
+    )
 
 
 def test_bridge_import_does_not_require_carla() -> None:
@@ -222,6 +282,63 @@ def test_read_export_payload_rejects_schema_invalid_payload(tmp_path) -> None:
 
     with pytest.raises(jsonschema.ValidationError, match="fallback"):
         read_export_payload(output_path)
+
+
+def test_build_export_payload_from_map_definition_validates() -> None:
+    """Certified map definitions should convert to schema-valid neutral export payloads."""
+    from robot_sf_carla_bridge import build_export_payload_from_map_definition
+
+    payload = build_export_payload_from_map_definition(
+        map_def=_programmatic_map(),
+        certificate={"schema_version": "scenario_cert.v1", "classification": "valid"},
+        scenario_id="unit_map_definition",
+        source_config=Path("configs/scenarios/unit.yaml"),
+        map_id="unit_map",
+        robot_radius_m=0.35,
+        robot_kinematics={"model": "differential_drive", "max_speed_mps": 1.0},
+        dt_s=0.1,
+        horizon_s=12.0,
+        provenance={
+            "robot_sf_commit": "abc123",
+            "created_by": "unit-test",
+            "certificate_generator": "scenario_cert.v1",
+        },
+    )
+
+    assert payload["scenario"]["certificate"]["status"] == "valid"
+    assert payload["robot"]["start"] == {"x": 1.0, "y": 1.0}
+    assert payload["robot"]["goal"] == {"x": 5.0, "y": 1.0}
+    assert payload["pedestrians"][0]["route"] == [{"x": 3.0, "y": 3.5}]
+    assert payload["pedestrians"][0]["timing"]["speed_m_s"] == 1.1
+    assert payload["pedestrians"][1]["route"] == [{"x": 4.0, "y": 2.0}, {"x": 4.0, "y": 3.5}]
+    assert payload["static_geometry"]["obstacles"][0]["type"] == "polygon"
+
+
+def test_build_export_payload_from_map_definition_rejects_excluded_certificate() -> None:
+    """T0 export should fail closed when certification excluded the scenario."""
+    from robot_sf_carla_bridge import build_export_payload_from_map_definition
+
+    with pytest.raises(ValueError, match="excluded"):
+        build_export_payload_from_map_definition(
+            map_def=_programmatic_map(),
+            certificate={
+                "schema_version": "scenario_cert.v1",
+                "classification": "invalid",
+                "benchmark_eligibility": "excluded",
+            },
+            scenario_id="unit_map_definition",
+            source_config="configs/scenarios/unit.yaml",
+            map_id="unit_map",
+            robot_radius_m=0.35,
+            robot_kinematics={"model": "differential_drive"},
+            dt_s=0.1,
+            horizon_s=12.0,
+            provenance={
+                "robot_sf_commit": "abc123",
+                "created_by": "unit-test",
+                "certificate_generator": "scenario_cert.v1",
+            },
+        )
 
 
 def test_read_export_payload_rejects_malformed_json(tmp_path) -> None:

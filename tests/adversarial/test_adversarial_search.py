@@ -25,6 +25,7 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.materialize import (
+    materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
 from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
@@ -376,6 +377,87 @@ def test_multi_ped_materialized_overrides_are_yaml_safe() -> None:
     loaded = yaml.safe_load(dumped)
     assert loaded["single_pedestrians"][0]["id"] == "stopper"
     assert loaded["single_pedestrians"][0]["start_delay_s"] == 0.0
+
+
+def test_multi_ped_config_materializes_scenario_payload_with_template_merge() -> None:
+    """Multi-ped configs should produce scenario-loader-ready manifest payloads."""
+    config = MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=41,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="left_blocker",
+                start=Pose2D(1.0, 2.0),
+                goal=Pose2D(5.0, 2.0),
+                spawn_time_s=0.5,
+                speed_mps=1.1,
+            ),
+            MultiPedCandidateSpec(
+                id="right_blocker",
+                start=Pose2D(1.0, 3.0),
+                goal=Pose2D(5.0, 3.0),
+                spawn_time_s=0.75,
+                speed_mps=1.2,
+            ),
+        ],
+    )
+    template = {
+        "scenarios": [
+            {
+                "name": "template",
+                "map_id": "classic_cross_trap",
+                "simulation_config": {"max_episode_steps": 30, "ped_density": 0.0},
+                "metadata": {"archetype": "test"},
+                "single_pedestrians": [
+                    {"id": "left_blocker", "role": "wait", "note": "template note"}
+                ],
+            }
+        ]
+    }
+
+    payload = materialize_multi_ped_scenario_payload(config, template)
+
+    scenario = payload["scenarios"][0]
+    assert scenario["name"] == "template_multi_ped_adversarial_0041"
+    assert scenario["seeds"] == [41]
+    assert scenario["simulation_config"]["route_spawn_seed"] == 41
+    assert scenario["metadata"]["archetype"] == "test"
+    assert scenario["metadata"]["adversarial_multi_ped"]["family"] == "group_squeeze"
+    assert scenario["single_pedestrians"][0]["id"] == "left_blocker"
+    assert scenario["single_pedestrians"][0]["role"] == "wait"
+    assert scenario["single_pedestrians"][0]["start"] == [1.0, 2.0]
+    assert scenario["single_pedestrians"][0]["note"].startswith("adversarial-multi-ped.v1")
+    assert scenario["single_pedestrians"][1]["id"] == "right_blocker"
+
+
+def test_multi_ped_materialized_scenario_payload_is_yaml_safe() -> None:
+    """Scenario payload helper should emit plain YAML-safe primitives."""
+    config = MultiPedAdversarialConfig(
+        family="late_stop",
+        scenario_seed=7,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="stopper",
+                start=Pose2D(0.0, 0.0),
+                goal=Pose2D(1.0, 0.0),
+                speed_mps=0.8,
+            )
+        ],
+    )
+
+    dumped = yaml.safe_dump(
+        materialize_multi_ped_scenario_payload(
+            config,
+            {"scenarios": [{"name": "template", "map_id": "classic_cross_trap"}]},
+        ),
+        sort_keys=False,
+    )
+
+    loaded = yaml.safe_load(dumped)
+    assert loaded["scenarios"][0]["single_pedestrians"][0]["id"] == "stopper"
+    assert loaded["scenarios"][0]["metadata"]["adversarial_multi_ped"]["schema_version"] == (
+        "adversarial-multi-ped.v1"
+    )
 
 
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:

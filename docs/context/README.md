@@ -175,6 +175,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)
   records the pure-data materializer from `adversarial-multi-ped.v1` configs to scenario-loader
   `single_pedestrians` override dictionaries, stacked on the issue #923 schema PR.
+- [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
+  adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs,
+  stacked on the issue #936 override materializer.
 - [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 

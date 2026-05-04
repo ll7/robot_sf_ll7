@@ -49,11 +49,7 @@ def test_campus_lake_obstacle_is_authored_as_valid_polygon() -> None:
     )
     converter = SvgMapConverter(str(svg_fixture))
     lake_path = _get_path_by_id(converter, "path3")
-    vertices = list(lake_path.coordinates)
-    if vertices[0] != vertices[-1]:
-        vertices.append(vertices[0])
-
-    polygon = Polygon(vertices)
+    polygon = Polygon(lake_path.coordinates)
 
     assert polygon.is_valid
     assert polygon.area > 0.0

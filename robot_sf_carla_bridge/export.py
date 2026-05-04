@@ -36,6 +36,27 @@ class Pose2D:
 
 
 @dataclass(frozen=True)
+class Waypoint2D:
+    """Pedestrian-route waypoint matching the ``waypoint2d`` schema (x, y, optional t_s)."""
+
+    x: float
+    y: float
+    t_s: float | None = None
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the schema payload for this waypoint.
+
+        Returns:
+            JSON-ready waypoint dictionary.
+        """
+
+        payload: dict[str, float] = {"x": float(self.x), "y": float(self.y)}
+        if self.t_s is not None:
+            payload["t_s"] = float(self.t_s)
+        return payload
+
+
+@dataclass(frozen=True)
 class CertificateRef:
     """Reference to the scenario certification input used for export."""
 
@@ -113,7 +134,7 @@ class PedestrianReplaySpec:
 
     ped_id: str
     start: Pose2D
-    route: list[Pose2D]
+    route: list[Waypoint2D]
     timing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:

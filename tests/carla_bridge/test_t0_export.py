@@ -119,6 +119,7 @@ def test_build_export_payload_from_typed_sections_validates() -> None:
         RobotReplaySpec,
         ScenarioReplayRef,
         SimulationSpec,
+        Waypoint2D,
         build_export_payload,
         validate_export_payload,
     )
@@ -140,7 +141,7 @@ def test_build_export_payload_from_typed_sections_validates() -> None:
             PedestrianReplaySpec(
                 ped_id="ped_0",
                 start=Pose2D(2.0, -1.0, 1.57),
-                route=[Pose2D(2.0, 1.0)],
+                route=[Waypoint2D(2.0, 1.0)],
                 timing={"start_delay_s": 0.0},
             )
         ],
@@ -168,6 +169,7 @@ def test_builder_output_round_trip_writes_stable_json(tmp_path) -> None:
         RobotReplaySpec,
         ScenarioReplayRef,
         SimulationSpec,
+        Waypoint2D,
         build_export_payload,
         write_export_payload,
     )
@@ -189,7 +191,7 @@ def test_builder_output_round_trip_writes_stable_json(tmp_path) -> None:
             PedestrianReplaySpec(
                 ped_id="ped_0",
                 start=Pose2D(2.0, -1.0),
-                route=[Pose2D(2.0, 1.0)],
+                route=[Waypoint2D(2.0, 1.0)],
             )
         ],
         static_geometry={"obstacles": []},
@@ -217,6 +219,7 @@ def test_builder_invalid_radius_fails_schema_validation() -> None:
         RobotReplaySpec,
         ScenarioReplayRef,
         SimulationSpec,
+        Waypoint2D,
         build_export_payload,
     )
 
@@ -238,7 +241,7 @@ def test_builder_invalid_radius_fails_schema_validation() -> None:
                 PedestrianReplaySpec(
                     ped_id="ped_0",
                     start=Pose2D(2.0, -1.0),
-                    route=[Pose2D(2.0, 1.0)],
+                    route=[Waypoint2D(2.0, 1.0)],
                 )
             ],
             static_geometry={"obstacles": []},

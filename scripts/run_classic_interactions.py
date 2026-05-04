@@ -15,6 +15,7 @@ Outputs:
     output/benchmarks/classic_interactions/episodes.jsonl.manifest.json (resume manifest)
 
 Optional flags:
+    --scenario-matrix <path>      Scenario matrix YAML (default: classic interactions)
     --algo <name>                 Baseline algorithm (default: simple_policy)
     --algo-config <path>          YAML config for the algorithm
     --output <path>               Override output JSONL path
@@ -29,6 +30,9 @@ Optional flags:
 
 Example:
     uv run python scripts/run_classic_interactions.py --workers 4 --algo social_force
+    uv run python scripts/run_classic_interactions.py \
+        --scenario-matrix configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml \
+        --output output/benchmarks/issue736_station_platform_pack/episodes.jsonl
 """
 
 from __future__ import annotations
@@ -56,13 +60,18 @@ DEFAULT_OUT = get_artifact_category_path("benchmarks") / "classic_interactions/e
 
 
 def parse_args() -> argparse.Namespace:
-    """TODO docstring. Document this function.
-
+    """Parse command-line options for the classic interaction benchmark runner.
 
     Returns:
-        TODO docstring.
+        argparse.Namespace: Parsed scenario, output, planner, and execution options.
     """
     parser = argparse.ArgumentParser(description="Run classic interaction scenarios")
+    parser.add_argument(
+        "--scenario-matrix",
+        dest="scenario_matrix",
+        default=str(SCENARIO_MATRIX),
+        help="Scenario matrix YAML path (defaults to configs/scenarios/classic_interactions.yaml)",
+    )
     parser.add_argument("--algo", default="simple_policy", help="Baseline algorithm name")
     parser.add_argument(
         "--algo-config",
@@ -110,11 +119,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run the selected scenario matrix and write JSONL plus summary artifacts.
 
     Returns:
-        TODO docstring.
+        int: Process exit status code.
     """
     args = parse_args()
 
@@ -125,10 +133,11 @@ def main() -> int:
     out_path = resolve_artifact_path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Running classic interaction scenarios: {}", SCENARIO_MATRIX)
+    scenario_matrix = Path(args.scenario_matrix)
+    logger.info("Running classic interaction scenarios: {}", scenario_matrix)
 
     summary = run_batch(
-        SCENARIO_MATRIX,
+        scenario_matrix,
         out_path=out_path,
         schema_path=SCHEMA_PATH,
         algo=args.algo,

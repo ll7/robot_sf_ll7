@@ -12,6 +12,10 @@ from robot_sf_carla_bridge.export import (
 )
 
 
+def _has_parent_reference(path_value: str) -> bool:
+    return any(part == ".." for part in Path(path_value).parts)
+
+
 def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     """Export a scenario manifest to local CARLA T0 neutral JSON files.
 
@@ -34,6 +38,13 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
         help="Certificate generator id recorded in the export payload provenance.",
     )
     args = parser.parse_args(argv)
+
+    if not args.scenario_file or _has_parent_reference(args.scenario_file):
+        sys.stderr.write("Error: Invalid scenario file path.\n")
+        return 1
+    if not args.output_dir or _has_parent_reference(args.output_dir):
+        sys.stderr.write("Error: Invalid output directory path.\n")
+        return 1
 
     scenario_file = Path(args.scenario_file)
     output_dir = Path(args.output_dir)

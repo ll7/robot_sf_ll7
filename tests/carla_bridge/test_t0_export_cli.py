@@ -52,3 +52,45 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     }
     assert calls["write"]["target_dir"] == output_dir
     assert "manifest.json" in capsys.readouterr().out
+
+
+def test_export_t0_scenarios_main_rejects_parent_relative_paths(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """CLI main should fail fast on parent-relative file arguments."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+
+    build_called = False
+    write_called = False
+
+    def fake_build_records(path, *, provenance):
+        nonlocal build_called
+        build_called = True
+        return []
+
+    def fake_write_records(records, target_dir):
+        nonlocal write_called
+        write_called = True
+        return {"schema_version": "carla-replay-export-manifest.v1", "exports": []}
+
+    monkeypatch.setattr(cli_module, "build_export_payloads_from_scenario_file", fake_build_records)
+    monkeypatch.setattr(cli_module, "write_export_records", fake_write_records)
+
+    exit_code = export_t0_scenarios_main(
+        [
+            "--scenario-file",
+            "../unsafe.yaml",
+            "--output-dir",
+            str(tmp_path / "exports"),
+            "--robot-sf-commit",
+            "abc123",
+        ]
+    )
+
+    assert exit_code == 1
+    assert not build_called
+    assert not write_called
+    assert "Invalid scenario file path" in capsys.readouterr().err

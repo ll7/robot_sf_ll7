@@ -302,7 +302,7 @@ def build_export_payload_from_scenario_entry(
         certificate=certificate,
         scenario_id=_scenario_identifier(scenario),
         source_config=path,
-        map_id=str(getattr(config, "map_id", None) or map_id),
+        map_id=map_id,
         robot_radius_m=float(config.robot_config.radius),
         robot_kinematics=_robot_kinematics_payload(config.robot_config),
         dt_s=float(config.sim_config.time_per_step_in_secs),
@@ -372,7 +372,8 @@ def _certificate_payload_for_scenario_entry(
 def _single_loaded_map(config: Any) -> tuple[str, Any]:
     """Return the selected loaded map from a Robot-SF simulation config."""
 
-    map_defs = getattr(getattr(config, "map_pool", None), "map_defs", None)
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None) if map_pool is not None else None
     if not map_defs:
         raise ValueError("Scenario entry did not load a map definition")
     selected = getattr(config, "map_id", None)

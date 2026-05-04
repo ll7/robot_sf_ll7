@@ -313,6 +313,33 @@ def build_export_payload_from_scenario_entry(
     )
 
 
+def build_export_payloads_from_scenario_file(
+    scenario_path: str | Path,
+    *,
+    provenance: Mapping[str, Any],
+    route_index: int = 0,
+    trajectory_fields: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Build T0 neutral export payload records for every scenario in a manifest file.
+
+    Returns:
+        JSON-safe records with ``scenario_id`` and validated export ``payload`` fields.
+    """
+
+    path = Path(scenario_path)
+    records: list[dict[str, Any]] = []
+    for scenario in _load_scenario_entries(path):
+        payload = build_export_payload_from_scenario_entry(
+            scenario,
+            scenario_path=path,
+            provenance=provenance,
+            route_index=route_index,
+            trajectory_fields=trajectory_fields,
+        )
+        records.append({"scenario_id": _scenario_identifier(scenario), "payload": payload})
+    return records
+
+
 def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Path:
     """Validate and write a T0 export payload as stable UTF-8 JSON.
 
@@ -353,6 +380,18 @@ def _build_robot_config_for_scenario_entry(scenario: Mapping[str, Any], scenario
     from robot_sf.training.scenario_loader import build_robot_config_from_scenario  # noqa: PLC0415
 
     return build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def _load_scenario_entries(scenario_path: Path) -> list[Mapping[str, Any]]:
+    """Load scenario entries via the existing scenario loader.
+
+    Returns:
+        Scenario-loader entries in manifest order.
+    """
+
+    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+
+    return list(load_scenarios(scenario_path))
 
 
 def _certificate_payload_for_scenario_entry(

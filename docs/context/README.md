@@ -187,6 +187,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #946 CARLA T0 Scenario Entry Export](issue_946_carla_t0_scenario_entry_export.md)
   exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload,
   stacked on the issue #942 map-definition adapter.
+- [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
+  batch-loads scenario manifests into ordered neutral export payload records, stacked on the issue
+  #946 scenario-entry helper.
 
 ## DreamerV3 Notes
 

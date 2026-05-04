@@ -4,7 +4,11 @@ The package must remain usable without CARLA installed. Runtime replay integrati
 the availability helpers before importing or invoking CARLA-specific APIs.
 """
 
-from robot_sf_carla_bridge.availability import check_carla_availability
+from robot_sf_carla_bridge.availability import (
+    CarlaUnavailableError,
+    check_carla_availability,
+    require_carla,
+)
 from robot_sf_carla_bridge.export import (
     EXPORT_MANIFEST_SCHEMA_VERSION,
     EXPORT_SCHEMA_VERSION,
@@ -31,6 +35,7 @@ from robot_sf_carla_bridge.export import (
 __all__ = [
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
+    "CarlaUnavailableError",
     "CertificateRef",
     "PedestrianReplaySpec",
     "Pose2D",
@@ -46,6 +51,7 @@ __all__ = [
     "load_export_schema",
     "read_export_manifest",
     "read_export_payload",
+    "require_carla",
     "resolve_export_manifest_payload_paths",
     "validate_export_payload",
     "write_export_payload",

@@ -36,51 +36,22 @@ def validate_export_payload(payload: dict[str, Any]) -> None:
     jsonschema.validate(instance=payload, schema=load_export_schema())
 
 
-def _coerce_payload(value: Any) -> Any:
-    """Iteratively coerce non-JSON-native values (Path, numpy types) for serialization."""
+class _PayloadEncoder(json.JSONEncoder):
+    """JSON encoder that converts Path and numpy values to native types."""
 
-    try:
-        import numpy as np  # local import keeps numpy optional for the bridge package
-    except ImportError:  # pragma: no cover - numpy is a hard dep elsewhere
-        np = None  # type: ignore[assignment]
-
-    def _coerce_scalar(item: Any) -> Any:
-        if isinstance(item, Path):
-            return item.as_posix()
-        if np is not None:
-            if isinstance(item, np.ndarray):
-                return item.tolist()
-            if isinstance(item, np.generic):
-                return item.item()
-        return item
-
-    if isinstance(value, dict):
-        root: dict[str, Any] = {}
-        stack: list[tuple[Any, Any]] = [(root, value)]
-        while stack:
-            target, source = stack.pop()
-            for key, child in source.items():
-                str_key = key if isinstance(key, str) else str(key)
-                if isinstance(child, dict):
-                    nested: dict[str, Any] = {}
-                    target[str_key] = nested
-                    stack.append((nested, child))
-                elif isinstance(child, (list, tuple)):
-                    target[str_key] = [
-                        _coerce_payload(item)
-                        if isinstance(item, (dict, list, tuple))
-                        else _coerce_scalar(item)
-                        for item in child
-                    ]
-                else:
-                    target[str_key] = _coerce_scalar(child)
-        return root
-    if isinstance(value, (list, tuple)):
-        return [
-            _coerce_payload(item) if isinstance(item, (dict, list, tuple)) else _coerce_scalar(item)
-            for item in value
-        ]
-    return _coerce_scalar(value)
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Path):
+            return o.as_posix()
+        # numpy is a hard dep of robot_sf, but the bridge package itself is
+        # importable without numpy; resolve the conversion lazily so the
+        # export module stays usable in numpy-less environments.
+        tolist = getattr(o, "tolist", None)
+        if callable(tolist):
+            return tolist()
+        item = getattr(o, "item", None)
+        if callable(item):
+            return item()
+        return super().default(o)
 
 
 def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Path:
@@ -93,6 +64,6 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
     validate_export_payload(payload)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    coerced = _coerce_payload(payload)
-    path.write_text(json.dumps(coerced, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(payload, indent=2, sort_keys=True, cls=_PayloadEncoder)
+    path.write_text(serialized + "\n", encoding="utf-8")
     return path

@@ -215,6 +215,8 @@ why a change was made rather than a full issue execution transcript.
   adds deterministic machine-readable output to the CARLA-free batch validation CLI.
 - [Issue #968 CARLA Runtime Availability Guard](issue_968_carla_runtime_availability_guard.md)
   adds a strict optional-CARLA import guard for future replay entry points.
+- [Issue #970 CARLA Availability Check CLI](issue_970_carla_availability_check_cli.md)
+  exposes CARLA bridge availability metadata through a CARLA-free project script.
 
 ## DreamerV3 Notes
 

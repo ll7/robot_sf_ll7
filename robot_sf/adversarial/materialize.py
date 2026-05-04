@@ -7,12 +7,6 @@ from typing import Any
 from robot_sf.adversarial.config import MultiPedAdversarialConfig, MultiPedCandidateSpec
 
 
-def _point_payload(pose: Any) -> list[float]:
-    """Return a scenario-loader point payload from a pose-like object."""
-
-    return [float(pose.x), float(pose.y)]
-
-
 def _metadata_payload(
     config: MultiPedAdversarialConfig,
     pedestrian: MultiPedCandidateSpec,
@@ -46,8 +40,8 @@ def materialize_multi_ped_single_pedestrian_overrides(
         overrides.append(
             {
                 "id": pedestrian.id,
-                "start": _point_payload(pedestrian.start),
-                "goal": _point_payload(pedestrian.goal),
+                "start": pedestrian.start.as_waypoint(),
+                "goal": pedestrian.goal.as_waypoint(),
                 "speed_m_s": float(pedestrian.speed_mps),
                 "start_delay_s": float(pedestrian.spawn_time_s) + float(pedestrian.delay_s),
                 "note": (

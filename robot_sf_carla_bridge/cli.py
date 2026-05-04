@@ -8,8 +8,9 @@ from pathlib import Path
 
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
-    load_export_manifest_payloads,
     read_export_manifest,
+    read_export_payload,
+    resolve_export_manifest_payload_paths,
     write_export_records,
 )
 
@@ -75,8 +76,10 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
-    records = load_export_manifest_payloads(manifest_path)
-    payload_count = len(records)
+    payload_count = 0
+    for entry in resolve_export_manifest_payload_paths(manifest_path):
+        read_export_payload(entry["path"])
+        payload_count += 1
     noun = "payload" if payload_count == 1 else "payloads"
     sys.stdout.write(f"{manifest_path.as_posix()}: {payload_count} {noun}\n")
     return 0

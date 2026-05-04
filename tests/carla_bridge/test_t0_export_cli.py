@@ -91,27 +91,33 @@ def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     monkeypatch,
     capsys,
 ) -> None:
-    """Batch validator CLI should load every manifest payload and report the count."""
+    """Batch validator CLI should validate every manifest payload and report the count."""
     import robot_sf_carla_bridge.cli as cli_module
     from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
 
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")
-    calls = {}
+    calls = {"resolved": [], "validated": []}
 
-    def fake_load_payloads(path):
+    def fake_resolve_payloads(path):
         calls["path"] = Path(path)
         return [
-            {"scenario_id": "first", "path": tmp_path / "first.json", "payload": {}},
-            {"scenario_id": "second", "path": tmp_path / "second.json", "payload": {}},
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
         ]
 
-    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
 
     exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path)])
 
     assert exit_code == 0
     assert calls["path"] == manifest_path
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
     assert "2 payloads" in capsys.readouterr().out
 
 

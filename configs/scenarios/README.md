@@ -142,3 +142,6 @@ uv run python scripts/tools/policy_analysis_run.py \
   real-world constrained intersection flows.
 - `archetypes/classic_realworld_bottleneck.yaml` adds a narrow-hallway bottleneck
   derived from a real-world interaction layout to improve constrained-flow coverage.
+- `sets/station_platform_candidate_pack_issue736.yaml` is an exploratory station-platform
+  variant pack. Keep it out of the default classic matrix until a benchmark run shows
+  distinct value beyond corridor, bottleneck, doorway, and group-crossing controls.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass
 from importlib.resources import files
@@ -46,6 +47,27 @@ class Pose2D:
         payload: dict[str, float | None] = {"x": float(self.x), "y": float(self.y)}
         if self.theta is not None:
             payload["theta"] = float(self.theta)
+        return payload
+
+
+@dataclass(frozen=True)
+class Waypoint2D:
+    """Pedestrian-route waypoint matching the ``waypoint2d`` schema (x, y, optional t_s)."""
+
+    x: float
+    y: float
+    t_s: float | None = None
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the schema payload for this waypoint.
+
+        Returns:
+            JSON-ready waypoint dictionary.
+        """
+
+        payload: dict[str, float] = {"x": float(self.x), "y": float(self.y)}
+        if self.t_s is not None:
+            payload["t_s"] = float(self.t_s)
         return payload
 
 
@@ -127,7 +149,7 @@ class PedestrianReplaySpec:
 
     ped_id: str
     start: Pose2D
-    route: list[Pose2D]
+    route: list[Waypoint2D]
     timing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -169,6 +191,7 @@ class SimulationSpec:
         }
 
 
+@functools.lru_cache(maxsize=1)
 def load_export_schema() -> dict[str, Any]:
     """Load the versioned T0 neutral export JSON schema.
 
@@ -275,6 +298,35 @@ def build_export_payload_from_map_definition(  # noqa: PLR0913
     )
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively convert common Python objects to JSON-safe values.
+
+    Returns:
+        JSON-safe value composed only of native JSON-compatible containers and scalars.
+    """
+
+    if isinstance(value, Path):
+        return value.as_posix()
+
+    # Resolve numpy-like objects lazily so this module stays importable even if
+    # callers provide array/scalar wrappers without importing numpy here.
+    tolist = getattr(value, "tolist", None)
+    if callable(tolist):
+        return _json_safe(tolist())
+
+    item = getattr(value, "item", None)
+    if callable(item):
+        return _json_safe(item())
+
+    if isinstance(value, dict):
+        return {str(key): _json_safe(nested) for key, nested in value.items()}
+
+    if isinstance(value, list | tuple):
+        return [_json_safe(nested) for nested in value]
+
+    return value
+
+
 def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Path:
     """Validate and write a T0 export payload as stable UTF-8 JSON.
 
@@ -282,15 +334,20 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
         The output path that was written.
     """
 
-    validate_export_payload(payload)
+    normalized_payload = cast("dict[str, Any]", _json_safe(payload))
+    validate_export_payload(normalized_payload)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(normalized_payload, indent=2, sort_keys=True)
+    path.write_text(serialized + "\n", encoding="utf-8")
     return path
 
 
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
+
+    Streams the file via ``json.load`` instead of loading its full text first,
+    so very large exports do not need to be held in memory twice.
 
     Returns:
         Schema-valid export payload dictionary.
@@ -300,7 +357,8 @@ def read_export_payload(input_path: str | Path) -> dict[str, Any]:
         jsonschema.ValidationError: if the parsed payload does not satisfy the export schema.
     """
 
-    payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    with Path(input_path).open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
     validate_export_payload(payload)
     return cast("dict[str, Any]", payload)
 

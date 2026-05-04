@@ -46,7 +46,7 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
             ("--output-dir", args.output_dir),
             ("--robot-sf-commit", args.robot_sf_commit),
         )
-        if value is None
+        if value is None or not str(value).strip()
     ]
     if missing_args:
         parser.error(f"the following arguments are required: {', '.join(missing_args)}")

@@ -312,7 +312,9 @@ def _certificate_ref_from_payload(certificate: Mapping[str, Any]) -> Certificate
     if eligibility == "excluded":
         raise ValueError("Cannot export CARLA T0 payload for excluded scenario certificate")
 
-    status = str(certificate.get("status") or certificate.get("classification") or "").strip()
+    status = (
+        str(certificate.get("status") or certificate.get("classification") or "").strip().lower()
+    )
     if status not in _EXPORTABLE_CERT_STATUSES:
         raise ValueError(f"Cannot export CARLA T0 payload for certificate status '{status}'")
     return CertificateRef(
@@ -386,21 +388,34 @@ def _static_geometry_from_map_definition(map_def: Any) -> dict[str, Any]:
     }
 
 
+def _obstacle_vertices(points: Any) -> list[list[float]]:
+    """Return cleaned 2D vertex list; drops a trailing duplicate closing point."""
+
+    coords = [list(_point_tuple(point)) for point in list(points)]
+    if len(coords) >= 2 and coords[0] == coords[-1]:
+        coords = coords[:-1]
+    return coords
+
+
 def _obstacles_from_map_definition(map_def: Any) -> list[dict[str, Any]]:
     obstacles: list[dict[str, Any]] = []
     for index, obstacle in enumerate(getattr(map_def, "obstacles", []) or []):
         polygons = getattr(obstacle, "iter_polygons", lambda: [])()
         if polygons:
             for poly_index, polygon in enumerate(polygons):
-                coords = [list(_point_tuple(point)) for point in list(polygon.exterior.coords)[:-1]]
                 obstacles.append(
                     {
                         "id": f"obstacle_{index}_{poly_index}",
                         "type": "polygon",
-                        "vertices": coords,
+                        "vertices": _obstacle_vertices(polygon.exterior.coords),
                     }
                 )
             continue
-        vertices = [list(_point_tuple(point)) for point in getattr(obstacle, "vertices", [])]
-        obstacles.append({"id": f"obstacle_{index}", "type": "polygon", "vertices": vertices})
+        obstacles.append(
+            {
+                "id": f"obstacle_{index}",
+                "type": "polygon",
+                "vertices": _obstacle_vertices(getattr(obstacle, "vertices", [])),
+            }
+        )
     return obstacles

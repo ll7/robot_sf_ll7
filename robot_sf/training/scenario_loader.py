@@ -154,7 +154,13 @@ def _load_scenarios_recursive(
         )
         if isinstance(data, Mapping):
             combined = _apply_scenario_selection(combined, data=data, source=resolved)
-            combined = _apply_scenario_overrides(combined, data=data, source=resolved)
+            combined = _apply_scenario_overrides(
+                combined,
+                data=data,
+                source=resolved,
+                root=root,
+                map_search_paths=effective_search_paths,
+            )
         if not combined:
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
@@ -309,6 +315,8 @@ def _apply_scenario_overrides(
     *,
     data: Mapping[str, Any],
     source: Path,
+    root: Path,
+    map_search_paths: list[Path],
 ) -> list[Mapping[str, Any]]:
     """Apply manifest-wide nested overrides after include expansion.
 
@@ -319,7 +327,12 @@ def _apply_scenario_overrides(
     overrides = _resolve_scenario_overrides(data, source=source)
     if not overrides:
         return scenarios
-    return [_deep_merge_mapping(scenario, overrides) for scenario in scenarios]
+    return _normalize_scenarios(
+        [_deep_merge_mapping(scenario, overrides) for scenario in scenarios],
+        source=source,
+        root=root,
+        map_search_paths=map_search_paths,
+    )
 
 
 def _scenario_identifier(

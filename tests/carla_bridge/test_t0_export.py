@@ -422,6 +422,57 @@ def test_build_export_payload_from_scenario_entry_rejects_excluded_certificate(m
         )
 
 
+def test_build_export_payloads_from_scenario_file_preserves_manifest_order(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Scenario files should export each loaded entry in deterministic order."""
+    import robot_sf_carla_bridge.export as export_module
+    from robot_sf_carla_bridge import build_export_payloads_from_scenario_file
+
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "scenarios:\n"
+        "  - name: first\n"
+        "    map_id: unit_map\n"
+        "  - name: second\n"
+        "    map_id: unit_map\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        export_module,
+        "_load_scenario_entries",
+        lambda path: [
+            {"name": "first", "map_id": "unit_map"},
+            {"name": "second", "map_id": "unit_map"},
+        ],
+    )
+
+    def fake_entry_export(scenario, *, scenario_path, provenance, **kwargs):
+        payload = _minimal_payload()
+        payload["scenario"]["id"] = scenario["name"]
+        payload["scenario"]["source_config"] = Path(scenario_path).as_posix()
+        payload["provenance"] = dict(provenance)
+        return payload
+
+    monkeypatch.setattr(
+        export_module, "build_export_payload_from_scenario_entry", fake_entry_export
+    )
+
+    records = build_export_payloads_from_scenario_file(
+        scenario_path,
+        provenance={
+            "robot_sf_commit": "abc123",
+            "created_by": "unit-test",
+            "certificate_generator": "scenario_cert.v1",
+        },
+    )
+
+    assert [record["scenario_id"] for record in records] == ["first", "second"]
+    assert records[0]["payload"]["scenario"]["source_config"] == scenario_path.as_posix()
+    assert records[1]["payload"]["provenance"]["created_by"] == "unit-test"
+
+
 def test_read_export_payload_rejects_malformed_json(tmp_path) -> None:
     """Malformed JSON files should surface a JSONDecodeError, not a schema error."""
     from robot_sf_carla_bridge import read_export_payload

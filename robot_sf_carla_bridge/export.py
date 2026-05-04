@@ -298,6 +298,44 @@ def build_export_payload_from_map_definition(  # noqa: PLR0913
     )
 
 
+def build_export_payload_from_scenario_entry(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: str | Path,
+    provenance: Mapping[str, Any],
+    route_index: int = 0,
+    trajectory_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a T0 neutral export payload from one scenario-loader entry.
+
+    The helper uses the existing Robot-SF scenario loader and ``scenario_cert.v1`` certification
+    path, then delegates geometry serialization to
+    :func:`build_export_payload_from_map_definition`.
+
+    Returns:
+        Schema-valid export payload dictionary.
+    """
+
+    path = Path(scenario_path)
+    config = _build_robot_config_for_scenario_entry(scenario, path)
+    map_id, map_def = _single_loaded_map(config)
+    certificate = _certificate_payload_for_scenario_entry(scenario, path)
+    return build_export_payload_from_map_definition(
+        map_def=map_def,
+        certificate=certificate,
+        scenario_id=_scenario_identifier(scenario),
+        source_config=path,
+        map_id=map_id,
+        robot_radius_m=float(config.robot_config.radius),
+        robot_kinematics=_robot_kinematics_payload(config.robot_config),
+        dt_s=float(config.sim_config.time_per_step_in_secs),
+        horizon_s=float(config.sim_config.sim_time_in_secs),
+        provenance=provenance,
+        route_index=route_index,
+        trajectory_fields=trajectory_fields,
+    )
+
+
 def _json_safe(value: Any) -> Any:
     """Recursively convert common Python objects to JSON-safe values.
 
@@ -361,6 +399,81 @@ def read_export_payload(input_path: str | Path) -> dict[str, Any]:
         payload = json.load(handle)
     validate_export_payload(payload)
     return cast("dict[str, Any]", payload)
+
+
+def _build_robot_config_for_scenario_entry(scenario: Mapping[str, Any], scenario_path: Path) -> Any:
+    """Build Robot-SF runtime config for a scenario entry via the existing loader.
+
+    Returns:
+        Robot-SF simulation config for the supplied scenario entry.
+    """
+
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario  # noqa: PLC0415
+
+    return build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def _certificate_payload_for_scenario_entry(
+    scenario: Mapping[str, Any],
+    scenario_path: Path,
+) -> dict[str, Any]:
+    """Return JSON-safe ``scenario_cert.v1`` payload for one scenario entry."""
+
+    from robot_sf.scenario_certification import (  # noqa: PLC0415
+        certificate_to_dict,
+        certify_scenario,
+    )
+
+    return certificate_to_dict(certify_scenario(scenario, scenario_path=scenario_path))
+
+
+def _single_loaded_map(config: Any) -> tuple[str, Any]:
+    """Return the selected loaded map from a Robot-SF simulation config."""
+
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None) if map_pool is not None else None
+    if not map_defs:
+        raise ValueError("Scenario entry did not load a map definition")
+    selected = getattr(config, "map_id", None)
+    if selected in map_defs:
+        return str(selected), map_defs[selected]
+    map_id, map_def = next(iter(map_defs.items()))
+    return str(map_id), map_def
+
+
+def _scenario_identifier(scenario: Mapping[str, Any]) -> str:
+    """Return the scenario id field used by scenario-loader manifests."""
+
+    for key in ("name", "scenario_id", "id"):
+        value = scenario.get(key)
+        if value is not None and str(value).strip():
+            return str(value)
+    raise ValueError("Scenario entry must define name, scenario_id, or id")
+
+
+def _robot_kinematics_payload(robot_config: Any) -> dict[str, Any]:
+    """Return neutral kinematics metadata for supported Robot-SF robot settings."""
+
+    if hasattr(robot_config, "max_linear_speed"):
+        return {
+            "model": "differential_drive",
+            "max_speed_mps": float(robot_config.max_linear_speed),
+            "max_angular_speed_radps": float(robot_config.max_angular_speed),
+        }
+    if hasattr(robot_config, "max_velocity"):
+        return {
+            "model": "bicycle_drive",
+            "max_speed_mps": float(robot_config.max_velocity),
+            "max_steer_rad": float(robot_config.max_steer),
+        }
+    if hasattr(robot_config, "max_speed"):
+        return {
+            "model": "holonomic",
+            "max_speed_mps": float(robot_config.max_speed),
+            "max_angular_speed_radps": float(robot_config.max_angular_speed),
+            "command_mode": str(robot_config.command_mode),
+        }
+    return {"model": type(robot_config).__name__}
 
 
 def _certificate_ref_from_payload(certificate: Mapping[str, Any]) -> CertificateRef:

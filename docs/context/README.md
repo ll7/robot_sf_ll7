@@ -201,6 +201,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #942 CARLA T0 MapDefinition Adapter](issue_942_carla_t0_map_definition_adapter.md)
   converts already-certified Robot-SF `MapDefinition` objects into schema-valid neutral export
   payloads, stacked on the issue #940 read helper.
+- [Issue #946 CARLA T0 Scenario Entry Export](issue_946_carla_t0_scenario_entry_export.md)
+  exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload,
+  stacked on the issue #942 map-definition adapter.
 - [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.

@@ -736,6 +736,39 @@ def test_missing_carla_availability_validates_against_schema(monkeypatch) -> Non
     jsonschema.validate(check_carla_availability(), load_availability_schema())
 
 
+def test_schema_catalog_lists_all_carla_bridge_contracts() -> None:
+    """Schema catalog should expose every CARLA bridge schema contract."""
+    from robot_sf_carla_bridge import list_carla_bridge_schema_catalog
+
+    catalog = list_carla_bridge_schema_catalog()
+
+    assert catalog == {
+        "schema_version": "carla-bridge-schema-catalog.v1",
+        "schemas": [
+            {
+                "name": "availability",
+                "loader": "load_availability_schema",
+                "schema_version": "carla-availability.v1",
+            },
+            {
+                "name": "t0_export_payload",
+                "loader": "load_export_schema",
+                "schema_version": "carla-replay-export.v1",
+            },
+            {
+                "name": "t0_export_manifest",
+                "loader": "load_export_manifest_schema",
+                "schema_version": "carla-replay-export-manifest.v1",
+            },
+            {
+                "name": "t0_batch_validation_summary",
+                "loader": "load_batch_validation_summary_schema",
+                "schema_version": "carla-replay-export-batch-validation-summary.v1",
+            },
+        ],
+    }
+
+
 def test_importable_carla_reports_available(monkeypatch) -> None:
     """Importable CARLA should report a boolean available status."""
     from robot_sf_carla_bridge.availability import check_carla_availability

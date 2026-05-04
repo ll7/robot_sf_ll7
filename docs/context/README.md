@@ -241,6 +241,8 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #992 CARLA T0 Batch Summary Schema CLI](issue_992_carla_t0_batch_summary_schema_cli.md)
   exposes the CARLA T0 batch validation summary JSON Schema through
   `robot-sf-validate-carla-t0-batch --schema`.
+- [Issue #994 CARLA Bridge Schema Catalog API](issue_994_carla_schema_catalog_api.md)
+  adds an import-safe catalog for CARLA bridge schema names, versions, and loader helpers.
 
 ## DreamerV3 Notes
 

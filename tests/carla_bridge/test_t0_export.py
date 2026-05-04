@@ -682,10 +682,16 @@ def test_builder_invalid_radius_fails_schema_validation() -> None:
 
 def test_missing_carla_reports_not_available(monkeypatch) -> None:
     """Missing CARLA should be a status object, not an import-time crash."""
+    import importlib.util
+
     from robot_sf_carla_bridge.availability import check_carla_availability
 
+    real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
-        "importlib.util.find_spec", lambda name: None if name == "carla" else object()
+        "importlib.util.find_spec",
+        lambda name, *args, **kwargs: (
+            None if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
     )
 
     status = check_carla_availability()
@@ -697,10 +703,16 @@ def test_missing_carla_reports_not_available(monkeypatch) -> None:
 
 def test_importable_carla_reports_available(monkeypatch) -> None:
     """Importable CARLA should report a boolean available status."""
+    import importlib.util
+
     from robot_sf_carla_bridge.availability import check_carla_availability
 
+    real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
-        "importlib.util.find_spec", lambda name: object() if name == "carla" else None
+        "importlib.util.find_spec",
+        lambda name, *args, **kwargs: (
+            object() if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
     )
 
     status = check_carla_availability()

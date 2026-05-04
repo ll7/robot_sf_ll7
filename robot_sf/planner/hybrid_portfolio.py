@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import Any
 
@@ -201,17 +202,21 @@ class HybridPortfolioAdapter:
             "hold_remaining": int(self._hold_remaining),
             "selected_head_counts": dict(self._selected_head_counts),
             "fallback_count": int(self._fallback_count),
-            "last_decision": dict(self._last_decision) if self._last_decision else None,
+            "last_decision": deepcopy(self._last_decision) if self._last_decision else None,
         }
 
     def last_decision(self) -> dict[str, Any] | None:
         """Return the latest planner-head decision for step-level tooling.
 
+        Returns a deep copy so callers can safely store, compare, or mutate the
+        payload without affecting the planner's internal state, even if future
+        decisions include nested structures (e.g. candidate score tables).
+
         Returns:
             Copy of the latest decision payload, or ``None`` before the first step/reset.
         """
 
-        return dict(self._last_decision) if self._last_decision else None
+        return deepcopy(self._last_decision) if self._last_decision else None
 
 
 @dataclass

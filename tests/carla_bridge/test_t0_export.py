@@ -209,7 +209,7 @@ def test_builder_output_round_trip_writes_stable_json(tmp_path) -> None:
     assert loaded == payload
 
 
-def test_read_export_payload_rejects_invalid_json_payload(tmp_path) -> None:
+def test_read_export_payload_rejects_schema_invalid_payload(tmp_path) -> None:
     """Read helper should validate JSON loaded from disk before returning it."""
     from robot_sf_carla_bridge import read_export_payload, write_export_payload
 
@@ -220,6 +220,17 @@ def test_read_export_payload_rejects_invalid_json_payload(tmp_path) -> None:
 
     with pytest.raises(jsonschema.ValidationError, match="fallback"):
         read_export_payload(output_path)
+
+
+def test_read_export_payload_rejects_malformed_json(tmp_path) -> None:
+    """Malformed JSON files should surface a JSONDecodeError, not a schema error."""
+    from robot_sf_carla_bridge import read_export_payload
+
+    bad_path = tmp_path / "malformed_export.json"
+    bad_path.write_text("{not valid json", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        read_export_payload(bad_path)
 
 
 def test_builder_invalid_radius_fails_schema_validation() -> None:

@@ -1439,6 +1439,21 @@ def _resolve_wait_override(
     )
 
 
+def _resolve_start_delay_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> float:
+    """Resolve bounded start-delay dwell overrides for a pedestrian definition.
+
+    Returns:
+        float: Existing or overridden start-delay duration in seconds.
+    """
+    if "start_delay_s" not in entry:
+        return float(ped.start_delay_s)
+    value = entry.get("start_delay_s")
+    return float(value) if value is not None else 0.0
+
+
 def _resolve_note_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -1505,6 +1520,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         trajectory_labels=trajectory_labels,
     )
+    start_delay_s = _resolve_start_delay_override(ped, entry)
     note = _resolve_note_override(ped, entry)
     role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
 
@@ -1515,6 +1531,7 @@ def _apply_single_pedestrian_override(
         trajectory=trajectory,
         speed_m_s=speed,
         wait_at=wait_at,
+        start_delay_s=start_delay_s,
         note=note,
         role=role,
         role_target_id=role_target_id,

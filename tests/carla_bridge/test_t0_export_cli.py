@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 
@@ -113,6 +114,37 @@ def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     assert exit_code == 0
     assert calls["path"] == manifest_path
     assert "2 payloads" in capsys.readouterr().out
+
+
+def test_validate_t0_export_batch_main_prints_json_summary(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator CLI should support deterministic machine-readable output."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    def fake_load_payloads(path):
+        assert Path(path) == manifest_path
+        return [
+            {"scenario_id": "first", "path": tmp_path / "first.json", "payload": {}},
+            {"scenario_id": "second", "path": tmp_path / "second.json", "payload": {}},
+        ]
+
+    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path), "--json"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "manifest": manifest_path.as_posix(),
+        "payload_count": 2,
+        "scenario_ids": ["first", "second"],
+    }
 
 
 def test_export_t0_cli_is_packaged_as_project_script() -> None:

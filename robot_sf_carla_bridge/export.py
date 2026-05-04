@@ -6,7 +6,7 @@ import functools
 import json
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import jsonschema
 
@@ -36,22 +36,33 @@ def validate_export_payload(payload: dict[str, Any]) -> None:
     jsonschema.validate(instance=payload, schema=load_export_schema())
 
 
-class _PayloadEncoder(json.JSONEncoder):
-    """JSON encoder that converts Path and numpy values to native types."""
+def _json_safe(value: Any) -> Any:
+    """Recursively convert common Python objects to JSON-safe values.
 
-    def default(self, o: Any) -> Any:
-        if isinstance(o, Path):
-            return o.as_posix()
-        # numpy is a hard dep of robot_sf, but the bridge package itself is
-        # importable without numpy; resolve the conversion lazily so the
-        # export module stays usable in numpy-less environments.
-        tolist = getattr(o, "tolist", None)
-        if callable(tolist):
-            return tolist()
-        item = getattr(o, "item", None)
-        if callable(item):
-            return item()
-        return super().default(o)
+    Returns:
+        JSON-safe value composed only of native JSON-compatible containers and scalars.
+    """
+
+    if isinstance(value, Path):
+        return value.as_posix()
+
+    # Resolve numpy-like objects lazily so this module stays importable even if
+    # callers provide array/scalar wrappers without importing numpy here.
+    tolist = getattr(value, "tolist", None)
+    if callable(tolist):
+        return _json_safe(tolist())
+
+    item = getattr(value, "item", None)
+    if callable(item):
+        return _json_safe(item())
+
+    if isinstance(value, dict):
+        return {str(key): _json_safe(nested) for key, nested in value.items()}
+
+    if isinstance(value, list | tuple):
+        return [_json_safe(nested) for nested in value]
+
+    return value
 
 
 def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Path:
@@ -61,9 +72,10 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
         The output path that was written.
     """
 
-    validate_export_payload(payload)
+    normalized_payload = cast("dict[str, Any]", _json_safe(payload))
+    validate_export_payload(normalized_payload)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    serialized = json.dumps(payload, indent=2, sort_keys=True, cls=_PayloadEncoder)
+    serialized = json.dumps(normalized_payload, indent=2, sort_keys=True)
     path.write_text(serialized + "\n", encoding="utf-8")
     return path

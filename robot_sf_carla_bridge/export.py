@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 EXPORT_SCHEMA_VERSION = "carla-replay-export.v1"
 _SCHEMA_RESOURCE = "schemas/carla_replay_export.v1.json"
 EXPORT_MANIFEST_SCHEMA_VERSION = "carla-replay-export-manifest.v1"
+_MANIFEST_SCHEMA_RESOURCE = "schemas/carla_replay_export_manifest.v1.json"
 _EXPORTABLE_CERT_STATUSES = {"passed", "valid", "hard_but_solvable", "knife_edge"}
 _DEFAULT_TRAJECTORY_FIELDS = [
     "success",
@@ -179,6 +180,17 @@ def load_export_schema() -> dict[str, Any]:
     """
 
     schema_path = files("robot_sf_carla_bridge").joinpath(_SCHEMA_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+def load_export_manifest_schema() -> dict[str, Any]:
+    """Load the versioned T0 export manifest JSON schema.
+
+    Returns:
+        Parsed JSON schema dictionary.
+    """
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_MANIFEST_SCHEMA_RESOURCE)
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
@@ -421,6 +433,7 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
         path = entry.get("path")
         if not isinstance(path, str) or not path.strip():
             raise ValueError(f"export manifest exports[{index}].path must be a non-empty string")
+    jsonschema.validate(instance=manifest, schema=load_export_manifest_schema())
     return cast("dict[str, Any]", manifest)
 
 

@@ -503,6 +503,32 @@ def test_write_export_records_writes_payloads_and_manifest(tmp_path) -> None:
     assert (tmp_path / "exports" / "manifest.json").exists()
 
 
+def test_export_manifest_validates_against_schema(tmp_path) -> None:
+    """Writer output should satisfy the packaged manifest JSON Schema."""
+    from robot_sf_carla_bridge import load_export_manifest_schema, write_export_records
+
+    manifest = write_export_records(
+        [{"scenario_id": "unit scenario", "payload": _minimal_payload()}],
+        tmp_path / "exports",
+    )
+
+    jsonschema.validate(manifest, load_export_manifest_schema())
+
+
+def test_export_manifest_schema_rejects_malformed_entries() -> None:
+    """Manifest schema should reject malformed batch references."""
+    from robot_sf_carla_bridge import load_export_manifest_schema
+
+    with pytest.raises(jsonschema.ValidationError, match="path"):
+        jsonschema.validate(
+            {
+                "schema_version": "carla-replay-export-manifest.v1",
+                "exports": [{"scenario_id": "unit"}],
+            },
+            load_export_manifest_schema(),
+        )
+
+
 def test_read_export_manifest_round_trips_writer_output(tmp_path) -> None:
     """Manifest reader should validate the writer output without loading payload files."""
     from robot_sf_carla_bridge import read_export_manifest, write_export_records

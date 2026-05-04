@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -183,6 +184,7 @@ def load_export_schema() -> dict[str, Any]:
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
+@cache
 def load_export_manifest_schema() -> dict[str, Any]:
     """Load the versioned T0 export manifest JSON schema.
 

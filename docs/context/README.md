@@ -210,6 +210,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
+- [Issue #952 CARLA T0 Export CLI](issue_952_carla_t0_export_cli.md)
+  adds a CARLA-free command-line wrapper over scenario-file export and deterministic record writing,
+  stacked on the issue #950 record writer.
 - [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.

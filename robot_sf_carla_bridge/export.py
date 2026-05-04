@@ -336,7 +336,7 @@ def build_export_payloads_from_scenario_file(
             route_index=route_index,
             trajectory_fields=trajectory_fields,
         )
-        records.append({"scenario_id": _scenario_identifier(scenario), "payload": payload})
+        records.append({"scenario_id": payload["scenario"]["id"], "payload": payload})
     return records
 
 
@@ -391,7 +391,7 @@ def _load_scenario_entries(scenario_path: Path) -> list[Mapping[str, Any]]:
 
     from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
 
-    return list(load_scenarios(scenario_path))
+    return load_scenarios(scenario_path)
 
 
 def _certificate_payload_for_scenario_entry(

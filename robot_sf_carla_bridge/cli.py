@@ -44,6 +44,9 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
 def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
     """Validate a local CARLA T0 export manifest.
 
+    Args:
+        argv: Command-line arguments to parse; ``None`` reads from ``sys.argv``.
+
     Returns:
         Process-style exit code.
     """
@@ -52,10 +55,11 @@ def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
     args = parser.parse_args(argv)
 
-    manifest = read_export_manifest(Path(args.manifest))
+    manifest_path = Path(args.manifest)
+    manifest = read_export_manifest(manifest_path)
     export_count = len(manifest["exports"])
     noun = "export" if export_count == 1 else "exports"
-    sys.stdout.write(f"{Path(args.manifest).as_posix()}: {export_count} {noun}\n")
+    sys.stdout.write(f"{manifest_path.as_posix()}: {export_count} {noun}\n")
     return 0
 
 

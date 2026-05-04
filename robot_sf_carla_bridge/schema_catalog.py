@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from importlib.resources import files
 from typing import Any
 
 from robot_sf_carla_bridge.availability import AVAILABILITY_SCHEMA_VERSION
@@ -12,6 +14,18 @@ from robot_sf_carla_bridge.export import (
 )
 
 SCHEMA_CATALOG_VERSION = "carla-bridge-schema-catalog.v1"
+_SCHEMA_CATALOG_RESOURCE = "schemas/carla_bridge_schema_catalog.v1.json"
+
+
+def load_schema_catalog_schema() -> dict[str, Any]:
+    """Load the versioned CARLA bridge schema catalog JSON schema.
+
+    Returns:
+        Parsed JSON schema dictionary.
+    """
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_SCHEMA_CATALOG_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
 def list_carla_bridge_schema_catalog() -> dict[str, Any]:

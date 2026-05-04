@@ -769,6 +769,16 @@ def test_schema_catalog_lists_all_carla_bridge_contracts() -> None:
     }
 
 
+def test_schema_catalog_validates_against_schema() -> None:
+    """Schema catalog metadata should satisfy its packaged JSON schema."""
+    from robot_sf_carla_bridge import (
+        list_carla_bridge_schema_catalog,
+        load_schema_catalog_schema,
+    )
+
+    jsonschema.validate(list_carla_bridge_schema_catalog(), load_schema_catalog_schema())
+
+
 def test_importable_carla_reports_available(monkeypatch) -> None:
     """Importable CARLA should report a boolean available status."""
     from robot_sf_carla_bridge.availability import check_carla_availability

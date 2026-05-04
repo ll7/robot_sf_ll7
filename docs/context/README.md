@@ -245,6 +245,8 @@ why a change was made rather than a full issue execution transcript.
   adds an import-safe catalog for CARLA bridge schema names, versions, and loader helpers.
 - [Issue #996 CARLA Bridge Schema Catalog CLI](issue_996_carla_schema_catalog_cli.md)
   exposes the CARLA bridge schema catalog through `robot-sf-catalog-carla-schemas`.
+- [Issue #998 CARLA Bridge Schema Catalog Schema](issue_998_carla_schema_catalog_schema.md)
+  adds a packaged JSON Schema for `carla-bridge-schema-catalog.v1` metadata.
 
 ## DreamerV3 Notes
 

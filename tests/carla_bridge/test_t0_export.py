@@ -691,4 +691,20 @@ def test_missing_carla_reports_not_available(monkeypatch) -> None:
     status = check_carla_availability()
 
     assert status["status"] == "not-available"
+    assert status["available"] is False
     assert "carla" in status["reason"].lower()
+
+
+def test_importable_carla_reports_available(monkeypatch) -> None:
+    """Importable CARLA should report a boolean available status."""
+    from robot_sf_carla_bridge.availability import check_carla_availability
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name == "carla" else None
+    )
+
+    status = check_carla_availability()
+
+    assert status["status"] == "available"
+    assert status["available"] is True
+    assert status["dependency"] == "carla"

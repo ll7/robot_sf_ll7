@@ -149,23 +149,18 @@ def test_validate_t0_export_batch_main_prints_json_summary(
 
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should expose deterministic machine-readable status."""
-    import robot_sf_carla_bridge.cli as cli_module
     from robot_sf_carla_bridge.cli import check_carla_availability_main
 
     monkeypatch.setattr(
-        cli_module,
-        "check_carla_availability",
-        lambda: {
-            "status": "not-available",
-            "reason": "CARLA Python API package 'carla' is not importable",
-            "dependency": "carla",
-        },
+        "importlib.util.find_spec",
+        lambda name: None if name == "carla" else object(),
     )
 
     exit_code = check_carla_availability_main(["--json"])
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) == {
+        "available": False,
         "dependency": "carla",
         "reason": "CARLA Python API package 'carla' is not importable",
         "status": "not-available",

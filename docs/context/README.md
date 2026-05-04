@@ -219,6 +219,8 @@ why a change was made rather than a full issue execution transcript.
   exposes CARLA bridge availability metadata through a CARLA-free project script.
 - [Issue #972 CARLA Availability CLI Require Mode](issue_972_carla_availability_cli_require_mode.md)
   adds fail-closed availability checking for CARLA-dependent setup gates.
+- [Issue #974 CARLA Availability Boolean Field](issue_974_carla_availability_boolean_field.md)
+  adds an explicit boolean to CARLA availability metadata and CLI JSON output.
 
 ## DreamerV3 Notes
 

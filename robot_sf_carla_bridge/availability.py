@@ -21,11 +21,13 @@ def check_carla_availability() -> dict[str, Any]:
     if importlib.util.find_spec("carla") is None:
         return {
             "status": "not-available",
+            "available": False,
             "reason": "CARLA Python API package 'carla' is not importable",
             "dependency": "carla",
         }
     return {
         "status": "available",
+        "available": True,
         "reason": "CARLA Python API package is importable",
         "dependency": "carla",
     }

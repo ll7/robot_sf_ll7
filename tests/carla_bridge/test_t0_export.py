@@ -551,6 +551,56 @@ def test_read_export_manifest_rejects_invalid_manifest_shape(tmp_path) -> None:
         read_export_manifest(manifest_path)
 
 
+def test_resolve_export_manifest_payload_paths_returns_local_batch_paths(tmp_path) -> None:
+    """Manifest path resolver should join payload paths relative to the manifest file."""
+    from robot_sf_carla_bridge import resolve_export_manifest_payload_paths, write_export_records
+
+    payload = _minimal_payload()
+    write_export_records(
+        [{"scenario_id": "unit scenario", "payload": payload}],
+        tmp_path / "exports",
+    )
+
+    records = resolve_export_manifest_payload_paths(tmp_path / "exports" / "manifest.json")
+
+    assert records == [
+        {
+            "scenario_id": "unit scenario",
+            "path": tmp_path / "exports" / "unit_scenario.json",
+        }
+    ]
+
+
+def test_resolve_export_manifest_payload_paths_rejects_unsafe_paths(tmp_path) -> None:
+    """Manifest payload paths should stay scoped to the manifest directory."""
+    from robot_sf_carla_bridge import resolve_export_manifest_payload_paths
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "carla-replay-export-manifest.v1",
+                "exports": [{"scenario_id": "absolute", "path": "/tmp/payload.json"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="absolute"):
+        resolve_export_manifest_payload_paths(manifest_path)
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "carla-replay-export-manifest.v1",
+                "exports": [{"scenario_id": "escape", "path": "../payload.json"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="parent"):
+        resolve_export_manifest_payload_paths(manifest_path)
+
+
 def test_read_export_manifest_rejects_parent_relative_path() -> None:
     """Manifest reader should reject parent-relative input paths before opening files."""
     from robot_sf_carla_bridge import read_export_manifest

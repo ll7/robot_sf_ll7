@@ -400,7 +400,8 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
         ValueError: if the manifest shape is unsupported.
     """
 
-    manifest = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    with Path(input_path).open("r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
     if not isinstance(manifest, dict):
         raise ValueError("export manifest must be a JSON object")
     if manifest.get("schema_version") != EXPORT_MANIFEST_SCHEMA_VERSION:

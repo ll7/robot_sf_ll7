@@ -177,6 +177,9 @@ why a change was made rather than a full issue execution transcript.
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 - [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
+- [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
+  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
+  and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 
 ## DreamerV3 Notes
 

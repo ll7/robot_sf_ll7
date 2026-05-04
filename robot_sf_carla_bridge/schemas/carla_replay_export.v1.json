@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/carla_replay_export.v1.json",
+  "title": "Robot-SF CARLA T0 Neutral Replay Export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "scenario",
+    "robot",
+    "pedestrians",
+    "static_geometry",
+    "simulation",
+    "metrics",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "carla-replay-export.v1"
+    },
+    "mode": {
+      "enum": ["neutral-export"]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_config", "map_id", "certificate"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_config": {
+          "type": "string",
+          "minLength": 1
+        },
+        "map_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["schema_version", "status"],
+          "properties": {
+            "schema_version": {
+              "const": "scenario_cert.v1"
+            },
+            "status": {
+              "enum": ["passed", "valid", "hard_but_solvable", "knife_edge"]
+            },
+            "source": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "robot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "goal", "footprint", "kinematics"],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/pose2d"
+        },
+        "goal": {
+          "$ref": "#/$defs/pose2d"
+        },
+        "footprint": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["radius_m"],
+          "properties": {
+            "radius_m": {
+              "type": "number",
+              "exclusiveMinimum": 0.0
+            }
+          }
+        },
+        "kinematics": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["model"],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "max_speed_mps": {
+              "type": "number",
+              "exclusiveMinimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    "pedestrians": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pedestrian"
+      }
+    },
+    "static_geometry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["obstacles"],
+      "properties": {
+        "obstacles": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "route_topology_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dt_s", "horizon_s", "termination"],
+      "properties": {
+        "dt_s": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "horizon_s": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "termination": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["trajectory_fields"],
+      "properties": {
+        "trajectory_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["robot_sf_commit", "created_by", "certificate_generator"],
+      "properties": {
+        "robot_sf_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate_generator": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "pose2d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "theta": {
+          "type": "number"
+        }
+      }
+    },
+    "pedestrian": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "start", "route"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "$ref": "#/$defs/pose2d"
+        },
+        "route": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/waypoint2d"
+          }
+        },
+        "timing": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "waypoint2d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "t_s": {
+          "type": "number",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

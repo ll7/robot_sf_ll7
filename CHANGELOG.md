@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
+  support in `robot_sf/training/scenario_loader.py`, the new
+  `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,
+  the seed-123 retrain clone
+  `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml`,
+  the diagnostic benchmark probe
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`, and focused
+  regression coverage for the new horizon-matched workflow.
 * Added the issue-856 broad-training evidence surfaces for the completed seed-123 control: the 12223 baseline adapter (`configs/baselines/ppo_issue_856_all_scenarios_12223.yaml`), the dedicated camera-ready comparison matrix (`configs/benchmarks/paper_experiment_matrix_v1_issue_856_all_scenarios_compare.yaml`), the campaign and pre-PR verification context notes, and the linked experiment-memory write-back. Recorded the verdict that, at fixed 10M budget, broad-training underperforms the eval-aligned leader on the camera-ready matrix (success −0.035, collisions +0.007, SNQI −0.040), strengthening the alignment-vs-diversity claim for the manuscript.
 * Added a file-based policy-search workflow under `docs/context/policy_search/` with a canonical candidate registry, stage-gated runner (`scripts/validation/run_policy_search_candidate.py`), comparison/failure/promotion tools, and SLURM handoff notes for training-heavy follow-up work. The first non-training candidate, `hybrid_orca_sampler_v1`, now runs end to end in the benchmark stack and emits markdown/json validation artifacts locally.
 * Added the deterministic `hybrid_rule_local_planner` policy-search record and ablation surfaces. The current best non-learning candidate is `hybrid_rule_v3_static_margin0_waypoint2`, which preserved zero collision terminations on nominal sanity and stress slices, while rejected static-escape, route-commitment, route-lookahead, and speed variants remain documented as reproducible ablations rather than promoted planner defaults.
@@ -154,6 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Root `README.md` attribution section now also documents fast-pysf acknowledgements (svenkreiss/socialforce and pedsim_ros) and links the core Social Force references (Helbing & Molnar 1995; Moussaid et al. 2010).
 
 ### Fixed
+
+* Fixed scenario-driven timeout semantics so `max_episode_steps` now expires on the configured
+  discrete step count instead of one step late from a floating elapsed-time comparison.
 
 * Legacy `scripts/training_ppo.py` invocations now fail closed and point to the canonical PPO
   training workflow docs.

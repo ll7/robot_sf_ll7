@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import yaml
 
@@ -408,6 +409,82 @@ def test_full_maintained_eval_manifest_loads_unique_scenarios() -> None:
 
     assert len(scenarios) == 71
     assert len(set(scenario_ids)) == 71
+
+
+def test_horizon100_eval_manifest_overrides_all_episode_limits() -> None:
+    """The horizon-100 eval surface should keep membership but force a 100-step limit."""
+    scenarios = load_scenarios(
+        Path("configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml")
+    )
+    scenario_ids = [
+        str(scenario.get("name") or scenario.get("scenario_id")) for scenario in scenarios
+    ]
+    step_limits = [
+        int(scenario["simulation_config"]["max_episode_steps"]) for scenario in scenarios
+    ]
+
+    assert len(scenarios) == 70
+    assert len(set(scenario_ids)) == 70
+    assert len(step_limits) == 70
+    assert set(step_limits) == {100}
+
+
+def test_issue_857_horizon100_training_config_uses_horizon_matched_surface() -> None:
+    """The horizon-matched training clone should train and evaluate on the 100-step surface."""
+    config_path = Path(
+        "configs/training/ppo/ablations/"
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml"
+    ).resolve()
+    expected_surface = Path(
+        "configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml"
+    ).resolve()
+
+    config = load_expert_training_config(config_path)
+
+    assert config.scenario_config == expected_surface
+    assert config.evaluation.scenario_config == expected_surface
+
+
+def test_issue_857_horizon100_surface_truncates_empty_map_at_step_100() -> None:
+    """The horizon-matched surface should time out a representative empty-map rollout at 100."""
+    config_path = Path(
+        "configs/training/ppo/ablations/"
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml"
+    ).resolve()
+    config = load_expert_training_config(config_path)
+    scenarios = load_scenarios(config.scenario_config)
+    scenario = next(s for s in scenarios if s.get("name") == "empty_map_8_directions_east")
+    env_config = build_robot_config_from_scenario(scenario, scenario_path=config.scenario_config)
+
+    _apply_env_overrides(env_config, config.env_overrides)
+    env = make_robot_env(
+        config=env_config,
+        seed=config.seeds[0],
+        suite_name="issue857_smoke",
+        scenario_name="empty_map_8_directions_east",
+        algorithm_name=config.policy_id,
+        **config.env_factory_kwargs,
+    )
+
+    try:
+        env.reset()
+        action = np.zeros_like(env.action_space.sample())
+        step_count = 0
+        terminated = False
+        truncated = False
+        info = {}
+        while not (terminated or truncated):
+            step_count += 1
+            _obs, _reward, terminated, truncated, info = env.step(action)
+            if step_count > 100:
+                pytest.fail("Expected the horizon-100 surface to end by step 100.")
+    finally:
+        env.close()
+
+    assert step_count == 100
+    assert terminated is True
+    assert truncated is False
+    assert info["meta"]["is_timesteps_exceeded"] is True
 
 
 def test_issue_708_predictive_foresight_override_enables_predictive_observation() -> None:

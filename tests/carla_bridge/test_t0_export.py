@@ -471,6 +471,38 @@ def test_build_export_payloads_from_scenario_file_preserves_manifest_order(
     assert records[1]["payload"]["provenance"]["created_by"] == "unit-test"
 
 
+def test_write_export_records_writes_payloads_and_manifest(tmp_path) -> None:
+    """Export records should persist deterministic JSON files plus a small manifest."""
+    from robot_sf_carla_bridge import read_export_payload, write_export_records
+
+    first = _minimal_payload()
+    first["scenario"]["id"] = "first scenario"
+    second = _minimal_payload()
+    second["scenario"]["id"] = "second/slash"
+
+    manifest = write_export_records(
+        [
+            {"scenario_id": "first scenario", "payload": first},
+            {"scenario_id": "second/slash", "payload": second},
+        ],
+        tmp_path / "exports",
+    )
+
+    assert manifest["schema_version"] == "carla-replay-export-manifest.v1"
+    assert [entry["scenario_id"] for entry in manifest["exports"]] == [
+        "first scenario",
+        "second/slash",
+    ]
+    assert [entry["path"] for entry in manifest["exports"]] == [
+        "first_scenario.json",
+        "second_slash.json",
+    ]
+    assert read_export_payload(tmp_path / "exports" / "first_scenario.json")["scenario"]["id"] == (
+        "first scenario"
+    )
+    assert (tmp_path / "exports" / "manifest.json").exists()
+
+
 def test_builder_invalid_radius_fails_schema_validation() -> None:
     """Builder validation should fail through the schema for invalid payload values."""
     from robot_sf_carla_bridge import (

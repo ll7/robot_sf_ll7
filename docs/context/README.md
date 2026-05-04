@@ -190,6 +190,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
   batch-loads scenario manifests into ordered neutral export payload records, stacked on the issue
   #946 scenario-entry helper.
+- [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
+  writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
+  on the issue #948 scenario-file helper.
 
 ## DreamerV3 Notes
 

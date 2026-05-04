@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
+from functools import cache
 from importlib.resources import files
 from typing import Any
 
@@ -15,6 +17,7 @@ class CarlaUnavailableError(RuntimeError):
     """Raised when a CARLA-dependent bridge path is used without CARLA installed."""
 
 
+@cache
 def load_availability_schema() -> dict[str, Any]:
     """Return the JSON schema for CARLA availability metadata."""
 

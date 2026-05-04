@@ -10,7 +10,10 @@ from robot_sf.adversarial.config import (
     SearchRunResult,
     SearchSpaceConfig,
 )
-from robot_sf.adversarial.materialize import materialize_multi_ped_single_pedestrian_overrides
+from robot_sf.adversarial.materialize import (
+    materialize_multi_ped_scenario_payload,
+    materialize_multi_ped_single_pedestrian_overrides,
+)
 from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
 from robot_sf.adversarial.search import run_adversarial_search
 
@@ -25,6 +28,7 @@ __all__ = [
     "SearchConfig",
     "SearchRunResult",
     "SearchSpaceConfig",
+    "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
     "run_adversarial_search",
 ]

@@ -9,9 +9,11 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 
 def _minimal_payload() -> dict:
@@ -331,6 +333,85 @@ def test_build_export_payload_from_map_definition_rejects_excluded_certificate()
             robot_kinematics={"model": "differential_drive"},
             dt_s=0.1,
             horizon_s=12.0,
+            provenance={
+                "robot_sf_commit": "abc123",
+                "created_by": "unit-test",
+                "certificate_generator": "scenario_cert.v1",
+            },
+        )
+
+
+def test_build_export_payload_from_scenario_entry_validates(monkeypatch) -> None:
+    """Scenario-loader entries should export through certification and map-definition adapter."""
+    import robot_sf_carla_bridge.export as export_module
+    from robot_sf_carla_bridge import build_export_payload_from_scenario_entry
+
+    config = RobotSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"unit_map": _programmatic_map()}),
+        map_id="unit_map",
+        robot_config=DifferentialDriveSettings(radius=0.35, max_linear_speed=1.25),
+    )
+    monkeypatch.setattr(
+        export_module,
+        "_build_robot_config_for_scenario_entry",
+        lambda scenario, scenario_path: config,
+    )
+    monkeypatch.setattr(
+        export_module,
+        "_certificate_payload_for_scenario_entry",
+        lambda scenario, scenario_path: {
+            "schema_version": "scenario_cert.v1",
+            "classification": "valid",
+            "source": str(scenario_path),
+        },
+    )
+
+    payload = build_export_payload_from_scenario_entry(
+        {"name": "unit_scenario", "map_id": "unit_map"},
+        scenario_path=Path("configs/scenarios/unit.yaml"),
+        provenance={
+            "robot_sf_commit": "abc123",
+            "created_by": "unit-test",
+            "certificate_generator": "scenario_cert.v1",
+        },
+    )
+
+    assert payload["scenario"]["id"] == "unit_scenario"
+    assert payload["scenario"]["source_config"] == "configs/scenarios/unit.yaml"
+    assert payload["scenario"]["map_id"] == "unit_map"
+    assert payload["robot"]["footprint"]["radius_m"] == 0.35
+    assert payload["robot"]["kinematics"]["model"] == "differential_drive"
+    assert payload["robot"]["kinematics"]["max_speed_mps"] == 1.25
+    assert payload["simulation"]["dt_s"] == 0.1
+
+
+def test_build_export_payload_from_scenario_entry_rejects_excluded_certificate(monkeypatch) -> None:
+    """Scenario-entry export should fail closed when certification excludes the scenario."""
+    import robot_sf_carla_bridge.export as export_module
+    from robot_sf_carla_bridge import build_export_payload_from_scenario_entry
+
+    config = RobotSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"unit_map": _programmatic_map()})
+    )
+    monkeypatch.setattr(
+        export_module,
+        "_build_robot_config_for_scenario_entry",
+        lambda scenario, scenario_path: config,
+    )
+    monkeypatch.setattr(
+        export_module,
+        "_certificate_payload_for_scenario_entry",
+        lambda scenario, scenario_path: {
+            "schema_version": "scenario_cert.v1",
+            "classification": "invalid",
+            "benchmark_eligibility": "excluded",
+        },
+    )
+
+    with pytest.raises(ValueError, match="excluded"):
+        build_export_payload_from_scenario_entry(
+            {"name": "unit_scenario", "map_id": "unit_map"},
+            scenario_path=Path("configs/scenarios/unit.yaml"),
             provenance={
                 "robot_sf_commit": "abc123",
                 "created_by": "unit-test",

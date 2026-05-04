@@ -178,7 +178,6 @@ class HybridPortfolioAdapter:
                 selected,
             )
             self._active_head = "orca"
-            command = self.orca.plan(observation)
             self._record_decision(
                 desired_head=desired,
                 selected_head="orca",
@@ -186,7 +185,7 @@ class HybridPortfolioAdapter:
                 fallback_from=selected,
                 error=str(exc),
             )
-            return command
+            return self.orca.plan(observation)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return episode-local planner-head diagnostics.

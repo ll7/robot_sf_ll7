@@ -227,6 +227,8 @@ why a change was made rather than a full issue execution transcript.
   adds a JSON Schema for validating CARLA availability metadata.
 - [Issue #980 CARLA Availability Schema CLI](issue_980_carla_availability_schema_cli.md)
   exposes the CARLA availability JSON Schema through `robot-sf-check-carla --schema`.
+- [Issue #982 CARLA T0 Export Schema CLI](issue_982_carla_t0_export_schema_cli.md)
+  exposes the CARLA T0 neutral export JSON Schema through `robot-sf-export-carla-t0 --schema`.
 
 ## DreamerV3 Notes
 

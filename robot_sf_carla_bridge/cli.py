@@ -11,6 +11,7 @@ from robot_sf_carla_bridge.availability import check_carla_availability, load_av
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
     load_export_manifest_payloads,
+    load_export_schema,
     read_export_manifest,
     write_export_records,
 )
@@ -24,12 +25,29 @@ def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     """
 
     parser = argparse.ArgumentParser(description="Export Robot-SF scenarios to CARLA T0 JSON.")
-    parser.add_argument("--scenario-file", required=True, help="Scenario manifest YAML path.")
-    parser.add_argument("--output-dir", required=True, help="Directory for export JSON files.")
-    parser.add_argument("--robot-sf-commit", required=True, help="Robot-SF commit/provenance id.")
+    parser.add_argument("--schema", action="store_true", help="Print the JSON Schema contract.")
+    parser.add_argument("--scenario-file", help="Scenario manifest YAML path.")
+    parser.add_argument("--output-dir", help="Directory for export JSON files.")
+    parser.add_argument("--robot-sf-commit", help="Robot-SF commit/provenance id.")
     parser.add_argument("--created-by", default="robot_sf_carla_bridge.cli")
     parser.add_argument("--certificate-generator", default="scenario_cert.v1")
     args = parser.parse_args(argv)
+
+    if args.schema:
+        sys.stdout.write(f"{json.dumps(load_export_schema(), sort_keys=True)}\n")
+        return 0
+
+    missing_args = [
+        option
+        for option, value in (
+            ("--scenario-file", args.scenario_file),
+            ("--output-dir", args.output_dir),
+            ("--robot-sf-commit", args.robot_sf_commit),
+        )
+        if value is None
+    ]
+    if missing_args:
+        parser.error(f"the following arguments are required: {', '.join(missing_args)}")
 
     scenario_file = Path(args.scenario_file)
     output_dir = Path(args.output_dir)

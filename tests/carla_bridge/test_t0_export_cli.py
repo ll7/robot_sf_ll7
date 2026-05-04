@@ -58,6 +58,17 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     assert "manifest.json" in capsys.readouterr().out
 
 
+def test_export_t0_scenarios_main_prints_schema(capsys) -> None:
+    """CARLA T0 export CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+    from robot_sf_carla_bridge.export import load_export_schema
+
+    exit_code = export_t0_scenarios_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_export_schema()
+
+
 def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     tmp_path,
     monkeypatch,

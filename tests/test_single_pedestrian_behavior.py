@@ -40,6 +40,36 @@ def test_single_pedestrian_waits_advance_waypoints():
     assert np.allclose(ped_states[0, 4:6], [2.0, 0.0])
 
 
+def test_single_pedestrian_start_delay_releases_to_trajectory():
+    """Verify start_delay_s holds a pedestrian before releasing its trajectory."""
+    ped = SinglePedestrianDefinition(
+        id="ped1",
+        start=(0.0, 0.0),
+        trajectory=[(1.0, 0.0), (2.0, 0.0)],
+        start_delay_s=2.0,
+    )
+    ped_states = np.zeros((1, 7))
+    ped_states[0, 0:2] = (0.0, 0.0)
+    ped_states[0, 4:6] = (1.0, 0.0)
+    states = PedestrianStates(lambda: ped_states)
+    groups = PedestrianGroupings(states)
+    behavior = SinglePedestrianBehavior(
+        states,
+        groups,
+        [ped],
+        single_offset=0,
+        time_step_s=1.0,
+        goal_proximity_threshold=0.1,
+    )
+
+    behavior.step()
+    assert np.allclose(ped_states[0, 4:6], [0.0, 0.0])
+    assert np.allclose(ped_states[0, 2:4], [0.0, 0.0])
+
+    behavior.step()
+    assert np.allclose(ped_states[0, 4:6], [1.0, 0.0])
+
+
 def test_single_pedestrian_follow_role_targets_robot():
     """Verify follow role updates the pedestrian goal relative to the robot pose."""
     ped = SinglePedestrianDefinition(id="ped1", start=(0.0, 0.0), role="follow")

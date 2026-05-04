@@ -1,0 +1,179 @@
+# Issue #736 exploratory station-platform candidate pack.
+#
+# This pack intentionally reuses the single parser-safe station-platform map from
+# issue #549 and varies only scenario parameters. Keep it out of
+# classic_interactions.yaml until a benchmark run shows non-redundant value.
+
+scenarios:
+- name: station_platform_route_flow_low
+  map_file: ../../../maps/svg_maps/classic_station_platform.svg
+  simulation_config:
+    max_episode_steps: 650
+    ped_density: 0.02
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    pack_id: issue_736_station_platform_candidate_pack
+    evaluation_scope: exploratory
+    platform_variant: route_flow_low
+    label: station platform low route-flow baseline
+    density: low
+    flow: bi
+    groups: 0.0
+    distinct_coverage_probe:
+      compare_against:
+      - classic_head_on_corridor_medium
+      - classic_bottleneck_medium
+      - classic_group_crossing_medium
+      observe_metrics:
+      - success_rate
+      - collision_rate
+      - near_miss_rate
+      - comfort_exposure_s
+      - time_to_goal_s
+      interpretation: low-density platform flow should not be claimed distinct unless outcomes diverge from corridor and bottleneck controls.
+  seeds:
+  - 301
+  - 302
+  - 303
+- name: station_platform_static_furniture_low
+  map_file: ../../../maps/svg_maps/classic_station_platform.svg
+  simulation_config:
+    max_episode_steps: 650
+    ped_density: 0.02
+  single_pedestrians:
+  - id: p1
+    goal: null
+    trajectory: null
+    note: static platform-side passenger marker
+  - id: p2
+    goal: null
+    trajectory: null
+    note: static door-side passenger marker
+  - id: p3
+    goal: null
+    trajectory: null
+    note: static platform-side passenger marker
+  - id: p4
+    goal: null
+    trajectory: null
+    note: static door-side passenger marker
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    pack_id: issue_736_station_platform_candidate_pack
+    evaluation_scope: exploratory
+    platform_variant: static_waiting_baseline
+    label: station platform low flow with deterministic static passenger markers
+    density: low
+    flow: static-plus-bi
+    groups: 0.0
+    distinct_coverage_probe:
+      compare_against:
+      - classic_bottleneck_low
+      - classic_doorway_low
+      observe_metrics:
+      - collision_rate
+      - near_miss_rate
+      - min_distance
+      - comfort_exposure_s
+      interpretation: static markers are useful only if they reveal platform-edge clearance failures beyond doorway or bottleneck geometry.
+  seeds:
+  - 304
+  - 305
+  - 306
+- name: station_platform_waiting_passengers_medium
+  map_file: ../../../maps/svg_maps/classic_station_platform.svg
+  simulation_config:
+    max_episode_steps: 650
+    ped_density: 0.05
+  single_pedestrians:
+  - id: p1
+    goal: null
+    trajectory:
+    - - 24.0
+      - 22.0
+    - - 24.0
+      - 18.5
+    - - 38.0
+      - 22.0
+    - - 76.0
+      - 22.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 6.0
+      note: wait near the left stair landing before continuing
+    note: left-to-right pause near stair access
+  - id: p3
+    goal: null
+    trajectory:
+    - - 60.0
+      - 4.2
+    - - 60.0
+      - 8.0
+    - - 44.0
+      - 4.2
+    - - 9.0
+      - 4.2
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 5.0
+      note: short dwell near the right stair landing
+    note: right-to-left pause near stair access
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    pack_id: issue_736_station_platform_candidate_pack
+    evaluation_scope: exploratory
+    platform_variant: waiting_passengers
+    label: station platform medium flow with deterministic waiting passengers
+    density: medium
+    flow: bi-with-dwell
+    groups: 0.0
+    distinct_coverage_probe:
+      compare_against:
+      - classic_group_crossing_medium
+      - classic_merging_medium
+      observe_metrics:
+      - collision_rate
+      - near_miss_rate
+      - comfort_exposure_s
+      - time_to_goal_s
+      interpretation: waiting behavior is the main candidate for distinct station-platform coverage.
+  seeds:
+  - 307
+  - 308
+  - 309
+- name: station_platform_dense_stress_optional
+  map_file: ../../../maps/svg_maps/classic_station_platform.svg
+  simulation_config:
+    max_episode_steps: 700
+    ped_density: 0.11
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    pack_id: issue_736_station_platform_candidate_pack
+    evaluation_scope: exploratory
+    optional: true
+    platform_variant: dense_stress
+    label: optional dense station-platform stress variant
+    density: high
+    density_advisory: high_density_stress
+    flow: bi
+    groups: 0.0
+    distinct_coverage_probe:
+      compare_against:
+      - classic_bottleneck_high
+      - classic_group_crossing_medium
+      observe_metrics:
+      - success_rate
+      - collision_rate
+      - timeout_rate
+      - wall_time_s
+      interpretation: retain only as an opt-in stress case unless runtime and failure semantics stay stable.
+  seeds:
+  - 310
+  - 311
+  - 312
+map_search_paths:
+  - ../../../maps/svg_maps

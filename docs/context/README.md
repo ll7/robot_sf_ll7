@@ -234,6 +234,8 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #986 CARLA T0 Manifest Schema CLI](issue_986_carla_t0_manifest_schema_cli.md)
   exposes the CARLA T0 export manifest JSON Schema through
   `robot-sf-validate-carla-t0-manifest --schema`.
+- [Issue #988 CARLA T0 Batch Summary Version](issue_988_carla_t0_batch_summary_version.md)
+  adds a schema version marker to `robot-sf-validate-carla-t0-batch --json` output.
 
 ## DreamerV3 Notes
 

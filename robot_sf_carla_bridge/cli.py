@@ -17,6 +17,8 @@ from robot_sf_carla_bridge.export import (
     write_export_records,
 )
 
+_BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
+
 
 def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     """Export a scenario manifest to local CARLA T0 neutral JSON files.
@@ -108,6 +110,7 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
             "manifest": manifest_path.as_posix(),
             "payload_count": payload_count,
             "scenario_ids": [str(record["scenario_id"]) for record in records],
+            "schema_version": _BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
         }
         sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
         return 0

@@ -84,6 +84,7 @@ def test_serialize_map_handles_core_map_contract() -> None:
                 "start": [1, 1],
                 "goal": [2, 2],
                 "wait_at": [{"waypoint_index": 0, "wait_s": 1.5, "note": "pause"}],
+                "start_delay_s": 0.5,
             }
         ],
     }
@@ -96,6 +97,7 @@ def test_serialize_map_handles_core_map_contract() -> None:
     assert len(map_def.robot_routes) == 2
     assert len(map_def.ped_routes) == 1
     assert len(map_def.single_pedestrians) == 1
+    assert map_def.single_pedestrians[0].start_delay_s == pytest.approx(0.5)
 
 
 def test_asymmetric_svg_routes_are_mirrored(tmp_path: Path) -> None:

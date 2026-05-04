@@ -44,6 +44,7 @@ Each single pedestrian is defined by:
 | `trajectory` | `list[Vec2D] \| None` | No | List of waypoints to follow (mutually exclusive with goal) |
 | `speed_m_s` | `float \| None` | No | Optional speed override for this pedestrian (m/s) |
 | `wait_at` | `list[PedestrianWaitRule] \| None` | No | Optional waits at trajectory waypoints (trajectory required) |
+| `start_delay_s` | `float` | No | Optional bounded dwell at the start before release to goal/trajectory |
 | `note` | `str \| None` | No | Optional note for scenario documentation |
 | `role` | `str \| None` | No | Optional runtime behavior role (`wait`, `follow`, `lead`, `accompany`, `join`, `leave`) |
 | `role_target_id` | `str \| None` | No | Optional target identifier for role behaviors (e.g., `robot:0`, other ped id) |
@@ -55,6 +56,8 @@ Each single pedestrian is defined by:
 - **Static Pedestrians**: If neither goal nor trajectory is provided, the pedestrian remains static
 - **Unique IDs**: All pedestrian IDs within a map must be unique
 - **Wait Rules**: `wait_at` requires a trajectory; wait indices refer to trajectory waypoints
+- **Start Delay**: `start_delay_s` is limited to `single_pedestrians`; route-spawned pedestrians
+  still move continuously
 - **Role Offsets**: `role_offset` is interpreted in the robot frame `(forward, left)` for follow/lead/accompany roles
 
 ### Role Behavior Notes
@@ -170,6 +173,7 @@ Supported override keys (mutually exclusive pairs):
 Optional override fields:
 - `speed_m_s`
 - `wait_at`
+- `start_delay_s`
 - `note`
 - `role`
 - `role_target_id`
@@ -188,6 +192,7 @@ scenarios:
       - id: ped1
         goal_poi: "hallway_end"
         speed_m_s: 0.6
+        start_delay_s: 1.5
         note: "slow walker"
       - id: ped2
         goal: null

@@ -255,6 +255,41 @@ def test_builder_invalid_radius_fails_schema_validation() -> None:
         )
 
 
+def test_write_export_payload_normalizes_json_like_values(tmp_path) -> None:
+    """Write helper should normalize Path, array-like values, and mapping keys before validation."""
+    from pathlib import Path
+
+    from robot_sf_carla_bridge.export import validate_export_payload, write_export_payload
+
+    class _ArrayLike:
+        def __init__(self, values) -> None:
+            self._values = values
+
+        def tolist(self):
+            return list(self._values)
+
+    class _ScalarLike:
+        def __init__(self, value) -> None:
+            self._value = value
+
+        def item(self):
+            return self._value
+
+    payload = _minimal_payload()
+    payload["scenario"]["source_config"] = Path("configs/scenarios/unit_crossing.yaml")
+    payload["robot"]["footprint"]["radius_m"] = _ScalarLike(0.3)
+    payload["provenance"][Path("extra_tags")] = _ArrayLike(["t0", "oracle"])
+    output_path = tmp_path / "carla_export_normalized.json"
+
+    write_export_payload(payload, output_path)
+    loaded = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert loaded["scenario"]["source_config"] == "configs/scenarios/unit_crossing.yaml"
+    assert loaded["robot"]["footprint"]["radius_m"] == 0.3
+    assert loaded["provenance"]["extra_tags"] == ["t0", "oracle"]
+    validate_export_payload(loaded)
+
+
 def test_missing_carla_reports_not_available(monkeypatch) -> None:
     """Missing CARLA should be a status object, not an import-time crash."""
     from robot_sf_carla_bridge.availability import check_carla_availability

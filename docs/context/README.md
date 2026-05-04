@@ -183,6 +183,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)
   records the import-safe `robot_sf_carla_bridge` package, `carla-replay-export.v1` schema, and
   missing-CARLA `not-available` guard for future oracle replay work.
+- [Issue #934 CARLA T0 Export Builder API](issue_934_carla_t0_export_builder.md)
+  adds typed, schema-validated builder objects for `carla-replay-export.v1` payload construction,
+  stacked on the issue #930 bridge package.
 - [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.

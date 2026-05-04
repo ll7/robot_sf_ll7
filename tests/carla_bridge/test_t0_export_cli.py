@@ -86,6 +86,41 @@ def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     assert "1 export" in capsys.readouterr().out
 
 
+def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator CLI should validate every manifest payload and report the count."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    calls = {"resolved": [], "validated": []}
+
+    def fake_resolve_payloads(path):
+        calls["path"] = Path(path)
+        return [
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
+        ]
+
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path)])
+
+    assert exit_code == 0
+    assert calls["path"] == manifest_path
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
+    assert "2 payloads" in capsys.readouterr().out
+
+
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
     """Project metadata should expose the CLI and include the bridge package."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -95,6 +130,9 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-manifest"] == (
         "robot_sf_carla_bridge.cli:validate_t0_manifest_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-batch"] == (
+        "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages

@@ -215,6 +215,9 @@ why a change was made rather than a full issue execution transcript.
   stacked on the issue #950 record writer.
 - [Issue #954 CARLA T0 Export CLI Packaging](issue_954_carla_t0_export_cli_packaging.md)
   exposes the issue #952 CLI as an installable project script while keeping the package CARLA-free.
+- [Issue #956 CARLA T0 Export Manifest Reader](issue_956_carla_t0_export_manifest_reader.md)
+  adds a local manifest reader for issue #950 export records, stacked on the issue #954 CLI package
+  surface.
 - [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.

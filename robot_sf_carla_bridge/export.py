@@ -445,6 +445,53 @@ def write_export_records(
     return manifest
 
 
+def _validated_input_path(input_path: str | Path, *, label: str) -> Path:
+    raw_path = str(input_path)
+    if not raw_path.strip():
+        raise ValueError(f"{label} must be a non-empty path")
+    path = Path(raw_path)
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{label} must not contain parent-relative segments")
+    return path
+
+
+def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
+    """Read and validate a T0 export-record manifest from UTF-8 JSON.
+
+    Returns:
+        JSON-safe manifest dictionary.
+
+    Raises:
+        json.JSONDecodeError: if the file does not contain valid JSON.
+        ValueError: if the manifest shape is unsupported.
+    """
+
+    path = _validated_input_path(input_path, label="export manifest path")
+    with path.open("r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    if not isinstance(manifest, dict):
+        raise ValueError("export manifest must be a JSON object")
+    if manifest.get("schema_version") != EXPORT_MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            f"export manifest schema_version must be {EXPORT_MANIFEST_SCHEMA_VERSION!r}"
+        )
+    exports = manifest.get("exports")
+    if not isinstance(exports, list):
+        raise ValueError("export manifest exports must be a list")
+    for index, entry in enumerate(exports):
+        if not isinstance(entry, dict):
+            raise ValueError(f"export manifest exports[{index}] must be an object")
+        scenario_id = entry.get("scenario_id")
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
+            raise ValueError(
+                f"export manifest exports[{index}].scenario_id must be a non-empty string"
+            )
+        path = entry.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError(f"export manifest exports[{index}].path must be a non-empty string")
+    return cast("dict[str, Any]", manifest)
+
+
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
 

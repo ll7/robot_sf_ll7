@@ -505,6 +505,60 @@ def test_write_export_records_writes_payloads_and_manifest(tmp_path) -> None:
     assert (tmp_path / "exports" / "manifest.json").exists()
 
 
+def test_read_export_manifest_round_trips_writer_output(tmp_path) -> None:
+    """Manifest reader should validate the writer output without loading payload files."""
+    from robot_sf_carla_bridge import read_export_manifest, write_export_records
+
+    payload = _minimal_payload()
+    manifest = write_export_records(
+        [{"scenario_id": "unit scenario", "payload": payload}],
+        tmp_path / "exports",
+    )
+
+    loaded = read_export_manifest(tmp_path / "exports" / "manifest.json")
+
+    assert loaded == manifest
+    assert loaded["exports"] == [{"scenario_id": "unit scenario", "path": "unit_scenario.json"}]
+
+
+def test_read_export_manifest_rejects_invalid_manifest_shape(tmp_path) -> None:
+    """Manifest reader should fail clearly for unsupported versions and malformed entries."""
+    from robot_sf_carla_bridge import read_export_manifest
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "carla-replay-export-manifest.v0",
+                "exports": [{"scenario_id": "unit", "path": "unit.json"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="manifest schema_version"):
+        read_export_manifest(manifest_path)
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "carla-replay-export-manifest.v1",
+                "exports": [{"scenario_id": "unit"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="exports\\[0\\].path"):
+        read_export_manifest(manifest_path)
+
+
+def test_read_export_manifest_rejects_parent_relative_path() -> None:
+    """Manifest reader should reject parent-relative input paths before opening files."""
+    from robot_sf_carla_bridge import read_export_manifest
+
+    with pytest.raises(ValueError, match="parent-relative"):
+        read_export_manifest("../unsafe/manifest.json")
+
+
 def test_read_export_payload_rejects_malformed_json(tmp_path) -> None:
     """Malformed JSON files should surface a JSONDecodeError, not a schema error."""
     from robot_sf_carla_bridge import read_export_payload

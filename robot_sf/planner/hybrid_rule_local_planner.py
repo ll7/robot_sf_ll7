@@ -944,6 +944,67 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 row[key] = float(value)
         return row
 
+    def _evaluate_candidates_for_plan(
+        self,
+        *,
+        candidates: list[HybridRuleCandidate],
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        speed_cap: float,
+        nearest_ped: float,
+        progress_windows: dict[str, float],
+    ) -> tuple[
+        list[dict[str, Any]],
+        Counter[str],
+        Counter[str],
+        dict[str, dict[str, int]],
+        list[dict[str, Any]],
+    ]:
+        """Evaluate a candidate set and collect rejection diagnostics.
+
+        Returns:
+            tuple: Accepted evaluations, aggregate rejections, moving-command
+            rejections, source-level rejections, and compact examples.
+        """
+        accepted: list[dict[str, Any]] = []
+        rejection_counts: Counter[str] = Counter()
+        moving_rejection_counts: Counter[str] = Counter()
+        rejection_counts_by_source: dict[str, Counter[str]] = {}
+        rejected_examples: list[dict[str, Any]] = []
+
+        for candidate in candidates:
+            evaluation = self._evaluate_candidate(
+                candidate=candidate,
+                observation=observation,
+                state=state,
+                speed_cap=speed_cap,
+                nearest_ped=nearest_ped,
+                progress_windows=progress_windows,
+            )
+            if bool(evaluation.get("accepted")):
+                accepted.append(evaluation)
+                continue
+
+            reason = str(evaluation.get("reason", "unknown"))
+            rejection_counts[reason] += 1
+            source_counts = rejection_counts_by_source.setdefault(candidate.source, Counter())
+            source_counts[reason] += 1
+            if candidate.linear > float(self.config.freezing_speed_threshold):
+                moving_rejection_counts[reason] += 1
+            if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
+                rejected_examples.append(self._rejection_diagnostic(evaluation))
+
+        return (
+            accepted,
+            rejection_counts,
+            moving_rejection_counts,
+            {
+                source: dict(sorted(counts.items()))
+                for source, counts in sorted(rejection_counts_by_source.items())
+            },
+            rejected_examples,
+        )
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the selected ``(linear, angular)`` command."""
         state = self._extract_state(observation)
@@ -974,25 +1035,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)
         candidates = self._generate_candidates(state, speed_cap)
-        accepted: list[dict[str, Any]] = []
-        rejection_counts: Counter[str] = Counter()
-        rejected_examples: list[dict[str, Any]] = []
-        for candidate in candidates:
-            evaluation = self._evaluate_candidate(
-                candidate=candidate,
-                observation=observation,
-                state=state,
-                speed_cap=speed_cap,
-                nearest_ped=nearest_ped,
-                progress_windows=progress_windows,
-            )
-            if bool(evaluation.get("accepted")):
-                accepted.append(evaluation)
-            else:
-                reason = str(evaluation.get("reason", "unknown"))
-                rejection_counts[reason] += 1
-                if len(rejected_examples) < max(int(self.config.top_k_diagnostics), 1):
-                    rejected_examples.append(self._rejection_diagnostic(evaluation))
+        (
+            accepted,
+            rejection_counts,
+            moving_rejection_counts,
+            rejection_counts_by_source,
+            rejected_examples,
+        ) = self._evaluate_candidates_for_plan(
+            candidates=candidates,
+            observation=observation,
+            state=state,
+            speed_cap=speed_cap,
+            nearest_ped=nearest_ped,
+            progress_windows=progress_windows,
+        )
 
         self._rejection_counts.update(rejection_counts)
         if accepted:
@@ -1051,6 +1107,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
             rejected_examples=rejected_examples,
+            moving_rejection_counts=dict(moving_rejection_counts),
+            rejection_counts_by_source=rejection_counts_by_source,
         )
         return command
 
@@ -1085,6 +1143,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         predicted_ttc: float,
         progress_windows: dict[str, float],
         rejected_examples: list[dict[str, Any]] | None = None,
+        moving_rejection_counts: dict[str, int] | None = None,
+        rejection_counts_by_source: dict[str, dict[str, int]] | None = None,
     ) -> None:
         """Persist selected-command diagnostics and update state."""
         self._last_command = (float(command[0]), float(command[1]))
@@ -1104,6 +1164,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             },
             "top_k": top_k,
             "rejection_counts": dict(sorted(rejection_counts.items())),
+            "moving_rejection_counts": dict(sorted((moving_rejection_counts or {}).items())),
+            "rejection_counts_by_source": rejection_counts_by_source or {},
             "rejected_examples": rejected_examples or [],
             "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
             "nearest_static_obstacle_distance": _finite_or_none(nearest_static),

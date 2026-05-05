@@ -232,6 +232,8 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
   exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
   script.
+- [Issue #966 CARLA T0 Batch Validation JSON Summary](issue_966_carla_t0_batch_validation_json_summary.md)
+  adds deterministic machine-readable output to the CARLA-free batch validation CLI.
 
 ## DreamerV3 Notes
 

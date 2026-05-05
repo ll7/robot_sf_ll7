@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -100,13 +101,26 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Validate a CARLA T0 export batch.")
     parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
+    parser.add_argument("--json", action="store_true", help="Print a machine-readable summary.")
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
     payload_count = 0
+    scenario_ids: list[str] = []
     for entry in resolve_export_manifest_payload_paths(manifest_path):
         read_export_payload(entry["path"])
         payload_count += 1
+        scenario_ids.append(str(entry["scenario_id"]))
+
+    if args.json:
+        summary = {
+            "manifest": manifest_path.as_posix(),
+            "payload_count": payload_count,
+            "scenario_ids": scenario_ids,
+        }
+        sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
+        return 0
+
     noun = "payload" if payload_count == 1 else "payloads"
     sys.stdout.write(f"{manifest_path.as_posix()}: {payload_count} {noun}\n")
     return 0

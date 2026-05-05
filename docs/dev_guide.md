@@ -160,6 +160,7 @@ scripts/dev/run_tests_parallel.sh
 scripts/dev/run_ci_local.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
 scripts/dev/gh_comment.sh pr --current <<'EOF'
 Summary line
 - bullet 1
@@ -181,6 +182,10 @@ feature branch by itself, so validation from before the latest-main sync is stal
 Do not wait until PR creation to pick up `main` branch improvements on long-lived feature branches;
 merge latest `origin/main` into the current branch when active work starts, then sync again before
 opening the PR.
+
+Use `uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests`
+before/after substantial refactor PRs when you need a quick, repeatable snapshot of largest modules,
+longest functions, and optional pytest duration rows from a captured `--pytest-log`.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

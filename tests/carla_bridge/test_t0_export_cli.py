@@ -239,6 +239,17 @@ def test_validate_t0_export_batch_main_prints_schema(capsys) -> None:
     assert json.loads(capsys.readouterr().out) == load_batch_validation_summary_schema()
 
 
+def test_catalog_carla_schemas_main_prints_catalog(capsys) -> None:
+    """Schema catalog CLI should expose deterministic catalog metadata."""
+    from robot_sf_carla_bridge import list_carla_bridge_schema_catalog
+    from robot_sf_carla_bridge.cli import catalog_carla_schemas_main
+
+    exit_code = catalog_carla_schemas_main([])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == list_carla_bridge_schema_catalog()
+
+
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should expose deterministic machine-readable status."""
     import importlib.util
@@ -364,6 +375,9 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     assert pyproject["project"]["scripts"]["robot-sf-check-carla"] == (
         "robot_sf_carla_bridge.cli:check_carla_availability_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-catalog-carla-schemas"] == (
+        "robot_sf_carla_bridge.cli:catalog_carla_schemas_main"
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages

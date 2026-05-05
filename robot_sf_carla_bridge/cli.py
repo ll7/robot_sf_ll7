@@ -19,6 +19,7 @@ from robot_sf_carla_bridge.export import (
     resolve_export_manifest_payload_paths,
     write_export_records,
 )
+from robot_sf_carla_bridge.schema_catalog import list_carla_bridge_schema_catalog
 
 
 def _has_parent_reference(path_value: str) -> bool:
@@ -212,6 +213,20 @@ def check_carla_availability_main(argv: list[str] | None = None) -> int:
 
     sys.stdout.write(f"{status['dependency']}: {status['status']} - {status['reason']}\n")
     return exit_code
+
+
+def catalog_carla_schemas_main(argv: list[str] | None = None) -> int:
+    """Print import-safe CARLA bridge schema catalog metadata.
+
+    Returns:
+        Process-style exit code.
+    """
+
+    parser = argparse.ArgumentParser(description="Print CARLA bridge schema catalog metadata.")
+    parser.parse_args(argv)
+
+    sys.stdout.write(f"{json.dumps(list_carla_bridge_schema_catalog(), sort_keys=True)}\n")
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

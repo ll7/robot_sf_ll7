@@ -149,3 +149,20 @@ Observed buckets from the h500 evidence:
 - Parsed the 23 h500 report summary paths and combined JSONL files referenced by those reports to
   compute aggregate ranking, h100-to-h500 deltas, scenario blockers, gate checks, and horizon
   buckets.
+- Follow-up implementation artifacts:
+  - Clean pinned rerun handoff:
+    `docs/context/policy_search/SLURM/004_h500_leader_clean_rerun.md`
+  - Strict h500 gate reports:
+    `docs/context/policy_search/reports/promotions/2026-05-05_full_matrix_h500_strict_gate/`
+  - Scenario horizon recommendations:
+    `docs/context/policy_search/reports/2026-05-05_h500_horizon_recommendations.md`
+    and `configs/policy_search/scenario_horizons_h500.yaml`
+  - Research plan:
+    `docs/context/policy_search/reasoning/2026-05-05_h500_research_plan.md`
+- Tooling checks for the follow-up implementation:
+  - `uv run pytest tests/tools/test_promote_policy_search_candidate.py tests/tools/test_suggest_policy_search_horizons.py`
+  - `uv run ruff check scripts/tools/suggest_policy_search_horizons.py scripts/tools/promote_policy_search_candidate.py scripts/tools/summarize_policy_search_portfolio.py tests/tools/test_promote_policy_search_candidate.py tests/tools/test_suggest_policy_search_horizons.py`
+  - `uv run ruff format --check scripts/tools/suggest_policy_search_horizons.py scripts/tools/promote_policy_search_candidate.py scripts/tools/summarize_policy_search_portfolio.py tests/tools/test_promote_policy_search_candidate.py tests/tools/test_suggest_policy_search_horizons.py`
+  - `bash -n scripts/dev/sbatch_policy_search_sweep.sh SLURM/Auxme/policy_search_candidate_stage.sl`
+  - `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix_h500 --candidates-file configs/policy_search/candidate_sets/h500_leader_clean_rerun.txt --run-id policy_search_full_matrix_h500_leaders_clean_dryrun --throttle 1 --workers 2 --clean-pinned --no-status --dry-run`
+  - `git diff --check`

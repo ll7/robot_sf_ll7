@@ -16,6 +16,8 @@ DRY_RUN=0
 SHOW_STATUS=1
 ALL_IMPLEMENTED=0
 CANDIDATES_FILE_OVERRIDE=""
+PIN_HEAD=0
+REQUIRE_CLEAN_WORKTREE=0
 RUN_ID="policy_search_$(date -u +%Y%m%d_%H%M%S)"
 EXTRA_SBATCH_ARGS=()
 
@@ -38,6 +40,12 @@ Options:
   --all-implemented       Run every implemented candidate at the selected stage,
                           ignoring candidate required_stages
   --candidates-file <p>   Use an explicit newline-delimited candidate file
+  --pin-head              Record current HEAD and make each array task fail if
+                          the checkout has moved before it starts
+  --require-clean-worktree
+                          Make each array task fail unless the worktree has no
+                          non-ignored changes
+  --clean-pinned          Convenience alias for --pin-head --require-clean-worktree
   --sbatch-arg <arg>      Extra sbatch argument
   --no-status             Skip partition status table
   --dry-run               Print resolved submission without submitting
@@ -47,6 +55,8 @@ Examples:
   scripts/dev/sbatch_policy_search_sweep.sh --stage nominal_sanity --dry-run
   scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 2
   scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --horizon 500 --candidates-file candidates.txt
+  scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix_h500 --clean-pinned \
+    --candidates-file configs/policy_search/candidate_sets/h500_leader_clean_rerun.txt
 EOF
 }
 
@@ -87,6 +97,19 @@ while [[ $# -gt 0 ]]; do
     --candidates-file)
       CANDIDATES_FILE_OVERRIDE="$2"
       shift 2
+      ;;
+    --pin-head)
+      PIN_HEAD=1
+      shift
+      ;;
+    --require-clean-worktree)
+      REQUIRE_CLEAN_WORKTREE=1
+      shift
+      ;;
+    --clean-pinned)
+      PIN_HEAD=1
+      REQUIRE_CLEAN_WORKTREE=1
+      shift
       ;;
     --sbatch-arg)
       EXTRA_SBATCH_ARGS+=("$2")
@@ -156,6 +179,15 @@ echo "[policy-search-submit] run_id=$RUN_ID stage=$STAGE candidates=$CANDIDATE_C
 echo "[policy-search-submit] horizon=${HORIZON:-stage-default}" >&2
 echo "[policy-search-submit] candidates_file=$CANDIDATES_FILE" >&2
 
+EXPECTED_COMMIT=""
+if [[ "$PIN_HEAD" == "1" ]]; then
+  EXPECTED_COMMIT="$(git rev-parse HEAD)"
+  echo "[policy-search-submit] expected_commit=$EXPECTED_COMMIT" >&2
+fi
+if [[ "$REQUIRE_CLEAN_WORKTREE" == "1" ]]; then
+  echo "[policy-search-submit] require_clean_worktree=1" >&2
+fi
+
 wrapper_args=(
   "--partition" "$PARTITION"
   "--qos" "$QOS"
@@ -163,7 +195,7 @@ wrapper_args=(
   "--sbatch-arg" "--qos=$QOS"
   "--sbatch-arg" "--array=0-$((CANDIDATE_COUNT - 1))%$THROTTLE"
   "--sbatch-arg" "--job-name=rsf-pol-$STAGE"
-  "--sbatch-arg" "--export=ALL,POLICY_SEARCH_STAGE=$STAGE,POLICY_SEARCH_CANDIDATES_FILE=$CANDIDATES_FILE,POLICY_SEARCH_RUN_ID=$RUN_ID,POLICY_SEARCH_WORKERS=$WORKERS,POLICY_SEARCH_HORIZON=$HORIZON"
+  "--sbatch-arg" "--export=ALL,POLICY_SEARCH_STAGE=$STAGE,POLICY_SEARCH_CANDIDATES_FILE=$CANDIDATES_FILE,POLICY_SEARCH_RUN_ID=$RUN_ID,POLICY_SEARCH_WORKERS=$WORKERS,POLICY_SEARCH_HORIZON=$HORIZON,POLICY_SEARCH_EXPECTED_COMMIT=$EXPECTED_COMMIT,POLICY_SEARCH_REQUIRE_CLEAN=$REQUIRE_CLEAN_WORKTREE"
 )
 
 if [[ "$DRY_RUN" == "1" ]]; then

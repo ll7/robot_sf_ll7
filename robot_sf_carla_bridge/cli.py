@@ -24,6 +24,29 @@ def _has_parent_reference(path_value: str) -> bool:
     return any(part == ".." for part in Path(path_value).parts)
 
 
+def load_export_manifest_payloads(manifest_path: Path) -> list[dict[str, object]]:
+    """Load and validate every payload referenced by a T0 export manifest.
+
+    The CLI keeps this small wrapper so tests and callers can patch either the batch-level helper or
+    the lower-level path resolution and payload-read boundaries.
+
+    Returns:
+        Ordered payload records with scenario id, path, and validated payload.
+    """
+
+    records: list[dict[str, object]] = []
+    for entry in resolve_export_manifest_payload_paths(manifest_path):
+        payload_path = Path(entry["path"])
+        records.append(
+            {
+                "scenario_id": entry["scenario_id"],
+                "path": payload_path,
+                "payload": read_export_payload(payload_path),
+            }
+        )
+    return records
+
+
 def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
     """Export a scenario manifest to local CARLA T0 neutral JSON files.
 
@@ -133,12 +156,9 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
-    payload_count = 0
-    scenario_ids: list[str] = []
-    for entry in resolve_export_manifest_payload_paths(manifest_path):
-        read_export_payload(entry["path"])
-        payload_count += 1
-        scenario_ids.append(str(entry["scenario_id"]))
+    records = load_export_manifest_payloads(manifest_path)
+    payload_count = len(records)
+    scenario_ids = [str(record["scenario_id"]) for record in records]
 
     if args.json:
         summary = {

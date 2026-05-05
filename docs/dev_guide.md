@@ -161,6 +161,7 @@ scripts/dev/run_ci_local.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
+uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10
 scripts/dev/gh_comment.sh pr --current <<'EOF'
 Summary line
 - bullet 1
@@ -186,6 +187,9 @@ opening the PR.
 Use `uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests`
 before/after substantial refactor PRs when you need a quick, repeatable snapshot of largest modules,
 longest functions, and optional pytest duration rows from a captured `--pytest-log`.
+Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10`
+when GitHub CI wall time drifts from local readiness and you need queue, job, and slowest-step
+timings from `gh run view` data.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

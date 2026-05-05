@@ -107,6 +107,9 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+* [Issue #1002 Complexity and Test Runtime Baseline](./issue_1002_complexity_runtime_baseline.md)
+  adds a lightweight `scripts/dev/complexity_runtime_baseline.py` command and records the first
+  2026-05-05 refactor-prioritization snapshot.
 * [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
   keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
   available; documents the rerun evidence and non-blocking policy.

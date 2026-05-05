@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 from typing import Any
+
+
+class CarlaUnavailableError(RuntimeError):
+    """Raised when a CARLA-dependent bridge path is used without CARLA installed."""
 
 
 def check_carla_availability() -> dict[str, Any]:
@@ -25,3 +30,24 @@ def check_carla_availability() -> dict[str, Any]:
         "reason": "CARLA Python API package is importable",
         "dependency": "carla",
     }
+
+
+def require_carla() -> Any:
+    """Import and return the optional CARLA Python API or raise a clear bridge error.
+
+    Returns:
+        Imported ``carla`` module for CARLA-dependent replay entry points.
+
+    Raises:
+        CarlaUnavailableError: When the CARLA Python API cannot be imported.
+    """
+
+    try:
+        return importlib.import_module("carla")
+    except ModuleNotFoundError as exc:
+        if exc.name != "carla":
+            raise
+        raise CarlaUnavailableError(
+            "CARLA Python API package 'carla' is not importable. Install CARLA and ensure its "
+            "Python API is on PYTHONPATH before using CARLA replay entry points."
+        ) from exc

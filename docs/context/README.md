@@ -234,6 +234,8 @@ why a change was made rather than a full issue execution transcript.
   script.
 - [Issue #966 CARLA T0 Batch Validation JSON Summary](issue_966_carla_t0_batch_validation_json_summary.md)
   adds deterministic machine-readable output to the CARLA-free batch validation CLI.
+- [Issue #968 CARLA Runtime Availability Guard](issue_968_carla_runtime_availability_guard.md)
+  adds a strict optional-CARLA import guard for future replay entry points.
 
 ## DreamerV3 Notes
 

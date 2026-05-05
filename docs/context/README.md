@@ -152,6 +152,9 @@ knowledge, not every transient iteration detail.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.
+* [Issue #1004 Policy Stack V1 Runtime](issue_1004_policy_stack_v1_runtime.md)
+  records the first runnable `policy_stack_v1` slice, its explicit proposal-status diagnostics, and
+  the map-runner smoke limitation under parent #871.
 
 ## Map Coverage Notes
 

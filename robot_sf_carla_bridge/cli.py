@@ -19,7 +19,10 @@ from robot_sf_carla_bridge.export import (
     resolve_export_manifest_payload_paths,
     write_export_records,
 )
-from robot_sf_carla_bridge.schema_catalog import list_carla_bridge_schema_catalog
+from robot_sf_carla_bridge.schema_catalog import (
+    list_carla_bridge_schema_catalog,
+    load_schema_catalog_schema,
+)
 
 
 def _has_parent_reference(path_value: str) -> bool:
@@ -223,8 +226,12 @@ def catalog_carla_schemas_main(argv: list[str] | None = None) -> int:
     """
 
     parser = argparse.ArgumentParser(description="Print CARLA bridge schema catalog metadata.")
-    parser.parse_args(argv)
+    parser.add_argument("--schema", action="store_true", help="Print the JSON Schema contract.")
+    args = parser.parse_args(argv)
 
+    if args.schema:
+        sys.stdout.write(f"{json.dumps(load_schema_catalog_schema(), sort_keys=True)}\n")
+        return 0
     sys.stdout.write(f"{json.dumps(list_carla_bridge_schema_catalog(), sort_keys=True)}\n")
     return 0
 

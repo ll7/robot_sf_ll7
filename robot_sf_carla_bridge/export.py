@@ -58,6 +58,27 @@ class Pose2D:
 
 
 @dataclass(frozen=True)
+class Waypoint2D:
+    """Pedestrian-route waypoint matching the ``waypoint2d`` schema (x, y, optional t_s)."""
+
+    x: float
+    y: float
+    t_s: float | None = None
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the schema payload for this waypoint.
+
+        Returns:
+            JSON-ready waypoint dictionary.
+        """
+
+        payload: dict[str, float] = {"x": float(self.x), "y": float(self.y)}
+        if self.t_s is not None:
+            payload["t_s"] = float(self.t_s)
+        return payload
+
+
+@dataclass(frozen=True)
 class CertificateRef:
     """Reference to the scenario certification input used for export."""
 
@@ -135,7 +156,7 @@ class PedestrianReplaySpec:
 
     ped_id: str
     start: Pose2D
-    route: list[Pose2D]
+    route: list[Waypoint2D]
     timing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -179,7 +200,7 @@ class SimulationSpec:
 
 @cache
 def load_export_schema() -> dict[str, Any]:
-    """Load the versioned T0 neutral export JSON schema.
+    """Load the versioned T0 neutral export JSON schema (cached).
 
     Returns:
         Parsed JSON schema dictionary.
@@ -335,7 +356,7 @@ def build_export_payload_from_scenario_entry(
         certificate=certificate,
         scenario_id=_scenario_identifier(scenario),
         source_config=path,
-        map_id=str(getattr(config, "map_id", None) or map_id),
+        map_id=map_id,
         robot_radius_m=float(config.robot_config.radius),
         robot_kinematics=_robot_kinematics_payload(config.robot_config),
         dt_s=float(config.sim_config.time_per_step_in_secs),
@@ -369,8 +390,37 @@ def build_export_payloads_from_scenario_file(
             route_index=route_index,
             trajectory_fields=trajectory_fields,
         )
-        records.append({"scenario_id": _scenario_identifier(scenario), "payload": payload})
+        records.append({"scenario_id": payload["scenario"]["id"], "payload": payload})
     return records
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert common Python objects to JSON-safe values.
+
+    Returns:
+        JSON-safe value composed only of native JSON-compatible containers and scalars.
+    """
+
+    if isinstance(value, Path):
+        return value.as_posix()
+
+    # Resolve numpy-like objects lazily so this module stays importable even if
+    # callers provide array/scalar wrappers without importing numpy here.
+    tolist = getattr(value, "tolist", None)
+    if callable(tolist):
+        return _json_safe(tolist())
+
+    item = getattr(value, "item", None)
+    if callable(item):
+        return _json_safe(item())
+
+    if isinstance(value, dict):
+        return {str(key): _json_safe(nested) for key, nested in value.items()}
+
+    if isinstance(value, list | tuple):
+        return [_json_safe(nested) for nested in value]
+
+    return value
 
 
 def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Path:
@@ -380,10 +430,12 @@ def write_export_payload(payload: dict[str, Any], output_path: str | Path) -> Pa
         The output path that was written.
     """
 
-    validate_export_payload(payload)
+    normalized_payload = cast("dict[str, Any]", _json_safe(payload))
+    validate_export_payload(normalized_payload)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(normalized_payload, indent=2, sort_keys=True)
+    path.write_text(serialized + "\n", encoding="utf-8")
     return path
 
 
@@ -402,7 +454,9 @@ def write_export_records(
         "schema_version": EXPORT_MANIFEST_SCHEMA_VERSION,
         "exports": [],
     }
-    used_names: set[str] = set()
+    # Reserve manifest.json so a scenario_id sanitizing to "manifest" cannot
+    # silently overwrite the manifest file written below.
+    used_names: set[str] = {"manifest.json"}
     for index, record in enumerate(records):
         scenario_id = str(record.get("scenario_id") or "").strip()
         if not scenario_id:
@@ -420,6 +474,16 @@ def write_export_records(
     return manifest
 
 
+def _validated_input_path(input_path: str | Path, *, label: str) -> Path:
+    raw_path = str(input_path)
+    if not raw_path.strip():
+        raise ValueError(f"{label} must be a non-empty path")
+    path = Path(raw_path)
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{label} must not contain parent-relative segments")
+    return path
+
+
 def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
     """Read and validate a T0 export-record manifest from UTF-8 JSON.
 
@@ -431,7 +495,9 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
         ValueError: if the manifest shape is unsupported.
     """
 
-    manifest = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    path = _validated_input_path(input_path, label="export manifest path")
+    with path.open("r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
     if not isinstance(manifest, dict):
         raise ValueError("export manifest must be a JSON object")
     if manifest.get("schema_version") != EXPORT_MANIFEST_SCHEMA_VERSION:
@@ -496,7 +562,9 @@ def load_export_manifest_payloads(input_path: str | Path) -> list[dict[str, Any]
         Ordered records with ``scenario_id``, resolved ``path``, and validated ``payload`` fields.
 
     Raises:
-        FileNotFoundError: if a referenced payload file is missing.
+        FileNotFoundError: if the manifest or a referenced payload file is missing.
+        ValueError: if the manifest shape is unsupported.
+        json.JSONDecodeError: if the manifest or any referenced payload contains invalid JSON.
         jsonschema.ValidationError: if a referenced payload is not schema-valid.
     """
 
@@ -516,6 +584,9 @@ def load_export_manifest_payloads(input_path: str | Path) -> list[dict[str, Any]
 def read_export_payload(input_path: str | Path) -> dict[str, Any]:
     """Read and validate one T0 export payload from UTF-8 JSON.
 
+    Streams the file via ``json.load`` instead of loading its full text first,
+    so very large exports do not need to be held in memory twice.
+
     Returns:
         Schema-valid export payload dictionary.
 
@@ -524,7 +595,8 @@ def read_export_payload(input_path: str | Path) -> dict[str, Any]:
         jsonschema.ValidationError: if the parsed payload does not satisfy the export schema.
     """
 
-    payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    with Path(input_path).open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
     validate_export_payload(payload)
     return cast("dict[str, Any]", payload)
 
@@ -550,7 +622,7 @@ def _load_scenario_entries(scenario_path: Path) -> list[Mapping[str, Any]]:
 
     from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
 
-    return list(load_scenarios(scenario_path))
+    return load_scenarios(scenario_path)
 
 
 def _unique_export_file_name(scenario_id: str, used_names: set[str]) -> str:
@@ -583,7 +655,8 @@ def _certificate_payload_for_scenario_entry(
 def _single_loaded_map(config: Any) -> tuple[str, Any]:
     """Return the selected loaded map from a Robot-SF simulation config."""
 
-    map_defs = getattr(getattr(config, "map_pool", None), "map_defs", None)
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None) if map_pool is not None else None
     if not map_defs:
         raise ValueError("Scenario entry did not load a map definition")
     selected = getattr(config, "map_id", None)
@@ -635,7 +708,9 @@ def _certificate_ref_from_payload(certificate: Mapping[str, Any]) -> Certificate
     if eligibility == "excluded":
         raise ValueError("Cannot export CARLA T0 payload for excluded scenario certificate")
 
-    status = str(certificate.get("status") or certificate.get("classification") or "").strip()
+    status = (
+        str(certificate.get("status") or certificate.get("classification") or "").strip().lower()
+    )
     if status not in _EXPORTABLE_CERT_STATUSES:
         raise ValueError(f"Cannot export CARLA T0 payload for certificate status '{status}'")
     return CertificateRef(
@@ -709,21 +784,34 @@ def _static_geometry_from_map_definition(map_def: Any) -> dict[str, Any]:
     }
 
 
+def _obstacle_vertices(points: Any) -> list[list[float]]:
+    """Return cleaned 2D vertex list; drops a trailing duplicate closing point."""
+
+    coords = [list(_point_tuple(point)) for point in list(points)]
+    if len(coords) >= 2 and coords[0] == coords[-1]:
+        coords = coords[:-1]
+    return coords
+
+
 def _obstacles_from_map_definition(map_def: Any) -> list[dict[str, Any]]:
     obstacles: list[dict[str, Any]] = []
     for index, obstacle in enumerate(getattr(map_def, "obstacles", []) or []):
         polygons = getattr(obstacle, "iter_polygons", lambda: [])()
         if polygons:
             for poly_index, polygon in enumerate(polygons):
-                coords = [list(_point_tuple(point)) for point in list(polygon.exterior.coords)[:-1]]
                 obstacles.append(
                     {
                         "id": f"obstacle_{index}_{poly_index}",
                         "type": "polygon",
-                        "vertices": coords,
+                        "vertices": _obstacle_vertices(polygon.exterior.coords),
                     }
                 )
             continue
-        vertices = [list(_point_tuple(point)) for point in getattr(obstacle, "vertices", [])]
-        obstacles.append({"id": f"obstacle_{index}", "type": "polygon", "vertices": vertices})
+        obstacles.append(
+            {
+                "id": f"obstacle_{index}",
+                "type": "polygon",
+                "vertices": _obstacle_vertices(getattr(obstacle, "vertices", [])),
+            }
+        )
     return obstacles

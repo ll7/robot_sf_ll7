@@ -1,0 +1,10 @@
+# Full maintained positive eval surface for issue-857 horizon-matched retrain checks:
+# - same 48 classic/francis maintained benchmark scenarios
+# - same 23 maintained atomic scenarios
+# - all expanded scenarios are forced to max_episode_steps=100
+includes:
+  - ../classic_interactions_francis2023.yaml
+  - atomic_navigation_minimal_full_v1.yaml
+scenario_overrides:
+  simulation_config:
+    max_episode_steps: 100

@@ -29,8 +29,55 @@ ceiling. Training and evaluating on `configs/scenarios/sets/ppo_full_maintained_
   OOD suite (see `docs/context/issue_791_ood_holdout_suite_design.md`) before any
   generalization claim.
 
+**Issue 856 full-budget broad-training control (added 2026-05-02):** the leader recipe was
+re-trained on the broader `ppo_all_available_training_v1` manifest at the same 10M budget
+(seed 123, job 12223, WandB `ll7/robot_sf/ateif3c8`). Best in-distribution eval at step
+9,961,472: success **0.900**, collision 0.100, SNQI 0.226 — `0.029` below the leader on
+success and `0.029` worse on collision rate. On the camera-ready matrix (job 12226, 141
+episodes per planner), the broad-training PPO row landed at success **0.2199**,
+collisions **0.0922**, SNQI **−0.3305**, vs the eval-aligned 12122 reference of
+0.2553 / 0.0851 / −0.2906 — broad-training is worse on every metric at fixed budget. This
+is a single-seed point estimate; replicas (jobs 12257/12258, seeds 231/1337) are running
+on l40s and will replace the point estimate with a seed band. The result strengthens the
+alignment-dominates claim rather than refuting it: broader scenario exposure does not
+recover the camera-ready row at the same budget. See
+`docs/context/issue_856_ppo_all_scenarios_full_budget.md` for the campaign and decision log
+and `docs/context/issue_856_implementation_verification.md` for the pre-PR audit.
+
 Leader artifact (candidate, not yet promoted into
 `configs/baselines/ppo_15m_grid_socnav.yaml`):
 `output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip`
 
 Full write-up: `docs/context/issue_791_wave6_results_and_benchmark_orca_block.md`.
+
+2026-04-29/30 follow-up outcome for issue 857:
+
+- Added a horizon-matched scenario surface at
+  `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` using a new
+  manifest-level `scenario_overrides` hook in `robot_sf/training/scenario_loader.py`.
+- Added the seed-123 retrain clone
+  `configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml`.
+- Added the horizon-400 benchmark reference
+  `configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml`.
+- Corrected `RobotState` timeout semantics so `max_episode_steps` now expires on the configured
+  discrete step budget instead of one step late.
+- Job `12178` trained the horizon-100 candidate. Its in-distribution eval reached
+  `success_rate=0.6429`, but its camera-ready horizon-100 row in job `12205` fell to
+  `success_mean=0.1489` with 120/141 timeouts and 0/141 binary collisions. Do not promote this
+  retrain or queue seed replicas.
+- Job `12206` reran the issue-791 Wave-5 leader (11724) on the same camera-ready matrix at horizon
+  400. The leader recovered to `success_mean=0.8298` across 141 PPO episodes, with 117/141
+  successes and 0/141 binary collisions. This is strong evidence that the 11724 leader's
+  camera-ready drop is benchmark-horizon-bound, while horizon-100 retraining produced a degenerate
+  conservative policy.
+- Practical implication: keep 11724 as the canonical PPO leader for now, avoid claiming a
+  horizon-100 PPO fix, and compare against horizon 400 as the paper-facing reference.
+- Horizon influence sweep jobs completed on 2026-04-30:
+  `12212` horizon 200 (`success_mean=0.7518`, `collisions_mean=0.1489`,
+  `snqi_mean=-0.2208`), `12213` horizon 300 (`success_mean=0.8440`,
+  `collisions_mean=0.1418`, `snqi_mean=-0.1912`), and `12214` horizon 600
+  (`success_mean=0.8369`, `collisions_mean=0.1489`, `snqi_mean=-0.1752`). The curve jumps
+  sharply from horizon 100 to 200 and is effectively saturated by horizon 300/400; extra budget
+  beyond 400 does not materially lift success.
+
+Full issue-857 write-up: `docs/context/issue_857_horizon_alignment_setup.md`.

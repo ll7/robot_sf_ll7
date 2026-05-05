@@ -13,7 +13,14 @@ from typing import Any
 
 import yaml
 
-STAGE_ORDER = ("smoke", "nominal_sanity", "stress_slice", "full_matrix", "robustness_extension")
+STAGE_ORDER = (
+    "smoke",
+    "nominal_sanity",
+    "stress_slice",
+    "full_matrix",
+    "full_matrix_h500",
+    "robustness_extension",
+)
 STAGE_RANK = {stage: index for index, stage in enumerate(STAGE_ORDER)}
 
 

@@ -11,9 +11,11 @@ PARTITION="a30"
 QOS="a30-gpu"
 THROTTLE="2"
 WORKERS="2"
+HORIZON=""
 DRY_RUN=0
 SHOW_STATUS=1
 ALL_IMPLEMENTED=0
+CANDIDATES_FILE_OVERRIDE=""
 RUN_ID="policy_search_$(date -u +%Y%m%d_%H%M%S)"
 EXTRA_SBATCH_ARGS=()
 
@@ -25,14 +27,17 @@ Submit a Slurm array that evaluates every implemented policy-search candidate
 registered for one funnel stage.
 
 Options:
-  --stage <name>          Funnel stage: smoke, nominal_sanity, stress_slice, full_matrix, robustness_extension
+  --stage <name>          Funnel stage: smoke, nominal_sanity, stress_slice, full_matrix,
+                          full_matrix_h500, robustness_extension
   --partition <name>      Slurm partition (default: a30)
   --qos <name>            Slurm QoS (default: a30-gpu)
   --throttle <n>          Slurm array throttle, e.g. 1 or 2 (default: 2)
   --workers <n>           Runner workers per candidate task (default: 2)
+  --horizon <n>           Override stage horizon passed to the candidate runner
   --run-id <id>           Output run id (default: UTC timestamp)
   --all-implemented       Run every implemented candidate at the selected stage,
                           ignoring candidate required_stages
+  --candidates-file <p>   Use an explicit newline-delimited candidate file
   --sbatch-arg <arg>      Extra sbatch argument
   --no-status             Skip partition status table
   --dry-run               Print resolved submission without submitting
@@ -41,6 +46,7 @@ Options:
 Examples:
   scripts/dev/sbatch_policy_search_sweep.sh --stage nominal_sanity --dry-run
   scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 2
+  scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --horizon 500 --candidates-file candidates.txt
 EOF
 }
 
@@ -66,6 +72,10 @@ while [[ $# -gt 0 ]]; do
       WORKERS="$2"
       shift 2
       ;;
+    --horizon)
+      HORIZON="$2"
+      shift 2
+      ;;
     --run-id)
       RUN_ID="$2"
       shift 2
@@ -73,6 +83,10 @@ while [[ $# -gt 0 ]]; do
     --all-implemented)
       ALL_IMPLEMENTED=1
       shift
+      ;;
+    --candidates-file)
+      CANDIDATES_FILE_OVERRIDE="$2"
+      shift 2
       ;;
     --sbatch-arg)
       EXTRA_SBATCH_ARGS+=("$2")
@@ -104,7 +118,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$STAGE" in
-  smoke|nominal_sanity|stress_slice|full_matrix|robustness_extension)
+  smoke|nominal_sanity|stress_slice|full_matrix|full_matrix_h500|robustness_extension)
     ;;
   *)
     echo "Unsupported stage: $STAGE" >&2
@@ -116,12 +130,17 @@ mkdir -p "$REPO_ROOT/output/policy_search/sweeps/$RUN_ID" "$REPO_ROOT/output/slu
 CANDIDATES_FILE="$REPO_ROOT/output/policy_search/sweeps/$RUN_ID/candidates_${STAGE}.txt"
 
 cd "$REPO_ROOT"
-candidate_args=("--list-candidates" "--stage" "$STAGE")
-if [[ "$ALL_IMPLEMENTED" == "1" ]]; then
-  candidate_args+=("--all-implemented")
+if [[ -n "$CANDIDATES_FILE_OVERRIDE" ]]; then
+  CANDIDATES_FILE="$(realpath "$CANDIDATES_FILE_OVERRIDE")"
+  test -f "$CANDIDATES_FILE"
+else
+  candidate_args=("--list-candidates" "--stage" "$STAGE")
+  if [[ "$ALL_IMPLEMENTED" == "1" ]]; then
+    candidate_args+=("--all-implemented")
+  fi
+  uv run python scripts/tools/summarize_policy_search_portfolio.py "${candidate_args[@]}" \
+    > "$CANDIDATES_FILE"
 fi
-uv run python scripts/tools/summarize_policy_search_portfolio.py "${candidate_args[@]}" \
-  > "$CANDIDATES_FILE"
 
 CANDIDATE_COUNT="$(wc -l < "$CANDIDATES_FILE" | tr -d ' ')"
 if [[ "$CANDIDATE_COUNT" == "0" ]]; then
@@ -134,6 +153,7 @@ if [[ "$SHOW_STATUS" == "1" ]]; then
 fi
 
 echo "[policy-search-submit] run_id=$RUN_ID stage=$STAGE candidates=$CANDIDATE_COUNT" >&2
+echo "[policy-search-submit] horizon=${HORIZON:-stage-default}" >&2
 echo "[policy-search-submit] candidates_file=$CANDIDATES_FILE" >&2
 
 wrapper_args=(
@@ -143,7 +163,7 @@ wrapper_args=(
   "--sbatch-arg" "--qos=$QOS"
   "--sbatch-arg" "--array=0-$((CANDIDATE_COUNT - 1))%$THROTTLE"
   "--sbatch-arg" "--job-name=rsf-pol-$STAGE"
-  "--sbatch-arg" "--export=ALL,POLICY_SEARCH_STAGE=$STAGE,POLICY_SEARCH_CANDIDATES_FILE=$CANDIDATES_FILE,POLICY_SEARCH_RUN_ID=$RUN_ID,POLICY_SEARCH_WORKERS=$WORKERS"
+  "--sbatch-arg" "--export=ALL,POLICY_SEARCH_STAGE=$STAGE,POLICY_SEARCH_CANDIDATES_FILE=$CANDIDATES_FILE,POLICY_SEARCH_RUN_ID=$RUN_ID,POLICY_SEARCH_WORKERS=$WORKERS,POLICY_SEARCH_HORIZON=$HORIZON"
 )
 
 if [[ "$DRY_RUN" == "1" ]]; then

@@ -19,6 +19,7 @@ STAGE="${POLICY_SEARCH_STAGE:-nominal_sanity}"
 CANDIDATES_FILE="${POLICY_SEARCH_CANDIDATES_FILE:?POLICY_SEARCH_CANDIDATES_FILE is required}"
 RUN_ID="${POLICY_SEARCH_RUN_ID:-slurm_${SLURM_JOB_ID:-manual}}"
 WORKERS="${POLICY_SEARCH_WORKERS:-2}"
+HORIZON="${POLICY_SEARCH_HORIZON:-}"
 
 if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
   echo "This script expects a Slurm array task id." >&2
@@ -32,7 +33,7 @@ if [[ -z "$CANDIDATE" ]]; then
 fi
 
 echo "[policy-search] repo=$REPO_ROOT"
-echo "[policy-search] run_id=$RUN_ID stage=$STAGE candidate=$CANDIDATE workers=$WORKERS"
+echo "[policy-search] run_id=$RUN_ID stage=$STAGE candidate=$CANDIDATE workers=$WORKERS horizon=${HORIZON:-stage-default}"
 echo "[policy-search] candidates_file=$CANDIDATES_FILE"
 
 if [[ -f .venv/bin/activate ]]; then
@@ -40,9 +41,16 @@ if [[ -f .venv/bin/activate ]]; then
   source .venv/bin/activate
 fi
 
-uv run python scripts/validation/run_policy_search_candidate.py \
-  --candidate "$CANDIDATE" \
-  --stage "$STAGE" \
-  --allow-expensive-stage \
-  --workers "$WORKERS" \
-  --output-dir "output/policy_search/${CANDIDATE}/${STAGE}/${RUN_ID}"
+cmd=(
+  uv run python scripts/validation/run_policy_search_candidate.py
+  --candidate "$CANDIDATE"
+  --stage "$STAGE"
+  --allow-expensive-stage
+  --workers "$WORKERS"
+)
+if [[ -n "$HORIZON" ]]; then
+  cmd+=(--horizon "$HORIZON")
+fi
+cmd+=(--output-dir "output/policy_search/${CANDIDATE}/${STAGE}/${RUN_ID}")
+
+"${cmd[@]}"

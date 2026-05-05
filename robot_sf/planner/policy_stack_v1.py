@@ -155,10 +155,11 @@ class PolicyStackV1Adapter:
                 f"hard stop clearance below {float(self.config.hard_stop_clearance):.3f} m"
             )
 
-        rejected_count = max(len(candidates) - 1, 0)
+        additional_rejected_count = max(len(candidates) - 1, 0)
         if shield_intervened:
-            rejected_count += 1
-        step_status_counts["rejected"] += rejected_count
+            additional_rejected_count += 1
+        step_status_counts["rejected"] += additional_rejected_count
+        rejected_count = step_status_counts["rejected"]
 
         failed_count = step_status_counts["failed"]
         unavailable_count = step_status_counts["not_available"]
@@ -207,7 +208,7 @@ class PolicyStackV1Adapter:
             key = _normalize_source(source)
             proposal = self._proposal_from_source(key, observation)
             if (
-                proposal.status in {"failed", "not_available"}
+                proposal.status in {"failed", "not_available", "rejected"}
                 and key in self.config.mandatory_sources
             ):
                 reason = proposal.reason or proposal.status.replace("_", " ")
@@ -218,18 +219,51 @@ class PolicyStackV1Adapter:
     def _proposal_from_source(self, key: str, observation: dict[str, Any]) -> _Proposal:
         status = self._source_mode(key)
         if key == "goal":
-            return _Proposal(key=key, status=status, command=self._goal_command(observation))
+            return self._command_proposal(
+                key=key, status=status, command=self._goal_command(observation)
+            )
         if key == "risk_dwa":
             try:
                 command = self.risk_dwa.plan(observation)
             except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
                 return _Proposal(key=key, status="failed", reason=str(exc))
+            return self._command_proposal(key=key, status=status, command=command)
+        return _Proposal(key=key, status="not_available", reason="not available")
+
+    def _command_proposal(
+        self,
+        *,
+        key: str,
+        status: str,
+        command: object,
+    ) -> _Proposal:
+        """Return a proposal with a normalized command or a rejected diagnostic."""
+        try:
+            values = np.asarray(command, dtype=float).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            return _Proposal(key=key, status="rejected", reason=f"invalid command: {exc}")
+        if values.size != 2:
             return _Proposal(
                 key=key,
-                status=status,
-                command=(float(command[0]), float(command[1])),
+                status="rejected",
+                reason=f"invalid command shape: expected 2 values, got {values.size}",
             )
-        return _Proposal(key=key, status="not_available", reason="not available")
+        linear, angular = float(values[0]), float(values[1])
+        if not np.isfinite([linear, angular]).all():
+            return _Proposal(key=key, status="rejected", reason="non-finite command")
+        if abs(linear) > float(self.config.max_linear_speed) or abs(angular) > float(
+            self.config.max_angular_speed
+        ):
+            return _Proposal(
+                key=key,
+                status="rejected",
+                reason=(
+                    "outside configured command bounds: "
+                    f"linear={linear:.3f} max={float(self.config.max_linear_speed):.3f}, "
+                    f"angular={angular:.3f} max={float(self.config.max_angular_speed):.3f}"
+                ),
+            )
+        return _Proposal(key=key, status=status, command=(linear, angular))
 
     def _source_mode(self, key: str) -> str:
         if key in self.config.fallback_sources:

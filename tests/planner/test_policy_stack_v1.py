@@ -98,6 +98,48 @@ def test_policy_stack_records_failed_and_not_available_without_fallback_success(
     assert "not available" in last["rejection_reasons"]["missing_optional"]
 
 
+def test_policy_stack_rejects_nonfinite_adapter_command_before_scoring() -> None:
+    """Non-finite adapter commands should be rejected instead of entering risk scoring."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(proposal_sources=("goal", "risk_dwa")),
+        risk_dwa=_DummyRiskDWA(command=(float("nan"), 0.0)),
+    )
+
+    command = stack.plan(_obs())
+    last = stack.diagnostics()["last_step"]
+
+    assert command[0] > 0.0
+    assert last["selected_proposal_key"] == "goal"
+    assert last["proposal_statuses"]["risk_dwa"] == "rejected"
+    assert last["proposal_status_counts"]["rejected"] == 1
+    assert last["rejected_count"] == 1
+    assert "non-finite command" in last["rejection_reasons"]["risk_dwa"]
+    assert set(last["risk_score_components"]) == {"goal"}
+    json.dumps(stack.diagnostics(), allow_nan=False)
+
+
+def test_policy_stack_rejects_adapter_command_outside_configured_bounds() -> None:
+    """Out-of-bounds adapter commands should fail closed at the proposal boundary."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal", "risk_dwa"),
+            max_linear_speed=0.8,
+            max_angular_speed=0.6,
+        ),
+        risk_dwa=_DummyRiskDWA(command=(1.5, 0.8)),
+    )
+
+    command = stack.plan(_obs())
+    last = stack.diagnostics()["last_step"]
+
+    assert command[0] > 0.0
+    assert last["proposal_statuses"]["risk_dwa"] == "rejected"
+    assert last["proposal_status_counts"]["rejected"] == 1
+    assert last["rejected_count"] == 1
+    assert "outside configured command bounds" in last["rejection_reasons"]["risk_dwa"]
+    assert set(last["risk_score_components"]) == {"goal"}
+
+
 def test_policy_stack_fail_closes_when_mandatory_source_is_unavailable() -> None:
     """Mandatory proposal source gaps should raise instead of becoming fallback success."""
     stack = PolicyStackV1Adapter(

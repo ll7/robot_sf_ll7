@@ -6,6 +6,8 @@ import json
 import tomllib
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -56,6 +58,34 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     }
     assert calls["write"]["target_dir"] == output_dir
     assert "manifest.json" in capsys.readouterr().out
+
+
+def test_export_t0_scenarios_main_prints_schema(capsys) -> None:
+    """CARLA T0 export CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+    from robot_sf_carla_bridge.export import load_export_schema
+
+    exit_code = export_t0_scenarios_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_export_schema()
+
+
+def test_export_t0_scenarios_main_rejects_blank_required_args() -> None:
+    """Schema mode is the only path that should bypass required export arguments."""
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+
+    with pytest.raises(SystemExit, match="2"):
+        export_t0_scenarios_main(
+            [
+                "--scenario-file",
+                "   ",
+                "--output-dir",
+                "",
+                "--robot-sf-commit",
+                "\t",
+            ]
+        )
 
 
 def test_validate_t0_manifest_main_reads_manifest_and_prints_count(

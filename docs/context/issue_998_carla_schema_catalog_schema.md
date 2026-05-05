@@ -7,13 +7,14 @@ Issue #998 adds a packaged JSON Schema for the CARLA bridge schema catalog metad
 schema without importing CARLA, and the catalog output is validated against that schema in tests.
 
 The schema contract covers the catalog version marker and the per-schema `name`, `loader`, and
-`schema_version` fields exposed by issue #994.
+`schema_version` fields exposed by issue #994. The final catalog now also lists the catalog schema
+itself so `robot-sf-catalog-carla-schemas` remains complete after the new loader is added.
 
 ## Boundary
 
-This change only adds a machine-readable schema for catalog metadata. It does not change the
-catalog contents, the issue #996 CLI behavior, CARLA installation, replay execution, scenario
-export, or simulator metric comparison.
+This change only adds a machine-readable schema for catalog metadata and makes that schema
+discoverable from the catalog output. It does not change CARLA installation, replay execution,
+scenario export, or simulator metric comparison.
 
 ## Validation
 

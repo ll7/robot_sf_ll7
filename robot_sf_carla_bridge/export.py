@@ -177,6 +177,7 @@ class SimulationSpec:
         }
 
 
+@cache
 def load_export_schema() -> dict[str, Any]:
     """Load the versioned T0 neutral export JSON schema.
 
@@ -200,6 +201,7 @@ def load_export_manifest_schema() -> dict[str, Any]:
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
+@cache
 def load_batch_validation_summary_schema() -> dict[str, Any]:
     """Load the versioned T0 batch validation summary JSON schema.
 

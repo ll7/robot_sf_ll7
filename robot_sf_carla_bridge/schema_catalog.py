@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from functools import cache
 from importlib.resources import files
 from typing import Any
 
@@ -17,6 +18,7 @@ SCHEMA_CATALOG_VERSION = "carla-bridge-schema-catalog.v1"
 _SCHEMA_CATALOG_RESOURCE = "schemas/carla_bridge_schema_catalog.v1.json"
 
 
+@cache
 def load_schema_catalog_schema() -> dict[str, Any]:
     """Load the versioned CARLA bridge schema catalog JSON schema.
 
@@ -57,6 +59,11 @@ def list_carla_bridge_schema_catalog() -> dict[str, Any]:
                 "name": "t0_batch_validation_summary",
                 "loader": "load_batch_validation_summary_schema",
                 "schema_version": BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
+            },
+            {
+                "name": "schema_catalog",
+                "loader": "load_schema_catalog_schema",
+                "schema_version": SCHEMA_CATALOG_VERSION,
             },
         ],
     }

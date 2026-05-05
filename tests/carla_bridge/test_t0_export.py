@@ -765,6 +765,11 @@ def test_schema_catalog_lists_all_carla_bridge_contracts() -> None:
                 "loader": "load_batch_validation_summary_schema",
                 "schema_version": "carla-replay-export-batch-validation-summary.v1",
             },
+            {
+                "name": "schema_catalog",
+                "loader": "load_schema_catalog_schema",
+                "schema_version": "carla-bridge-schema-catalog.v1",
+            },
         ],
     }
 

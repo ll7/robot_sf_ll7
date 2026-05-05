@@ -81,7 +81,7 @@ def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
     if args.schema:
         sys.stdout.write(f"{json.dumps(load_export_manifest_schema(), sort_keys=True)}\n")
         return 0
-    if args.manifest is None:
+    if args.manifest is None or not str(args.manifest).strip():
         parser.error("the following arguments are required: --manifest")
 
     manifest = read_export_manifest(Path(args.manifest))
@@ -107,7 +107,7 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     if args.schema:
         sys.stdout.write(f"{json.dumps(load_batch_validation_summary_schema(), sort_keys=True)}\n")
         return 0
-    if args.manifest is None:
+    if args.manifest is None or not str(args.manifest).strip():
         parser.error("the following arguments are required: --manifest")
 
     manifest_path = Path(args.manifest)

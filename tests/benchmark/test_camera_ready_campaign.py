@@ -285,6 +285,23 @@ def test_issue_791_eval_aligned_ppo_config_is_serial_and_fail_closed() -> None:
     assert ppo_cfg["predictive_foresight_model_id"] == "predictive_proxy_selected_v2_full"
 
 
+def test_issue_857_horizon400_probe_only_changes_horizon_and_bundle_export() -> None:
+    """The horizon probe should keep the leader PPO adapter but raise the benchmark horizon."""
+    cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon400_probe.yaml")
+    )
+
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert cfg.horizon == 400
+    assert cfg.paper_facing is True
+    assert cfg.export_publication_bundle is False
+    assert (
+        planners["ppo"].algo_config_path
+        == Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml").resolve()
+    )
+    assert planners["ppo"].workers_override == 1
+
+
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
     """Extended seed configs should change only the named seed schedule."""
     base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))

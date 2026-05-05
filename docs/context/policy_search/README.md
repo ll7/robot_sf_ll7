@@ -27,6 +27,8 @@ Use it for three things only:
 - `reports/2026-05-05_full_matrix_all_candidates_analysis.md`: completed 29-candidate
   full-matrix sweep analysis, release-candidate decision, provenance caveat, and recommended next
   steps.
+- `reports/2026-05-05_full_matrix_h500_analysis.md`: h500 long-horizon full-matrix analysis,
+  current leader, promotion split, research directions, and scenario-specific horizon policy.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 

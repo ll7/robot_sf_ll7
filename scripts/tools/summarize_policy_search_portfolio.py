@@ -22,6 +22,7 @@ STAGE_ORDER = (
     "robustness_extension",
 )
 STAGE_RANK = {stage: index for index, stage in enumerate(STAGE_ORDER)}
+PROMOTION_SCALE_STAGES = {"full_matrix", "full_matrix_h500", "robustness_extension"}
 
 
 @dataclass(frozen=True)
@@ -447,7 +448,7 @@ def _write_markdown(overview: dict[str, Any], output_md: Path) -> None:
         row
         for row in rows
         if row.get("best_evidence")
-        and row["best_evidence"].get("stage") not in {"full_matrix", "robustness_extension"}
+        and row["best_evidence"].get("stage") not in PROMOTION_SCALE_STAGES
     ]
 
     lines = [
@@ -457,8 +458,8 @@ def _write_markdown(overview: dict[str, Any], output_md: Path) -> None:
         "",
         "This note summarizes the registered policy-search candidates and the latest tracked reports.",
         "It is an evidence map, not a paper-facing benchmark claim. Stages are not equally strong:",
-        "`full_matrix` evidence is stronger than `stress_slice`, which is stronger than",
-        "`nominal_sanity` and `smoke`.",
+        "`full_matrix_h500` and `full_matrix` are promotion-scale full-matrix diagnostics,",
+        "`stress_slice` is narrower, and `nominal_sanity`/`smoke` are local gates.",
         "",
         "## Current Leaders",
         "",

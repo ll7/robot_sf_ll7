@@ -288,9 +288,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         prior_command = self._prior_command(observation)
         prior_eval: dict[str, float | bool] | None = None
         prior_weight = float(self.config.prior_blend_weight)
-        use_prior_in_scene = prior_command is not None and prior_weight > 0.0 and (
-            not bool(self.config.prior_near_field_only)
-            or current_min_dist <= float(self.config.near_field_distance)
+        use_prior_in_scene = (
+            prior_command is not None
+            and prior_weight > 0.0
+            and (
+                not bool(self.config.prior_near_field_only)
+                or current_min_dist <= float(self.config.near_field_distance)
+            )
         )
         if use_prior_in_scene and prior_command is not None:
             blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)

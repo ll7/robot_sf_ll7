@@ -194,9 +194,10 @@ def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
 class _DummyGuardedPPOAdapter:
     """Test double for guarded PPO arbitration."""
 
-    def __init__(self, config=None, *, fallback_adapter=None):
+    def __init__(self, config=None, *, fallback_adapter=None, prior_adapter=None):
         self.config = config
         self.fallback_adapter = fallback_adapter
+        self.prior_adapter = prior_adapter
         self.last_command = None
 
     def choose_command(self, obs, ppo_command):

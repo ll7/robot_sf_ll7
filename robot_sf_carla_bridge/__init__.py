@@ -37,12 +37,17 @@ from robot_sf_carla_bridge.export import (
     write_export_payload,
     write_export_records,
 )
+from robot_sf_carla_bridge.schema_catalog import (
+    SCHEMA_CATALOG_VERSION,
+    list_carla_bridge_schema_catalog,
+)
 
 __all__ = [
     "AVAILABILITY_SCHEMA_VERSION",
     "BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
+    "SCHEMA_CATALOG_VERSION",
     "CarlaUnavailableError",
     "CertificateRef",
     "PedestrianReplaySpec",
@@ -56,6 +61,7 @@ __all__ = [
     "build_export_payload_from_scenario_entry",
     "build_export_payloads_from_scenario_file",
     "check_carla_availability",
+    "list_carla_bridge_schema_catalog",
     "load_availability_schema",
     "load_batch_validation_summary_schema",
     "load_export_manifest_payloads",

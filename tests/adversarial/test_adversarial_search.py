@@ -28,7 +28,16 @@ from robot_sf.adversarial.materialize import (
     materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
+from robot_sf.adversarial.runtime import (
+    build_multi_ped_adversarial_robot_config,
+    multi_ped_config_to_single_pedestrian_definitions,
+)
 from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.obstacle import Obstacle
+from robot_sf.ped_npc.ped_population import populate_single_pedestrians
 
 
 def _write_template(path: Path) -> None:
@@ -113,6 +122,70 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
         pedestrian_speed_mps=1.0,
         pedestrian_delay_s=0.0,
         scenario_seed=seed,
+    )
+
+
+def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
+    width, height = 8.0, 6.0
+    robot_spawn_zones = [((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))]
+    robot_goal_zones = [((7.0, 5.0), (7.5, 5.0), (7.5, 5.5))]
+    robot_routes = [
+        GlobalRoute(
+            spawn_id=0,
+            goal_id=0,
+            waypoints=[(0.75, 0.75), (4.0, 3.0), (7.25, 5.25)],
+            spawn_zone=robot_spawn_zones[0],
+            goal_zone=robot_goal_zones[0],
+        )
+    ]
+    return MapDefinition(
+        width=width,
+        height=height,
+        obstacles=obstacles or [],
+        robot_spawn_zones=robot_spawn_zones,
+        ped_spawn_zones=[],
+        robot_goal_zones=robot_goal_zones,
+        bounds=[
+            (0.0, width, 0.0, 0.0),
+            (0.0, width, height, height),
+            (0.0, 0.0, 0.0, height),
+            (width, width, 0.0, height),
+        ],
+        robot_routes=robot_routes,
+        ped_goal_zones=[],
+        ped_crowded_zones=[],
+        ped_routes=[],
+        single_pedestrians=[],
+    )
+
+
+def _runtime_multi_ped_config(
+    *,
+    second_start_y: float = 3.2,
+    first_start: Pose2D | None = None,
+) -> MultiPedAdversarialConfig:
+    return MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=41,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="left_blocker",
+                start=first_start or Pose2D(1.5, 2.0),
+                goal=Pose2D(6.5, 2.0),
+                spawn_time_s=0.2,
+                speed_mps=1.1,
+                delay_s=0.1,
+                metadata={"lane": "left"},
+            ),
+            MultiPedCandidateSpec(
+                id="right_blocker",
+                start=Pose2D(1.5, second_start_y),
+                goal=Pose2D(6.5, second_start_y),
+                spawn_time_s=0.4,
+                speed_mps=1.2,
+                metadata={"lane": "right"},
+            ),
+        ],
     )
 
 
@@ -459,6 +532,74 @@ def test_multi_ped_materialized_scenario_payload_is_yaml_safe() -> None:
     assert loaded["scenarios"][0]["metadata"]["adversarial_multi_ped"]["schema_version"] == (
         "adversarial-multi-ped.v1"
     )
+
+
+def test_multi_ped_config_converts_to_runtime_single_pedestrians_with_metadata() -> None:
+    """Runtime definitions should preserve adversarial attribution metadata per pedestrian."""
+    config = _runtime_multi_ped_config()
+
+    ped_defs = multi_ped_config_to_single_pedestrian_definitions(config)
+    _ped_states, population_metadata = populate_single_pedestrians(ped_defs)
+
+    assert [ped.id for ped in ped_defs] == ["left_blocker", "right_blocker"]
+    assert ped_defs[0].start == (1.5, 2.0)
+    assert ped_defs[0].goal == (6.5, 2.0)
+    assert ped_defs[0].speed_m_s == pytest.approx(1.1)
+    assert ped_defs[0].start_delay_s == pytest.approx(0.3)
+    assert ped_defs[0].metadata["adversarial_family"] == "group_squeeze"
+    assert ped_defs[0].metadata["pedestrian_metadata"] == {"lane": "left"}
+    assert population_metadata[0]["metadata"]["adversarial_scenario_seed"] == 41
+
+
+def test_multi_ped_adversarial_runtime_config_resets_and_steps() -> None:
+    """A validated N>1 multi-ped config should run through the robot env reset/step path."""
+    config = _runtime_multi_ped_config()
+    base_map = _runtime_base_map()
+    robot_config = build_multi_ped_adversarial_robot_config(
+        config,
+        base_map,
+        map_id="issue_870_runtime",
+        sim_time_in_secs=1.0,
+    )
+
+    assert base_map.single_pedestrians == []
+    runtime_map = robot_config.map_pool.get_map("issue_870_runtime")
+    assert len(runtime_map.single_pedestrians) == 2
+    assert runtime_map.single_pedestrians[1].metadata["pedestrian_metadata"] == {"lane": "right"}
+
+    env = make_robot_env(config=robot_config, debug=True, seed=config.scenario_seed)
+    try:
+        _obs, _info = env.reset(seed=config.scenario_seed)
+        first_reset_positions = env.simulator.ped_pos.copy()
+
+        assert env.simulator.ped_pos.shape[0] >= 2
+        for _ in range(3):
+            _obs, _reward, terminated, truncated, _info = env.step(env.action_space.sample())
+            if terminated or truncated:
+                break
+
+        env.reset(seed=config.scenario_seed)
+        assert env.simulator.ped_pos.shape == first_reset_positions.shape
+        assert (env.simulator.ped_pos == first_reset_positions).all()
+    finally:
+        env.close()
+
+
+def test_multi_ped_adversarial_runtime_rejects_impossible_initial_collision() -> None:
+    """Runtime plausibility checks should fail closed on overlapping starts."""
+    config = _runtime_multi_ped_config(second_start_y=2.1)
+
+    with pytest.raises(ValueError, match="start separation"):
+        build_multi_ped_adversarial_robot_config(config, _runtime_base_map())
+
+
+def test_multi_ped_adversarial_runtime_rejects_obstacle_intersection() -> None:
+    """Runtime plausibility checks should fail closed when a pedestrian starts in an obstacle."""
+    obstacle = Obstacle([(1.0, 1.5), (2.0, 1.5), (2.0, 2.5), (1.0, 2.5)])
+    config = _runtime_multi_ped_config(first_start=Pose2D(1.5, 2.0))
+
+    with pytest.raises(ValueError, match="inside obstacle"):
+        build_multi_ped_adversarial_robot_config(config, _runtime_base_map(obstacles=[obstacle]))
 
 
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:

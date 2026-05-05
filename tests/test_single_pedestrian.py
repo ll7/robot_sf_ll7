@@ -113,6 +113,23 @@ class TestSinglePedestrianSpawning:
         assert metadata[0]["speed_m_s"] == pytest.approx(1.2)
         assert metadata[0]["note"] == "slow"
 
+    def test_populate_single_pedestrians_start_delay_holds_at_start(self):
+        """Verify start-delay dwell initializes as a held pedestrian."""
+        start: Vec2D = (2.0, 2.0)
+        goal: Vec2D = (8.0, 8.0)
+        ped = SinglePedestrianDefinition(
+            id="ped_delay",
+            start=start,
+            goal=goal,
+            start_delay_s=1.5,
+        )
+
+        ped_states, metadata = populate_single_pedestrians([ped], initial_speed=0.5)
+
+        assert np.allclose(ped_states[0, 2:4], [0.0, 0.0])
+        assert np.allclose(ped_states[0, 4:6], start)
+        assert metadata[0]["start_delay_s"] == pytest.approx(1.5)
+
     def test_populate_single_pedestrians_with_trajectory(self):
         """Test spawning a single pedestrian with a predefined trajectory."""
         start: Vec2D = (2.0, 2.0)
@@ -321,6 +338,16 @@ class TestErrorHandling:
                 start=(1.0, 1.0),
                 goal=(5.0, 5.0),
                 trajectory=[(3.0, 3.0)],
+            )
+
+    def test_invalid_start_delay_negative(self):
+        """Test that negative start-delay dwell raises ValueError."""
+        with pytest.raises(ValueError, match="start_delay_s must be >= 0"):
+            SinglePedestrianDefinition(
+                id="ped1",
+                start=(1.0, 1.0),
+                goal=(5.0, 5.0),
+                start_delay_s=-0.1,
             )
 
 

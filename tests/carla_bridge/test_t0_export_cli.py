@@ -133,27 +133,33 @@ def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     monkeypatch,
     capsys,
 ) -> None:
-    """Batch validator CLI should load every manifest payload and report the count."""
+    """Batch validator CLI should validate every manifest payload and report the count."""
     import robot_sf_carla_bridge.cli as cli_module
     from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
 
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")
-    calls = {}
+    calls = {"resolved": [], "validated": []}
 
-    def fake_load_payloads(path):
+    def fake_resolve_payloads(path):
         calls["path"] = Path(path)
         return [
-            {"scenario_id": "first", "path": tmp_path / "first.json", "payload": {}},
-            {"scenario_id": "second", "path": tmp_path / "second.json", "payload": {}},
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
         ]
 
-    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
 
     exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path)])
 
     assert exit_code == 0
     assert calls["path"] == manifest_path
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
     assert "2 payloads" in capsys.readouterr().out
 
 
@@ -168,19 +174,26 @@ def test_validate_t0_export_batch_main_prints_json_summary(
 
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")
+    calls = {"validated": []}
 
-    def fake_load_payloads(path):
+    def fake_resolve_payloads(path):
         assert Path(path) == manifest_path
         return [
-            {"scenario_id": "first", "path": tmp_path / "first.json", "payload": {}},
-            {"scenario_id": "second", "path": tmp_path / "second.json", "payload": {}},
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
         ]
 
-    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
 
     exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path), "--json"])
 
     assert exit_code == 0
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
     assert json.loads(capsys.readouterr().out) == {
         "manifest": manifest_path.as_posix(),
         "payload_count": 2,
@@ -191,11 +204,16 @@ def test_validate_t0_export_batch_main_prints_json_summary(
 
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should expose deterministic machine-readable status."""
+    import importlib.util
+
     from robot_sf_carla_bridge.cli import check_carla_availability_main
 
+    real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
         "importlib.util.find_spec",
-        lambda name: None if name == "carla" else object(),
+        lambda name, *args, **kwargs: (
+            None if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
     )
 
     exit_code = check_carla_availability_main(["--json"])
@@ -316,3 +334,45 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
         "/robot_sf_carla_bridge"
         in pyproject["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
     )
+
+
+def test_export_t0_scenarios_main_rejects_parent_relative_paths(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """CLI main should fail fast on parent-relative file arguments."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+
+    build_called = False
+    write_called = False
+
+    def fake_build_records(path, *, provenance):
+        nonlocal build_called
+        build_called = True
+        return []
+
+    def fake_write_records(records, target_dir):
+        nonlocal write_called
+        write_called = True
+        return {"schema_version": "carla-replay-export-manifest.v1", "exports": []}
+
+    monkeypatch.setattr(cli_module, "build_export_payloads_from_scenario_file", fake_build_records)
+    monkeypatch.setattr(cli_module, "write_export_records", fake_write_records)
+
+    exit_code = export_t0_scenarios_main(
+        [
+            "--scenario-file",
+            "../unsafe.yaml",
+            "--output-dir",
+            str(tmp_path / "exports"),
+            "--robot-sf-commit",
+            "abc123",
+        ]
+    )
+
+    assert exit_code == 1
+    assert not build_called
+    assert not write_called
+    assert "Invalid scenario file path" in capsys.readouterr().err

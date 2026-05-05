@@ -59,6 +59,207 @@ class CandidateSpec:
 
 
 @dataclass(frozen=True)
+class MultiPedCandidateSpec:
+    """One pedestrian in a scripted multi-pedestrian adversarial candidate."""
+
+    id: str
+    start: Pose2D
+    goal: Pose2D
+    spawn_time_s: float = 0.0
+    speed_mps: float = 1.0
+    delay_s: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        index: int,
+    ) -> MultiPedCandidateSpec:
+        """Build one multi-pedestrian entry from a YAML/JSON mapping."""
+        if not isinstance(payload, dict):
+            raise ValueError(f"pedestrians[{index}] must be a mapping")
+        raw_id = payload.get("id")
+        pedestrian_id = str(raw_id).strip() if raw_id is not None else ""
+        if not pedestrian_id:
+            raise ValueError(f"pedestrians[{index}].id must be non-empty")
+        start = _pose_from_mapping(payload.get("start"), name=f"pedestrians[{index}].start")
+        goal = _pose_from_mapping(payload.get("goal"), name=f"pedestrians[{index}].goal")
+        raw_metadata = payload.get("metadata", {})
+        if raw_metadata is None:
+            raw_metadata = {}
+        if not isinstance(raw_metadata, dict):
+            raise ValueError(f"pedestrians[{index}].metadata must be a mapping")
+        spawn_time_raw = payload.get("spawn_time_s")
+        speed_raw = payload.get("speed_mps", payload.get("pedestrian_speed_mps"))
+        delay_raw = payload.get("delay_s", payload.get("pedestrian_delay_s"))
+        return cls(
+            id=pedestrian_id,
+            start=start,
+            goal=goal,
+            spawn_time_s=float(spawn_time_raw) if spawn_time_raw is not None else 0.0,
+            speed_mps=float(speed_raw) if speed_raw is not None else 1.0,
+            delay_s=float(delay_raw) if delay_raw is not None else 0.0,
+            metadata=dict(raw_metadata),
+        )
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-compatible payload for this pedestrian candidate."""
+        return {
+            "id": self.id,
+            "start": self.start.to_json(),
+            "goal": self.goal.to_json(),
+            "spawn_time_s": float(self.spawn_time_s),
+            "speed_mps": float(self.speed_mps),
+            "delay_s": float(self.delay_s),
+            "metadata": dict(self.metadata),
+        }
+
+
+@dataclass(frozen=True)
+class MultiPedAdversarialConfig:
+    """Validated schema for scripted multi-pedestrian adversarial candidates.
+
+    This contract is intentionally additive and schema-only. Runtime environment
+    integration remains a separate benchmark-sensitive step.
+    """
+
+    family: str
+    scenario_seed: int
+    pedestrians: list[MultiPedCandidateSpec]
+    schema_version: str = "adversarial-multi-ped.v1"
+    min_start_goal_distance_m: float = 0.25
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> MultiPedAdversarialConfig:
+        """Load and validate a multi-pedestrian adversarial config YAML file."""
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError(f"Multi-ped adversarial config must be a mapping: {path}")
+        return cls.from_mapping(raw)
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> MultiPedAdversarialConfig:
+        """Build a multi-pedestrian adversarial config from a mapping."""
+        pedestrians = payload.get("pedestrians")
+        if not isinstance(pedestrians, list) or not pedestrians:
+            raise ValueError("pedestrians must be a non-empty list")
+        constraints = payload.get("constraints", {})
+        if constraints is None:
+            constraints = {}
+        if not isinstance(constraints, dict):
+            raise ValueError("constraints must be a mapping")
+        config = cls(
+            schema_version=str(payload.get("schema_version", "adversarial-multi-ped.v1")),
+            family=str(payload.get("family", "")).strip(),
+            scenario_seed=int(payload.get("scenario_seed", 0)),
+            min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
+            pedestrians=[
+                MultiPedCandidateSpec.from_mapping(entry, index=index)
+                for index, entry in enumerate(pedestrians)
+            ],
+        )
+        if not config.family:
+            raise ValueError("family must be non-empty")
+        if config.schema_version != "adversarial-multi-ped.v1":
+            raise ValueError("schema_version must be adversarial-multi-ped.v1")
+        if (
+            not math.isfinite(config.min_start_goal_distance_m)
+            or config.min_start_goal_distance_m < 0.0
+        ):
+            raise ValueError("min_start_goal_distance_m must be finite and >= 0")
+        errors = config.validate()
+        if errors:
+            raise ValueError("; ".join(errors))
+        return config
+
+    def validate(self) -> list[str]:
+        """Return validation errors for the multi-pedestrian candidate contract."""
+        errors: list[str] = []
+        if self.scenario_seed < 0:
+            errors.append("scenario_seed must be non-negative")
+        if (
+            not math.isfinite(self.min_start_goal_distance_m)
+            or self.min_start_goal_distance_m < 0.0
+        ):
+            errors.append("min_start_goal_distance_m must be finite and >= 0")
+        ids = [ped.id for ped in self.pedestrians]
+        if len(ids) != len(set(ids)):
+            seen: set[str] = set()
+            duplicates: list[str] = []
+            for ped_id in ids:
+                if ped_id in seen and ped_id not in duplicates:
+                    duplicates.append(ped_id)
+                seen.add(ped_id)
+            errors.append(
+                f"pedestrians ids must be unique; duplicates: {', '.join(sorted(duplicates))}"
+            )
+        for index, pedestrian in enumerate(self.pedestrians):
+            errors.extend(_validate_multi_pedestrian_entry(pedestrian, index=index))
+            dx = float(pedestrian.goal.x) - float(pedestrian.start.x)
+            dy = float(pedestrian.goal.y) - float(pedestrian.start.y)
+            distance = math.hypot(dx, dy)
+            if distance < self.min_start_goal_distance_m:
+                errors.append(
+                    f"pedestrians[{index}] start and goal distance ({distance:.3f}m) is less "
+                    f"than min_start_goal_distance_m ({self.min_start_goal_distance_m}m)"
+                )
+        return errors
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-compatible multi-pedestrian adversarial payload."""
+        return {
+            "schema_version": self.schema_version,
+            "family": self.family,
+            "scenario_seed": int(self.scenario_seed),
+            "constraints": {"min_start_goal_distance_m": self.min_start_goal_distance_m},
+            "pedestrians": [pedestrian.to_json() for pedestrian in self.pedestrians],
+        }
+
+
+def _pose_from_mapping(payload: object, *, name: str) -> Pose2D:
+    """Build a pose from a mapping with x/y and optional theta fields."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"{name} must be a mapping")
+    if "x" not in payload or "y" not in payload:
+        raise ValueError(f"{name} must define x and y")
+    theta_raw = payload.get("theta")
+    theta = float(theta_raw) if theta_raw is not None else 0.0
+    return Pose2D(float(payload["x"]), float(payload["y"]), theta)
+
+
+def _validate_multi_pedestrian_entry(
+    pedestrian: MultiPedCandidateSpec,
+    *,
+    index: int,
+) -> list[str]:
+    """Return validation errors for one pedestrian entry."""
+    errors: list[str] = []
+    values = {
+        "start.x": pedestrian.start.x,
+        "start.y": pedestrian.start.y,
+        "start.theta": pedestrian.start.theta,
+        "goal.x": pedestrian.goal.x,
+        "goal.y": pedestrian.goal.y,
+        "goal.theta": pedestrian.goal.theta,
+        "spawn_time_s": pedestrian.spawn_time_s,
+        "speed_mps": pedestrian.speed_mps,
+        "delay_s": pedestrian.delay_s,
+    }
+    for name, value in values.items():
+        if not math.isfinite(float(value)):
+            errors.append(f"pedestrians[{index}].{name} must be finite")
+    if pedestrian.spawn_time_s < 0.0:
+        errors.append(f"pedestrians[{index}].spawn_time_s must be non-negative")
+    if pedestrian.speed_mps <= 0.0:
+        errors.append(f"pedestrians[{index}].speed_mps must be positive")
+    if pedestrian.delay_s < 0.0:
+        errors.append(f"pedestrians[{index}].delay_s must be non-negative")
+    return errors
+
+
+@dataclass(frozen=True)
 class CandidateEvaluation:
     """Evaluation result for one candidate."""
 

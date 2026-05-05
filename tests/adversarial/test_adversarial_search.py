@@ -17,11 +17,17 @@ from robot_sf.adversarial.certification import failed_status, not_available_stat
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
+    MultiPedAdversarialConfig,
+    MultiPedCandidateSpec,
     Pose2D,
     SearchConfig,
     SearchSpaceConfig,
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
+from robot_sf.adversarial.materialize import (
+    materialize_multi_ped_scenario_payload,
+    materialize_multi_ped_single_pedestrian_overrides,
+)
 from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
 
 
@@ -168,6 +174,291 @@ def test_search_space_rejects_non_integral_seed_bounds() -> None:
 
     with pytest.raises(ValueError, match="scenario_seed bounds must be integers"):
         SearchSpaceConfig.from_mapping(payload)
+
+
+def test_multi_ped_adversarial_config_parses_and_serializes_yaml(tmp_path: Path) -> None:
+    """Multi-ped adversarial candidates should have a deterministic schema contract."""
+    path = tmp_path / "multi_ped.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "adversarial-multi-ped.v1",
+                "family": "group_squeeze",
+                "scenario_seed": 41,
+                "constraints": {"min_start_goal_distance_m": 1.0},
+                "pedestrians": [
+                    {
+                        "id": "left_blocker",
+                        "start": {"x": 1.0, "y": 2.0},
+                        "goal": {"x": 5.0, "y": 2.0},
+                        "spawn_time_s": 0.5,
+                        "speed_mps": 1.1,
+                        "delay_s": 0.25,
+                    },
+                    {
+                        "id": "right_blocker",
+                        "start": {"x": 1.0, "y": 3.0},
+                        "goal": {"x": 5.0, "y": 3.0},
+                        "spawn_time_s": 0.75,
+                        "speed_mps": 1.2,
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    config = MultiPedAdversarialConfig.from_file(path)
+
+    assert config.schema_version == "adversarial-multi-ped.v1"
+    assert config.family == "group_squeeze"
+    assert config.scenario_seed == 41
+    assert config.validate() == []
+    assert [ped.id for ped in config.pedestrians] == ["left_blocker", "right_blocker"]
+    assert config.to_json() == {
+        "schema_version": "adversarial-multi-ped.v1",
+        "family": "group_squeeze",
+        "scenario_seed": 41,
+        "constraints": {"min_start_goal_distance_m": 1.0},
+        "pedestrians": [
+            {
+                "id": "left_blocker",
+                "start": {"x": 1.0, "y": 2.0, "theta": 0.0},
+                "goal": {"x": 5.0, "y": 2.0, "theta": 0.0},
+                "spawn_time_s": 0.5,
+                "speed_mps": 1.1,
+                "delay_s": 0.25,
+                "metadata": {},
+            },
+            {
+                "id": "right_blocker",
+                "start": {"x": 1.0, "y": 3.0, "theta": 0.0},
+                "goal": {"x": 5.0, "y": 3.0, "theta": 0.0},
+                "spawn_time_s": 0.75,
+                "speed_mps": 1.2,
+                "delay_s": 0.0,
+                "metadata": {},
+            },
+        ],
+    }
+
+
+def test_multi_ped_adversarial_config_reports_validation_errors() -> None:
+    """Invalid multi-ped contracts should fail before runtime integration."""
+    config = MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=-1,
+        min_start_goal_distance_m=2.0,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="blocker",
+                start=Pose2D(1.0, 2.0),
+                goal=Pose2D(1.5, 2.0),
+                spawn_time_s=-0.1,
+                speed_mps=0.0,
+            ),
+            MultiPedCandidateSpec(
+                id="blocker",
+                start=Pose2D(float("nan"), 3.0),
+                goal=Pose2D(5.0, 3.0),
+                spawn_time_s=0.0,
+                speed_mps=1.0,
+                delay_s=-0.5,
+            ),
+        ],
+    )
+
+    errors = config.validate()
+
+    assert "scenario_seed must be non-negative" in errors
+    assert any("pedestrians ids must be unique" in err for err in errors)
+    assert any("duplicates: blocker" in err for err in errors)
+    assert "pedestrians[0].spawn_time_s must be non-negative" in errors
+    assert "pedestrians[0].speed_mps must be positive" in errors
+    assert any(err.startswith("pedestrians[0] start and goal distance") for err in errors)
+    assert "pedestrians[1].start.x must be finite" in errors
+    assert "pedestrians[1].delay_s must be non-negative" in errors
+
+
+def test_multi_ped_adversarial_example_config_is_valid() -> None:
+    """The checked-in example should stay aligned with the schema parser."""
+    config = MultiPedAdversarialConfig.from_file(
+        Path("configs/adversarial/group_squeeze_multi_ped_example.yaml")
+    )
+
+    assert config.family == "group_squeeze"
+    assert len(config.pedestrians) == 2
+    assert config.validate() == []
+
+
+def test_multi_ped_config_materializes_single_pedestrian_overrides() -> None:
+    """Multi-ped adversarial configs should bridge to scenario-loader override entries."""
+    config = MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=41,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="left_blocker",
+                start=Pose2D(1.0, 2.0, 0.1),
+                goal=Pose2D(5.0, 2.0),
+                spawn_time_s=0.5,
+                speed_mps=1.1,
+                delay_s=0.25,
+                metadata={"role": "left"},
+            ),
+            MultiPedCandidateSpec(
+                id="right_blocker",
+                start=Pose2D(1.0, 3.0),
+                goal=Pose2D(5.0, 3.0),
+                spawn_time_s=0.75,
+                speed_mps=1.2,
+            ),
+        ],
+    )
+
+    overrides = materialize_multi_ped_single_pedestrian_overrides(config)
+
+    assert overrides == [
+        {
+            "id": "left_blocker",
+            "start": [1.0, 2.0],
+            "goal": [5.0, 2.0],
+            "speed_m_s": 1.1,
+            "start_delay_s": 0.75,
+            "note": "adversarial-multi-ped.v1 group_squeeze seed=41 ped=left_blocker",
+            "metadata": {
+                "adversarial_family": "group_squeeze",
+                "adversarial_schema_version": "adversarial-multi-ped.v1",
+                "adversarial_scenario_seed": 41,
+                "pedestrian_metadata": {"role": "left"},
+                "spawn_time_s": 0.5,
+                "delay_s": 0.25,
+            },
+        },
+        {
+            "id": "right_blocker",
+            "start": [1.0, 3.0],
+            "goal": [5.0, 3.0],
+            "speed_m_s": 1.2,
+            "start_delay_s": 0.75,
+            "note": "adversarial-multi-ped.v1 group_squeeze seed=41 ped=right_blocker",
+            "metadata": {
+                "adversarial_family": "group_squeeze",
+                "adversarial_schema_version": "adversarial-multi-ped.v1",
+                "adversarial_scenario_seed": 41,
+                "pedestrian_metadata": {},
+                "spawn_time_s": 0.75,
+                "delay_s": 0.0,
+            },
+        },
+    ]
+
+
+def test_multi_ped_materialized_overrides_are_yaml_safe() -> None:
+    """Materialized overrides should serialize without custom YAML representers."""
+    config = MultiPedAdversarialConfig(
+        family="late_stop",
+        scenario_seed=7,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="stopper",
+                start=Pose2D(0.0, 0.0),
+                goal=Pose2D(1.0, 0.0),
+                speed_mps=0.8,
+            )
+        ],
+    )
+
+    dumped = yaml.safe_dump(
+        {"single_pedestrians": materialize_multi_ped_single_pedestrian_overrides(config)},
+        sort_keys=False,
+    )
+
+    loaded = yaml.safe_load(dumped)
+    assert loaded["single_pedestrians"][0]["id"] == "stopper"
+    assert loaded["single_pedestrians"][0]["start_delay_s"] == 0.0
+
+
+def test_multi_ped_config_materializes_scenario_payload_with_template_merge() -> None:
+    """Multi-ped configs should produce scenario-loader-ready manifest payloads."""
+    config = MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=41,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="left_blocker",
+                start=Pose2D(1.0, 2.0),
+                goal=Pose2D(5.0, 2.0),
+                spawn_time_s=0.5,
+                speed_mps=1.1,
+            ),
+            MultiPedCandidateSpec(
+                id="right_blocker",
+                start=Pose2D(1.0, 3.0),
+                goal=Pose2D(5.0, 3.0),
+                spawn_time_s=0.75,
+                speed_mps=1.2,
+            ),
+        ],
+    )
+    template = {
+        "scenarios": [
+            {
+                "name": "template",
+                "map_id": "classic_cross_trap",
+                "simulation_config": {"max_episode_steps": 30, "ped_density": 0.0},
+                "metadata": {"archetype": "test"},
+                "single_pedestrians": [
+                    {"id": "left_blocker", "role": "wait", "note": "template note"}
+                ],
+            }
+        ]
+    }
+
+    payload = materialize_multi_ped_scenario_payload(config, template)
+
+    scenario = payload["scenarios"][0]
+    assert scenario["name"] == "template_multi_ped_adversarial_0041"
+    assert scenario["seeds"] == [41]
+    assert scenario["simulation_config"]["route_spawn_seed"] == 41
+    assert scenario["metadata"]["archetype"] == "test"
+    assert scenario["metadata"]["adversarial_multi_ped"]["family"] == "group_squeeze"
+    assert scenario["single_pedestrians"][0]["id"] == "left_blocker"
+    assert scenario["single_pedestrians"][0]["role"] == "wait"
+    assert scenario["single_pedestrians"][0]["start"] == [1.0, 2.0]
+    assert scenario["single_pedestrians"][0]["note"].startswith("adversarial-multi-ped.v1")
+    assert scenario["single_pedestrians"][1]["id"] == "right_blocker"
+
+
+def test_multi_ped_materialized_scenario_payload_is_yaml_safe() -> None:
+    """Scenario payload helper should emit plain YAML-safe primitives."""
+    config = MultiPedAdversarialConfig(
+        family="late_stop",
+        scenario_seed=7,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="stopper",
+                start=Pose2D(0.0, 0.0),
+                goal=Pose2D(1.0, 0.0),
+                speed_mps=0.8,
+            )
+        ],
+    )
+
+    dumped = yaml.safe_dump(
+        materialize_multi_ped_scenario_payload(
+            config,
+            {"scenarios": [{"name": "template", "map_id": "classic_cross_trap"}]},
+        ),
+        sort_keys=False,
+    )
+
+    loaded = yaml.safe_load(dumped)
+    assert loaded["scenarios"][0]["single_pedestrians"][0]["id"] == "stopper"
+    assert loaded["scenarios"][0]["metadata"]["adversarial_multi_ped"]["schema_version"] == (
+        "adversarial-multi-ped.v1"
+    )
 
 
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:

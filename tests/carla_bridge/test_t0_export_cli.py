@@ -181,6 +181,7 @@ def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -
         "available": False,
         "dependency": "carla",
         "reason": "CARLA Python API package 'carla' is not importable",
+        "schema_version": "carla-availability.v1",
         "status": "not-available",
     }
 

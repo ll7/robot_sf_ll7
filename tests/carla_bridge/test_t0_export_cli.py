@@ -160,6 +160,104 @@ def test_validate_t0_export_batch_main_prints_json_summary(
     }
 
 
+def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
+    """CARLA availability CLI should expose deterministic machine-readable status."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "not-available",
+            "reason": "CARLA Python API package 'carla' is not importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--json"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "dependency": "carla",
+        "reason": "CARLA Python API package 'carla' is not importable",
+        "status": "not-available",
+    }
+
+
+def test_check_carla_availability_main_prints_text_status(monkeypatch, capsys) -> None:
+    """CARLA availability CLI should keep a concise human-readable output."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "available",
+            "reason": "CARLA Python API package is importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main([])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
+
+
+def test_check_carla_availability_main_require_fails_when_unavailable(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should fail closed when CARLA is unavailable."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "not-available",
+            "reason": "CARLA Python API package 'carla' is not importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require", "--json"])
+
+    assert exit_code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "dependency": "carla",
+        "reason": "CARLA Python API package 'carla' is not importable",
+        "status": "not-available",
+    }
+
+
+def test_check_carla_availability_main_require_passes_when_available(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should still succeed when CARLA is available."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "available",
+            "reason": "CARLA Python API package is importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require"])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
+
+
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
     """Project metadata should expose the CLI and include the bridge package."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -172,6 +270,9 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-batch"] == (
         "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-check-carla"] == (
+        "robot_sf_carla_bridge.cli:check_carla_availability_main"
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages

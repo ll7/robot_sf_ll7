@@ -488,6 +488,7 @@ robot_sf_bench = "robot_sf.benchmark.cli:main"
 robot-sf-export-carla-t0 = "robot_sf_carla_bridge.cli:export_t0_scenarios_main"
 robot-sf-validate-carla-t0-manifest = "robot_sf_carla_bridge.cli:validate_t0_manifest_main"
 robot-sf-validate-carla-t0-batch = "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"
+robot-sf-check-carla = "robot_sf_carla_bridge.cli:check_carla_availability_main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml

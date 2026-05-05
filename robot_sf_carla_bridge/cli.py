@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from robot_sf_carla_bridge.availability import check_carla_availability
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
     read_export_manifest,
@@ -124,6 +125,32 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     noun = "payload" if payload_count == 1 else "payloads"
     sys.stdout.write(f"{manifest_path.as_posix()}: {payload_count} {noun}\n")
     return 0
+
+
+def check_carla_availability_main(argv: list[str] | None = None) -> int:
+    """Report whether the optional CARLA Python API is importable.
+
+    Returns:
+        Process-style exit code.
+    """
+
+    parser = argparse.ArgumentParser(description="Check optional CARLA Python API availability.")
+    parser.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    parser.add_argument(
+        "--require",
+        action="store_true",
+        help="Exit nonzero when the CARLA Python API is not available.",
+    )
+    args = parser.parse_args(argv)
+
+    status = check_carla_availability()
+    exit_code = 0 if status["status"] == "available" or not args.require else 1
+    if args.json:
+        sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
+        return exit_code
+
+    sys.stdout.write(f"{status['dependency']}: {status['status']} - {status['reason']}\n")
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -21,16 +21,21 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `portfolio_overview_2026-05-05.md`: current candidate portfolio overview generated from the
+  policy-search registry and tracked reports; includes current leaders, success/collision/near-miss
+  evidence, why the best candidates look promising, coverage gaps, and reproduction commands.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 
 ## Reproducible Entry Points
 
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`
+- Candidate portfolio overview: `uv run python scripts/tools/summarize_policy_search_portfolio.py`
 - Candidate comparison: `uv run python scripts/tools/compare_policy_search_candidates.py`
 - Failure taxonomy: `uv run python scripts/tools/build_policy_search_failure_report.py`
 - Pareto plot: `uv run python scripts/tools/plot_policy_search_pareto_front.py`
 - Promotion decision: `uv run python scripts/tools/promote_policy_search_candidate.py`
+- SLURM candidate sweep: `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --all-implemented`
 
 ## Scope Boundary
 

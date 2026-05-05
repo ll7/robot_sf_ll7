@@ -545,7 +545,7 @@ def _write_markdown(overview: dict[str, Any], output_md: Path) -> None:
             "",
             "```bash",
             "scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --dry-run",
-            "scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 1",
+            "scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 2",
             "```",
             "",
             "Refresh this overview after new reports land:",

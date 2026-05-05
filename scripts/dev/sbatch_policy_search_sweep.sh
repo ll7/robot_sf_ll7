@@ -9,7 +9,7 @@ PARTITION_STATUS_SCRIPT="$SCRIPT_DIR/auxme_partition_status.sh"
 STAGE="nominal_sanity"
 PARTITION="a30"
 QOS="a30-gpu"
-THROTTLE="1"
+THROTTLE="2"
 WORKERS="2"
 DRY_RUN=0
 SHOW_STATUS=1
@@ -28,7 +28,7 @@ Options:
   --stage <name>          Funnel stage: smoke, nominal_sanity, stress_slice, full_matrix, robustness_extension
   --partition <name>      Slurm partition (default: a30)
   --qos <name>            Slurm QoS (default: a30-gpu)
-  --throttle <n>          Slurm array throttle, e.g. 1 or 2 (default: 1)
+  --throttle <n>          Slurm array throttle, e.g. 1 or 2 (default: 2)
   --workers <n>           Runner workers per candidate task (default: 2)
   --run-id <id>           Output run id (default: UTC timestamp)
   --all-implemented       Run every implemented candidate at the selected stage,
@@ -40,7 +40,7 @@ Options:
 
 Examples:
   scripts/dev/sbatch_policy_search_sweep.sh --stage nominal_sanity --dry-run
-  scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 1
+  scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --throttle 2
 EOF
 }
 

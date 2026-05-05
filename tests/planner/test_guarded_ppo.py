@@ -8,6 +8,7 @@ from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
+    build_guarded_ppo_prior,
 )
 
 
@@ -47,6 +48,10 @@ class _FallbackAdapter:
         return self.command
 
 
+class _PriorAdapter(_FallbackAdapter):
+    pass
+
+
 def test_guarded_ppo_keeps_safe_ppo_command() -> None:
     """Safe PPO commands should pass through unchanged."""
     guard = GuardedPPOAdapter(
@@ -76,6 +81,74 @@ def test_guarded_ppo_uses_fallback_when_ppo_is_unsafe() -> None:
     )
     assert command == (0.0, 1.0)
     assert decision == "fallback_safe"
+
+
+def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
+    """Near-field ORCA-prior blending should apply only when it remains safe."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "prior_blend_weight": 0.5,
+                "prior_progress_margin": 0.1,
+            }
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.2, 0.4)),
+    )
+    evaluations = iter(
+        [
+            {
+                "safe": True,
+                "progress": 0.4,
+                "min_ped_clear": 0.6,
+                "first_ped_clear": 0.6,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.8,
+            },
+            {
+                "safe": True,
+                "progress": 0.35,
+                "min_ped_clear": 0.7,
+                "first_ped_clear": 0.7,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.0,
+            },
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    command, decision = guard.choose_command(
+        _obs(ped_positions=[(1.0, 0.4)], ped_velocities=[(0.0, 0.0)]),
+        (0.6, 0.0),
+    )
+
+    assert command == (0.4, 0.2)
+    assert decision == "prior_blend_safe"
+
+
+def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> None:
+    """Unsafe PPO commands should prefer a safe configured prior over generic fallback."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config({"guard_near_field_distance": 2.5}),
+        fallback_adapter=_FallbackAdapter((0.0, 1.0)),
+        prior_adapter=_PriorAdapter((0.1, -0.5)),
+    )
+    evaluations = iter(
+        [
+            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": True, "min_ped_clear": 0.9},
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    command, decision = guard.choose_command(
+        _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.6, 0.0),
+    )
+
+    assert command == (0.1, -0.5)
+    assert decision == "prior_safe"
 
 
 def test_guarded_ppo_falls_back_to_stop_when_no_safe_motion_exists() -> None:
@@ -156,6 +229,7 @@ def test_guarded_ppo_handles_malformed_pedestrian_payloads_and_config_builders()
 
     fallback = build_guarded_ppo_fallback(None)
     assert fallback is not None
+    assert build_guarded_ppo_prior(None) is None
 
 
 def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:

@@ -1,0 +1,4 @@
+name: ppo_issue791_best_v1
+algo: ppo
+base_config_path: configs/baselines/ppo_15m_grid_socnav.yaml
+params: {}

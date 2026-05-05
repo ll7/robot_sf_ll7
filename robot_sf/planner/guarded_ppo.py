@@ -6,13 +6,24 @@ short-horizon rollout predicts unsafe pedestrian or obstacle clearance.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, fields
+from typing import Any, Protocol
 
 import numpy as np
 
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
-from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
+from robot_sf.planner.socnav import (
+    OccupancyAwarePlannerMixin,
+    ORCAPlannerAdapter,
+    SocNavPlannerConfig,
+)
+
+
+class _CommandPlanner(Protocol):
+    """Protocol for local planners that emit benchmark unicycle commands."""
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return a ``(linear, angular)`` command for one observation."""
 
 
 @dataclass
@@ -29,6 +40,9 @@ class GuardedPPOConfig:
     min_ttc: float = 0.70
     obstacle_threshold: float = 0.5
     obstacle_search_cells: int = 12
+    prior_blend_weight: float = 0.0
+    prior_near_field_only: bool = True
+    prior_progress_margin: float = 0.05
 
 
 class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
@@ -38,11 +52,66 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         self,
         config: GuardedPPOConfig | None = None,
         *,
-        fallback_adapter: RiskDWAPlannerAdapter | None = None,
+        fallback_adapter: _CommandPlanner | None = None,
+        prior_adapter: _CommandPlanner | None = None,
     ) -> None:
         """Initialize guard and fallback local planner."""
         self.config = config or GuardedPPOConfig()
         self.fallback_adapter = fallback_adapter or RiskDWAPlannerAdapter()
+        self.prior_adapter = prior_adapter
+
+    @staticmethod
+    def _blend_commands(
+        ppo_command: tuple[float, float],
+        prior_command: tuple[float, float],
+        weight: float,
+    ) -> tuple[float, float]:
+        """Blend PPO and prior commands as a lightweight residual correction.
+
+        Returns:
+            tuple[float, float]: Blended ``(linear, angular)`` command.
+        """
+        clipped_weight = float(np.clip(weight, 0.0, 1.0))
+        return (
+            (1.0 - clipped_weight) * float(ppo_command[0])
+            + clipped_weight * float(prior_command[0]),
+            (1.0 - clipped_weight) * float(ppo_command[1])
+            + clipped_weight * float(prior_command[1]),
+        )
+
+    def _prior_command(self, observation: dict[str, Any]) -> tuple[float, float] | None:
+        """Return the optional prior planner command, suppressing unavailable priors."""
+        if self.prior_adapter is None:
+            return None
+        try:
+            command = self.prior_adapter.plan(observation)
+        except RuntimeError:
+            return None
+        return float(command[0]), float(command[1])
+
+    def _blend_is_preferred(
+        self,
+        ppo_eval: dict[str, float | bool],
+        blend_eval: dict[str, float | bool],
+    ) -> bool:
+        """Return whether a safe prior blend improves safety without stalling progress."""
+        if not bool(blend_eval["safe"]):
+            return False
+        progress_margin = float(self.config.prior_progress_margin)
+        if float(blend_eval["progress"]) < float(ppo_eval["progress"]) - progress_margin:
+            return False
+        ppo_clear = min(float(ppo_eval["min_ped_clear"]), float(ppo_eval["first_ped_clear"]))
+        blend_clear = min(
+            float(blend_eval["min_ped_clear"]),
+            float(blend_eval["first_ped_clear"]),
+        )
+        ppo_ttc = float(ppo_eval["min_ttc"])
+        blend_ttc = float(blend_eval["min_ttc"])
+        clear_improves = blend_clear >= ppo_clear
+        ttc_improves = (not np.isfinite(ppo_ttc) and not np.isfinite(blend_ttc)) or (
+            np.isfinite(blend_ttc) and (not np.isfinite(ppo_ttc) or blend_ttc >= ppo_ttc)
+        )
+        return bool(clear_improves or ttc_improves)
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -198,7 +267,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "min_ttc": float(min_ttc),
         }
 
-    def choose_command(
+    def choose_command(  # noqa: C901
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
     ) -> tuple[tuple[float, float], str]:
         """Choose between PPO, fallback planner, and stop.
@@ -216,10 +285,28 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             current_min_dist = float("inf")
 
         ppo_eval = self._evaluate_command(observation, ppo_command)
+        prior_command = self._prior_command(observation)
+        prior_eval: dict[str, float | bool] | None = None
+        prior_weight = float(self.config.prior_blend_weight)
+        use_prior_in_scene = prior_command is not None and prior_weight > 0.0 and (
+            not bool(self.config.prior_near_field_only)
+            or current_min_dist <= float(self.config.near_field_distance)
+        )
+        if use_prior_in_scene and prior_command is not None:
+            blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
+            blended_eval = self._evaluate_command(observation, blended_command)
+            if self._blend_is_preferred(ppo_eval, blended_eval):
+                return blended_command, "prior_blend_safe"
+
         if current_min_dist > float(self.config.near_field_distance) and bool(ppo_eval["safe"]):
             return (float(ppo_command[0]), float(ppo_command[1])), "ppo_clear"
         if bool(ppo_eval["safe"]):
             return (float(ppo_command[0]), float(ppo_command[1])), "ppo_safe"
+
+        if prior_command is not None:
+            prior_eval = self._evaluate_command(observation, prior_command)
+            if bool(prior_eval["safe"]):
+                return (float(prior_command[0]), float(prior_command[1])), "prior_safe"
 
         fallback_command = self.fallback_adapter.plan(observation)
         fallback_eval = self._evaluate_command(observation, fallback_command)
@@ -231,7 +318,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             return (0.0, 0.0), "stop_safe"
 
         if float(fallback_eval["min_ped_clear"]) > max(
-            float(ppo_eval["min_ped_clear"]), float(stop_eval["min_ped_clear"])
+            float(ppo_eval["min_ped_clear"]),
+            float(stop_eval["min_ped_clear"]),
+            float(prior_eval["min_ped_clear"]) if prior_eval is not None else float("-inf"),
         ):
             return (float(fallback_command[0]), float(fallback_command[1])), "fallback_best_effort"
         return (0.0, 0.0), "stop_best_effort"
@@ -256,16 +345,63 @@ def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:
         min_ttc=float(cfg.get("guard_min_ttc", 0.70)),
         obstacle_threshold=float(cfg.get("guard_obstacle_threshold", 0.5)),
         obstacle_search_cells=int(cfg.get("guard_obstacle_search_cells", 12)),
+        prior_blend_weight=float(cfg.get("prior_blend_weight", 0.0)),
+        prior_near_field_only=bool(cfg.get("prior_near_field_only", True)),
+        prior_progress_margin=float(cfg.get("prior_progress_margin", 0.05)),
     )
 
 
-def build_guarded_ppo_fallback(cfg: dict[str, Any] | None) -> RiskDWAPlannerAdapter:
+def _build_socnav_orca_config(cfg: dict[str, Any] | None) -> SocNavPlannerConfig:
+    """Build an ORCA planner config from guarded-PPO prior/fallback payloads.
+
+    Returns:
+        SocNavPlannerConfig: ORCA-compatible SocNav planner configuration.
+    """
+    if not isinstance(cfg, dict):
+        return SocNavPlannerConfig()
+    allowed = {field.name for field in fields(SocNavPlannerConfig)}
+    return SocNavPlannerConfig(**{key: value for key, value in cfg.items() if key in allowed})
+
+
+def build_guarded_ppo_prior(cfg: dict[str, Any] | None) -> _CommandPlanner | None:
+    """Build an optional planner prior for residual guarded PPO.
+
+    Returns:
+        _CommandPlanner | None: ORCA prior when requested, otherwise ``None``.
+    """
+    root = cfg if isinstance(cfg, dict) else {}
+    prior_policy = str(root.get("prior_policy", "none")).strip().lower()
+    if prior_policy in {"", "none", "disabled"}:
+        return None
+    if prior_policy in {"orca", "socnav_orca"}:
+        prior_cfg = root.get("prior_orca")
+        if not isinstance(prior_cfg, dict):
+            prior_cfg = {}
+        return ORCAPlannerAdapter(
+            config=_build_socnav_orca_config(prior_cfg),
+            allow_fallback=bool(root.get("prior_allow_orca_fallback", False)),
+        )
+    raise ValueError(f"Unsupported guarded PPO prior_policy: {prior_policy}")
+
+
+def build_guarded_ppo_fallback(cfg: dict[str, Any] | None) -> _CommandPlanner:
     """Build fallback local planner for guarded PPO.
 
     Returns:
-        RiskDWAPlannerAdapter: Fallback adapter used when PPO action is unsafe.
+        _CommandPlanner: Fallback adapter used when PPO action is unsafe.
     """
     root = cfg if isinstance(cfg, dict) else {}
+    fallback_policy = str(root.get("fallback_policy", "risk_dwa")).strip().lower()
+    if fallback_policy in {"orca", "socnav_orca"}:
+        fallback_cfg = root.get("fallback_orca")
+        if not isinstance(fallback_cfg, dict):
+            fallback_cfg = {}
+        return ORCAPlannerAdapter(
+            config=_build_socnav_orca_config(fallback_cfg),
+            allow_fallback=bool(root.get("fallback_allow_orca_fallback", False)),
+        )
+    if fallback_policy not in {"risk_dwa", "dwa", ""}:
+        raise ValueError(f"Unsupported guarded PPO fallback_policy: {fallback_policy}")
     fallback_cfg = root.get("fallback_risk_dwa")
     if not isinstance(fallback_cfg, dict):
         fallback_cfg = {}
@@ -277,4 +413,5 @@ __all__ = [
     "GuardedPPOConfig",
     "build_guarded_ppo_config",
     "build_guarded_ppo_fallback",
+    "build_guarded_ppo_prior",
 ]

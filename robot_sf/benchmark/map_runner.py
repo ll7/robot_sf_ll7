@@ -71,6 +71,7 @@ from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
+    build_guarded_ppo_prior,
 )
 from robot_sf.planner.hybrid_orca_sampler import (
     HybridORCASamplerAdapter,
@@ -1549,6 +1550,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         guard_adapter = GuardedPPOAdapter(
             config=build_guarded_ppo_config(algo_config),
             fallback_adapter=build_guarded_ppo_fallback(algo_config),
+            prior_adapter=build_guarded_ppo_prior(algo_config),
         )
         planner_cfg = getattr(ppo_planner, "config", None)
         if isinstance(planner_cfg, dict):
@@ -1572,6 +1574,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "ppo_clear": 0,
             "ppo_safe": 0,
             "fallback_safe": 0,
+            "prior_blend_safe": 0,
+            "prior_safe": 0,
             "stop_safe": 0,
             "fallback_best_effort": 0,
             "stop_best_effort": 0,

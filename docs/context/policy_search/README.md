@@ -34,6 +34,8 @@ Use it for three things only:
   steps.
 - `reports/2026-05-05_full_matrix_h500_analysis.md`: h500 long-horizon full-matrix analysis,
   current leader, promotion split, research directions, and scenario-specific horizon policy.
+- `validation/2026-05-05_local_training_launch.md`: local RTX 3080 PPO 128k training launch note,
+  including the bounded config, tmux session, offline W&B path, and follow-up evaluation command.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 

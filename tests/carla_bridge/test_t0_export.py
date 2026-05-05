@@ -759,6 +759,20 @@ def test_missing_carla_reports_not_available(monkeypatch) -> None:
     assert "carla" in status["reason"].lower()
 
 
+def test_missing_carla_availability_validates_against_schema(monkeypatch) -> None:
+    """Missing-CARLA availability metadata should satisfy its JSON schema."""
+    from robot_sf_carla_bridge.availability import (
+        check_carla_availability,
+        load_availability_schema,
+    )
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: None if name == "carla" else object()
+    )
+
+    jsonschema.validate(check_carla_availability(), load_availability_schema())
+
+
 def test_importable_carla_reports_available(monkeypatch) -> None:
     """Importable CARLA should report a boolean available status."""
     import importlib.util
@@ -779,3 +793,17 @@ def test_importable_carla_reports_available(monkeypatch) -> None:
     assert status["available"] is True
     assert status["schema_version"] == "carla-availability.v1"
     assert status["dependency"] == "carla"
+
+
+def test_importable_carla_availability_validates_against_schema(monkeypatch) -> None:
+    """Available-CARLA metadata should satisfy its JSON schema."""
+    from robot_sf_carla_bridge.availability import (
+        check_carla_availability,
+        load_availability_schema,
+    )
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name == "carla" else None
+    )
+
+    jsonschema.validate(check_carla_availability(), load_availability_schema())

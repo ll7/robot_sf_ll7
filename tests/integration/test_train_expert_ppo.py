@@ -423,9 +423,9 @@ def test_horizon100_eval_manifest_overrides_all_episode_limits() -> None:
         int(scenario["simulation_config"]["max_episode_steps"]) for scenario in scenarios
     ]
 
-    assert len(scenarios) == 70
-    assert len(set(scenario_ids)) == 70
-    assert len(step_limits) == 70
+    assert len(scenarios) == 71
+    assert len(set(scenario_ids)) == 71
+    assert len(step_limits) == 71
     assert set(step_limits) == {100}
 
 

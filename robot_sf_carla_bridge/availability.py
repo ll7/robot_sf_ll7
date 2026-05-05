@@ -4,13 +4,25 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
+from functools import cache
+from importlib.resources import files
 from typing import Any
 
 AVAILABILITY_SCHEMA_VERSION = "carla-availability.v1"
+_AVAILABILITY_SCHEMA_RESOURCE = "schemas/carla_availability.v1.json"
 
 
 class CarlaUnavailableError(RuntimeError):
     """Raised when a CARLA-dependent bridge path is used without CARLA installed."""
+
+
+@cache
+def load_availability_schema() -> dict[str, Any]:
+    """Return the JSON schema for CARLA availability metadata."""
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_AVAILABILITY_SCHEMA_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
 def check_carla_availability() -> dict[str, Any]:

@@ -259,6 +259,9 @@ why a change was made rather than a full issue execution transcript.
   adds a schema version marker to `robot-sf-validate-carla-t0-batch --json` output.
 - [Issue #990 CARLA T0 Batch Summary Schema](issue_990_carla_t0_batch_summary_schema.md)
   adds a packaged JSON Schema for `carla-replay-export-batch-validation-summary.v1`.
+- [Issue #992 CARLA T0 Batch Summary Schema CLI](issue_992_carla_t0_batch_summary_schema_cli.md)
+  exposes the CARLA T0 batch validation summary JSON Schema through
+  `robot-sf-validate-carla-t0-batch --schema`.
 
 ## DreamerV3 Notes
 

@@ -1,4 +1,10 @@
-"""TODO docstring. Document this module."""
+"""Robot-aware force model for pedestrian Social Force simulations.
+
+The module exposes a PySocialForce-compatible callable that applies an inverse-cubic
+potential field between the robot and each pedestrian inside a configurable activation
+radius. Positive multipliers repel pedestrians from the robot; negative multipliers can
+be used for adversarial attraction experiments.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,7 +19,7 @@ from robot_sf.common.types import Vec2D
 
 @dataclass
 class PedRobotForceConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for robot-to-pedestrian force computation."""
 
     is_active: bool = True
     robot_radius: float = 1.0
@@ -22,11 +28,12 @@ class PedRobotForceConfig:
 
 
 class PedRobotForce:
-    """This force represents a behavior that's making the pedestrians
-    aware of the robot such that they try to avoid it.
+    """PySocialForce-compatible robot interaction force for pedestrians.
 
-    If the force multiplier is parameterized with a negative factor,
-    this force can be used for adverserial trainings as well."""
+    The force reads pedestrian positions from ``peds`` at call time and obtains the
+    latest robot position through ``get_robot_pos``. The resulting force array has
+    shape ``(num_peds, 2)`` and is stored in ``last_forces`` for diagnostics.
+    """
 
     def __init__(
         self,
@@ -34,12 +41,12 @@ class PedRobotForce:
         peds: PedState,
         get_robot_pos: Callable[[], Vec2D],
     ):
-        """TODO docstring. Document this function.
+        """Create a robot-aware pedestrian force.
 
         Args:
-            config: TODO docstring.
-            peds: TODO docstring.
-            get_robot_pos: TODO docstring.
+            config: Force activation, geometry, and scaling parameters.
+            peds: PySocialForce pedestrian state backing the current simulation.
+            get_robot_pos: Callback returning the robot position in world coordinates.
         """
         self.config = config
         self.peds = peds
@@ -94,15 +101,19 @@ def ped_robot_force(
 @numba.njit(fastmath=True)
 def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
     # info: distance is an expensive operation and therefore pre-computed
-    """TODO docstring. Document this function.
+    """Return the derivative of Euclidean distance with respect to ``p1``.
 
     Args:
-        p1: TODO docstring.
-        p2: TODO docstring.
-        distance: TODO docstring.
+        p1: Point whose distance derivative is being evaluated.
+        p2: Reference point for the distance calculation.
+        distance: Precomputed Euclidean distance between ``p1`` and ``p2``.
 
     Returns:
-        TODO docstring.
+        Unit vector pointing from ``p2`` toward ``p1``.
+
+    Notes:
+        ``distance`` must be positive; callers precompute it to avoid duplicate
+        square-root work inside the numba kernel.
     """
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
@@ -111,15 +122,15 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
 
 @numba.njit(fastmath=True)
 def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> tuple[float, float]:
-    """TODO docstring. Document this function.
+    """Compute the inverse-cubic potential-field force for one pedestrian.
 
     Args:
-        dist: TODO docstring.
-        dx_dist: TODO docstring.
-        dy_dist: TODO docstring.
+        dist: Distance from the pedestrian to the robot.
+        dx_dist: X component of the distance derivative.
+        dy_dist: Y component of the distance derivative.
 
     Returns:
-        TODO docstring.
+        Force vector in world-coordinate units.
     """
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

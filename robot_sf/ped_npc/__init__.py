@@ -1,1 +1,1 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian NPC controllers, population helpers, grouping state, and force models."""

@@ -96,6 +96,10 @@ from robot_sf.planner.nmpc_social import (
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
+from robot_sf.planner.policy_stack_v1 import (
+    PolicyStackV1Adapter,
+    build_policy_stack_v1_build_config,
+)
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
@@ -1134,6 +1138,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
             adapter=adapter,
             adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "policy_stack_v1":
+        stack_cfg = build_policy_stack_v1_build_config(algo_config)
+        adapter = PolicyStackV1Adapter(
+            config=stack_cfg.policy_stack,
+            risk_dwa=RiskDWAPlannerAdapter(config=stack_cfg.risk_dwa),
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="PolicyStackV1Adapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
         )

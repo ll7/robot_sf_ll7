@@ -129,6 +129,14 @@ def test_validate_t0_manifest_main_prints_schema(capsys) -> None:
     assert json.loads(capsys.readouterr().out) == load_export_manifest_schema()
 
 
+def test_validate_t0_manifest_main_rejects_blank_manifest() -> None:
+    """Manifest validator CLI should reject blank manifest paths before file I/O."""
+    from robot_sf_carla_bridge.cli import validate_t0_manifest_main
+
+    with pytest.raises(SystemExit, match="2"):
+        validate_t0_manifest_main(["--manifest", "   "])
+
+
 def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     tmp_path,
     monkeypatch,
@@ -237,6 +245,14 @@ def test_validate_t0_export_batch_main_prints_schema(capsys) -> None:
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) == load_batch_validation_summary_schema()
+
+
+def test_validate_t0_export_batch_main_rejects_blank_manifest() -> None:
+    """Batch validator CLI should reject blank manifest paths before file I/O."""
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    with pytest.raises(SystemExit, match="2"):
+        validate_t0_export_batch_main(["--manifest", "\t"])
 
 
 def test_catalog_carla_schemas_main_prints_catalog(capsys) -> None:

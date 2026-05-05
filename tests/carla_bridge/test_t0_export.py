@@ -828,8 +828,23 @@ def test_schema_catalog_lists_all_carla_bridge_contracts() -> None:
                 "loader": "load_batch_validation_summary_schema",
                 "schema_version": "carla-replay-export-batch-validation-summary.v1",
             },
+            {
+                "name": "schema_catalog",
+                "loader": "load_schema_catalog_schema",
+                "schema_version": "carla-bridge-schema-catalog.v1",
+            },
         ],
     }
+
+
+def test_schema_catalog_validates_against_schema() -> None:
+    """Schema catalog metadata should satisfy its packaged JSON schema."""
+    from robot_sf_carla_bridge import (
+        list_carla_bridge_schema_catalog,
+        load_schema_catalog_schema,
+    )
+
+    jsonschema.validate(list_carla_bridge_schema_catalog(), load_schema_catalog_schema())
 
 
 def test_importable_carla_reports_available(monkeypatch) -> None:

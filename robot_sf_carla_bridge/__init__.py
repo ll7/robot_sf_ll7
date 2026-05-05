@@ -40,6 +40,7 @@ from robot_sf_carla_bridge.export import (
 from robot_sf_carla_bridge.schema_catalog import (
     SCHEMA_CATALOG_VERSION,
     list_carla_bridge_schema_catalog,
+    load_schema_catalog_schema,
 )
 
 __all__ = [
@@ -67,6 +68,7 @@ __all__ = [
     "load_export_manifest_payloads",
     "load_export_manifest_schema",
     "load_export_schema",
+    "load_schema_catalog_schema",
     "read_export_manifest",
     "read_export_payload",
     "require_carla",

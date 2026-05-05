@@ -1,0 +1,51 @@
+# Warm-start the current best issue-791 PPO checkpoint on all available scenarios with a
+# uniform 500-step scenario horizon.
+#
+# Source checkpoint:
+# - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+# - W&B run: ll7/robot_sf/ibo3aqus
+# - cached SB3 num_timesteps: 10272768
+#
+# `total_timesteps` is the final post-resume target, not additional steps. The value below is
+# rounded to a PPO rollout boundary and gives roughly 10M additional transitions from the cached
+# checkpoint.
+base_config: expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml
+policy_id: ppo_expert_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22
+scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_horizon500.yaml
+resume_model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+resume_source_step: 10272768
+total_timesteps: 20275200
+convergence:
+  success_rate: 0.95
+  collision_rate: 0.05
+  plateau_window: 32
+evaluation:
+  evaluation_episodes: 70
+  hold_out_scenarios: []
+  randomize_seeds: false
+  scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_horizon500.yaml
+  full_policy_analysis_on_new_best: false
+  full_policy_analysis_videos: false
+  step_schedule:
+    - every_steps: 524288
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-791-all-scenarios-horizon500
+    job_type: expert-ppo-best-ckpt-all-scenarios-horizon500-20m-env22
+    name: ppo_issue791_best_ckpt_all_scenarios_horizon500_20m_env22
+    notes: >
+      Warm-start from the best issue-791 eval-aligned large-capacity PPO checkpoint, then train on
+      all available curated scenarios with a uniform max_episode_steps=500 horizon.
+    tags:
+      - issue-791
+      - all-scenarios
+      - horizon500
+      - warm-start
+      - best-checkpoint
+      - ppo
+      - reward-curriculum
+      - large-capacity
+      - env22

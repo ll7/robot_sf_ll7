@@ -1,0 +1,17 @@
+{
+  "candidate": "scenario_adaptive_hybrid_orca_v1",
+  "stage": "full_matrix_h500",
+  "runner_decision": "tracked",
+  "gate": "nominal_sanity",
+  "checks": {
+    "candidate_registered": true,
+    "gate_configured": true,
+    "stage_decision_passed": true,
+    "success_rate": true,
+    "collision_rate": false,
+    "classic_collision_rate": true,
+    "francis_collision_rate": true
+  },
+  "decision": "revise",
+  "summary_json": "output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json"
+}

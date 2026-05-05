@@ -1,0 +1,17 @@
+{
+  "candidate": "hybrid_rule_v3_fast_progress",
+  "stage": "full_matrix_h500",
+  "runner_decision": "tracked",
+  "gate": "nominal_sanity",
+  "checks": {
+    "candidate_registered": true,
+    "gate_configured": true,
+    "stage_decision_passed": true,
+    "success_rate": true,
+    "collision_rate": true,
+    "classic_collision_rate": true,
+    "francis_collision_rate": true
+  },
+  "decision": "promote",
+  "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json"
+}

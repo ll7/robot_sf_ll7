@@ -20,6 +20,8 @@ CANDIDATES_FILE="${POLICY_SEARCH_CANDIDATES_FILE:?POLICY_SEARCH_CANDIDATES_FILE 
 RUN_ID="${POLICY_SEARCH_RUN_ID:-slurm_${SLURM_JOB_ID:-manual}}"
 WORKERS="${POLICY_SEARCH_WORKERS:-2}"
 HORIZON="${POLICY_SEARCH_HORIZON:-}"
+EXPECTED_COMMIT="${POLICY_SEARCH_EXPECTED_COMMIT:-}"
+REQUIRE_CLEAN="${POLICY_SEARCH_REQUIRE_CLEAN:-0}"
 
 if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
   echo "This script expects a Slurm array task id." >&2
@@ -35,6 +37,21 @@ fi
 echo "[policy-search] repo=$REPO_ROOT"
 echo "[policy-search] run_id=$RUN_ID stage=$STAGE candidate=$CANDIDATE workers=$WORKERS horizon=${HORIZON:-stage-default}"
 echo "[policy-search] candidates_file=$CANDIDATES_FILE"
+
+CURRENT_COMMIT="$(git rev-parse HEAD)"
+echo "[policy-search] git_commit=$CURRENT_COMMIT"
+if [[ -n "$EXPECTED_COMMIT" && "$CURRENT_COMMIT" != "$EXPECTED_COMMIT" ]]; then
+  echo "[policy-search] expected commit $EXPECTED_COMMIT but found $CURRENT_COMMIT" >&2
+  exit 2
+fi
+if [[ "$REQUIRE_CLEAN" == "1" ]]; then
+  STATUS="$(git status --porcelain --untracked-files=normal)"
+  if [[ -n "$STATUS" ]]; then
+    echo "[policy-search] worktree is not clean:" >&2
+    echo "$STATUS" >&2
+    exit 2
+  fi
+fi
 
 if [[ -f .venv/bin/activate ]]; then
   # shellcheck source=/dev/null

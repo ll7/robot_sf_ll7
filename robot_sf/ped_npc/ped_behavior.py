@@ -1,8 +1,4 @@
-"""
-ped_behavior.py
-- Defines the behavior of pedestrian groups
-- Pedestrian groups can be assigned to follow a route or to move around a crowded zone
-"""
+"""Pedestrian behavior controllers for crowd zones, routes, and scripted actors."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -22,17 +18,14 @@ if TYPE_CHECKING:
 
 
 class PedestrianBehavior(Protocol):
-    """
-    !!! Not Implemented !!!
-    This class is used for type checking the pedestrian behaviors.
-    """
+    """Protocol implemented by pedestrian behavior controllers."""
 
     def step(self):
-        """TODO docstring. Document this function."""
+        """Advance behavior state for one simulation timestep."""
         raise NotImplementedError()
 
     def reset(self):
-        """TODO docstring. Document this function."""
+        """Reset behavior state at an episode boundary."""
         raise NotImplementedError()
 
 
@@ -51,7 +44,7 @@ class CrowdedZoneBehavior:
         The crowded zones.
     goal_proximity_threshold : float
         The distance threshold for proximity to a goal. Default is 1.
-        TODO: What is the unit of this distance?
+        Uses the same world-coordinate units as pedestrian positions and zones.
 
     Methods
     -------

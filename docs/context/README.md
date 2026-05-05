@@ -199,6 +199,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
   adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
   stacked on the issue #936 override materializer.
+* [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
+  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof,
+  while keeping certification, policy-analysis smoke, and benchmark promotion out of scope.
 * [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 * [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)

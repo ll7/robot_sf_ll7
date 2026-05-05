@@ -14,6 +14,11 @@ from robot_sf.adversarial.materialize import (
     materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
+from robot_sf.adversarial.runtime import (
+    build_multi_ped_adversarial_robot_config,
+    multi_ped_config_to_single_pedestrian_definitions,
+    validate_multi_ped_runtime_plausibility,
+)
 from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
 from robot_sf.adversarial.search import run_adversarial_search
 
@@ -28,7 +33,10 @@ __all__ = [
     "SearchConfig",
     "SearchRunResult",
     "SearchSpaceConfig",
+    "build_multi_ped_adversarial_robot_config",
     "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
+    "multi_ped_config_to_single_pedestrian_definitions",
     "run_adversarial_search",
+    "validate_multi_ped_runtime_plausibility",
 ]

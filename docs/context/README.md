@@ -107,6 +107,9 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+* [Issue #1001 Architecture Seam Audit](./issue_1001_architecture_seam_audit.md)
+  records benchmark/planner/training hotspot ownership boundaries, the top three refactor
+  candidates, and the first no-behavior-change map-runner command-contract extraction.
 * [Issue #1002 Complexity and Test Runtime Baseline](./issue_1002_complexity_runtime_baseline.md)
   adds a lightweight `scripts/dev/complexity_runtime_baseline.py` command and records the first
   2026-05-05 refactor-prioritization snapshot.

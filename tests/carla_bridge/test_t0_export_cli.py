@@ -198,6 +198,7 @@ def test_validate_t0_export_batch_main_prints_json_summary(
         "manifest": manifest_path.as_posix(),
         "payload_count": 2,
         "scenario_ids": ["first", "second"],
+        "schema_version": "carla-replay-export-batch-validation-summary.v1",
     }
 
 

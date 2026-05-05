@@ -18,6 +18,8 @@ from robot_sf_carla_bridge.export import (
     write_export_records,
 )
 
+_BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
+
 
 def _has_parent_reference(path_value: str) -> bool:
     return any(part == ".." for part in Path(path_value).parts)
@@ -144,6 +146,7 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
             "manifest": manifest_path.as_posix(),
             "payload_count": payload_count,
             "scenario_ids": scenario_ids,
+            "schema_version": _BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
         }
         sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
         return 0

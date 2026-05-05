@@ -10,6 +10,7 @@ from pathlib import Path
 from robot_sf_carla_bridge.availability import check_carla_availability, load_availability_schema
 from robot_sf_carla_bridge.export import (
     build_export_payloads_from_scenario_file,
+    load_export_manifest_schema,
     load_export_schema,
     read_export_manifest,
     read_export_payload,
@@ -97,8 +98,15 @@ def validate_t0_manifest_main(argv: list[str] | None = None) -> int:
     """
 
     parser = argparse.ArgumentParser(description="Validate a CARLA T0 export manifest.")
-    parser.add_argument("--manifest", required=True, help="Path to export manifest JSON.")
+    parser.add_argument("--manifest", help="Path to export manifest JSON.")
+    parser.add_argument("--schema", action="store_true", help="Print the JSON Schema contract.")
     args = parser.parse_args(argv)
+
+    if args.schema:
+        sys.stdout.write(f"{json.dumps(load_export_manifest_schema(), sort_keys=True)}\n")
+        return 0
+    if args.manifest is None or not str(args.manifest).strip():
+        parser.error("the following arguments are required: --manifest")
 
     manifest_path = Path(args.manifest)
     manifest = read_export_manifest(manifest_path)

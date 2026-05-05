@@ -252,6 +252,9 @@ why a change was made rather than a full issue execution transcript.
   exposes the CARLA T0 neutral export JSON Schema through `robot-sf-export-carla-t0 --schema`.
 - [Issue #984 CARLA T0 Export Manifest Schema](issue_984_carla_t0_export_manifest_schema.md)
   adds a packaged JSON Schema for `carla-replay-export-manifest.v1` metadata.
+- [Issue #986 CARLA T0 Manifest Schema CLI](issue_986_carla_t0_manifest_schema_cli.md)
+  exposes the CARLA T0 export manifest JSON Schema through
+  `robot-sf-validate-carla-t0-manifest --schema`.
 
 ## DreamerV3 Notes
 

@@ -1,0 +1,324 @@
+{
+  "rows": [
+    {
+      "candidate": "scenario_adaptive_hybrid_orca_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.2777777777777778,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3402777777777778,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_progress_2p4",
+      "stage": "full_matrix",
+      "success_rate": 0.2708333333333333,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3402777777777778,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_progress_2p4/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "stage": "full_matrix",
+      "success_rate": 0.2638888888888889,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3402777777777778,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8_static02",
+      "stage": "full_matrix",
+      "success_rate": 0.2638888888888889,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3333333333333333,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_static02/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8_static05",
+      "stage": "full_matrix",
+      "success_rate": 0.2638888888888889,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3333333333333333,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_static05/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v0_minimal",
+      "stage": "full_matrix",
+      "success_rate": 0.2569444444444444,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v0_minimal/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "stage": "full_matrix",
+      "success_rate": 0.2569444444444444,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3333333333333333,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v4_recovery_aware",
+      "stage": "full_matrix",
+      "success_rate": 0.25,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3125,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v4_recovery_aware/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "ppo",
+      "stage": "baseline_reference",
+      "success_rate": 0.2482,
+      "collision_rate": 0.0993,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    },
+    {
+      "candidate": "hybrid_rule_v3_dynamic_relaxed",
+      "stage": "full_matrix",
+      "success_rate": 0.24305555555555555,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3125,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_dynamic_relaxed/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_teb_like_rollout",
+      "stage": "full_matrix",
+      "success_rate": 0.24305555555555555,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3194444444444444,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_teb_like_rollout/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_commit",
+      "stage": "full_matrix",
+      "success_rate": 0.24305555555555555,
+      "collision_rate": 0.09027777777777778,
+      "near_miss_rate": 0.3472222222222222,
+      "classic_collision_rate": 0.10144927536231885,
+      "francis_collision_rate": 0.08,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_commit/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead6",
+      "stage": "full_matrix",
+      "success_rate": 0.24305555555555555,
+      "collision_rate": 0.09722222222222222,
+      "near_miss_rate": 0.3333333333333333,
+      "classic_collision_rate": 0.10144927536231885,
+      "francis_collision_rate": 0.09333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead6/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_speed2p2",
+      "stage": "full_matrix",
+      "success_rate": 0.2361111111111111,
+      "collision_rate": 0.10416666666666667,
+      "near_miss_rate": 0.3888888888888889,
+      "classic_collision_rate": 0.10144927536231885,
+      "francis_collision_rate": 0.10666666666666667,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_speed2p2/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "mpc_clearance_sampler_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.2361111111111111,
+      "collision_rate": 0.2847222222222222,
+      "near_miss_rate": 0.13194444444444445,
+      "classic_collision_rate": 0.42028985507246375,
+      "francis_collision_rate": 0.16,
+      "summary_json": "output/policy_search/mpc_clearance_sampler_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_progress",
+      "stage": "full_matrix",
+      "success_rate": 0.22916666666666666,
+      "collision_rate": 0.125,
+      "near_miss_rate": 0.3333333333333333,
+      "classic_collision_rate": 0.13043478260869565,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_progress/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8_clearance1",
+      "stage": "full_matrix",
+      "success_rate": 0.22916666666666666,
+      "collision_rate": 0.125,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.13043478260869565,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_clearance1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8",
+      "stage": "full_matrix",
+      "success_rate": 0.2222222222222222,
+      "collision_rate": 0.125,
+      "near_miss_rate": 0.3402777777777778,
+      "classic_collision_rate": 0.13043478260869565,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8_inflation4",
+      "stage": "full_matrix",
+      "success_rate": 0.2222222222222222,
+      "collision_rate": 0.125,
+      "near_miss_rate": 0.3402777777777778,
+      "classic_collision_rate": 0.13043478260869565,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_inflation4/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_dynamic_clearance",
+      "stage": "full_matrix",
+      "success_rate": 0.2152777777777778,
+      "collision_rate": 0.10416666666666667,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.08695652173913043,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_dynamic_clearance/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_static_margin0",
+      "stage": "full_matrix",
+      "success_rate": 0.2152777777777778,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.10144927536231885,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_static_margin0/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+      "stage": "full_matrix",
+      "success_rate": 0.2152777777777778,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.10144927536231885,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_static_margin0_waypoint2/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_static_escape",
+      "stage": "full_matrix",
+      "success_rate": 0.2152777777777778,
+      "collision_rate": 0.13194444444444445,
+      "near_miss_rate": 0.3263888888888889,
+      "classic_collision_rate": 0.14492753623188406,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_static_escape/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_mild_comfort",
+      "stage": "full_matrix",
+      "success_rate": 0.2013888888888889,
+      "collision_rate": 0.09027777777777778,
+      "near_miss_rate": 0.2847222222222222,
+      "classic_collision_rate": 0.057971014492753624,
+      "francis_collision_rate": 0.12,
+      "summary_json": "output/policy_search/hybrid_rule_v3_waypoint2_mild_comfort/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "orca",
+      "stage": "baseline_reference",
+      "success_rate": 0.1844,
+      "collision_rate": 0.0355,
+      "near_miss_rate": null,
+      "classic_collision_rate": 0.03,
+      "francis_collision_rate": 0.04,
+      "summary_json": null
+    },
+    {
+      "candidate": "hybrid_rule_v3_static_margin0_comfort",
+      "stage": "full_matrix",
+      "success_rate": 0.18055555555555555,
+      "collision_rate": 0.09722222222222222,
+      "near_miss_rate": 0.2361111111111111,
+      "classic_collision_rate": 0.057971014492753624,
+      "francis_collision_rate": 0.13333333333333333,
+      "summary_json": "output/policy_search/hybrid_rule_v3_static_margin0_comfort/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "hybrid_rule_v3_static_margin0_waypoint3",
+      "stage": "full_matrix",
+      "success_rate": 0.14583333333333334,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.3472222222222222,
+      "classic_collision_rate": 0.15942028985507245,
+      "francis_collision_rate": 0.06666666666666667,
+      "summary_json": "output/policy_search/hybrid_rule_v3_static_margin0_waypoint3/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "risk_guarded_ppo_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.11805555555555555,
+      "collision_rate": 0.1736111111111111,
+      "near_miss_rate": 0.22916666666666666,
+      "classic_collision_rate": 0.2028985507246377,
+      "francis_collision_rate": 0.14666666666666667,
+      "summary_json": "output/policy_search/risk_guarded_ppo_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "scenario_adaptive_orca_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.04861111111111111,
+      "collision_rate": 0.034722222222222224,
+      "near_miss_rate": 0.2708333333333333,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.05333333333333334,
+      "summary_json": "output/policy_search/scenario_adaptive_orca_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "planner_selector_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.04861111111111111,
+      "collision_rate": 0.3055555555555556,
+      "near_miss_rate": 0.2569444444444444,
+      "classic_collision_rate": 0.4057971014492754,
+      "francis_collision_rate": 0.21333333333333335,
+      "summary_json": "output/policy_search/planner_selector_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    },
+    {
+      "candidate": "goal",
+      "stage": "baseline_reference",
+      "success_rate": 0.0142,
+      "collision_rate": 0.2411,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    },
+    {
+      "candidate": "hybrid_orca_sampler_v1",
+      "stage": "full_matrix",
+      "success_rate": 0.013888888888888888,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.16666666666666666,
+      "classic_collision_rate": 0.17391304347826086,
+      "francis_collision_rate": 0.05333333333333334,
+      "summary_json": "output/policy_search/hybrid_orca_sampler_v1/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+    }
+  ]
+}

@@ -86,6 +86,12 @@ knowledge, not every transient iteration detail.
 * [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 * [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
 
+## Benchmark Run Notes
+
+* [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
+  records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
+  `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
+
 ## Feature Extractor Notes
 
 * [Issue #193 Feature Extractor Evaluation](./issue_193_feature_extractor_evaluation.md)
@@ -145,7 +151,10 @@ knowledge, not every transient iteration detail.
   unjustified.
 * [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
-* [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
+* [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
+  evaluation funnel, SLURM handoff notes, and the current
+  [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
+  policy-search workstream.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from robot_sf_carla_bridge.availability import check_carla_availability, load_availability_schema
 from robot_sf_carla_bridge.export import (
+    BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     build_export_payloads_from_scenario_file,
     load_export_manifest_schema,
     load_export_schema,
@@ -18,11 +19,32 @@ from robot_sf_carla_bridge.export import (
     write_export_records,
 )
 
-_BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
-
 
 def _has_parent_reference(path_value: str) -> bool:
     return any(part == ".." for part in Path(path_value).parts)
+
+
+def load_export_manifest_payloads(manifest_path: Path) -> list[dict[str, object]]:
+    """Load and validate every payload referenced by a T0 export manifest.
+
+    The CLI keeps this small wrapper so tests and callers can patch either the batch-level helper or
+    the lower-level path resolution and payload-read boundaries.
+
+    Returns:
+        Ordered payload records with scenario id, path, and validated payload.
+    """
+
+    records: list[dict[str, object]] = []
+    for entry in resolve_export_manifest_payload_paths(manifest_path):
+        payload_path = Path(entry["path"])
+        records.append(
+            {
+                "scenario_id": entry["scenario_id"],
+                "path": payload_path,
+                "payload": read_export_payload(payload_path),
+            }
+        )
+    return records
 
 
 def export_t0_scenarios_main(argv: list[str] | None = None) -> int:
@@ -134,19 +156,16 @@ def validate_t0_export_batch_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
-    payload_count = 0
-    scenario_ids: list[str] = []
-    for entry in resolve_export_manifest_payload_paths(manifest_path):
-        read_export_payload(entry["path"])
-        payload_count += 1
-        scenario_ids.append(str(entry["scenario_id"]))
+    records = load_export_manifest_payloads(manifest_path)
+    payload_count = len(records)
+    scenario_ids = [str(record["scenario_id"]) for record in records]
 
     if args.json:
         summary = {
             "manifest": manifest_path.as_posix(),
             "payload_count": payload_count,
             "scenario_ids": scenario_ids,
-            "schema_version": _BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
+            "schema_version": BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
         }
         sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
         return 0

@@ -20,6 +20,10 @@ EXPORT_SCHEMA_VERSION = "carla-replay-export.v1"
 _SCHEMA_RESOURCE = "schemas/carla_replay_export.v1.json"
 EXPORT_MANIFEST_SCHEMA_VERSION = "carla-replay-export-manifest.v1"
 _MANIFEST_SCHEMA_RESOURCE = "schemas/carla_replay_export_manifest.v1.json"
+BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
+_BATCH_VALIDATION_SUMMARY_SCHEMA_RESOURCE = (
+    "schemas/carla_replay_export_batch_validation_summary.v1.json"
+)
 _EXPORTABLE_CERT_STATUSES = {"passed", "valid", "hard_but_solvable", "knife_edge"}
 _DEFAULT_TRAJECTORY_FIELDS = [
     "success",
@@ -216,6 +220,17 @@ def load_export_manifest_schema() -> dict[str, Any]:
     """
 
     schema_path = files("robot_sf_carla_bridge").joinpath(_MANIFEST_SCHEMA_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+def load_batch_validation_summary_schema() -> dict[str, Any]:
+    """Load the versioned T0 batch validation summary JSON schema.
+
+    Returns:
+        Parsed JSON schema dictionary.
+    """
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_BATCH_VALIDATION_SUMMARY_SCHEMA_RESOURCE)
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 

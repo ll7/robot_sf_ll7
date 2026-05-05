@@ -35,46 +35,46 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ---
 
-* [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
-  + [Quick Start](#quick-start)
-  + [Core Capabilities](#core-capabilities)
-  + [Ready-to-Use Workflows](#ready-to-use-workflows)
-* [📚 Documentation Index](#-documentation-index)
-  + [Getting Started](#getting-started)
-  + [Benchmarking \& Metrics](#benchmarking--metrics)
-  + [Tooling](#tooling)
-  + [Architecture \& Refactoring](#architecture--refactoring)
-  + [Simulation \& UI](#simulation--ui)
-  + [Figures \& Visualization](#figures--visualization)
-  + [Performance \& CI](#performance--ci)
-  + [Hardware \& Environment](#hardware--environment)
-  + [Additional Resources (Legacy Structure)](#additional-resources-legacy-structure)
-  + [🏗️ Architecture \& Development](#️-architecture--development)
-  + [🎮 Simulation \& Environment](#-simulation--environment)
-  + [📊 Analysis \& Tools](#-analysis--tools)
+- [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
+  - [Quick Start](#quick-start)
+  - [Core Capabilities](#core-capabilities)
+  - [Ready-to-Use Workflows](#ready-to-use-workflows)
+- [📚 Documentation Index](#-documentation-index)
+  - [Getting Started](#getting-started)
+  - [Benchmarking \& Metrics](#benchmarking--metrics)
+  - [Tooling](#tooling)
+  - [Architecture \& Refactoring](#architecture--refactoring)
+  - [Simulation \& UI](#simulation--ui)
+  - [Figures \& Visualization](#figures--visualization)
+  - [Performance \& CI](#performance--ci)
+  - [Hardware \& Environment](#hardware--environment)
+  - [Additional Resources (Legacy Structure)](#additional-resources-legacy-structure)
+  - [🏗️ Architecture \& Development](#️-architecture--development)
+  - [🎮 Simulation \& Environment](#-simulation--environment)
+  - [📊 Analysis \& Tools](#-analysis--tools)
     - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
     - [Figures naming and outputs](#figures-naming-and-outputs)
     - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
-  + [Per-Test Performance Budget](#per-test-performance-budget)
-  + [⚙️ Setup \& Configuration](#️-setup--configuration)
-  + [📈 Pedestrian Metrics](#-pedestrian-metrics)
-  + [📁 Media Resources](#-media-resources)
-* [🚀 Quick Start Guides](#-quick-start-guides)
-  + [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
-  + [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
+  - [⚙️ Setup \& Configuration](#️-setup--configuration)
+  - [📈 Pedestrian Metrics](#-pedestrian-metrics)
+  - [📁 Media Resources](#-media-resources)
+- [🚀 Quick Start Guides](#-quick-start-guides)
+  - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
+  - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
     - [Environment Factory Ergonomics Migration (Feature 130)](#environment-factory-ergonomics-migration-feature-130)
-* [🎯 Key Features](#-key-features)
-  + [Environment System](#environment-system)
-  + [Simulation Capabilities](#simulation-capabilities)
-  + [Training \& Analysis](#training--analysis)
-* [📖 Documentation Highlights](#-documentation-highlights)
-  + [🆕 Latest Updates](#-latest-updates)
-  + [📋 Migration Status](#-migration-status)
-  + [Architecture \& design features](#architecture--design-features)
-* [🔗 External Links](#-external-links)
-* [🤝 Contributing](#-contributing)
-* [📞 Support](#-support)
-* [Planner Documentation](#planner-documentation)
+- [🎯 Key Features](#-key-features)
+  - [Environment System](#environment-system)
+  - [Simulation Capabilities](#simulation-capabilities)
+  - [Training \& Analysis](#training--analysis)
+- [📖 Documentation Highlights](#-documentation-highlights)
+  - [🆕 Latest Updates](#-latest-updates)
+  - [📋 Migration Status](#-migration-status)
+  - [Architecture \& design features](#architecture--design-features)
+- [🔗 External Links](#-external-links)
+- [🤝 Contributing](#-contributing)
+- [📞 Support](#-support)
+- [Planner Documentation](#planner-documentation)
 
 ## 📚 Documentation Index
 
@@ -139,6 +139,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #736 Station-Platform Candidate Pack](./context/issue_736_station_platform_candidate_pack.md)** - Exploratory station-platform variants, canonical commands, and conservative promotion boundary
 * **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice
 * **[Issues #717/#718 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike and nominal-controller closeout; current static-slice evidence remains testing-only, not a promotion claim
@@ -304,7 +305,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
 * [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests
-* **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
+* **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, station-platform, and group crossing archetypes for benchmark coverage. See also [Issue #549 station-platform map rationale](./context/issue_549_station_platform_map.md).
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
   scenario matrix in [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml).
 * **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
